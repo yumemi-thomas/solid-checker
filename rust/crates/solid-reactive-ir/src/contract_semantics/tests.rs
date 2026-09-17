@@ -65,6 +65,7 @@ fn operation(id: &str, kind: OperationKind) -> Operation {
         inputs: vec![],
         output: None,
         resources: BTreeSet::new(),
+        composed_from: None,
     }
 }
 
@@ -139,6 +140,7 @@ fn export(
 
 fn artifact_case(id: &str) -> ArtifactCase {
     ArtifactCase {
+        initialization: None,
         id: id.into(),
         entrypoint: ".".into(),
         resolution_trace: vec![ResolutionStep {
@@ -152,6 +154,81 @@ fn artifact_case(id: &str) -> ArtifactCase {
         stability: StabilityKnowledge::Unknown,
         exports: BTreeMap::new(),
     }
+}
+
+/// Withdrawing an operation the census could not certify has to leave the
+/// export publishable and the domain that listed it *open*: a shorter list
+/// still marked closed would assert an absence nothing established, which is a
+/// stronger claim than the one being withdrawn.
+#[test]
+fn withholding_an_operation_opens_its_domain_and_takes_its_dependents() {
+    let case = artifact_case("server-import");
+    let mut read = operation("read-0", OperationKind::Read);
+    let mut dependent = operation("write-0", OperationKind::Write);
+    dependent.trigger = Some(Trigger::Operation(OperationId("read-0".into())));
+    let mut untouched = operation("create-0", OperationKind::Create);
+    untouched.trigger = Some(Trigger::Event(Event::Call));
+    read.inputs.push(ValueShape::Parameter {
+        index: 0,
+        path: vec!["contains".into()],
+    });
+    let mut semantics = call(vec![read, dependent, untouched], vec![]);
+    semantics.edges.push(OperationEdge {
+        kind: EdgeKind::Orders,
+        from: OperationId("read-0".into()),
+        to: OperationId("create-0".into()),
+    });
+    let mut export = export(&case, "contains", ValueShape::Unknown, semantics);
+    assert!(export.call.claims.reads.is_closed());
+
+    let withdrawn = export.withhold_operations(&BTreeSet::from([OperationId("read-0".into())]));
+
+    assert_eq!(
+        withdrawn,
+        BTreeSet::from([OperationId("read-0".into()), OperationId("write-0".into())]),
+        "an operation triggered by a withdrawn one describes nothing either"
+    );
+    let ids = export
+        .call
+        .operations
+        .iter()
+        .map(|operation| operation.id.0.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        ids,
+        vec!["create-0"],
+        "only the unrelated operation survives"
+    );
+    assert!(
+        export.call.edges.is_empty(),
+        "an edge touching a withdrawn operation is removed"
+    );
+    assert!(
+        !export.call.claims.reads.is_closed(),
+        "the domain that listed the withdrawn operation is opened"
+    );
+    assert!(
+        export.call.claims.reads.items().is_empty(),
+        "and no longer lists it"
+    );
+    assert!(
+        !export.call.claims.writes.is_closed(),
+        "so is the domain that listed the cascade"
+    );
+    assert!(
+        export.call.claims.creates.is_closed(),
+        "a domain that listed nothing withdrawn keeps its closure"
+    );
+
+    // An id this export does not carry is not a withdrawal, and changes
+    // nothing: the caller learns that from the empty return rather than from a
+    // document that quietly lost a closure.
+    let mut untouched_export = export.clone();
+    let none =
+        untouched_export.withhold_operations(&BTreeSet::from([OperationId("absent".into())]));
+    assert!(none.is_empty());
+    assert_eq!(untouched_export.call.operations.len(), 1);
+    assert!(untouched_export.call.claims.creates.is_closed());
 }
 
 fn proposal_with(shape: ValueShape, call: CallSemantics) -> ContractProposal {
@@ -1012,6 +1089,316 @@ fn semantic_model_v1_digest_algorithm_and_golden_vector_are_frozen() {
     assert_eq!(
         normalized.semantic_digest().as_str(),
         "sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9"
+    );
+}
+
+/// The provenance digest family is separate, frozen, and disjoint from the
+/// legacy one.
+///
+/// The vector above is what pins the half that matters most: a contract with
+/// no composed operation hashes exactly the bytes it hashed before
+/// `composed_from` existed, so every policy-2 receipt already issued for such
+/// a contract keeps authenticating. This pins the other half — that a contract
+/// which *does* state provenance lands in its own family, under its own
+/// domain, with its own frozen vector.
+#[test]
+fn composed_provenance_digest_family_is_separate_and_frozen() {
+    assert_eq!(
+        SEMANTIC_DIGEST_DOMAIN_COMPOSED,
+        "solid-checker:normalized-package-contract:composed-provenance"
+    );
+
+    let read = operation("read", OperationKind::Read);
+    let write = operation("write", OperationKind::Write);
+    let owner = resource("owner", ResourceKind::Owner);
+    let cleanup = resource("cleanup", ResourceKind::Cleanup);
+    let plain = |composed: Option<ComposedFrom>| {
+        let mut read = read.clone();
+        read.composed_from = composed;
+        let mut behavior = call(
+            vec![read.clone(), write.clone()],
+            vec![owner.clone(), cleanup.clone()],
+        );
+        behavior.edges = vec![OperationEdge {
+            kind: EdgeKind::Data,
+            from: read.id.clone(),
+            to: write.id.clone(),
+        }];
+        proposal_with(ValueShape::Plain, behavior)
+            .normalize()
+            .unwrap()
+    };
+    // The same contract, with and without provenance on one row. The two
+    // digests are in different families and neither is the other's.
+    assert_eq!(
+        plain(None).semantic_digest().as_str(),
+        "sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9",
+        "a provenance-free contract must keep the legacy vector byte for byte"
+    );
+    assert_eq!(
+        plain(Some(ComposedFrom {
+            export: "createPolled".into(),
+            operation: OperationId("case:createPolled:operation:read-0".into()),
+        }))
+        .semantic_digest()
+        .as_str(),
+        "sha256:6d2c93ab74d0543599ce2729ae2d705a197bc70242eeee1d7ff69d08a2563700"
+    );
+}
+
+/// The proposed-closure families are separate, frozen, and disjoint from both
+/// families above.
+///
+/// A proposed closure states no knowledge — the domain it names stays open —
+/// but it is what `inspect_candidates` derives the planner's candidate
+/// universe from, so two documents that differ only in what they propose plan
+/// different demand graphs and must not share the identity a receipt binds.
+/// The features are independent, so the four combinations are four domains.
+#[test]
+fn proposed_closure_digest_family_is_separate_and_frozen() {
+    assert_eq!(
+        SEMANTIC_DIGEST_DOMAIN_PROPOSED_CLOSURE,
+        "solid-checker:normalized-package-contract:proposed-closure"
+    );
+    assert_eq!(
+        SEMANTIC_DIGEST_DOMAIN_COMPOSED_PROPOSED_CLOSURE,
+        "solid-checker:normalized-package-contract:composed-provenance:proposed-closure"
+    );
+
+    let read = operation("read", OperationKind::Read);
+    let write = operation("write", OperationKind::Write);
+    let owner = resource("owner", ResourceKind::Owner);
+    let cleanup = resource("cleanup", ResourceKind::Cleanup);
+    let contract = |propose: bool, composed: bool| {
+        let mut read = read.clone();
+        if composed {
+            read.composed_from = Some(ComposedFrom {
+                export: "createPolled".into(),
+                operation: OperationId("case:createPolled:operation:read-0".into()),
+            });
+        }
+        let mut behavior = call(
+            vec![read.clone(), write.clone()],
+            vec![owner.clone(), cleanup.clone()],
+        );
+        behavior.edges = vec![OperationEdge {
+            kind: EdgeKind::Data,
+            from: read.id.clone(),
+            to: write.id.clone(),
+        }];
+        // The label is over a closure the document states, which the helper
+        // already closes empty, so the two variants differ in the label alone.
+        let behavior = if propose {
+            behavior.with_proposed_closures([ClaimDomain::Creates])
+        } else {
+            behavior
+        };
+        proposal_with(ValueShape::Plain, behavior)
+            .normalize()
+            .unwrap()
+    };
+    assert_eq!(
+        contract(false, false).semantic_digest().as_str(),
+        "sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9",
+        "a contract that proposes nothing keeps the legacy vector byte for byte"
+    );
+    assert_eq!(
+        contract(true, false).semantic_digest().as_str(),
+        "sha256:46711b6a1ccebc437a1beb44d90854c7a53c8f5bf45fac89421ee6e935732a05"
+    );
+    assert_eq!(
+        contract(true, true).semantic_digest().as_str(),
+        "sha256:c2906640684350d1053c1b3409c2b69db35822fb3d7ffd4055a394cdd7395249"
+    );
+}
+
+/// The label is over a closure this document states, so it is well-formed only
+/// where the domain really is closed and only where a certifier can decide it.
+#[test]
+fn a_proposed_closure_is_refused_over_an_open_domain_and_over_an_undecidable_one() {
+    let mut behavior = call(vec![], vec![]);
+    behavior.claims.creates = KnowledgeSet::Unknown;
+    let open = proposal_with(
+        ValueShape::Plain,
+        behavior.with_proposed_closures([ClaimDomain::Creates]),
+    )
+    .normalize()
+    .expect_err("an open domain states no closure to propose");
+    assert!(
+        matches!(&open, ModelError::Contradiction { reason, .. } if reason.contains("creates")),
+        "{open}"
+    );
+
+    // `writes`, not `reads`: `reads` gained a closure proof mode on
+    // 2026-09-10 and this row needs a domain that still has none.
+    let undecidable = proposal_with(
+        ValueShape::Plain,
+        call(vec![], vec![]).with_proposed_closures([ClaimDomain::Writes]),
+    )
+    .normalize()
+    .expect_err("a domain with no closure proof mode cannot be proposed");
+    assert!(
+        matches!(
+            &undecidable,
+            ModelError::InvalidKnowledge { reason, .. }
+                if reason.contains("writes") && reason.contains("no closure proof mode")
+        ),
+        "{undecidable}"
+    );
+    assert!(ClaimDomain::Creates.is_proposable());
+    assert!(ClaimDomain::Returns.is_proposable());
+    assert!(ClaimDomain::Reads.is_proposable());
+    assert!(ClaimDomain::Callbacks.is_proposable());
+    assert!(!ClaimDomain::Writes.is_proposable());
+    assert_eq!(
+        ClaimDomain::PROPOSABLE,
+        [
+            ClaimDomain::Creates,
+            ClaimDomain::Returns,
+            ClaimDomain::Reads,
+            ClaimDomain::Callbacks
+        ]
+    );
+}
+
+/// Opening a domain withdraws its proposal.
+///
+/// This is what keeps an opaque closure frontier and a recipe-gated
+/// withholding effective: both reopen the domain, and a marker that survived
+/// would let the certifier rediscover the candidate it had just withdrawn.
+#[test]
+fn opening_a_call_domain_withdraws_its_proposed_closure() {
+    let mut export = normalized_export(proposal_with(
+        ValueShape::Plain,
+        call(vec![], vec![]).with_proposed_closures([ClaimDomain::Creates]),
+    ));
+    assert_eq!(
+        export.call.proposed_closures(),
+        &BTreeSet::from([ClaimDomain::Creates])
+    );
+    let mut weakened = export.clone();
+    assert!(
+        weakened
+            .open_proposed_closure()
+            .contains(&ClaimPath::Call(ClaimDomain::Creates))
+    );
+    assert!(weakened.call.proposed_closures().is_empty());
+
+    export.open_call_domains([ClaimDomain::Creates]);
+    assert!(export.call.proposed_closures().is_empty());
+    assert!(export.claim_state(ClaimDomain::Creates).is_open());
+    // And back again: the generator republishes exactly this pair.
+    export.propose_closures([ClaimDomain::Creates]);
+    assert!(!export.claim_state(ClaimDomain::Creates).is_open());
+    assert_eq!(
+        export.call.proposed_closures(),
+        &BTreeSet::from([ClaimDomain::Creates])
+    );
+}
+
+/// Provenance is part of the operation's identity, so it is part of the
+/// digest.
+///
+/// The two proposals state the same rows and differ only in where one of them
+/// says the read happens. A digest that could not tell them apart would let an
+/// acceptance receipt for the plain row authenticate the composed one, whose
+/// evidence is an entirely different premise.
+#[test]
+fn composed_provenance_moves_the_semantic_digest() {
+    let plain = operation("read", OperationKind::Read);
+    let mut composed = plain.clone();
+    composed.composed_from = Some(ComposedFrom {
+        export: "createPolled".into(),
+        operation: OperationId("case:createPolled:operation:read-0".into()),
+    });
+    let digest = |operation| {
+        proposal_with(ValueShape::Plain, call(vec![operation], vec![]))
+            .normalize()
+            .unwrap()
+            .semantic_digest()
+            .as_str()
+            .to_owned()
+    };
+    assert_ne!(digest(plain), digest(composed));
+}
+
+/// Only a `read` operation may state provenance, and never its own export's
+/// operation.
+///
+/// Both refusals are the model's, not the certifier's: a published
+/// `composedFrom` on an `invoke` row would be a fact whose premise was never
+/// reviewed, and one naming this export's own operation is a cycle wearing a
+/// proof's clothes.
+#[test]
+fn composed_provenance_is_refused_on_a_non_read_and_on_its_own_export() {
+    let mut invoke = operation("invoke", OperationKind::Invoke);
+    // The control: the same row without provenance normalizes, so the refusal
+    // below is the guard's and not the proposal's shape.
+    assert!(
+        proposal_with(
+            ValueShape::Plain,
+            call(vec![operation("invoke", OperationKind::Invoke)], vec![]),
+        )
+        .normalize()
+        .is_ok()
+    );
+    invoke.composed_from = Some(ComposedFrom {
+        export: "other".into(),
+        operation: OperationId("case:other:operation:read-0".into()),
+    });
+    let error = proposal_with(ValueShape::Plain, call(vec![invoke], vec![]))
+        .normalize()
+        .expect_err("provenance on an invoke operation");
+    assert!(
+        format!("{error:?}").contains("only a read operation may state composed provenance"),
+        "{error:?}"
+    );
+
+    // Two well-formed reads, both in the closed `reads` claim, so validation
+    // reaches the provenance guard instead of stopping at a node with no
+    // positive claim behind it. The `call` helper cannot build this: it
+    // *overwrites* `claims.reads` per operation, so a two-read proposal built
+    // with it is malformed and every assertion about it passes for the wrong
+    // reason.
+    let mut read = operation("read", OperationKind::Read);
+    let sibling = operation("sibling", OperationKind::Read);
+    read.composed_from = Some(ComposedFrom {
+        export: "self".into(),
+        operation: sibling.id.clone(),
+    });
+    let two_reads = |operations: Vec<Operation>| {
+        let mut claims = closed_claims();
+        claims.reads =
+            KnowledgeSet::Complete(operations.iter().map(|row| row.id.clone()).collect());
+        CallSemantics::new(
+            claims,
+            operations,
+            vec![],
+            vec![],
+            GuardPartition {
+                cases: KnowledgeSet::complete(vec![]),
+            },
+        )
+    };
+    // The control: the same two rows, with no provenance, normalize.
+    assert!(
+        proposal_with(
+            ValueShape::Plain,
+            two_reads(vec![
+                operation("read", OperationKind::Read),
+                sibling.clone(),
+            ]),
+        )
+        .normalize()
+        .is_ok(),
+        "the two-read proposal itself must be well formed, or the guard below is untested"
+    );
+    let error = proposal_with(ValueShape::Plain, two_reads(vec![read, sibling]))
+        .normalize()
+        .expect_err("a provenance naming this export's own operation");
+    assert!(
+        format!("{error:?}").contains("composed provenance names an operation of the composing"),
+        "{error:?}"
     );
 }
 

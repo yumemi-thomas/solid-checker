@@ -80,6 +80,7 @@ fn policy() -> ProbePolicy {
         timeout_millis: 5_000,
         max_microtask_turns: 8,
         max_macrotask_turns: 4,
+        max_animation_frame_turns: 0,
         max_events: 128,
     }
 }
@@ -188,6 +189,7 @@ fn runs_with(
             },
             drained_microtasks: 2,
             drained_macrotasks: 1,
+            drained_animation_frames: 0,
             outcome: ProbeRunOutcome::Completed {
                 events: events(session),
             },
@@ -425,6 +427,7 @@ fn finite_absence_timeout_error_and_inconsistent_repeats_never_promote_negative_
     let mut error_runs = runs_with(&plan, |_| operation_events(&operation, "required"));
     error_runs[0].outcome = ProbeRunOutcome::Error {
         details: digest('6'),
+        summary: Some("ReferenceError: document is not defined".into()),
     };
     let error = evaluate_runtime_probes(&plan, error_runs, tool("runner", '5')).unwrap();
     assert_eq!(
@@ -432,6 +435,25 @@ fn finite_absence_timeout_error_and_inconsistent_repeats_never_promote_negative_
         ProbeOutcome::Error {
             details: digest('6')
         }
+    );
+    // The summary explains the incomplete verdict and reaches nothing else:
+    // the observation above carries only the digest.
+    let claim_id = plan.targets[0].claim_id.as_str();
+    assert_eq!(
+        error.incompletion(claim_id),
+        Some(format!(
+            "{}: the worker threw: ReferenceError: document is not defined",
+            plan.sessions[0].mode.name
+        ))
+        .as_deref()
+    );
+    assert_eq!(
+        timeout.incompletion(claim_id),
+        Some(format!(
+            "{}: the worker did not report within the policy budget of 5000 ms",
+            plan.sessions[0].mode.name
+        ))
+        .as_deref()
     );
 
     let mut inconsistent = runs_with(&plan, |_| operation_events(&operation, "required"));
@@ -444,6 +466,14 @@ fn finite_absence_timeout_error_and_inconsistent_repeats_never_promote_negative_
         inconsistent.claim_material()[0].observations[0].outcome,
         ProbeOutcome::Refused { .. }
     ));
+    assert_eq!(
+        inconsistent.incompletion(claim_id),
+        Some(format!(
+            "{}: the run was refused: semantic event transcripts differ across isolated repeat runs",
+            plan.sessions[0].mode.name
+        ))
+        .as_deref()
+    );
 }
 
 #[test]
@@ -1020,4 +1050,51 @@ fn evaluation_material_integrates_with_multi_mode_phase9_sidecars() {
         crate::validate_evidence_sidecars(SIGNAL, &catalog, None, documents.probes()),
         Err(EvidenceSidecarError::OrphanDocument { .. })
     ));
+}
+
+/// § 51: a transitive dependency the private workspace never authenticated
+/// fails at import as a bare `ERR_MODULE_NOT_FOUND`, because
+/// `require_authenticated_dependency_closure` reads only the analyzed
+/// package's own declared dependencies. The candidate is withheld either way;
+/// this names what failed instead of echoing Node.
+#[test]
+fn a_missing_transitive_dependency_is_named_rather_than_echoed() {
+    let named = super::unresolvable_package_incompletion(
+        "Error: Cannot find package 'seroval' imported from \
+         /tmp/private/node_modules/solid-js/web/dist/server.js",
+    )
+    .expect("a missing-package throw is named");
+    assert!(
+        named.contains("\"seroval\""),
+        "it names the package: {named}"
+    );
+    assert!(
+        named.contains("authenticated dependency closure"),
+        "and says why it is absent: {named}"
+    );
+
+    // Double quotes are the other spelling Node uses.
+    assert!(
+        super::unresolvable_package_incompletion(
+            "Cannot find package \"left-pad\" imported from x"
+        )
+        .is_some_and(|named| named.contains("\"left-pad\"")),
+    );
+
+    // The controls: every other throw keeps its own text, because rewriting a
+    // throw this does not understand would replace a real diagnosis with a
+    // guess. A truncated frame names nothing, and an empty name is not a
+    // package.
+    assert_eq!(
+        super::unresolvable_package_incompletion("ReferenceError: document is not defined"),
+        None
+    );
+    assert_eq!(
+        super::unresolvable_package_incompletion("Cannot find package "),
+        None
+    );
+    assert_eq!(
+        super::unresolvable_package_incompletion("Cannot find package ''"),
+        None
+    );
 }

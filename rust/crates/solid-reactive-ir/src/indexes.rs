@@ -484,6 +484,91 @@ impl<'a> SemanticLookup<'a> {
             })
     }
 
+    /// Whether the accepted contract bound to `symbol` closes `creates` with
+    /// no item, or `None` when no contract is bound to it at all.
+    ///
+    /// `Some(false)` is the counterexample the generator's `creates` proposal
+    /// walk refuses on: an open domain and a domain carrying a `create` item
+    /// are both reasons not to propose that the calling export publishes none.
+    /// `None` means this callee is not a contracted dependency export, which is
+    /// not a counterexample this walk can name — see
+    /// [`crate::CreatesProposalWalk`].
+    pub(super) fn contract_creates_closed_empty(&self, symbol: &str) -> Option<bool> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .map(|binding| binding.summary.creates_closed_empty)
+    }
+
+    /// The exact compiler symbol demanded at one span of one file, if any.
+    ///
+    /// Deliberately narrower than [`Self::callee_symbol`]: no wrapper peeling
+    /// and no member fallback, because the callers are spans that *are* a
+    /// binding name (an import's local name) rather than an arbitrary callee
+    /// expression.
+    pub(super) fn entity_symbol(&self, file: &FileFacts, span: Span) -> Option<&'a str> {
+        self.entities
+            .at(file.path.as_str(), span)
+            .map(SymbolId::as_str)
+    }
+
+    /// The module specifier the compiler resolved this callee's declaration to
+    /// originate from, or `None` when the build has no resolved declaration for
+    /// it (or the producer recorded no origin).
+    ///
+    /// An exact resolved fact and nothing weaker: it is the callee's own
+    /// `ResolvedDeclaration::origin_module`, never derived from the callee's
+    /// spelling or from an import statement standing nearby.
+    ///
+    /// **Exact, and frequently absent** — measured 2026-09-17, and worth
+    /// knowing before trusting it. Probed against the audited rc.3 install,
+    /// every `solid-js` primitive callee answered `None` here, so the caller
+    /// that names the package half of a
+    /// [`crate::CreatesDeclineKind::DialectSilent`] record reached its
+    /// import-statement fallback instead. That record's package is therefore
+    /// usually the *written specifier's* package rather than this one, which is
+    /// weaker than it reads: for `solid-js` it cannot tell a re-export of
+    /// `@solidjs/signals`' declaration from `solid-js`' own re-declaration.
+    ///
+    /// Nothing decides an audit on it. The proposal-side denial lookup moved to
+    /// [`Self::callee_declaration_source_file`] for exactly that reason, and the
+    /// census that proves a claim binds an archive. What remains is that the
+    /// decline record — an instrument for ranking *which primitive to audit
+    /// next* — can name a package coarser than the one whose bytes the call
+    /// reached.
+    /// The file the callee's resolved declaration is written in.
+    ///
+    /// Distinct from [`Self::callee_origin_module`], and the distinction is the
+    /// point: `origin_module` is the module the *specifier* resolved to, so it
+    /// cannot tell a re-export from a re-declaration. This resolves through the
+    /// re-export to the file that actually declares the name, which is the only
+    /// thing that identifies the package whose audited bytes a call reaches.
+    ///
+    /// Measured against the audited rc.3 install: a `solid-js` import of
+    /// `untrack` answers `@solidjs/signals/.../core/core.d.ts`, while a
+    /// `solid-js` import of `createSignal` answers
+    /// `solid-js/types/client/hydration.d.ts` -- 2.0 re-exports the first and
+    /// re-declares the second.
+    pub(super) fn callee_declaration_source_file(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<&'a str> {
+        let declaration = self
+            .resolved_callee_call(file, callee)?
+            .declaration
+            .as_ref()?;
+        (!declaration.source_file.is_empty()).then_some(declaration.source_file.as_ref())
+    }
+
+    pub(super) fn callee_origin_module(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
+        let declaration = self
+            .resolved_callee_call(file, callee)?
+            .declaration
+            .as_ref()?;
+        (!declaration.origin_module.is_empty()).then_some(declaration.origin_module.as_ref())
+    }
+
     pub(super) fn contract_owner_requirements(
         &self,
         symbol: &str,

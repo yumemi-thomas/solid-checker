@@ -1,4 +1,9 @@
 /bin/
+# Build-provenance stamp for the runtime-probe harness image, written by
+# scripts/probe-harness-source-identity.mjs --write-stamp. Generated like
+# bin/solid-typefacts.buildinfo, and never a root of trust on its own: the
+# probe adapter compares it with the manifest digest compiled into the verifier.
+/packages/cli/probe-harness.buildinfo
 # Per-user agent state; .claude/settings.json, skills, and hooks are shared.
 .claude/settings.local.json
 .claude/worktrees/
@@ -12,21 +17,15 @@ fixtures/upstream-parity/.staging/
 **/node_modules/
 !rust/crates/solid-facts-backend/tests/fixtures/contract-async/node_modules/
 !rust/crates/solid-facts-backend/tests/fixtures/contract-async/node_modules/**
+!rust/crates/solid-facts-backend/tests/fixtures/unsupported-runtime-v1/node_modules/
+!rust/crates/solid-facts-backend/tests/fixtures/unsupported-runtime-v1/node_modules/**
 # Contract integration tests use small, hand-written packages as fixtures.
 !fixtures/reactive-ir/package-*/node_modules/
 !fixtures/reactive-ir/package-*/node_modules/**
-!fixtures/reactive-ir/upstream-divergences/node_modules/
-!fixtures/reactive-ir/upstream-divergences/node_modules/**
-!fixtures/reactive-ir/array-shape-v1/node_modules/
-!fixtures/reactive-ir/array-shape-v1/node_modules/**
-!fixtures/reactive-ir/v1-reactivity/node_modules/
-!fixtures/reactive-ir/v1-reactivity/node_modules/**
-!fixtures/reactive-ir/v1-write-scope/node_modules/
-!fixtures/reactive-ir/v1-write-scope/node_modules/**
+!fixtures/package-contracts/props-split-vocabulary/node_modules/
+!fixtures/package-contracts/props-split-vocabulary/node_modules/**
 !fixtures/package-contracts/external-reexport/node_modules/
 !fixtures/package-contracts/external-reexport/node_modules/**
-!fixtures/package-contracts/dialect-detection/node_modules/
-!fixtures/package-contracts/dialect-detection/node_modules/**
 !fixtures/package-contracts/class-expression-kind/node_modules/
 !fixtures/package-contracts/class-expression-kind/node_modules/**
 !fixtures/package-contracts/carried-value-kind/node_modules/
@@ -34,14 +33,12 @@ fixtures/upstream-parity/.staging/
 # The bundled-contract consumer resolves a real package name; its stub is the
 # only thing that makes the installed-version and callback-timing proofs
 # reproducible from a clean checkout.
-!fixtures/reactive-ir/bundled-scheduled-consumer/node_modules/
-!fixtures/reactive-ir/bundled-scheduled-consumer/node_modules/**
-!fixtures/reactive-ir/bundled-contract-solid1-consumer/node_modules/
-!fixtures/reactive-ir/bundled-contract-solid1-consumer/node_modules/**
-!fixtures/reactive-ir/bundled-rootless-consumer/node_modules/
-!fixtures/reactive-ir/bundled-rootless-consumer/node_modules/**
 !fixtures/package-contracts/shorthand-block-scope/node_modules/
 !fixtures/package-contracts/shorthand-block-scope/node_modules/**
+!fixtures/package-contracts/composed-operation-provenance/node_modules/
+!fixtures/package-contracts/composed-operation-provenance/node_modules/**
+!fixtures/package-contracts/composed-operation-shadowed-target/node_modules/
+!fixtures/package-contracts/composed-operation-shadowed-target/node_modules/**
 # Dialect detection reads the installed solid-js version from these stubs.
 !fixtures/reactive-ir/dialect-solid-*/node_modules/
 !fixtures/reactive-ir/dialect-solid-*/node_modules/**
@@ -53,12 +50,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/jsx-nested-children-attribute-*/node_modules/**
 !fixtures/reactive-ir/eslint-compat/node_modules/
 !fixtures/reactive-ir/eslint-compat/node_modules/**
-!fixtures/reactive-ir/store-subpath/node_modules/
-!fixtures/reactive-ir/store-subpath/node_modules/**
 !fixtures/reactive-ir/shared-reactivity-v2/node_modules/
 !fixtures/reactive-ir/shared-reactivity-v2/node_modules/**
-!fixtures/reactive-ir/no-owner-v1/node_modules/
-!fixtures/reactive-ir/no-owner-v1/node_modules/**
 !fixtures/reactive-ir/namespace-import-v2/node_modules/
 !fixtures/reactive-ir/namespace-import-v2/node_modules/**
 !fixtures/reactive-ir/solid2-precision/node_modules/
@@ -70,26 +63,39 @@ fixtures/upstream-parity/.staging/
 # solid-1x-sources selects the 1.x catalog from this stub. Without the
 # exception the stub is untracked, the fixture falls back to the 2.0 default in
 # CI, and its 1.x-only source factories stop being exercised at all.
-!fixtures/reactive-ir/solid-1x-sources/node_modules/
-!fixtures/reactive-ir/solid-1x-sources/node_modules/**
-!fixtures/reactive-ir/import-location/node_modules/
-!fixtures/reactive-ir/import-location/node_modules/**
-!fixtures/engine/eslint-reactivity-v1/node_modules/
-!fixtures/engine/eslint-reactivity-v1/node_modules/**
-!fixtures/reactive-ir/eslint-plugin-corpus-v1/node_modules/
-!fixtures/reactive-ir/eslint-plugin-corpus-v1/node_modules/**
-!fixtures/reactive-ir/summary-callback-extent/node_modules/
-!fixtures/reactive-ir/summary-callback-extent/node_modules/**
 !fixtures/package-contracts/solid-reexport/node_modules/
 !fixtures/package-contracts/solid-reexport/node_modules/**
 !fixtures/package-contracts/callback-reactive-arguments/node_modules/
 !fixtures/package-contracts/callback-reactive-arguments/node_modules/**
-!fixtures/package-contracts/callback-slot-props-forwarding/node_modules/
-!fixtures/package-contracts/callback-slot-props-forwarding/node_modules/**
 !fixtures/package-contracts/callback-slot-derived-store/node_modules/
 !fixtures/package-contracts/callback-slot-derived-store/node_modules/**
+!fixtures/package-contracts/callback-untracked-wrapper/node_modules/
+!fixtures/package-contracts/callback-untracked-wrapper/node_modules/**
+!fixtures/package-contracts/callback-deferred-untracked-chain/node_modules/
+!fixtures/package-contracts/callback-deferred-untracked-chain/node_modules/**
+!fixtures/package-contracts/escaping-private-helper/node_modules/
+!fixtures/package-contracts/escaping-private-helper/node_modules/**
 !fixtures/package-contracts/callback-slot-derived-store-server/node_modules/
 !fixtures/package-contracts/callback-slot-derived-store-server/node_modules/**
+!fixtures/package-contracts/implementation-census-creates/node_modules/
+!fixtures/package-contracts/implementation-census-creates/node_modules/**
+!fixtures/package-contracts/value-exports/node_modules/
+!fixtures/package-contracts/value-exports/node_modules/**
+!fixtures/package-contracts/creates-decline-records/node_modules/
+!fixtures/package-contracts/creates-decline-records/node_modules/**
+!fixtures/package-contracts/implementation-census-reads/node_modules/
+!fixtures/package-contracts/implementation-census-reads/node_modules/**
+!fixtures/package-contracts/implementation-census-returns/node_modules/
+!fixtures/package-contracts/implementation-census-returns/node_modules/**
+# The nested consumer whose own top-level `import "solid-js"` is what the
+# probe workspace's authenticated dependency closure has to resolve. Its stub
+# is copied into the private workspace and *run* there, so an untracked one
+# does not merely change the dialect in CI — it removes the only fixture that
+# proves a consumer recipe can import the package under test at all.
+!fixtures/package-contracts/implementation-census-creates/dependency-consumer/node_modules/
+!fixtures/package-contracts/implementation-census-creates/dependency-consumer/node_modules/**
+!fixtures/package-contracts/closed-domain-probe-gate/primitive-consumer/node_modules/
+!fixtures/package-contracts/closed-domain-probe-gate/primitive-consumer/node_modules/**
 # The dependency contract in this stub is the whole point of the fixture: it
 # advertises host conditions, so it only resolves when the generator passes the
 # analyzed target's export-map conditions through. Without this exception the
@@ -116,8 +122,6 @@ fixtures/upstream-parity/.staging/
 # `uncharted-helpers` contract, which is what makes its callee uncontracted.
 !fixtures/package-contracts/arrow-export-attribution/node_modules/
 !fixtures/package-contracts/arrow-export-attribution/node_modules/**
-!fixtures/package-contracts/escaping-private-helper/node_modules/
-!fixtures/package-contracts/escaping-private-helper/node_modules/**
 !fixtures/package-contracts/export-identity-join/node_modules/
 !fixtures/package-contracts/export-identity-join/node_modules/**
 !fixtures/package-contracts/parameter-member-forwarded/node_modules/
@@ -126,6 +130,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/callback-execution-boundary/node_modules/**
 !fixtures/package-contracts/destructured-parameter-callback/node_modules/
 !fixtures/package-contracts/destructured-parameter-callback/node_modules/**
+!fixtures/package-contracts/destructured-return-slot/node_modules/
+!fixtures/package-contracts/destructured-return-slot/node_modules/**
 !fixtures/package-contracts/unreached-private-obligation/node_modules/
 !fixtures/package-contracts/unreached-private-obligation/node_modules/**
 !fixtures/package-contracts/uncaptured-source-return/node_modules/
@@ -138,10 +144,6 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/conditional-returns-divergence/node_modules/**
 !fixtures/package-contracts/conditional-returns-divergence-both/node_modules/
 !fixtures/package-contracts/conditional-returns-divergence-both/node_modules/**
-!fixtures/package-contracts/callback-untracked-wrapper/node_modules/
-!fixtures/package-contracts/callback-untracked-wrapper/node_modules/**
-!fixtures/package-contracts/callback-deferred-untracked-chain/node_modules/
-!fixtures/package-contracts/callback-deferred-untracked-chain/node_modules/**
 !fixtures/package-contracts/multi-role-callback-parameter/node_modules/
 !fixtures/package-contracts/multi-role-callback-parameter/node_modules/**
 packages/wasm/browser.js
@@ -152,3 +154,16 @@ packages/wasm/solid-checker-wasm.wasi.cjs
 packages/wasm/solid-checker-wasm.wasm32-wasi*.wasm
 packages/wasm/wasi-worker*.mjs
 /.typefacts/
+
+# Bulk phase-21 measurement dumps. These are 20-70 MB machine-readable
+# artifacts of one measurement run each -- evidence a document cites, never an
+# input any code or gate reads. 63 of them were tracked before this rule
+# existed (961 MB, 21.3 M lines, 94% of the branch's whole diff), which is what
+# the name-based list here failed to prevent: it enumerated some names and
+# missed 42 others, and .gitignore never untracks what is already tracked.
+#
+# Structural now, not name-based, and the tracked copies were removed from the
+# index on 2026-09-17. The files stay on disk; regenerate rather than commit.
+# Documents citing one by relative link are citing a local artifact, not a
+# repository file.
+docs/package-contract-v2/phase21/*measurement.json

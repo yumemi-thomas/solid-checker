@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"path"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -31,6 +32,9 @@ func (p *project) ExportValueTranscripts(
 				demand.CallableDepth,
 				typefacts.MaxInvocationCallableDepth,
 			)
+		}
+		if err := validateDemandedPremises(demand); err != nil {
+			return typefacts.ExportValueAnswer{}, err
 		}
 	}
 	p.mu.Lock()
@@ -129,6 +133,11 @@ func (p *project) exportValueTranscriptLocked(
 	transcript.Value = p.invocationValueFactLocked(valueType)
 	transcript.CallablePaths = p.callablePathsLocked(valueType, demand.CallableDepth)
 	signatures := p.checker.GetSignaturesOfType(valueType, checker.SignatureKindCall)
+	// The declared signature, when there is exactly one, is also the premise
+	// the implementation's form census may classify under (ADR 0038): it is
+	// what the consumer compiles its arguments against, and what a synthesized
+	// veto samples from. Handed down as a fact, decided nothing about here.
+	var premise *declaredSignaturePremise
 	if len(signatures) == 1 {
 		declaration := p.currentSignatureDeclaration(signatures[0], target)
 		if declaration != nil {
@@ -136,6 +145,9 @@ func (p *project) exportValueTranscriptLocked(
 				signatures[0], declaration, target, typefacts.CallKindCall, demand.CallableDepth,
 			)
 			transcript.CallSignature = &selected
+			premise = &declaredSignaturePremise{
+				signature: signatures[0], declaration: declaration, target: target,
+			}
 		}
 	} else if len(signatures) > 1 {
 		// An overload set has no single signature, and inventing one would
@@ -163,11 +175,48 @@ func (p *project) exportValueTranscriptLocked(
 			ctx,
 			*demand.ImplementationLocation,
 			demand.CallableDepth,
+			premise,
 		)
 		transcript.Implementation = &implementation
+		transcript.Initializer = p.exportInitializerTranscriptLocked(*demand.ImplementationLocation)
+	}
+	if demand.LocalDeclarationLocation != nil {
+		local := p.localDeclarationImplementationTranscriptLocked(
+			ctx,
+			*demand.LocalDeclarationLocation,
+			demand.CallableDepth,
+			demand.ParameterPremises,
+		)
+		transcript.LocalDeclaration = &local
 	}
 	transcript.Complete = true
 	return transcript
+}
+
+// validateDemandedPremises refuses a demand whose ParameterPremises are not a
+// premise this producer can answer: they belong to a local-declaration demand
+// only — an export's root binds its declared signature, and a consumer
+// restating one would be a premise nobody reviewed — with strictly increasing
+// indexes and a nonempty type each. Refused before the lock, as the depth
+// limit is, so a malformed batch answers nothing rather than something.
+func validateDemandedPremises(demand typefacts.ExportValueDemand) error {
+	if len(demand.ParameterPremises) == 0 {
+		return nil
+	}
+	if demand.LocalDeclarationLocation == nil {
+		return fmt.Errorf("export-value demand states parameter premises without a local declaration to bind them to")
+	}
+	previous := -1
+	for _, premise := range demand.ParameterPremises {
+		if premise.Index <= previous {
+			return fmt.Errorf("export-value demand premises are not in strictly increasing parameter order at %d", premise.Index)
+		}
+		if premise.Type == "" {
+			return fmt.Errorf("export-value demand premise for parameter %d states no type", premise.Index)
+		}
+		previous = premise.Index
+	}
+	return nil
 }
 
 // completeOverloadSet is the all-or-nothing gate on a reported overload set: it
@@ -192,6 +241,7 @@ func (p *project) exportImplementationTranscriptLocked(
 	ctx context.Context,
 	location typefacts.Location,
 	callableDepth int,
+	premise *declaredSignaturePremise,
 ) typefacts.ExportImplementationTranscript {
 	transcript := typefacts.ExportImplementationTranscript{Location: location}
 	sourceFile, err := p.sourceFileFor(location)
@@ -219,35 +269,465 @@ func (p *project) exportImplementationTranscriptLocked(
 	transcript.Target = p.idFor(target)
 	valueType := p.checker.GetTypeAtLocation(node)
 	signatures := p.checker.GetSignaturesOfType(valueType, checker.SignatureKindCall)
+	// ADR 0099: a value with no call and no construct signature has no
+	// invocation for a call domain to be about. Stated with the declaration
+	// for identity and one open reason, and only when the classifier proves
+	// it; any doubt falls through to callSignatureNotUnique as before.
+	// A class symbol is excluded by name before the type is asked: the type
+	// at a class declaration's own name is the *instance* type, which has no
+	// construct signature, while the exported value is the constructor, and
+	// `typeof Box === "function"`. The fixture's `Box` found this -- the
+	// synthesized typeof veto contradicted the stated fact -- and the
+	// construct-signature test in the classifier stays as the second guard.
+	if len(signatures) == 0 && target.ValueDeclaration != nil &&
+		target.Flags&ast.SymbolFlagsClass == 0 {
+		if fact := notCallableValueFact(p.checker, valueType); fact != nil {
+			if declaration := p.resolvedDeclaration(nil, target.ValueDeclaration, target); declaration != nil {
+				transcript.Declaration = declaration
+				transcript.NotCallableValue = fact
+				transcript.OpenReasons = append(transcript.OpenReasons, "valueNotCallable")
+				return transcript
+			}
+		}
+	}
+	// ADR 0103: an export that is an immutable alias of a default-library
+	// member is that member, by identity. Stated before the signature check
+	// and carried past it, because the two refusals it answers sit on
+	// opposite sides: an overloaded member (`Object.keys`) never reaches the
+	// implementation path at all, while a body-less one (`Math.floor`)
+	// reaches it and finds no body. The open reason is still appended in
+	// both cases -- this fact does not make the transcript complete, it
+	// gives a reviewed consumer something to close on instead.
+	if alias := p.defaultLibraryAliasFactLocked(target); alias != nil {
+		transcript.DefaultLibraryAlias = alias
+		if transcript.Declaration == nil && target.ValueDeclaration != nil {
+			transcript.Declaration = p.resolvedDeclaration(nil, target.ValueDeclaration, target)
+		}
+	}
+	// ADR 0105: a class export is **constructed**, not called. `new C(…)` runs
+	// the constructor body exactly as a call runs a function body, and the
+	// class-construction census below already knows how to walk it -- but
+	// `SignatureKindCall` yields nothing for a class, and `!= 1` reports the
+	// same reason for "none" as for "several", so the transcript returned
+	// before any implementation was looked for and the census was unreachable
+	// for a class export.
+	//
+	// Asked only when the call side is *empty*. A value with both a call and a
+	// construct signature is two claims, and picking one of them here would be
+	// choosing which without saying so.
+	callKind := typefacts.CallKindCall
+	if len(signatures) == 0 {
+		if constructs := p.classConstructSignaturesLocked(valueType); len(constructs) == 1 {
+			signatures, callKind = constructs, typefacts.CallKindConstruct
+		}
+	}
 	if len(signatures) != 1 {
 		transcript.OpenReasons = append(transcript.OpenReasons, "callSignatureNotUnique")
 		return transcript
 	}
 	selectedDeclaration := p.currentSignatureDeclaration(signatures[0], target)
 	implementation := invocationImplementationDeclaration(selectedDeclaration, target)
+	// A binding that aliases a function -- `const defaultScheduler =
+	// systemSetTimeoutZero` -- has no body of its own, and when the aliased
+	// name is imported from a sibling module of a package that ships
+	// declarations, module resolution lands on the `.d.ts`, which has no body
+	// either. The runtime value is the runtime module's export of that name,
+	// so the census walks that body and the transcript states the hop
+	// (handshake protocol 20): Declaration stays the demanded binding's own
+	// declaration, and ImplementationOf names whose body was walked.
+	//
+	// The hop is taken whenever the binding is such an alias, not only when
+	// the signature path found no body: for a local alias that path already
+	// reached the aliased function and named *it* as the declaration, which
+	// misnamed the export; the binding is the declaration, and the aliased
+	// function is what the transcript now says it is.
+	var implementationOf *typefacts.ResolvedDeclaration
+	if aliased, aliasedSymbol := p.aliasedRuntimeImplementationLocked(target); aliased != nil {
+		if resolved := p.resolvedDeclaration(nil, aliased, aliasedSymbol); resolved != nil {
+			implementationOf = resolved
+			implementation = aliased
+			selectedDeclaration = aliased
+		}
+	}
 	if selectedDeclaration == nil || implementation == nil || implementation.Body() == nil {
 		transcript.OpenReasons = append(transcript.OpenReasons, "implementationUnavailable")
 		return transcript
 	}
-	transcript.Declaration = p.resolvedDeclaration(nil, implementation, target)
+	// ADR 0105: selecting the construct signature found a constructor *body*,
+	// and a construction runs more than that. The heritage clause's
+	// constructor, every field initializer, a static block, a computed member
+	// name, a decorator and a parameter property each run code this body
+	// census would be silent about, and silence is the failure this census
+	// exists to prevent. `classConstructorAt` is ADR 0047's line, already
+	// drawn and already tested; it is asked here rather than re-derived, and
+	// every one of its reasons refuses.
+	if callKind == typefacts.CallKindConstruct {
+		constructor, refusal := classConstructorAt(implementation.Parent)
+		if refusal != "" {
+			transcript.OpenReasons = append(transcript.OpenReasons, refusal)
+			return transcript
+		}
+		// Overload resolution picked a constructor; the gate walked the class
+		// and picked one too. A disagreement means one of them is describing a
+		// different node, which is never something to census through.
+		if constructor != implementation {
+			transcript.OpenReasons = append(transcript.OpenReasons, "declarationAmbiguous")
+			return transcript
+		}
+	}
+	if implementationOf != nil {
+		transcript.Declaration = p.resolvedDeclaration(nil, target.ValueDeclaration, target)
+		transcript.ImplementationOf = implementationOf
+	} else {
+		declared := implementation
+		if callKind == typefacts.CallKindConstruct {
+			// The transcript is about the **class** the consumer demanded;
+			// what it censuses is the constructor. A constructor has no name
+			// of its own, so reporting it here would answer "constructor" to a
+			// query for "Store" -- which the session refuses outright, and
+			// correctly: that check is what stops a producer describing some
+			// other node than the one demanded. The same indirection
+			// `localDeclarationImplementationTranscriptLocked` takes when a
+			// consumer resolves a callee to a class.
+			if class := implementation.Parent; class != nil &&
+				(ast.IsClassDeclaration(class) || ast.IsClassExpression(class)) {
+				declared = class
+				// `var Store = class {…}` is what every bundler emits for
+				// `class Store {…}`, and the class expression itself is
+				// anonymous. The enclosing variable declaration is what
+				// carries the name, which is the same indirection the arrow
+				// case takes for `const helper = () => …`.
+				if class.Name() == nil {
+					if binding := class.Parent; binding != nil &&
+						ast.IsVariableDeclaration(binding) {
+						declared = binding
+					}
+				}
+			}
+		}
+		transcript.Declaration = p.resolvedDeclaration(nil, declared, target)
+	}
 	if transcript.Declaration == nil {
 		transcript.OpenReasons = append(transcript.OpenReasons, "declarationUnavailable")
 		return transcript
 	}
+	if callKind == typefacts.CallKindConstruct {
+		transcript.Invocation = typefacts.CallKindConstruct
+	}
+	transcript.CompletionForm = implementationCompletionForm(implementation)
 	selected := p.selectedSignatureLocked(
-		signatures[0], selectedDeclaration, target, typefacts.CallKindCall, callableDepth,
+		signatures[0], selectedDeclaration, target, callKind, callableDepth,
 	)
 	transcript.Signature = &selected
 	transcript.ParameterUses = p.parameterUseCensusLocked(ctx, implementation)
+	transcript.UnwrittenParameters = p.unwrittenParameterBindingsLocked(implementation, transcript.Signature, location)
+	transcript.InitialParameterReads = p.initialParameterReadsLocked(implementation, transcript.Signature, location, transcript.ParameterUses)
 	transcript.ControlFlow = p.controlFlowCensusLocked(implementation)
 	transcript.CallableReturns = p.callableReturnCensusesLocked(implementation)
 	transcript.Calls = p.implementationCallCensusLocked(implementation)
+	if nodeLocation(implementation).Path == location.Path {
+		transcript.OriginalHelperReads = p.originalHelperReadsLocked(implementation, transcript.Signature, transcript.Calls, transcript.ParameterUses)
+	}
+	transcript.UncensusedInvokingForms = p.uncensusedInvokingFormCensusLocked(implementation)
+	// ADR 0045: whether the value this body hands its caller is provably a
+	// primitive, over the same program the forms above were classified on. A
+	// premised classification replaces it below, because the fact belongs to
+	// the premise.
+	transcript.PrimitiveCompletion = p.primitiveCompletionLocked(implementation)
+	// ADR 0038: when a form the classifier decides from a type was recorded
+	// over the parameters' own (`any`) types, classify the body once more
+	// under the export's declared signature, on a checked twin of the file.
+	// The twin is built only then — most bodies record no such form — and a
+	// twin that cannot be bound to the declaration leaves the census as it
+	// is, with the refusal stated for measurement.
+	//
+	// It is built as well when a helper reachable from the body records such a
+	// form over its own types: the argument types at the reaching call, on the
+	// twin, are the premise a consumer may hand back for the helper's census
+	// (CallArgumentPremises), and an unpremised caller has none to offer.
+	if premise != nil && (formsMayClearUnderTypes(transcript.UncensusedInvokingForms) ||
+		p.calleesWorthPremisingLocked(implementation)) {
+		premised := p.premisedFormCensusLocked(ctx, implementation, premise)
+		if premised.refusal != "" {
+			transcript.ParameterPremiseRefusal = premised.refusal
+		} else {
+			transcript.UncensusedInvokingForms = premised.forms
+			transcript.ParameterPremises = premised.premises
+			transcript.CallArgumentPremises = premised.arguments
+			transcript.PrimitiveCompletion = premised.primitiveCompletion
+		}
+	}
 	if len(transcript.ControlFlow.Unsupported) != 0 {
 		transcript.OpenReasons = append(transcript.OpenReasons, "controlFlowUnsupported")
 		return transcript
 	}
 	transcript.Complete = true
 	return transcript
+}
+
+// localDeclarationImplementationTranscriptLocked answers a demand that names a
+// function-like declaration by its exact source range, rather than by an
+// identifier that resolves to it.
+//
+// It exists because a census must recurse into module-local helpers, and
+// exportImplementationTranscriptLocked cannot reach one: that path starts at an
+// identifier, resolves its symbol, and takes the implementation of its single
+// call signature — machinery that presupposes a binding some export names. A
+// helper nothing exports has no such binding.
+//
+// Everything it refuses, it refuses by open reason and never by answering a
+// transcript about some other declaration:
+//
+//   - The accepted program resolved no file at that path, or the byte range is
+//     outside it or off a UTF-8 boundary: `sourceUnavailable`. This is a
+//     statement about the *program*, and by itself it does not separate a file
+//     the snapshot carries as runtime source from a `lib.d.ts` or a
+//     dependency's declaration file, which the program also holds — hence the
+//     next reason.
+//   - The file is in the program but carries no runtime bytes, i.e. it is a
+//     declaration file: `declarationOutsideSnapshot`. A `.d.ts` has no body to
+//     census, and a census that recursed into one would be reading a
+//     description of code rather than the code.
+//   - No node in that file has exactly this span, or the node that does is not
+//     function-like: `declarationNotExact`. Containment is not enough; the
+//     span must match in both bytes.
+//   - More than one function-like node has exactly this span:
+//     `declarationAmbiguous`. Nothing in the grammar is known to produce that,
+//     and a demand that hits it is refused rather than resolved by picking.
+//   - The declaration has no body: `implementationUnavailable`.
+//   - The declaration the checker resolves from the located node's own symbol
+//     does not sit inside the demanded span: `declarationIdentityUnbound`. See
+//     below.
+//
+// **What binds the answer to the demand, and what does not.** The transcript's
+// Location is the requested location *verbatim*, so on its own it binds
+// nothing at all: a producer answering about a different helper would echo the
+// demand just the same. The binding is Declaration, whose location the checker
+// derives independently — from the located declaration's own name node, via
+// resolvedDeclaration — and which must name the demanded file and lie inside
+// the demanded span. It is a containment rather than an equality because a
+// named function's resolved location is its *identifier*, while an anonymous
+// `const helper = () => …` resolves to the arrow itself. The client repeats
+// this comparison, and additionally requires QueryName and the resolved
+// declaration's name to agree where both are populated.
+//
+// `demanded` is the consumer's premise for this declaration's form census: the
+// argument types the caller's premised census recorded at the call that
+// reached it (ExportValueDemand.ParameterPremises). The census is classified
+// under them on a spelled twin when the body, or a helper reachable from it,
+// records a type-decided form over its own types, and the transcript echoes
+// exactly the premises the twin bound; a twin that cannot bind them leaves the
+// census over the parameters' own types, the strictly more refusing reading,
+// with the refusal stated for measurement.
+func (p *project) localDeclarationImplementationTranscriptLocked(
+	ctx context.Context,
+	location typefacts.Location,
+	callableDepth int,
+	demanded []typefacts.ParameterPremise,
+) typefacts.ExportImplementationTranscript {
+	transcript := typefacts.ExportImplementationTranscript{Location: location}
+	sourceFile, err := p.sourceFileFor(location)
+	if err != nil {
+		transcript.OpenReasons = append(transcript.OpenReasons, "sourceUnavailable")
+		return transcript
+	}
+	// sourceFileFor accepts any file of the accepted program, which includes
+	// every `lib.*.d.ts` and every dependency declaration file. Those are not
+	// the snapshot's runtime source — the set the producer publishes as
+	// Sources() is exactly the program's non-declaration files — and an
+	// implementation census over a declaration file would be a census of a
+	// description.
+	if sourceFile.IsDeclarationFile || !p.isCurrentSourceFile(sourceFile) {
+		transcript.OpenReasons = append(transcript.OpenReasons, "declarationOutsideSnapshot")
+		return transcript
+	}
+	var declared *ast.Node
+	matches := exactFunctionLikeDeclarationsAt(sourceFile, location)
+	if len(matches) == 0 {
+		// A class at the demanded location is a callee too: `new C(…)` runs a
+		// constructor body exactly as a call runs a function body, and a
+		// consumer that resolved the callee to a class has no other node to
+		// name. classConstructorAt either hands back that constructor or says
+		// which part of the construction this producer cannot see (protocol
+		// 55); every one of its reasons refuses here, and a consumer refuses on
+		// any nonempty openReasons whether or not it has seen the word.
+		if class := exactClassDeclarationAt(sourceFile, location); class != nil {
+			constructor, refusal := classConstructorAt(class)
+			if refusal != "" {
+				transcript.OpenReasons = append(transcript.OpenReasons, refusal)
+				return transcript
+			}
+			matches = []*ast.Node{constructor}
+			// The *declaration* this transcript is about stays the class: a
+			// consumer demanded `C`, and the identity it binds the answer to
+			// must be the thing it asked for. What the transcript *censuses* is
+			// the constructor, which is the code a construction runs. Reporting
+			// the constructor as the declaration would answer `"constructor"`
+			// to a query for `"C"`, which the session refuses outright — and
+			// correctly, since that check is what stops a producer describing
+			// some other node than the one demanded.
+			declared = class
+		}
+	}
+	if len(matches) == 0 {
+		transcript.OpenReasons = append(transcript.OpenReasons, "declarationNotExact")
+		return transcript
+	}
+	if len(matches) > 1 {
+		transcript.OpenReasons = append(transcript.OpenReasons, "declarationAmbiguous")
+		return transcript
+	}
+	implementation := matches[0]
+	if implementation.Body() == nil {
+		transcript.OpenReasons = append(transcript.OpenReasons, "implementationUnavailable")
+		return transcript
+	}
+	// The declared name, when there is one, is what names the symbol; a
+	// `const helper = () => …` carries its name on the enclosing variable
+	// declaration instead, which is the one indirection taken here. An
+	// anonymous callable instead uses its own compiler signature symbol when
+	// that symbol independently declares this exact node (protocol 37).
+	name := implementation.Name()
+	if name == nil {
+		if parent := implementation.Parent; parent != nil && ast.IsVariableDeclaration(parent) {
+			name = parent.Name()
+		}
+	}
+	if name == nil {
+		// A constructor has no name of its own, and the thing a consumer
+		// resolved to reach it was the class: `new C(…)` names `C`. So the
+		// class's own name identifies this transcript — its declaration for
+		// `class C {…}`, and the enclosing variable declaration's for the
+		// compiled `const C = class {…}`, which is the same indirection the
+		// arrow case above takes.
+		name = classNameForConstructor(implementation)
+	}
+	var target *ast.Symbol
+	if name != nil && ast.IsIdentifier(name) {
+		transcript.QueryName = name.Text()
+		target = p.canonicalSymbol(p.checker.GetSymbolAtLocation(name))
+	} else if ast.IsArrowFunction(implementation) || ast.IsFunctionExpression(implementation) {
+		// An exact anonymous callable node has its own compiler signature
+		// symbol. Require that symbol to declare this very node; containment
+		// or borrowing an enclosing factory's symbol proves no identity.
+		target = p.canonicalSymbol(implementation.Symbol())
+		if target != nil && (len(target.Declarations) != 1 || target.Declarations[0] != implementation) {
+			target = nil
+		}
+	}
+	if target == nil {
+		transcript.OpenReasons = append(transcript.OpenReasons, "symbolUnresolved")
+		return transcript
+	}
+	transcript.Target = p.idFor(target)
+	if declared == nil {
+		declared = implementation
+	}
+	transcript.Declaration = p.resolvedDeclaration(nil, declared, target)
+	if transcript.Declaration == nil {
+		transcript.OpenReasons = append(transcript.OpenReasons, "declarationUnavailable")
+		return transcript
+	}
+	transcript.CompletionForm = implementationCompletionForm(implementation)
+	// The identity binding. Location is the demand echoed back, so it proves
+	// nothing by itself; this is the comparison that does, because the resolved
+	// declaration's own location comes from the checker rather than from the
+	// demand.
+	if !locationEncloses(location, transcript.Declaration.Location) {
+		transcript.OpenReasons = append(
+			transcript.OpenReasons, "declarationIdentityUnbound",
+		)
+		return transcript
+	}
+	signature := p.checker.GetSignatureFromDeclaration(implementation)
+	if signature == nil {
+		transcript.OpenReasons = append(transcript.OpenReasons, "callSignatureNotUnique")
+		return transcript
+	}
+	selected := p.selectedSignatureLocked(
+		signature, implementation, target, typefacts.CallKindCall, callableDepth,
+	)
+	transcript.Signature = &selected
+	transcript.ParameterUses = p.parameterUseCensusLocked(ctx, implementation)
+	transcript.UnwrittenParameters = p.unwrittenParameterBindingsLocked(implementation, transcript.Signature, location)
+	transcript.InitialParameterReads = p.initialParameterReadsLocked(implementation, transcript.Signature, location, transcript.ParameterUses)
+	transcript.ControlFlow = p.controlFlowCensusLocked(implementation)
+	transcript.CallableReturns = p.callableReturnCensusesLocked(implementation)
+	transcript.Calls = p.implementationCallCensusLocked(implementation)
+	if nodeLocation(implementation).Path == location.Path {
+		transcript.OriginalHelperReads = p.originalHelperReadsLocked(implementation, transcript.Signature, transcript.Calls, transcript.ParameterUses)
+	}
+	transcript.UncensusedInvokingForms = p.uncensusedInvokingFormCensusLocked(implementation)
+	// ADR 0045: whether the value this body hands its caller is provably a
+	// primitive, over the same program the forms above were classified on. A
+	// premised classification replaces it below, because the fact belongs to
+	// the premise.
+	transcript.PrimitiveCompletion = p.primitiveCompletionLocked(implementation)
+	// The premise is applied when it could change an answer the consumer will
+	// read. Two of those now: a form a type can clear, here or in a helper
+	// this body reaches — and, since ADR 0045, the **completion**, which a
+	// caller's coercion asks about. A declaration whose completion is already
+	// a primitive over its own types can answer without a twin; one whose is
+	// not is exactly the case the demanded premise exists to settle.
+	if len(demanded) != 0 && (formsMayClearUnderTypes(transcript.UncensusedInvokingForms) ||
+		!transcript.PrimitiveCompletion ||
+		p.calleesWorthPremisingLocked(implementation)) {
+		premised := p.demandedPremiseCensusLocked(ctx, implementation, demanded)
+		if premised.refusal != "" {
+			transcript.ParameterPremiseRefusal = premised.refusal
+		} else {
+			transcript.UncensusedInvokingForms = premised.forms
+			transcript.ParameterPremises = premised.premises
+			transcript.CallArgumentPremises = premised.arguments
+			transcript.PrimitiveCompletion = premised.primitiveCompletion
+		}
+	}
+	if len(transcript.ControlFlow.Unsupported) != 0 {
+		transcript.OpenReasons = append(transcript.OpenReasons, "controlFlowUnsupported")
+		return transcript
+	}
+	transcript.Complete = true
+	return transcript
+}
+
+// locationEncloses answers whether inner names the same file as outer and
+// falls inside its byte range, endpoints included.
+func locationEncloses(outer typefacts.Location, inner typefacts.Location) bool {
+	return inner.Path == outer.Path &&
+		outer.StartByte <= inner.StartByte && inner.EndByte <= outer.EndByte
+}
+
+// exactFunctionLikeDeclarationsAt collects every function-like declaration in
+// one file whose source range is exactly the demanded one. It returns all of
+// them rather than the first so that an ambiguous demand can be refused as
+// ambiguous instead of silently resolved.
+func exactFunctionLikeDeclarationsAt(
+	sourceFile *ast.SourceFile,
+	location typefacts.Location,
+) []*ast.Node {
+	var matches []*ast.Node
+	var visit func(*ast.Node)
+	visit = func(node *ast.Node) {
+		if node == nil {
+			return
+		}
+		nodeAt := nodeLocation(node)
+		if nodeAt.StartByte == location.StartByte && nodeAt.EndByte == location.EndByte &&
+			nodeAt.Path == location.Path && ast.IsFunctionLikeDeclaration(node) {
+			matches = append(matches, node)
+		}
+		// A node whose range cannot contain the demanded one holds no
+		// descendant that can either, so the walk prunes on containment.
+		node.ForEachChild(func(child *ast.Node) bool {
+			childAt := nodeLocation(child)
+			if childAt.StartByte <= location.StartByte && location.EndByte <= childAt.EndByte {
+				visit(child)
+			}
+			return false
+		})
+	}
+	visit(sourceFile.AsNode())
+	return matches
 }
 
 // callableReturnCensusesLocked records the return-carry edges owned by every
@@ -352,6 +832,7 @@ func (p *project) implementationCallCensusLocked(
 	for _, root := range roots {
 		bySymbol[p.canonicalSymbol(root.symbol)] = root
 	}
+	subjectRoots := p.parameterSubjectRootsLocked(implementation)
 	var calls []typefacts.ImplementationCall
 	// The walk is shared with the parameter-use census on purpose: a call and a
 	// property access on the same statement must not disagree about whether
@@ -377,9 +858,44 @@ func (p *project) implementationCallCensusLocked(
 			if flowOwner == nil {
 				flowOwner = implementation
 			}
+			// A call inside a region a `break` or `continue` makes
+			// non-universal is recorded with Reach `unknown`.
+			//
+			// **`unknown` is the sound value here, and the row's presence is
+			// what makes it so.** Reachability is ordered by the strength of
+			// the positive claim it licenses: `reachable` says invoking this
+			// implementation runs the call on every path, `unknown` says it may
+			// run it, `unreachable` says it cannot. A jump falsifies only the
+			// first, so `unknown` is exactly what the producer still knows —
+			// and it is the weakest non-negative value, so no consumer can read
+			// more out of it than the jump left standing. A consumer needing a
+			// guarantee refuses it; one at the may-execute floor admits it,
+			// which is the only floor a claim about *which* callables a body can
+			// reach could ever be built on.
+			//
+			// The row used to be **dropped** here, and the reason was sound as
+			// far as it went: it kept an over-optimistic `reachable` off the
+			// wire, and for a claim that some behavior *happens* a missing row
+			// is the safe direction, because absence lends authority to nothing.
+			// For a claim that some behavior is *absent* it is the exact failure
+			// mode. A dropped call is a `CallExpression`, so it leaves no
+			// uncensused-form row either: `switch (kind) { case "mount":
+			// render(App, el); break; }` published nothing about `render` at all
+			// beyond the enclosing construct's `switchReachability` marker, and
+			// a consumer that relaxed that marker would have closed a call
+			// domain over a call that runs. Dropping is now needed for neither
+			// direction — `unknown` is strictly weaker than the row that was
+			// withheld, so nothing sound became unsound, and the enumeration a
+			// negative census needs is on the wire.
+			//
+			// An already-`unreachable` row is left alone. It was not the jump
+			// that decided it, and downgrading it would discard a proof for
+			// nothing; unsafeJumpRegionsLocked covers the whole frame whenever
+			// a jump's target cannot be bound, so no `unreachable` row survives
+			// a jump this census could not account for.
 			if reach != typefacts.Unreachable &&
 				locationWithheldByJump(unsafeJumps[flowOwner], nodeLocation(node)) {
-				return
+				reach = typefacts.ReachUnknown
 			}
 			kind := typefacts.CallKindCall
 			if construct {
@@ -403,13 +919,47 @@ func (p *project) implementationCallCensusLocked(
 			exact := exactArgumentSlots(node)
 			for index, argument := range node.Arguments() {
 				var source *typefacts.ParameterValueSource
+				// The value provenance of the same slot, from the same
+				// tracer the return sites use. It answers a different
+				// question than the parameter root above — "what created
+				// this value" rather than "which parameter is it" — and a
+				// displaced slot gets neither, because the runtime value at
+				// that position is not the one written there.
+				//
+				// The empty list is written as an empty list, never as
+				// nothing: the wire form of a slot is an array, and one
+				// entry per written argument is the invariant a consumer
+				// indexes by.
+				traced := []typefacts.ImplementationValueSource{}
 				if index < exact {
 					source = p.parameterValueSourceLocked(argument, bySymbol)
+					if found := p.returnValueSourcesLocked(argument); len(found) != 0 {
+						traced = found
+					}
 				}
 				call.ArgumentParameters = append(call.ArgumentParameters, source)
+				call.ArgumentSources = append(call.ArgumentSources, traced)
 			}
 			call.Target, call.TargetName, call.TargetModule, call.Declaration =
 				p.implementationCallTargetLocked(node.Expression())
+			call.ImmutableCalleeAlias = p.immutableCalleeAliasLocked(node)
+			// ADR 0034: a `.call`/`.apply` on a default-library receiver states
+			// that receiver and the parameter its `this` argument is rooted at.
+			call.CallReceiver, call.ThisParameter =
+				p.thisProtocolCallLocked(node, call.Declaration, subjectRoots)
+			// The value provenance of the callee, from the same tracer the
+			// return sites and the argument slots use. It answers a different
+			// question than the resolution just above — "what created the value
+			// being called" rather than "which symbol is it" — and the two
+			// coexist: `read()` for `const [read] = createSignal(0)` resolves
+			// to a BindingElement and traces to createSignal's tuple slot 0.
+			//
+			// Recorded for a construction as well. This is a value trace, not
+			// the callee-parameter resolution the construct branch below
+			// withholds, so nothing about a constructor's resolution is being
+			// claimed; a consumer whose claim is about a *call* still checks
+			// Kind first.
+			call.CalleeSources = p.returnValueSourcesLocked(node.Expression())
 			call.ArgumentCallables = p.argumentCallableLocationsLocked(node)
 			call.DefaultLibraryInvoker, call.InvokedArguments = p.defaultLibraryInvokerLocked(node)
 			if !construct {
@@ -420,6 +970,8 @@ func (p *project) implementationCallCensusLocked(
 				// which is a different resolution and was not reviewed here, so
 				// a construct site states neither and the demand stays open.
 				call.CalleeParameter = p.parameterValueSourceLocked(node.Expression(), bySymbol)
+				call.CalleeIteratedParameter =
+					p.calleeIteratedParameterLocked(node.Expression(), bySymbol)
 				call.CalleeDirectlyCalledParameters,
 					call.CalleeInvokedParameters,
 					call.CalleeStronglyInvokedParameters,
@@ -510,6 +1062,92 @@ func importedAliasIdentity(symbol *ast.Symbol) (string, string) {
 	return "", ""
 }
 
+// aliasedRuntimeImplementationLocked finds the body behind a binding that
+// merely aliases a function: `const defaultScheduler = systemSetTimeoutZero`.
+// It answers only when the alias is exact by identity -- the binding is an
+// identifier initializer (through identity-preserving wrappers) and is never
+// assigned anywhere in its file, and the function it names is never assigned
+// in its own file -- so the binding's runtime value *is* that function object.
+//
+// The aliased name may be local or imported. An import that the program
+// resolved to a sibling `.d.ts` (a package that ships declarations beside its
+// runtime) is followed to the runtime module the specifier denotes -- the file
+// at that relative path in the accepted program, never a declaration file --
+// and to that module's own export of the imported name, which is what the
+// import binds at runtime. Anything less exact -- a non-relative specifier, a
+// file the program does not hold, a missing export, a body-less target --
+// answers nothing, and the transcript stays open as before.
+func (p *project) aliasedRuntimeImplementationLocked(target *ast.Symbol) (*ast.Node, *ast.Symbol) {
+	if target == nil || target.ValueDeclaration == nil || !ast.IsVariableDeclaration(target.ValueDeclaration) {
+		return nil, nil
+	}
+	binding := target.ValueDeclaration
+	if p.symbolIsAssignedLocked(target, binding) {
+		return nil, nil
+	}
+	initializer := identityPreservingUnwrap(binding.Initializer())
+	if initializer == nil || !ast.IsIdentifier(initializer) {
+		return nil, nil
+	}
+	aliasSymbol := p.checker.GetSymbolAtLocation(initializer)
+	if aliasSymbol == nil {
+		return nil, nil
+	}
+	if canonical := p.canonicalSymbol(aliasSymbol); canonical != nil {
+		if body := callableBodyDeclaration(canonical); body != nil && !p.symbolIsAssignedLocked(canonical, body) {
+			return body, canonical
+		}
+	}
+	specifier, importedName := importedAliasIdentity(aliasSymbol)
+	if specifier == "" || importedName == "" || !(strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../")) {
+		return nil, nil
+	}
+	importer := ast.GetSourceFileOfNode(binding)
+	if importer == nil {
+		return nil, nil
+	}
+	// Program file names are forward-slash paths; the specifier is relative
+	// to the importer's directory, exactly as the module loader resolves it.
+	runtimePath := path.Clean(path.Join(path.Dir(importer.FileName()), specifier))
+	runtimeFile := p.program.GetSourceFile(runtimePath)
+	if runtimeFile == nil || runtimeFile.IsDeclarationFile || !p.isCurrentSourceFile(runtimeFile) || runtimeFile.Symbol == nil {
+		return nil, nil
+	}
+	for _, exported := range p.checker.GetExportsOfModule(runtimeFile.Symbol) {
+		if exported == nil || exported.Name != importedName {
+			continue
+		}
+		canonical := p.canonicalSymbol(exported)
+		if canonical == nil {
+			return nil, nil
+		}
+		body := callableBodyDeclaration(canonical)
+		if body == nil || p.symbolIsAssignedLocked(canonical, body) {
+			return nil, nil
+		}
+		return body, canonical
+	}
+	return nil, nil
+}
+
+// callableBodyDeclaration is the one declaration of `symbol` that carries a
+// callable body: a function declaration, or a variable whose initializer is a
+// function-like expression. Anything else answers nil.
+func callableBodyDeclaration(symbol *ast.Symbol) *ast.Node {
+	for _, declaration := range symbol.Declarations {
+		if declaration.Body() != nil && isExactCallableImplementationKind(strings.TrimPrefix(declaration.KindString(), "Kind")) {
+			return declaration
+		}
+		if ast.IsVariableDeclaration(declaration) {
+			if initializer := identityPreservingUnwrap(declaration.Initializer()); initializer != nil &&
+				initializer.Body() != nil && ast.IsFunctionLikeDeclaration(initializer) {
+				return initializer
+			}
+		}
+	}
+	return nil
+}
+
 func (p *project) returnValueSourcesLocked(expression *ast.Node) []typefacts.ImplementationValueSource {
 	var sources []typefacts.ImplementationValueSource
 	var walk func(*ast.Node, []typefacts.PathSegment)
@@ -522,6 +1160,12 @@ func (p *project) returnValueSourcesLocked(expression *ast.Node) []typefacts.Imp
 		}
 		if ast.IsArrayLiteralExpression(node) {
 			for index, element := range node.AsArrayLiteralExpression().Elements.Nodes {
+				// A spread's runtime length is not its single syntax position.
+				// Only the prefix retains exact tuple indexes; nested arrays
+				// stop their own walk without erasing an outer sibling.
+				if ast.IsSpreadElement(element) {
+					break
+				}
 				item := index
 				walk(element, append(path, typefacts.PathSegment{Kind: typefacts.PathSegmentTuple, Index: &item}))
 			}
@@ -546,39 +1190,153 @@ func (p *project) returnValueSourcesLocked(expression *ast.Node) []typefacts.Imp
 		if !ast.IsIdentifier(node) {
 			return
 		}
-		symbol := p.checker.GetSymbolAtLocation(node)
-		if symbol == nil {
+		// Exactly one hop, through a binding whose value cannot have been
+		// anything else, and whose slot is the slot it looks like.
+		//
+		// The arm used to walk every declaration of the symbol and take the
+		// first array-binding one, which made `let [a] = f(); [a] = g();` and a
+		// redeclared binding trace to `f()` and state it as the value's
+		// provenance. Four premises replace that:
+		//
+		//   - exactly one declaration, so a redeclared `var` proves nothing;
+		//   - the symbol is never an assignment target anywhere, answered by
+		//     the checker's own assignment-target symbols rather than by
+		//     reading source text. This is the whole single-assignment premise:
+		//     a `const` gate was tried and reverted, because bundler output
+		//     across the measured corpus (solid-js 1.9.14's own dist among
+		//     them) destructures with `let`/`var` and never reassigns, and
+		//     refusing those buys no soundness that this census does not
+		//     already give;
+		//   - no rest element. `const [...rest] = createSignal(1)` binds the
+		//     *tail array*, not slot 0, and the arm traced it to slot 0;
+		//   - no default. `const [a = fallback] = createSignal(2)` is `a`
+		//     only when slot 0 is not `undefined`, and nothing here observes
+		//     which value won;
+		//   - the reference is positioned at or after the end of the binding's
+		//     declaration, in the same file. `cb(hoisted); var [hoisted] =
+		//     createSignal(1);` reads `undefined`, and `tsc` says nothing about
+		//     it for a `var`. The bound is the whole `VariableDeclaration`, so
+		//     a self-reference inside the initializer is refused too. This
+		//     over-refuses a reference written earlier inside a closure that
+		//     runs later, which is recorded rather than special-cased.
+		//
+		// The slot index counts positions among the pattern's elements, and an
+		// omitted element (`const [, set] = …`) still holds its position, so
+		// the count is over all elements up to this one. A rest element is
+		// refused above rather than counted past.
+		//
+		// This can only remove sources, never add one, so it tightens
+		// ReturnSite.Sources at the same time as the argument slots.
+		symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(node))
+		if symbol == nil || len(symbol.Declarations) != 1 {
 			return
 		}
-		for _, declaration := range symbol.Declarations {
-			if ast.IsBindingElement(declaration) && declaration.Parent != nil && ast.IsArrayBindingPattern(declaration.Parent) {
-				pattern := declaration.Parent
-				variable := pattern.Parent
-				if variable == nil || !ast.IsVariableDeclaration(variable) || variable.AsVariableDeclaration().Initializer == nil ||
-					!ast.IsCallExpression(variable.AsVariableDeclaration().Initializer) {
-					continue
-				}
-				for index, element := range pattern.AsBindingPattern().Elements.Nodes {
-					if element != declaration {
-						continue
-					}
-					target, name, module, _ := p.implementationCallTargetLocked(variable.AsVariableDeclaration().Initializer.Expression())
-					if target == "" {
-						return
-					}
-					item := index
-					sources = append(sources, typefacts.ImplementationValueSource{
-						Path: append([]typefacts.PathSegment(nil), path...), Kind: typefacts.ImplementationValueCallResult,
-						Target: target, TargetName: name, TargetModule: module,
-						TargetPath: []typefacts.PathSegment{{Kind: typefacts.PathSegmentTuple, Index: &item}},
-					})
-					return
-				}
+		declaration := symbol.Declarations[0]
+		if !ast.IsBindingElement(declaration) || declaration.Parent == nil ||
+			!ast.IsArrayBindingPattern(declaration.Parent) ||
+			p.symbolIsAssignedLocked(symbol, declaration) {
+			return
+		}
+		element := declaration.AsBindingElement()
+		if element.DotDotDotToken != nil || element.Initializer != nil {
+			return
+		}
+		pattern := declaration.Parent
+		variable := pattern.Parent
+		if variable == nil || !ast.IsVariableDeclaration(variable) || variable.AsVariableDeclaration().Initializer == nil ||
+			!ast.IsCallExpression(variable.AsVariableDeclaration().Initializer) {
+			return
+		}
+		reference := nodeLocation(node)
+		if declared := nodeLocation(variable); reference.Path != declared.Path ||
+			reference.StartByte < declared.EndByte {
+			return
+		}
+		for index, candidate := range pattern.AsBindingPattern().Elements.Nodes {
+			if candidate != declaration {
+				continue
 			}
+			target, name, module, _ := p.implementationCallTargetLocked(variable.AsVariableDeclaration().Initializer.Expression())
+			if target == "" {
+				return
+			}
+			item := index
+			sources = append(sources, typefacts.ImplementationValueSource{
+				Path: append([]typefacts.PathSegment(nil), path...), Kind: typefacts.ImplementationValueCallResult,
+				Target: target, TargetName: name, TargetModule: module,
+				TargetPath: []typefacts.PathSegment{{Kind: typefacts.PathSegmentTuple, Index: &item}},
+			})
+			return
 		}
 	}
 	walk(expression, nil)
 	return sources
+}
+
+// calleeIteratedParameterLocked answers the parameter-rooted iterable whose
+// iteration produced `node` as a value, or nil (ADR 0042).
+//
+// The shape is exactly `for (const callback of callbacks) callback(…)`: the
+// callee is the binding the loop head declares, and the loop iterates a value
+// rooted at a parameter of this declaration. What the iterable yields is the
+// caller's, so calling it runs the caller's code — the same fact
+// CalleeParameter states for a callee that *is* a parameter.
+//
+// Every premise is checked here rather than left to the consumer:
+//
+//   - the callee is a plain identifier (after identity-preserving unwrapping);
+//   - its symbol has exactly one declaration, a variable declaration with no
+//     initializer of its own, whose declaration list is the head of a
+//     `for…of`;
+//   - the loop is not `for await`, whose async iteration protocol reaches
+//     `Symbol.asyncIterator` and the promise machinery and has not been
+//     reviewed;
+//   - the head declares that one binding and nothing else, and no file writes
+//     it — a reassigned loop variable may hold anything by the time it is
+//     called, and this fact is not flow-sensitive;
+//   - the iterated expression roots at a parameter by the same walk
+//     CalleeParameter uses.
+func (p *project) calleeIteratedParameterLocked(
+	node *ast.Node,
+	bySymbol map[*ast.Symbol]parameterCensusRoot,
+) *typefacts.ParameterValueSource {
+	callee := identityPreservingUnwrap(node)
+	if callee == nil || !ast.IsIdentifier(callee) {
+		return nil
+	}
+	symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(callee))
+	if symbol == nil || len(symbol.Declarations) != 1 {
+		return nil
+	}
+	declaration := symbol.Declarations[0]
+	if declaration == nil || !ast.IsVariableDeclaration(declaration) ||
+		declaration.Initializer() != nil {
+		return nil
+	}
+	name := declaration.Name()
+	if name == nil || !ast.IsIdentifier(name) {
+		return nil
+	}
+	list := declaration.Parent
+	if list == nil || nodeKindName(list) != "VariableDeclarationList" {
+		return nil
+	}
+	if declarations := list.AsVariableDeclarationList(); declarations == nil ||
+		len(declarations.Declarations.Nodes) != 1 {
+		return nil
+	}
+	loop := list.Parent
+	if loop == nil || nodeKindName(loop) != "ForOfStatement" {
+		return nil
+	}
+	statement := loop.AsForInOrOfStatement()
+	if statement == nil || statement.AwaitModifier != nil {
+		return nil
+	}
+	if p.symbolIsAssignedLocked(symbol, declaration) {
+		return nil
+	}
+	return p.parameterValueSourceLocked(statement.Expression, bySymbol)
 }
 
 func (p *project) parameterValueSourceLocked(
@@ -630,7 +1388,80 @@ func exportValueDemandDigest(demands []typefacts.ExportValueDemand) string {
 			hashField(hash, strconv.Itoa(demand.ImplementationLocation.StartByte))
 			hashField(hash, strconv.Itoa(demand.ImplementationLocation.EndByte))
 		}
+		if demand.LocalDeclarationLocation == nil {
+			hashField(hash, "")
+		} else {
+			hashField(hash, demand.LocalDeclarationLocation.Path)
+			hashField(hash, strconv.Itoa(demand.LocalDeclarationLocation.StartByte))
+			hashField(hash, strconv.Itoa(demand.LocalDeclarationLocation.EndByte))
+		}
 		hashField(hash, strconv.Itoa(demand.CallableDepth))
+		// Protocol 23: the demanded premises are part of the question. A
+		// consumer that asked for a census under `number` must not accept an
+		// answer to a demand that asked for one under nothing.
+		hashField(hash, strconv.Itoa(len(demand.ParameterPremises)))
+		for _, premise := range demand.ParameterPremises {
+			hashField(hash, strconv.Itoa(premise.Index))
+			hashField(hash, premise.Type)
+			hashField(hash, premise.Identity)
+		}
 	}
 	return "sha256:" + hex.EncodeToString(hash.Sum(nil))
+}
+
+// implementationCompletionForm classifies how a function-like implementation
+// completes to its caller, from its own syntax (ADR 0035): the `async`
+// modifier and the asterisk token on the declaration itself. Only the four
+// function-like kinds a call signature's implementation can be are reviewed;
+// anything else is Unclassified, which a consumer refuses.
+func implementationCompletionForm(implementation *ast.Node) typefacts.ImplementationCompletionForm {
+	if implementation == nil {
+		return typefacts.CompletionUnclassified
+	}
+	generator := false
+	switch {
+	case ast.IsFunctionDeclaration(implementation):
+		generator = implementation.AsFunctionDeclaration().AsteriskToken != nil
+	case ast.IsFunctionExpression(implementation):
+		generator = implementation.AsFunctionExpression().AsteriskToken != nil
+	case ast.IsMethodDeclaration(implementation):
+		generator = implementation.AsMethodDeclaration().AsteriskToken != nil
+	case ast.IsArrowFunction(implementation):
+	default:
+		return typefacts.CompletionUnclassified
+	}
+	async := ast.HasSyntacticModifier(implementation, ast.ModifierFlagsAsync)
+	switch {
+	case async && generator:
+		return typefacts.CompletionAsyncGenerator
+	case async:
+		return typefacts.CompletionAsync
+	case generator:
+		return typefacts.CompletionGenerator
+	default:
+		return typefacts.CompletionPlain
+	}
+}
+
+// classNameForConstructor answers the identifier that names the class a
+// constructor belongs to, or nil when the constructor is not a class member or
+// the class is anonymous and unbound. An anonymous class expression that is not
+// assigned to a variable — `export default class {}`, or one passed straight to
+// a call — has no name to resolve a symbol through, and states none rather than
+// borrowing the enclosing declaration's.
+func classNameForConstructor(implementation *ast.Node) *ast.Node {
+	if implementation == nil || nodeKindName(implementation) != "Constructor" {
+		return nil
+	}
+	class := implementation.Parent
+	if class == nil || !(ast.IsClassDeclaration(class) || ast.IsClassExpression(class)) {
+		return nil
+	}
+	if name := class.Name(); name != nil {
+		return name
+	}
+	if parent := class.Parent; parent != nil && ast.IsVariableDeclaration(parent) {
+		return parent.Name()
+	}
+	return nil
 }

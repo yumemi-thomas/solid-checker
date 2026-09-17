@@ -1,0 +1,88 @@
+{
+  "format": "initial-read-claim-preservation",
+  "authoritative": false,
+  "rows": [
+    {
+      "probeId": "@solid-primitives/i18n@2.2.1|solid1|only",
+      "beforeCases": 0,
+      "afterCases": 1,
+      "identicalClaimSets": 0,
+      "lost": [],
+      "changed": []
+    },
+    {
+      "probeId": "@solid-primitives/i18n@3.0.0-next.4|solid2|floor",
+      "beforeCases": 0,
+      "afterCases": 1,
+      "identicalClaimSets": 0,
+      "lost": [],
+      "changed": []
+    },
+    {
+      "probeId": "@solid-primitives/i18n@3.0.0-next.4|solid2|head",
+      "beforeCases": 0,
+      "afterCases": 1,
+      "identicalClaimSets": 0,
+      "lost": [],
+      "changed": []
+    },
+    {
+      "probeId": "@solid-primitives/marker@0.2.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "lost": [],
+      "changed": []
+    },
+    {
+      "probeId": "@solid-primitives/marker@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "lost": [],
+      "changed": []
+    },
+    {
+      "probeId": "@solid-primitives/marker@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "lost": [],
+      "changed": []
+    },
+    {
+      "probeId": "@solid-primitives/utils@6.4.1|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "lost": [],
+      "changed": []
+    },
+    {
+      "probeId": "motion-solidjs@0.6.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "lost": [],
+      "changed": []
+    },
+    {
+      "probeId": "motion-solidjs@0.7.0-beta.4|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "lost": [],
+      "changed": []
+    },
+    {
+      "probeId": "motion-solidjs@0.7.0-beta.4|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "lost": [],
+      "changed": []
+    }
+  ],
+  "allPreviousArtifactSelectionsAndClaimsPreserved": true,
+  "metricChanged": false
+}

@@ -33,6 +33,7 @@ fn operation(id: &str, min: u32) -> Operation {
         },
         inputs: vec![],
         output: None,
+        composed_from: None,
         resources: BTreeSet::new(),
     }
 }
@@ -88,6 +89,7 @@ fn accepted() -> AcceptedContract {
         ),
     };
     let case = ArtifactCase {
+        initialization: None,
         id: "case-a".into(),
         entrypoint: ".".into(),
         resolution_trace: vec![],
@@ -122,6 +124,118 @@ fn accepted() -> AcceptedContract {
             authentication: None,
         },
     }
+}
+
+#[test]
+fn ordinary_analysis_excludes_core_authority_even_through_aliases() {
+    for package in ["solid-js", "@solidjs/signals", "@solidjs/web"] {
+        let mut core = accepted();
+        core.package.name = package.into();
+        for specifier in [package, "runtime-alias"] {
+            let index = AcceptedContractIndex::new([AcceptedContractInput {
+                importer: "/project/main.ts".into(),
+                specifier: specifier.into(),
+                contract: core.clone(),
+                artifact_identity: None,
+            }])
+            .unwrap();
+            assert!(index.contract("/project/main.ts", specifier).is_ok());
+            let external = index.external_packages();
+            assert!(external.contract("/project/main.ts", specifier).is_err());
+            assert_eq!(
+                external.cache_fingerprint(),
+                AcceptedContractIndex::default().cache_fingerprint()
+            );
+        }
+    }
+}
+
+#[test]
+fn external_authority_and_similar_names_survive_core_filtering() {
+    for package in [
+        "pkg",
+        "solid-js-extra",
+        "@solidjs/router",
+        "@solidjs/web-extra",
+    ] {
+        let mut contract = accepted();
+        contract.package.name = package.into();
+        let index = AcceptedContractIndex::new([AcceptedContractInput {
+            importer: "/project/main.ts".into(),
+            specifier: package.into(),
+            contract,
+            artifact_identity: None,
+        }])
+        .unwrap();
+        assert!(matches!(
+            index.external_packages(),
+            std::borrow::Cow::Borrowed(_)
+        ));
+        assert_eq!(
+            index.external_packages().cache_fingerprint(),
+            index.cache_fingerprint()
+        );
+    }
+}
+
+#[test]
+fn missing_or_obsolete_core_receipts_are_not_analysis_requirements() {
+    let index = AcceptedContractIndex::default().with_uncertifiable_import_reasons([
+        (
+            ("/project/main.ts".into(), "solid-js/store".into()),
+            UncertifiableImportReason::ObsoletePolicy1,
+        ),
+        (
+            ("/project/main.ts".into(), "@solidjs/signals".into()),
+            UncertifiableImportReason::Unspecified,
+        ),
+        (
+            ("/project/main.ts".into(), "@solidjs/web/server".into()),
+            UncertifiableImportReason::Unspecified,
+        ),
+        (
+            ("/project/main.ts".into(), "@solidjs/router".into()),
+            UncertifiableImportReason::Unspecified,
+        ),
+    ]);
+    let external = index.external_packages();
+    for specifier in ["solid-js/store", "@solidjs/signals", "@solidjs/web/server"] {
+        assert!(!external.is_uncertifiable("/project/main.ts", specifier));
+    }
+    assert!(external.is_uncertifiable("/project/main.ts", "@solidjs/router"));
+}
+
+#[test]
+fn unknown_runtime_export_projection_preserves_open_call_behavior() {
+    let mut contract = accepted();
+    let export = contract.selected_case.exports.get_mut("run").unwrap();
+    export.shape = ValueShape::Unknown;
+    export.call = CallSemantics::new(
+        CallClaims::default(),
+        vec![],
+        vec![],
+        vec![],
+        GuardPartition::default(),
+    );
+    let identity = export.identity.clone();
+    let accepted_use = AcceptedContractUse {
+        contract: &contract,
+        identity: identity.clone(),
+    };
+    let projected = crate::project_accepted_export(&accepted_use);
+    assert_eq!(projected.kind, "unknown");
+    assert!(projected.callbacks.is_open());
+    assert!(projected.reactive_reads.is_open());
+    assert!(projected.returns.is_open());
+    assert!(projected.owner_requirements.is_open());
+    assert!(!projected.creates_closed_empty);
+    assert!(!projected.creates_walk_clean);
+    let facts = CallSiteFacts::default();
+    let instance = contract.instantiate_export(&identity, &facts).unwrap();
+    assert_eq!(
+        instance.operation_claim(ClaimDomain::Creates).knowledge,
+        KnowledgeSet::Unknown
+    );
 }
 
 #[test]
@@ -230,6 +344,7 @@ fn analyzer_index_binds_semantics_to_the_exact_import_occurrence() {
         importer: "/project/a.ts".into(),
         specifier: "pkg".into(),
         contract,
+        artifact_identity: None,
     }])
     .unwrap();
 
@@ -265,11 +380,13 @@ fn analyzer_cache_identity_is_deterministic_across_acquisition_order() {
                 importer: "/project/a.ts".into(),
                 specifier: "pkg".into(),
                 contract: accepted(),
+                artifact_identity: None,
             },
             AcceptedContractInput {
                 importer: "/project/b.ts".into(),
                 specifier: "pkg".into(),
                 contract: accepted(),
+                artifact_identity: None,
             },
         ]
     };
@@ -292,12 +409,14 @@ fn duplicate_exact_import_is_refused_and_receipt_policy_is_cache_identity() {
         importer: "/project/a.ts".into(),
         specifier: "pkg".into(),
         contract: first.clone(),
+        artifact_identity: None,
     }])
     .unwrap();
     let changed_index = AcceptedContractIndex::new([AcceptedContractInput {
         importer: "/project/a.ts".into(),
         specifier: "pkg".into(),
         contract: changed_policy.clone(),
+        artifact_identity: None,
     }])
     .unwrap();
     assert_ne!(
@@ -311,11 +430,13 @@ fn duplicate_exact_import_is_refused_and_receipt_policy_is_cache_identity() {
                 importer: "/project/a.ts".into(),
                 specifier: "pkg".into(),
                 contract: first,
+                artifact_identity: None,
             },
             AcceptedContractInput {
                 importer: "/project/a.ts".into(),
                 specifier: "pkg".into(),
                 contract: changed_policy,
+                artifact_identity: None,
             },
         ])
         .unwrap_err(),
@@ -558,4 +679,78 @@ fn invocation_transcript_supplies_exact_signature_arity_and_result_protocol() {
         facts.evaluate(&GuardAtom::ResultProtocol(ValueKind::Promise), "case-a",),
         GuardTruth::True
     );
+}
+
+/// The acceptance an importer already matches is answered exactly as before;
+/// the artifact lookup is an addition, and it answers a consumer this index has
+/// never seen.
+#[test]
+fn an_artifact_identity_answers_an_importer_the_index_never_saw() {
+    let index = AcceptedContractIndex::new([AcceptedContractInput {
+        importer: "/certification/synthetic.mjs".into(),
+        specifier: "pkg".into(),
+        contract: accepted(),
+        artifact_identity: Some("sha256:artifact".into()),
+    }])
+    .unwrap();
+
+    assert!(
+        index
+            .contract("/certification/synthetic.mjs", "pkg")
+            .is_ok()
+    );
+    assert!(index.contract("/project/src/App.tsx", "pkg").is_err());
+    assert!(index.contract_for_artifact("sha256:artifact").is_some());
+    assert!(index.contract_for_artifact("sha256:other").is_none());
+}
+
+/// An acceptance the loader could not state an identity for stays
+/// importer-only. This is the fail-closed direction the condition narrowing
+/// uses: a multi-condition receipt yields `None` rather than a match nobody
+/// checked the conditions of.
+#[test]
+fn an_acceptance_without_an_artifact_identity_is_importer_only() {
+    let index = AcceptedContractIndex::new([AcceptedContractInput {
+        importer: "/certification/synthetic.mjs".into(),
+        specifier: "pkg".into(),
+        contract: accepted(),
+        artifact_identity: None,
+    }])
+    .unwrap();
+
+    assert!(
+        index
+            .contract("/certification/synthetic.mjs", "pkg")
+            .is_ok()
+    );
+    assert!(index.contract_for_artifact("sha256:artifact").is_none());
+}
+
+/// Two different contracts under one artifact identity are two answers about
+/// the same published bytes. Neither may be applied, so the identity is dropped
+/// and both acceptances fall back to their importers rather than the catalog
+/// failing: the importer-keyed answers are exactly as sound as they were.
+#[test]
+fn one_artifact_identity_naming_two_contracts_is_dropped_not_preferred() {
+    let mut other = accepted();
+    other.receipt.verifier.policy += 1;
+    let index = AcceptedContractIndex::new([
+        AcceptedContractInput {
+            importer: "/a.ts".into(),
+            specifier: "pkg".into(),
+            contract: accepted(),
+            artifact_identity: Some("sha256:artifact".into()),
+        },
+        AcceptedContractInput {
+            importer: "/b.ts".into(),
+            specifier: "pkg".into(),
+            contract: other,
+            artifact_identity: Some("sha256:artifact".into()),
+        },
+    ])
+    .unwrap();
+
+    assert!(index.contract_for_artifact("sha256:artifact").is_none());
+    assert!(index.contract("/a.ts", "pkg").is_ok());
+    assert!(index.contract("/b.ts", "pkg").is_ok());
 }

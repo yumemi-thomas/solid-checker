@@ -651,6 +651,29 @@ impl Drop for Connection {
     }
 }
 
+/// What [`Session::close`] found when it said goodbye.
+///
+/// Closing is not the same question as whether the producer was still there to
+/// hear it, and this separates them. Every variant means the session is closed:
+/// `close` marks it closed and terminates the child on every path it can take.
+///
+/// Deliberately not `#[must_use]`: a caller that simply wants the session shut
+/// down is right not to inspect this, and the enclosing `Result` already forces
+/// a real failure to be handled. Requiring every `close()` to bind the outcome
+/// would add noise to the ~28 call sites that correctly do not care.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CloseOutcome {
+    /// The producer acknowledged the close request.
+    Acknowledged,
+    /// The producer was already gone -- it had died, or it did not answer
+    /// within the bound -- so the child was terminated without a goodbye.
+    ///
+    /// Not a failure. Nothing is left behind either way: the child is killed
+    /// and its reader joined by `Connection::terminate`, and a shared
+    /// transition arena is removed by its own `Drop` on this side of the pipe.
+    ProducerAlreadyGone,
+}
+
 /// A retained Type Facts session.
 ///
 /// Framing, request identities, handshake validation, Wire table transitions,
@@ -887,6 +910,41 @@ impl Session {
                 // The producer lost the state this delta was relative to, so the
                 // next request must carry the complete demand set.
                 self.clear_retained_state();
+                Self::reject_foreign_locations(groups)?;
+                let complete = groups
+                    .iter()
+                    .flat_map(|group| group.demands().iter().cloned())
+                    .collect::<Vec<_>>();
+                let table =
+                    self.analyze_exchange(complete, Vec::new(), true, &reference_locations, true)?;
+                self.retain_all_groups(groups);
+                Ok(table)
+            }
+            // A producer that died *after* answering the analyze request, while
+            // the symbol phase was still talking to it.
+            //
+            // `exchange` restarts and replays around one failed request, and
+            // that covers the analyze exchange itself. It cannot cover the
+            // `Operation::Symbols` exchanges that follow, and those deliberately
+            // use `exchange_once`: each carries the `state_token` and the
+            // `release_analysis`/`reference_changes` flags of the analysis that
+            // just ran, so re-sending one to a freshly spawned producer would
+            // name retained state that process never had. Recovery has to redo
+            // the analysis, not the request -- which is why it belongs here,
+            // where the demand set is still known, rather than inside
+            // `close_symbols`.
+            //
+            // Reaching this arm therefore means nothing has recovered yet: the
+            // analyze exchange's own restart either was not entered or already
+            // succeeded. So restart, replay the update history, and re-ask for
+            // the complete demand set against the new process -- the same shape
+            // the `state-mismatch` arm uses, plus the restart it does not need.
+            //
+            // Exactly once. The re-ask is not wrapped again, so a producer that
+            // keeps dying surfaces its failure instead of being retried
+            // forever.
+            Err(error) if error.is_transport_failure() => {
+                self.restart_and_replay()?;
                 Self::reject_foreign_locations(groups)?;
                 let complete = groups
                     .iter()
@@ -1208,6 +1266,8 @@ impl Session {
                     "export-value transcript {index} location does not match its demand"
                 )));
             }
+            validate_local_declaration_binding(index, demand, transcript)?;
+            validate_export_initializer_binding(demand, transcript, &envelope)?;
             validate_export_value_transcript(transcript)?;
         }
         validate_export_value_envelope(&envelope, &self.project_id, self.generation, demands)?;
@@ -1313,9 +1373,29 @@ impl Session {
         })
     }
 
-    pub fn close(&mut self) -> Result<(), SessionError> {
+    /// Closes the session, returning what the producer did about it.
+    ///
+    /// **A producer that is already gone is not a failure to close it.**
+    /// Everything `close` promises has happened before this returns, on every
+    /// path: the session is marked closed and the child is terminated whether
+    /// or not the goodbye was acknowledged. A transport failure here says the
+    /// process died before it could answer -- which is the state `close` was
+    /// asking it to reach -- and the 250 ms bound means the same thing, because
+    /// the connection is torn down regardless of which wins.
+    ///
+    /// Reporting that as `Err` said "close failed" about a close that had
+    /// succeeded, and it was the only place in this API where a producer death
+    /// the session can absorb is an error: everywhere else the restart
+    /// machinery recovers one and answers `Ok`. The information is still worth
+    /// having, so it comes back as [`CloseOutcome`] rather than as a failure.
+    ///
+    /// Narrow on purpose: only transport failures become
+    /// [`CloseOutcome::ProducerAlreadyGone`]. A service-level refusal is the
+    /// producer answering and declining, which is a real answer and still
+    /// propagates.
+    pub fn close(&mut self) -> Result<CloseOutcome, SessionError> {
         if self.closed {
-            return Ok(());
+            return Ok(CloseOutcome::Acknowledged);
         }
         let mut close = request(Operation::Close, &self.project_id, self.generation);
         let result = self
@@ -1333,7 +1413,11 @@ impl Session {
         if let Some(mut connection) = self.connection.take() {
             connection.terminate();
         }
-        result.map(|_| ())
+        match result {
+            Ok(_) => Ok(CloseOutcome::Acknowledged),
+            Err(error) if error.is_transport_failure() => Ok(CloseOutcome::ProducerAlreadyGone),
+            Err(error) => Err(error),
+        }
     }
 
     fn analyze_exchange(
@@ -2098,6 +2182,375 @@ fn validate_export_value_transcript(
             "complete export-value transcript lacks exact identity or remains open".into(),
         ));
     }
+    if let Some(implementation) = &transcript.implementation {
+        validate_implementation_transcript(implementation)?;
+    }
+    if let Some(local) = &transcript.local_declaration {
+        validate_implementation_transcript(local)?;
+    }
+    Ok(())
+}
+
+/// Validate the joined subjects before exposing a conditional initializer
+/// premise. Source hashes authenticate the files; these checks prevent a row
+/// for another query, binding, call or argument from answering this demand.
+fn validate_export_initializer_binding(
+    demand: &crate::ExportValueDemand,
+    transcript: &crate::ExportValueTranscript,
+    envelope: &crate::InvocationEnvelope,
+) -> Result<(), SessionError> {
+    let Some(initializer) = &transcript.initializer else {
+        return Ok(());
+    };
+    let invalid = || {
+        SessionError::InvalidResponse(
+            "export initializer lacks exact demand, source or binding identity".into(),
+        )
+    };
+    let contains = |outer: &crate::Location, inner: &crate::Location| {
+        outer.path == inner.path
+            && outer.start_byte <= inner.start_byte
+            && inner.start_byte < inner.end_byte
+            && inner.end_byte <= outer.end_byte
+    };
+    let sourced = |location: &crate::Location| {
+        location.start_byte < location.end_byte
+            && envelope
+                .sources
+                .iter()
+                .any(|source| source.path == location.path)
+    };
+    if demand.implementation_location.as_ref() != Some(&initializer.location)
+        || initializer.target.is_empty()
+        || transcript
+            .implementation
+            .as_ref()
+            .is_none_or(|implementation| {
+                implementation.location != initializer.location
+                    || implementation.target != initializer.target
+            })
+        || initializer.bindings.is_empty()
+        || initializer.bindings.len() > 16
+        || initializer.specifier.is_empty()
+        || initializer.export_name.is_empty()
+        || initializer.declaration.symbol.is_empty()
+        || initializer.declaration.name.is_empty()
+        || !sourced(&initializer.location)
+        || !sourced(&initializer.declaration.location)
+        || !contains(&initializer.call, &initializer.callee)
+        || initializer.object_arguments.is_empty()
+        || initializer.object_arguments.len() > 1_000_000
+    {
+        return Err(invalid());
+    }
+    let mut symbols = std::collections::HashSet::new();
+    for (index, binding) in initializer.bindings.iter().enumerate() {
+        if binding.declaration.symbol.is_empty()
+            || binding.declaration.name.is_empty()
+            || binding.declaration.kind.as_ref() != "VariableDeclaration"
+            || !symbols.insert(&binding.declaration.symbol)
+            || binding.location.path != initializer.call.path
+            || !sourced(&binding.location)
+            || !contains(&binding.location, &binding.declaration.location)
+            || !contains(&binding.location, &binding.initializer)
+            || binding.declaration.location.end_byte > binding.initializer.start_byte
+            || (index == 0 && binding.declaration.symbol != initializer.target)
+            || (index > 0
+                && binding.location.end_byte
+                    > initializer.bindings[index - 1].initializer.start_byte)
+        {
+            return Err(invalid());
+        }
+    }
+    if initializer
+        .bindings
+        .last()
+        .is_none_or(|binding| binding.initializer != initializer.call)
+    {
+        return Err(invalid());
+    }
+    let mut previous_index = None;
+    let mut previous_end = initializer.callee.end_byte;
+    for argument in &initializer.object_arguments {
+        if previous_index.is_some_and(|index| index >= argument.index)
+            || !contains(&initializer.call, &argument.location)
+            || argument.location.start_byte < previous_end
+        {
+            return Err(invalid());
+        }
+        previous_index = Some(argument.index);
+        previous_end = argument.location.end_byte;
+    }
+    Ok(())
+}
+
+/// Binds a local-declaration answer to the demand that asked for it.
+///
+/// The producer echoes the demanded location into the answer's own `location`,
+/// so that field alone binds nothing: an answer about a different helper would
+/// carry the same echo. Three checks are therefore made, in increasing
+/// strength:
+///
+/// 1. **Presence agrees.** A `local_declaration` for a demand that asked for
+///    none, and its absence for a demand that asked for one, are both refused.
+/// 2. **The echo matches.** Cheap, and it does catch one real confusion — an
+///    answer built for a *different demand of the same batch*, whose location
+///    differs.
+/// 3. **The resolved declaration lies inside the demanded span.** This is the
+///    half the producer does not echo: it derives
+///    `declaration.location` from the located declaration's own symbol. A
+///    containment rather than an equality, because a named function resolves
+///    to its identifier while an anonymous `const helper = () => …` resolves
+///    to the arrow itself. Where `query_name` and the resolved declaration's
+///    `name` are both populated they must also agree.
+///
+/// What this does not do is make a fabricated transcript about some other
+/// declaration impossible: the producer is trusted for the contents of a body
+/// it censuses, here exactly as for an export's. It makes an answer whose two
+/// identity fields disagree, or which describes a declaration outside the
+/// bytes that were asked about, refusable without reading the source.
+fn validate_local_declaration_binding(
+    index: usize,
+    demand: &crate::ExportValueDemand,
+    transcript: &crate::ExportValueTranscript,
+) -> Result<(), SessionError> {
+    let (demanded, local) = match (
+        &demand.local_declaration_location,
+        &transcript.local_declaration,
+    ) {
+        (None, None) => return Ok(()),
+        (Some(_), None) => {
+            return Err(SessionError::InvalidResponse(format!(
+                "export-value transcript {index} carries no local-declaration transcript for a demand that asked for one"
+            )));
+        }
+        (None, Some(_)) => {
+            return Err(SessionError::InvalidResponse(format!(
+                "export-value transcript {index} carries a local-declaration transcript for a demand that asked for none"
+            )));
+        }
+        (Some(demanded), Some(local)) => (demanded, local),
+    };
+    if &local.location != demanded {
+        return Err(SessionError::InvalidResponse(format!(
+            "export-value transcript {index} local-declaration transcript describes {}:{}..{} rather than the demanded {}:{}..{}",
+            local.location.path,
+            local.location.start_byte,
+            local.location.end_byte,
+            demanded.path,
+            demanded.start_byte,
+            demanded.end_byte
+        )));
+    }
+    if let Some(declaration) = &local.declaration {
+        let resolved = &declaration.location;
+        if resolved.path != demanded.path
+            || resolved.start_byte < demanded.start_byte
+            || resolved.end_byte > demanded.end_byte
+        {
+            return Err(SessionError::InvalidResponse(format!(
+                "export-value transcript {index} local-declaration transcript resolves a declaration at {}:{}..{}, which is not inside the demanded {}:{}..{}",
+                resolved.path,
+                resolved.start_byte,
+                resolved.end_byte,
+                demanded.path,
+                demanded.start_byte,
+                demanded.end_byte
+            )));
+        }
+        if !local.query_name.is_empty()
+            && !declaration.name.is_empty()
+            && local.query_name != declaration.name
+        {
+            return Err(SessionError::InvalidResponse(format!(
+                "export-value transcript {index} local-declaration transcript queried {:?} but resolved a declaration named {:?}",
+                local.query_name, declaration.name
+            )));
+        }
+    }
+    // Protocol 23: a local declaration's premise is the demand's, or nothing.
+    // The producer states the entries its twin bound, and it binds all of the
+    // demanded ones or none; a transcript stating a premise nobody demanded, a
+    // subset, or a different type or identity for a slot is a census
+    // classified under a condition this consumer never asked for.
+    if !local.parameter_premises.is_empty() && local.parameter_premises != demand.parameter_premises
+    {
+        return Err(SessionError::InvalidResponse(format!(
+            "export-value transcript {index} local-declaration transcript states parameter premises {:?} for a demand that asked for {:?}",
+            local.parameter_premises, demand.parameter_premises
+        )));
+    }
+    Ok(())
+}
+
+/// Checks the per-row invariants of an implementation transcript's
+/// uncensused-invoking-form census.
+///
+/// Both are invariants a consumer reads without re-deriving: `captured` is the
+/// boolean form of `enclosing_callable`'s presence, and a row's `node_kind` is
+/// the only description of an unclassified form, so an empty one would turn
+/// the load-bearing refusal row into an anonymous one.
+fn validate_implementation_transcript(
+    transcript: &crate::ExportImplementationTranscript,
+) -> Result<(), SessionError> {
+    let mut helper_reads = std::collections::BTreeSet::new();
+    if transcript.original_helper_reads.len() > 256
+        || transcript.original_helper_reads.iter().any(|read| {
+            !read.binds_to(transcript)
+                || !helper_reads.insert((
+                    read.call.path.clone(),
+                    read.call.start_byte,
+                    read.call.end_byte,
+                    read.argument_index,
+                    read.read.start_byte,
+                    read.read.end_byte,
+                ))
+        })
+    {
+        return Err(SessionError::InvalidResponse(
+            "original helper read does not bind its exact caller, argument and local helper".into(),
+        ));
+    }
+    let mut previous = None;
+    let mut initial_uses = std::collections::BTreeSet::new();
+    let mut default_parameters = std::collections::BTreeSet::new();
+    for read in &transcript.initial_parameter_reads {
+        let parameter = transcript
+            .signature
+            .as_ref()
+            .and_then(|signature| signature.parameters.get(read.parameter_index));
+        let matching_uses = transcript
+            .parameter_uses
+            .iter()
+            .filter(|usage| {
+                usage.parameter_index == read.parameter_index
+                    && usage.location == read.r#use
+                    && usage.binding_path.is_empty()
+                    && usage.kind == crate::ParameterUseKind::PropertyAccess
+                    && (usage.reach == crate::Reachability::Reachable
+                        || read.first_iteration_only && usage.reach == crate::Reachability::Unknown)
+                    && !usage.captured
+                    && !usage.alias
+            })
+            .count();
+        // A first-iteration row is admitted by entering a loop body, which the
+        // positional rule refuses outright, so a row claiming both describes no
+        // premise a consumer could take.
+        if read.first_iteration_only && read.positional
+            || read.undefined_default.as_ref().is_some_and(|default| {
+                !default.binds_read(read) || !default_parameters.insert(read.parameter_index)
+            })
+            || transcript.completion_form != Some(crate::ImplementationCompletionForm::Plain)
+            || read.declaration.path != transcript.location.path
+            || read.declaration.start_byte >= read.declaration.end_byte
+            || read.r#use.path != read.declaration.path
+            || read.r#use.start_byte >= read.r#use.end_byte
+            || matching_uses != 1
+            || !initial_uses.insert((
+                read.r#use.path.clone(),
+                read.r#use.start_byte,
+                read.r#use.end_byte,
+            ))
+            || parameter.is_none_or(|parameter| {
+                parameter.index != read.parameter_index
+                    || parameter.rest
+                    || parameter.defaulted
+                    || parameter
+                        .declaration
+                        .as_ref()
+                        .is_none_or(|declaration| declaration.location != read.declaration)
+            })
+        {
+            return Err(SessionError::InvalidResponse("initial parameter read does not bind one exact original-input use and signature slot".into()));
+        }
+    }
+    for binding in &transcript.unwritten_parameters {
+        let parameter = transcript
+            .signature
+            .as_ref()
+            .and_then(|signature| signature.parameters.get(binding.parameter_index));
+        if previous.is_some_and(|index| index >= binding.parameter_index)
+            || !matches!(
+                transcript.completion_form,
+                Some(
+                    crate::ImplementationCompletionForm::Plain
+                        | crate::ImplementationCompletionForm::Async
+                )
+            )
+            || binding.declaration.start_byte >= binding.declaration.end_byte
+            || binding.declaration.path != transcript.location.path
+            || parameter.is_none_or(|parameter| {
+                parameter.index != binding.parameter_index
+                    || parameter.rest
+                    || parameter.defaulted
+                    || parameter
+                        .declaration
+                        .as_ref()
+                        .is_none_or(|declaration| declaration.location != binding.declaration)
+            })
+        {
+            return Err(SessionError::InvalidResponse("unwritten parameter binding does not match its exact implementation signature slot".into()));
+        }
+        previous = Some(binding.parameter_index);
+    }
+    for form in &transcript.uncensused_invoking_forms {
+        if form.captured != form.enclosing_callable.is_some() {
+            return Err(SessionError::InvalidResponse(format!(
+                "uncensused invoking form at {}:{}..{} disagrees with its enclosing callable about capture",
+                form.location.path, form.location.start_byte, form.location.end_byte
+            )));
+        }
+        if form.node_kind.is_empty() {
+            return Err(SessionError::InvalidResponse(format!(
+                "uncensused invoking form at {}:{}..{} names no node kind",
+                form.location.path, form.location.start_byte, form.location.end_byte
+            )));
+        }
+    }
+    if let Some(flow) = transcript.control_flow.as_ref() {
+        validate_control_flow_incompleteness(flow)?;
+    }
+    Ok(())
+}
+
+/// The two lists of a control-flow census's incompleteness must name the same
+/// markers.
+///
+/// `unsupported` is the older, deduplicated marker set every existing consumer
+/// reads; `incompleteness` is the classified per-construct form. A producer that
+/// stated a marker in one and not the other would be handing a consumer either
+/// an unclassified incompleteness — which is the thing the class exists to make
+/// impossible — or a classified row for an incompleteness the transcript does
+/// not admit to. Neither is a state this client will read, and both are cheap to
+/// detect, so both refuse the response.
+///
+/// This says nothing about *which* class is admissible. That is each consumer's
+/// own decision, because the answer depends on what the consumer is asking.
+pub(crate) fn validate_control_flow_incompleteness(
+    flow: &crate::ControlFlowCensus,
+) -> Result<(), SessionError> {
+    for row in &flow.incompleteness {
+        if row.marker.is_empty() {
+            return Err(SessionError::InvalidResponse(
+                "control-flow incompleteness row names no marker".into(),
+            ));
+        }
+        if !flow.unsupported.contains(&row.marker) {
+            return Err(SessionError::InvalidResponse(format!(
+                "control-flow incompleteness row {} at {}:{}..{} names a marker the census does \
+                 not report unsupported",
+                row.marker, row.location.path, row.location.start_byte, row.location.end_byte
+            )));
+        }
+    }
+    for marker in &flow.unsupported {
+        if !flow.incompleteness.iter().any(|row| row.marker == *marker) {
+            return Err(SessionError::InvalidResponse(format!(
+                "control-flow census reports {marker} unsupported and classifies no construct \
+                 for it"
+            )));
+        }
+    }
     Ok(())
 }
 
@@ -2330,6 +2783,9 @@ fn validate_invocation_transcript(
             "control-flow census is closed while absent or unsupported".into(),
         ));
     }
+    if let Some(flow) = transcript.control_flow.as_ref() {
+        validate_control_flow_incompleteness(flow)?;
+    }
     Ok(())
 }
 
@@ -2404,6 +2860,21 @@ fn validate_callable_paths(
                 "absent callable path carries a positive or open fact".into(),
             ));
         }
+        // An apparent member is one the compiler's global-`Function`
+        // augmentation supplies. It is observed, so it is never an absence
+        // claim, and the producer emits it without descending, so it never
+        // claims its own subtree was enumerated. A fact violating either would
+        // let a library-owned leaf close a census or prove a path below itself
+        // absent, so it is refused rather than reinterpreted.
+        if fact.apparent
+            && (fact.presence == PathPresence::Absent
+                || fact.subtree_enumerated
+                || fact.path.is_empty())
+        {
+            return Err(SessionError::InvalidResponse(
+                "apparent callable path claims absence, an enumerated subtree, or the root".into(),
+            ));
+        }
     }
     Ok(())
 }
@@ -2435,7 +2906,23 @@ fn export_value_demand_digest(demands: &[crate::ExportValueDemand]) -> String {
         } else {
             hash_invocation_field(&mut hasher, "");
         }
+        if let Some(location) = &demand.local_declaration_location {
+            hash_invocation_field(&mut hasher, &location.path);
+            hash_invocation_field(&mut hasher, &location.start_byte.to_string());
+            hash_invocation_field(&mut hasher, &location.end_byte.to_string());
+        } else {
+            hash_invocation_field(&mut hasher, "");
+        }
         hash_invocation_field(&mut hasher, &demand.callable_depth.to_string());
+        // Protocol 23: the demanded premises are part of the question, so an
+        // answer to a demand asking for a census under `number` is never
+        // accepted for one that asked for a census under nothing.
+        hash_invocation_field(&mut hasher, &demand.parameter_premises.len().to_string());
+        for premise in &demand.parameter_premises {
+            hash_invocation_field(&mut hasher, &premise.index.to_string());
+            hash_invocation_field(&mut hasher, &premise.r#type);
+            hash_invocation_field(&mut hasher, &premise.identity);
+        }
     }
     format!("sha256:{:x}", hasher.finalize())
 }
@@ -2836,12 +3323,50 @@ mod tests {
             constructability: crate::InvocationConstructability::Unknown,
             declaration: None,
             complete: true,
+            apparent: false,
             subtree_enumerated: false,
             open_reasons: Vec::new(),
         };
         assert!(validate_callable_paths(std::slice::from_ref(&fact), 1).is_err());
         fact.subtree_enumerated = true;
-        assert!(validate_callable_paths(&[fact], 1).is_ok());
+        assert!(validate_callable_paths(std::slice::from_ref(&fact), 1).is_ok());
+    }
+
+    /// An apparent member is an observation of a library-owned leaf. Letting it
+    /// claim absence, an enumerated subtree, or the root itself would let it
+    /// close a declared-member census or prove a path below itself absent, so
+    /// the client refuses the response instead of reinterpreting it.
+    #[test]
+    fn apparent_callable_path_may_not_close_a_census_or_claim_absence() {
+        let leaf = crate::CallablePathFact {
+            alternative: 0,
+            path: vec![crate::PathSegment {
+                kind: crate::PathSegmentKind::Property,
+                property: "bind".into(),
+                index: None,
+            }],
+            presence: crate::PathPresence::Required,
+            callability: crate::Callability::Callable,
+            constructability: crate::InvocationConstructability::NonConstructable,
+            declaration: None,
+            complete: true,
+            apparent: true,
+            subtree_enumerated: false,
+            open_reasons: Vec::new(),
+        };
+        assert!(validate_callable_paths(std::slice::from_ref(&leaf), 1).is_ok());
+        let mut enumerated = leaf.clone();
+        enumerated.subtree_enumerated = true;
+        assert!(validate_callable_paths(&[enumerated], 1).is_err());
+        let mut rooted = leaf.clone();
+        rooted.path = Vec::new();
+        assert!(validate_callable_paths(&[rooted], 1).is_err());
+        let mut absent = leaf;
+        absent.presence = crate::PathPresence::Absent;
+        absent.callability = crate::Callability::Unknown;
+        absent.constructability = crate::InvocationConstructability::Unknown;
+        absent.subtree_enumerated = true;
+        assert!(validate_callable_paths(&[absent], 1).is_err());
     }
 
     #[test]
@@ -3433,5 +3958,729 @@ mod tests {
                 .unwrap_or_else(|error| panic!("{}: apply delta: {error}", step.label));
             assert_eq!(actual, expected, "{} produced the wrong table", step.label);
         }
+    }
+
+    fn span(path: &str, start: u64, end: u64) -> Location {
+        Location {
+            path: path.into(),
+            start_byte: start,
+            end_byte: end,
+        }
+    }
+
+    fn implementation_transcript(location: Location) -> crate::ExportImplementationTranscript {
+        crate::ExportImplementationTranscript {
+            location,
+            query_name: "".into(),
+            target: "".into(),
+            declaration: None,
+            signature: None,
+            completion_form: None,
+            implementation_of: None,
+            parameter_uses: Vec::new(),
+            unwritten_parameters: Vec::new(),
+            initial_parameter_reads: Vec::new(),
+            original_helper_reads: Vec::new(),
+            control_flow: None,
+            callable_returns: Vec::new(),
+            calls: Vec::new(),
+            uncensused_invoking_forms: Vec::new(),
+            parameter_premises: Vec::new(),
+            parameter_premise_refusal: "".into(),
+            call_argument_premises: Vec::new(),
+            primitive_completion: false,
+            not_callable_value: None,
+            default_library_alias: None,
+            invocation: None,
+            complete: false,
+            open_reasons: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn unwritten_parameter_binding_requires_matching_signature_slot() {
+        let mut transcript = implementation_transcript(span("/input.js", 0, 5));
+        transcript.completion_form = Some(crate::ImplementationCompletionForm::Plain);
+        let value = export_value_transcript(span("/input.js", 6, 11)).value;
+        transcript.signature = Some(crate::SelectedSignature {
+            identity: "signature".into(),
+            declaration: resolved_declaration("value", span("/input.js", 0, 5)),
+            overload_ordinal: 0,
+            overload_count: 1,
+            minimum_argument_count: 1,
+            has_rest: false,
+            parameters: vec![crate::SelectedParameter {
+                index: 0,
+                symbol: "input".into(),
+                declaration: Some(crate::Declaration {
+                    name: "input".into(),
+                    kind: "parameter".into(),
+                    location: span("/input.js", 6, 11),
+                }),
+                rest: false,
+                optional: false,
+                defaulted: false,
+                value: value.clone(),
+                declared_type: None,
+                callable_paths: vec![],
+            }],
+            result: value,
+            result_callable_paths: vec![],
+        });
+        transcript
+            .unwritten_parameters
+            .push(crate::UnwrittenParameterBinding {
+                parameter_index: 0,
+                declaration: span("/input.js", 6, 11),
+            });
+        validate_implementation_transcript(&transcript).unwrap();
+        for invalid in [
+            "slot",
+            "duplicate",
+            "declaration",
+            "default",
+            "rest",
+            "generator",
+            "missing-signature",
+        ] {
+            let mut changed = transcript.clone();
+            match invalid {
+                "slot" => changed.unwritten_parameters[0].parameter_index = 1,
+                "duplicate" => changed
+                    .unwritten_parameters
+                    .push(changed.unwritten_parameters[0].clone()),
+                "declaration" => changed.unwritten_parameters[0].declaration.end_byte += 1,
+                "default" => changed.signature.as_mut().unwrap().parameters[0].defaulted = true,
+                "rest" => changed.signature.as_mut().unwrap().parameters[0].rest = true,
+                "generator" => {
+                    changed.completion_form = Some(crate::ImplementationCompletionForm::Generator)
+                }
+                "missing-signature" => changed.signature = None,
+                _ => unreachable!(),
+            }
+            assert!(
+                validate_implementation_transcript(&changed).is_err(),
+                "{invalid}"
+            );
+        }
+        transcript.completion_form = Some(crate::ImplementationCompletionForm::Async);
+        validate_implementation_transcript(&transcript).unwrap();
+        transcript.completion_form = Some(crate::ImplementationCompletionForm::Plain);
+        transcript.unwritten_parameters.clear();
+        transcript.parameter_uses.push(crate::ParameterUse {
+            parameter_index: 0,
+            binding_path: vec![],
+            location: span("/input.js", 20, 25),
+            reach: crate::Reachability::Reachable,
+            kind: crate::ParameterUseKind::PropertyAccess,
+            alias: false,
+            captured: false,
+        });
+        transcript
+            .initial_parameter_reads
+            .push(crate::InitialParameterRead {
+                parameter_index: 0,
+                declaration: span("/input.js", 6, 11),
+                r#use: span("/input.js", 20, 25),
+                first_iteration_only: false,
+                positional: false,
+                undefined_default: None,
+            });
+        validate_implementation_transcript(&transcript).unwrap();
+        for invalid in [
+            "slot",
+            "duplicate",
+            "declaration",
+            "use",
+            "missing-use",
+            "alias",
+            "capture",
+            "reach",
+            "kind",
+            "path",
+            "default",
+            "rest",
+            "async",
+            "missing-signature",
+            "both-markers",
+        ] {
+            let mut changed = transcript.clone();
+            match invalid {
+                "slot" => changed.initial_parameter_reads[0].parameter_index = 1,
+                "duplicate" => changed
+                    .initial_parameter_reads
+                    .push(changed.initial_parameter_reads[0].clone()),
+                "declaration" => changed.initial_parameter_reads[0].declaration.end_byte += 1,
+                "use" => changed.initial_parameter_reads[0].r#use.end_byte += 1,
+                "missing-use" => changed.parameter_uses.clear(),
+                "alias" => changed.parameter_uses[0].alias = true,
+                "capture" => changed.parameter_uses[0].captured = true,
+                "reach" => changed.parameter_uses[0].reach = crate::Reachability::Unreachable,
+                "kind" => changed.parameter_uses[0].kind = crate::ParameterUseKind::Return,
+                "path" => changed.initial_parameter_reads[0].r#use.path = "/other.js".into(),
+                "default" => changed.signature.as_mut().unwrap().parameters[0].defaulted = true,
+                "rest" => changed.signature.as_mut().unwrap().parameters[0].rest = true,
+                "async" => {
+                    changed.completion_form = Some(crate::ImplementationCompletionForm::Async)
+                }
+                "missing-signature" => changed.signature = None,
+                // ADR 0069: the loop that admits a first-iteration row is what
+                // the positional rule refuses outright, so no producer rule can
+                // establish both.
+                "both-markers" => {
+                    changed.initial_parameter_reads[0].positional = true;
+                    changed.initial_parameter_reads[0].first_iteration_only = true;
+                }
+                _ => unreachable!(),
+            }
+            assert!(
+                validate_implementation_transcript(&changed).is_err(),
+                "initial read: {invalid}"
+            );
+        }
+        // A positional row is bound under the same reachable-use filter as an
+        // ordinary one, which is exactly why the producer only states it for a
+        // reachable use: an unbindable row loses the transcript, not the premise.
+        transcript.initial_parameter_reads[0].positional = true;
+        validate_implementation_transcript(&transcript).unwrap();
+        transcript.initial_parameter_reads[0].positional = false;
+        {
+            let mut defaulted = transcript.clone();
+            defaulted.initial_parameter_reads[0].undefined_default =
+                Some(crate::UndefinedParameterDefault {
+                    guard: span("/input.js", 12, 19),
+                    assignment: span("/input.js", 14, 18),
+                });
+            validate_implementation_transcript(&defaulted).unwrap();
+            for invalid in [
+                "guard-after-read",
+                "foreign-guard",
+                "store-outside-guard",
+                "positional",
+                "first-iteration",
+            ] {
+                let mut changed = defaulted.clone();
+                let read = &mut changed.initial_parameter_reads[0];
+                match invalid {
+                    "guard-after-read" => {
+                        read.undefined_default.as_mut().unwrap().guard.end_byte = 30
+                    }
+                    "foreign-guard" => {
+                        read.undefined_default.as_mut().unwrap().guard.path = "/other.js".into()
+                    }
+                    "store-outside-guard" => {
+                        read.undefined_default.as_mut().unwrap().assignment.end_byte = 20
+                    }
+                    "positional" => read.positional = true,
+                    "first-iteration" => read.first_iteration_only = true,
+                    _ => unreachable!(),
+                }
+                assert!(
+                    validate_implementation_transcript(&changed).is_err(),
+                    "{invalid}"
+                );
+            }
+        }
+        transcript.parameter_uses[0].reach = crate::Reachability::Unknown;
+        assert!(validate_implementation_transcript(&transcript).is_err());
+        transcript.initial_parameter_reads[0].positional = true;
+        assert!(validate_implementation_transcript(&transcript).is_err());
+        transcript.initial_parameter_reads[0].positional = false;
+        transcript.initial_parameter_reads[0].first_iteration_only = true;
+        validate_implementation_transcript(&transcript).unwrap();
+        transcript.parameter_uses[0].reach = crate::Reachability::Unreachable;
+        assert!(validate_implementation_transcript(&transcript).is_err());
+    }
+
+    fn resolved_declaration(name: &str, location: Location) -> crate::ResolvedDeclaration {
+        crate::ResolvedDeclaration {
+            symbol: "symbol-1".into(),
+            name: name.into(),
+            kind: "FunctionDeclaration".into(),
+            location,
+            owners: Vec::new().into(),
+            qualified_name: "".into(),
+            origin_module: "".into(),
+            source_file: "".into(),
+            standard_library: false,
+        }
+    }
+
+    fn export_value_transcript(location: Location) -> crate::ExportValueTranscript {
+        crate::ExportValueTranscript {
+            location,
+            query_name: "".into(),
+            target: "".into(),
+            declaration: None,
+            value: crate::InvocationValueFact {
+                type_descriptor: None,
+                callability: crate::Callability::Unknown,
+                constructability: crate::InvocationConstructability::Unknown,
+                primitive: crate::ValuePrimitiveDomain::default(),
+                alternatives: Vec::new(),
+                partitions: Vec::new(),
+                open_reasons: Vec::new(),
+            },
+            callable_paths: Vec::new(),
+            call_signature: None,
+            call_signatures: Vec::new(),
+            implementation: None,
+            initializer: None,
+            local_declaration: None,
+            complete: false,
+            open_reasons: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn export_initializer_requires_exact_joined_source_subjects() {
+        let query = span("/p/harness.ts", 80, 85);
+        let mut demand = export_value_demand(query.clone());
+        demand.implementation_location = Some(query.clone());
+        let mut transcript = export_value_transcript(query.clone());
+        let mut implementation = implementation_transcript(query.clone());
+        implementation.target = "result-symbol".into();
+        transcript.implementation = Some(implementation);
+        let mut root = resolved_declaration("result", span("/p/runtime.ts", 70, 76));
+        root.kind = "VariableDeclaration".into();
+        root.symbol = "result-symbol".into();
+        let mut plugin = resolved_declaration("plugin", span("/p/runtime.ts", 10, 16));
+        plugin.kind = "VariableDeclaration".into();
+        plugin.symbol = "plugin-symbol".into();
+        transcript.initializer = Some(crate::ExportInitializerTranscript {
+            location: query,
+            target: "result-symbol".into(),
+            bindings: vec![
+                crate::ExportInitializerBinding {
+                    declaration: root,
+                    location: span("/p/runtime.ts", 70, 85),
+                    initializer: span("/p/runtime.ts", 79, 85),
+                },
+                crate::ExportInitializerBinding {
+                    declaration: plugin,
+                    location: span("/p/runtime.ts", 10, 60),
+                    initializer: span("/p/runtime.ts", 20, 60),
+                },
+            ],
+            call: span("/p/runtime.ts", 20, 60),
+            callee: span("/p/runtime.ts", 20, 27),
+            declaration: resolved_declaration("createPlugin", span("/p/factory.ts", 16, 28)),
+            specifier: "./factory".into(),
+            export_name: "createPlugin".into(),
+            object_arguments: vec![
+                crate::ExportInitializerObjectArgument {
+                    index: 0,
+                    location: span("/p/runtime.ts", 28, 30),
+                },
+                crate::ExportInitializerObjectArgument {
+                    index: 2,
+                    location: span("/p/runtime.ts", 40, 45),
+                },
+            ],
+        });
+        let envelope = crate::InvocationEnvelope {
+            project_id: "/p/tsconfig.json".into(),
+            generation: 0,
+            demand_sha256: export_value_demand_digest(&[demand.clone()]).into(),
+            module_graph_sha256: crate::SourceHash::of("graph").as_str().into(),
+            schema_sha256: v3::TYPE_FACTS_SCHEMA_SHA256.into(),
+            producer_build: v3::TYPE_FACTS_BUILD_ID.into(),
+            sources: ["/p/factory.ts", "/p/harness.ts", "/p/runtime.ts"]
+                .into_iter()
+                .map(|path| crate::TranscriptSourceDigest {
+                    path: path.into(),
+                    sha256: crate::SourceHash::of(path).as_str().into(),
+                })
+                .collect(),
+            open_reasons: Vec::new(),
+        };
+        validate_export_initializer_binding(&demand, &transcript, &envelope).unwrap();
+        type Mutation = fn(&mut crate::ExportInitializerTranscript);
+        let mutations: &[(&str, Mutation)] = &[
+            ("wrong query", |row| row.location.start_byte += 1),
+            ("wrong runtime target", |row| row.target = "other".into()),
+            ("wrong root symbol", |row| {
+                row.bindings[0].declaration.symbol = "other".into()
+            }),
+            ("empty chain", |row| row.bindings.clear()),
+            ("unbounded chain", |row| {
+                row.bindings.resize(17, row.bindings[0].clone())
+            }),
+            ("cycle", |row| {
+                row.bindings[1].declaration.symbol = row.bindings[0].declaration.symbol.clone()
+            }),
+            ("forward binding", |row| {
+                row.bindings[1].location.end_byte = 100
+            }),
+            ("different module", |row| {
+                row.bindings[1].location.path = "/p/other.ts".into()
+            }),
+            ("non-variable", |row| {
+                row.bindings[0].declaration.kind = "FunctionDeclaration".into()
+            }),
+            ("declaration outside binding", |row| {
+                row.bindings[0].declaration.location.start_byte = 1
+            }),
+            ("initializer outside binding", |row| {
+                row.bindings[0].initializer.end_byte = 100
+            }),
+            ("another call", |row| row.call.end_byte = 59),
+            ("callee outside call", |row| row.callee.start_byte = 1),
+            ("missing dependency identity", |row| {
+                row.declaration.symbol = "".into()
+            }),
+            ("missing specifier", |row| row.specifier = "".into()),
+            ("missing export", |row| row.export_name = "".into()),
+            ("no object argument", |row| row.object_arguments.clear()),
+            ("duplicate slot", |row| row.object_arguments[1].index = 0),
+            ("argument outside call", |row| {
+                row.object_arguments[1].location.end_byte = 100
+            }),
+            ("argument overlaps callee", |row| {
+                row.object_arguments[0].location.start_byte = 21
+            }),
+            ("overlapping arguments", |row| {
+                row.object_arguments[1].location.start_byte = 29
+            }),
+        ];
+        for (name, mutate) in mutations {
+            let mut bad = transcript.clone();
+            mutate(bad.initializer.as_mut().unwrap());
+            assert!(
+                validate_export_initializer_binding(&demand, &bad, &envelope).is_err(),
+                "{name}"
+            );
+        }
+        for omitted in 0..envelope.sources.len() {
+            let mut missing_source = envelope.clone();
+            missing_source.sources.remove(omitted);
+            assert!(
+                validate_export_initializer_binding(&demand, &transcript, &missing_source).is_err()
+            );
+        }
+        let mut unasked = demand.clone();
+        unasked.implementation_location = None;
+        assert!(validate_export_initializer_binding(&unasked, &transcript, &envelope).is_err());
+        transcript.implementation = None;
+        assert!(validate_export_initializer_binding(&demand, &transcript, &envelope).is_err());
+        transcript.initializer = None;
+        validate_export_initializer_binding(&demand, &transcript, &envelope).unwrap();
+    }
+
+    fn uncensused_form(location: Location) -> crate::UncensusedInvokingForm {
+        crate::UncensusedInvokingForm {
+            kind: crate::UncensusedInvokingFormKind::TaggedTemplate,
+            node_kind: "TaggedTemplateExpression".into(),
+            location,
+            reach: crate::Reachability::Reachable,
+            enclosing_callable: None,
+            captured: false,
+            subject_parameter: None,
+            subject_write: false,
+            subject_root: String::new(),
+            subject_import: None,
+            subject_root_refusal: String::new(),
+            coercion_subject_root: String::new(),
+            coercion_subject_root_refusal: String::new(),
+            coercion_subject_parameters: Vec::new(),
+            subject_local_literal_results: Vec::new(),
+            subject_declaration: None,
+            coercion_premise: None,
+            local_literal_result: None,
+        }
+    }
+
+    fn export_value_demand(location: Location) -> crate::ExportValueDemand {
+        crate::ExportValueDemand {
+            location,
+            implementation_location: None,
+            local_declaration_location: None,
+            callable_depth: 0,
+            parameter_premises: Vec::new(),
+        }
+    }
+
+    /// The two per-row invariants a consumer reads without re-deriving. Both
+    /// are cheap and both are load-bearing: `captured` is the boolean form of
+    /// `enclosing_callable`'s presence, so a row that disagrees with itself
+    /// would let a captured form read as an executed one; and `node_kind` is
+    /// the *only* description an `unclassified-invoking-form` row carries, so
+    /// an empty one turns the refusal row into an anonymous one.
+    #[test]
+    fn uncensused_form_rows_must_agree_with_themselves_and_name_their_node_kind() {
+        let mut transcript = implementation_transcript(span("/p/a.ts", 0, 40));
+        transcript
+            .uncensused_invoking_forms
+            .push(uncensused_form(span("/p/a.ts", 10, 20)));
+        validate_implementation_transcript(&transcript).expect("a well-formed row is accepted");
+
+        let mut claims_capture = transcript.clone();
+        claims_capture.uncensused_invoking_forms[0].captured = true;
+        assert!(validate_implementation_transcript(&claims_capture).is_err());
+
+        let mut carries_a_callable = transcript.clone();
+        carries_a_callable.uncensused_invoking_forms[0].enclosing_callable =
+            Some(span("/p/a.ts", 5, 30));
+        assert!(validate_implementation_transcript(&carries_a_callable).is_err());
+
+        let mut anonymous = transcript;
+        anonymous.uncensused_invoking_forms[0].node_kind = "".into();
+        assert!(validate_implementation_transcript(&anonymous).is_err());
+    }
+
+    /// The two lists of control-flow incompleteness must name the same markers.
+    ///
+    /// A marker with no classified construct is an *unclassified*
+    /// incompleteness, which is exactly what the class exists to make
+    /// impossible: a consumer that admits one class and refuses the other would
+    /// have to guess. A classified row for a marker the census does not report
+    /// is the same disagreement from the other side. Both are cheap to detect
+    /// here and neither is a state any consumer should have to reason about.
+    #[test]
+    fn control_flow_incompleteness_must_classify_exactly_the_reported_markers() {
+        let row = |marker: &str, class| crate::ControlFlowIncompleteness {
+            marker: marker.into(),
+            class,
+            location: span("/p/a.ts", 10, 20),
+        };
+        let mut flow = crate::ControlFlowCensus::default();
+        validate_control_flow_incompleteness(&flow).expect("a census with nothing unmodelled");
+
+        flow.unsupported = vec!["iterationReachability".into()];
+        assert!(
+            validate_control_flow_incompleteness(&flow).is_err(),
+            "a marker with no classified construct must refuse"
+        );
+
+        flow.incompleteness = vec![row(
+            "iterationReachability",
+            crate::ControlFlowIncompletenessClass::ReachabilityLowerBound,
+        )];
+        validate_control_flow_incompleteness(&flow).expect("marker sets agree");
+
+        // Two constructs of the same kind are one marker and two rows, which is
+        // why the comparison is over *sets* rather than lengths.
+        flow.incompleteness.push(crate::ControlFlowIncompleteness {
+            location: span("/p/a.ts", 30, 40),
+            ..flow.incompleteness[0].clone()
+        });
+        validate_control_flow_incompleteness(&flow).expect("one marker, two constructs");
+
+        let mut unreported = flow.clone();
+        unreported.incompleteness.push(row(
+            "jumpReachability",
+            crate::ControlFlowIncompletenessClass::FlowUnaccounted,
+        ));
+        assert!(
+            validate_control_flow_incompleteness(&unreported).is_err(),
+            "a classified row for an unreported marker must refuse"
+        );
+
+        let mut anonymous = flow;
+        anonymous.incompleteness[0].marker = "".into();
+        assert!(validate_control_flow_incompleteness(&anonymous).is_err());
+    }
+
+    /// Presence has to agree with the demand in both directions, and the
+    /// answer's own location has to be the demanded one.
+    #[test]
+    fn local_declaration_presence_and_location_follow_the_demand() {
+        let demanded = span("/p/a.ts", 10, 40);
+        let mut demand = export_value_demand(span("/p/a.ts", 0, 5));
+        let transcript = export_value_transcript(span("/p/a.ts", 0, 5));
+        validate_local_declaration_binding(0, &demand, &transcript)
+            .expect("neither side asked for a local declaration");
+
+        demand.local_declaration_location = Some(demanded.clone());
+        assert!(
+            validate_local_declaration_binding(0, &demand, &transcript).is_err(),
+            "a demand that asked for a local declaration and got none must refuse"
+        );
+
+        let mut unasked = transcript.clone();
+        unasked.local_declaration = Some(implementation_transcript(demanded.clone()));
+        assert!(
+            validate_local_declaration_binding(
+                0,
+                &export_value_demand(span("/p/a.ts", 0, 5)),
+                &unasked
+            )
+            .is_err(),
+            "a local declaration for a demand that asked for none must refuse"
+        );
+
+        let mut wrong_span = transcript.clone();
+        wrong_span.local_declaration = Some(implementation_transcript(span("/p/a.ts", 50, 80)));
+        assert!(validate_local_declaration_binding(0, &demand, &wrong_span).is_err());
+
+        let mut wrong_file = transcript.clone();
+        wrong_file.local_declaration = Some(implementation_transcript(span("/p/b.ts", 10, 40)));
+        assert!(validate_local_declaration_binding(0, &demand, &wrong_file).is_err());
+
+        let mut exact = transcript;
+        exact.local_declaration = Some(implementation_transcript(demanded));
+        validate_local_declaration_binding(0, &demand, &exact)
+            .expect("the demanded location, echoed back");
+    }
+
+    /// Protocol 23: a local declaration's transcript states the demanded
+    /// premise verbatim or none at all. A subset, a different type or identity
+    /// in a slot, or a premise for a demand that carried none is a census
+    /// classified under a condition the consumer never asked for.
+    #[test]
+    fn local_declaration_premise_is_the_demands_or_nothing() {
+        let demanded = span("/p/a.ts", 10, 40);
+        let premise = |index: usize, text: &str, identity: &str| crate::ParameterPremise {
+            index,
+            r#type: text.into(),
+            identity: identity.into(),
+            spelling: String::new(),
+        };
+        let mut demand = export_value_demand(span("/p/a.ts", 0, 5));
+        demand.local_declaration_location = Some(demanded.clone());
+        demand.parameter_premises = vec![
+            premise(0, "number", "flags:8"),
+            premise(1, "Axis", "flags:524288|symbol:/p/a.d.ts:3"),
+        ];
+        let mut transcript = export_value_transcript(span("/p/a.ts", 0, 5));
+        transcript.local_declaration = Some(implementation_transcript(demanded.clone()));
+
+        validate_local_declaration_binding(0, &demand, &transcript)
+            .expect("no premise stated is the strictly more refusing census");
+
+        let mut echoed = transcript.clone();
+        echoed
+            .local_declaration
+            .as_mut()
+            .unwrap()
+            .parameter_premises = demand.parameter_premises.clone();
+        validate_local_declaration_binding(0, &demand, &echoed).expect("the demand, echoed");
+
+        for stated in [
+            vec![premise(0, "number", "flags:8")],
+            vec![
+                premise(0, "number", "flags:8"),
+                premise(1, "Axis", "flags:524288"),
+            ],
+            vec![
+                premise(0, "number", "flags:8"),
+                premise(1, "unknown", "flags:2"),
+            ],
+            vec![
+                premise(1, "Axis", "flags:524288|symbol:/p/a.d.ts:3"),
+                premise(0, "number", "flags:8"),
+            ],
+        ] {
+            let mut other = transcript.clone();
+            other.local_declaration.as_mut().unwrap().parameter_premises = stated;
+            assert!(
+                validate_local_declaration_binding(0, &demand, &other).is_err(),
+                "a premise other than the demanded one must refuse"
+            );
+        }
+
+        let mut unasked = export_value_demand(span("/p/a.ts", 0, 5));
+        unasked.local_declaration_location = Some(demanded);
+        assert!(
+            validate_local_declaration_binding(0, &unasked, &echoed).is_err(),
+            "a premise for a demand that carried none must refuse"
+        );
+    }
+
+    /// The echo above binds nothing on its own — the producer copies the
+    /// demand into it. This is the half it does not copy: the declaration the
+    /// checker resolved must sit inside the demanded bytes, and its name must
+    /// agree with the queried one.
+    #[test]
+    fn local_declaration_binds_through_the_resolved_declaration() {
+        let demanded = span("/p/a.ts", 10, 40);
+        let mut demand = export_value_demand(span("/p/a.ts", 0, 5));
+        demand.local_declaration_location = Some(demanded.clone());
+
+        // A named function resolves to its *identifier*, which is inside the
+        // declaration rather than equal to it, so containment is the check.
+        let mut inside = export_value_transcript(span("/p/a.ts", 0, 5));
+        let mut local = implementation_transcript(demanded.clone());
+        local.query_name = "helper".into();
+        local.declaration = Some(resolved_declaration("helper", span("/p/a.ts", 19, 25)));
+        inside.local_declaration = Some(local.clone());
+        validate_local_declaration_binding(0, &demand, &inside)
+            .expect("resolved inside the demand");
+
+        // An anonymous `const helper = () => …` resolves to the arrow itself,
+        // which is the demanded span exactly.
+        let mut equal = inside.clone();
+        equal.local_declaration.as_mut().unwrap().declaration =
+            Some(resolved_declaration("helper", demanded.clone()));
+        validate_local_declaration_binding(0, &demand, &equal).expect("resolved as the demand");
+
+        // The fabricated answer the echo cannot catch: span A is echoed while
+        // the resolved declaration names span B.
+        let mut elsewhere = inside.clone();
+        elsewhere.local_declaration.as_mut().unwrap().declaration =
+            Some(resolved_declaration("other", span("/p/a.ts", 60, 66)));
+        assert!(validate_local_declaration_binding(0, &demand, &elsewhere).is_err());
+
+        let mut other_file = inside.clone();
+        other_file.local_declaration.as_mut().unwrap().declaration =
+            Some(resolved_declaration("helper", span("/p/b.ts", 19, 25)));
+        assert!(validate_local_declaration_binding(0, &demand, &other_file).is_err());
+
+        let mut renamed = inside;
+        renamed.local_declaration.as_mut().unwrap().declaration =
+            Some(resolved_declaration("other", span("/p/a.ts", 19, 25)));
+        assert!(
+            validate_local_declaration_binding(0, &demand, &renamed).is_err(),
+            "queryName and the resolved declaration's name must agree"
+        );
+    }
+
+    /// The kind vocabulary is closed, and closed means the *whole transcript*
+    /// is rejected rather than the row degrading to an unknown one. A row of
+    /// unknown kind would keep every other field of that row in play, and a
+    /// census would have to decide what an unnamed form permits — which is
+    /// exactly the question the enum exists to refuse.
+    #[test]
+    fn an_unrecognized_invoking_form_kind_rejects_the_whole_transcript() {
+        use serde::Serialize;
+
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct WireForm<'a> {
+            kind: &'a str,
+            node_kind: &'a str,
+            location: Location,
+            reach: crate::Reachability,
+        }
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct WireTranscript<'a> {
+            location: Location,
+            uncensused_invoking_forms: Vec<WireForm<'a>>,
+        }
+
+        let encoded = |kind: &str| {
+            crate::encode(&WireTranscript {
+                location: span("/p/a.ts", 0, 40),
+                uncensused_invoking_forms: vec![WireForm {
+                    kind,
+                    node_kind: "TaggedTemplateExpression",
+                    location: span("/p/a.ts", 10, 20),
+                    reach: crate::Reachability::Reachable,
+                }],
+            })
+            .expect("encode the wire transcript")
+        };
+
+        let accepted: crate::ExportImplementationTranscript =
+            crate::decode(&encoded("tagged-template")).expect("a named kind decodes");
+        assert_eq!(
+            accepted.uncensused_invoking_forms[0].kind,
+            crate::UncensusedInvokingFormKind::TaggedTemplate
+        );
+        assert!(
+            crate::decode::<crate::ExportImplementationTranscript>(&encoded("not-a-kind")).is_err(),
+            "an unrecognized kind must fail the transcript, not the row"
+        );
     }
 }

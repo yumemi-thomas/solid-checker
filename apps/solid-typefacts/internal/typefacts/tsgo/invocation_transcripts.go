@@ -296,33 +296,46 @@ func (p *project) expandedMinimumArgumentCountLocked(
 	return minimum
 }
 
-func invocationOverloadOrdinal(declaration *ast.Node) int {
+// overloadDeclarations is the declaration set an overload ordinal and count
+// range over: the symbol's declarations of the signature's own kind that state
+// a call signature. TypeScript's overload set is the bodiless declarations; the
+// implementation that follows them has a body and is not a signature of the
+// type. A function declared once, with its body, is its own one-member set.
+// Counting the implementation reported `overloadCount == len(signatures) + 1`
+// for every overloaded function whose *source* was analyzed rather than its
+// `.d.ts`, and the consumer, which requires the count to agree with the type's
+// signatures, refused the set as incomplete (docs/precision-backlog.md).
+func overloadDeclarations(declaration *ast.Node) []*ast.Node {
 	if declaration == nil || declaration.Symbol() == nil {
-		return 0
+		return nil
 	}
-	ordinal := 0
+	var sameKind, bodiless []*ast.Node
 	for _, candidate := range declaration.Symbol().Declarations {
+		if candidate.Kind != declaration.Kind {
+			continue
+		}
+		sameKind = append(sameKind, candidate)
+		if candidate.Body() == nil {
+			bodiless = append(bodiless, candidate)
+		}
+	}
+	if len(bodiless) != 0 {
+		return bodiless
+	}
+	return sameKind
+}
+
+func invocationOverloadOrdinal(declaration *ast.Node) int {
+	for ordinal, candidate := range overloadDeclarations(declaration) {
 		if candidate == declaration {
 			return ordinal
 		}
-		if candidate.Kind == declaration.Kind {
-			ordinal++
-		}
 	}
-	return ordinal
+	return 0
 }
 
 func invocationOverloadCount(declaration *ast.Node) int {
-	if declaration == nil || declaration.Symbol() == nil {
-		return 0
-	}
-	count := 0
-	for _, candidate := range declaration.Symbol().Declarations {
-		if candidate.Kind == declaration.Kind {
-			count++
-		}
-	}
-	return count
+	return len(overloadDeclarations(declaration))
 }
 
 func selectedSignatureDigest(kind typefacts.CallKind, selected typefacts.SelectedSignature) string {
@@ -572,10 +585,20 @@ func invocationValueHasClosedPrimitiveApparentIndex(
 
 // invocationValueHasClosedArrayIndex recognizes only the global Array and
 // ReadonlyArray references whose sole numeric index has exactly their element
-// type. This closes the value's own shape, not its unbounded member census;
-// callable-path facts deliberately retain openIndex. Tuples are handled by the
-// stricter fixed-length arm above, and author-defined array-like interfaces do
-// not satisfy the checker's array-or-tuple predicate.
+// type. This closes the value's own shape and says nothing about its unbounded
+// member census, on both fact kinds: the root value fact drops openIndex, and a
+// callable-path fact records the unenumerated elements as SubtreeEnumerated=false
+// while keeping its own Complete and no openIndex. The whole-census consumer
+// gates read SubtreeEnumerated and still refuse; a demand naming that exact path
+// asserts nothing about the elements and no longer reads the census's premise as
+// its own. Tuples are handled by the stricter fixed-length arm above, and
+// author-defined array-like interfaces do not satisfy the checker's
+// array-or-tuple predicate.
+//
+// Ask this of the value's own type, never of its apparent type: a type parameter
+// constrained to an array has array index infos but is not an array, and closing
+// it on the strength of a constraint is unsound (an instantiation may intersect
+// in a call signature).
 func invocationValueHasClosedArrayIndex(typeChecker *checker.Checker, value *checker.Type) bool {
 	if value == nil || value.Flags()&checker.TypeFlagsUnion != 0 ||
 		!checker.Checker_isArrayOrTupleType(typeChecker, value) ||
@@ -835,6 +858,18 @@ func (p *project) callablePathsLocked(value *checker.Type, depth int) []typefact
 	// index, or generic cut retains an explicit unknown instead. This prevents a
 	// union sibling from inheriting another sibling's callback without claiming
 	// a path absent below an unenumerated parent.
+	//
+	// A closed declared census is not evidence of absence for every name. The
+	// compiler augments every object type with the global `Object` interface's
+	// members, and GetPropertiesOfType never enumerates them, so `toString`,
+	// `hasOwnProperty` and `valueOf` are answered by the compiler — `tsc`
+	// accepts `({ dispose(): void }).toString()` — on a sibling whose declared
+	// census names none of them. The tuple member census makes exactly those
+	// names reachable as templates, and a template some alternative declares
+	// outright reaches them too. Such a name therefore retains the explicit
+	// unknown regardless of what the sibling's prefix proves, and if the global
+	// `Object` interface does not resolve at all, no absence is synthesized for
+	// any template.
 	type pathTemplate struct {
 		path []typefacts.PathSegment
 	}
@@ -845,11 +880,27 @@ func (p *project) callablePathsLocked(value *checker.Type, depth int) []typefact
 			continue
 		}
 		key := callablePathKey(fact)
-		templates[key] = pathTemplate{path: fact.Path}
 		if present[key] == nil {
 			present[key] = make(map[int]struct{})
 		}
 		present[key][fact.Alternative] = struct{}{}
+		// An apparent member does not oblige a sibling alternative to answer
+		// for it, and reconciling it would cost closure rather than buy
+		// precision. Every alternative to which the compiler's Function
+		// fallback applies emits the same nine leaves at the same path length,
+		// because the depth decrement is uniform — so the only alternatives a
+		// reconciled apparent template can reach are the ones that genuinely do
+		// not have the member. There the augmented-name rule below refuses to
+		// prove absence, and the synthesized fact is an explicit unknown that
+		// carries Apparent=false and therefore *counts* against declared-member
+		// census closure. `(() => void) | undefined` measured 20 facts with 9
+		// open declared ones that way, against 11 facts and none open with this
+		// exclusion. The templates that close F2/F3 come from declared
+		// siblings, so they are unaffected.
+		if fact.Apparent {
+			continue
+		}
+		templates[key] = pathTemplate{path: fact.Path}
 	}
 	for key, template := range templates {
 		for alternative := range constituents {
@@ -860,7 +911,8 @@ func (p *project) callablePathsLocked(value *checker.Type, depth int) []typefact
 			complete := false
 			var reasons []string
 			subtreeEnumerated := false
-			if callablePathPrefixProvesAbsence(paths, alternative, template.path) {
+			if !p.templateNameMayBeCompilerAugmentedLocked(template.path) &&
+				callablePathPrefixProvesAbsence(paths, alternative, template.path) {
 				presence = typefacts.PathAbsent
 				complete = true
 				subtreeEnumerated = true
@@ -957,9 +1009,26 @@ func (p *project) walkCallablePathsLocked(
 	if value != nil && len(p.checker.GetIndexInfosOfType(value)) != 0 &&
 		!invocationValueHasClosedExactTupleIndex(p.checker, value) {
 		fact := &(*paths)[factIndex]
-		fact.Complete = false
+		// An exact Array's sole numeric index is the compiler's own synthesized
+		// element accessor, and this walk emits the array's declared members but
+		// never its elements. That is a statement about member *enumeration*,
+		// not about this node's shape: callability, constructability and the
+		// type flags are all answered for `T[]` exactly as they are for a fixed
+		// tuple. So record it the way the depth and cycle cuts are recorded —
+		// SubtreeEnumerated only. The whole-census gates
+		// (`callable_path_census_is_closed`) still refuse it; a demand naming
+		// this exact path, which asserts nothing about the elements, no longer
+		// reads the census's premise as its own.
+		//
+		// Everything else keeps `openIndex` and its incompleteness: a string- or
+		// symbol-keyed index signature, a union, and any tuple with an optional
+		// or rest element are all author-declared open key spaces whose value
+		// type is not the element type this walk skipped.
 		fact.SubtreeEnumerated = false
-		fact.OpenReasons = append(fact.OpenReasons, "openIndex")
+		if !invocationValueHasClosedArrayIndex(p.checker, value) {
+			fact.Complete = false
+			fact.OpenReasons = append(fact.OpenReasons, "openIndex")
+		}
 	}
 	if value == nil || remaining == 0 {
 		if value != nil && (len(p.checker.GetPropertiesOfType(value)) != 0 || checker.IsTupleType(value)) {
@@ -973,6 +1042,7 @@ func (p *project) walkCallablePathsLocked(
 	}
 	seen[value] = struct{}{}
 	defer delete(seen, value)
+	emitted := make(map[string]struct{})
 	if checker.IsTupleType(value) {
 		target := value.TargetTupleType()
 		elements := checker.Checker_getTypeArguments(p.checker, value)
@@ -981,13 +1051,45 @@ func (p *project) walkCallablePathsLocked(
 			segment := typefacts.PathSegment{Kind: typefacts.PathSegmentTuple, Index: &tupleIndex}
 			p.walkCallablePathsLocked(elements[index], alternative, append(path, segment), remaining-1, seen, paths)
 		}
+		// A tuple's element slots are Tuple segments, above. Its *members* are
+		// the ones its Array or ReadonlyArray base declares — slice, length,
+		// map, and the rest — which GetPropertiesOfType returns and which this
+		// branch used to drop by returning after the elements. A plain array
+		// already censuses them, so dropping them for a tuple made the same
+		// member answerable for `T[]` and absent for `[T, T]`. The base's
+		// numeric element properties are skipped: those slots are already the
+		// Tuple segments, and emitting both would name one value twice.
+		p.walkDeclaredMembersLocked(value, alternative, path, remaining, seen, paths, emitted, true)
+		p.appendApparentFunctionMembersLocked(value, alternative, path, paths, emitted)
 		return
 	}
+	p.walkDeclaredMembersLocked(value, alternative, path, remaining, seen, paths, emitted, false)
+	p.appendApparentFunctionMembersLocked(value, alternative, path, paths, emitted)
+}
+
+// walkDeclaredMembersLocked emits and recurses into the members
+// GetPropertiesOfType returns for this node — the ones some declaration in the
+// program actually writes down. skipArrayIndexNames drops the canonical numeric
+// element properties of a tuple, whose slots the caller already emitted as
+// Tuple segments.
+func (p *project) walkDeclaredMembersLocked(
+	value *checker.Type,
+	alternative int,
+	path []typefacts.PathSegment,
+	remaining int,
+	seen map[*checker.Type]struct{},
+	paths *[]typefacts.CallablePathFact,
+	emitted map[string]struct{},
+	skipArrayIndexNames bool,
+) {
 	properties := append([]*ast.Symbol(nil), p.checker.GetPropertiesOfType(value)...)
 	sort.Slice(properties, func(i, j int) bool { return properties[i].Name < properties[j].Name })
 	for _, property := range properties {
 		name, ok := invocationPropertyName(property.Name)
 		if !ok {
+			continue
+		}
+		if skipArrayIndexNames && isCanonicalArrayIndexName(name) {
 			continue
 		}
 		propertyType := p.checker.GetTypeOfPropertyOfType(value, name)
@@ -1003,7 +1105,223 @@ func (p *project) walkCallablePathsLocked(
 				child.Declaration = &declarations[0]
 			}
 		}
+		emitted[name] = struct{}{}
 	}
+}
+
+// isCanonicalArrayIndexName is the compiler's own canonical numeric index
+// spelling: the decimal digits that round-trip through a number. "01", "1.0",
+// "-1" and "1e3" are ordinary string keys, not element slots.
+func isCanonicalArrayIndexName(name string) bool {
+	if name == "0" {
+		return true
+	}
+	if name == "" || name[0] < '1' || name[0] > '9' {
+		return false
+	}
+	for index := 1; index < len(name); index++ {
+		if name[index] < '0' || name[index] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// appendApparentFunctionMembersLocked emits the members a callable node carries
+// through the compiler's apparent-type augmentation rather than through any
+// declaration of its own.
+//
+// getPropertyOfType falls back to the global `Function` interface (via
+// CallableFunction or NewableFunction) for every object type with call or
+// construct signatures, so `fn.bind`, `fn.call`, `fn.toString` and the rest are
+// real members the compiler answers and `tsc` accepts. GetPropertiesOfType does
+// not enumerate them, so before this the census said such a value had *no*
+// members, and a consumer asking for one read absence where the compiler
+// answers a type.
+//
+// The facts are leaves, and deliberately so. Recursing would be unbounded in
+// the useless direction (bind.bind.bind…) while the values reached are
+// library-owned and never caller-supplied, so no proof about the package under
+// analysis can rest on them. They carry Apparent, which keeps them out of
+// declared-member census closure and out of the template set that
+// cross-alternative reconciliation answers for — though they still serve as
+// prefixes there, so nothing below one can be proved absent through it. An
+// exact path lookup finds them like any other fact.
+//
+// A member the node declares itself wins: the compiler's own lookup order
+// consults resolved members before the Function fallback, so the declared fact
+// already emitted is the answer. Each member's type comes from
+// GetTypeOfPropertyOfType on the node — TypeScript's answer for that node,
+// which is how an augmented `interface Function` or a strictBindCallApply
+// signature reaches the fact rather than a shape reconstructed here.
+func (p *project) appendApparentFunctionMembersLocked(
+	value *checker.Type,
+	alternative int,
+	path []typefacts.PathSegment,
+	paths *[]typefacts.CallablePathFact,
+	emitted map[string]struct{},
+) {
+	if value == nil ||
+		(len(p.checker.GetSignaturesOfType(value, checker.SignatureKindCall)) == 0 &&
+			len(p.checker.GetSignaturesOfType(value, checker.SignatureKindConstruct)) == 0) {
+		return
+	}
+	for _, name := range p.apparentFunctionMemberNamesLocked() {
+		if _, done := emitted[name]; done {
+			continue
+		}
+		memberType := p.checker.GetTypeOfPropertyOfType(value, name)
+		if memberType == nil {
+			continue
+		}
+		emitted[name] = struct{}{}
+		// Presence is the compiler's, not a constant. `interface Function`
+		// declares nine required members today, but an augmentation may add
+		// `maybe?(): void`, and reporting that as required would tell a
+		// consumer a member is always there when the type says it may not be.
+		// The declared walk reads the same flag off the same kind of symbol.
+		presence := typefacts.PathRequired
+		if symbol := p.checker.GetPropertyOfType(value, name); symbol != nil &&
+			symbol.Flags&ast.SymbolFlagsOptional != 0 {
+			presence = typefacts.PathOptional
+		}
+		callability := callabilityOfType(p.checker, memberType)
+		constructability := invocationConstructabilityOfType(p.checker, memberType)
+		fact := typefacts.CallablePathFact{
+			Alternative: alternative,
+			Path: append(
+				append([]typefacts.PathSegment(nil), path...),
+				typefacts.PathSegment{Kind: typefacts.PathSegmentProperty, Property: name},
+			),
+			Presence:         presence,
+			Callability:      callability,
+			Constructability: constructability,
+			Complete: memberType.Flags()&(checker.TypeFlagsAny|
+				checker.TypeFlagsUnknown|
+				checker.TypeFlagsIncludesError|
+				checker.TypeFlagsInstantiable) == 0 &&
+				callability != typefacts.CallabilityUnknown &&
+				constructability != typefacts.InvocationConstructUnknown,
+			Apparent: true,
+		}
+		if memberType.Flags()&checker.TypeFlagsInstantiable != 0 {
+			fact.OpenReasons = append(fact.OpenReasons, "unresolvedGeneric")
+		}
+		if !fact.Complete && len(fact.OpenReasons) == 0 {
+			fact.OpenReasons = append(fact.OpenReasons, "openType")
+		}
+		*paths = append(*paths, fact)
+	}
+}
+
+// templateNameMayBeCompilerAugmentedLocked reports whether a reconciliation
+// template ends in a property name the compiler can answer on *any* object type
+// through its apparent-type augmentation — that is, a member of the global
+// `Object` interface.
+//
+// It exists because a closed declared census is not evidence that such a name
+// is absent. GetPropertiesOfType never enumerates the `Object` fallback, so a
+// sibling alternative declaring `{ dispose(): void }` has a closed, fully
+// enumerated census that names no `toString` — while `tsc` accepts
+// `obj.toString()`.
+//
+// The global `Function` interface is deliberately *not* consulted. Its
+// fallback applies only to a type with call or construct signatures, and every
+// such alternative emits all nine apparent leaves at the same path length
+// (the depth decrement is uniform), so a Function-only name is reconciled into
+// an alternative only when that alternative genuinely lacks it — `tsc` agrees
+// that `({ q: 1 }).bind` does not exist. Suppressing there would give up a
+// correct absence for all nine names and buy nothing.
+func (p *project) templateNameMayBeCompilerAugmentedLocked(path []typefacts.PathSegment) bool {
+	names, resolved := p.objectMemberNamesLocked()
+	return templateNameMayBeAugmented(names, resolved, path)
+}
+
+// templateNameMayBeAugmented is the decision itself, separated from the checker
+// so the fail-closed branch is testable without a program.
+//
+// An unresolved name set suppresses *every* absence, including for a tuple
+// segment. Without the set there is no way to tell a genuinely absent member
+// from one the `Object` fallback supplies, and the census must not guess in the
+// permissive direction. Only the last segment is consulted: every earlier
+// segment had to be observed for the template to exist, and the prefix proof
+// already requires the nearest one to be closed and enumerated.
+func templateNameMayBeAugmented(
+	objectMembers map[string]struct{},
+	resolved bool,
+	path []typefacts.PathSegment,
+) bool {
+	if !resolved {
+		return true
+	}
+	if len(path) == 0 {
+		return false
+	}
+	last := path[len(path)-1]
+	if last.Kind != typefacts.PathSegmentProperty {
+		return false
+	}
+	_, augmented := objectMembers[last.Property]
+	return augmented
+}
+
+// objectMemberNamesLocked is the global `Object` interface's member names for
+// this program, and whether the interface resolved at all. getPropertyOfTypeEx
+// falls back to it for every object type, so a name in this set may exist on a
+// value whose declared census does not mention it.
+func (p *project) objectMemberNamesLocked() (map[string]struct{}, bool) {
+	if p.objectMemberNamesResolved {
+		return p.objectMemberNames, p.objectMemberNames != nil
+	}
+	p.objectMemberNamesResolved = true
+	declared := p.globalInterfaceMemberNamesLocked("Object")
+	if declared == nil {
+		return nil, false
+	}
+	names := make(map[string]struct{}, len(declared))
+	for _, name := range declared {
+		names[name] = struct{}{}
+	}
+	p.objectMemberNames = names
+	return p.objectMemberNames, true
+}
+
+// apparentFunctionMemberNamesLocked is the global `Function` interface's member
+// names for this program, in sorted order. A project whose lib declares no
+// `Function` (or declares it with type parameters) gets an empty set, and the
+// census then simply carries no apparent members — the compiler's own fallback
+// is equally absent there. A user augmentation of `interface Function` is part
+// of the answer, because it is part of what the compiler resolves.
+func (p *project) apparentFunctionMemberNamesLocked() []string {
+	if p.apparentFunctionMembersResolved {
+		return p.apparentFunctionMembers
+	}
+	p.apparentFunctionMembersResolved = true
+	p.apparentFunctionMembers = p.globalInterfaceMemberNamesLocked("Function")
+	return p.apparentFunctionMembers
+}
+
+// globalInterfaceMemberNamesLocked enumerates one zero-arity global
+// interface's member names, sorted, filtering symbol-named members. A project
+// whose lib omits the interface (or declares it with type parameters) yields
+// nothing, which is the honest answer: the compiler's own fallback is equally
+// absent there. A user augmentation is included, because it is part of what the
+// compiler resolves.
+func (p *project) globalInterfaceMemberNamesLocked(global string) []string {
+	declared := checker.Checker_getGlobalType(p.checker, global, 0, false)
+	if declared == nil {
+		return nil
+	}
+	names := make([]string, 0)
+	for _, property := range p.checker.GetPropertiesOfType(declared) {
+		name, ok := invocationPropertyName(property.Name)
+		if !ok {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func invocationPropertyName(name string) (string, bool) {
@@ -1119,8 +1437,26 @@ func (p *project) parameterUseCensusLocked(
 			if ctx.Err() != nil {
 				return
 			}
-			if !ast.IsIdentifier(node) || ast.IsDeclarationNameOrImportPropertyName(node) ||
-				ast.IsPartOfTypeNode(node) {
+			// A shorthand property assignment's name is *both* a declaration
+			// name and a value read: `{ cb }` stores `cb` exactly as
+			// `{ cb: cb }` does. The declaration-name guard skipped it, so
+			// `const holder = { cb }` recorded no use of `cb` at all while
+			// every other escape of the same value — `{ cb: cb }`, `[cb]`,
+			// `(0, cb)`, `new Map([["k", cb]])` — recorded `unknownEscape`.
+			// A consumer that reads this census as exhaustive was therefore
+			// blind to the shorthand, and the value could leave the body
+			// unrecorded.
+			//
+			// The use is recorded as `unknownEscape`, which is what this
+			// census says about a value it cannot classify further: the
+			// producer knows the value was stored into an object literal and
+			// states no more than that. This also covers `{ ...{ cb } }`,
+			// whose inner literal is the same node kind.
+			shorthand := node.Parent != nil &&
+				ast.IsShorthandPropertyAssignment(node.Parent) &&
+				node.Parent.Name() == node
+			if !ast.IsIdentifier(node) || ast.IsPartOfTypeNode(node) ||
+				(ast.IsDeclarationNameOrImportPropertyName(node) && !shorthand) {
 				return
 			}
 			// The use census exempts an implementation whose own body *is* a
@@ -1140,13 +1476,26 @@ func (p *project) parameterUseCensusLocked(
 				locationWithheldByJump(unsafeJumps[flowOwner], nodeLocation(node)) {
 				return
 			}
-			symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(node))
+			// The symbol at a shorthand name is the *property*, not the value
+			// it reads; the value symbol has its own resolution.
+			resolved := p.checker.GetSymbolAtLocation(node)
+			if shorthand {
+				resolved = p.checker.GetShorthandAssignmentValueSymbol(node.Parent)
+			}
+			symbol := p.canonicalSymbol(resolved)
 			root, ok := bySymbol[symbol]
 			if !ok {
 				return
 			}
 			_, alias := aliases[symbol]
 			kind := p.parameterUseKindLocked(node)
+			// parameterUseKindLocked already answers unknownEscape for a shorthand
+			// property name; this is belt-and-braces, not the guard, so a change
+			// to the classifier cannot silently turn an object-literal escape
+			// into a weaker kind.
+			if shorthand {
+				kind = typefacts.ParameterUseUnknownEscape
+			}
 			if alias && kind == typefacts.ParameterUseDirectCall {
 				kind = typefacts.ParameterUseAliasCall
 			}
@@ -1296,6 +1645,98 @@ func isCallableDeclaration(node *ast.Node) bool {
 		(ast.IsFunctionLikeDeclaration(node) || ast.IsClassStaticBlockDeclaration(node))
 }
 
+// containsReturnStatement reports whether `node` holds a `return` of the
+// enclosing function -- one not inside a nested callable, whose returns are
+// that callable's own. It decides whether an arm that never completes normally
+// left by throwing alone or may have left by returning a value.
+func containsReturnStatement(node *ast.Node) bool {
+	if node == nil {
+		return false
+	}
+	if ast.IsReturnStatement(node) {
+		return true
+	}
+	found := false
+	node.ForEachChild(func(child *ast.Node) bool {
+		if found || isCallableDeclaration(child) {
+			return false
+		}
+		if containsReturnStatement(child) {
+			found = true
+		}
+		return false
+	})
+	return found
+}
+
+// returnedParameterIdentityLocked proves binding identity, not value shape.
+// Every excluded form remains open; symbol spelling is never positive evidence.
+func (p *project) returnedParameterIdentityLocked(implementation, expression *ast.Node) *typefacts.ParameterValueSource {
+	if implementation == nil || ast.HasSyntacticModifier(implementation, ast.ModifierFlagsAsync) {
+		return nil
+	}
+	return p.unwrittenParameterIdentityLocked(implementation, expression)
+}
+
+// Lexical binding identity survives an await when no code can replace the
+// binding. This is deliberately separate from return identity: an async
+// function still wraps its result even when it returns an unwritten parameter.
+func (p *project) unwrittenParameterIdentityLocked(implementation, expression *ast.Node) *typefacts.ParameterValueSource {
+	if implementation == nil {
+		return nil
+	}
+	switch {
+	case ast.IsFunctionDeclaration(implementation):
+		if implementation.AsFunctionDeclaration().AsteriskToken != nil {
+			return nil
+		}
+	case ast.IsFunctionExpression(implementation):
+		if implementation.AsFunctionExpression().AsteriskToken != nil {
+			return nil
+		}
+	case ast.IsArrowFunction(implementation):
+	default:
+		return nil
+	}
+	expression = identityPreservingUnwrap(expression)
+	if expression == nil || !ast.IsIdentifier(expression) {
+		return nil
+	}
+	symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(expression))
+	// A redeclaration initializer replaces the parameter without appearing in
+	// the assignment-target census. Require the witnessed binding itself to
+	// have one declaration before treating it as the caller's original value.
+	if symbol == nil || len(symbol.Declarations) != 1 || p.symbolIsAssignedLocked(symbol, implementation) {
+		return nil
+	}
+	// Direct eval and mapped arguments can mutate a binding without a visible
+	// assignment to its symbol. Refuse mentions rather than guessing strictness.
+	if mentionsArgumentsOrEval(implementation) {
+		return nil
+	}
+	var result *typefacts.ParameterValueSource
+	names := make(map[string]bool)
+	for index, parameter := range implementation.Parameters() {
+		if name := parameter.Name(); name != nil && ast.IsIdentifier(name) {
+			if names[name.Text()] {
+				return nil
+			}
+			names[name.Text()] = true
+		}
+		if parameter.Name() == nil || !ast.IsIdentifier(parameter.Name()) ||
+			parameter.Initializer() != nil || parameter.AsParameterDeclaration().DotDotDotToken != nil {
+			continue
+		}
+		if p.canonicalSymbol(p.checker.GetSymbolAtLocation(parameter.Name())) == symbol {
+			if result != nil {
+				return nil
+			}
+			result = &typefacts.ParameterValueSource{ParameterIndex: index}
+		}
+	}
+	return result
+}
+
 func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.ControlFlowCensus {
 	census := &typefacts.ControlFlowCensus{}
 	body := implementation.Body()
@@ -1307,11 +1748,29 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 			Location:         nodeLocation(body),
 			Reach:            typefacts.Reachable,
 			Value:            &value,
+			Parameter:        p.returnedParameterIdentityLocked(implementation, body),
 			CarriedCallables: carried,
 			CarryReach:       &reachable,
 			Sources:          p.returnValueSourcesLocked(body),
 		})
 		return census
+	}
+	// markIncomplete is the single writer of both incompleteness records. The
+	// marker set a consumer already reads and the classified rows can never
+	// disagree, because there is nowhere to append to one of them alone: the
+	// client refuses a transcript whose two lists name different markers, and a
+	// second append site is exactly how that drift starts.
+	markIncomplete := func(
+		marker string,
+		class typefacts.ControlFlowIncompletenessClass,
+		node *ast.Node,
+	) {
+		census.Unsupported = append(census.Unsupported, marker)
+		census.Incompleteness = append(census.Incompleteness, typefacts.ControlFlowIncompleteness{
+			Marker:   marker,
+			Class:    class,
+			Location: nodeLocation(node),
+		})
 	}
 	// ReturnSite.Reach deliberately retains the producer's historical,
 	// optimistic reachability. carryReach is a separate lower-bound premise for
@@ -1358,6 +1817,7 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 			}
 			census.Returns = append(census.Returns, typefacts.ReturnSite{
 				Location: nodeLocation(node), Reach: state.reach, Value: value,
+				Parameter:        p.returnedParameterIdentityLocked(implementation, node.Expression()),
 				CarriedCallables: carried, CarryReach: carryReach,
 				Sources: p.returnValueSourcesLocked(node.Expression()),
 			})
@@ -1404,11 +1864,33 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 				return elseState
 			}
 			merged := flowState{reach: mergeReachability(thenState.reach, elseState.reach)}
+			// A throw guard -- an arm whose exit is unreachable and whose only
+			// way out is a `throw`, never a `return` -- takes nothing from the
+			// state after the `if`: an execution that reaches the next
+			// statement took the other arm and completed it, and no
+			// value-return edge competes from inside the guard, because an
+			// execution that throws returns no value at all. When the other arm
+			// is absent or always completes normally, the successor therefore
+			// keeps the entry carry strength, and `if (!ok) throw …; return
+			// input;` still has an unconditional value-return edge
+			// (`@solidjs/web`'s `withMeta`). An arm that may `return` is not a
+			// guard: its return is another value-return edge, and the merge
+			// below keeps the successor's carry unknown exactly as before.
+			thenGuards := thenState.reach == typefacts.Unreachable &&
+				!containsReturnStatement(statement.ThenStatement)
+			elseGuards := statement.ElseStatement != nil &&
+				elseState.reach == typefacts.Unreachable &&
+				!containsReturnStatement(statement.ElseStatement)
 			switch {
 			case merged.reach == typefacts.Unreachable || state.carryReach == typefacts.Unreachable:
 				merged.carryReach = typefacts.Unreachable
 			case p.constructCompletesNormallyLocked(statement.ThenStatement) &&
 				(statement.ElseStatement == nil || p.constructCompletesNormallyLocked(statement.ElseStatement)):
+				merged.carryReach = state.carryReach
+			case thenGuards &&
+				(statement.ElseStatement == nil || p.constructCompletesNormallyLocked(statement.ElseStatement)):
+				merged.carryReach = state.carryReach
+			case elseGuards && p.constructCompletesNormallyLocked(statement.ThenStatement):
 				merged.carryReach = state.carryReach
 			default:
 				merged.carryReach = typefacts.ReachUnknown
@@ -1435,7 +1917,13 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 			} else if ast.IsIterationStatement(node, true) {
 				marker = "iterationReachability"
 			}
-			census.Unsupported = append(census.Unsupported, marker)
+			// The construct is walked in full below — every child is scanned,
+			// and the shared body walk records every call and invoking form
+			// inside it — so what is missing is only the lower bound: control
+			// may not enter a loop body, a catch clause, or a selected clause.
+			// That is ControlFlowReachabilityLowerBound, and it is what lets a
+			// consumer asking a may-execute question read this transcript.
+			markIncomplete(marker, typefacts.ControlFlowReachabilityLowerBound, node)
 			if ast.IsSwitchStatement(node) {
 				expression := node.Expression()
 				partitions := p.invocationValueFactLocked(p.checker.GetTypeAtLocation(expression)).Partitions
@@ -1474,8 +1962,21 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 			// labelled break can bypass a later return without changing the legacy
 			// optimistic Reach row. Mark the whole census unsupported so no
 			// callable-return edge can acquire lower-bound authority from it.
+			//
+			// This is ControlFlowUnaccounted rather than the lower-bound class,
+			// and the reason is what the *target* buys: every repair either
+			// census applies to a jump is bounded by the construct that owns
+			// the target — the region implementationCallCensusLocked reduces to
+			// `unknown`, and the fallthrough question
+			// constructCompletesNormallyLocked answers. A jump this predicate
+			// declines is one whose target no enclosing construct of this frame
+			// owns, so there is no region to bound and the census is not
+			// claiming to know where control goes. Over-refusal is the safe
+			// direction; the two shapes real code is made of — a `break` inside
+			// the `switch` or loop that owns it — are handled and leave the
+			// construct's own lower-bound marker alone.
 			if !jumpHandledByFallthroughConstruct(node, implementation) {
-				census.Unsupported = append(census.Unsupported, "jumpReachability")
+				markIncomplete("jumpReachability", typefacts.ControlFlowUnaccounted, node)
 			}
 			return flowState{reach: typefacts.Unreachable, carryReach: typefacts.Unreachable}
 		}
@@ -1489,6 +1990,7 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 	scan(body, flowState{reach: typefacts.Reachable, carryReach: typefacts.Reachable})
 	sort.Strings(census.Unsupported)
 	census.Unsupported = compactStrings(census.Unsupported)
+	census.Incompleteness = sortedControlFlowIncompleteness(census.Incompleteness)
 	if stringListContains(census.Unsupported, "jumpReachability") {
 		// The optimistic ReturnSite reach rows remain useful to their historical
 		// consumers, but partial control flow is never enough to authorize a
@@ -1502,13 +2004,56 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 	return census
 }
 
-// unsafeJumpRegionsLocked records the exact target-owned region whose positive
-// execution rows a jump makes non-universal. Source byte order is insufficient:
-// a `for` update is written before its body break, and sibling branch order says
-// nothing about execution. A break therefore withholds its whole target
-// subtree. A continue withholds only the loop body; the update/condition remain
-// valid may-execute evidence. The target boundary restores authority and no
-// region crosses a callable identity.
+// sortedControlFlowIncompleteness puts the classified rows in a deterministic
+// order and removes exact duplicates. One row per construct is the invariant, so
+// a duplicate can only come from two records of the same construct.
+func sortedControlFlowIncompleteness(
+	rows []typefacts.ControlFlowIncompleteness,
+) []typefacts.ControlFlowIncompleteness {
+	if len(rows) == 0 {
+		return nil
+	}
+	sort.SliceStable(rows, func(left, right int) bool {
+		first, second := rows[left], rows[right]
+		if first.Location.Path != second.Location.Path {
+			return first.Location.Path < second.Location.Path
+		}
+		if first.Location.StartByte != second.Location.StartByte {
+			return first.Location.StartByte < second.Location.StartByte
+		}
+		if first.Location.EndByte != second.Location.EndByte {
+			return first.Location.EndByte < second.Location.EndByte
+		}
+		if first.Marker != second.Marker {
+			return first.Marker < second.Marker
+		}
+		return first.Class < second.Class
+	})
+	unique := rows[:1]
+	for _, row := range rows[1:] {
+		if row != unique[len(unique)-1] {
+			unique = append(unique, row)
+		}
+	}
+	return unique
+}
+
+// unsafeJumpRegionsLocked records the exact target-owned region in which a jump
+// makes the shared body walk's positive execution rows non-universal. Source
+// byte order is insufficient: a `for` update is written before its body break,
+// and sibling branch order says nothing about execution. A break therefore
+// covers its whole target subtree. A continue covers only the loop body; the
+// update/condition remain valid may-execute evidence. The target boundary
+// restores authority and no region crosses a callable identity.
+//
+// A jump whose target is not inside the frame at all has no such boundary, so
+// its region is the **whole flow owner**. Regions are keyed by flow owner, which
+// is what makes this walk cover a jump inside a *nested* callable: the
+// control-flow census never enters one and so leaves no marker there, while
+// this walk does and reduces that callable's own rows.
+//
+// What a caller does with a region is reduce the row's Reach to `unknown`, not
+// drop the row — see implementationCallCensusLocked.
 func (p *project) unsafeJumpRegionsLocked(
 	implementation *ast.Node,
 ) map[*ast.Node][]typefacts.Location {
@@ -1535,9 +2080,15 @@ func (p *project) unsafeJumpRegionsLocked(
 					}
 				}
 			}
-			if region != nil {
-				regions[owner] = append(regions[owner], nodeLocation(region))
+			// A narrowing step that lands on nothing leaves the jump with no
+			// region at all, which would be a jump whose rows nothing repairs.
+			// Nothing in the grammar is known to produce it; the fallback is
+			// the frame, so the failure mode is over-refusal rather than an
+			// unrepaired row.
+			if region == nil {
+				region = owner
 			}
+			regions[owner] = append(regions[owner], nodeLocation(region))
 		},
 	)
 	return regions
@@ -1672,7 +2223,19 @@ func (p *project) walkImplementationBodyLocked(
 			tryReach := visit(statement.TryBlock, nested, reach)
 			catchReach := typefacts.Unreachable
 			if statement.CatchClause != nil {
-				catchReach = visit(statement.CatchClause.AsCatchClause().Block, nested, reach)
+				clause := statement.CatchClause.AsCatchClause()
+				// The catch *parameter*, before the block. A destructuring
+				// catch binding may carry a default — `catch ({ message =
+				// describe() })` — and that call is reached exactly when the
+				// clause is. Visiting the block alone left it in no census at
+				// all, which is the one thing this walk may not do: the
+				// enumeration a negative call domain rests on is over every
+				// node of the frame. It went unnoticed while the only census
+				// that asks for that enumeration refused every `try` outright.
+				if clause.VariableDeclaration != nil {
+					visit(clause.VariableDeclaration, nested, reach)
+				}
+				catchReach = visit(clause.Block, nested, reach)
 			}
 			completes := mergeReachability(tryReach, catchReach)
 			if statement.FinallyBlock != nil {
@@ -2609,18 +3172,61 @@ func (p *project) symbolIsAssignedLocked(target *ast.Symbol, declaration *ast.No
 	return written
 }
 
+// isAssignmentTargetIdentifier reports whether an identifier is written by an
+// assignment.
+//
+// It is GetAssignmentTarget alone, and the point is what it is *not* asked
+// beside: the declaration-name filter. `({ current } = other)` writes
+// `current`, and the identifier there is a ShorthandPropertyAssignment's name,
+// which the compiler calls a declaration name — so a scan that skipped
+// declaration names first called such a binding **unwritten**, which is the
+// premise ADR 0034 and everything built on it rest on. The filter is also
+// redundant: an ordinary declaration name is not an assignment target, so
+// dropping it changes exactly the destructuring-assignment shapes and nothing
+// else.
+func isAssignmentTargetIdentifier(node *ast.Node) bool {
+	return ast.GetAssignmentTarget(node) != nil
+}
+
+// assignedBindingSymbol resolves the **variable** an assignment-target
+// identifier writes.
+//
+// For a shorthand property assignment inside a destructuring assignment,
+// GetSymbolAtLocation answers the object literal's *property* symbol, not the
+// variable, so a scan that used it alone matched nothing and called the
+// binding unwritten. The checker has a dedicated resolution for that shape and
+// this is where it belongs.
+func (p *project) assignedBindingSymbol(fileChecker *checker.Checker, node *ast.Node) *ast.Symbol {
+	if node.Parent != nil && ast.IsShorthandPropertyAssignment(node.Parent) {
+		if symbol := checker.Checker_GetShorthandAssignmentValueSymbol(fileChecker, node.Parent); symbol != nil {
+			return p.canonicalSymbol(symbol)
+		}
+	}
+	return p.canonicalSymbol(fileChecker.GetSymbolAtLocation(node))
+}
+
 func (p *project) assignmentTargetSymbolsLocked(
 	sourceFile *ast.SourceFile,
 ) map[*ast.Symbol]struct{} {
 	assigned := make(map[*ast.Symbol]struct{})
+	// The file's own checker: a premise twin's file (ADR 0038) was bound by the
+	// twin program, every other file by the accepted one.
+	fileChecker := p.checker
+	if p.formTwin != nil && sourceFile == p.formTwin.file {
+		fileChecker = p.formTwin.checker
+	}
 	var visit func(*ast.Node)
 	visit = func(node *ast.Node) {
 		if node == nil {
 			return
 		}
-		if ast.IsIdentifier(node) && !ast.IsDeclarationNameOrImportPropertyName(node) &&
-			!ast.IsPartOfTypeNode(node) && ast.GetAssignmentTarget(node) != nil {
-			if symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(node)); symbol != nil {
+		// The declaration-name filter is asked *after* the assignment test, not
+		// before it: a shorthand destructuring-assignment target
+		// (`({ current } = other)`) is a declaration name by the compiler's
+		// reckoning and a write by the language's.
+		if ast.IsIdentifier(node) && !ast.IsPartOfTypeNode(node) &&
+			isAssignmentTargetIdentifier(node) {
+			if symbol := p.assignedBindingSymbol(fileChecker, node); symbol != nil {
 				assigned[symbol] = struct{}{}
 			}
 		}

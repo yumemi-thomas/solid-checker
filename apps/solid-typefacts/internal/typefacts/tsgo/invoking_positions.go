@@ -203,11 +203,17 @@ func arrayIterationRule() defaultLibraryInvokerRule {
 func (p *project) defaultLibraryInvokerLocked(
 	call *ast.Node,
 ) (typefacts.DefaultLibraryInvoker, []int) {
-	callee := call.Expression()
+	return p.defaultLibraryInvokerForCalleeLocked(call.Expression(), ast.IsNewExpression(call))
+}
+
+func (p *project) defaultLibraryInvokerForCalleeLocked(
+	callee *ast.Node,
+	construct bool,
+) (typefacts.DefaultLibraryInvoker, []int) {
 	if callee == nil {
 		return "", nil
 	}
-	if ast.IsNewExpression(call) {
+	if construct {
 		if !ast.IsIdentifier(callee) {
 			return "", nil
 		}

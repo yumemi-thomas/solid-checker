@@ -41,6 +41,11 @@ pub struct AcceptedContractInput {
     pub importer: String,
     pub specifier: String,
     pub contract: AcceptedContract,
+    /// The receipt's importer-free artifact identity, when the loader could
+    /// establish it. `None` keeps this acceptance importer-only: it is the
+    /// fail-closed direction, and the loader uses it for anything it cannot
+    /// state exactly — see `artifact_identity` below.
+    pub artifact_identity: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -88,21 +93,130 @@ impl AcceptedContractUse<'_> {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct AcceptedContractIndex {
     imports: BTreeMap<(String, String), Vec<AcceptedContract>>,
+    /// Acceptances reachable by the artifact they were proven about, rather
+    /// than by the file that imported it during certification. An entry here
+    /// is an addition to `imports`, never a replacement: a consumer that
+    /// matches by importer is answered exactly as before.
+    by_artifact: BTreeMap<String, Vec<AcceptedContract>>,
+    /// Specifiers whose installed artifact in *this* project is one an
+    /// acceptance was issued for, so any file may import them. Populated only
+    /// by `with_admitted_artifacts`; empty otherwise, which is every path that
+    /// does not derive identities.
+    admitted: BTreeMap<String, AcceptedContract>,
     uncertifiable_imports: BTreeMap<(String, String), UncertifiableImportReason>,
     identity: Vec<AcceptedImportIdentity>,
 }
 
 impl AcceptedContractIndex {
+    /// Ordinary analysis has one authority for Solid core: the built-in
+    /// dialect. Independent certification may still retain core contracts in
+    /// this general index, but they cannot supplement the runtime model.
+    /// Filter by authenticated package identity as well as written specifier,
+    /// so an alias cannot introduce a second authority. This is withholding,
+    /// never evidence that the specifier actually resolves to Solid.
+    #[must_use]
+    pub fn external_packages(&self) -> std::borrow::Cow<'_, Self> {
+        fn core_specifier(specifier: &str) -> bool {
+            solid_dialect::core_runtime_contract_reference("", specifier)
+        }
+
+        let retain = |key: &(String, String), contracts: &[AcceptedContract]| {
+            !core_specifier(&key.1)
+                && contracts.iter().all(|contract| {
+                    !solid_dialect::primitive_defining_package(&contract.package().name)
+                })
+        };
+        if self.imports.iter().all(|(key, values)| retain(key, values))
+            && self
+                .uncertifiable_imports
+                .keys()
+                .all(|(_, specifier)| !core_specifier(specifier))
+        {
+            return std::borrow::Cow::Borrowed(self);
+        }
+        let mut external = self.clone();
+        external.imports.retain(|key, values| retain(key, values));
+        let external_package = |contract: &AcceptedContract| {
+            !solid_dialect::primitive_defining_package(&contract.package().name)
+        };
+        external
+            .by_artifact
+            .retain(|_, values| values.iter().all(external_package));
+        external
+            .admitted
+            .retain(|specifier, contract| !core_specifier(specifier) && external_package(contract));
+        external.identity.retain(|identity| {
+            external
+                .imports
+                .contains_key(&(identity.importer.clone(), identity.specifier.clone()))
+        });
+        external
+            .uncertifiable_imports
+            .retain(|(_, specifier), _| !core_specifier(specifier));
+        std::borrow::Cow::Owned(external)
+    }
+
+    /// Acceptances a project never imported by name: each one is reachable
+    /// only through the artifact it was proven about.
+    ///
+    /// This is the compiled-in tier's shape. A bundle has no importer in this
+    /// project — the file that imported it during certification is on another
+    /// machine — so putting it in `imports` would key it on a path that cannot
+    /// occur here, and would make every report that enumerates
+    /// `semantic_identity` claim the project accepted a contract it never
+    /// reached. Artifact admission is the whole match, exactly as it is for a
+    /// catalog entry whose importer does not match either.
+    #[must_use]
+    pub fn from_artifact_acceptances(
+        inputs: impl IntoIterator<Item = (String, AcceptedContract)>,
+    ) -> Self {
+        let mut by_artifact = BTreeMap::<String, Vec<AcceptedContract>>::new();
+        for (identity, contract) in inputs {
+            by_artifact.entry(identity).or_default().push(contract);
+        }
+        by_artifact.retain(|_, contracts| {
+            contracts.len() == 1
+                || contracts
+                    .windows(2)
+                    .all(|pair| pair[0].semantic_identity() == pair[1].semantic_identity())
+        });
+        Self {
+            imports: BTreeMap::new(),
+            by_artifact,
+            admitted: BTreeMap::new(),
+            uncertifiable_imports: BTreeMap::new(),
+            identity: Vec::new(),
+        }
+    }
+
     pub fn new(
         inputs: impl IntoIterator<Item = AcceptedContractInput>,
     ) -> Result<Self, SemanticQueryError> {
         let mut imports = BTreeMap::<_, Vec<_>>::new();
+        let mut by_artifact = BTreeMap::<String, Vec<AcceptedContract>>::new();
         for input in inputs {
+            if let Some(identity) = input.artifact_identity {
+                by_artifact
+                    .entry(identity)
+                    .or_default()
+                    .push(input.contract.clone());
+            }
             imports
                 .entry((input.importer, input.specifier))
                 .or_default()
                 .push(input.contract);
         }
+        // An artifact identity naming two different contracts is not a
+        // preference to resolve: it is two answers about the same bytes, and
+        // neither may be applied. Dropping the entry leaves those acceptances
+        // importer-only rather than failing the catalog, because the
+        // importer-keyed answers are still exactly as sound as they were.
+        by_artifact.retain(|_, contracts| {
+            contracts.len() == 1
+                || contracts
+                    .windows(2)
+                    .all(|pair| pair[0].semantic_identity() == pair[1].semantic_identity())
+        });
         let mut identity = Vec::new();
         for ((importer, specifier), contracts) in &imports {
             if contracts.len() != 1 {
@@ -120,6 +234,8 @@ impl AcceptedContractIndex {
         identity.sort();
         Ok(Self {
             imports,
+            by_artifact,
+            admitted: BTreeMap::new(),
             uncertifiable_imports: BTreeMap::new(),
             identity,
         })
@@ -176,6 +292,17 @@ impl AcceptedContractIndex {
         for (key, contracts) in fallback.imports {
             self.imports.entry(key).or_insert(contracts);
         }
+        // The artifact index is unioned for the same reason the import index
+        // is. Leaving it out made folding several catalogs keep only the last
+        // one's artifacts, and `with_admitted_artifacts` then silently found
+        // nothing for every other catalog's acceptance -- which is what a
+        // project with two certified dependencies has, because `contract
+        // certify` publishes a plain catalog for a single-case package and a
+        // case set for a multi-case one. Measured: two certified packages, both
+        // reported `missing`.
+        for (identity, contracts) in fallback.by_artifact {
+            self.by_artifact.entry(identity).or_insert(contracts);
+        }
         self.identity = self
             .imports
             .iter()
@@ -208,7 +335,7 @@ impl AcceptedContractIndex {
     #[must_use]
     pub fn cache_fingerprint(&self) -> [u8; 32] {
         let mut hash = Sha256::new();
-        hash.update(b"solid-checker-accepted-contract-index-v2");
+        hash.update(b"solid-checker-accepted-contract-index-v3");
         hash.update((self.identity.len() as u64).to_be_bytes());
         for binding in &self.identity {
             hash_text(&mut hash, &binding.importer);
@@ -236,6 +363,25 @@ impl AcceptedContractIndex {
                     hash_text(&mut hash, authentication.policy_digest.as_str());
                     hash_text(&mut hash, authentication.trust_store_digest.as_str());
                     hash.update(authentication.revocation_epoch.to_be_bytes());
+                }
+                None => hash.update([0]),
+            }
+        }
+        hash.update((self.admitted.len() as u64).to_be_bytes());
+        for (specifier, contract) in &self.admitted {
+            hash_text(&mut hash, specifier);
+            let semantic = contract.semantic_identity();
+            hash_text(&mut hash, &semantic.package.name);
+            hash_text(&mut hash, &semantic.package.version);
+            hash_text(&mut hash, &semantic.package.integrity);
+            hash_text(&mut hash, &semantic.artifact_case);
+            hash_text(&mut hash, semantic.semantic_digest.as_str());
+            hash_text(&mut hash, semantic.closed_claims_root.as_str());
+            match &semantic.authentication {
+                Some(authentication) => {
+                    hash.update([1]);
+                    hash_text(&mut hash, authentication.receipt_digest.as_str());
+                    hash_text(&mut hash, authentication.trust_store_digest.as_str());
                 }
                 None => hash.update([0]),
             }
@@ -305,10 +451,86 @@ impl AcceptedContractIndex {
         self.imports
             .get(&(importer.to_owned(), specifier.to_owned()))
             .and_then(|contracts| contracts.first())
+            .or_else(|| self.admitted.get(specifier))
             .ok_or_else(|| SemanticQueryError::MissingImport {
                 importer: importer.into(),
                 specifier: specifier.into(),
             })
+    }
+
+    /// Finds the acceptance issued for exactly this artifact, whatever file
+    /// imported it when the contract was certified.
+    ///
+    /// The caller supplies an identity it derived from its *own* resolution,
+    /// and equality of that identity is the whole check: it commits to the
+    /// package's tarball integrity, its entrypoint and the export conditions,
+    /// so an equal identity is the same published bytes reached the same way.
+    /// The importer is deliberately not consulted — it is what this lookup
+    /// exists to stop requiring — and an identity the loader could not state
+    /// exactly is simply absent here.
+    /// Admits a specifier project-wide when this project's *installed* artifact
+    /// is the one an accepted contract was proven about.
+    ///
+    /// Each entry is `(specifier, artifact identity)` derived by the caller from
+    /// the installed tree: the package's registry integrity, its entrypoint and
+    /// the host's declared export conditions. An identity that matches no
+    /// acceptance is skipped.
+    ///
+    /// This is where an acceptance stops being bound to the file that imported
+    /// it during certification. What justifies dropping the importer is that the
+    /// identity commits to the tarball integrity: if the installed bytes, the
+    /// entrypoint and the conditions are the same, every importer in this
+    /// project reaches the artifact the contract was proven about, whatever file
+    /// it was certified from. A nested install with different bytes derives a
+    /// different identity and is not admitted — the caller must refuse to state
+    /// an identity when the project's installs disagree, rather than pick one.
+    ///
+    /// Importer-keyed acceptances still win: `contract` consults them first, so
+    /// a catalog entry naming an exact file is never displaced by this.
+    ///
+    /// One identity per specifier. Where a project's own resolution cannot
+    /// narrow the candidates to one -- a host that declares no export
+    /// conditions, which is every ESLint and Oxlint run -- the caller decides
+    /// whether the candidates claim the same thing before calling this, because
+    /// deciding needs the document's own content address for a claim and this
+    /// crate cannot compute one. See
+    /// `solid-facts-backend`'s `agreed_admissions`.
+    #[must_use]
+    pub fn with_admitted_artifacts(
+        mut self,
+        admitted: impl IntoIterator<Item = (String, String)>,
+    ) -> Self {
+        for (specifier, identity) in admitted {
+            let Some(contract) = self.by_artifact.get(&identity).and_then(|it| it.first()) else {
+                continue;
+            };
+            self.admitted
+                .entry(specifier)
+                .or_insert_with(|| contract.clone());
+        }
+        self
+    }
+
+    /// The acceptances this project reaches by artifact rather than by
+    /// importer.
+    ///
+    /// `semantic_identity` answers "what did this project import under a
+    /// contract certified from one of its own files", which is the wrong
+    /// question for an acceptance admitted from an installed-tree match — and
+    /// the only question that had an answer while every acceptance was also
+    /// importer-keyed. A report that enumerates what the analysis used has to
+    /// ask both.
+    pub fn admitted_contracts(&self) -> impl Iterator<Item = (&str, &AcceptedContract)> {
+        self.admitted
+            .iter()
+            .map(|(specifier, contract)| (specifier.as_str(), contract))
+    }
+
+    #[must_use]
+    pub fn contract_for_artifact(&self, artifact_identity: &str) -> Option<&AcceptedContract> {
+        self.by_artifact
+            .get(artifact_identity)
+            .and_then(|contracts| contracts.first())
     }
 
     /// Enumerates the runtime surface of the one receipt-authenticated

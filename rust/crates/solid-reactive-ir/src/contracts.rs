@@ -27,7 +27,7 @@ use crate::contract_semantics::{
     OwnerSource, Requirement, Schedule, Tracking, UncertifiableImportReason, ValueShape,
     ValueSource,
 };
-use crate::identity::symbol_id;
+use crate::interproc::ParameterMemberInvocation;
 use crate::pipeline::parallel_slice_results;
 
 /// Whether a value-kind export's shape leaves open the possibility that it is
@@ -52,11 +52,47 @@ fn shape_may_be_callable(shape: &ValueShape) -> bool {
 /// ID, condition label, evidence spelling, or closure-array mechanic is inspected.
 pub fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractExport {
     let export = accepted.export();
+    ContractExport {
+        // The exact contract and export this projection came from. Re-emission
+        // reads the *presence* of this to know the summary is inherited rather
+        // than inferred; the strings themselves are attribution for the emit
+        // boundary's record. The certifier rebinds the re-export from its own
+        // snapshot-verified evidence and never reads them.
+        inherited_from: Some(crate::InheritedExportOrigin {
+            package_name: accepted.contract().package().name.clone(),
+            package_version: accepted.contract().package().version.clone(),
+            artifact_case: accepted.contract().artifact_case().id.clone(),
+            semantic_digest: accepted
+                .contract()
+                .receipt()
+                .semantic_digest
+                .as_str()
+                .to_owned(),
+            entrypoint: export.identity.entrypoint.clone(),
+            export: export.identity.public_name.clone(),
+        }),
+        ..project_export_semantics(export)
+    }
+}
+
+/// [`project_accepted_export`] without the acceptance identity: the projection
+/// itself, over one normalized export's semantics.
+///
+/// Split out because the certifier has to re-derive exactly this, from the
+/// dependency node's own certified export, to decide whether a parent's
+/// inherited closure *is* the projection of the dependency's or merely
+/// resembles it. Two derivations of "the projection" would be two answers, and
+/// the certifier's is the one that would silently admit a claim the generator
+/// never made.
+#[must_use]
+pub fn project_export_semantics(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> ContractExport {
     let mut open_claims = BTreeSet::new();
-    let kind = if matches!(export.shape, ValueShape::Callable | ValueShape::Component) {
-        "function"
-    } else {
-        "value"
+    let kind = match export.shape {
+        ValueShape::Callable | ValueShape::Component => "function",
+        ValueShape::Unknown => "unknown",
+        _ => "value",
     };
 
     let mut callbacks = project_callbacks(export, &mut open_claims);
@@ -104,6 +140,17 @@ pub fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractEx
         }
     }
 
+    // Read from the accepted document itself rather than from the projection:
+    // `project_owner_requirements` keeps only the operations that impose an
+    // owner obligation, so a `create` this export publishes need not survive
+    // it. The generator's `creates` proposal walk needs the domain's own
+    // closure — closed *and* empty, which is the only shape that is not a
+    // counterexample to a caller proposing `creates: []`.
+    let creates = export
+        .operation_claim(ClaimDomain::Creates)
+        .expect("creates is an operation domain");
+    let creates_closed_empty = creates.is_closed() && creates.items().is_empty();
+
     ContractExport {
         kind: kind.into(),
         reactive_reads,
@@ -112,6 +159,16 @@ pub fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractEx
         owner_requirements,
         async_behavior,
         open_claims,
+        creates_closed_empty,
+        creates_walk_clean: false,
+        creates_walk_declines: Vec::new(),
+        returns_walk_clean: false,
+        direct_callback_parameters: BTreeSet::new(),
+        // A projected dependency export has no body here to walk.
+        merged_props_return: None,
+        // The projection alone states no acceptance identity;
+        // `project_accepted_export` attaches it.
+        inherited_from: None,
     }
 }
 
@@ -212,18 +269,31 @@ fn project_reactive_reads(
                 label: String::new(),
                 parameter: Some(usize::from(*index)),
                 path: Some(path.clone()),
+                // An *accepted* contract's operation is projected back with no
+                // provenance, deliberately. Composition is intra-package: the
+                // claim it discharges is "this export performs the read
+                // through its call to that export of the same artifact case",
+                // and an accepted dependency's export is in neither this
+                // artifact case nor this census. Carrying it here would make a
+                // cross-package composition the consumer has no premise for.
+                composed_owner: None,
+                composed_from: None,
             }),
             Some(ValueShape::Reactive { .. }) => reads.push(ContractReactiveRead {
                 kind: "accessor".into(),
                 label: "normalized reactive read".into(),
                 parameter: None,
                 path: None,
+                composed_owner: None,
+                composed_from: None,
             }),
             Some(ValueShape::Store { .. }) => reads.push(ContractReactiveRead {
                 kind: "store-path".into(),
                 label: "normalized store read".into(),
                 parameter: None,
                 path: None,
+                composed_owner: None,
+                composed_from: None,
             }),
             _ => {
                 open.insert(ClaimDomain::Reads);
@@ -278,6 +348,14 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
             label: "normalized store result".into(),
             ..ContractReturn::default()
         }),
+        // ADR 0109. Carries the caller's argument index and *no* label: this is
+        // not a reactive leaf, it is a conditional one, and reading it as a
+        // `store-path` would assert reactivity of a merge of plain objects.
+        ValueShape::MergedProps { from } => Some(ContractReturn {
+            kind: "merged-props".into(),
+            parameter: Some(usize::from(*from)),
+            ..ContractReturn::default()
+        }),
         ValueShape::Parameter { index, .. } => Some(ContractReturn {
             kind: "argument".into(),
             parameter: Some(usize::from(*index)),
@@ -327,13 +405,41 @@ fn project_owner_requirements(
     if !knowledge.is_closed() {
         open.insert(ClaimDomain::Creates);
     }
+    // `cleanups` is read for its *items* only, deliberately: a cleanup owner
+    // requirement is published as a `kind: cleanup` operation in that domain
+    // (`inferred_contract.rs`'s `owner_requirement_operation`), so the
+    // projection has to look there. That shape has **no audited precedent** --
+    // every `kind: cleanup` operation in the bundled corpus is
+    // `requires: forbidden`, `source: none`, because each describes a cleanup
+    // the runtime runs rather than one the export installs on its caller's
+    // owner -- so the filter below decides membership from the operation's own
+    // `Requirement` triple and never from its kind.
+    //
+    // Inserting `ClaimDomain::Cleanups` into `open` would open the domain for
+    // every Solid 1.x contract -- all of them omit `cleanups` entirely -- and
+    // `contract_document`'s proven-non-callable assertion expects no call-path
+    // domain left open. See
+    // `docs/package-contract-v2/phase21/2026-09-03-implementation-census-plan.md`
+    // § 2.2 item 5, which forbids taking the other option incidentally.
+    let cleanups = export
+        .operation_claim(ClaimDomain::Cleanups)
+        .expect("cleanups is an operation domain");
     let mut requirements = Vec::new();
     for operation in knowledge
         .items()
         .iter()
+        .chain(cleanups.items())
         .filter_map(|id| export.operation(&id.0))
     {
-        if operation.owner.requirements.owner == Requirement::Required {
+        // A requirement projects when the operation requires an owner it does
+        // not itself supply. An operation whose owner is `created` made the
+        // owner it runs under -- audited `render`'s `register-delegation` is
+        // exactly that, `requires: required` *and* `source: created` -- and
+        // imposes no obligation on its caller, so reading `requires` alone
+        // would report an owner-less effect for a top-level `render(...)`.
+        if operation.owner.requirements.owner == Requirement::Required
+            && !matches!(operation.owner.source, OwnerSource::Created(_))
+        {
             let operation = match operation.kind {
                 OperationKind::Cleanup | OperationKind::Dispose => {
                     OwnerRequirementOperation::Cleanup
@@ -348,6 +454,252 @@ fn project_owner_requirements(
     match knowledge {
         KnowledgeSet::Unknown if requirements.is_empty() => ContractClaim::Open,
         _ => ContractClaim::Known(requirements),
+    }
+}
+
+/// Which published operation imposes an owner obligation on the *caller*.
+///
+/// The three shapes here are the ones a consumer can actually meet today: the
+/// `ambient-at-call` `create` the two frozen Solid 1.x authority documents
+/// still carry (`debounce-root-default.json` and `rootless-root-default.json`,
+/// each one `owner-requirement-0`), audited `render`'s `source: created`
+/// `create`, and the `kind: cleanup` requirement the generator publishes. The
+/// distinction between the first two is the whole content of the filter: both
+/// say `requires: required`, and only one of them is the caller's problem. The
+/// third one proves the filter reads the `Requirement` triple rather than the
+/// operation's kind.
+///
+/// A findings fixture cannot pin this today. Every contract-consumer fixture
+/// under `fixtures/reactive-ir/` has its catalog entry cut to
+/// `"status": "obsolete-policy1"` by the proof-policy-2 cut, so each one
+/// produces `SC9005 package-contract-incomplete` instead of consuming a
+/// contract at all, and `@solidjs/web`'s audited `render` reaches no analyzer
+/// either — `EMBEDDED_SOLID1_BUNDLES` is `&[]` and both first-party bundle
+/// producers validate their inputs and return an empty vector. Recorded in
+/// `docs/precision-backlog.md`; the fixture pair the census plan asks for
+/// becomes constructible when a fixture can hold an accepted contract again.
+#[cfg(test)]
+mod owner_requirement_projection_tests {
+    use std::collections::BTreeSet;
+
+    use super::project_owner_requirements;
+    use crate::contract_semantics::{
+        ArtifactIdentity, CallClaims, CallSemantics, Cardinality, CardinalityScope, Digest, Event,
+        ExportIdentity, ExportSemantics, ExportTargetIdentity, GuardPartition, KnowledgeSet,
+        Lifetime, Operation, OperationId, OperationKind, OwnerCapabilities, OwnerProduction,
+        OwnerRelation, OwnerRequirements, OwnerSource, Requirement, Resource, ResourceId,
+        ResourceKind, ResourceState, Schedule, StabilityKnowledge, Tracking, Trigger, UpperBound,
+        ValueShape,
+    };
+    use crate::{ContractClaim, ContractOwnerRequirement, OwnerRequirementOperation};
+
+    fn digest() -> Digest {
+        Digest::parse(format!("sha256:{}", "a".repeat(64))).unwrap()
+    }
+
+    fn owner_resource(id: &str) -> Resource {
+        Resource {
+            id: ResourceId(id.into()),
+            kind: ResourceKind::Owner,
+            states: KnowledgeSet::Complete(vec![
+                ResourceState::OwnerActive,
+                ResourceState::OwnerDisposed,
+            ]),
+            capabilities: KnowledgeSet::Complete(Vec::new()),
+            lifetime: Some(Lifetime::Owner(ResourceId(id.into()))),
+        }
+    }
+
+    fn operation(id: &str, kind: OperationKind, resources: &[&str]) -> Operation {
+        Operation {
+            id: OperationId(id.into()),
+            kind,
+            guard: None,
+            trigger: Some(Trigger::Event(Event::Call)),
+            at: Some(Event::Call),
+            schedule: Some(Schedule::SameStack),
+            tracking: Tracking::Untracked,
+            owner: OwnerRelation::default(),
+            cardinality: Cardinality {
+                scope: Some(CardinalityScope::Call),
+                min: Some(0),
+                max: Some(UpperBound::Many),
+            },
+            inputs: Vec::new(),
+            output: None,
+            resources: resources
+                .iter()
+                .map(|resource| ResourceId((*resource).into()))
+                .collect(),
+            composed_from: None,
+        }
+    }
+
+    fn export(
+        claims: CallClaims,
+        operations: Vec<Operation>,
+        resources: Vec<Resource>,
+    ) -> ExportSemantics {
+        let module = ArtifactIdentity {
+            path: "./index.js".into(),
+            digest: digest(),
+        };
+        let target = ExportTargetIdentity {
+            module,
+            export_name: "subject".into(),
+        };
+        ExportSemantics {
+            identity: ExportIdentity {
+                entrypoint: ".".into(),
+                public_name: "subject".into(),
+                runtime: target.clone(),
+                declarations: target,
+            },
+            shape: ValueShape::Callable,
+            stability: StabilityKnowledge::Unknown,
+            call: CallSemantics::new(
+                claims,
+                operations,
+                Vec::new(),
+                resources,
+                GuardPartition::default(),
+            ),
+        }
+    }
+
+    fn claims() -> CallClaims {
+        CallClaims {
+            callbacks: KnowledgeSet::Complete(Vec::new()),
+            reads: KnowledgeSet::Complete(Vec::new()),
+            writes: KnowledgeSet::Unknown,
+            creates: KnowledgeSet::Complete(Vec::new()),
+            invalidates: KnowledgeSet::Unknown,
+            throws: KnowledgeSet::Unknown,
+            returns: KnowledgeSet::Complete(Vec::new()),
+            cleanups: KnowledgeSet::Unknown,
+            disposals: KnowledgeSet::Unknown,
+        }
+    }
+
+    /// The shape the two frozen Solid 1.x authority documents still carry, and
+    /// the only `ambient-at-call` `create` a consumer can meet: it needs an
+    /// ambient owner it did not make. This is the obligation `SC4001` reports
+    /// at an unowned call.
+    ///
+    /// The generator no longer produces it. A `create` naming a child owner
+    /// resource would contradict `semantic-model.md` § creates -- a `create`
+    /// registers a resource into a runtime *outside* the invocation -- so an
+    /// `Effect` owner requirement is now withheld by name instead. This test
+    /// pins how a consumer reads the frozen documents until their re-capture
+    /// lands.
+    #[test]
+    fn an_ambient_at_call_requirement_projects_as_a_consumer_obligation() {
+        let mut created = operation("register-effect", OperationKind::Create, &["child-owner"]);
+        created.owner = OwnerRelation {
+            source: OwnerSource::AmbientAtCall,
+            requirements: OwnerRequirements {
+                owner: Requirement::Required,
+                child_owners: Requirement::Required,
+                cleanup: Requirement::Unconstrained,
+            },
+            capabilities: OwnerCapabilities::default(),
+            lifetime: None,
+            productions: KnowledgeSet::Complete(vec![OwnerProduction {
+                resource: ResourceId("child-owner".into()),
+                capabilities: OwnerCapabilities::default(),
+                lifetime: Some(Lifetime::Owner(ResourceId("child-owner".into()))),
+            }]),
+        };
+        let mut claims = claims();
+        claims.creates = KnowledgeSet::Complete(vec![created.id.clone()]);
+        let export = export(claims, vec![created], vec![owner_resource("child-owner")]);
+
+        let mut open = BTreeSet::new();
+        assert_eq!(
+            project_owner_requirements(&export, &mut open),
+            ContractClaim::Known(vec![ContractOwnerRequirement {
+                operation: OwnerRequirementOperation::Effect
+            }])
+        );
+        assert!(open.is_empty());
+    }
+
+    /// Audited `@solidjs/web` `render`'s `register-delegation`: `requires:
+    /// required` *and* `source: created`. It runs under the root it made, so a
+    /// top-level `render(() => <App/>, el)` owes its caller nothing.
+    #[test]
+    fn an_operation_that_created_its_own_owner_imposes_nothing_on_the_caller() {
+        let mut created = operation(
+            "register-delegation",
+            OperationKind::Create,
+            &["browser-root"],
+        );
+        created.owner = OwnerRelation {
+            source: OwnerSource::Created(ResourceId("browser-root".into())),
+            requirements: OwnerRequirements {
+                owner: Requirement::Required,
+                child_owners: Requirement::Unconstrained,
+                cleanup: Requirement::Unconstrained,
+            },
+            capabilities: OwnerCapabilities::default(),
+            lifetime: Some(Lifetime::Owner(ResourceId("browser-root".into()))),
+            productions: KnowledgeSet::Complete(vec![OwnerProduction {
+                resource: ResourceId("browser-root".into()),
+                capabilities: OwnerCapabilities::default(),
+                lifetime: Some(Lifetime::Owner(ResourceId("browser-root".into()))),
+            }]),
+        };
+        let mut claims = claims();
+        claims.creates = KnowledgeSet::Complete(vec![created.id.clone()]);
+        let export = export(claims, vec![created], vec![owner_resource("browser-root")]);
+
+        let mut open = BTreeSet::new();
+        assert_eq!(
+            project_owner_requirements(&export, &mut open),
+            ContractClaim::Known(Vec::new())
+        );
+        assert!(open.is_empty());
+    }
+
+    /// The generated cleanup shape: `kind: cleanup` in the `cleanups` domain,
+    /// `source: ambient-at-call`, `requires: required`,
+    /// `requiresCleanup: required`, and **no resource**. No audited document
+    /// carries it -- every bundled `kind: cleanup` operation is
+    /// `requires: forbidden`, `source: none` -- so the projection has to read
+    /// the domain for its items while leaving it out of `open`, because every
+    /// 1.x contract omits `cleanups` entirely.
+    ///
+    /// The role in the result is the user-visible half: this requirement now
+    /// round-trips as `OwnerRequirementOperation::Cleanup`, so `SC4001`'s
+    /// remedy names `onCleanup` rather than an owner for an effect.
+    #[test]
+    fn a_cleanup_requirement_projects_from_the_cleanups_domain_without_opening_it() {
+        let mut cleanup = operation("replace-cleanup", OperationKind::Cleanup, &[]);
+        cleanup.owner = OwnerRelation {
+            source: OwnerSource::AmbientAtCall,
+            requirements: OwnerRequirements {
+                owner: Requirement::Required,
+                child_owners: Requirement::Unconstrained,
+                cleanup: Requirement::Required,
+            },
+            capabilities: OwnerCapabilities::default(),
+            lifetime: None,
+            productions: KnowledgeSet::Complete(Vec::new()),
+        };
+        let mut claims = claims();
+        claims.cleanups = KnowledgeSet::Partial(vec![cleanup.id.clone()]);
+        let export = export(claims, vec![cleanup], Vec::new());
+
+        let mut open = BTreeSet::new();
+        assert_eq!(
+            project_owner_requirements(&export, &mut open),
+            ContractClaim::Known(vec![ContractOwnerRequirement {
+                operation: OwnerRequirementOperation::Cleanup
+            }])
+        );
+        // `creates` is closed and empty here, and the *cleanups* read must not
+        // add a domain of its own.
+        assert!(open.is_empty());
     }
 }
 
@@ -435,6 +787,7 @@ fn push_runtime_identity_conflict(
             module: "<runtime-identity-conflict>".into(),
             export: "<conflicting-contract-summaries>".into(),
             reexported: true,
+            site: crate::ContractDefectSite::Argument,
         },
         location: location.clone(),
         analysis_context:
@@ -529,21 +882,9 @@ fn join_runtime_identity_aliases(
     }
 }
 
-/// Whether the dialect's own vocabulary outranks a package contract for a name
-/// imported from `module`.
-///
-/// Solid's built-ins have richer native semantics than any cross-package
-/// contract summary can express: ownership, async provenance, writes, and
-/// cleanup phases. The reviewed contract stays as evidence and for export
-/// completeness, but its coarse callbacks/returns must not be layered over
-/// native facts.
-///
-/// The gate is the dialect's module-ownership answer, not the literal package
-/// name `solid-js`. 1.x reaches `createStore` only through `solid-js/store` and
-/// `Portal` only through `solid-js/web`; 2.0 moved the whole DOM surface to the
-/// separate `@solidjs/web` package. Comparing package names gave the package
-/// root native precedence and every other entrypoint the contract's coarse
-/// answer, for the same primitives.
+/// A missing external-contract obligation must not invent a receipt
+/// requirement for a primitive already modeled by the selected dialect.
+/// Core contracts themselves are excluded at the analysis boundary.
 fn native_vocabulary_outranks_contract(
     dialect: &dyn Dialect,
     module: &str,
@@ -560,24 +901,95 @@ fn missing_accepted_export_needs_obligation(
     !native_vocabulary_outranks_contract(dialect, module, imported)
 }
 
-/// Keep exact, artifact-selected callback timing from an accepted package
-/// contract even when the dialect owns the rest of the primitive. Ownership,
-/// returns, reads, and async behavior remain native.
-fn native_callback_overlay(summary: &ContractExport) -> Option<ContractExport> {
-    let callbacks = summary.callbacks.known()?.clone();
-    (!callbacks.is_empty()).then(|| ContractExport {
-        kind: summary.kind.clone(),
-        callbacks: ContractClaim::Known(callbacks),
-        ..ContractExport::default()
-    })
-}
-
 /// Keep the known parts of a partial export usable while opening the existing
 /// per-export contract obligation for every non-callback claim that cannot yet
 /// be consumed demand-sensitively. Unknown callbacks are handled separately:
 /// omitting their symbol from the callback map preserves the existing
 /// callable-argument obligation and stays quiet for calls with no callable
 /// argument.
+/// The bound symbols whose `returns` **no consumer in this project can
+/// reach**, so its openness discharges no proof obligation.
+///
+/// Demand read off every consumer in
+/// `docs/package-contract-v2/phase21/2026-09-10-sc9005-demand-scoping-design.md`
+/// § 8: `returns` is consulted where a call's result goes somewhere
+/// (`source_discovery` 225/621/918/1011, `static_rules` 248) and where the
+/// binding is a computation's argument (`owners` 1886, through
+/// `asyncBehavior`). Both reduce to the same question about a *reference*: is
+/// it the callee of a call that throws its result away, or is it anything
+/// else?
+///
+/// Sound in one direction only, and that is the direction that matters. A
+/// symbol sheds only when it has references and **every** one of them is a
+/// discarded call's callee; a reference this cannot classify — an argument, a
+/// member base, a re-export, one that resolves to no symbol — keeps the
+/// obligation. Shedding wrongly drops a fail-closed answer silently, so the
+/// predicate is written to fail toward reporting.
+///
+/// References are counted per file because an import's binding symbol is
+/// file-local: every reference to it is in the file that imported it, which
+/// is what makes "every one of them" decidable here at all.
+fn returns_shed_symbols(facts: &ProjectFacts, entities: &EntitySymbols) -> HashSet<SymbolId> {
+    let mut references = HashMap::<SymbolId, (usize, usize)>::new();
+    for file in &facts.files {
+        let discarded: HashSet<(u32, u32)> = file
+            .ast
+            .calls
+            .iter()
+            .filter(|call| call.result_discarded)
+            .map(|call| (call.callee.start, call.callee.end))
+            .collect();
+        for identifier in &file.ast.identifiers {
+            if identifier.role != solid_facts::ast::IdentifierRole::Reference {
+                continue;
+            }
+            let Some(symbol) = entities.get(&location(file.path.shared(), identifier.span)) else {
+                continue;
+            };
+            let counts = references.entry(symbol.clone()).or_default();
+            counts.0 += 1;
+            if discarded.contains(&(identifier.span.start, identifier.span.end)) {
+                counts.1 += 1;
+            }
+        }
+    }
+    references
+        .into_iter()
+        .filter(|(_, (total, discarded))| *total > 0 && total == discarded)
+        .map(|(symbol, _)| symbol)
+        .collect()
+}
+
+/// Whether this binding's `reads` **completeness** is demanded here.
+///
+/// Always true, and now believed to be the right answer rather than a
+/// placeholder for one.
+///
+/// The seam was cut expecting a narrowing. `reads` completeness proves an
+/// export reads nothing beyond what it enumerates; rules consume `reads`
+/// *items*, which arrive whether or not the domain is closed, and **only
+/// SC9005 consumes the completeness**
+/// (`docs/package-contract-v2/phase21/2026-09-10-reads-demand-population.md`
+/// § 6). The narrowing that suggested itself was "demand it only where the
+/// call site is tracked".
+///
+/// That predicate is wrong, and not merely unavailable here. A contract read
+/// is consumed in six of the ten [`crate::ExecutionRole`]s — every stale-read
+/// role in `reports_untracked_read`, `TrackedJsx` through the async boundary
+/// rules, and `DeferredCallback` through the leaf-owner clause. Of the three
+/// left, two are consumed nowhere only because no rule reports a pending read
+/// in an event handler *yet*, so shedding them would freeze a rules gap into
+/// the trust boundary. What remains is `DiscardedRendering`: a call site the
+/// compiler deleted, which performs no reads at all and produces no finding
+/// to shed. See `2026-09-10-sc9005-demand-scoping-design.md` § 13.
+///
+/// Kept as a named function rather than folded back into the conjunction: it
+/// is where a future narrowing goes, and where the reason it has not happened
+/// is written down.
+const fn reads_completeness_demanded() -> bool {
+    true
+}
+
 fn push_unknown_contract_claims(
     missing_exports: &mut Vec<StaticDefect>,
     summary: &ContractExport,
@@ -585,19 +997,30 @@ fn push_unknown_contract_claims(
     export: &str,
     reexported: bool,
     location: Location,
+    returns_demanded: bool,
 ) {
     let mut claims = Vec::new();
-    if summary.reactive_reads.is_open()
-        || summary
-            .open_claims
-            .contains(&crate::contract_semantics::ClaimDomain::Reads)
+    if reads_completeness_demanded()
+        && (summary.reactive_reads.is_open()
+            || summary
+                .open_claims
+                .contains(&crate::contract_semantics::ClaimDomain::Reads))
     {
         claims.push("reactiveReads");
     }
-    if summary.returns.is_open()
-        || summary
-            .open_claims
-            .contains(&crate::contract_semantics::ClaimDomain::Returns)
+    // Scoped by demand (`returns_shed_symbols`): an open domain no consumer
+    // can reach discharges no obligation, so reporting it is noise rather than
+    // a fail-closed answer.
+    //
+    // `creates` is still unconditional because its demand really is "the
+    // binding is called". `reads` is unconditional for a different reason —
+    // see `reads_completeness_demanded` — and design § 9's claim that the two
+    // are alike is corrected in § 12.
+    if returns_demanded
+        && (summary.returns.is_open()
+            || summary
+                .open_claims
+                .contains(&crate::contract_semantics::ClaimDomain::Returns))
     {
         claims.push("returns");
     }
@@ -608,11 +1031,15 @@ fn push_unknown_contract_claims(
     {
         claims.push("ownerRequirements");
     }
-    if summary.async_behavior.is_open()
-        || summary
-            .open_claims
-            .contains(&crate::contract_semantics::ClaimDomain::Throws)
-    {
+    // No `open_claims` disjunct here, deliberately. `project_async_behavior`
+    // derives this field from the **returns** domain and inserts
+    // `ClaimDomain::Returns`; it never inserts `Throws`, and no other consumer
+    // path does either, so the `Throws` disjunct this check used to carry was
+    // both unreachable and a claim about the wrong domain. Returns is already
+    // the conjunct above. The `is_open()` guard stays: it is the fail-closed
+    // answer for any summary that arrives with the field genuinely open, which
+    // `ContractExport::unknown_runtime_kind` still constructs.
+    if summary.async_behavior.is_open() {
         claims.push("asyncBehavior");
     }
     if claims.is_empty() {
@@ -623,6 +1050,7 @@ fn push_unknown_contract_claims(
             module: module.to_owned(),
             export: export.to_owned(),
             reexported,
+            site: crate::ContractDefectSite::Import,
         },
         location,
         analysis_context: format!("unknown-contract-claims:{}", claims.join(",")),
@@ -639,42 +1067,6 @@ pub(super) fn resolve_accepted_contract_imports(
 ) -> ResolvedContracts {
     let projected = project_accepted_contracts(facts, contracts);
     resolve_contract_imports_inner(facts, &projected, contracts, entities, dialect)
-}
-
-pub(super) fn accepted_bundled_returns(
-    facts: &ProjectFacts,
-    contracts: &AcceptedContractIndex,
-) -> HashMap<SymbolId, ContractReturn> {
-    let mut returned = HashMap::new();
-    for file in &facts.files {
-        if !file
-            .ast
-            .imports
-            .iter()
-            .any(|import| !import.type_only && import.module.as_str() == "solid-js")
-        {
-            continue;
-        }
-        let Ok(contract) = contracts.contract(file.path.as_str(), "solid-js") else {
-            continue;
-        };
-        if contract.artifact_case().entrypoint != "." {
-            continue;
-        }
-        for name in contract.artifact_case().exports.keys() {
-            let Ok(accepted) = contracts.resolve_name(file.path.as_str(), "solid-js", name) else {
-                continue;
-            };
-            if let Some(value) = project_accepted_export(&accepted)
-                .returns
-                .known()
-                .and_then(Clone::clone)
-            {
-                returned.entry(symbol_id(name)).or_insert(value);
-            }
-        }
-    }
-    returned
 }
 
 fn project_accepted_contracts(
@@ -746,6 +1138,7 @@ fn resolve_contract_imports_inner(
     let mut by_symbol = HashMap::new();
     let mut missing_exports = Vec::new();
     let mut counts = crate::ContractBindingCounts::default();
+    let returns_shed = returns_shed_symbols(facts, entities);
     for file in &facts.files {
         for import in &file.ast.imports {
             if import.type_only {
@@ -804,6 +1197,7 @@ fn resolve_contract_imports_inner(
                                         module: import.module.to_string(),
                                         export: imported,
                                         reexported: false,
+                                        site: crate::ContractDefectSite::Import,
                                     },
                                     location: location(file.path.shared(), member.property),
                                     analysis_context: String::new(),
@@ -817,15 +1211,6 @@ fn resolve_contract_imports_inner(
                         let Some(symbol) = entities.get(&member_location).cloned() else {
                             continue;
                         };
-                        let native =
-                            native_vocabulary_outranks_contract(dialect, &import.module, &imported);
-                        let mut summary = summary;
-                        if native {
-                            let Some(overlay) = native_callback_overlay(&summary) else {
-                                continue;
-                            };
-                            summary = overlay;
-                        }
                         if !summary.open_claims.is_empty() {
                             push_unknown_contract_claims(
                                 &mut missing_exports,
@@ -834,6 +1219,7 @@ fn resolve_contract_imports_inner(
                                 &imported,
                                 false,
                                 member_location.clone(),
+                                !returns_shed.contains(&symbol),
                             );
                         }
                         let resolved = ResolvedContractBinding {
@@ -849,11 +1235,8 @@ fn resolve_contract_imports_inner(
                             },
                             summary,
                         };
-                        // Native dialect facts are richer than the package
-                        // schema, but the reviewed package contract remains
-                        // the only semantic evidence for public Solid exports
-                        // outside that native vocabulary. Apply the same
-                        // precedence to namespace and named imports.
+                        // External namespace bindings use the same exact
+                        // accepted semantics as named imports.
                         bindings.push(resolved.clone());
                         by_symbol.insert(symbol, resolved);
                     }
@@ -896,6 +1279,7 @@ fn resolve_contract_imports_inner(
                                 module: import.module.to_string(),
                                 export: imported.to_owned(),
                                 reexported: false,
+                                site: crate::ContractDefectSite::Import,
                             },
                             location: binding_location,
                             analysis_context: String::new(),
@@ -905,14 +1289,6 @@ fn resolve_contract_imports_inner(
                     }
                     continue;
                 };
-                let native = native_vocabulary_outranks_contract(dialect, &import.module, imported);
-                let mut summary = summary;
-                if native {
-                    let Some(overlay) = native_callback_overlay(&summary) else {
-                        continue;
-                    };
-                    summary = overlay;
-                }
                 if !summary.open_claims.is_empty() {
                     push_unknown_contract_claims(
                         &mut missing_exports,
@@ -921,6 +1297,7 @@ fn resolve_contract_imports_inner(
                         imported,
                         false,
                         binding_location.clone(),
+                        !returns_shed.contains(&symbol),
                     );
                 }
                 let resolved = ResolvedContractBinding {
@@ -939,11 +1316,7 @@ fn resolve_contract_imports_inner(
                     },
                     summary,
                 };
-                // Solid's built-ins have richer native semantics than their
-                // cross-package contract summary (ownership, async
-                // provenance, writes, and cleanup phases). Keep the bundled
-                // contract as evidence and for export completeness, but do
-                // not layer its coarse callbacks/returns over native facts.
+                // Only external package bindings enter this projection.
                 bindings.push(resolved.clone());
                 by_symbol.insert(symbol, resolved);
             }
@@ -979,6 +1352,7 @@ fn resolve_contract_imports_inner(
                                 module: module.to_owned(),
                                 export: imported.to_owned(),
                                 reexported: true,
+                                site: crate::ContractDefectSite::Import,
                             },
                             location: specifier_location,
                             analysis_context: String::new(),
@@ -988,14 +1362,6 @@ fn resolve_contract_imports_inner(
                     }
                     continue;
                 };
-                let native = native_vocabulary_outranks_contract(dialect, module, imported);
-                let mut summary = summary;
-                if native {
-                    let Some(overlay) = native_callback_overlay(&summary) else {
-                        continue;
-                    };
-                    summary = overlay;
-                }
                 if !summary.open_claims.is_empty() {
                     push_unknown_contract_claims(
                         &mut missing_exports,
@@ -1004,6 +1370,7 @@ fn resolve_contract_imports_inner(
                         imported,
                         true,
                         specifier_location.clone(),
+                        !returns_shed.contains(&symbol),
                     );
                 }
                 let resolved = ResolvedContractBinding {
@@ -1094,6 +1461,18 @@ fn push_missing_accepted_import(
     }
 }
 
+/// The analysis context of the **acceptance** gate: this project accepted no
+/// contract for the import at all, so nothing export-specific has been read
+/// yet.
+///
+/// Named rather than spelled twice because three places have to agree on it —
+/// the producer below, the evidence wording, and the per-package collapse in
+/// `projection` — and two of them are deciding whether a finding is about the
+/// package or about one of its exports. A drift between them would silently
+/// re-scatter the collapse or mislabel the evidence.
+pub(crate) const UNACCEPTED_IMPORT_CONTEXT: &str =
+    "no receipt-accepted contract matches this exact import";
+
 fn push_missing_accepted_export(
     missing: &mut Vec<StaticDefect>,
     module: &str,
@@ -1106,12 +1485,11 @@ fn push_missing_accepted_export(
             module: module.into(),
             export: export.into(),
             reexported: false,
+            site: crate::ContractDefectSite::Import,
         },
         location,
         analysis_context: match reason {
-            UncertifiableImportReason::Unspecified => {
-                "no receipt-accepted contract matches this exact import"
-            }
+            UncertifiableImportReason::Unspecified => UNACCEPTED_IMPORT_CONTEXT,
             UncertifiableImportReason::ObsoletePolicy1 => {
                 "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
             }
@@ -1123,9 +1501,7 @@ fn push_missing_accepted_export(
 }
 
 pub(super) struct ContractSemantics<'a> {
-    pub(super) bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
     pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
-    pub(super) source_primitives: &'a HashMap<SymbolId, SymbolId>,
 }
 
 pub(super) struct ContractGraph<'a> {
@@ -1140,12 +1516,15 @@ pub(super) struct ContractAnalysis<'a> {
     pub(super) returned: &'a [SummaryReads],
     pub(super) structured_returns: &'a [Option<ContractReturn>],
     pub(super) callbacks: &'a [Vec<ContractCallback>],
+    /// Per node, the parameters the node calls itself, directly, in its own
+    /// body (ADR 0100) -- see `InterproceduralGraphContribution`.
+    pub(super) direct_callback_parameters: &'a [Vec<usize>],
     /// Per node, the parameters whose caller-supplied value the analysis never
     /// accounted for. Any one of them makes this export's `callbacks` domain
     /// its callback domain open — see
     /// `interproc::push_unaccounted_parameter_escapes`.
     pub(super) escaped_parameters: &'a [Vec<usize>],
-    pub(super) invoked_parameter_members: &'a [Vec<(usize, Vec<String>)>],
+    pub(super) invoked_parameter_members: &'a [Vec<ParameterMemberInvocation>],
     pub(super) semantics: ContractSemantics<'a>,
 }
 
@@ -1157,8 +1536,9 @@ struct ContractExportNode<'a> {
     returned_summary: &'a SummaryReads,
     structured_return: Option<&'a ContractReturn>,
     callbacks: &'a [ContractCallback],
+    direct_callback_parameters: &'a [usize],
     escaped_parameters: &'a [usize],
-    invoked_parameter_members: &'a [(usize, Vec<String>)],
+    invoked_parameter_members: &'a [ParameterMemberInvocation],
 }
 
 impl<'a> ContractExportNode<'a> {
@@ -1169,6 +1549,7 @@ impl<'a> ContractExportNode<'a> {
             returned_summary: &analysis.returned[index],
             structured_return: analysis.structured_returns[index].as_ref(),
             callbacks: &analysis.callbacks[index],
+            direct_callback_parameters: &analysis.direct_callback_parameters[index],
             escaped_parameters: &analysis.escaped_parameters[index],
             invoked_parameter_members: &analysis.invoked_parameter_members[index],
         }
@@ -1185,6 +1566,7 @@ fn contract_export_function(
         returned_summary,
         structured_return,
         callbacks,
+        direct_callback_parameters,
         escaped_parameters,
         invoked_parameter_members,
     } = inputs;
@@ -1194,19 +1576,33 @@ fn contract_export_function(
         .filter_map(|read| {
             let reactive_read = ContractReactiveRead {
                 kind: read.kind.clone().unwrap_or_else(|| "accessor".into()),
-                label: semantics
-                    .source_primitives
-                    .get(&read.symbol)
-                    .and_then(|primitive| semantics.bundled_returns.get(primitive))
-                    .map_or_else(
-                        || read.display.to_string(),
-                        |returned| returned.label.clone(),
-                    ),
+                label: read.display.to_string(),
                 parameter: None,
                 path: None,
+                // Provenance is stated exactly when the read was discovered in
+                // a *different* node and travelled here across a call edge.
+                // A read the export performs itself carries none, and neither
+                // does a row whose discovering node the summary could not
+                // identify — `None` is the fail-closed value at both ends.
+                composed_owner: read
+                    .owner
+                    .as_ref()
+                    .filter(|owner| node.symbol.as_ref() != Some(*owner))
+                    .map(|owner| owner.as_str().to_owned()),
+                composed_from: None,
             };
+            // The dedup key carries the provenance, so a read the export
+            // performs itself and a read of the same `(kind, label)` it
+            // performs through a call stay two rows. Collapsing them onto one
+            // would publish a single claim that the export's own census has to
+            // witness *and* a composed claim it cannot, and the stronger of
+            // the two demands would silently disappear.
             seen_reactive_reads
-                .insert((reactive_read.kind.clone(), reactive_read.label.clone()))
+                .insert((
+                    reactive_read.kind.clone(),
+                    reactive_read.label.clone(),
+                    reactive_read.composed_owner.clone(),
+                ))
                 .then_some(reactive_read)
         })
         .collect::<Vec<_>>();
@@ -1216,19 +1612,27 @@ fn contract_export_function(
     // accesses that a last-segment comparison would have collapsed into one
     // claim about `values`.
     let mut paths_by_parameter = BTreeMap::<usize, HashSet<&[String]>>::new();
-    for (parameter, path) in invoked_parameter_members {
+    for ParameterMemberInvocation {
+        parameter, path, ..
+    } in invoked_parameter_members
+    {
         paths_by_parameter
             .entry(*parameter)
             .or_default()
             .insert(path.as_slice());
     }
     for (parameter, paths) in paths_by_parameter {
-        if seen_reactive_reads.insert(("parameter-member".into(), parameter.to_string())) {
+        if seen_reactive_reads.insert(("parameter-member".into(), parameter.to_string(), None)) {
             reactive_reads.push(ContractReactiveRead {
                 kind: "parameter-member".into(),
                 label: String::new(),
                 parameter: Some(parameter),
                 path: (paths.len() == 1).then(|| paths.into_iter().next().unwrap().to_vec()),
+                // A parameter-member read is rooted at *this* export's own
+                // parameter, so it is never composed from another export's
+                // row.
+                composed_owner: None,
+                composed_from: None,
             });
         }
     }
@@ -1249,14 +1653,7 @@ fn contract_export_function(
             } else {
                 "accessor".into()
             },
-            label: semantics
-                .source_primitives
-                .get(&read.symbol)
-                .and_then(|primitive| semantics.bundled_returns.get(primitive))
-                .map_or_else(
-                    || read.display.to_string(),
-                    |returned| returned.label.clone(),
-                ),
+            label: read.display.to_string(),
             parameter: None,
             elements: Vec::new(),
             properties: BTreeMap::new(),
@@ -1276,7 +1673,17 @@ fn contract_export_function(
     };
     ContractExport {
         kind: "function".into(),
-        reactive_reads: reactive_reads.into(),
+        // ADR 0013: an access path alone does not establish the execution of
+        // a nested callable. The compact model cannot express this uncertainty
+        // beside known reads, so keep the whole domain open, never empty.
+        reactive_reads: if invoked_parameter_members
+            .iter()
+            .all(|read| read.in_owner_body)
+        {
+            reactive_reads.into()
+        } else {
+            ContractClaim::Open
+        },
         callbacks,
         owner_requirements: Vec::new().into(),
         returns: returns.into(),
@@ -1286,6 +1693,23 @@ fn contract_export_function(
             String::new().into()
         },
         open_claims: BTreeSet::new(),
+        // Neither field is decided here. `creates_closed_empty` describes an
+        // *accepted dependency's* domain and only `project_accepted_export`
+        // sets it; `creates_walk_clean` is attached at the emit boundary from
+        // `Program::creates_proposal_walk`. Both defaults refuse.
+        creates_closed_empty: false,
+        creates_walk_clean: false,
+        // This summary *is* the local inference, so it is never inherited.
+        inherited_from: None,
+        // Attached at the emit boundary from `Program::merged_props_returns`,
+        // beside the other two walk verdicts.
+        merged_props_return: None,
+        creates_walk_declines: Vec::new(),
+        returns_walk_clean: false,
+        // ADR 0100: a proposal input read beside the rows. Kept whether or not
+        // the callbacks domain above stayed known -- the generator's filter
+        // reads both, and an open domain proposes nothing either way.
+        direct_callback_parameters: direct_callback_parameters.iter().copied().collect(),
     }
 }
 
@@ -1569,6 +1993,7 @@ fn contract_export_fragment(
         {
             fragment.dependencies.insert(node_keys[target].clone());
             fragment.direct.push((name.clone(), summary.clone()));
+            fragment.owners.push((name.clone(), symbol.clone()));
         }
     }
     // `module_level_exports`, not `exports`: an `export` inside a `namespace`
@@ -1626,6 +2051,15 @@ fn contract_export_fragment(
                 })
                 .unwrap_or_else(value_contract_export);
             let summary = promote_callable_export(facts, file, specifier.local.span, summary);
+            if let Some(symbol) = graph
+                .entities
+                .get(&location(file.path.shared(), specifier.local.span))
+                .filter(|symbol| graph.by_symbol.contains_key(*symbol))
+            {
+                fragment
+                    .owners
+                    .push((specifier.exported.to_string(), symbol.clone()));
+            }
             fragment
                 .syntax
                 .push((specifier.exported.to_string(), summary, true));
@@ -1651,11 +2085,15 @@ fn contract_export_fragment(
                     })
                     .unwrap_or_else(value_contract_export);
                 let summary = promote_callable_export(facts, file, name.span, summary);
-                fragment.syntax.push((
-                    file.source_text(name.span).unwrap_or_default().to_owned(),
-                    summary,
-                    false,
-                ));
+                let exported = file.source_text(name.span).unwrap_or_default().to_owned();
+                if let Some(symbol) = graph
+                    .entities
+                    .get(&location(file.path.shared(), name.span))
+                    .filter(|symbol| graph.by_symbol.contains_key(*symbol))
+                {
+                    fragment.owners.push((exported.clone(), symbol.clone()));
+                }
+                fragment.syntax.push((exported, summary, false));
             }
         }
     }
@@ -1888,7 +2326,107 @@ fn aggregate_contract_fragments(
             }
         }
     }
+    resolve_composed_reactive_reads(facts, fragments, &mut aggregate);
     aggregate
+}
+
+/// Resolve every row's unpublished `composed_owner` into a published
+/// `composed_from`, and clear the unpublished half.
+///
+/// This is the only place in the pipeline that knows both halves of the
+/// question: the per-node projection knows *which node* discovered a read but
+/// not the name it is exported under, and each file's fragment knows its own
+/// export bindings but not another file's. Aggregation has all of them.
+///
+/// Every step publishes nothing rather than approximating:
+///
+/// * an owner symbol no export of this project names — a private helper, a
+///   node reached only through an unnameable re-export — stays unresolved,
+///   because "some node in this package performs the read" is exactly the
+///   claim the scoping study forbids;
+/// * an owner exported under **more than one** name stays unresolved: the two
+///   names are two claims, and picking one would name a target a call site may
+///   not resolve to;
+/// * an owner whose own read list carries no row with this row's identity
+///   stays unresolved. The identity is `(kind, label)`, the same key the
+///   projection deduplicates by, so at most one row can match — the ordinal it
+///   is found at is what `normalize_export` names `read-<ordinal>`;
+/// * a row whose owner is the export publishing it is not a composition at
+///   all.
+///
+/// The resolution is a *nomination*, never authority. The certifier proves the
+/// composing call's callee resolves to the named export through the compiler's
+/// own authenticated export table, and proves the named export's own demand
+/// for the named operation separately, so a provenance this pass got wrong
+/// refuses rather than discharges.
+fn resolve_composed_reactive_reads(
+    facts: &ProjectFacts,
+    fragments: &HashMap<String, ContractExportFragment>,
+    aggregate: &mut BTreeMap<String, ContractExport>,
+) {
+    let mut names_by_owner = BTreeMap::<&str, BTreeSet<&str>>::new();
+    for file in &facts.files {
+        if let Some(fragment) = fragments.get(file.path.as_str()) {
+            for (name, symbol) in &fragment.owners {
+                names_by_owner
+                    .entry(symbol.as_str())
+                    .or_default()
+                    .insert(name.as_str());
+            }
+        }
+    }
+    // The read identities of every export, snapshotted before anything is
+    // rewritten: an ordinal has to be read off the list as published, and the
+    // rewrite below never reorders one.
+    let identities = aggregate
+        .iter()
+        .filter_map(|(name, summary)| {
+            summary.reactive_reads.known().map(|reads| {
+                (
+                    name.clone(),
+                    reads
+                        .iter()
+                        .map(|read| (read.kind.clone(), read.label.clone()))
+                        .collect::<Vec<_>>(),
+                )
+            })
+        })
+        .collect::<BTreeMap<_, _>>();
+    for (name, summary) in aggregate.iter_mut() {
+        let ContractClaim::Known(reads) = &mut summary.reactive_reads else {
+            continue;
+        };
+        for read in reads.iter_mut() {
+            let Some(owner) = read.composed_owner.take() else {
+                continue;
+            };
+            let Some(exports) = names_by_owner.get(owner.as_str()) else {
+                continue;
+            };
+            let [export] = exports.iter().copied().collect::<Vec<_>>()[..] else {
+                continue;
+            };
+            if export == name.as_str() {
+                continue;
+            }
+            let Some(rows) = identities.get(export) else {
+                continue;
+            };
+            let matched = rows
+                .iter()
+                .enumerate()
+                .filter(|(_, (kind, label))| *kind == read.kind && *label == read.label)
+                .map(|(ordinal, _)| ordinal)
+                .collect::<Vec<_>>();
+            let [ordinal] = matched[..] else {
+                continue;
+            };
+            read.composed_from = Some(crate::ComposedReactiveRead {
+                export: export.to_owned(),
+                read: ordinal,
+            });
+        }
+    }
 }
 
 fn path_within_project(path: &Path, directory: &Path) -> bool {
@@ -2153,37 +2691,9 @@ fn promote_callable_export(
 }
 
 #[cfg(test)]
-mod native_overlay_tests {
-    use super::{
-        ContractExport, missing_accepted_export_needs_obligation, native_callback_overlay,
-    };
-    use crate::{ContractCallback, ContractClaim, ContractReturn};
+mod native_obligation_tests {
+    use super::missing_accepted_export_needs_obligation;
     use solid_dialect::Solid2;
-
-    #[test]
-    fn native_overlay_keeps_only_exact_callback_timing() {
-        let summary = ContractExport {
-            kind: "function".into(),
-            callbacks: ContractClaim::Known(vec![ContractCallback {
-                parameter: 1,
-                execution: "inline".into(),
-                schedule: None,
-                arguments: Vec::new(),
-                owner: None,
-            }]),
-            returns: ContractClaim::Known(Some(ContractReturn {
-                kind: "accessor".into(),
-                label: "package return".into(),
-                ..ContractReturn::default()
-            })),
-            async_behavior: ContractClaim::Open,
-            ..ContractExport::default()
-        };
-        let overlay = native_callback_overlay(&summary).expect("known callback row");
-        assert_eq!(overlay.callbacks, summary.callbacks);
-        assert_eq!(overlay.returns, ContractClaim::Known(None));
-        assert_eq!(overlay.async_behavior, ContractClaim::Known(String::new()));
-    }
 
     #[test]
     fn partial_accepted_contract_does_not_reopen_dialect_owned_primitives() {

@@ -1,0 +1,146 @@
+{
+  "format": "initial-read-member-boundary",
+  "authoritative": false,
+  "audit": {
+    "format": "solid-checker-contract-certification-audit",
+    "auditVersion": 1,
+    "authoritative": false,
+    "replayable": false,
+    "status": "refused",
+    "package": {
+      "name": "parameter-origin-probe",
+      "version": "1.0.0"
+    },
+    "stage": "witness-acquisition",
+    "refusal": {
+      "owner": "certifier",
+      "demandId": "sha256:0add7b98bccb2d6291fe7a1b8444d51c8b8f3db4554a7fde09cd26aa4aacb019",
+      "family": "recursive-value-shape",
+      "reason": "solid-checker-rust: policy-2 proof finalization failed: Type Facts certification failed during live export-value verification: Type Facts demand sha256:0add7b98bccb2d6291fe7a1b8444d51c8b8f3db4554a7fde09cd26aa4aacb019 is locally open: recursive-value-shape (artifact-case:00d0a4d13f10c0b01c7e9be4a5050bc33d10d531277c9a708eb926a39e458e0b:read): parameter-rooted read lacks positive original-input identity"
+    },
+    "stageDurationsMs": {
+      "artifactAcquisition": 0.7,
+      "proposalGeneration": 158.88,
+      "demandPlanning": 10.96,
+      "witnessAcquisition": 170.79
+    },
+    "graphPreparation": null,
+    "refusals": [],
+    "withheldClosures": [],
+    "demandPlans": [
+      {
+        "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+        "candidateSemanticDigest": "sha256:3c6ac1acf7cc8a9f3b14ca0ef5b4ff8153012c90841b699d842a5e1094bdc3dd",
+        "snapshotRoot": "sha256:600542a6ee236ac62f1add2e353bd89a77f4973815fe16fe137dd096b25724a0",
+        "provenanceRoot": "sha256:9ba1161ea66a8dfa1bffa36a5348776d64ae662720b3280261b73509b8b67b24",
+        "demandGraphRoot": "sha256:5cbd794bfc7ed8fe75ac3839f3ed7fb3337eb644adee1a51d9c88610508d90e1",
+        "demands": [
+          {
+            "family": "export-identity",
+            "id": "sha256:02feaa27385767987dce25e10290e258a8d57c47e770240c99ee3595801dad5a",
+            "owner": "package-artifact",
+            "satisfiedByArtifactSnapshot": true
+          },
+          {
+            "family": "recursive-value-shape",
+            "id": "sha256:0add7b98bccb2d6291fe7a1b8444d51c8b8f3db4554a7fde09cd26aa4aacb019",
+            "owner": "type-facts",
+            "satisfiedByArtifactSnapshot": false
+          },
+          {
+            "family": "module-closure",
+            "id": "sha256:169b9d524281a1195c310cc3114a3ff878d4fbbabd9bb7b653e14e09be8006b2",
+            "owner": "package-artifact",
+            "satisfiedByArtifactSnapshot": true
+          },
+          {
+            "family": "manifest-entrypoint",
+            "id": "sha256:24f770c7923e51ac86c680bf4e636d2985d9d4808f9a24ed732d0e6d214ae4d7",
+            "owner": "package-artifact",
+            "satisfiedByArtifactSnapshot": true
+          },
+          {
+            "family": "operation-cardinality",
+            "id": "sha256:38d6c5f192800b5397bcdaafa33984ffc8bb8ab5fd907c39f1b43c8b92f44eb7",
+            "owner": "type-facts",
+            "satisfiedByArtifactSnapshot": false
+          },
+          {
+            "family": "rest-spread-coverage",
+            "id": "sha256:3b846a9b515709411bf0dbe29c8b87625818acd6df7da3b45b334aba5be823b5",
+            "owner": "type-facts",
+            "satisfiedByArtifactSnapshot": false
+          },
+          {
+            "family": "selected-signature",
+            "id": "sha256:3becf8af87757d21e97a9ea2e25c13ce71e2768c5da16baa6b62c5041c61772e",
+            "owner": "type-facts",
+            "satisfiedByArtifactSnapshot": false
+          },
+          {
+            "family": "callable-path",
+            "id": "sha256:720957dcd0de4aa64118039c6b3923db45bae2da4ac964a60490bf01473d17ea",
+            "owner": "type-facts",
+            "satisfiedByArtifactSnapshot": false
+          },
+          {
+            "family": "artifact-declarations",
+            "id": "sha256:765a0a6a185a1666585030d8188108b378c5567d6110835fd7a53d09f0642554",
+            "owner": "package-artifact",
+            "satisfiedByArtifactSnapshot": true
+          },
+          {
+            "family": "operation-reachability",
+            "id": "sha256:87c7592e1ebf559dd921eeadc8104b85ddb71f3349a5f1b3def0040d489e7c66",
+            "owner": "type-facts",
+            "satisfiedByArtifactSnapshot": false
+          },
+          {
+            "family": "package-identity",
+            "id": "sha256:b2548ddc170b9666f4cf184f4a9e33f42a5e3d923d6a5bdda5d711fa6a25b614",
+            "owner": "package-artifact",
+            "satisfiedByArtifactSnapshot": true
+          },
+          {
+            "family": "export-resolution",
+            "id": "sha256:d7a91e93a3cf38e4f6d4d18e0276d1ba9de705401d5619a58881a385f385034e",
+            "owner": "package-artifact",
+            "satisfiedByArtifactSnapshot": true
+          },
+          {
+            "family": "recursive-value-shape",
+            "id": "sha256:de69ffb436f4b8a3411468da1a5cb8bed392d80c60451a2b4b32778872832ca5",
+            "owner": "type-facts",
+            "satisfiedByArtifactSnapshot": false
+          }
+        ]
+      }
+    ]
+  },
+  "source": {
+    "path": "/private/tmp/parameter-prefix-member-probe/package/index.js",
+    "digest": "sha256:191979011572910052cc51e012d554956b9fbe7e0350bde12a8ccc9491957c02"
+  },
+  "archive": {
+    "path": "/private/tmp/parameter-prefix-member-probe/package.tgz",
+    "digest": "sha256:0f6b8588041655772050dbc84fc4be7bd78c44efeb4aaf185681c7a97799061a"
+  },
+  "declarations": {
+    "path": "/private/tmp/parameter-prefix-member-probe/package/index.d.ts",
+    "digest": "sha256:0ca610c0c2e578ea783bf50f08a5f6988b6752af85e8d8785f484aed0486773c"
+  },
+  "binary": {
+    "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/verify/solid-checker-rust",
+    "digest": "sha256:9050f74401c3b54bc808185ea5acb50bfacb05f412d766b702c4da6fb233a507"
+  },
+  "runtime": {
+    "rootReads": 1,
+    "methodCalls": 0,
+    "result": 1
+  },
+  "typescript": {
+    "version": "5.9.3",
+    "diagnostics": []
+  },
+  "newCatalogPublished": false
+}

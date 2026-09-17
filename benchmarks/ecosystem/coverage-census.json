@@ -1,0 +1,192 @@
+{
+  "format": "solid-checker-contract-coverage-census",
+  "censusVersion": 1,
+  "solidTarget": "solid1",
+  "demand": {
+    "source": "docs/package-contract-v2/phase21/2026-09-14-consumer-demand-recensus.json",
+    "callSites": 2585,
+    "inCorpusSites": 1958
+  },
+  "totals": {
+    "sites": 1958,
+    "ownerRequirement": 31,
+    "measuredPackages": 16,
+    "operations": 599,
+    "closed-empty": 939,
+    "degenerate": 337,
+    "absent": 65,
+    "unmeasured": 18
+  },
+  "packages": [
+    {
+      "package": "@kobalte/utils",
+      "sites": 942,
+      "measured": true,
+      "operations": 312,
+      "closed-empty": 530,
+      "degenerate": 100,
+      "absent": 0,
+      "ownerRequirement": 2
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "sites": 820,
+      "measured": true,
+      "operations": 257,
+      "closed-empty": 409,
+      "degenerate": 135,
+      "absent": 19,
+      "ownerRequirement": 20
+    },
+    {
+      "package": "@kobalte/solidbase",
+      "sites": 60,
+      "measured": true,
+      "operations": 0,
+      "closed-empty": 0,
+      "degenerate": 15,
+      "absent": 45,
+      "ownerRequirement": 0
+    },
+    {
+      "package": "@solid-primitives/rootless",
+      "sites": 39,
+      "measured": true,
+      "operations": 9,
+      "closed-empty": 0,
+      "degenerate": 30,
+      "absent": 0,
+      "ownerRequirement": 0
+    },
+    {
+      "package": "@solidjs/start",
+      "sites": 24,
+      "measured": true,
+      "operations": 0,
+      "closed-empty": 0,
+      "degenerate": 24,
+      "absent": 0,
+      "ownerRequirement": 0
+    },
+    {
+      "package": "@solid-primitives/platform",
+      "sites": 18,
+      "measured": true,
+      "operations": 0,
+      "closed-empty": 0,
+      "degenerate": 18,
+      "absent": 0,
+      "ownerRequirement": 0
+    },
+    {
+      "package": "@kobalte/core",
+      "sites": 16,
+      "measured": false
+    },
+    {
+      "package": "@solid-primitives/trigger",
+      "sites": 9,
+      "measured": true,
+      "operations": 0,
+      "closed-empty": 0,
+      "degenerate": 9,
+      "absent": 0,
+      "ownerRequirement": 0
+    },
+    {
+      "package": "@solid-primitives/marker",
+      "sites": 8,
+      "measured": true,
+      "operations": 8,
+      "closed-empty": 0,
+      "degenerate": 0,
+      "absent": 0,
+      "ownerRequirement": 4
+    },
+    {
+      "package": "@solid-primitives/scheduled",
+      "sites": 5,
+      "measured": true,
+      "operations": 5,
+      "closed-empty": 0,
+      "degenerate": 0,
+      "absent": 0,
+      "ownerRequirement": 5
+    },
+    {
+      "package": "@solid-primitives/memo",
+      "sites": 4,
+      "measured": true,
+      "operations": 3,
+      "closed-empty": 0,
+      "degenerate": 1,
+      "absent": 0,
+      "ownerRequirement": 0
+    },
+    {
+      "package": "@solid-primitives/permission",
+      "sites": 3,
+      "measured": true,
+      "operations": 3,
+      "closed-empty": 0,
+      "degenerate": 0,
+      "absent": 0,
+      "ownerRequirement": 0
+    },
+    {
+      "package": "@solid-primitives/context",
+      "sites": 2,
+      "measured": false
+    },
+    {
+      "package": "@solid-primitives/keyed",
+      "sites": 2,
+      "measured": true,
+      "operations": 0,
+      "closed-empty": 0,
+      "degenerate": 2,
+      "absent": 0,
+      "ownerRequirement": 0
+    },
+    {
+      "package": "@solid-primitives/tween",
+      "sites": 2,
+      "measured": true,
+      "operations": 2,
+      "closed-empty": 0,
+      "degenerate": 0,
+      "absent": 0,
+      "ownerRequirement": 0
+    },
+    {
+      "package": "@solidjs/meta",
+      "sites": 2,
+      "measured": true,
+      "operations": 0,
+      "closed-empty": 0,
+      "degenerate": 2,
+      "absent": 0,
+      "ownerRequirement": 0
+    },
+    {
+      "package": "@solid-primitives/storage",
+      "sites": 1,
+      "measured": true,
+      "operations": 0,
+      "closed-empty": 0,
+      "degenerate": 0,
+      "absent": 1,
+      "ownerRequirement": 0
+    },
+    {
+      "package": "@solid-primitives/timer",
+      "sites": 1,
+      "measured": true,
+      "operations": 0,
+      "closed-empty": 0,
+      "degenerate": 1,
+      "absent": 0,
+      "ownerRequirement": 0
+    }
+  ]
+}

@@ -68,6 +68,7 @@ fn operation(id: &str, min: u32) -> Operation {
         inputs: vec![],
         output: None,
         resources: BTreeSet::new(),
+        composed_from: None,
     }
 }
 
@@ -134,6 +135,7 @@ fn export(
 fn analysis() -> ProposalAnalysis {
     let closure = ClosureManifest::new(vec![], vec![], vec![]).unwrap();
     let mut case = ArtifactCase {
+        initialization: None,
         id: "import-case".into(),
         entrypoint: ".".into(),
         resolution_trace: vec![
@@ -399,6 +401,7 @@ fn runtime_probe_plan_accepts_only_witness_and_closure_subjects_from_the_proposa
             timeout_millis: 5_000,
             max_microtask_turns: 4,
             max_macrotask_turns: 0,
+            max_animation_frame_turns: 0,
             max_events: 128,
         },
     )

@@ -28,8 +28,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use solid_facts_backend::{
     DiagnosticSession, NativeIncrementalSession, RequestedRuleEnablement, SourceChange, SourceFile,
-    TypeFactsSession, accepted_contract_catalog_members, bundled_first_party_contract_index,
-    discovered_contract_paths, imported_package_roots, read_accepted_contract_catalog_with_trust,
+    TypeFactsSession, accepted_contract_catalog_members, discovered_contract_paths,
+    external_package_contract_requirements, imported_package_roots,
     read_policy2_trust_configuration, semantic_demand_options_for_enablement,
 };
 use solid_reactive_ir::CacheRetention;
@@ -47,12 +47,23 @@ struct CheckRequest {
     accepted_contract_catalog: String,
     #[serde(default)]
     receipt_trust_configuration: String,
+    /// Whether the contracts compiled into this checker may be applied. One
+    /// daemon serves every client for a project, so this crosses the socket and
+    /// is part of the cached answer's identity; otherwise a
+    /// `--no-bundled-contracts` run would be served a cached answer that used
+    /// them, or the reverse.
+    #[serde(default = "bundled_by_default")]
+    bundled_contracts: bool,
     #[serde(default)]
     presets: Vec<String>,
     #[serde(default)]
     enable_rules: Vec<String>,
     #[serde(default)]
     runtime: RuntimeEnvironment,
+}
+
+const fn bundled_by_default() -> bool {
+    true
 }
 
 #[derive(Serialize, Deserialize)]
@@ -113,9 +124,29 @@ fn resolve_dialect(
     match request.dialect.as_deref() {
         Some(id) => solid_facts_backend::dialect::by_id(id)
             .ok_or_else(|| format!("unknown dialect {id:?}").into()),
-        None => Ok(solid_facts_backend::dialect::detect(Path::new(
-            &request.project_id,
-        ))),
+        // A direct `--serve` for a project whose installed runtime this build
+        // has no dialect for refuses to start, rather than retaining a session
+        // that would answer every request under the wrong language. The
+        // ordinary CLI path never gets here: `run` refuses at the selection
+        // site, above the branch that consults this daemon at all. This is the
+        // backstop for the case that skips it.
+        None => match solid_facts_backend::dialect::detect_detailed(Path::new(&request.project_id))
+        {
+            solid_facts_backend::dialect::Detection::Installed { dialect, .. } => Ok(dialect),
+            solid_facts_backend::dialect::Detection::Unsupported {
+                installed,
+                manifest,
+                ..
+            } => Err(format!(
+                "solid-js {installed} at {} is a runtime this build carries no dialect for [{}]",
+                manifest.display(),
+                solid_facts_backend::dialect::UNSUPPORTED_RUNTIME_CODE
+            )
+            .into()),
+            solid_facts_backend::dialect::Detection::Defaulted { .. } => {
+                Ok(solid_facts_backend::dialect::default_dialect())
+            }
+        },
     }
 }
 
@@ -610,23 +641,29 @@ fn answer(
         .project
         .parent()
         .ok_or("tsconfig has no parent directory")?;
-    let bundled =
-        bundled_first_party_contract_index(state.dialect.id, directory, &facts, &check.runtime)?;
-    let catalog = if check.accepted_contract_catalog.is_empty() {
-        let candidate = directory.join(".solid-checker/accepted-contracts.json");
-        candidate.is_file().then_some(candidate)
-    } else {
-        Some(PathBuf::from(&check.accepted_contract_catalog))
-    };
+    let requirements = external_package_contract_requirements(state.dialect.id, directory, &facts);
     let trust = (!check.receipt_trust_configuration.is_empty())
         .then(|| read_policy2_trust_configuration(Path::new(&check.receipt_trust_configuration)))
         .transpose()?;
-    let contracts = catalog
-        .as_deref()
-        .map(|path| read_accepted_contract_catalog_with_trust(path, trust.as_ref()))
-        .transpose()?
-        .unwrap_or_default()
-        .with_fallback(bundled);
+    // The same contract acquisition the one-shot path performs, and for the
+    // same reason it has to be the same: this daemon is *on by default in a
+    // release build*, so it -- not the one-shot path -- is what an ordinary
+    // user runs. It had its own, older acquisition: one
+    // `accepted-contracts.json` and no artifact admission at all. So a case
+    // set went undiscovered, an acceptance certified from another file never
+    // applied, and the compiled-in tier was invisible. Measured on a project
+    // importing a bundled `@solid-primitives/keyed@1.5.3`: the release binary
+    // answered "no receipt-accepted contract matches this exact import" with
+    // the daemon on and read the contract with it off.
+    let contracts = solid_facts_backend::project_accepted_contracts(
+        directory,
+        &discovered_catalogs(directory, &check.accepted_contract_catalog)?,
+        trust.as_ref(),
+        check.bundled_contracts,
+        &check.runtime.selected_conditions(),
+        &facts,
+        requirements,
+    )?;
     let analysis = state
         .diagnostics
         .analyze_accepted_measured_with_enablement(
@@ -655,10 +692,7 @@ fn answer(
     let modules = imported_package_roots(&facts);
     state.last = Some(CachedAnswer {
         generation: state.session.generation(),
-        explicit: vec![
-            check.accepted_contract_catalog.clone(),
-            check.receipt_trust_configuration.clone(),
-        ],
+        explicit: explicit_inputs(check),
         contract_files: contract_files(
             state,
             &modules,
@@ -700,15 +734,35 @@ fn cached_answer(
     )?;
     Ok(cached.snapshot_if_current(
         state.session.generation(),
-        &[
-            check.accepted_contract_catalog.clone(),
-            check.receipt_trust_configuration.clone(),
-        ],
+        &explicit_inputs(check),
         &current,
         &check.presets,
         &check.enable_rules,
         &check.runtime,
     ))
+}
+
+/// Every catalog the local tier holds, or the one the caller named.
+///
+/// Discovery used to be a single `accepted-contracts.json` here. `contract
+/// certify` publishes a *case set* for a package with more than one artifact
+/// case, so that spelling silently missed contracts the one-shot path reads --
+/// the same defect `discovered_catalog_paths` was written for.
+fn discovered_catalogs(directory: &Path, explicit: &str) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+    if explicit.is_empty() {
+        Ok(solid_facts_backend::discovered_catalog_paths(directory)?)
+    } else {
+        Ok(vec![PathBuf::from(explicit)])
+    }
+}
+
+/// What the client stated, as the cached answer compares it.
+fn explicit_inputs(check: &CheckRequest) -> Vec<String> {
+    vec![
+        check.accepted_contract_catalog.clone(),
+        check.receipt_trust_configuration.clone(),
+        check.bundled_contracts.to_string(),
+    ]
 }
 
 /// The current on-disk contract inputs: package manifests and discovered
@@ -733,16 +787,16 @@ fn contract_files(
     if let Some(path) = solid_facts_backend::discovered_rule_options_path(directory) {
         paths.push(path);
     }
-    let catalog = if accepted_catalog.is_empty() {
-        let candidate = directory.join(".solid-checker/accepted-contracts.json");
-        candidate.is_file().then_some(candidate)
-    } else {
-        Some(PathBuf::from(accepted_catalog))
-    };
-    if let Some(catalog) = catalog {
+    for catalog in discovered_catalogs(directory, accepted_catalog)? {
         paths.extend(accepted_contract_catalog_members(&catalog)?);
         paths.push(catalog);
     }
+    // Artifact admission recomputes an acceptance root from the *installed*
+    // tarball integrity, which lives in whichever lockfile the project's
+    // package manager wrote. Without these an install that repacks a dependency
+    // at the same version keeps serving the previous verdict for a whole
+    // generation.
+    paths.extend(solid_facts_backend::admission_input_paths(directory));
     if !receipt_trust_configuration.is_empty() {
         paths.push(PathBuf::from(receipt_trust_configuration));
     }
@@ -750,7 +804,16 @@ fn contract_files(
     paths.dedup();
     let mut files = Vec::with_capacity(paths.len());
     for path in paths {
-        files.push((path.clone(), hash_file(&path)?));
+        // Absence is a state, not an error. A lockfile that does not exist yet
+        // must still be an input -- creating one changes what is admitted --
+        // and a contract file deleted between runs should invalidate the cache
+        // rather than fail the check.
+        let hash = match hash_file(&path) {
+            Ok(hash) => hash,
+            Err(_) if !path.exists() => [0_u8; 32],
+            Err(error) => return Err(error),
+        };
+        files.push((path.clone(), hash));
     }
     Ok(files)
 }
@@ -776,6 +839,7 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
         project_id: request.project_id.clone(),
         accepted_contract_catalog: request.accepted_contract_catalog.clone(),
         receipt_trust_configuration: request.receipt_trust_configuration.clone(),
+        bundled_contracts: request.bundled_contracts,
         presets: request.presets.clone(),
         enable_rules: request.enable_rules.clone(),
         runtime: request.runtime.clone(),
@@ -899,13 +963,14 @@ mod tests {
         cell::Cell,
         ffi::OsStr,
         fs,
+        path::Path,
         time::Duration,
         time::{SystemTime, UNIX_EPOCH},
     };
 
     use super::{
         CheckHeader, CheckRequest, FileRefresh, ProcessMemory, cache_retention_from, enabled_from,
-        fingerprint_file, normalize_enablement, parse_process_memory,
+        explicit_inputs, fingerprint_file, normalize_enablement, parse_process_memory,
         process_tree_resident_bytes_from, refresh_file_with, retained_format, socket_path,
         timing_value,
     };
@@ -950,6 +1015,54 @@ mod tests {
         normalize_enablement(&mut absent);
         assert!(absent.presets.is_empty());
         assert!(absent.enable_rules.is_empty());
+        // An omitted switch is the on state, not `false`. `#[serde(default)]`
+        // on a bool would have turned the compiled-in tier off for every
+        // request that did not mention it.
+        assert!(absent.bundled_contracts);
+    }
+
+    #[test]
+    fn the_bundled_contract_switch_is_part_of_the_cached_answer() {
+        // One daemon serves every client for a project, and both settings are
+        // eligible for it. Without this the first `--no-bundled-contracts` run
+        // would be answered from a cache built with the tier on, or the
+        // reverse -- silently, because the two differ only in which contracts
+        // were available, not in any input file.
+        let request = |bundled: bool| CheckRequest {
+            project_id: "project".into(),
+            accepted_contract_catalog: String::new(),
+            receipt_trust_configuration: String::new(),
+            bundled_contracts: bundled,
+            presets: Vec::new(),
+            enable_rules: Vec::new(),
+            runtime: RuntimeEnvironment::default(),
+        };
+        assert_ne!(
+            explicit_inputs(&request(true)),
+            explicit_inputs(&request(false))
+        );
+    }
+
+    #[test]
+    fn a_lockfile_is_an_admission_input_whether_or_not_it_exists() {
+        // Artifact admission reads the installed tarball integrity out of one
+        // of these. A path that does not exist yet still belongs in the set:
+        // creating a lockfile changes what is admitted, and a cache keyed only
+        // on files that already exist would not notice.
+        let paths = solid_facts_backend::admission_input_paths(Path::new("/project/app"));
+        for expected in [
+            "/project/app/package-lock.json",
+            "/project/app/node_modules/.package-lock.json",
+            "/project/app/bun.lock",
+            "/project/app/pnpm-lock.yaml",
+            "/project/app/yarn.lock",
+            "/project/package-lock.json",
+        ] {
+            assert!(
+                paths.iter().any(|path| path == Path::new(expected)),
+                "{expected} is not an admission input"
+            );
+        }
     }
 
     #[test]
@@ -958,6 +1071,7 @@ mod tests {
             project_id: "project".into(),
             accepted_contract_catalog: String::new(),
             receipt_trust_configuration: String::new(),
+            bundled_contracts: true,
             presets: vec!["z".into(), "preferences".into(), "z".into()],
             enable_rules: vec![
                 "prefer-show".into(),

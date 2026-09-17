@@ -4,20 +4,113 @@ See [../../docs/ecosystem-benchmark.md](../../docs/ecosystem-benchmark.md) for
 what this measures, the failure-class vocabulary, and the CI split. This file
 is the short day-to-day operator reference.
 
+## Bounded entrypoint recovery
+
+For a value-only proposal with multiple artifact cases, recovery first attempts
+the entire set. If native proof verification refuses and the destination has no
+existing publication, it can select independently verified cases, then freshly
+certify and publish the successful subset. Up to 32 cases it tries each case
+with the already proved selection; larger sets use binary subdivision of
+refused batches. The limit is 1,024 cases and at most 2 × case count native
+transactions. It never copies trial receipts or treats a missing proof as permission.
+An existing destination cannot be replaced by a smaller subset through this
+lane. `graphPreparation.independentCaseRecovery` records expected cases,
+published cases and exact proof refusals. An empty result still refuses.
+
+`contract certify --recover-entrypoints` and the benchmark's matching opt-in
+flag re-certify the generated artifact cases together with exact refused
+dependency-composition cases. The existing graph-only flag still selects only
+the refused cases. Recovery keeps the generated proposal available even when
+its inputs can be reused; it does not return early and ignore the frontier.
+
+Start with a scoped measurement, for example `--package motion-solidjs
+--solid 2 --attempt-certification --recover-entrypoints --keep-temp`. Read the
+published case-set pointer and its named catalogs, then check ordinary consumer
+verification. A generated proposal, a preparation trace, or a successful process
+exit alone does not establish new coverage.
+
+Preparation isolates per artifact case. A graph node that cannot be resolved,
+acquired or generated is recorded by name, the refusal reaches every node
+generated against its contract, and only the cases whose graph reaches one are
+refused; nodes no surviving root reaches are dropped before acquisition. A
+retained generated case is a floor: a graph that cannot prepare one abandons the
+lane, because the proposal already covers that case and this lane certainly will
+not. Recovery refuses a prepared set above 32 artifact cases before any work --
+a measured resource deadline, not a semantic ceiling.
+
+Certification then isolates proof failures over the prepared set. Retained cases
+are the baseline every trial extends; if that baseline itself refuses and
+nothing was published here before, selection runs across the whole prepared set
+by binary subdivision instead of abandoning the graph. The final selection is
+independently certified again before native atomic publication, and trial
+receipts are never reused as authority.
+
+The audit records `expectedCases` and `preparationRefusals` when preparation
+is split, and `caseRefusals` and `publishedCases` when certification is split.
+Failed or unattempted cases never count toward the published selection.
+
+Every root is freshly acquired and certified under its exact importer,
+conditions, artifact and dependency graph. No receipts are copied between
+contexts. Duplicate selection coordinates are rejected; other refusals remain
+explicit in `graphPreparation.entrypointRecovery.remainingRefusals`. This flag
+does not change the coverage denominator or reinterpret assets, wildcard
+exports, or intentionally scoped probes as new certifications.
+
+A partial row whose refusal census names a dependency-composition case asks for
+recovery by policy, with no flag. `--recover-probe <exact-probe-id>` (repeatable)
+and `--recover-entrypoints` force recovery for rows the policy does not select --
+a row with no dependency frontier, where the lane answers a proof refusal
+instead. Neither filters the corpus; all other rows keep their normal lane. Each attempt records its requested lane
+under `laneRequested`; report metadata also preserves the recipe-corpus path
+and recovery selection for comparisons.
+
 ## The two commands
 
 ```sh
 make ecosystem-discover    # network: refresh manifest.json from the registry
 make ecosystem-sentinel    # no registry metadata: run the pinned sentinel subset
 make ecosystem-benchmark   # no registry metadata: run every row's every probe
+make ecosystem-regression  # every row against the pinned report; exit 1 on any lost receipt
 ```
 
+`ecosystem-regression` is the pre-merge certification gate: the full corpus
+compared with `--baseline benchmarks/ecosystem/report.json` under
+`certification-regression-thresholds.json` (`maxCertificationRegressions: 0`),
+writing under `rust/target/ecosystem-regression/` so it never moves the pin.
+Both it and `ecosystem-benchmark` pass `--probe-recipe-corpus probe-recipes`, so
+`creates` candidates are vetoed against the checked-in recipes rather than all
+withheld as `noRecipe`. See "Discovery and execution" in
+`docs/ecosystem-benchmark.md`.
+
 `ecosystem-discover` is the only one of these that touches the network on its
-own account; `ecosystem-sentinel` and `ecosystem-benchmark` read
+own account; `ecosystem-sentinel`, `ecosystem-benchmark` and
+`ecosystem-regression` read
 `manifest.json` and only reach the network to `bun install` each probe's exact
 pinned versions.
 
 ## Required environment
+
+For a focused investigation, `make ecosystem-package PACKAGE=@solid-primitives/utils`
+builds its own fresh release checker, selects that exact package's probes, and
+keeps dependency graph nodes/edges and temporary audit sidecars. It writes to
+a unique directory under `rust/target/ecosystem-investigations`; the JSON
+result's `retainedArtifacts` gives the temporary project/output paths. Optional
+`ECOSYSTEM_PROFILE=debug` uses a debug build. Delete those named temporary
+directories when the investigation is finished.
+
+The raw runner also accepts repeatable `--package <NAME>` (intersected with
+other filters), `--include-graph`, and `--keep-temp`. Unknown packages and empty
+intersections fail. Filtered defaults cannot replace the canonical report.
+Package selection still performs the normal dependency planning and certification;
+it changes which root probes run, not which dependencies they require.
+
+`certificationAttempt.withheldClosureDetails` preserves each audit withholding
+record, including the export, claim id and reason, alongside the existing
+counts. A census refusal now includes any producer `parameterPremiseRefusal`
+text for the transcript whose call walk refused, with its location and helper
+depth. The explanation is diagnostic only: it neither clears nor introduces
+a refusal. Earlier identity/premise validation failures keep their existing
+reasons; an explanation is not evidence of a proved behavior.
 
 `run.mjs` (invoked by both `ecosystem-sentinel` and `ecosystem-benchmark`)
 requires both of these to point at real, existing binaries, and exits 2
@@ -61,7 +154,10 @@ Generation and certification run inside a pool of long-lived CLI workers
 per probe and phase. A worker imports the two CLI functions once and serves one
 request at a time, reproducing the CLI's stdout, stderr and exit status exactly;
 the pool keeps the per-request timeout and memory supervision by killing the
-worker that serves the request, recycles workers after 64 requests, and never
+worker that serves the request. On POSIX each worker owns a separate process
+group: termination includes its native descendants, and worker exit cleans up
+remaining descendants before inherited pipes can hold the request open.
+Windows retains direct-child termination. The pool recycles workers after 64 requests and never
 shares state between requests (every call builds its own resolution session and
 scratch, as a fresh process would). The ~800 process starts a corpus run used to
 pay for cost more CPU than the work they carried.
@@ -153,6 +249,21 @@ about certifiable behavior, so counting it as a refusal would make a row look
 unproven where nothing was ever provable. See the sidecar's `inapplicable`
 array and `artifactCaseDisposition` in
 `packages/cli/scripts/generate-package-contract.mjs`.
+
+The sidecar's `declinedClosures` array is read the same way, into
+`declinedClosures` (a count), `declinedClosuresByKind`,
+`dialectSilentBlockers` — the `(package, export)` primitives whose missing
+dialect audit row is what stopped the generator proposing a closed `creates`
+for an export, with how many *distinct* exports each blocks — and
+`unresolvedCalleeShapes`, the same measurement for the larger half of the
+declines: each `unresolved-callee` record's observed callee **shape**
+(`parameter-rooted`, `member-property-unresolved`, `computed-member`, …) with
+the concrete spellings it was seen on. It is measurement,
+not a refusal: the row certifies and the domain is simply open. `bun
+scripts/dialect-audit-yield.mjs [--report <path>] [--json]` ranks those across
+every row of a report and is the answer to "which dialect audit would return
+the most candidates"; `docs/adr/0008-implementation-census-for-creates.md`
+§ "The decline records" owns the record kinds.
 
 It is additive: no outcome class, success rate, baseline comparison, or
 floor/head diff depends on it, and a result with no `contractContent` still

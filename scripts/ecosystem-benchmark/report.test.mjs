@@ -102,6 +102,7 @@ function makeResult(overrides) {
           ? 1
           : null,
     refusedArtifactCases: overrides.refusedArtifactCases ?? null,
+    certificationAttempt: overrides.certificationAttempt ?? null,
     checklistItems: overrides.checklistItems !== undefined ? overrides.checklistItems : producedContract ? 10 : null,
     outcome,
     class: overrides.class,
@@ -138,6 +139,22 @@ test("report exposes aggregate worker phase timings", () => {
   const markdown = renderMarkdown(report);
   assert.match(markdown, /Worker time: 1800 ms/);
   assert.match(markdown, /install 700 ms, generation 950 ms, harness 150 ms/);
+});
+
+test("report retains recipe and exact recovery requests without inventing old configuration", () => {
+  const input = {
+    manifest: makeManifest({ results: [] }), results: [],
+    startedAt: "2026-09-07T09:00:00.000Z", finishedAt: "2026-09-07T09:00:01.000Z"
+  };
+  const entrypointRecovery = { allSelectedProbes: false, probeIds: ["package@1|solid2|floor"] };
+  const configured = buildReport({ ...input, checker: {
+    probeRecipeCorpus: "/exact/recipes", entrypointRecovery
+  } });
+  assert.equal(configured.checker.probeRecipeCorpus, "/exact/recipes");
+  assert.deepEqual(configured.checker.entrypointRecovery, entrypointRecovery);
+  assert.equal(buildReport({ ...input, checker: { probeRecipeCorpus: null } }).checker.probeRecipeCorpus, null);
+  assert.equal(Object.hasOwn(buildReport(input).checker, "probeRecipeCorpus"), false);
+  assert.equal(Object.hasOwn(buildReport(input).checker, "entrypointRecovery"), false);
 });
 
 // A minimal manifest good enough for `manifestStats` (rowCount/probeCount)
@@ -711,6 +728,104 @@ test("a partial contract is never counted as a success, and its refusals are rep
   );
 });
 
+test("a certified baseline row that no longer certifies is a certification regression the threshold refuses", () => {
+  const attempt = (status, reason = null) => ({
+    attempted: true,
+    status,
+    ...(reason ? { reason } : {})
+  });
+  // Both rows still emit a complete contract, so the generation comparison
+  // sees no movement at all; only the receipt moved.
+  const results = [
+    {
+      ...makeResult({ package: "@corvu/drawer", version: "0.2.4", family: "corvu", class: "success" }),
+      certificationAttempt: attempt("refused", "published graph planning failed: ambiguous")
+    },
+    {
+      ...makeResult({ package: "@corvu/dialog", version: "0.2.4", family: "corvu", class: "success" }),
+      certificationAttempt: attempt("certified")
+    },
+    // Certified now, not attempted in the baseline: a fix, never a regression.
+    {
+      ...makeResult({ package: "@corvu/utils", version: "0.4.2", family: "corvu", class: "success" }),
+      certificationAttempt: attempt("certified")
+    }
+  ];
+  const baseline = {
+    results: [
+      {
+        probeId: "@corvu/drawer@0.2.4|solid1|only",
+        package: "@corvu/drawer",
+        outcome: "success",
+        class: "success",
+        certificationAttempt: attempt("certified")
+      },
+      {
+        probeId: "@corvu/dialog@0.2.4|solid1|only",
+        package: "@corvu/dialog",
+        outcome: "success",
+        class: "success",
+        certificationAttempt: attempt("certified")
+      },
+      {
+        probeId: "@corvu/utils@0.4.2|solid1|only",
+        package: "@corvu/utils",
+        outcome: "success",
+        class: "success"
+      }
+    ]
+  };
+  const report = buildReport({
+    manifest: makeManifest({ results }),
+    results,
+    baseline,
+    startedAt: "2026-09-05T09:00:00.000Z",
+    finishedAt: "2026-09-05T09:01:00.000Z"
+  });
+
+  assert.equal(report.combined.baseline.regressionCount, 0, "generation saw nothing move");
+  assert.equal(report.combined.baseline.certificationRegressionCount, 1);
+  assert.deepEqual(report.combined.baseline.certificationRegressions, [
+    {
+      probeId: "@corvu/drawer@0.2.4|solid1|only",
+      package: "@corvu/drawer",
+      previousStatus: "certified",
+      currentStatus: "refused",
+      currentReason: "published graph planning failed: ambiguous"
+    }
+  ]);
+  assert.equal(report.combined.baseline.certificationFixCount, 1);
+  assert.equal(report.combined.baseline.certificationFixes[0].probeId, "@corvu/utils@0.4.2|solid1|only");
+  assert.equal(report.combined.baseline.certificationFixes[0].previousStatus, "not attempted");
+
+  const markdown = renderMarkdown(report);
+  assert.match(markdown, /- Certification regressions: 1/);
+  assert.match(markdown, /@corvu\/drawer@0\.2\.4\|solid1\|only: certified -> refused/);
+
+  const refused = evaluateThresholds(report, { global: { maxCertificationRegressions: 0 } });
+  assert.equal(refused.ok, false);
+  assert.deepEqual(refused.failures[0], {
+    scope: "global",
+    metric: "certificationRegressions",
+    actual: 1,
+    maximum: 0,
+    probes: ["@corvu/drawer@0.2.4|solid1|only"]
+  });
+  assert.equal(evaluateThresholds(report, { global: { maxCertificationRegressions: 1 } }).ok, true);
+
+  // The ceiling means nothing without a pin to compare against, so a run that
+  // supplied no baseline fails the threshold rather than passing it silently.
+  const unpinned = buildReport({
+    manifest: makeManifest({ results }),
+    results,
+    startedAt: "2026-09-05T09:00:00.000Z",
+    finishedAt: "2026-09-05T09:01:00.000Z"
+  });
+  const unbaselined = evaluateThresholds(unpinned, { global: { maxCertificationRegressions: 0 } });
+  assert.equal(unbaselined.ok, false);
+  assert.equal(unbaselined.failures[0].note, "no baseline supplied");
+});
+
 test("a baseline success that becomes a partial contract is a regression", () => {
   const results = [
     makeResult({ package: "@kobalte/core", version: "0.13.13", family: "kobalte", class: "partial-success" })
@@ -1166,6 +1281,18 @@ test("a filtered report identifies itself as partial rather than reading as a fu
   assert.match(renderMarkdown(full), /- Scope: full corpus/);
 });
 
+test("a package report preserves the selector through normalization and rendering", () => {
+  const report = buildReport({
+    manifest: { generatedAt: "2026-01-01T00:00:00.000Z", rows: [] },
+    results: [],
+    startedAt: "2026-01-01T00:00:00.000Z",
+    finishedAt: "2026-01-01T00:00:01.000Z",
+    scope: { kind: "filtered", packages: ["@solid-primitives/utils"] }
+  });
+  assert.deepEqual(report.scope.packages, ["@solid-primitives/utils"]);
+  assert.match(renderMarkdown(report), /Scope: PARTIAL -- packages @solid-primitives\/utils/);
+});
+
 test("an exact-probe report retains its complete row identity set", () => {
   const results = [makeResult({ package: "@kobalte/core", version: "0.13.13", family: "kobalte" })];
   const probeIds = ["@kobalte/core@0.13.13|solid1|only"];
@@ -1186,4 +1313,230 @@ test("an exact-probe report retains its complete row identity set", () => {
 
   assert.deepEqual(report.scope.probeIds, probeIds);
   assert.match(renderMarkdown(report), /1 exact probe id\(s\)/);
+});
+
+test("the verified split counts a row with no denominator in neither half", () => {
+  const certified = (overrides, coverage) =>
+    makeResult({
+      ...overrides,
+      class: "success",
+      certificationAttempt: {
+        attempted: true,
+        status: "certified",
+        lane: "reused-proposal",
+        laneRequested: "reused-proposal",
+        coverage
+      }
+    });
+  const results = [
+    // Every declared entrypoint under receipt, root included.
+    certified({ family: "kobalte", package: "complete-row", version: "1.0.0" }, {
+      declaredEntrypoints: 3,
+      declaredWildcard: false,
+      certifiedEntrypoints: 3,
+      rootCertified: true
+    }),
+    // One of four, and not the root: the outcome the split exists to expose.
+    certified({ family: "kobalte", package: "partial-row", version: "1.0.0" }, {
+      declaredEntrypoints: 4,
+      declaredWildcard: false,
+      certifiedEntrypoints: 1,
+      rootCertified: false
+    }),
+    // A wildcard manifest whose counts coincide. No denominator, so not
+    // complete -- but the coverage *was* measured, so it is the partial half.
+    certified({ family: "kobalte", package: "wildcard-row", version: "1.0.0" }, {
+      declaredEntrypoints: 2,
+      declaredWildcard: true,
+      certifiedEntrypoints: 2,
+      rootCertified: true
+    }),
+    // An unreadable manifest: an exact numerator and no denominator at all.
+    // Counting it partial would assert a shortfall against a number nobody
+    // read, so it belongs with the unreadable catalogs.
+    certified({ family: "kobalte", package: "no-manifest-row", version: "1.0.0" }, {
+      declaredEntrypoints: null,
+      declaredWildcard: false,
+      certifiedEntrypoints: 2,
+      rootCertified: true
+    }),
+    // An unreadable catalog: the same absent measurement from the other side.
+    certified({ family: "kobalte", package: "no-catalog-row", version: "1.0.0" }, null)
+  ];
+  const report = buildReport({
+    manifest: makeManifest({ results }),
+    results,
+    startedAt: "2026-09-03T09:00:00.000Z",
+    finishedAt: "2026-09-03T09:01:00.000Z"
+  });
+
+  const certification = report.combined.certification;
+  assert.equal(certification.attempted, 5);
+  assert.equal(certification.verified, 5);
+  assert.equal(certification.verifiedComplete, 1);
+  assert.equal(certification.verifiedPartial, 2);
+  assert.equal(certification.verifiedUnmeasured, 2);
+  assert.equal(certification.verifiedPartialWithRoot, 1);
+  // Only the measured rows contribute a numerator.
+  assert.equal(certification.certifiedEntrypoints, 6);
+  assert.equal(
+    certification.verifiedComplete + certification.verifiedPartial + certification.verifiedUnmeasured,
+    certification.verified
+  );
+
+  const markdown = renderMarkdown(report);
+  assert.match(markdown, /1 complete, 2 partial \(1 with the root\), 2 coverage unmeasured/);
+  assert.match(markdown, /complete 3 of 3 \(root\)/);
+  assert.match(markdown, /partial 1 of 4 \(no root\)/);
+  assert.match(markdown, /partial 2 certified, 2 declared via wildcard \(root\)/);
+  assert.match(markdown, /unmeasured 2 of \? \(root\)/);
+  assert.match(markdown, /certified \(coverage not measured\)/);
+  // Never a fabricated denominator.
+  assert.doesNotMatch(markdown, /null declared/);
+});
+
+// The dialect negative authority is pinned to exact audited prereleases, and
+// nothing reported how much of the corpus still installs them. A release of
+// the audited package takes its reach to nothing without failing anything:
+// an unmatched identity refuses, and a refusal is the normal state of a
+// withheld claim (docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md
+// § 71).
+const AUTHORITY_PINS = {
+  schemaVersion: 1,
+  dialects: [
+    { id: "solid-v1", archives: [], negativeRowCount: 0 },
+    {
+      id: "solid-v2",
+      archives: [
+        {
+          name: "solid-js",
+          version: "2.0.0-rc.3",
+          integrity: "sha512-pin",
+          manifestSha256: "digest"
+        }
+      ],
+      negativeRowCount: 47
+    }
+  ]
+};
+
+test("the report says how much of the corpus the negative authority can answer about", () => {
+  const results = [
+    makeResult({
+      family: "corvu",
+      package: "corvu",
+      version: "0.7.0",
+      solidTarget: "solid2",
+      class: "success",
+      installedVersions: { corvu: "0.7.0", "solid-js": "2.0.0-rc.3" }
+    }),
+    makeResult({
+      family: "corvu",
+      package: "@corvu/utils",
+      version: "0.4.2",
+      solidTarget: "solid2",
+      class: "success",
+      installedVersions: { "@corvu/utils": "0.4.2", "solid-js": "2.0.0-rc.0" }
+    }),
+    makeResult({
+      family: "kobalte",
+      package: "@kobalte/core",
+      version: "0.13.13",
+      solidTarget: "solid1",
+      class: "success",
+      installedVersions: { "@kobalte/core": "0.13.13", "solid-js": "1.9.14" }
+    })
+  ];
+  const report = buildReport({
+    manifest: makeManifest({ results }),
+    results,
+    startedAt: "2026-09-12T09:00:00.000Z",
+    finishedAt: "2026-09-12T09:01:00.000Z",
+    auditedArchives: AUTHORITY_PINS
+  });
+
+  const authority = report.combined.dialectNegativeAuthority;
+  assert.equal(authority.rows, 3);
+  assert.equal(authority.rowsCovered, 1);
+  assert.equal(authority.coveragePercentage, 33.3);
+  assert.deepEqual(
+    authority.byDialect.map(entry => [entry.id, entry.rows, entry.rowsCovered]),
+    [
+      ["solid-v1", 1, 0],
+      ["solid-v2", 2, 1]
+    ]
+  );
+
+  const markdown = renderMarkdown(report);
+  assert.match(markdown, /Rows an audited archive identity could answer about: 1 of 3 \(33\.3%\)/);
+  // The bound is stated where the number is, because a reader who takes it for
+  // a yield reads a proof claim off a version string.
+  assert.match(markdown, /upper bound/);
+  assert.match(markdown, /solid-v1: 0 of 1 rows, 0 audited archives, 0 negative rows/);
+  assert.match(markdown, /solid-js@2\.0\.0-rc\.0: 1 row$/m);
+  assert.match(markdown, /solid-js@2\.0\.0-rc\.3: 1 row \(audited\)/);
+});
+
+test("a corpus the authority cannot answer about fails the floor and names the re-audit", () => {
+  const results = [
+    makeResult({
+      family: "corvu",
+      package: "corvu",
+      version: "0.7.0",
+      solidTarget: "solid2",
+      class: "success",
+      // The whole corpus has moved past the audited prerelease -- the failure
+      // the pin has no way to notice on its own.
+      installedVersions: { corvu: "0.7.0", "solid-js": "2.0.0-rc.4" }
+    })
+  ];
+  const report = buildReport({
+    manifest: makeManifest({ results }),
+    results,
+    startedAt: "2026-09-12T09:00:00.000Z",
+    finishedAt: "2026-09-12T09:01:00.000Z",
+    auditedArchives: AUTHORITY_PINS
+  });
+
+  assert.equal(report.combined.dialectNegativeAuthority.rowsCovered, 0);
+  const refused = evaluateThresholds(report, { global: { minAuthorityCoveredRows: 1 } });
+  assert.equal(refused.ok, false);
+  assert.deepEqual(refused.failures[0], {
+    scope: "global",
+    metric: "authorityCoveredRows",
+    actual: 0,
+    minimum: 1,
+    unaudited: ["solid-js@2.0.0-rc.4"]
+  });
+  assert.equal(evaluateThresholds(report, { global: { minAuthorityCoveredRows: 0 } }).ok, true);
+});
+
+test("pins the report could not read fail the floor rather than passing as coverage", () => {
+  const results = [
+    makeResult({
+      family: "corvu",
+      package: "corvu",
+      version: "0.7.0",
+      solidTarget: "solid2",
+      class: "success",
+      installedVersions: { "solid-js": "2.0.0-rc.3" }
+    })
+  ];
+  const report = buildReport({
+    manifest: makeManifest({ results }),
+    results,
+    startedAt: "2026-09-12T09:00:00.000Z",
+    finishedAt: "2026-09-12T09:01:00.000Z",
+    auditedArchives: { schemaVersion: 1 }
+  });
+
+  assert.ok(report.combined.dialectNegativeAuthority.unreadable);
+  const markdown = renderMarkdown(report);
+  assert.match(markdown, /### Dialect negative authority\n\nUnreadable: /);
+
+  const refused = evaluateThresholds(report, { global: { minAuthorityCoveredRows: 1 } });
+  assert.equal(refused.ok, false);
+  assert.equal(refused.failures[0].metric, "authorityCoveredRows");
+  assert.equal(refused.failures[0].actual, null);
+  assert.match(refused.failures[0].note, /audited archives unreadable/);
 });

@@ -45,6 +45,23 @@ import remains uncertifiable. Hosts should use the same artifact-acquisition
 adapter as the Node CLI and must not manufacture closure digests from contract
 bytes.
 
+`acceptedContracts` is no longer the *only* way package behavior enters. This
+build also carries the accepted contracts compiled into the checker
+(`pkg/contracts/accepted/`), and `installedPackages` is how a host lets one
+apply: it states, per specifier, the installed package's name, version,
+registry integrity and resolved file. Admission recomputes each bundled
+contract's signed artifact root from those five facts and applies it only on
+equality, so a wrong or invented entry yields no contract rather than the wrong
+one. `exportConditions` must name what the host resolved under; an empty set
+admits nothing, because conditions select the artifact. Stating no
+`installedPackages` at all keeps the previous behavior exactly.
+
+The asymmetry is deliberate and is the price of having no filesystem: on the
+native side the analyzer reads the project's lockfile itself, and here the host
+asserts it, as it already asserts `typeFacts`. What that does not move is the
+acceptance — the contract and its receipt are compiled in and are not the
+host's to state.
+
 Rule configuration is not yet transported through the WASM `CheckRequest`.
 The adapter cannot read `.solid-checker/rule-options.json` and exposes no rule
 override fields, so it uses catalog defaults: all `prefer-*` rules run. Unlike

@@ -8,7 +8,9 @@
 use std::collections::BTreeSet;
 
 use sha2::{Digest as _, Sha256};
-use solid_facts::ast::{ModuleHazardKind, ModuleLoadKind, extract};
+use solid_facts::ast::{
+    ExportFact, ExportKind, ImportFact, ImportKind, ModuleHazardKind, ModuleLoadKind, extract,
+};
 
 use crate::artifact_resolution::{
     AcceptedDependencyEdge, AffectedClaimDomain, ClosureEntry, ClosureFileRole, ClosureHazard,
@@ -23,6 +25,56 @@ const DECLARATION_EXTENSIONS: [&str; 3] = [".d.ts", ".d.mts", ".d.cts"];
 const DECLARATION_MODULE_EXTENSIONS: [&str; 11] = [
     ".ts", ".tsx", ".d.ts", ".mts", ".d.mts", ".cts", ".d.cts", ".js", ".jsx", ".mjs", ".cjs",
 ];
+
+/// Whether TypeScript reads this path as a declaration file, by name alone.
+///
+/// Mirrors `tspath.GetDeclarationFileExtension`, the generator's
+/// `isDeclarationFileName`, and the binary's
+/// `is_typescript_declaration_file_name` — including the `x.d.web.ts` case and
+/// the base-name-only scope. Wider than [`DECLARATION_EXTENSIONS`]
+/// deliberately: that list drives suffix *substitution*, this predicate answers
+/// "does a runtime module exist under this name".
+fn is_declaration_file_name(path: &str) -> bool {
+    // Case-sensitive, like `strings.HasSuffix` in tsgo and like the other two
+    // mirrors of this predicate.
+    let base = path.rsplit('/').next().unwrap_or(path);
+    if DECLARATION_EXTENSIONS
+        .iter()
+        .any(|extension| base.ends_with(extension))
+    {
+        return true;
+    }
+    base.ends_with(".ts") && base.contains(".d.")
+}
+
+/// Whether an import declaration is erased whole, so the module it names is
+/// read for types and never loaded at runtime.
+///
+/// Mirrors the generator's `specifierIsTypeOnly` exactly, both directions
+/// included: a bare `import "./x"` and an `import {} from "./x"` carry no
+/// bindings and are **not** type-only, and a default or namespace binding is a
+/// value binding unless the whole clause is marked `type`.
+fn import_is_type_only(fact: &ImportFact) -> bool {
+    fact.type_only
+        || (!fact.bindings.is_empty()
+            && fact
+                .bindings
+                .iter()
+                .all(|binding| binding.kind == ImportKind::Named && binding.type_only))
+}
+
+/// The export half of [`import_is_type_only`]. `export * from` and
+/// `export * as ns from` are value edges; a named re-export list is erased only
+/// when it is non-empty and every specifier is type-only.
+fn export_module_is_type_only(fact: &ExportFact) -> bool {
+    if fact.type_only {
+        return true;
+    }
+    if fact.kind == ExportKind::All || fact.namespace.is_some() {
+        return false;
+    }
+    !fact.specifiers.is_empty() && fact.specifiers.iter().all(|specifier| specifier.type_only)
+}
 
 #[derive(Clone, Debug)]
 pub struct SnapshotVerifiedClosure {
@@ -181,47 +233,72 @@ impl ClosureReplay<'_> {
         })?;
 
         for hazard in facts.module_hazards {
+            let kind = match hazard.kind {
+                ModuleHazardKind::NonliteralDynamicLoading => {
+                    ClosureHazardKind::NonliteralDynamicLoading
+                }
+                ModuleHazardKind::Eval => ClosureHazardKind::Eval,
+                ModuleHazardKind::OpaqueWasm => ClosureHazardKind::OpaqueWasm,
+                ModuleHazardKind::MutableUnboundGlobal => ClosureHazardKind::MutableUnboundGlobal,
+                // Mirrored in `syntaxHazards` in
+                // `packages/cli/scripts/artifact-resolution.mjs`. The hazard
+                // census is computed twice — here over oxc, there over the
+                // TypeScript AST — and both manifests must agree byte for
+                // byte, spans included, because they feed the closure digest.
+                // `verify_snapshot_closure` is what compares them, and
+                // `closure_difference` names the offenders.
+                ModuleHazardKind::RuntimeAccessorInstallation => {
+                    ClosureHazardKind::RuntimeAccessorInstallation
+                }
+            };
             self.hazards.push(ClosureHazard {
-                kind: match hazard.kind {
-                    ModuleHazardKind::NonliteralDynamicLoading => {
-                        ClosureHazardKind::NonliteralDynamicLoading
-                    }
-                    ModuleHazardKind::Eval => ClosureHazardKind::Eval,
-                    ModuleHazardKind::OpaqueWasm => ClosureHazardKind::OpaqueWasm,
-                    ModuleHazardKind::MutableUnboundGlobal => {
-                        ClosureHazardKind::MutableUnboundGlobal
-                    }
-                },
+                kind,
                 source: format!("./{path}:{}-{}", hazard.span.start, hazard.span.end),
                 affected_exports: Vec::new(),
-                affected_domains: all_domains(),
+                // An installed accessor makes *reads* through the receiver
+                // invisible and says nothing about any other domain: it
+                // creates no owner, returns nothing, invokes no callback.
+                // Widening it to every domain would withdraw the `creates`
+                // and `returns` closures this census already proves, which is
+                // a regression, not caution.
+                affected_domains: if kind == ClosureHazardKind::RuntimeAccessorInstallation {
+                    vec![AffectedClaimDomain::Reads]
+                } else {
+                    all_domains()
+                },
             });
         }
 
+        // The `type` modifier travels with the specifier: an erased edge is a
+        // declarations-axis edge, and dropping the flag here made the replay
+        // disagree with the generator's census about every such edge's role.
         let static_specifiers = facts
             .imports
             .into_iter()
-            .map(|fact| fact.module.into_string())
-            .chain(
-                facts
-                    .exports
-                    .into_iter()
-                    .filter_map(|fact| fact.module.map(|module| module.into_string())),
-            )
+            .map(|fact| {
+                let type_only = import_is_type_only(&fact);
+                (fact.module.into_string(), type_only)
+            })
+            .chain(facts.exports.into_iter().filter_map(|fact| {
+                let type_only = export_module_is_type_only(&fact);
+                fact.module.map(|module| (module.into_string(), type_only))
+            }))
             .collect::<Vec<_>>();
-        for specifier in static_specifiers {
-            self.visit_specifier(path, axis, role, &specifier, false)?;
+        for (specifier, type_only) in static_specifiers {
+            self.visit_specifier(path, axis, role, &specifier, false, type_only)?;
         }
         for load in facts.module_loads {
             let Some(specifier) = load.specifier else {
                 continue;
             };
+            // A dynamic import or `require` is always a value edge.
             self.visit_specifier(
                 path,
                 axis,
                 role,
                 &specifier,
                 load.kind == ModuleLoadKind::DynamicImport,
+                false,
             )?;
         }
         Ok(())
@@ -234,7 +311,16 @@ impl ClosureReplay<'_> {
         current_role: ClosureFileRole,
         specifier: &str,
         dynamic_import: bool,
+        type_only: bool,
     ) -> Result<(), ArtifactSnapshotError> {
+        // An erased edge reaches its target on the declarations axis. This is
+        // the generator's rule in `closureForRoots`, and the two must agree or
+        // the recomputed closure never matches the supplied one.
+        let (axis, current_role) = if type_only && axis == ModuleAxis::Runtime {
+            (ModuleAxis::Declarations, ClosureFileRole::Declaration)
+        } else {
+            (axis, current_role)
+        };
         if dynamic_import && (specifier.ends_with(".node") || specifier.ends_with(".wasm")) {
             self.hazards.push(ClosureHazard {
                 kind: if specifier.ends_with(".node") {
@@ -251,6 +337,19 @@ impl ClosureReplay<'_> {
 
         match resolve_local(self.snapshot, importer, specifier, axis)? {
             LocalResolution::Module(target) => {
+                // A *value* edge whose only resolution is a declaration file
+                // names a runtime module the package does not ship. The
+                // generator refuses the artifact case for this
+                // (`local-runtime-target-is-declaration-only`), so a proposal
+                // carrying one should not exist; refuse it here too rather than
+                // recompute a closure the generator would never have emitted.
+                if axis == ModuleAxis::Runtime && is_declaration_file_name(&target) {
+                    return closure_mismatch(format!(
+                        "local runtime module {specifier:?} from {importer:?} resolves only to \
+                         declaration file {target:?}; the package ships no runtime module under \
+                         that specifier"
+                    ));
+                }
                 let role = if dynamic_import && axis == ModuleAxis::Runtime {
                     ClosureFileRole::LiteralDynamicChunk
                 } else {
@@ -268,7 +367,7 @@ impl ClosureReplay<'_> {
                 self.record_opaque_frontier(importer, specifier);
                 Ok(())
             }
-            LocalResolution::External => self.record_external(importer, specifier),
+            LocalResolution::External => self.record_external(importer, specifier, axis),
             LocalResolution::Missing => closure_mismatch(format!(
                 "local closure module {specifier:?} from {importer:?} was not found"
             )),
@@ -279,6 +378,7 @@ impl ClosureReplay<'_> {
         &mut self,
         importer: &str,
         specifier: &str,
+        axis: ModuleAxis,
     ) -> Result<(), ArtifactSnapshotError> {
         let matches = self
             .supplied_dependencies
@@ -287,6 +387,37 @@ impl ClosureReplay<'_> {
             .collect::<Vec<_>>();
         match matches.as_slice() {
             [dependency] => self.dependencies.push((*dependency).clone()),
+            // ADR 0010: declaration files do not execute their imports. Their
+            // bytes still bind the specifier, and Type Facts can use external
+            // typings only through the authenticated compiler-source channel.
+            // Keep supplied semantic edges and export-binding checks intact.
+            [] if axis == ModuleAxis::Declarations
+                && is_declaration_file_name(importer)
+                && !specifier.starts_with('#')
+                && !specifier.ends_with(".node")
+                && !specifier.ends_with(".wasm") => {}
+            // The built-in runtime foundation is not an unknown dependency.
+            // `solid-js`, `@solidjs/signals` and `@solidjs/web` have no
+            // package contract *by design* -- `core_runtime_contract_reference`
+            // withholds one, and generating one selects
+            // `GenerationScope::DialectDefiningPackage`, which withholds the
+            // reactive domains wholesale -- so an opaque frontier for them is
+            // a demand that can never be met, and it opened every domain of
+            // every export of any package that imports Solid at all.
+            //
+            // **This is a name-only predicate that stops withholding**, which
+            // `primitive_defining_package` says its own basis may not do. The
+            // narrower thing it does here is admissible for a different
+            // reason: clearing the frontier establishes no claim. Every claim
+            // still comes from the generator's derivation over *this*
+            // package's bytes, and every proposed closure is re-proved by the
+            // certifier's implementation census, which walks the archive's own
+            // implementation and refuses any form it cannot census. What the
+            // name gates is whether a blanket withdrawal applies, not whether
+            // anything is true. See
+            // `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
+            // § 27.
+            [] if solid_dialect::core_runtime_specifier(specifier) => {}
             [] => self.record_opaque_frontier(importer, specifier),
             _ => {
                 return closure_mismatch(format!(
@@ -540,4 +671,57 @@ fn all_domains() -> Vec<AffectedClaimDomain> {
 
 fn closure_mismatch<T>(reason: impl Into<String>) -> Result<T, ArtifactSnapshotError> {
     Err(ArtifactSnapshotError::ModuleClosure(reason.into()))
+}
+
+#[cfg(test)]
+mod tests {
+    /// The closure is computed twice — here and by the generator's
+    /// TypeScript census in `packages/cli/scripts/artifact-resolution.mjs` —
+    /// and the two must agree byte for byte, or a supplied closure never
+    /// matches the recomputed one.
+    ///
+    /// `record_external` now exempts the built-in runtime foundation from the
+    /// opaque frontier. Rust derives that list from
+    /// `Dialect::primitive_defining_packages`; the TypeScript side hard-codes
+    /// it, because nothing checked in carries the list for it to read — the
+    /// dialect manifests' `contracts[]` is the *bundled contract* list, which
+    /// is broader (it holds `@solid-primitives/scheduled` and friends). So
+    /// the agreement is asserted from the side that owns the authoritative
+    /// list, by reading the constant out of the mirror.
+    ///
+    /// This is the failure the dual hazard census already cost this
+    /// repository once: one concept, two implementations, agreement enforced
+    /// only by a downstream mismatch.
+    #[test]
+    fn the_core_runtime_package_list_agrees_with_the_typescript_census() {
+        let mirror = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../packages/cli/scripts/artifact-resolution.mjs");
+        let source = std::fs::read_to_string(&mirror).expect("the TypeScript census is readable");
+        let declaration = source
+            .split_once("const CORE_RUNTIME_PACKAGES = [")
+            .expect("the mirror declares CORE_RUNTIME_PACKAGES")
+            .1
+            .split_once(']')
+            .expect("the declaration is a closed array literal")
+            .0;
+        let mirrored = declaration
+            .split(',')
+            .map(|entry| entry.trim().trim_matches('"').to_owned())
+            .filter(|entry| !entry.is_empty())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        let owned = solid_dialect::DIALECTS
+            .iter()
+            .flat_map(|dialect| dialect.primitive_defining_packages())
+            .map(|name| (*name).to_owned())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        assert_eq!(
+            mirrored, owned,
+            "packages/cli/scripts/artifact-resolution.mjs and \
+             Dialect::primitive_defining_packages disagree about the built-in \
+             runtime foundation, so the two closure censuses disagree about \
+             which imports are an opaque frontier"
+        );
+    }
 }

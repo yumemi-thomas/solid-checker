@@ -85,6 +85,46 @@ per fixture project, holding rule, code, kind, severity, path, and span
 5. Commit the snapshot update in the same commit as the code that moved the
    findings, not a thematically nearby one.
 
+## A fixture that consumes an *accepted* contract
+
+A contract-consumer fixture that ships `.solid-checker/accepted-contracts.json`
+pins the **rejection** path: every catalog in the tree is `obsolete-policy1`,
+which is refused before a claim is read, so every component in the fixture
+reports the same `SC9005` no matter what the contract says. That is legitimate
+for a fixture whose claim *is* the refusal, and useless for one whose claim is
+downstream of an accepted contract.
+
+For the second kind, ship `.solid-checker/authorize-contract.json` and **no**
+catalog:
+
+~~~json
+{ "document": "node_modules/<pkg>/solid-reactivity.json", "import": { … } }
+~~~
+
+The `import` block is an ordinary resolved-import record with project-relative
+paths — copy a neighbouring fixture's and change the export names. Coverage then
+copies the tree to `rust/target/fixture-authorization/`, runs
+`solid-contract-authorize` over it, and analyzes the copy with the trust
+configuration supplied out of band; the snapshot still names paths inside the
+fixture directory.
+
+Three things to get right:
+
+- **Ship `node_modules/solid-js/package.json`.** An authorized fixture is
+  analyzed from a copy at a different depth, so it cannot inherit a dialect from
+  its ancestors. Coverage refuses one that does not, by name.
+- **Keep the package manifest byte-identical to the fixture you copied the
+  import block from**, or recompute the closure digest, integrity and file
+  hashes. The names in `exports` are not digested; the bytes of `package.json`
+  are.
+- **Check what the fixture reports un-authorized** (`solid-checker-rust
+  --project …` with no trust flag). If that is the same as the snapshot, the
+  authorization is buying nothing and the fixture is not testing what you think.
+
+`fixtures/reactive-ir/package-merged-props-consumer` is the worked example, and
+`rust/crates/solid-facts-backend/src/fixture_authorization.rs` explains why a
+checked-in signing seed is not a forgery.
+
 Package-contract fixtures (`fixtures/package-contracts/`) additionally pin the
 exact package artifact; keep unknown external behavior fail-closed rather than
 adding blanket trust to make a case green. They are registered by name in

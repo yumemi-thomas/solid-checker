@@ -84,7 +84,6 @@ pub(crate) fn collect_project<'facts>(
         contract_reads: &source.contract_reads,
         contract_parameter_reads: &source.contract_parameter_reads,
         contract_returns: &source.contract_returns,
-        bundled_returns: &source.bundled_returns,
         source_kinds: ctx.source_kinds,
         prop_sources: ctx.prop_sources,
         uncertain_prop_sources: ctx.uncertain_prop_sources,
@@ -133,8 +132,6 @@ pub(crate) fn collect_project<'facts>(
         contract_parameter_reads: &source.contract_parameter_reads,
         contract_callbacks: &source.contract_callbacks,
         contract_returns: &source.contract_returns,
-        bundled_returns: &source.bundled_returns,
-        source_primitives: &source.source_primitives,
         entities: ctx.entities,
         references_by_source: &references_by_source,
         symbol_names: ctx.symbol_names,
@@ -332,6 +329,7 @@ mod tests {
                 module: "reactive-package".into(),
                 export: "mapValue".into(),
                 reexported: false,
+                site: crate::ContractDefectSite::Argument,
             },
             location: location.clone(),
             analysis_context: "unbound-contract-claims:callback arguments".into(),
@@ -380,6 +378,7 @@ mod tests {
             module: "partial-package".into(),
             export: "withValue".into(),
             reexported: false,
+            site: crate::ContractDefectSite::Argument,
         };
         assert_eq!(
             generation.family(),

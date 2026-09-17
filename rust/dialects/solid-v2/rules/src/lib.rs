@@ -547,7 +547,11 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::AsyncOutsideLoadingBoundary
         | Rule::PrimitiveInDirectiveApplication
         | Rule::MissingEffectFunction
-        | Rule::PackageContractIncomplete => panic!(
+        | Rule::PackageContractIncomplete
+        // Never reaches any wording channel: dialect detection emits it
+        // directly, with the message built at the refusal site because the
+        // manifest path and installed version are what it has to say.
+        | Rule::UnsupportedSolidRuntime => panic!(
             "rule {} is not emitted through the static-violation channel",
             rule.metadata().name
         ),

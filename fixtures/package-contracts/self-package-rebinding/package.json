@@ -1,0 +1,9 @@
+{
+  "name": "self-package-rebinding",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": { "types": "./index.d.ts", "import": "./index.js" },
+    "./forward": { "types": "./forward.d.ts", "import": "./forward.js" }
+  }
+}

@@ -1,7 +1,22 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { test } from "vitest";
 
 import { buildPhase16Report, buildRefusalReport } from "./package-contract-v2-phase16.mjs";
+
+test("the current audit caller completes against the worker's shared protocol", () => {
+  // Only the isolated recipe envelope runs: no benchmark report or ledger is
+  // read/re-pinned, and this audit path supplies no certification authority.
+  // Run the Node audit explicitly. A Bun worker writes its transpiler cache
+  // under HOME, which this historical audit helper sets to scripts/.
+  const module = new URL("./package-contract-v2-phase16.mjs", import.meta.url).href;
+  const result = JSON.parse(execFileSync("node", ["--input-type=module", "-e",
+    `import { benchmarkCurrentProbeExecution } from ${JSON.stringify(module)}; process.stdout.write(JSON.stringify(await benchmarkCurrentProbeExecution(1)));`
+  ], { encoding: "utf8" }));
+  assert.equal(result.semanticAcceptance, false);
+  assert.equal(result.sessionsPerIteration, 2);
+  assert.equal(result.millisecondsPerIsolatedSession.count, 1);
+});
 
 function sources() {
   const results = [

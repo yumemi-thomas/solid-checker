@@ -123,19 +123,6 @@ func callAt(
 	return typefacts.ImplementationCall{}
 }
 
-func hasCallAt(
-	implementation *typefacts.ExportImplementationTranscript,
-	source, needle string,
-) bool {
-	start := strings.Index(source, needle)
-	for _, call := range implementation.Calls {
-		if call.Location.StartByte == start {
-			return true
-		}
-	}
-	return false
-}
-
 func argumentCallables(call typefacts.ImplementationCall, argument int) []typefacts.Location {
 	for _, carried := range call.ArgumentCallables {
 		if carried.Argument == argument {
@@ -421,14 +408,28 @@ void nestedLabelContinueUpdates;
 		}
 	}
 
+	// A call inside the region a jump makes non-universal is **stated**, with
+	// `unknown` reach. The row used to be dropped, which kept the same
+	// over-optimistic `reachable` off the wire and cost nothing to a positive
+	// claim — but a dropped `CallExpression` leaves no uncensused-form row
+	// either, so a consumer proving that a body reaches *no* callable of some
+	// kind saw nothing at all. `unknown` is the weakest non-negative value, so
+	// it withholds exactly what the jump falsified and states the rest.
 	for name, needle := range map[string]string{
 		"directJump": "directCallback();",
 		"nestedJump": "nestedCallback();",
 	} {
-		if hasCallAt(censuses[name], source, needle) {
-			t.Fatalf("%s retained a call from an unsupported frame: %#v", name, censuses[name].Calls)
+		call := callAt(t, censuses[name], source, needle)
+		if call.Reach != typefacts.ReachUnknown {
+			t.Fatalf(
+				"%s call inside a jump region = %#v, want a stated row with unknown reach",
+				name, call,
+			)
 		}
 	}
+	// The parameter-use census still drops the same position. That asymmetry is
+	// deliberate and recorded: a use census answers positive escape questions,
+	// where absence is no claim, and no consumer builds a negative claim on it.
 	for name, needle := range map[string]string{
 		"directJump": "directCallback();",
 		"nestedJump": "nestedCallback();",
@@ -478,14 +479,24 @@ void nestedLabelContinueUpdates;
 			t.Fatalf("%s use after handled break = %#v, want unreachable", name, use)
 		}
 	}
+	// The four positions a jump makes non-universal by a route source byte
+	// order cannot see: a `continue` out of a `switch`, a `break` out of a
+	// `try`, a sibling branch written before the jump, and a `for` update
+	// written before the body's `break`. Each is a **stated** row with unknown
+	// reach and no parameter use, for the reason above: the call census may not
+	// answer with silence, and the use census still does.
 	for name, needle := range map[string]string{
 		"crossSwitchJump":    "crossSwitchCallback();",
 		"crossTryJump":       "crossTryCallback();",
 		"reverseSiblingJump": "reverseCallback();",
 		"breakSkipsUpdate":   "breakUpdateCallback())",
 	} {
-		if hasCallAt(censuses[name], source, needle) {
-			t.Fatalf("%s retained a call across an unmodelled jump: %#v", name, censuses[name].Calls)
+		call := callAt(t, censuses[name], source, needle)
+		if call.Reach != typefacts.ReachUnknown {
+			t.Fatalf(
+				"%s call across an unmodelled jump = %#v, want a stated row with unknown reach",
+				name, call,
+			)
 		}
 		start := strings.Index(source, needle)
 		for _, use := range censuses[name].ParameterUses {
@@ -526,11 +537,18 @@ void nestedLabelContinueUpdates;
 	if labelledUse == nil || labelledUse.Reach != typefacts.ReachUnknown {
 		t.Fatalf("labeled for-update use = %#v, want possible execution", labelledUse)
 	}
+	// A `continue` a `finally`'s `return` overrides never reaches the update, so
+	// the update call is not guaranteed; the row is stated at unknown, and the
+	// use census still withholds.
 	for name, needle := range map[string]string{
 		"finallyStopsContinueUpdate": "finallyUpdateCallback())",
 	} {
-		if hasCallAt(censuses[name], source, needle) {
-			t.Fatalf("%s retained an update call overridden by finally: %#v", name, censuses[name].Calls)
+		call := callAt(t, censuses[name], source, needle)
+		if call.Reach != typefacts.ReachUnknown {
+			t.Fatalf(
+				"%s update call overridden by finally = %#v, want a stated row with unknown reach",
+				name, call,
+			)
 		}
 		start := strings.Index(source, needle)
 		for _, use := range censuses[name].ParameterUses {
@@ -558,11 +576,14 @@ void nestedLabelContinueUpdates;
 			t.Fatalf("%s target-external update use = %#v, want possible execution", name, use)
 		}
 	}
+	// `continue outer` skips the *inner* loop's update, so that call is not
+	// guaranteed either: stated at unknown, with no use row.
 	innerNeedle := "innerUpdateCallback())"
-	if hasCallAt(censuses["nestedLabelContinueUpdates"], source, innerNeedle) {
+	innerCall := callAt(t, censuses["nestedLabelContinueUpdates"], source, innerNeedle)
+	if innerCall.Reach != typefacts.ReachUnknown {
 		t.Fatalf(
-			"continue outer retained the inner-loop update call: %#v",
-			censuses["nestedLabelContinueUpdates"].Calls,
+			"inner-loop update call skipped by continue outer = %#v, want unknown reach",
+			innerCall,
 		)
 	}
 	innerUpdateStart := strings.Index(source, innerNeedle)

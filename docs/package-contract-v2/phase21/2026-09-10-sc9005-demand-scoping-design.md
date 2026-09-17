@@ -1,0 +1,617 @@
+# Scoping SC9005 to what the call site reads
+
+- **Status:** design. Nothing implemented.
+- **Date:** 2026-09-10.
+- **Why now:** `reads` will not close in bulk
+  ([veto design § 6](2026-09-10-reads-veto-observation-design.md)), and
+  SC9005 demands it of **every** bound import. One permanently-unclosable
+  conjunct therefore taxes every certified import forever. Of 29 rule
+  identities, **6 need `reads` and 13 need `returns`** — and **8 need
+  `returns` without needing `reads` at all**.
+
+## 1. The pattern already exists: `callbacks`
+
+`callbacks` is *not* one of SC9005's conjuncts, and it is not unreported. It is
+demand-scoped, and the machinery is three pieces:
+
+1. **A per-symbol openness query** —
+   `Indexes::unknown_contract_callback_export(symbol)`
+   ([indexes.rs:468](../../../rust/crates/solid-reactive-ir/src/indexes.rs)),
+   which answers only when the binding's `callbacks` is open *or* `open_claims`
+   carries the domain.
+2. **A call-site condition** —
+   [interproc.rs:1415](../../../rust/crates/solid-reactive-ir/src/interproc.rs)
+   raises the obligation only when that call actually hands over a
+   potentially-callable argument: not a proven non-callable literal, not a bare
+   identifier. A call that passes no callback raises nothing.
+3. **Deference elsewhere** —
+   [execution_role.rs:1336](../../../rust/crates/solid-reactive-ir/src/execution_role.rs)
+   reads the same query and explicitly does not duplicate the obligation:
+   *"The call site already carries…"*.
+
+So the shape is settled repository practice, not a new idea. The four SC9005
+conjuncts are simply the ones that never got it.
+
+## 2. What each conjunct's call-site demand is
+
+`push_unknown_contract_claims`
+([contracts.rs:859](../../../rust/crates/solid-reactive-ir/src/contracts.rs))
+fires at **binding** time, in three places inside
+`resolve_contract_imports_inner`, before anything knows how the import is used.
+Each conjunct has a demand that is decidable at the site instead:
+
+| conjunct | consumed by | the site condition |
+| --- | --- | --- |
+| `returns` | `source_discovery.rs:225, 621, 918`, `static_rules.rs:257` | a **call whose result is bound or used** — the accessor/store/async identity of a discarded result is consulted by nobody |
+| `reads` | `local_access.rs` parameter/direct read handling, `interproc.rs` read summaries | a call in a position the reactive-read analysis classifies |
+| `creates` (`ownerRequirements`) | `indexes.rs:539` → `owners.rs` | a call whose **owner context is analyzed** |
+| `asyncBehavior` | `owners.rs:1890` | derived from `returns`; folds into that row |
+
+`returns` is the first slice: it has the most rule consumers (13, of which 8
+need nothing else), its consumers all funnel through `.known()`, and its site
+condition — *is the result used?* — is the cheapest of the four to decide.
+
+## 3. The change, per slice
+
+1. Add `Indexes::unknown_contract_returns_export(symbol)`, a byte-for-byte
+   analogue of the callbacks query against `summary.returns` /
+   `ClaimDomain::Returns`.
+2. Raise the obligation at the sites that consult the return identity, under
+   the condition above, into `contract_consumer_obligations` — the same vector
+   the callbacks obligation uses.
+3. **Only then** drop `returns` from `push_unknown_contract_claims`.
+
+Steps 2 and 3 must land together. Dropping the conjunct without the site
+obligation does not reduce noise — it **loses** a fail-closed answer, which is
+strictly worse than the noise it removes. That is the one way this change can
+do harm, and it is why each domain is its own slice with its own fixture.
+
+## 4. What it is expected to buy
+
+Nothing for a consumer that genuinely uses every domain. For the common case —
+an import called once, result used, no callback passed, owner not in question
+— it should reduce four conjuncts to one, and for the 8 rules that need only
+`returns` it removes the `reads` tax entirely.
+
+That is a prediction, and it should be **measured the way the findings-delta
+was**: run the corpus before and after, count SC9005 by
+`analysisContext`, and report the change per domain. If the count does not
+move, the site conditions are too weak and the slice should be reverted rather
+than kept for tidiness.
+
+## 5. Why this is not being landed in the same pass as the design
+
+Gate 3 was landed on a "this is small, the machinery already refuses it"
+judgement that turned out to be wrong, and was withdrawn the same day. This
+change is four domains across five modules, and its failure mode is silent
+under-reporting rather than a loud test failure. It wants a fresh pass, one
+slice at a time, each with the before/after count in § 4.
+
+## 6. Attempted (2026-09-10): the `returns` slice needs a fact that does not exist
+
+Two findings from starting it, both of which change § 3 rather than the
+direction.
+
+### 6.1 There is no "the result is discarded" fact
+
+`CallFact` ([ast/mod.rs:219](../../../rust/crates/solid-facts/src/ast/mod.rs))
+carries `span`, `callee`, `direct_callee`, `type_arguments`, `arguments`,
+`static_callee`, `owned_write_option`. Nothing says whether the call sits in
+expression-statement position.
+
+The site condition "*the result is bound or used*" therefore has no fact to
+read. Its sound complement — a call **is** an expression statement, so the
+result is discarded — is one bit and is the right one to add, because
+everything else is a use. That is an extraction addition in `solid-facts`,
+not a rethread of the consumer, but it is a producer change with its own
+review rather than a consumer-side slice.
+
+The three sites that consume a returned identity
+(`source_discovery.rs:225, 621, 918`) already work the other way round: they
+start from a *declaration initializer* and ask `ast_index.call_by_span(...)`.
+That index proves "this call's result is bound"; it cannot enumerate the calls
+whose result is not.
+
+### 6.2 `returns` is demanded from two places, not one
+
+`asyncBehavior` derives from `returns`, and
+`computation_is_async_with_contracts`
+([owners.rs:1886](../../../rust/crates/solid-reactive-ir/src/owners.rs))
+consults it at an **argument** span:
+
+~~~rust
+let contracted_async_at = |span| { … binding.summary.async_behavior.known() … };
+if contracted_async_at(argument) { return true; }
+~~~
+
+So a binding passed as the callback of a computation — `createEffect(imported)`
+— demands `returns` while being neither called nor having its result used. A
+site condition written only from § 3's table would drop the obligation there
+and silently under-report.
+
+The demand for `returns` is therefore: *the result of a call to it is used*,
+**or** *it appears where a computation's async behavior is analyzed*. Both
+halves have to be in the first slice.
+
+### 6.3 What this means for the design as a whole
+
+The pattern in § 1 is still right, and `callbacks` still proves it works. What
+§ 3 understated is the prerequisite: demand scoping needs **call-site use
+facts** that the consumer does not currently have, and each domain's demand is
+a set of positions rather than a single one. The order should be:
+
+1. Add the discarded-result bit to `CallFact` and its extraction, with its own
+   fixtures. Nothing about SC9005 changes yet.
+2. Enumerate each domain's demand positions the way § 6.2 did for `returns` —
+   by reading every consumer, not by reasoning from the rule matrix.
+3. Only then the per-domain slices, each with the before/after SC9005 count.
+
+Nothing was landed. Step 1 is the next concrete task, and it is a
+`solid-facts` change rather than a contracts one.
+
+## 7. Step 1 landed (2026-09-10): `CallFact::result_discarded`
+
+~~~rust
+/// Whether this call's own result provably reaches nothing: the call
+/// **is** the expression of an `ExpressionStatement`.
+///
+/// One direction only. `true` proves the result is discarded; `false`
+/// proves nothing and is the default …
+#[serde(default)]
+pub result_discarded: bool,
+~~~
+
+Recorded in both construction sites (`visit_call_expression` and
+`visit_new_expression`) by span equality against the expression the innermost
+enclosing `ExpressionStatement` discards. Span equality rather than a depth
+counter, so `f(g())` as a statement answers `true` for `f(...)` and `false`
+for `g()` with no unwinding.
+
+**The trap, and the reason the negative half of the test is the load-bearing
+half.** Oxc models a concise arrow body as a body holding one
+`ExpressionStatement`, so `() => f()` and `{ f(); }` are the *same node shape*
+— and the first returns its value. The first implementation marked
+`const concise = () => f()` as discarded, which is precisely the direction
+this bit may never be wrong in. `Collector::concise_arrow_bodies` now excludes
+them, and the test pins nine cases:
+
+| source | `result_discarded` |
+| --- | --- |
+| `f();` | true |
+| `const bound = f();` | false |
+| `await f();` | false — the `await` consumes it |
+| `void f();` | false — the unary consumes it |
+| `f(f())` as a statement | true (outer), false (inner) |
+| `if (flag) { f(); }` | true |
+| `const concise = () => f()` | **false** |
+| `new Date();` | true |
+
+**Nothing consumes it yet**, deliberately: no SC9005 behaviour changed, and
+no snapshot moved. facts-lib 83, ir-lib 236, backend-lib 450,
+contract-process 13/37, diagnostics green, coverage 94 projects / 547
+findings unchanged, contract corpus 97 unchanged, clippy `--all-targets`
+clean, fmt clean.
+
+Step 2 of § 6.3 — enumerating each domain's demand positions by reading every
+consumer — is next, and is still a reading task rather than a coding one.
+
+## 8. Step 2 (2026-09-10): every consumer, read
+
+Every site in the analysis crate that reads one of SC9005's four conjuncts.
+Generator-side uses (`main.rs`, `inferred_contract.rs`), model validation
+(`lib.rs:1269`, `:1335`) and the generator's own composed-owner rewrite
+(`contracts.rs:2205`, `:2217`) are excluded: they do not consume a binding on
+behalf of a rule.
+
+### `returns` — five sites, one condition
+
+| site | what it is |
+| --- | --- |
+| `source_discovery.rs:225` | an inner call reached while computing an effective return |
+| `source_discovery.rs:621` | a declaration whose **initializer** is a call |
+| `source_discovery.rs:918` | a name bound from a call's tuple element |
+| `source_discovery.rs:1011` | a **member access on a call's result** — `call().prop` |
+| `static_rules.rs:248` | a `call_initializer` |
+
+All five are "the result went somewhere". `!result_discarded`
+(§ 7) covers every one of them and over-approximates, which is the safe
+direction.
+
+### `asyncBehavior` — one site, and it is *not* a result use
+
+| site | what it is |
+| --- | --- |
+| `owners.rs:1886` | `contracted_async_at(argument)` — the binding at an **argument** span |
+
+`createEffect(imported)` demands `returns` through this path while the binding
+is neither called nor has a result. Confirmed as § 6.2 predicted; it must be
+the second half of the `returns` slice's condition.
+
+### `creates` (`ownerRequirements`) — two sites, and the condition is nearly vacuous
+
+| site | what it is |
+| --- | --- |
+| `owners.rs:789` | a call whose owner context is being decided and is not already root-owned |
+| `owners.rs:1121` | a call not inside an owner-providing region |
+
+Both key on `lookup.callee_symbol(file, call.callee)`, so the demand is
+essentially **"the binding is called"**. Scoping buys nothing here except for
+an import that is never called.
+
+### `reads` — one consumption point, two maps
+
+| site | what it is |
+| --- | --- |
+| built at `source_discovery.rs:1367-1392` | `contract_reads` (kinds `accessor`/`store-path`) and `contract_parameter_reads` |
+| consumed at `local_access.rs:612`, `:643` | at a **call**, gated on `!inside_non_component_function` |
+
+Demand: the binding is called **outside a non-component function**. Broad, but
+not vacuous — a call in a plain helper sheds it.
+
+## 9. What step 2 changes about the expected yield
+
+The § 4 prediction was "four conjuncts down to one for the common case". Read
+against the actual sites, that is too optimistic:
+
+| conjunct | sheds the obligation when |
+| --- | --- |
+| `returns` | the call's result is discarded **and** the binding is never a computation argument |
+| `reads` | the binding is only called inside non-component functions, or never called |
+| `creates` | the binding is never called |
+
+For the shape that motivated this — an imported primitive called for effect
+inside a component, e.g. `createEffect(imported)` or `render(...)` — `creates`
+and `reads` both stay demanded, and `returns` stays demanded through the
+argument path. **That case sheds nothing.**
+
+Where it does pay: a binding called for effect in a plain helper (sheds
+`reads`), and a binding whose result is discarded and never passed as a
+computation argument (sheds `returns` and `asyncBehavior`).
+
+**So the honest expectation is a partial reduction on some imports, not a
+collapse to one conjunct.** That is worth having — it is the difference
+between an unconditional tax and a conditional one — but the measurement in
+§ 4 should be run before the slice is called a success, and the bar should be
+set from this table rather than from § 4's guess.
+
+The order in § 6.3 stands. Step 1 is landed; step 3's first slice is
+`returns`, whose condition is now exactly:
+`(!result_discarded at some call to the binding) || (binding appears at a computation argument span)`.
+
+## 10. The measurement vehicle (2026-09-10)
+
+§ 4 asked for a before/after SC9005 count. **There is no baseline to count.**
+Measured: every SC9005 in the repository is
+`obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics`
+(6 live across the contract fixtures, 37 in snapshots with the context not
+retained). That path fires *before* `push_unknown_contract_claims`, so a
+demand-scoping change would move no existing number.
+
+So the bar changed from a count to a **control**, which is the stronger test
+anyway: it pins the condition instead of aggregating over it.
+
+### The control
+
+`fixtures/reactive-ir/package-return-consumer` now exports two bindings whose
+contracts are **byte-identical** — the same declared signature and the same
+contract summary id — differing only in where the consumer puts them:
+
+| binding | use | § 8 says |
+| --- | --- | --- |
+| `createCount` | result bound at module scope | four consumers can reach its `returns` |
+| `createLabel` | `createLabel();` as a whole statement, never an argument | **no consumer can reach its `returns`**; `CallFact::result_discarded` is `true` at its only call |
+
+Any difference in what is reported about them is attributable to the use
+position alone, because nothing else differs.
+
+### The assertion, written before the slice
+
+`contracts_process::contract_closure_process::an_open_domain_is_reported_against_every_binding_including_one_no_consumer_reads`
+mints a policy-2 receipt with `returns` reopened and asserts **both** bindings
+are reported today:
+
+~~~rust
+assert!(reported("createCount"), "the bound result keeps its obligation");
+assert!(reported("createLabel"), "PRE-SLICE STATE. … When `returns` demand
+    scoping lands this assertion inverts to `!reported(\"createLabel\")`;
+    until then, its passing is what says the obligation is unscoped");
+~~~
+
+Written before the slice deliberately, so the change lands as a visible
+inversion in an assertion rather than as a claim in a commit message. If a
+slice cannot flip it, the slice does not work.
+
+### Cost of the vehicle
+
+One export added to the fixture package (declarations, contract summary map,
+catalog resolver answer), one consumer function, and one snapshot line: the
+fixture now reports two policy-1 obligations instead of one, which is the
+correct per-export count. facts 83, ir 236, dialect 63, contract-process
+14/37, coverage 94 projects / 548 findings, corpus 97, clippy and fmt clean.
+
+The vehicle is reusable: the `reads` and `creates` slices need the same two
+bindings in different positions, and can add their own controls to the same
+fixture.
+
+## 11. The `returns` slice, landed (2026-09-10)
+
+`returns_shed_symbols(facts, entities)` in `contracts.rs`, computed once per
+project, and one gate on the conjunct.
+
+### The predicate
+
+Both § 8 demands reduce to the same question about a *reference*: is it the
+callee of a call that throws its result away, or is it anything else? So a
+symbol sheds `returns` only when it has references and **every** one of them
+is a discarded call's callee. An argument, a member base, a re-export, or a
+reference that resolves to no symbol all keep it.
+
+Two properties make that decidable and safe:
+
+- **File-local.** An import's binding symbol is file-local, so every reference
+  to it is in the file that imported it. "Every one of them" is answerable
+  without a project-wide alias analysis.
+- **Fails toward reporting.** Shedding wrongly drops a fail-closed answer with
+  no test going red, so the predicate is written so that anything it cannot
+  classify keeps the obligation. The argument path § 6.2 warned about is
+  covered by that default rather than by a special case: a reference used as
+  an argument is simply not a discarded callee.
+
+### The control flipped
+
+`an_open_returns_is_reported_only_where_a_consumer_can_read_it` was written in
+§ 10 asserting **both** bindings were reported. With the gate in place it
+failed exactly once, on `createLabel`, and was then inverted. `createCount` —
+byte-identical contract, result bound — still reports. That is the whole
+evidence for the slice, and it is a diff in an assertion rather than a claim.
+
+### Scope
+
+`returns` only. `creates` and `reads` stay unconditional: § 9 measured their
+demand as "the binding is called" and "called outside a non-component
+function", so scoping them buys almost nothing and would spend the same
+silent-under-report risk for it.
+
+### Verification
+
+facts 83, ir 236, backend-lib 450, contracts_process 14, dialects 15,
+diagnostics 37, coverage 94 projects / 548 findings unchanged, corpus 97
+unchanged, clippy `--all-targets` clean, fmt clean. 77 insertions in
+`contracts.rs`.
+
+No existing finding moved, which is expected and is *not* evidence the slice
+does nothing: every SC9005 in the corpus is the policy-1 rejection (§ 10), so
+the only place the gate can be observed is the minted-receipt control.
+
+## 12. Scoping the `reads` conjunct: not at this layer, and here is the reason
+
+Asked to scope SC9005's `reads` conjunct the way § 11 scoped `returns`. Not
+done, and the blocker is structural rather than effort — § 9 guessed this
+outcome but for the wrong reason.
+
+### The principled predicate is not computable where the obligation is raised
+
+`reads` completeness is the proof that an export reads *nothing beyond* what
+it enumerates. An unenumerated read is only observable where it would be
+tracked: inside a tracking scope, calling an export whose reads are unknown
+means the tracking set is unknown. Outside one it changes nothing any rule
+proves. So the scoping predicate is "is this call site inside a tracked
+scope".
+
+`resolve_contract_imports_inner`, which raises SC9005, takes `facts`,
+`exact`, `accepted`, `entities` and `dialect`. There is no IR, no execution
+role, no tracking context — those are computed **downstream**, by the code
+that consumes these bindings. The predicate is not available here, and making
+it available means raising the obligation after execution roles exist. That
+is a restructuring of where SC9005 lives, not a slice like
+`returns_shed_symbols`.
+
+### The narrowing that *is* available sheds nothing
+
+The only demand question answerable from AST facts at this point is whether
+the binding is invoked at all — an export never called performs no reads in
+this project. Measured across the catalog-bearing fixtures: **every bound
+import is called** in all thirteen mintable projects. The single fixture with
+never-called imports (`package-structured-unresolved`:
+`ambiguousTracked`, `bareHelper`, `mappedTracked`) is one of the two that
+cannot mint, because its catalog publishes more than one contract.
+
+So the predicate would shed zero on the corpus that exists — a code path no
+test could exercise, which is worse than not having it.
+
+### What § 9 got right and wrong
+
+§ 9 declined this and said `reads`' demand is "barely narrower" than
+`creates`' — "the binding is called". That conclusion holds. The reason given
+was wrong: it is not that the useful predicate is nearly universal, it is
+that the useful predicate needs information this layer does not have, and the
+one it does have is nearly universal.
+
+### The route, if it is wanted
+
+Raise the `reads` conjunct where tracked-scope knowledge exists rather than
+at binding resolution. The measurement that motivates it is
+[§ 6 of the demand-population document](2026-09-10-reads-demand-population.md):
+rules consume `reads` *items*, which arrive regardless of closure, and only
+SC9005 consumes the completeness. A contract stating items without closing
+the domain already serves every rule in the corpus; the conjunct is the only
+thing that penalizes it.
+
+### What the layer move actually requires (investigated 2026-09-10)
+
+Mapped before starting, and it is larger than "move the check downstream".
+
+**The join point exists.** `ProgramDraft::push_defect` accepts defects until
+`into_program`, and `obligation_reach` deliberately runs over the *final*
+defect list, so appending a deferred SC9005 after source discovery is
+architecturally supported. That half is free.
+
+**The predicate does not exist.** There is no query answering "is this call
+site inside a tracked scope". `SourceDiscovery` carries reactive-source maps
+keyed by symbol — accessors, setters, source kinds, phases — and no
+per-call-site execution role. `execution_role.rs` exposes exactly three
+`pub(crate)` functions (`missing_jsx_census`, `missing_jsx_census_region`,
+`discarded_region_contains`); the tracked determination lives in private code
+reached with rule-specific context.
+
+So the move means **designing a shared notion of "tracked at this call
+site"** and exposing it. The hazard in that is specific and this repository
+has already paid it once: a second notion of tracking, subtly different from
+the one each rule derives for itself, would make SC9005 disagree with the
+rules it exists to serve. The dual hazard census (§ 10 of the reads design)
+is the same failure — one concept, two implementations, agreement enforced
+only by a downstream mismatch.
+
+The work, in order:
+
+1. Decide what "tracked call site" means as a *shared* concept, and whether
+   the rules' own derivations become consumers of it or stay independent.
+2. Expose it from `execution_role` with the context it needs at the join
+   point (`semantic_lookup` and the discovered sources are both in scope).
+3. Split the conjunct's emission: `creates`, `returns` and `asyncBehavior`
+   stay at binding resolution, `reads` defers.
+4. Regenerate: SC9005 spans 94 coverage projects and the contract corpus.
+
+Step 1 is the one that matters and it is a semantic decision, not a
+refactor.
+
+## 13. Step 1 of the layer move: the concept, and why it retires steps 2–4
+
+§ 12 ended with four steps and said step 1 — *decide what "tracked call site"
+means as a shared concept* — was the one that mattered. It is, and the answer
+is that **"tracked" is the wrong concept**, for a reason that removes the
+motivation for the other three.
+
+### 13.1 What § 12 assumed
+
+> An unenumerated read is only observable where it would be tracked: inside a
+> tracking scope, calling an export whose reads are unknown means the tracking
+> set is unknown. Outside one it changes nothing any rule proves.
+
+The first clause is true. The second is false, and it is false in this
+repository's own rule set, not in principle only.
+
+### 13.2 A read is consumed in six roles, one of which is tracked
+
+`ExecutionRole` already carries the answer, in two `const fn`s that predate
+this question ([lib.rs:294](../../../rust/crates/solid-reactive-ir/src/lib.rs)):
+
+- `reports_untracked_read()` — `ModuleInitialization | UntrackedRendering |
+  UntrackedCallback | EffectApply`. These are the *stale* reads: the read
+  happens, sees one value, and never updates. `project_findings`
+  ([projection.rs:512](../../../rust/crates/solid-reactive-ir/src/projection.rs))
+  filters the strict-read table on exactly this.
+- The async-read table
+  ([projection.rs:589](../../../rust/crates/solid-reactive-ir/src/projection.rs))
+  consumes `TrackedJsx` (SC5003/SC5005, the boundary and SSR-hole rules),
+  `ModuleInitialization` and `UntrackedRendering` (SC5001/SC5002, pending
+  reads), and any role at all when the read sits under a leaf owner —
+  `createTrackedEffect` or `onSettled`, the two `CallbackOwner::Leaf`
+  positions ([solid_2.rs:1350](../../../rust/crates/solid-dialect/src/solid_2.rs)).
+
+So a contract read is consumed in `TrackedJsx`, `ModuleInitialization`,
+`UntrackedRendering`, `UntrackedCallback`, `EffectApply`, and — through the
+leaf-owner clause — `DeferredCallback`. Six of the ten roles. Scoping the
+conjunct to the one that is literally tracked would shed the other five, every
+one of which currently feeds a rule.
+
+### 13.3 The demonstration is a committed fixture, not a hypothetical
+
+`fixtures/reactive-ir/package-consumer` calls the same contracted accessor
+from two positions on purpose:
+
+~~~tsx
+export function Good() { return <div>{readCount()}</div>; }   // TrackedJsx
+export function Bad()  { const value = readCount();           // UntrackedRendering
+                         return <div>{value}</div>; }
+~~~
+
+Minted onto a policy-2 receipt, the project reports two findings and **both
+rest on the single read item**, neither at a tracked site:
+
+- **SC1001 `strict-read-untracked`** at `Bad`, worded by the checker as
+  *"reactive accessor `reactive-package.readCount` is read through `readCount`
+  in `Bad`, which does not track"*, with the evidence line *"the call is
+  outside every compiler-tracked JSX region and deferred callback"*. That is
+  § 12's premise contradicted in the analyzer's own words.
+- **SC8014 `prefer-for`** at `GoodList`, which
+  [fires only when the mapped input "has a proven reactive dependency at the
+  rendered JSX position"](../../../rust/crates/solid-reactive-ir/src/upstream_compat/solid1x_structure.rs) —
+  a dependency this contract's read item is what supplies.
+
+Strip the read operations from the minted document and both disappear;
+nothing else about the project changes. `Good`, which reads the same accessor
+inside JSX, reports nothing, so the finding is attributable to the position
+rather than to the accessor.
+`contract_closure_process::a_contract_read_is_consumed_outside_a_tracking_scope`
+pins all three counts.
+
+### 13.4 The remaining shed set is "code that does not run"
+
+Working the other way — which roles consume a read *nowhere* — leaves four:
+`Unknown`, `EventCallback`, `DirectiveApply` and `DiscardedRendering`.
+
+`Unknown` is not a shed candidate at all. It is the role for a span nothing
+classified, which is the fail-closed answer, and it is also where the
+transitive case lands: a contracted call inside a plain helper has no
+component, no callback position and no compiler region, so it classifies
+`Unknown` and keeps the obligation. That is worth noting on its own, because
+it removes the call-graph closure this section otherwise needed — a read
+recorded against a helper node by `discover_interprocedural_graph`
+([interproc.rs:1093](../../../rust/crates/solid-reactive-ir/src/interproc.rs),
+which applies no role gate) is demanded through the helper's own site rather
+than through an upward walk over its callers.
+
+Of the three that remain, two are a property of the current rule set rather
+than of the read. A pending async read throws wherever it executes, event handlers
+included; that no filter reports it there today is a gap in the rules, not
+evidence that the read is inert. **Defining the contract layer's demand from
+the filter list would freeze a rules gap into the trust boundary**, and close
+SC9005 silently the day the gap is closed — the same silent-under-report
+failure mode § 11 wrote its predicate to avoid.
+
+Defining it from what a read *means* leaves exactly one role:
+`DiscardedRendering`, which the compiler deleted. A call site that does not
+execute performs no reads, enumerated or not. That is the entire shed set, and
+it sheds nothing observable, because a discarded region produces no finding to
+begin with.
+
+### 13.5 The decision
+
+**The shared concept is `ExecutionRole` itself**, and no new one is needed. Had
+a predicate been worth having it would have been a third `const fn` beside
+`reports_untracked_read` and `reports_disallowed_write` — a *total function of
+the existing classification*, with no derivation of its own. That is the
+answer to § 12's second half: the rules stay independent and that is safe,
+because the dual-census hazard needs two derivations of one concept, and a
+function of `semantic_execution_role` adds a second *reading*, not a second
+derivation.
+
+**The rest of the layer move is retired.** Steps 2–4 — exposing the predicate
+from `execution_role`, splitting the conjunct's emission, regenerating across
+94 coverage projects and the corpus — all exist to carry a scoping whose shed
+set is `{DiscardedRendering}`.
+
+Two incidental corrections to § 12 while the code was open:
+
+- *"the tracked determination lives in private code reached with rule-specific
+  context"* is wrong. `semantic_execution_role` is `pub(super)` on a top-level
+  module, which is crate-wide, and seven modules already call it —
+  `local_access`, `interproc`, `static_rules`, `static_api`, `server_rules`,
+  `owners`, `directives`.
+- The ordering blocker § 12 looked for is real but sits elsewhere:
+  `SemanticLookup::new` takes `&resolved_contracts`
+  ([pipeline.rs:374](../../../rust/crates/solid-reactive-ir/src/pipeline.rs)),
+  so contract resolution genuinely cannot consult the classifier. Any future
+  narrowing does have to defer past that point.
+
+### 13.6 What is left, and it is not this
+
+`reads_completeness_demanded()` in `contracts.rs` (§ 11's sibling seam, landed
+as `2f4d4496`) stays `true`, and now carries this section as its reason. The
+open work on `reads` is unchanged and unrelated to demand: the domain cannot
+close in bulk because no synthesized veto observes a read of a source the
+export owns
+([veto design § 6](2026-09-10-reads-veto-observation-design.md)), so closure
+needs a hand recipe per export. Making those recipes mechanical is the lever;
+scoping who demands them is not.

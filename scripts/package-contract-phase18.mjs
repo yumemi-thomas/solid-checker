@@ -34,7 +34,8 @@ const VERSIONED_FORMATS = new Map([
   ["solid-checker-runtime-probe-request", { field: "schemaVersion", version: 2 }],
   ["solid-checker-runtime-probe-plan", { field: "schemaVersion", version: 2 }],
   ["solid-checker-runtime-probe-runs", { field: "schemaVersion", version: 2 }],
-  ["solid-checker-runtime-probe-evaluation", { field: "schemaVersion", version: 2 }]
+  ["solid-checker-runtime-probe-evaluation", { field: "schemaVersion", version: 2 }],
+  ["solid-checker-module-emission-cases", { field: "casesVersion", version: 1 }]
 ]);
 
 const ACTIVE_JSON_PREFIXES = [
@@ -50,13 +51,12 @@ const ACTIVE_JSON_PREFIXES = [
 ];
 
 const ACTIVE_JSON_FILES = new Set([
+  "fixtures/module-emission/cases.json",
   "fixtures/ownership-cases/cases.json",
   "fixtures/ownership-cases/migration-ledger.json",
   "fixtures/tsc-oracle/packages.json",
   "fixtures/tsc-oracle/rule-cases.json",
-  "packages/cli/lib/rules-solid-v1.json",
   "packages/cli/lib/rules-solid-v2.json",
-  "rust/dialects/solid-v1/dialect.json",
   "rust/dialects/solid-v2/dialect.json",
   "scripts/ecosystem-benchmark/manifest.json"
 ]);
@@ -137,12 +137,17 @@ const SOURCE_OWNERS = [
     markers: ["const SCHEMA_VERSION: u16 = 2;", "contract_document::decode("]
   },
   {
+    // `contract_document::decode(` until 2026-09-17, when the Solid 1 authority
+    // replay -- the only raw decode in this file -- was deleted with the 1.x
+    // artifacts. The file still owns stable-v1 bundle loading; it now reaches
+    // it through the interface that decodes, so the marker follows the role
+    // rather than the call it used to make.
     path: "rust/crates/solid-facts-backend/src/first_party_bundles.rs",
-    markers: ["contract_document::decode("]
+    markers: ["load_receipt_issued_embedded_contract("]
   },
   {
     path: "rust/crates/solid-checker-wasm/src/lib.rs",
-    markers: ["accepted_contracts: Vec<HostAcceptedContract>", "load_accepted_contract_index("]
+    markers: ["accepted_contracts: Vec<HostAcceptedContract>", "load_external_contract_index("]
   },
   {
     path: "packages/cli/scripts/generate-package-contract.mjs",
@@ -185,12 +190,10 @@ const STABLE_BOUNDARY_TESTS = [
 ];
 
 const INDEPENDENT_JSON_VERSIONS = [
-  ["packages/cli/lib/rules-solid-v1.json", "schemaVersion", 1],
   ["packages/cli/lib/rules-solid-v2.json", "schemaVersion", 1],
   ["scripts/ecosystem-benchmark/manifest.json", "schemaVersion", 1],
   ["fixtures/ownership-cases/cases.json", "schemaVersion", 1],
   ["fixtures/ownership-cases/migration-ledger.json", "schemaVersion", 1],
-  ["rust/dialects/solid-v1/dialect.json", "schemaVersion", 2],
   ["rust/dialects/solid-v2/dialect.json", "schemaVersion", 2]
 ];
 
@@ -375,6 +378,7 @@ function auditSourceInventory(root) {
   const allowedReaders = [
     "scripts/check-bundled-contracts.mjs",
     "scripts/contract-corpus.mjs",
+    "scripts/ecosystem-benchmark/lib/certified-coverage.mjs",
     "scripts/ecosystem-benchmark/lib/contract-content.mjs",
     "scripts/package-contract-phase18.mjs",
     "scripts/solid-recharts-performance.mjs"

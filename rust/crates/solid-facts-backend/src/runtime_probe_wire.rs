@@ -126,6 +126,7 @@ enum WireDrainStep {
     Flush,
     Microtasks { max_turns: u16 },
     Macrotasks { max_turns: u16 },
+    AnimationFrames { max_turns: u16 },
 }
 
 #[derive(Clone, Copy, Deserialize, Serialize)]
@@ -135,7 +136,15 @@ struct WirePolicy {
     timeout_millis: u64,
     max_microtask_turns: u16,
     max_macrotask_turns: u16,
+    /// ADR 0033. Defaulted and omitted at zero, so a session document for a
+    /// Node worker is byte-identical to one written before the field existed.
+    #[serde(default, skip_serializing_if = "is_zero_u16")]
+    max_animation_frame_turns: u16,
     max_events: u32,
+}
+
+fn is_zero_u16(value: &u16) -> bool {
+    *value == 0
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -202,6 +211,39 @@ struct WireSession {
     mode: WireModeOutput,
     repeat: u16,
     policy: WirePolicy,
+    /// What the worker must resolve, and how, before it imports the recipe.
+    ///
+    /// Present only for a launch Rust owns: the certification harness compares
+    /// the answer against the artifact case's own runtime target, so it always
+    /// asks. The audit driver carries no such authority and asks for nothing,
+    /// which is why this is optional rather than defaulted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    resolution: Option<WireResolutionRequest>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WireResolutionRequest {
+    specifier: String,
+    import_kind: String,
+    /// The bare dependency specifiers this recipe declared it needs, which the
+    /// worker resolves — before it imports the recipe — so Rust can require
+    /// each answer to land inside that dependency's authenticated private copy.
+    ///
+    /// Omitted when the recipe declares none, so a corpus that names no
+    /// dependency produces a byte-identical session document.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    dependencies: Vec<String>,
+}
+
+/// What one launch asks the worker to resolve.
+///
+/// The analyzed package's own specifier and import kind are mandatory; the
+/// dependency specifiers are the recipe's declared closure needs.
+pub(crate) struct ProbeResolutionRequest<'a> {
+    pub(crate) specifier: &'a str,
+    pub(crate) import_kind: &'a str,
+    pub(crate) dependencies: &'a [String],
 }
 
 #[derive(Serialize)]
@@ -337,6 +379,9 @@ pub fn plan_runtime_probes(
                 },
                 repeat: session.repeat(),
                 policy: session.policy().into(),
+                // The audit path establishes no realm integrity and binds no
+                // artifact case, so it asks the worker to prove no resolution.
+                resolution: None,
             }
         })
         .collect();
@@ -351,6 +396,182 @@ pub fn plan_runtime_probes(
     Ok(PlannedRuntimeProbes {
         plan: runtime,
         bytes,
+    })
+}
+
+/// Encodes one session for a worker Rust launches itself.
+///
+/// The certification harness has no plan *document*: it holds the opaque
+/// `RuntimeProbePlan` in process and emits one session at a time. Reusing
+/// [`WireSession`] keeps a single definition of what a worker reads, so the
+/// audit driver and the authority-bearing adapter cannot drift apart.
+pub(crate) fn encode_probe_session(
+    session: &crate::ProbeSessionRequest,
+    module: &str,
+    construction: &Digest,
+    resolution: Option<ProbeResolutionRequest<'_>>,
+) -> Result<Vec<u8>, RuntimeProbeWireError> {
+    validate_transport_string(module, "probe recipe module")?;
+    let resolution = match resolution {
+        Some(request) => {
+            validate_transport_string(request.specifier, "probe resolution specifier")?;
+            validate_transport_string(request.import_kind, "probe resolution import kind")?;
+            for dependency in request.dependencies {
+                validate_transport_string(dependency, "probe dependency resolution specifier")?;
+            }
+            Some(WireResolutionRequest {
+                specifier: request.specifier.into(),
+                import_kind: request.import_kind.into(),
+                dependencies: request.dependencies.to_vec(),
+            })
+        }
+        None => None,
+    };
+    emit(&WireSession {
+        id: session.id().as_str().into(),
+        claim_id: session.claim_id().as_str().into(),
+        subject: WireSemanticClaimSubject::from(session.subject()),
+        authority: session.authority().into(),
+        scenario: session.scenario().into(),
+        recipe: session.recipe().as_str().into(),
+        construction: construction.as_str().into(),
+        module: module.into(),
+        expected_event: WireExpectedEventOutput {
+            marker: session.expected_event().marker.clone(),
+            class: session.expected_event().class,
+            operation: session
+                .expected_event()
+                .operation
+                .as_ref()
+                .map(|operation| operation.0.clone()),
+        },
+        drain: session.drain().iter().copied().map(Into::into).collect(),
+        mode: WireModeOutput {
+            name: session.mode().name.clone(),
+            artifact_case: session.mode().artifact_case.clone(),
+            environment: WireEnvironment::from(&session.mode().environment),
+        },
+        repeat: session.repeat(),
+        policy: session.policy().into(),
+        resolution,
+    })
+}
+
+/// One worker's run frame: the semantic run, plus the module resolution it
+/// reported when the session asked for one.
+///
+/// The resolution is deliberately *not* a field of [`ProbeRun`]. It is not
+/// semantic material and no evaluator reads it; it is a transport echo the
+/// launching adapter compares against the artifact case it bound.
+pub(crate) struct DecodedProbeRun {
+    pub(crate) run: ProbeRun,
+    pub(crate) resolution: Option<ReportedResolution>,
+    pub(crate) execution: Option<ReportedExecution>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct InertExecutionRequest {
+    pub(crate) profile: String,
+    pub(crate) source_path: String,
+    pub(crate) derived_path: String,
+    pub(crate) source_digest: String,
+    pub(crate) output_digest: String,
+    pub(crate) export_name: String,
+    pub(crate) consumer: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) modules: Vec<DerivedExecutionModuleRequest>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) edges: Vec<DerivedExecutionEdgeRequest>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct DerivedExecutionModuleRequest {
+    pub(crate) source_path: String,
+    pub(crate) derived_path: String,
+    pub(crate) source_digest: String,
+    pub(crate) output_digest: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct DerivedExecutionEdgeRequest {
+    pub(crate) importer_path: String,
+    pub(crate) specifier: String,
+    pub(crate) target_path: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ReportedExecution {
+    pub(crate) binding: InertExecutionRequest,
+    pub(crate) loaded: bool,
+    pub(crate) consumer_completed: bool,
+    pub(crate) stage: String,
+}
+
+/// What the worker resolved, before it imported the recipe. Transport data:
+/// the caller compares it against what Rust computed.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ReportedResolution {
+    pub(crate) specifier: String,
+    pub(crate) import_kind: String,
+    pub(crate) esm: String,
+    pub(crate) require: String,
+    /// One entry per dependency specifier the session asked about, in the order
+    /// it asked. Absent when it asked about none, which keeps an older worker's
+    /// frame decodable and is why the launcher requires the *count* it asked
+    /// for rather than trusting what came back.
+    #[serde(default)]
+    pub(crate) dependencies: Vec<ReportedDependencyResolution>,
+}
+
+/// What the worker resolved for one declared dependency specifier, before it
+/// imported the recipe. Transport data, like [`ReportedResolution`].
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ReportedDependencyResolution {
+    pub(crate) specifier: String,
+    pub(crate) esm: String,
+    pub(crate) require: String,
+}
+
+/// Decodes one worker's run frame. Every field stays transport data: the
+/// caller reconciles it against what Rust computed for the session.
+pub(crate) fn decode_probe_run(bytes: &[u8]) -> Result<DecodedProbeRun, RuntimeProbeWireError> {
+    let wire = decode::<WireRun>(bytes)?;
+    let resolution = match wire.resolution.clone() {
+        Some(resolution) => {
+            for (value, field) in [
+                (&resolution.specifier, "probe resolution specifier"),
+                (&resolution.import_kind, "probe resolution import kind"),
+                (&resolution.esm, "probe ESM resolution"),
+                (&resolution.require, "probe CommonJS resolution"),
+            ] {
+                validate_transport_string(value, field)?;
+            }
+            for dependency in &resolution.dependencies {
+                for (value, field) in [
+                    (
+                        &dependency.specifier,
+                        "probe dependency resolution specifier",
+                    ),
+                    (&dependency.esm, "probe dependency ESM resolution"),
+                    (&dependency.require, "probe dependency CommonJS resolution"),
+                ] {
+                    validate_transport_string(value, field)?;
+                }
+            }
+            Some(resolution)
+        }
+        None => None,
+    };
+    Ok(DecodedProbeRun {
+        execution: wire.execution.clone(),
+        run: probe_run(wire)?,
+        resolution,
     })
 }
 
@@ -372,7 +593,15 @@ struct WireRun {
     isolation: WireIsolation,
     drained_microtasks: u16,
     drained_macrotasks: u16,
+    /// Absent from every Node worker frame; the browser bootstrap reports it.
+    #[serde(default)]
+    drained_animation_frames: u16,
     outcome: WireRunOutcome,
+    /// Absent on the audit path, whose sessions ask for no resolution.
+    #[serde(default)]
+    resolution: Option<ReportedResolution>,
+    #[serde(default)]
+    execution: Option<ReportedExecution>,
 }
 
 #[derive(Deserialize)]
@@ -390,10 +619,20 @@ struct WireIsolation {
     rename_all_fields = "camelCase"
 )]
 enum WireRunOutcome {
-    Completed { events: Vec<WireEvent> },
-    Error { details: String },
+    Completed {
+        events: Vec<WireEvent>,
+    },
+    Error {
+        details: String,
+        /// The worker's bounded one-line summary of what was thrown. Absent
+        /// from a frame an older harness wrote; never part of evidence.
+        #[serde(default)]
+        summary: Option<String>,
+    },
     Timeout,
-    Refused { reason: String },
+    Refused {
+        reason: String,
+    },
 }
 
 #[derive(Deserialize)]
@@ -624,6 +863,7 @@ fn probe_run(run: WireRun) -> Result<ProbeRun, RuntimeProbeWireError> {
         },
         drained_microtasks: run.drained_microtasks,
         drained_macrotasks: run.drained_macrotasks,
+        drained_animation_frames: run.drained_animation_frames,
         outcome: match run.outcome {
             WireRunOutcome::Completed { events } => ProbeRunOutcome::Completed {
                 events: events
@@ -631,8 +871,9 @@ fn probe_run(run: WireRun) -> Result<ProbeRun, RuntimeProbeWireError> {
                     .map(probe_event)
                     .collect::<Result<Vec<_>, _>>()?,
             },
-            WireRunOutcome::Error { details } => ProbeRunOutcome::Error {
+            WireRunOutcome::Error { details, summary } => ProbeRunOutcome::Error {
                 details: parse_digest(&details, "probe error details")?,
+                summary,
             },
             WireRunOutcome::Timeout => ProbeRunOutcome::Timeout,
             WireRunOutcome::Refused { reason } => ProbeRunOutcome::Refused { reason },
@@ -791,6 +1032,7 @@ impl From<WireDrainStep> for crate::DrainStep {
             WireDrainStep::Flush => Self::Flush,
             WireDrainStep::Microtasks { max_turns } => Self::Microtasks { max_turns },
             WireDrainStep::Macrotasks { max_turns } => Self::Macrotasks { max_turns },
+            WireDrainStep::AnimationFrames { max_turns } => Self::AnimationFrames { max_turns },
         }
     }
 }
@@ -801,6 +1043,7 @@ impl From<crate::DrainStep> for WireDrainStep {
             crate::DrainStep::Flush => Self::Flush,
             crate::DrainStep::Microtasks { max_turns } => Self::Microtasks { max_turns },
             crate::DrainStep::Macrotasks { max_turns } => Self::Macrotasks { max_turns },
+            crate::DrainStep::AnimationFrames { max_turns } => Self::AnimationFrames { max_turns },
         }
     }
 }
@@ -812,6 +1055,7 @@ impl From<WirePolicy> for ProbePolicy {
             timeout_millis: value.timeout_millis,
             max_microtask_turns: value.max_microtask_turns,
             max_macrotask_turns: value.max_macrotask_turns,
+            max_animation_frame_turns: value.max_animation_frame_turns,
             max_events: value.max_events,
         }
     }
@@ -824,6 +1068,7 @@ impl From<ProbePolicy> for WirePolicy {
             timeout_millis: value.timeout_millis,
             max_microtask_turns: value.max_microtask_turns,
             max_macrotask_turns: value.max_macrotask_turns,
+            max_animation_frame_turns: value.max_animation_frame_turns,
             max_events: value.max_events,
         }
     }
@@ -935,7 +1180,15 @@ mod tests {
         .unwrap()
         .normalize()
         .unwrap();
-        let proposal = encode_proposal_artifacts(&contract, Vec::new(), false).unwrap();
+        let proposal = encode_proposal_artifacts(
+            &contract,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            false,
+        )
+        .unwrap();
         let plan: serde_json::Value = serde_json::from_slice(&proposal.plan).unwrap();
         let positive = &plan["positiveOperations"][0];
         let claim_id = positive["claimId"].as_str().unwrap();
@@ -1010,5 +1263,29 @@ mod tests {
         );
         assert!(evaluation["contradictions"].as_array().unwrap().is_empty());
         assert_eq!(evaluation["transcripts"].as_array().unwrap().len(), 1);
+
+        // An error outcome decodes with or without the worker's one-line
+        // summary: a frame an older harness wrote has none, and the summary
+        // reaches the evaluation's account of the incomplete verdict but not
+        // the observation, which keeps only the digest.
+        for summary in [
+            None,
+            Some(serde_json::json!("ReferenceError: document is not defined")),
+        ] {
+            let mut errored = runs.clone();
+            let outcome = &mut errored["runs"][0]["outcome"];
+            *outcome = serde_json::json!({"kind": "error", "details": digest('7')});
+            if let Some(summary) = &summary {
+                outcome["summary"] = summary.clone();
+            }
+            let evaluation =
+                evaluate_runtime_probe_runs(&planned, &serde_json::to_vec(&errored).unwrap())
+                    .unwrap();
+            let evaluation: serde_json::Value = serde_json::from_slice(&evaluation).unwrap();
+            let observation = &evaluation["claims"][0]["observations"][0]["outcome"];
+            assert_eq!(observation["kind"], "error");
+            assert_eq!(observation["details"], serde_json::json!(digest('7')));
+            assert!(observation.get("summary").is_none());
+        }
     }
 }

@@ -1,0 +1,6 @@
+{
+  "name": "@solidjs/router",
+  "version": "0.0.0-fixture",
+  "type": "module",
+  "exports": "./index.ts"
+}

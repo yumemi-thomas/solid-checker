@@ -21,6 +21,15 @@ type Checker = checker.Checker
 //go:linkname Checker_getResolvedSignature github.com/microsoft/typescript-go/internal/checker.(*Checker).getResolvedSignature
 func Checker_getResolvedSignature(recv *checker.Checker, node *ast.Node, candidatesOutArray *[]*checker.Signature, checkMode checker.CheckMode) *checker.Signature
 
+// GetShorthandAssignmentValueSymbol resolves the *variable* a shorthand
+// property assignment names, which is what a destructuring assignment
+// (`({ current } = other)`) writes. GetSymbolAtLocation answers the object
+// literal's property symbol there instead, so a write scan that used it alone
+// called such a binding unwritten.
+//
+//go:linkname Checker_GetShorthandAssignmentValueSymbol github.com/microsoft/typescript-go/internal/checker.(*Checker).GetShorthandAssignmentValueSymbol
+func Checker_GetShorthandAssignmentValueSymbol(recv *checker.Checker, location *ast.Node) *ast.Symbol
+
 //go:linkname Checker_getBaseTypes github.com/microsoft/typescript-go/internal/checker.(*Checker).getBaseTypes
 func Checker_getBaseTypes(recv *checker.Checker, t *checker.Type) []*checker.Type
 
@@ -51,6 +60,20 @@ const (
 //
 //go:linkname Checker_getIterationTypeOfIterable github.com/microsoft/typescript-go/internal/checker.(*Checker).getIterationTypeOfIterable
 func Checker_getIterationTypeOfIterable(recv *checker.Checker, use checker.IterationUse, typeKind checker.IterationTypeKind, inputType *checker.Type, errorNode *ast.Node) *checker.Type
+
+// Checker_getPropertyNameForKnownSymbolName answers the property-key string
+// under which the binder stored a well-known-symbol member — `[Symbol.iterator]`
+// and its siblings. It is linknamed rather than reimplemented because the name
+// is not a constant: when the program's lib declares `SymbolConstructor`, the
+// compiler derives the key from that declaration's unique-symbol type, and only
+// without it does it fall back to the `__@iterator` spelling. Passing anything
+// else to GetPropertyOfType silently finds nothing, which for a fail-closed
+// census reads as a refusal rather than an error — so the lookup has to use the
+// compiler's own key. The compiler's own iterable resolver calls it exactly this
+// way (checker.getIterationTypesOfIterableSlow).
+//
+//go:linkname Checker_getPropertyNameForKnownSymbolName github.com/microsoft/typescript-go/internal/checker.(*Checker).getPropertyNameForKnownSymbolName
+func Checker_getPropertyNameForKnownSymbolName(recv *checker.Checker, symbolName string) string
 
 //go:linkname Checker_isTypeIdenticalTo github.com/microsoft/typescript-go/internal/checker.(*Checker).isTypeIdenticalTo
 func Checker_isTypeIdenticalTo(recv *checker.Checker, source *checker.Type, target *checker.Type) bool
@@ -141,6 +164,21 @@ func Checker_isUntypedFunctionCall(recv *checker.Checker, funcType *checker.Type
 //
 //go:linkname Checker_getReducedApparentType github.com/microsoft/typescript-go/internal/checker.(*Checker).getReducedApparentType
 func Checker_getReducedApparentType(recv *checker.Checker, t *checker.Type) *checker.Type
+
+// Checker_getGlobalType resolves a global type by name and type-parameter
+// arity, exactly as the compiler's own lib lookups do. It exists here for one
+// question: which members do the global `Function` and `Object` interfaces
+// declare? The compiler's getPropertyOfType augments any object type carrying
+// call or construct signatures with Function's members and every object type
+// with Object's (see getPropertyOfTypeEx's
+// globalCallableFunctionType/globalNewableFunctionType/globalObjectType
+// fallbacks), while GetPropertiesOfType never enumerates either, so the member
+// *names* have to come from the interfaces themselves. Call it with
+// reportErrors false: a project whose lib omits one must leave the fact open,
+// not emit a compiler diagnostic.
+//
+//go:linkname Checker_getGlobalType github.com/microsoft/typescript-go/internal/checker.(*Checker).getGlobalType
+func Checker_getGlobalType(recv *checker.Checker, name string, arity int, reportErrors bool) *checker.Type
 
 //go:linkname NewChecker github.com/microsoft/typescript-go/internal/checker.NewChecker
 func NewChecker(program checker.Program, tracer *checker.Tracer) (*checker.Checker, *sync.Mutex)

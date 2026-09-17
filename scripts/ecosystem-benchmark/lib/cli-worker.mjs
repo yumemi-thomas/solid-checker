@@ -90,6 +90,31 @@ lines.on("line", line => {
     protocolWrite(`${JSON.stringify(response)}\n`);
   });
 });
+// Stdin EOF is this worker's only signal that nobody is listening any more. It
+// arrives on an orderly recycle (the pool calls `stdin.end()` on an idle
+// worker) and, just as reliably, when the runner *dies* -- the kernel closes
+// the write end with it, whether it exited, threw, or was killed outright.
+//
+// Both cases end the same way, and they must. Waiting for `chain` to settle
+// first looks polite and is the leak: a certification runs for minutes, nobody
+// will ever read its answer, and meanwhile this worker's native children keep
+// a machine busy. A crashed corpus run left eight of these alive for half an
+// hour, two of their children pinned at over 200% CPU, and the run that
+// replaced it was starved by them -- which read, from outside, as a hang.
+//
+// So exit now rather than when the work happens to finish. When the pool told
+// us we lead our own process group, signal the *group*: that takes down the
+// native checker children this worker started, which `process.exit` cannot
+// reach and which are the part that actually burns CPU. It kills this process
+// too, which is the intent -- the line below is only reached when the group
+// kill is unavailable or refused.
 lines.on("close", () => {
-  chain.then(() => process.exit(0));
+  if (process.env.SOLID_CHECKER_CLI_WORKER_GROUP_LEADER === "1") {
+    try {
+      process.kill(-process.pid, "SIGKILL");
+    } catch {
+      // Already gone, or not ours to signal: fall through and exit alone.
+    }
+  }
+  process.exit(0);
 });

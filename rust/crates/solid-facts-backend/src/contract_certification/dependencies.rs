@@ -6,6 +6,7 @@
 //! authority.
 
 use sha2::{Digest as _, Sha256};
+use solid_reactive_ir::contract_semantics::NormalizedContract;
 use solid_reactive_ir::contract_semantics::certification::{
     DependencyDemandInput, ProofDemandSubject, ProofFamily,
 };
@@ -20,7 +21,14 @@ use super::{
     policy2_resolved_import_root,
 };
 
-const POLICY_2_GRAPH_NODE_LIMIT: usize = 256;
+// 1024, from 256: a node is one (artifact, importing module) pair, so a package
+// with many entrypoints multiplies its dependencies by its importers and an
+// umbrella package (`corvu`) crossed 256 without adding an artifact. Importer
+// variants share generation and exported-value acquisition, so the cost this
+// bounds grows with distinct artifacts, not with the node count. The CLI's
+// discovery bound (`certify-contract.mjs`, `published-contract-graph.mjs`) is
+// the same number.
+const POLICY_2_GRAPH_NODE_LIMIT: usize = 1024;
 const POLICY_2_GRAPH_DEPTH_LIMIT: usize = 64;
 
 /// Package-manager selection compared with independently authenticated
@@ -67,7 +75,309 @@ pub(super) struct VerifiedGraphSourcePackage {
     pub(super) snapshot: super::ArtifactSnapshot,
 }
 
+/// Rejects the YAML features the pnpm reader does not implement.
+///
+/// Not conservatism: an anchor, alias or merge key can move a value from one
+/// entry to another, and a second document can redefine `packages:` wholesale,
+/// so a reader that skipped what it did not understand would answer confidently
+/// from the wrong bytes.
+fn refuse_pnpm_yaml_beyond_subset(text: &str) -> Result<(), super::ArtifactSnapshotError> {
+    let refuse = |detail: String| super::ArtifactSnapshotError::InvalidProvenance(detail);
+    if text.contains('\t') {
+        return Err(refuse(
+            "pnpm lockfile contains a tab, which YAML does not permit for indentation".into(),
+        ));
+    }
+    for (index, line) in text.lines().enumerate() {
+        let at = index + 1;
+        let trimmed = line.trim_end();
+        if trimmed == "---" || trimmed == "..." {
+            return Err(refuse(format!(
+                "pnpm lockfile has a document marker at line {at}; only a single document is read"
+            )));
+        }
+        if line.trim_start().starts_with("<<")
+            && line.trim_start()[2..].trim_start().starts_with(':')
+        {
+            return Err(refuse(format!(
+                "pnpm lockfile uses a YAML merge key at line {at}"
+            )));
+        }
+        let mut quote: Option<char> = None;
+        let mut previous_breaks_token = true;
+        for character in line.chars() {
+            if let Some(active) = quote {
+                if character == active {
+                    quote = None;
+                }
+                continue;
+            }
+            if character == '\'' || character == '"' {
+                quote = Some(character);
+                previous_breaks_token = false;
+                continue;
+            }
+            if (character == '&' || character == '*') && previous_breaks_token {
+                return Err(refuse(format!(
+                    "pnpm lockfile uses a YAML anchor or alias at line {at}"
+                )));
+            }
+            // Whitespace and the flow indicators only. A bare `:` does not end
+            // a token -- `workspace:*` is one plain scalar, and every lockfile
+            // in the demand corpus carries that line.
+            previous_breaks_token = matches!(character, ' ' | '\t' | '[' | '{' | ',');
+        }
+    }
+    Ok(())
+}
+
+/// Requires `lockfileVersion` to declare major 9; see `from_pnpm_lock`.
+fn require_pnpm_lockfile_major_9(text: &str) -> Result<(), super::ArtifactSnapshotError> {
+    let declared = text
+        .lines()
+        .find_map(|line| line.strip_prefix("lockfileVersion:"))
+        .map(pnpm_scalar)
+        .ok_or_else(|| {
+            super::ArtifactSnapshotError::InvalidProvenance(
+                "pnpm lockfile does not declare a lockfileVersion".into(),
+            )
+        })?
+        .ok_or_else(|| {
+            super::ArtifactSnapshotError::InvalidProvenance(
+                "pnpm lockfile declares an unreadable lockfileVersion".into(),
+            )
+        })?;
+    let major = declared
+        .split('.')
+        .next()
+        .and_then(|part| part.parse::<u32>().ok());
+    if major != Some(9) {
+        return Err(super::ArtifactSnapshotError::InvalidProvenance(format!(
+            "pnpm lockfile major {declared:?} is not 9; earlier majors write peer suffixes \
+             into packages keys, so one name@version can appear under several keys and exact \
+             selection is not decidable here"
+        )));
+    }
+    Ok(())
+}
+
+/// Reads one YAML scalar: plain, single- or double-quoted.
+///
+/// pnpm quotes any key containing `@`, and a formatter may have rewritten single
+/// quotes to double, so both styles are ordinary input rather than an oddity.
+fn pnpm_scalar(text: &str) -> Option<String> {
+    let trimmed = text.trim();
+    if let Some(inner) = trimmed.strip_prefix('\'') {
+        let inner = inner.strip_suffix('\'')?;
+        return Some(inner.replace("''", "'"));
+    }
+    if trimmed.starts_with('"') {
+        return serde_json::from_str::<String>(trimmed).ok();
+    }
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(trimmed.to_owned())
+}
+
+/// Finds the exact `packages:` entry for `exact` and returns its registry
+/// integrity.
+///
+/// A repeated key is a refusal rather than a last-one-wins read: two records for
+/// one `name@version` is exactly the ambiguity the Bun locator exists to
+/// separate, and pnpm's key space gives nothing to separate them with.
+fn pnpm_packages_integrity(
+    text: &str,
+    exact: &str,
+) -> Result<String, super::ArtifactSnapshotError> {
+    let lines: Vec<&str> = text.lines().collect();
+    let start = lines
+        .iter()
+        .position(|line| *line == "packages:")
+        .ok_or_else(|| {
+            super::ArtifactSnapshotError::InvalidProvenance(
+                "pnpm lockfile has no packages block".into(),
+            )
+        })?;
+    let mut selected: Option<String> = None;
+    let mut seen = false;
+    let mut key: Option<String> = None;
+    let mut index = start + 1;
+    while index < lines.len() {
+        let line = lines[index];
+        if line.trim().is_empty() {
+            index += 1;
+            continue;
+        }
+        if !line.starts_with(' ') {
+            break;
+        }
+        if let Some(rest) = entry_key_line(line) {
+            let parsed = pnpm_scalar(rest).ok_or_else(|| {
+                super::ArtifactSnapshotError::InvalidProvenance(format!(
+                    "pnpm lockfile has an unreadable packages key on line {}",
+                    index + 1
+                ))
+            })?;
+            if parsed == exact {
+                if seen {
+                    return Err(super::ArtifactSnapshotError::InvalidProvenance(format!(
+                        "pnpm lockfile repeats packages key {exact}"
+                    )));
+                }
+                seen = true;
+            }
+            key = Some(parsed);
+            index += 1;
+            continue;
+        }
+        let resolution = line
+            .strip_prefix("    resolution:")
+            .filter(|_| key.as_deref() == Some(exact));
+        let Some(head) = resolution else {
+            index += 1;
+            continue;
+        };
+        let mut body = head.trim().to_owned();
+        // pnpm writes this inline; a formatter may wrap it across lines. Gather
+        // until the braces balance rather than assuming either layout.
+        while !body.ends_with('}') && index + 1 < lines.len() {
+            index += 1;
+            if !lines[index].starts_with("    ") {
+                break;
+            }
+            body.push_str(lines[index].trim());
+        }
+        if let Some(integrity) = pnpm_flow_mapping(&body, exact)?
+            .into_iter()
+            .find_map(|(name, value)| (name == "integrity").then_some(value))
+            .filter(|value| is_pnpm_integrity(value))
+        {
+            selected = Some(integrity);
+        }
+        index += 1;
+    }
+    selected.ok_or_else(|| {
+        super::ArtifactSnapshotError::InvalidProvenance(format!(
+            "pnpm lockfile has no exact selection for {exact}"
+        ))
+    })
+}
+
+/// A `packages:` entry key line: exactly two spaces, then a scalar, then `:`.
+fn entry_key_line(line: &str) -> Option<&str> {
+    let rest = line.strip_prefix("  ")?;
+    if rest.starts_with(' ') || rest.is_empty() {
+        return None;
+    }
+    let trimmed = rest.trim_end();
+    trimmed.strip_suffix(':')
+}
+
+fn is_pnpm_integrity(value: &str) -> bool {
+    let Some((algorithm, digest)) = value.split_once('-') else {
+        return false;
+    };
+    matches!(algorithm, "sha512" | "sha384" | "sha256" | "sha1")
+        && !digest.is_empty()
+        && digest.trim_end_matches('=').chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '+' || character == '/'
+        })
+}
+
+/// Parses one flat YAML flow mapping (`{ a: b, c: d }`, trailing comma allowed).
+///
+/// Nested flow collections are refused rather than flattened: the only mapping
+/// this reader consumes is `resolution`, whose values pnpm writes as scalars.
+fn pnpm_flow_mapping(
+    text: &str,
+    at: &str,
+) -> Result<Vec<(String, String)>, super::ArtifactSnapshotError> {
+    let refuse = |detail: String| super::ArtifactSnapshotError::InvalidProvenance(detail);
+    let body = text.trim();
+    let inner = body
+        .strip_prefix('{')
+        .and_then(|rest| rest.strip_suffix('}'))
+        .ok_or_else(|| refuse(format!("pnpm lockfile has a non-flow resolution for {at}")))?;
+    let mut parts: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let mut depth: i32 = 0;
+    let mut quote: Option<char> = None;
+    for character in inner.chars() {
+        if let Some(active) = quote {
+            current.push(character);
+            if character == active {
+                quote = None;
+            }
+            continue;
+        }
+        match character {
+            '\'' | '"' => {
+                quote = Some(character);
+                current.push(character);
+            }
+            '{' | '[' => {
+                depth += 1;
+                current.push(character);
+            }
+            '}' | ']' => {
+                depth -= 1;
+                if depth < 0 {
+                    return Err(refuse(format!(
+                        "pnpm lockfile has an unbalanced resolution for {at}"
+                    )));
+                }
+                current.push(character);
+            }
+            ',' if depth == 0 => {
+                parts.push(std::mem::take(&mut current));
+            }
+            _ => current.push(character),
+        }
+    }
+    if quote.is_some() || depth != 0 {
+        return Err(refuse(format!(
+            "pnpm lockfile has an unterminated resolution for {at}"
+        )));
+    }
+    parts.push(current);
+    let mut entries: Vec<(String, String)> = Vec::new();
+    for part in parts {
+        if part.trim().is_empty() {
+            continue;
+        }
+        if part.contains('{') || part.contains('[') {
+            return Err(refuse(format!(
+                "pnpm lockfile nests a collection inside the resolution for {at}"
+            )));
+        }
+        let (name, value) = part.split_once(':').ok_or_else(|| {
+            refuse(format!(
+                "pnpm lockfile has a non-mapping item in the resolution for {at}"
+            ))
+        })?;
+        let name = pnpm_scalar(name).ok_or_else(|| {
+            refuse(format!(
+                "pnpm lockfile has an unreadable key in the resolution for {at}"
+            ))
+        })?;
+        if entries.iter().any(|(existing, _)| *existing == name) {
+            return Err(refuse(format!(
+                "pnpm lockfile repeats {name} in the resolution for {at}"
+            )));
+        }
+        entries.push((name, pnpm_scalar(value).unwrap_or_default()));
+    }
+    Ok(entries)
+}
+
 impl PublishedGraphLockSelection {
+    /// The registry integrity this lockfile selected for the package.
+    #[must_use]
+    pub fn integrity(&self) -> &str {
+        &self.integrity
+    }
+
     /// Replays an exact Bun text lock selection. The digest binds the original
     /// bytes (including formatting), while selection uses a conservative
     /// trailing-comma normalization matching Bun's JSON-like lock syntax.
@@ -146,6 +456,145 @@ impl PublishedGraphLockSelection {
         )
     }
 
+    /// Reads one exact selection from untrusted pnpm lockfile bytes.
+    ///
+    /// The twin of `from_bun_lock`, and deliberately a reader for one block of
+    /// one lockfile major rather than a YAML parser. The acquisition side
+    /// (`published-contract-graph.mjs`) implements the same subset; this is the
+    /// authority, so anything either does not implement is refused here.
+    ///
+    /// Only major 9 is read. Major 6 wrote peer suffixes into `packages:` keys
+    /// (`foo@1.0.0(bar@2.0.0)`), so one `name@version` could appear under
+    /// several keys with no installed-path locator to separate them, and exact
+    /// selection would not be decidable. Major 9 keys are exactly
+    /// `name@version` and its store is content-addressed, which is why the
+    /// locator here is the key itself rather than an install path.
+    pub fn from_pnpm_lock(
+        lockfile: &[u8],
+        locator: impl Into<String>,
+        package_name: impl Into<String>,
+        package_version: impl Into<String>,
+    ) -> Result<Self, super::ArtifactSnapshotError> {
+        if lockfile.len() > 8 * 1024 * 1024 {
+            return Err(super::ArtifactSnapshotError::ResourceLimit(
+                "lockfile bytes exceed graph policy limit".into(),
+            ));
+        }
+        let locator = locator.into();
+        let package_name = package_name.into();
+        let package_version = package_version.into();
+        let source = std::str::from_utf8(lockfile).map_err(|_| {
+            super::ArtifactSnapshotError::InvalidProvenance(
+                "pnpm lockfile is not valid UTF-8".into(),
+            )
+        })?;
+        let text = source.replace("\r\n", "\n");
+        refuse_pnpm_yaml_beyond_subset(&text)?;
+        let exact = format!("{package_name}@{package_version}");
+        if locator != exact {
+            return Err(super::ArtifactSnapshotError::InvalidProvenance(format!(
+                "pnpm lock locator {locator:?} is not the exact key {exact:?}"
+            )));
+        }
+        require_pnpm_lockfile_major_9(&text)?;
+        let integrity = pnpm_packages_integrity(&text, &exact)?;
+        Self::new(
+            "pnpm",
+            format!("sha256:{:x}", Sha256::digest(lockfile)),
+            locator,
+            package_name,
+            package_version,
+            integrity,
+        )
+    }
+
+    /// Replays an exact Yarn **classic** (v1) lock selection.
+    ///
+    /// Keyed by `name@version` rather than by an install path, like the pnpm
+    /// reader and unlike the npm and Bun ones. A v1 lockfile is keyed by
+    /// *descriptor* (`name@range`), several descriptors share one entry, and no
+    /// entry names where the package was installed -- so the installed
+    /// manifest's own name and version are the only usable key, and two entries
+    /// reaching that same name and version must agree or nothing is stated.
+    ///
+    /// **Yarn Berry (v2+) is refused, and widening this reader cannot support
+    /// it.** Berry's `checksum:` is a Yarn-internal hash over the package's zip
+    /// in Yarn's own cache, not the registry tarball's subresource integrity,
+    /// so a Berry lockfile does not carry the fact this reader exists to
+    /// recover. A Berry project states no integrity, which is the fail-closed
+    /// answer and not a gap a parser can close.
+    ///
+    /// Not named by [`Self::from_lockfile`]: that table is the *certification*
+    /// dispatch, and its readers are paired with a subset the acquisition side
+    /// (`published-contract-graph.mjs`) implements too. This reader has no such
+    /// counterpart yet, and a lockfile format certification can half-read is
+    /// worse than one it refuses. Consumer-side artifact admission uses it
+    /// directly.
+    pub fn from_yarn_lock(
+        lockfile: &[u8],
+        locator: impl Into<String>,
+        package_name: impl Into<String>,
+        package_version: impl Into<String>,
+    ) -> Result<Self, super::ArtifactSnapshotError> {
+        if lockfile.len() > 8 * 1024 * 1024 {
+            return Err(super::ArtifactSnapshotError::ResourceLimit(
+                "lockfile bytes exceed graph policy limit".into(),
+            ));
+        }
+        let locator = locator.into();
+        let package_name = package_name.into();
+        let package_version = package_version.into();
+        let source = std::str::from_utf8(lockfile).map_err(|_| {
+            super::ArtifactSnapshotError::InvalidProvenance(
+                "Yarn lockfile is not valid UTF-8".into(),
+            )
+        })?;
+        let text = source.replace("\r\n", "\n");
+        let exact = format!("{package_name}@{package_version}");
+        if locator != exact {
+            return Err(super::ArtifactSnapshotError::InvalidProvenance(format!(
+                "Yarn lock locator {locator:?} is not the exact key {exact:?}"
+            )));
+        }
+        require_yarn_classic(&text)?;
+        let integrity = yarn_classic_integrity(&text, &package_name, &package_version)?;
+        Self::new(
+            "yarn",
+            format!("sha256:{:x}", Sha256::digest(lockfile)),
+            locator,
+            package_name,
+            package_version,
+            integrity,
+        )
+    }
+
+    /// Dispatches to the reader for the package manager that wrote this
+    /// lockfile, named by the file's own name.
+    ///
+    /// The name is the whole format decision, on both sides of the boundary: no
+    /// tag travels the wire and no reader sniffs content, so a file the table
+    /// does not name is refused rather than tried against each parser in turn.
+    pub fn from_lockfile(
+        path: &std::path::Path,
+        lockfile: &[u8],
+        locator: impl Into<String>,
+        package_name: impl Into<String>,
+        package_version: impl Into<String>,
+    ) -> Result<Self, super::ArtifactSnapshotError> {
+        match path.file_name().and_then(|name| name.to_str()) {
+            Some("bun.lock") => {
+                Self::from_bun_lock(lockfile, locator, package_name, package_version)
+            }
+            Some("pnpm-lock.yaml") => {
+                Self::from_pnpm_lock(lockfile, locator, package_name, package_version)
+            }
+            other => Err(super::ArtifactSnapshotError::InvalidProvenance(format!(
+                "{} names no lockfile format this certifier reads",
+                other.unwrap_or("<unnamed path>")
+            ))),
+        }
+    }
+
     pub(crate) fn new(
         package_manager: impl Into<String>,
         lockfile_digest: impl Into<String>,
@@ -174,6 +623,173 @@ impl PublishedGraphLockSelection {
         super::validate_integrity_shape(&value.integrity)?;
         Ok(value)
     }
+}
+
+/// Refuses anything that is not a Yarn classic lockfile.
+///
+/// Both directions matter. A Berry lockfile parsed as classic would find no
+/// `integrity` field and could only ever say "no entry", which reads as a
+/// missing package rather than an unsupported format. A file with no header at
+/// all is not a Yarn lockfile and must not be guessed at.
+fn require_yarn_classic(text: &str) -> Result<(), super::ArtifactSnapshotError> {
+    if text.lines().any(|line| {
+        line.trim_end() == "__metadata:" || line.trim_start().starts_with("resolution:")
+    }) {
+        return Err(super::ArtifactSnapshotError::InvalidProvenance(
+            "Yarn Berry lockfiles record a cache checksum rather than the registry integrity"
+                .into(),
+        ));
+    }
+    if !text
+        .lines()
+        .take(8)
+        .any(|line| line.trim() == "# yarn lockfile v1")
+    {
+        return Err(super::ArtifactSnapshotError::InvalidProvenance(
+            "yarn.lock does not declare the classic v1 format".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// The integrity every classic entry reaching `name@version` agrees on.
+fn yarn_classic_integrity(
+    text: &str,
+    name: &str,
+    version: &str,
+) -> Result<String, super::ArtifactSnapshotError> {
+    let refuse = |message: String| super::ArtifactSnapshotError::InvalidProvenance(message);
+    let mut entries: Vec<YarnEntry> = Vec::new();
+    for raw in text.lines() {
+        let line = raw.trim_end();
+        if line.is_empty() || line.trim_start().starts_with('#') {
+            continue;
+        }
+        if !line.starts_with(' ') && !line.starts_with('\t') {
+            let header = line.strip_suffix(':').ok_or_else(|| {
+                refuse(format!(
+                    "yarn.lock has a top-level line that is not an entry header: {line:?}"
+                ))
+            })?;
+            entries.push(YarnEntry {
+                names: yarn_descriptor_names(header)?,
+                version: None,
+                integrity: None,
+            });
+            continue;
+        }
+        // Exactly two spaces is an entry field. Four or more is inside a nested
+        // block -- `dependencies:` lists, whose keys are package names, and one
+        // of those may legitimately be called `version`.
+        if line.len() - line.trim_start().len() != 2 {
+            continue;
+        }
+        let Some(entry) = entries.last_mut() else {
+            return Err(refuse(
+                "yarn.lock states a field before any entry header".into(),
+            ));
+        };
+        let field = line.trim_start();
+        if let Some(rest) = field.strip_prefix("version ") {
+            entry.version = Some(yarn_scalar(rest));
+        } else if let Some(rest) = field.strip_prefix("integrity ") {
+            entry.integrity = Some(yarn_scalar(rest));
+        }
+    }
+    let mut selected: Option<&str> = None;
+    for entry in &entries {
+        if entry.version.as_deref() != Some(version) || !entry.names.iter().any(|it| it == name) {
+            continue;
+        }
+        let integrity = entry.integrity.as_deref().ok_or_else(|| {
+            refuse(format!(
+                "yarn.lock states no integrity for {name}@{version}; a git, file or link \
+                 dependency has no registry tarball"
+            ))
+        })?;
+        match selected {
+            None => selected = Some(integrity),
+            Some(existing) if existing != integrity => {
+                return Err(refuse(format!(
+                    "yarn.lock states two integrities for {name}@{version}"
+                )));
+            }
+            Some(_) => {}
+        }
+    }
+    selected
+        .map(str::to_owned)
+        .ok_or_else(|| refuse(format!("yarn.lock has no entry selecting {name}@{version}")))
+}
+
+struct YarnEntry {
+    names: Vec<String>,
+    version: Option<String>,
+    integrity: Option<String>,
+}
+
+/// The package names an entry header selects, one per descriptor.
+fn yarn_descriptor_names(header: &str) -> Result<Vec<String>, super::ArtifactSnapshotError> {
+    let mut names = Vec::new();
+    for descriptor in yarn_header_descriptors(header) {
+        let descriptor = yarn_scalar(&descriptor);
+        let name = yarn_descriptor_name(&descriptor).ok_or_else(|| {
+            super::ArtifactSnapshotError::InvalidProvenance(format!(
+                "yarn.lock entry key {descriptor:?} is not a name@range descriptor"
+            ))
+        })?;
+        names.push(name);
+    }
+    Ok(names)
+}
+
+/// Splits `"a@^1", "b@^2"` on the commas between descriptors, not on commas
+/// inside a quoted range.
+fn yarn_header_descriptors(header: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut quoted = false;
+    for character in header.chars() {
+        match character {
+            '"' => {
+                quoted = !quoted;
+                current.push(character);
+            }
+            ',' if !quoted => {
+                parts.push(std::mem::take(&mut current));
+            }
+            _ => current.push(character),
+        }
+    }
+    parts.push(current);
+    parts
+        .into_iter()
+        .map(|part| part.trim().to_owned())
+        .filter(|part| !part.is_empty())
+        .collect()
+}
+
+/// The name half of a `name@range` descriptor, exactly.
+///
+/// Not the last `@`: a v1 range can be a URL that contains one
+/// (`foo@git+ssh://git@host/x.git#ref`). A scoped name's leading `@` is not a
+/// separator, so the separator is the first `@` after it.
+fn yarn_descriptor_name(descriptor: &str) -> Option<String> {
+    let (offset, rest) = descriptor
+        .strip_prefix('@')
+        .map_or((0, descriptor), |rest| (1, rest));
+    let at = rest.find('@')?;
+    let name = &descriptor[..offset + at];
+    (!name.is_empty()).then(|| name.to_owned())
+}
+
+fn yarn_scalar(value: &str) -> String {
+    let value = value.trim();
+    value
+        .strip_prefix('"')
+        .and_then(|rest| rest.strip_suffix('"'))
+        .unwrap_or(value)
+        .to_owned()
 }
 
 fn normalize_json_trailing_commas(source: &str) -> String {
@@ -328,13 +944,75 @@ impl CanonicalDependencyNodeIdentity {
     pub fn digest(&self) -> &str {
         &self.digest
     }
+
+    /// Every field of the identity except the importing module and the two
+    /// values derived from it (`resolved_import_root`, which hashes the
+    /// resolved import that names the importer, and the digest), for
+    /// [`select_importer_variant`]: two identities with equal keys are the same
+    /// archive, lock selection, resolution result, closure, proposal, and
+    /// source set, reached from different modules of the same consuming
+    /// package.
+    fn importer_invariant_key(&self) -> Vec<&str> {
+        let mut key = vec![
+            self.registry_origin.as_str(),
+            self.package_manager.as_str(),
+            self.package_name.as_str(),
+            self.package_version.as_str(),
+            self.integrity.as_str(),
+            self.lockfile_digest.as_str(),
+            self.lock_locator.as_str(),
+            self.entrypoint.as_str(),
+            self.resolution_kind.as_str(),
+            self.runtime_target.as_str(),
+            self.runtime_digest.as_str(),
+            self.declarations_target.as_str(),
+            self.declarations_digest.as_str(),
+            self.closure_root.as_str(),
+            self.snapshot_root.as_str(),
+            self.provenance_root.as_str(),
+            self.artifact_case.as_str(),
+            self.semantic_digest.as_str(),
+            self.source_dependencies_root.as_str(),
+        ];
+        key.extend(self.conditions.iter().map(String::as_str));
+        key
+    }
 }
 
+#[derive(Clone)]
 struct PlannedGraphNode {
     identity: CanonicalDependencyNodeIdentity,
     plan: CertificationPlan,
     dependencies: Vec<CanonicalDependencyNodeIdentity>,
     source_dependencies: Vec<VerifiedGraphSourcePackage>,
+    /// What recipe-gated planning withheld from this node's plan; empty until
+    /// [`PublishedContractGraphPlan::recipe_gated`] derives the gated graph.
+    withheld: Vec<super::WithheldClosure>,
+    /// The operations this node's plan was weakened by, carried so the
+    /// published result can report them exactly as it reports `withheld`.
+    withheld_operations: Vec<super::WithheldOperation>,
+    /// The proposal this node was **planned** with — the one its identity's
+    /// `semantic_digest` names and every parent's closure edge accepted.
+    /// Recipe gating replaces `plan` with a plan over a weakened proposal; this
+    /// stays, so composition can re-derive that weakening from the accepted
+    /// proposal and the withheld records and compare it against what the
+    /// dependency's receipt actually certified (see
+    /// [`authenticate_dependency_receipt`]).
+    accepted_candidate: NormalizedContract,
+}
+
+/// What recipe gating did to one dependency node, as composition needs it:
+/// the proposal every parent accepted, the proposal the node's receipt
+/// certifies, and the records that separate them.
+struct DependencyGating<'a> {
+    accepted_candidate: &'a NormalizedContract,
+    certified_candidate: &'a NormalizedContract,
+    withheld: &'a [super::WithheldClosure],
+    /// The operations the node's transaction withdrew, which separate the two
+    /// candidates exactly as `withheld` does. Composition re-derives *both*
+    /// weakenings, in the order the node applied them, or the digest it
+    /// compares is of a document the node never certified.
+    withheld_operations: &'a [super::WithheldOperation],
 }
 
 /// Opaque native graph plan. Plans are retained in canonical dependency-first
@@ -411,19 +1089,65 @@ impl PublishedContractGraphPlan {
         issuer: &ConfiguredReceiptIssuer,
         revocation_epoch: u64,
     ) -> Result<VerifiedDependencyComposition, DependencyReceiptCompositionError> {
+        self.authenticate_dependency_receipts_with_census(
+            parent,
+            receipts,
+            issuer,
+            revocation_epoch,
+            None,
+        )
+    }
+
+    fn authenticate_dependency_receipts_with_census(
+        &self,
+        parent: &CanonicalDependencyNodeIdentity,
+        receipts: &[(
+            &CanonicalDependencyNodeIdentity,
+            &AuthenticatedPolicy2Receipt,
+        )],
+        issuer: &ConfiguredReceiptIssuer,
+        revocation_epoch: u64,
+        type_facts: Option<&super::type_facts::VerifiedTypeFactsEvidence>,
+    ) -> Result<VerifiedDependencyComposition, DependencyReceiptCompositionError> {
         let node = self
             .nodes
             .iter()
             .find(|node| &node.identity == parent)
             .ok_or(DependencyReceiptCompositionError::ParentOutsideGraph)?;
+        let gating = node
+            .dependencies
+            .iter()
+            .map(|dependency| {
+                let planned = self
+                    .nodes
+                    .iter()
+                    .find(|candidate| &candidate.identity == dependency)
+                    .ok_or_else(
+                        || DependencyReceiptCompositionError::DependencyOutsideGraph {
+                            dependency: dependency.digest().into(),
+                        },
+                    )?;
+                Ok((
+                    dependency.digest().to_owned(),
+                    DependencyGating {
+                        accepted_candidate: &planned.accepted_candidate,
+                        certified_candidate: &planned.plan.selected_candidate,
+                        withheld: &planned.withheld,
+                        withheld_operations: &planned.withheld_operations,
+                    },
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>, DependencyReceiptCompositionError>>()?;
         VerifiedDependencyComposition::authenticate(
             &node.plan,
             &node.dependencies,
             &node.source_dependencies,
+            &gating,
             self.graph_root(),
             receipts,
             issuer,
             revocation_epoch,
+            type_facts,
         )
     }
 
@@ -435,37 +1159,125 @@ impl PublishedContractGraphPlan {
         pin: &TypeFactsProducerPin,
         issuer: &ConfiguredReceiptIssuer,
         revocation_epoch: u64,
+        probes: Option<&super::ProbeHarnessConfiguration>,
     ) -> Result<FinalizedPolicy2Graph, PublishedGraphCertificationError> {
-        let type_facts_requests = self.type_facts_requests()?;
-        let root_plan = self.plan(self.root_identity()).ok_or_else(|| {
-            PublishedGraphCertificationError::MissingPlannedDependency(
-                self.root_identity().digest().into(),
-            )
-        })?;
-        let type_facts_evidence = super::type_facts::acquire_and_verify_graph_export_values(
-            root_plan,
-            &type_facts_requests
-                .iter()
-                .map(|(_, request)| super::type_facts::GraphExportValueRequest {
-                    plan: request.plan,
-                    dependencies: request.dependencies.clone(),
-                    sources: request.sources,
-                })
-                .collect::<Vec<_>>(),
+        let mut finalized = certify_graphs_with_recipe_gating(
+            std::slice::from_ref(self),
             pin,
-        )
-        .map_err(
-            |source| PublishedGraphCertificationError::TypeFactsForGraph {
-                graph: self.graph_root().into(),
-                source,
-            },
+            issuer,
+            revocation_epoch,
+            probes,
         )?;
-        let type_facts_by_node = type_facts_requests
-            .into_iter()
-            .map(|(identity, _)| identity)
-            .zip(type_facts_evidence)
-            .collect::<BTreeMap<_, _>>();
-        self.finalize_value_only_with_type_facts(&type_facts_by_node, pin, issuer, revocation_epoch)
+        finalized
+            .pop()
+            .ok_or(PublishedGraphCertificationError::EmptyCaseSet)
+    }
+
+    fn node(&self, digest: &str) -> Option<&PlannedGraphNode> {
+        self.nodes
+            .iter()
+            .find(|node| node.identity.digest() == digest)
+    }
+
+    /// The graph with every node's plan recipe-gated
+    /// (`CertificationPlan::recipe_gated`), node identities and graph root
+    /// unchanged.
+    ///
+    /// Node identity binds the snapshot, the resolution and the proposal's
+    /// semantic digest as *planned*; the graph root is derived from those
+    /// identities alone. Gating re-derives a node's demand graph from a
+    /// weakened proposal, which the receipt then binds through its own
+    /// `semantic_digest` and `demand_graph_root` fields — so the graph root a
+    /// case set is keyed by is the same before and after, and the receipt is
+    /// the one telling the truth about what was certified.
+    ///
+    /// Identities are kept rather than rebound to the gated digest on purpose.
+    /// A parent's closure edge names the dependency proposal it was generated
+    /// against (`accepted_contract_digest`), that digest is hashed into every
+    /// dependency demand of the parent's demand graph, and the edge lives in
+    /// the parent's authenticated closure manifest — none of which a gate on
+    /// the *dependency* may rewrite. So the accepted digest stays the identity,
+    /// and composition instead proves that what the dependency's receipt
+    /// certifies is exactly the accepted proposal with the withheld domains
+    /// opened ([`authenticate_dependency_receipt`]).
+    /// One gating pass with a single corpus and nothing already withdrawn:
+    /// what the certification loop's first pass does, kept for the tests that
+    /// pin gating on its own.
+    #[cfg(test)]
+    pub(super) fn recipe_gated(
+        &self,
+        recipe_corpus: Option<&Path>,
+    ) -> Result<Self, PublishedGraphCertificationError> {
+        self.recipe_gated_per_node(
+            &BTreeMap::new(),
+            recipe_corpus,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        )
+    }
+
+    /// [`Self::recipe_gated`] with ADR 0036's per-node inputs: the corpus and
+    /// the already-withdrawn candidates are chosen *per node*, by canonical
+    /// identity digest, so one node's synthesized corpus and one node's census
+    /// or veto withdrawals never reach another node's gate.
+    pub(super) fn recipe_gated_per_node(
+        &self,
+        synthesized: &BTreeMap<String, super::synthesized_vetoes::SynthesizedCorpus>,
+        base_corpus: Option<&Path>,
+        already_withheld: &BTreeMap<String, Vec<super::WithheldClosure>>,
+        withheld_operations: &BTreeMap<String, Vec<super::WithheldOperation>>,
+    ) -> Result<Self, PublishedGraphCertificationError> {
+        // Nodes gate independently, and a wide graph re-gates every one of
+        // them on every pass (616 nodes × 12 passes on `corvu@0.7.2`), so the
+        // map runs on the bounded pool and is collected back in node order.
+        let nodes = super::parallel::run_each(
+            &self.nodes,
+            super::parallel::workers_for(self.nodes.len()),
+            |node| {
+                let digest = node.identity.digest();
+                let corpus = synthesized
+                    .get(digest)
+                    .map(|corpus| corpus.configuration().recipe_corpus())
+                    .or(base_corpus);
+                let (plan, withheld) = node
+                    .plan
+                    .recipe_gated_with_operations(
+                        corpus,
+                        already_withheld.get(digest).map_or(&[], Vec::as_slice),
+                        withheld_operations.get(digest).map_or(&[], Vec::as_slice),
+                    )
+                    .map_err(
+                        |source| PublishedGraphCertificationError::RecipeGatingAtNode {
+                            node: node.identity.digest().into(),
+                            package: format!(
+                                "{}@{}",
+                                node.identity.package_name, node.identity.package_version
+                            ),
+                            source: Box::new(source),
+                        },
+                    )?
+                    .into_parts();
+                Ok(PlannedGraphNode {
+                    identity: node.identity.clone(),
+                    plan,
+                    dependencies: node.dependencies.clone(),
+                    source_dependencies: node.source_dependencies.clone(),
+                    withheld,
+                    withheld_operations: withheld_operations
+                        .get(digest)
+                        .cloned()
+                        .unwrap_or_default(),
+                    accepted_candidate: node.accepted_candidate.clone(),
+                })
+            },
+        )
+        .into_iter()
+        .collect::<Result<Vec<_>, PublishedGraphCertificationError>>()?;
+        Ok(Self {
+            nodes,
+            root: self.root.clone(),
+            graph_root: self.graph_root.clone(),
+        })
     }
 
     fn type_facts_requests(
@@ -490,87 +1302,188 @@ impl PublishedContractGraphPlan {
                         plan: &node.plan,
                         dependencies: self.transitive_dependency_plans(node)?,
                         sources: &node.source_dependencies,
+                        acquire: true,
                     },
                 ))
             })
             .collect()
     }
 
+    /// Finalizes every node bottom-up against the pass's evidence and the
+    /// gates the pre-pass authenticated. `Ok(Err(withdrawals))` is a pass that
+    /// could not finalize as gated: a parent's dependency-closure demand
+    /// required a child claim the child withheld, and the parent's own
+    /// candidate is withdrawn by name (ADR 0036, graph lanes); every node
+    /// above a withdrawn one is skipped this pass, so one pass collects every
+    /// such withdrawal the graph can reach.
     fn finalize_value_only_with_type_facts(
         &self,
         type_facts_by_node: &BTreeMap<String, super::type_facts::VerifiedTypeFactsEvidence>,
+        gates_by_node: &BTreeMap<String, (String, super::probe_gates::VerifiedProbeGateBatch)>,
         pin: &TypeFactsProducerPin,
         issuer: &ConfiguredReceiptIssuer,
         revocation_epoch: u64,
-    ) -> Result<FinalizedPolicy2Graph, PublishedGraphCertificationError> {
+    ) -> Result<
+        Result<FinalizedPolicy2Graph, Vec<(String, super::WithheldClosure)>>,
+        PublishedGraphCertificationError,
+    > {
         let mut finalized = Vec::<FinalizedGraphNode>::with_capacity(self.nodes.len());
+        let mut withdrawals = Vec::<(String, super::WithheldClosure)>::new();
+        let mut skipped = BTreeSet::<String>::new();
         for node in &self.nodes {
+            let digest = node.identity.digest();
+            let package = format!(
+                "{}@{}",
+                node.identity.package_name, node.identity.package_version
+            );
+            if node
+                .dependencies
+                .iter()
+                .any(|dependency| skipped.contains(dependency.digest()))
+            {
+                skipped.insert(digest.to_owned());
+                continue;
+            }
             let proposal = crate::contract_document::encode(
                 &node.plan.selected_candidate,
                 &crate::contract_document::SidecarDigests::default(),
                 false,
             )?;
-            let type_facts = type_facts_by_node.get(node.identity.digest());
-            let dependency_evidence =
-                if node.dependencies.is_empty() && node.source_dependencies.is_empty() {
-                    None
-                } else {
-                    let receipts = node
-                        .dependencies
-                        .iter()
-                        .map(|dependency| {
-                            finalized
-                                .iter()
-                                .find(|candidate| &candidate.identity == dependency)
-                                .map(|candidate| (dependency, candidate.finalized.authenticated()))
-                                .ok_or_else(|| {
-                                    PublishedGraphCertificationError::MissingFinalizedDependency(
-                                        dependency.digest().into(),
-                                    )
-                                })
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-                    Some(self.authenticate_dependency_receipts(
-                        &node.identity,
-                        &receipts,
-                        issuer,
-                        revocation_epoch,
-                    )?)
-                };
+            let type_facts = type_facts_by_node.get(digest);
+            let dependency_evidence = if node.dependencies.is_empty()
+                && node.source_dependencies.is_empty()
+            {
+                None
+            } else {
+                let receipts = node
+                    .dependencies
+                    .iter()
+                    .map(|dependency| {
+                        finalized
+                            .iter()
+                            .find(|candidate| &candidate.identity == dependency)
+                            .map(|candidate| (dependency, candidate.finalized.authenticated()))
+                            .ok_or_else(|| {
+                                PublishedGraphCertificationError::MissingFinalizedDependency(
+                                    dependency.digest().into(),
+                                )
+                            })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                match self.authenticate_dependency_receipts_with_census(
+                    &node.identity,
+                    &receipts,
+                    issuer,
+                    revocation_epoch,
+                    type_facts,
+                ) {
+                    Ok(evidence) => Some(evidence),
+                    Err(DependencyReceiptCompositionError::MissingClosedClaim {
+                        demand_id,
+                        semantic_claim_id,
+                    }) => {
+                        let Some(record) =
+                            composed_from_withheld_dependency(node, &demand_id, &semantic_claim_id)
+                        else {
+                            return Err(DependencyReceiptCompositionError::MissingClosedClaim {
+                                demand_id,
+                                semantic_claim_id,
+                            }
+                            .into());
+                        };
+                        withdrawals.push((digest.to_owned(), record));
+                        skipped.insert(digest.to_owned());
+                        continue;
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+            };
+            let (_, probe_gates) = gates_by_node.get(digest).ok_or_else(|| {
+                PublishedGraphCertificationError::MissingProbeGates(digest.to_owned())
+            })?;
             let contract = super::finalization::finalize_value_only_with_dependencies(
                 &node.plan,
                 &proposal,
                 type_facts,
                 dependency_evidence.as_ref(),
+                probe_gates,
                 pin,
                 issuer,
                 revocation_epoch,
             )
             .map_err(|source| {
                 PublishedGraphCertificationError::FinalizationAtNode {
-                    node: node.identity.digest().into(),
-                    package: format!(
-                        "{}@{}",
-                        node.identity.package_name, node.identity.package_version
-                    ),
-                    source,
+                    node: digest.to_owned(),
+                    package: package.clone(),
+                    source: Box::new(source),
                 }
             })?;
             finalized.push(FinalizedGraphNode {
                 identity: node.identity.clone(),
-                finalized: contract,
+                finalized: contract
+                    .with_withheld_closures(node.withheld.clone())
+                    .with_withheld_operations(node.withheld_operations.clone()),
             });
         }
-        Ok(FinalizedPolicy2Graph {
+        if !withdrawals.is_empty() {
+            return Ok(Err(withdrawals));
+        }
+        Ok(Ok(FinalizedPolicy2Graph {
             graph_root: self.graph_root.clone(),
             root: self.root.clone(),
             nodes: finalized,
-        })
+        }))
     }
 }
 
-/// Certifies a complete root case-set through one Type Facts session and one
-/// native bottom-up transaction. Canonical nodes shared by multiple roots are
+/// The parent candidate a `MissingClosedClaim` composition refusal is about,
+/// withheld by name: the parent's dependency-closure demand `demand_id` asked
+/// for `child_claim` closed in the dependency's certified contract, and the
+/// dependency withheld it, so the parent's own closure -- composed from that
+/// claim -- cannot be certified either. Withholding the parent leaves its
+/// domain open, which is exactly what is known. `None` when the demand is not
+/// a proposable dependency-closure demand of this node, in which case the
+/// refusal stands.
+fn composed_from_withheld_dependency(
+    node: &PlannedGraphNode,
+    demand_id: &str,
+    child_claim: &str,
+) -> Option<super::WithheldClosure> {
+    let demand = node
+        .plan
+        .demand_graph()
+        .demands()
+        .iter()
+        .find(|demand| demand.id().as_str() == demand_id)?;
+    let ProofDemandSubject::DependencyClosure {
+        dependency, parent, ..
+    } = demand.subject()
+    else {
+        return None;
+    };
+    let super::SemanticClaimPath::Domain(super::ClaimPath::Call(domain)) = &parent.path else {
+        return None;
+    };
+    if !domain.is_proposable() {
+        return None;
+    }
+    let semantic_claim_id = node.plan.candidates.proposal().claim_id(parent).ok()?;
+    Some(super::WithheldClosure {
+        artifact_case: parent.artifact_case.clone(),
+        export: parent.export.clone(),
+        domain: super::type_facts::call_claim_domain_name(*domain).to_owned(),
+        semantic_claim_id: semantic_claim_id.as_str().to_owned(),
+        reason: format!(
+            "{}{child_claim} of {}",
+            super::WITHHELD_CLOSURE_DEPENDENCY_WITHHELD_PREFIX,
+            dependency.package
+        ),
+    })
+}
+
+/// Certifies a complete root case-set through one native bottom-up transaction.
+/// Type Facts acquisition shares a session with bounded context isolation for
+/// duplicate installations. Canonical nodes shared by multiple roots are
 /// acquired once for evidence; receipt composition remains graph-root-local,
 /// so no child receipt is transplanted between root graphs.
 pub fn certify_published_contract_graph_case_set(
@@ -578,7 +1491,545 @@ pub fn certify_published_contract_graph_case_set(
     pin: &TypeFactsProducerPin,
     issuer: &ConfiguredReceiptIssuer,
     revocation_epoch: u64,
+    probes: Option<&super::ProbeHarnessConfiguration>,
 ) -> Result<Vec<FinalizedPolicy2Graph>, PublishedGraphCertificationError> {
+    certify_graphs_with_recipe_gating(graphs, pin, issuer, revocation_epoch, probes)
+}
+
+/// ADR 0036 for the graph lanes: recipe gating, census-refusal and
+/// incomplete-veto withholding, and synthesized vetoes, per node.
+///
+/// The value-only lane's bounded loop (`CertificationPlan::certify_value_only`)
+/// applied to every node of every graph in the case set at once. Each pass
+/// re-gates every node with the corpus and the already-withdrawn candidates
+/// chosen for *that* node, acquires exported-value evidence for the nodes whose
+/// gating changed since their evidence was taken, and then either withdraws one
+/// more candidate by name -- a census that could not decide it, a veto run that
+/// did not complete -- and goes again, or synthesizes a veto for every node's
+/// recipe-less candidate that stated a call signature (once per node, before
+/// the first gate runs), or finalizes. Initial acquisition proceeds dependency
+/// first: a factory parent may need a child's synthesized return candidate to
+/// state its conditional evidence. Every pass withdraws a candidate or advances
+/// initial acquisition/synthesis, so closure candidates plus Type Facts nodes
+/// plus two bound the loop. Final receipt discharge still requires the child's
+/// independent census and completed veto; staging supplies no authority.
+///
+/// A node's synthesized corpus and a node's withdrawals are keyed by its
+/// canonical identity digest, so nothing a child withheld or synthesized
+/// reaches a parent's gate, and canonical nodes two roots share are gated and
+/// acquired once. Evidence is re-acquired only for nodes whose own gating moved:
+/// a gate changes a node's demand graph, never its resolution, and a parent's
+/// dependency demands hash the accepted proposal digest the gate leaves alone.
+/// Initial staging prevents a descendant from gaining synthesized claims after
+/// its parent's evidence was acquired; subsequent withdrawals must still pass
+/// exact dependency receipt discharge.
+fn certify_graphs_with_recipe_gating(
+    graphs: &[PublishedContractGraphPlan],
+    pin: &TypeFactsProducerPin,
+    issuer: &ConfiguredReceiptIssuer,
+    revocation_epoch: u64,
+    probes: Option<&super::ProbeHarnessConfiguration>,
+) -> Result<Vec<FinalizedPolicy2Graph>, PublishedGraphCertificationError> {
+    let first_graph = graphs
+        .first()
+        .ok_or(PublishedGraphCertificationError::EmptyCaseSet)?;
+    let label = if graphs.len() == 1 {
+        first_graph.graph_root().to_owned()
+    } else {
+        "published-graph-case-set".to_owned()
+    };
+    let candidate_count = graphs
+        .iter()
+        .flat_map(|graph| graph.nodes.iter())
+        .map(|node| node.plan.candidates.closure_candidates().len())
+        .sum::<usize>();
+    let type_facts_nodes = graphs
+        .iter()
+        .map(PublishedContractGraphPlan::type_facts_requests)
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .flatten()
+        .map(|(digest, _)| digest)
+        .collect::<BTreeSet<_>>();
+    let passes = candidate_count + type_facts_nodes.len() + 2;
+    let mut already_withheld = BTreeMap::<String, Vec<super::WithheldClosure>>::new();
+    // The rung below it, per node: operations whose own stated facts the
+    // census refused. Each pass withdraws at least one more by name, so the
+    // graph loop stays bounded.
+    let mut withheld_operations = BTreeMap::<String, Vec<super::WithheldOperation>>::new();
+    let mut synthesized = BTreeMap::<String, super::synthesized_vetoes::SynthesizedCorpus>::new();
+    let mut synthesis_attempted = BTreeSet::new();
+    let base_corpus = probes.map(super::ProbeHarnessConfiguration::recipe_corpus);
+    // Evidence and gates persist across passes, each entry keyed by the gating
+    // it was taken under: a node whose demand-graph root (and, for gates, whose
+    // corpus) did not move keeps both, so a pass costs only the nodes it moved.
+    let mut evidence_by_node =
+        BTreeMap::<String, super::type_facts::VerifiedTypeFactsEvidence>::new();
+    let mut evidence_roots = BTreeMap::<String, String>::new();
+    let mut gates_by_node =
+        BTreeMap::<String, (String, super::probe_gates::VerifiedProbeGateBatch)>::new();
+    let emit_timings = std::env::var_os("SOLID_CHECKER_TIMINGS").is_some();
+    for pass in 0..passes {
+        let mut timing = GraphGatingPassTiming {
+            pass,
+            ..GraphGatingPassTiming::default()
+        };
+        let pass_started = std::time::Instant::now();
+        let gated = graphs
+            .iter()
+            .map(|graph| {
+                graph.recipe_gated_per_node(
+                    &synthesized,
+                    base_corpus,
+                    &already_withheld,
+                    &withheld_operations,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        // Every Type Facts node stays in the request set on every pass, and
+        // only the nodes whose demand-graph root moved are acquired again.
+        // Acquiring a subset of the *plans* was tried and is unsound: an
+        // export's runtime binding may belong to another node's snapshot (a
+        // re-export), and `export_implementation_location` finds that owner
+        // among the plans being acquired, so a subset left such an export
+        // bound to "an unplanned snapshot". Keeping every plan in the request
+        // while acquiring only the moved ones keeps the owner lookup whole.
+        timing.nodes = gated.iter().map(|graph| graph.nodes.len()).sum();
+        let acquisition_started = std::time::Instant::now();
+        let acquired = acquire_case_set_evidence(
+            &gated,
+            pin,
+            &evidence_roots,
+            probes.map(|_| &synthesis_attempted),
+        );
+        timing.acquisition_ns = elapsed_ns(acquisition_started);
+        match acquired {
+            Ok(fresh) => {
+                timing.acquired = fresh.len();
+                for (digest, evidence) in fresh {
+                    let root = gated
+                        .iter()
+                        .find_map(|graph| graph.node(&digest))
+                        .map(|node| node.plan.demand_graph().root().as_str().to_owned())
+                        .expect("fresh evidence names a gated node");
+                    evidence_roots.insert(digest.clone(), root);
+                    evidence_by_node.insert(digest, evidence);
+                }
+            }
+            Err(PublishedGraphCertificationError::TypeFactsForGraph { source, .. }) => {
+                // Every node's census refusals at once (`CensusRefused`
+                // carries them all), each withheld at its own node.
+                let mut seen = BTreeSet::new();
+                let mut withdrawn = 0_usize;
+                for node in gated.iter().flat_map(|graph| graph.nodes.iter()) {
+                    let digest = node.identity.digest();
+                    if !seen.insert(digest.to_owned()) {
+                        continue;
+                    }
+                    let records = super::census_refusal_withholding(&node.plan, &source);
+                    withdrawn += records.len();
+                    if !records.is_empty() {
+                        already_withheld
+                            .entry(digest.to_owned())
+                            .or_default()
+                            .extend(records);
+                    }
+                    // Both kinds in the same pass: one `CensusRefused` carries
+                    // every refusal this node recorded, and leaving the
+                    // operations for the next pass would spend a whole
+                    // producer acquisition rediscovering them. A record
+                    // already held is not progress, so it does not count and
+                    // the graph refuses instead of looping.
+                    let held = withheld_operations
+                        .get(digest)
+                        .map_or(&[][..], Vec::as_slice);
+                    let operations = super::positive_fact_refusal_withholding(&node.plan, &source)
+                        .into_iter()
+                        .filter(|record| {
+                            !held.iter().any(|existing| {
+                                existing.artifact_case == record.artifact_case
+                                    && existing.export == record.export
+                                    && existing.operation == record.operation
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    withdrawn += operations.len();
+                    if !operations.is_empty() {
+                        withheld_operations
+                            .entry(digest.to_owned())
+                            .or_default()
+                            .extend(operations);
+                    }
+                }
+                if withdrawn == 0 {
+                    return Err(PublishedGraphCertificationError::TypeFactsForGraph {
+                        graph: label,
+                        source,
+                    });
+                }
+                timing.withdrawn = withdrawn;
+                timing.emit(emit_timings, pass_started);
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
+        let attempted_before = synthesis_attempted.len();
+        let mut changed = false;
+        {
+            let synthesis_started = std::time::Instant::now();
+            for node in gated.iter().flat_map(|graph| graph.nodes.iter()) {
+                let digest = node.identity.digest();
+                let Some(evidence) = evidence_by_node.get(digest) else {
+                    continue;
+                };
+                if !synthesis_attempted.insert(digest.to_owned()) {
+                    continue;
+                }
+                let Some(base) = probes else { continue };
+                let corpus = super::synthesized_vetoes::synthesize(
+                    &node.plan,
+                    evidence,
+                    base,
+                    &node.withheld,
+                )
+                .map_err(|error| {
+                    PublishedGraphCertificationError::FinalizationAtNode {
+                        node: digest.to_owned(),
+                        package: format!(
+                            "{}@{}",
+                            node.identity.package_name, node.identity.package_version
+                        ),
+                        source: Box::new(super::Policy2FinalizationError::VetoSynthesis(
+                            error.to_string(),
+                        )),
+                    }
+                })?;
+                if let Some(corpus) = corpus {
+                    synthesized.insert(digest.to_owned(), corpus);
+                    changed = true;
+                    timing.synthesized += 1;
+                }
+            }
+            timing.synthesis_ns = elapsed_ns(synthesis_started);
+        }
+        if changed || !type_facts_nodes.is_subset(&synthesis_attempted) {
+            if !changed && synthesis_attempted.len() == attempted_before {
+                return Err(
+                    PublishedGraphCertificationError::WithholdingDidNotConverge {
+                        passes: pass + 1,
+                    },
+                );
+            }
+            timing.emit(emit_timings, pass_started);
+            continue;
+        }
+        // Gate pre-pass: every node's veto set runs now, so one pass collects
+        // every incomplete veto and every synthesized veto the interpreter
+        // cannot run, instead of one per pass. The batches are independent —
+        // each has its own private workspace, corpus, and evidence — so they
+        // run side by side (`parallel::run_each`) and are applied afterwards
+        // in node order, which keeps every withdrawal, every cache entry, and
+        // the first reported error where the sequential loop put them.
+        let mut withdrawals = Vec::<(String, super::WithheldClosure)>::new();
+        let mut dropped_corpora = BTreeSet::<String>::new();
+        let mut gated_this_pass = BTreeSet::<String>::new();
+        let mut jobs = Vec::new();
+        for graph in &gated {
+            for node in &graph.nodes {
+                let digest = node.identity.digest();
+                if !gated_this_pass.insert(digest.to_owned()) {
+                    continue;
+                }
+                let node_probes = synthesized
+                    .get(digest)
+                    .map(super::synthesized_vetoes::SynthesizedCorpus::configuration)
+                    .or(probes);
+                let gating_key = format!(
+                    "{}\0{}",
+                    node.plan.demand_graph().root().as_str(),
+                    node_probes.map_or_else(String::new, |configuration| {
+                        configuration.recipe_corpus().to_string_lossy().into_owned()
+                    })
+                );
+                if gates_by_node
+                    .get(digest)
+                    .is_some_and(|(key, _)| *key == gating_key)
+                {
+                    continue;
+                }
+                gates_by_node.remove(digest);
+                jobs.push(GateJob {
+                    digest: digest.to_owned(),
+                    package: format!(
+                        "{}@{}",
+                        node.identity.package_name, node.identity.package_version
+                    ),
+                    node,
+                    node_probes,
+                    gating_key,
+                    dependencies: graph.transitive_dependency_plans(node)?,
+                });
+            }
+        }
+        let gate_started = std::time::Instant::now();
+        timing.gate_workers = super::parallel::workers_for(jobs.len());
+        let outcomes = super::parallel::run_each(&jobs, timing.gate_workers, |job| {
+            super::finalization::authenticate_probe_gates_with_dependencies(
+                &job.node.plan,
+                job.node_probes,
+                pin,
+                &job.dependencies,
+            )
+        });
+        timing.gate_runs = jobs.len();
+        timing.gate_sessions = jobs
+            .iter()
+            .map(|job| {
+                job.node
+                    .plan
+                    .probe_gate_schedule()
+                    .map_or(0, |schedule| schedule.gates().len())
+            })
+            .sum();
+        timing.gate_ns = elapsed_ns(gate_started);
+        for (job, authenticated) in jobs.into_iter().zip(outcomes) {
+            let GateJob {
+                digest,
+                package,
+                node,
+                gating_key,
+                ..
+            } = job;
+            let digest = digest.as_str();
+            match authenticated {
+                Ok(gates) => {
+                    gates_by_node.insert(digest.to_owned(), (gating_key, gates));
+                }
+                Err(source) => {
+                    let incomplete = super::incomplete_gate_withholding(&node.plan, &source);
+                    if !incomplete.is_empty() {
+                        withdrawals.extend(
+                            incomplete
+                                .into_iter()
+                                .map(|record| (digest.to_owned(), record)),
+                        );
+                        continue;
+                    }
+                    // A private workspace this node cannot have at all -- two
+                    // authenticated versions of one dependency name in its
+                    // closure -- refuses every gate of the node before any
+                    // runs. Withhold them all with that reason rather than
+                    // failing the case set (`workspace_refusal_withholding`).
+                    let workspace_refused =
+                        super::workspace_refusal_withholding(&node.plan, &source);
+                    if !workspace_refused.is_empty() {
+                        withdrawals.extend(
+                            workspace_refused
+                                .into_iter()
+                                .map(|record| (digest.to_owned(), record)),
+                        );
+                        continue;
+                    }
+                    // A synthesized veto the pinned interpreter cannot run
+                    // for this artifact case -- an export condition it
+                    // cannot be given (`@tanstack/custom-condition`), or
+                    // one under which it would load a different file than
+                    // the witness read (`solid` selecting `dist/solid.js`
+                    // where Node selects `dist/server.js`), or a dependency
+                    // edge the private workspace cannot populate from its
+                    // authenticated snapshots. The hand corpus
+                    // named nothing for these candidates and the checker's
+                    // own veto cannot be executed, so they are withheld
+                    // with that reason and the node keeps the hand corpus.
+                    // A hand recipe that hits the same binding refuses as
+                    // it always did.
+                    let cannot_run = matches!(
+                        &source,
+                        super::Policy2FinalizationError::ProbeHarness(
+                            super::probe_harness::ProbeHarnessError::Configuration(_)
+                                | super::probe_harness::ProbeHarnessError::ConditionMismatch(_)
+                                | super::probe_harness::ProbeHarnessError::UnauthenticatedDependency(_)
+                        )
+                    );
+                    if cannot_run && synthesized.contains_key(digest) {
+                        let served = graphs
+                            .iter()
+                            .find_map(|original| original.node(digest))
+                            .map(|original| {
+                                original.plan.recipe_gated_with(
+                                    base_corpus,
+                                    already_withheld.get(digest).map_or(&[], Vec::as_slice),
+                                )
+                            })
+                            .transpose()
+                            .map_err(|gating| {
+                                PublishedGraphCertificationError::RecipeGatingAtNode {
+                                    node: digest.to_owned(),
+                                    package: package.clone(),
+                                    source: Box::new(gating),
+                                }
+                            })?
+                            .map(|gated| gated.into_parts().1)
+                            .unwrap_or_default();
+                        let schedule = node.plan.probe_gate_schedule().ok();
+                        let records = served
+                        .into_iter()
+                        .filter(|record| record.reason == super::WITHHELD_CLOSURE_NO_RECIPE)
+                        .map(|record| {
+                            let gate_id = schedule
+                                .as_ref()
+                                .and_then(|schedule| {
+                                    schedule.gates().iter().find(|gate| {
+                                        gate.semantic_claim_id() == record.semantic_claim_id
+                                    })
+                                })
+                                .map_or_else(
+                                    || "unscheduled".to_owned(),
+                                    |gate| gate.id().to_owned(),
+                                );
+                            (
+                                digest.to_owned(),
+                                super::WithheldClosure {
+                                    reason: format!(
+                                        "{}{gate_id} (synthesized veto cannot run for this artifact case: {source})",
+                                        super::WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX
+                                    ),
+                                    ..record
+                                },
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                        if !records.is_empty() {
+                            withdrawals.extend(records);
+                            dropped_corpora.insert(digest.to_owned());
+                            continue;
+                        }
+                    }
+                    return Err(PublishedGraphCertificationError::FinalizationAtNode {
+                        node: digest.to_owned(),
+                        package,
+                        source: Box::new(source),
+                    });
+                }
+            }
+        }
+        for digest in &dropped_corpora {
+            synthesized.remove(digest);
+        }
+        if !withdrawals.is_empty() {
+            timing.withdrawn = withdrawals.len();
+            for (digest, record) in withdrawals {
+                already_withheld.entry(digest).or_default().push(record);
+            }
+            timing.emit(emit_timings, pass_started);
+            continue;
+        }
+        let mut finalized = Vec::with_capacity(gated.len());
+        let mut composition_withdrawals = Vec::new();
+        for graph in &gated {
+            match graph.finalize_value_only_with_type_facts(
+                &evidence_by_node,
+                &gates_by_node,
+                pin,
+                issuer,
+                revocation_epoch,
+            )? {
+                Ok(contract) => finalized.push(contract),
+                Err(withdrawn) => composition_withdrawals.extend(withdrawn),
+            }
+        }
+        timing.withdrawn = composition_withdrawals.len();
+        timing.emit(emit_timings, pass_started);
+        if composition_withdrawals.is_empty() {
+            return Ok(finalized);
+        }
+        for (digest, record) in composition_withdrawals {
+            already_withheld.entry(digest).or_default().push(record);
+        }
+    }
+    Err(PublishedGraphCertificationError::WithholdingDidNotConverge { passes })
+}
+
+/// One node's probe-gate batch to run in the gate pre-pass of
+/// [`certify_graphs_with_recipe_gating`]: everything the run reads, resolved
+/// before any batch starts so the batches share no lookups.
+struct GateJob<'a> {
+    digest: String,
+    package: String,
+    node: &'a PlannedGraphNode,
+    node_probes: Option<&'a super::ProbeHarnessConfiguration>,
+    gating_key: String,
+    dependencies: Vec<&'a CertificationPlan>,
+}
+
+/// What one pass of [`certify_graphs_with_recipe_gating`] cost and moved,
+/// reported under `SOLID_CHECKER_TIMINGS` so a slow graph row is attributable
+/// to acquisition, synthesis, or gate launches rather than guessed at.
+#[derive(Debug, Default)]
+struct GraphGatingPassTiming {
+    pass: usize,
+    nodes: usize,
+    acquired: usize,
+    acquisition_ns: u64,
+    synthesized: usize,
+    synthesis_ns: u64,
+    gate_runs: usize,
+    gate_sessions: usize,
+    gate_workers: usize,
+    gate_ns: u64,
+    withdrawn: usize,
+}
+
+impl GraphGatingPassTiming {
+    fn emit(&self, enabled: bool, pass_started: std::time::Instant) {
+        if !enabled {
+            return;
+        }
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "mode": "graph-recipe-gating",
+                "pass": self.pass,
+                "nodes": self.nodes,
+                "acquired": self.acquired,
+                "acquisitionNs": self.acquisition_ns,
+                "synthesized": self.synthesized,
+                "synthesisNs": self.synthesis_ns,
+                "gateRuns": self.gate_runs,
+                "gateSessions": self.gate_sessions,
+                "gateWorkers": self.gate_workers,
+                "gateNs": self.gate_ns,
+                "withdrawn": self.withdrawn,
+                "passNs": elapsed_ns(pass_started),
+            })
+        );
+    }
+}
+
+fn elapsed_ns(started: std::time::Instant) -> u64 {
+    u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX)
+}
+
+/// Exported-value evidence for the Type Facts nodes of the case set whose
+/// gating moved since `held` was taken, keyed by canonical identity digest;
+/// `held` maps a digest to the demand-graph root its evidence was acquired
+/// under, and a node whose root is unchanged is not acquired again. Every node
+/// still takes part in schedule derivation, so an export whose runtime binding
+/// belongs to another node's snapshot finds its owner. Canonical nodes shared
+/// by several roots are acquired once; the same digest naming two different
+/// identities is refused.
+/// With synthesis enabled, a node waits for the initial acquisition/synthesis
+/// of all reachable Type Facts dependencies. Deferred requests remain in the
+/// owner lookup but retain no evidence, including reused importer evidence.
+fn acquire_case_set_evidence(
+    graphs: &[PublishedContractGraphPlan],
+    pin: &TypeFactsProducerPin,
+    held: &BTreeMap<String, String>,
+    synthesis_attempted: Option<&BTreeSet<String>>,
+) -> Result<
+    BTreeMap<String, super::type_facts::VerifiedTypeFactsEvidence>,
+    PublishedGraphCertificationError,
+> {
     let first_graph = graphs
         .first()
         .ok_or(PublishedGraphCertificationError::EmptyCaseSet)?;
@@ -592,39 +2043,61 @@ pub fn certify_published_contract_graph_case_set(
     let mut requests = BTreeMap::new();
     let mut identities = BTreeMap::new();
     for graph in graphs {
-        for (identity, request) in graph.type_facts_requests()? {
+        for (identity, mut request) in graph.type_facts_requests()? {
             let node = graph
                 .nodes
                 .iter()
                 .find(|node| node.identity.digest() == identity)
                 .expect("Type Facts requests originate from retained graph nodes");
+            // Retain deferred plans in the shared project and owner lookup.
+            // Only their acquisition waits, until every reachable Type Facts
+            // dependency has had its one synthesis attempt. Later withdrawals
+            // cannot grant a new premise and still require receipt discharge.
+            let waiting_for_dependency = synthesis_attempted.is_some_and(|attempted| {
+                graph.nodes.iter().any(|dependency| {
+                    !attempted.contains(dependency.identity.digest())
+                        && dependency
+                            .plan
+                            .demand_graph()
+                            .demands()
+                            .iter()
+                            .any(|demand| demand.family() == ProofFamily::RecursiveValueShape)
+                        && request
+                            .dependencies
+                            .iter()
+                            .any(|plan| std::ptr::eq(*plan, &dependency.plan))
+                })
+            });
+            request.acquire = !waiting_for_dependency
+                && held.get(&identity)
+                    != Some(&node.plan.demand_graph().root().as_str().to_owned());
             if identities
                 .insert(identity.clone(), node.identity.clone())
                 .is_some_and(|previous| previous != node.identity)
             {
                 return Err(PublishedGraphCertificationError::CanonicalIdentityCollision(identity));
             }
-            requests.entry(identity).or_insert(request);
+            // The canonical identity travels with its request rather than
+            // being looked up again when the order is derived. A lookup would
+            // need an answer for a key it cannot find, and every such answer
+            // is wrong: `None` coordinates sort the node first, and a panic
+            // turns an ordering decision into a crash.
+            requests
+                .entry(identity)
+                .or_insert((node.identity.clone(), request));
         }
     }
     let mut request_entries = requests.into_iter().collect::<Vec<_>>();
-    request_entries.sort_by(|(left_identity, left), (right_identity, right)| {
+    request_entries.sort_by(|(_, (left, _)), (_, (right, _))| {
         compare_type_facts_request_coordinates(
-            (
-                &left.plan.resolved_import.package_name,
-                &left.plan.resolved_import.package_version,
-                &left.plan.resolved_import.requested_entrypoint,
-                left_identity,
-            ),
-            (
-                &right.plan.resolved_import.package_name,
-                &right.plan.resolved_import.package_version,
-                &right.plan.resolved_import.requested_entrypoint,
-                right_identity,
-            ),
+            type_facts_request_order_key(left),
+            type_facts_request_order_key(right),
         )
     });
-    let (request_keys, request_values): (Vec<_>, Vec<_>) = request_entries.into_iter().unzip();
+    let (request_keys, request_values): (Vec<_>, Vec<_>) = request_entries
+        .into_iter()
+        .map(|(digest, (_, request))| (digest, request))
+        .unzip();
     let evidence =
         super::type_facts::acquire_and_verify_graph_export_values(root_plan, &request_values, pin)
             .map_err(
@@ -633,26 +2106,100 @@ pub fn certify_published_contract_graph_case_set(
                     source,
                 },
             )?;
-    let evidence_by_node = request_keys
+    Ok(request_keys
         .into_iter()
+        .zip(request_values)
         .zip(evidence)
-        .collect::<BTreeMap<_, _>>();
-    graphs
-        .iter()
-        .map(|graph| {
-            graph.finalize_value_only_with_type_facts(
-                &evidence_by_node,
-                pin,
-                issuer,
-                revocation_epoch,
-            )
+        // Importer-variant grouping can return reused evidence even for a
+        // deferred request. Its dependencies must finish their own initial
+        // synthesis before this canonical node may retain that evidence.
+        .filter_map(|((digest, request), evidence)| {
+            evidence
+                .filter(|_| request.acquire)
+                .map(|evidence| (digest, evidence))
         })
-        .collect()
+        .collect())
+}
+
+/// The coordinates one case-set Type Facts request is ordered by, most
+/// significant first. See `type_facts_request_order_key`.
+type TypeFactsRequestOrderKey<'a> = (
+    &'a str,
+    &'a str,
+    &'a str,
+    usize,
+    &'a [String],
+    &'a str,
+    &'a str,
+    &'a str,
+);
+
+/// The order one case set's Type Facts requests are acquired and verified in —
+/// and therefore, since verification stops at the first open demand, which
+/// node's refusal a failing case set reports.
+///
+/// Package name, version and requested entrypoint first, so a case set stays
+/// grouped by package; then **fewest conditions first**, the conditions
+/// themselves, and the package-relative runtime and declaration targets those
+/// conditions resolve to. Every coordinate is a property of the packages; the
+/// canonical identity digest is only the last resort, and it is never reached
+/// in practice (see the residual below).
+///
+/// Condition *count* precedes the conditions because the list alone orders
+/// them backwards. `certify-contract.mjs` adds `import` to
+/// every case's condition set, so the unconditional case is `["import"]` and
+/// the opt-in cases are supersets of it — and *lexicographically* a superset
+/// starting with a lower-sorting word comes first:
+/// `["@tanstack/custom-condition", "import"]` and `["development", "import"]`
+/// both sort before `["import"]`, because `@` and `d` precede `i`. Ordering by
+/// the condition list alone therefore put the publisher-private TypeScript
+/// source case first and the ordinary consumer's case last, the exact
+/// inversion of the intent. The count restores it: `["import"]` is the
+/// shortest set any case can have.
+///
+/// The digest used to be the *third* tie-break, and it is salted by absolute
+/// paths — the canonical identity binds `importer` and the resolved import
+/// root, which under any harness that installs into a fresh temporary
+/// directory differ on every run. Alternative artifact cases of one package
+/// share name, version and entrypoint, so the digest alone decided their
+/// relative order, and the case whose refusal a failing set reported changed
+/// run to run from identical inputs and identical binaries:
+/// `@tanstack/query-persist-client-core`'s plain `import` case
+/// (`build/modern/createPersister.js`) one run and its
+/// `@tanstack/custom-condition` case (`src/createPersister.ts`) the next, with
+/// the demand digest in the report flipping with it.
+///
+/// Residual, unobservable within one run: two nodes agreeing on every
+/// coordinate above and differing only in `importer` would still tie down to
+/// the path-salted digest. One `name@version` resolves to one integrity in a
+/// lockfile, so two such nodes are byte-identical installations of the same
+/// package reached from different importers, and every premise proved over
+/// them is the same. Nothing in the corpus produces the pair.
+///
+/// The sibling lane orders differently and deliberately:
+/// `certify_value_only` consumes `type_facts_requests()` in `self.nodes`
+/// order, which is the retained dependency-first planning order. That is
+/// deterministic and path-independent too, but it is not this order, and a
+/// single-graph run and a case-set run can report different first refusals for
+/// the same node set.
+fn type_facts_request_order_key(
+    identity: &CanonicalDependencyNodeIdentity,
+) -> TypeFactsRequestOrderKey<'_> {
+    (
+        identity.package_name.as_str(),
+        identity.package_version.as_str(),
+        identity.entrypoint.as_str(),
+        identity.conditions.len(),
+        identity.conditions.as_slice(),
+        identity.runtime_target.as_str(),
+        identity.declarations_target.as_str(),
+        identity.digest(),
+    )
 }
 
 fn compare_type_facts_request_coordinates(
-    left: (&str, &str, &str, &str),
-    right: (&str, &str, &str, &str),
+    left: TypeFactsRequestOrderKey<'_>,
+    right: TypeFactsRequestOrderKey<'_>,
 ) -> std::cmp::Ordering {
     left.cmp(&right)
 }
@@ -733,9 +2280,28 @@ pub enum PublishedGraphCertificationError {
     FinalizationAtNode {
         node: String,
         package: String,
+        /// Boxed: with the finalization error inline this variant sits at the
+        /// size Clippy's `result_large_err` refuses.
         #[source]
-        source: super::Policy2FinalizationError,
+        source: Box<super::Policy2FinalizationError>,
     },
+    #[error("recipe-gated planning failed for graph node {node} ({package}): {source}")]
+    RecipeGatingAtNode {
+        node: String,
+        package: String,
+        // Boxed: the gating error carries a whole planning error, and an
+        // unboxed one would grow every `Result` in this module past the size
+        // Clippy's `result_large_err` accepts.
+        #[source]
+        source: Box<super::RecipeGatingError>,
+    },
+    /// ADR 0036's withdraw-and-re-plan passes are bounded by the number of
+    /// closure candidates plus initial Type Facts acquisition/synthesis stages;
+    /// exceeding that is a bookkeeping defect, not a property of the package.
+    #[error("recipe gating of the published graph did not converge within {passes} passes")]
+    WithholdingDidNotConverge { passes: usize },
+    #[error("graph node {0} reached finalization without an authenticated probe gate set")]
+    MissingProbeGates(String),
     #[error(transparent)]
     Contract(#[from] crate::contract_interface::ContractFailure),
 }
@@ -849,32 +2415,8 @@ fn plan_published_contract_graph_with_limits(
                 })
                 .map(|candidate| candidate.identity.clone())
                 .collect::<Vec<_>>();
-            match matches.as_slice() {
-                [identity] => {
-                    for (field, supplied, replayed) in [
-                        (
-                            "artifact case",
-                            edge.artifact_case.as_str(),
-                            identity.artifact_case.as_str(),
-                        ),
-                        (
-                            "semantic digest",
-                            edge.accepted_contract_digest.as_str(),
-                            identity.semantic_digest.as_str(),
-                        ),
-                    ] {
-                        if supplied != replayed {
-                            identity_disagreements.push((
-                                planned[parent_index].identity.digest.clone(),
-                                edge.specifier.clone(),
-                                field,
-                                supplied.to_owned(),
-                                replayed.to_owned(),
-                            ));
-                        }
-                    }
-                    resolved.push(identity.clone());
-                }
+            let identity = match matches.as_slice() {
+                [identity] => identity.clone(),
                 [] => {
                     return Err(PublishedGraphPlanningError::MissingDependency {
                         parent: planned[parent_index].identity.digest.clone(),
@@ -882,12 +2424,49 @@ fn plan_published_contract_graph_with_limits(
                     });
                 }
                 _ => {
-                    return Err(PublishedGraphPlanningError::AmbiguousDependency {
-                        parent: planned[parent_index].identity.digest.clone(),
-                        specifier: edge.specifier,
-                    });
+                    let variants = matches
+                        .iter()
+                        .map(|identity| {
+                            (
+                                identity.importer_invariant_key(),
+                                identity.importer.as_str(),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    match select_importer_variant(&variants) {
+                        Some(position) => matches[position].clone(),
+                        None => {
+                            return Err(PublishedGraphPlanningError::AmbiguousDependency {
+                                parent: planned[parent_index].identity.digest.clone(),
+                                specifier: edge.specifier,
+                            });
+                        }
+                    }
+                }
+            };
+            for (field, supplied, replayed) in [
+                (
+                    "artifact case",
+                    edge.artifact_case.as_str(),
+                    identity.artifact_case.as_str(),
+                ),
+                (
+                    "semantic digest",
+                    edge.accepted_contract_digest.as_str(),
+                    identity.semantic_digest.as_str(),
+                ),
+            ] {
+                if supplied != replayed {
+                    identity_disagreements.push((
+                        planned[parent_index].identity.digest.clone(),
+                        edge.specifier.clone(),
+                        field,
+                        supplied.to_owned(),
+                        replayed.to_owned(),
+                    ));
                 }
             }
+            resolved.push(identity);
         }
         resolved.sort();
         resolved.dedup();
@@ -960,13 +2539,55 @@ fn plan_published_contract_graph_with_limits(
     })
 }
 
-/// True when `importer` lies anywhere inside `package_root`. Node resolves an
-/// external import from the importing module, which may be any module of the
-/// parent package rather than only its entry, so package-root containment is
-/// the sound relation for ordering unplanned graph requests. Comparison is
-/// component-wise, so a sibling directory sharing a name prefix does not match.
-fn importer_within_package_root(importer: &str, package_root: &str) -> bool {
-    Path::new(importer).starts_with(Path::new(package_root))
+/// Selects, among several nodes that all match one dependency edge of a parent,
+/// the node the parent's discovery bound to that edge.
+///
+/// Discovery keys a dependency node by the module that imports it, and a
+/// package with many entrypoints reaches the same dependency from many of its
+/// modules, so a parent's closure can contain the importers of several nodes
+/// that are the same artifact, resolution, and proposal and differ only in
+/// which of the package's modules imported them. Those nodes are
+/// interchangeable as a dependency, and the one discovery bound to *this*
+/// parent is the one whose importer sorts first: discovery binds a parent to
+/// the first of its importing modules in the same byte order, and every node
+/// whose importer is a member of the parent's closure is one of those modules.
+/// Nodes that differ in anything beyond the importer are not interchangeable,
+/// and the tie stays refused. Returns the position of the selected variant.
+fn select_importer_variant<K: PartialEq>(variants: &[(K, &str)]) -> Option<usize> {
+    let (first_key, _) = variants.first()?;
+    if variants.iter().any(|(key, _)| key != first_key) {
+        return None;
+    }
+    variants
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, (_, importer))| *importer)
+        .map(|(position, _)| position)
+}
+
+/// Everything an unplanned graph request's replayed resolution names except
+/// the importing module, for [`select_importer_variant`].
+fn request_importer_invariant_key(certification: &CertificationRequest) -> Vec<String> {
+    let resolved = &certification.resolved_import;
+    let mut conditions = certification.import_request.export_conditions.clone();
+    conditions.sort();
+    conditions.dedup();
+    let mut key = vec![
+        certification.import_request.specifier.clone(),
+        resolved.package_name.clone(),
+        resolved.package_version.clone(),
+        resolved.package_integrity.clone(),
+        resolved.package_root.clone(),
+        resolved.requested_entrypoint.clone(),
+        resolved.runtime.path.clone(),
+        resolved.runtime.digest.clone(),
+        resolved.declarations.path.clone(),
+        resolved.declarations.digest.clone(),
+        resolved.closure.digest.clone(),
+        format!("{:?}", resolved.authority),
+    ];
+    key.extend(conditions);
+    key
 }
 
 /// True when `importer` is exactly one runtime- or declaration-role module of
@@ -975,7 +2596,7 @@ fn importer_within_package_root(importer: &str, package_root: &str) -> bool {
 /// admits a re-export issued from a non-entry module of the parent package
 /// while still rejecting any importer that is not a member of the parent's
 /// proven closure (for instance one transplanted outside the package root).
-fn importer_is_closure_entry_module(
+pub(super) fn importer_is_closure_entry_module(
     importer: &str,
     package_root: &str,
     entries: &[crate::artifact_resolution::ClosureEntry],
@@ -1004,6 +2625,10 @@ fn graph_request_edges(
     let mut graph = vec![Vec::new(); requests.len()];
     for (parent_index, parent) in requests.iter().enumerate() {
         let parent_root = &parent.certification.resolved_import.package_root;
+        // The supplied closure is untrusted here and only orders planning;
+        // `plan_published_contract_graph_with_limits` re-derives every edge
+        // against the replayed, digest-pinned closure with the same matcher.
+        let parent_entries = &parent.certification.resolved_import.closure.entries;
         let mut parent_conditions = parent
             .certification
             .import_request
@@ -1022,9 +2647,10 @@ fn graph_request_edges(
                     child_conditions.dedup();
                     child.certification.resolved_import.package_name == edge.package_name
                         && child.certification.import_request.specifier == edge.specifier
-                        && importer_within_package_root(
+                        && importer_is_closure_entry_module(
                             &child.certification.import_request.importer,
                             parent_root,
+                            parent_entries,
                         )
                         && child_conditions == parent_conditions
                 })
@@ -1036,8 +2662,8 @@ fn graph_request_edges(
                 parent.certification.resolved_import.package_version,
                 parent.certification.resolved_import.requested_entrypoint
             );
-            match matches.as_slice() {
-                [index] => graph[parent_index].push(*index),
+            let selected = match matches.as_slice() {
+                [index] => *index,
                 [] => {
                     return Err(PublishedGraphPlanningError::MissingDependency {
                         parent: parent_label,
@@ -1045,12 +2671,28 @@ fn graph_request_edges(
                     });
                 }
                 _ => {
-                    return Err(PublishedGraphPlanningError::AmbiguousDependency {
-                        parent: parent_label,
-                        specifier: edge.specifier.clone(),
-                    });
+                    let variants = matches
+                        .iter()
+                        .map(|index| {
+                            let certification = &requests[*index].certification;
+                            (
+                                request_importer_invariant_key(certification),
+                                certification.import_request.importer.as_str(),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    match select_importer_variant(&variants) {
+                        Some(position) => matches[position],
+                        None => {
+                            return Err(PublishedGraphPlanningError::AmbiguousDependency {
+                                parent: parent_label,
+                                specifier: edge.specifier.clone(),
+                            });
+                        }
+                    }
                 }
-            }
+            };
+            graph[parent_index].push(selected);
         }
         graph[parent_index].sort_unstable();
         graph[parent_index].dedup();
@@ -1215,11 +2857,15 @@ fn plan_graph_node(
         digest: String::new(),
     };
     identity.digest = node_identity_digest(&identity);
+    let accepted_candidate = plan.selected_candidate.clone();
     Ok(PlannedGraphNode {
         identity,
         plan,
         dependencies: Vec::new(),
         source_dependencies,
+        withheld: Vec::new(),
+        withheld_operations: Vec::new(),
+        accepted_candidate,
     })
 }
 
@@ -1666,7 +3312,16 @@ pub struct DependencyCompositionRequirement {
     demand_id: String,
     dependency: DependencyDemandInput,
     parent_export: Option<String>,
+    /// The **parent's** own closure-candidate claim id, which is what
+    /// `creates_census` and `dependency_creates_claims` resolve against the
+    /// parent's `DomainClosure` demand.
     semantic_claim_id: Option<String>,
+    /// The **dependency's** claim this requirement demands closed in the
+    /// dependency's receipt. Demand planning names none -- see the condition
+    /// in `authenticate_dependency_receipt` for why that is correct rather
+    /// than missing -- so today only a caller that has a real dependency
+    /// claim in hand sets it.
+    dependency_semantic_claim_id: Option<String>,
 }
 
 impl DependencyCompositionRequirement {
@@ -1688,6 +3343,11 @@ impl DependencyCompositionRequirement {
     #[must_use]
     pub fn semantic_claim_id(&self) -> Option<&str> {
         self.semantic_claim_id.as_deref()
+    }
+
+    #[must_use]
+    pub fn dependency_semantic_claim_id(&self) -> Option<&str> {
+        self.dependency_semantic_claim_id.as_deref()
     }
 
     #[must_use]
@@ -1714,6 +3374,7 @@ impl DependencyCompositionSchedule {
                         dependency: dependency.clone(),
                         parent_export: None,
                         semantic_claim_id: None,
+                        dependency_semantic_claim_id: None,
                     })
                 }
                 ProofDemandSubject::DependencyClosure {
@@ -1725,6 +3386,7 @@ impl DependencyCompositionSchedule {
                     dependency: dependency.clone(),
                     parent_export: Some(parent.export.clone()),
                     semantic_claim_id: Some(semantic_claim_id.clone()),
+                    dependency_semantic_claim_id: None,
                 }),
                 _ => Err(DependencyCompositionError::InvalidDemand),
             })
@@ -1776,13 +3438,17 @@ pub struct VerifiedDependencyComposition {
     trust_root: String,
     verifier_build_digest: Option<String>,
     semantic_dependency_count: usize,
+    census_requirements_root: Option<String>,
+    factory_requirements_root: Option<String>,
 }
 
 impl VerifiedDependencyComposition {
+    #[allow(clippy::too_many_arguments)]
     fn authenticate(
         parent: &CertificationPlan,
         expected_dependencies: &[CanonicalDependencyNodeIdentity],
         source_dependencies: &[VerifiedGraphSourcePackage],
+        gating: &BTreeMap<String, DependencyGating<'_>>,
         graph_root: &str,
         receipts: &[(
             &CanonicalDependencyNodeIdentity,
@@ -1790,6 +3456,7 @@ impl VerifiedDependencyComposition {
         )],
         issuer: &ConfiguredReceiptIssuer,
         revocation_epoch: u64,
+        type_facts: Option<&super::type_facts::VerifiedTypeFactsEvidence>,
     ) -> Result<Self, DependencyReceiptCompositionError> {
         if expected_dependencies.len() != receipts.len() {
             return Err(DependencyReceiptCompositionError::ReceiptCensus {
@@ -1809,6 +3476,9 @@ impl VerifiedDependencyComposition {
         let mut trust_rows = Vec::new();
         let mut verifier_build_digest = None::<String>;
         let mut witnesses = Vec::with_capacity(schedule.requirements().len());
+        let factory_claims = type_facts
+            .map(|facts| facts.factory_return_claims())
+            .unwrap_or_default();
         for requirement in schedule.requirements() {
             let dependency = expected_dependencies
                 .iter()
@@ -1826,14 +3496,114 @@ impl VerifiedDependencyComposition {
                     dependency: dependency.digest().into(),
                 }
             })?;
+            let dependency_gating = gating.get(dependency.digest()).ok_or_else(|| {
+                DependencyReceiptCompositionError::DependencyOutsideGraph {
+                    dependency: dependency.digest().into(),
+                }
+            })?;
+            let census = requirement
+                .semantic_claim_id()
+                .and_then(|claim| type_facts?.creates_census(parent, claim));
             authenticate_dependency_receipt(
                 parent,
                 requirement,
                 dependency,
+                dependency_gating,
                 receipt,
                 issuer,
                 revocation_epoch,
+                census,
             )?;
+            let census_claims = requirement
+                .semantic_claim_id()
+                .and_then(|claim| {
+                    type_facts.map(|facts| facts.dependency_creates_claims(parent, claim))
+                })
+                .unwrap_or_default();
+            let mut census_sites = Vec::new();
+            for claim in census_claims.iter().filter(|claim| {
+                claim.package == requirement.dependency().package
+                    && claim.artifact_case == requirement.dependency().artifact_case
+                    && claim.accepted_contract_digest
+                        == requirement.dependency().accepted_contract_digest
+            }) {
+                let empty = dependency_gating
+                    .certified_candidate
+                    .artifact_case(&claim.artifact_case)
+                    .and_then(|case| case.exports.get(&claim.export))
+                    .and_then(|export| {
+                        export.operation_claim(
+                            solid_reactive_ir::contract_semantics::ClaimDomain::Creates,
+                        )
+                    })
+                    .is_some_and(|creates| creates.is_closed() && creates.items().is_empty());
+                if !empty || !receipt.contains_closed_claim_id(&claim.semantic_claim_id) {
+                    return Err(DependencyReceiptCompositionError::MissingClosedClaim {
+                        demand_id: requirement.demand_id().into(),
+                        semantic_claim_id: claim.semantic_claim_id.clone(),
+                    });
+                }
+                census_sites.push(format!(
+                    "census-dependency-creates:{}:{}:{}",
+                    claim.export,
+                    claim.semantic_claim_id,
+                    receipt.receipt_digest()
+                ));
+            }
+            // The inherited-closure half. The parent's closure on a
+            // re-exported name is the dependency's claim republished under this
+            // package's identity, and the Type Facts arm that admitted it
+            // proved only that it *is* the projection of the dependency's —
+            // against the dependency's **gated** candidate, before the
+            // dependency's own census and vetoes had their say. What certifies
+            // it is the dependency's receipt, and that is this check: the
+            // domain closed in the contract the receipt actually certifies, and
+            // the claim id among the receipt's closed claims. A dependency that
+            // withheld the domain therefore refuses here by name, and
+            // `composed_from_withheld_dependency` turns that refusal into the
+            // parent's own withholding, which opens the domain at the parent —
+            // exactly what is known.
+            let inherited = requirement
+                .semantic_claim_id()
+                .and_then(|claim| {
+                    type_facts.map(|facts| facts.inherited_closure_claims(parent, claim))
+                })
+                .unwrap_or_default();
+            for claim in inherited.iter().filter(|claim| {
+                claim.package == requirement.dependency().package
+                    && claim.artifact_case == requirement.dependency().artifact_case
+                    && claim.accepted_contract_digest
+                        == requirement.dependency().accepted_contract_digest
+            }) {
+                let closed = solid_reactive_ir::contract_semantics::ClaimDomain::ALL
+                    .into_iter()
+                    .find(|domain| domain.wire_name() == claim.domain)
+                    .and_then(|domain| {
+                        let export = dependency_gating
+                            .certified_candidate
+                            .artifact_case(&claim.artifact_case)?
+                            .exports
+                            .get(&claim.export)?;
+                        Some(export.operation_claim(domain).map_or_else(
+                            || export.callbacks().is_closed(),
+                            |claim| claim.is_closed(),
+                        ))
+                    })
+                    .unwrap_or(false);
+                if !closed || !receipt.contains_closed_claim_id(&claim.semantic_claim_id) {
+                    return Err(DependencyReceiptCompositionError::MissingClosedClaim {
+                        demand_id: requirement.demand_id().into(),
+                        semantic_claim_id: claim.semantic_claim_id.clone(),
+                    });
+                }
+                census_sites.push(format!(
+                    "inherited-closure-dependency:{}:{}:{}:{}",
+                    claim.export,
+                    claim.domain,
+                    claim.semantic_claim_id,
+                    receipt.receipt_digest()
+                ));
+            }
             match &verifier_build_digest {
                 Some(expected) if expected != receipt.verifier_build_digest().as_str() => {
                     return Err(DependencyReceiptCompositionError::VerifierBuildDisagreement);
@@ -1850,22 +3620,122 @@ impl VerifiedDependencyComposition {
                 dependency,
                 receipt,
             );
+            let evidence_root = census.map_or(evidence_root.clone(), |census| {
+                composition_root(
+                    if census_claims.is_empty() {
+                        "independent-creates-census-composition"
+                    } else {
+                        "dependency-creates-census-composition"
+                    },
+                    graph_root,
+                    &[evidence_root.as_str(), census],
+                )
+            });
+            let mut sites = vec![
+                format!("graph:{graph_root}"),
+                format!("parent-case:{}", parent.selected_artifact_case_id()),
+                format!("dependency-node:{}", dependency.digest()),
+                format!("dependency-receipt:{}", receipt.receipt_digest()),
+            ];
+            if let Some(census) = census {
+                let kind = if census_claims.is_empty() {
+                    "independent-creates-census"
+                } else {
+                    "dependency-creates-census"
+                };
+                sites.push(format!("{kind}:{census}"));
+            }
+            sites.extend(census_sites);
             witnesses.push(
                 solid_reactive_ir::contract_semantics::certification::WitnessBinding::new(
                     solid_reactive_ir::contract_semantics::certification::ProofWitnessVariant::AcceptedDependencyComposition,
                     requirement.demand_id(),
                     evidence_root,
-                    vec![
-                        format!("graph:{graph_root}"),
-                        format!("parent-case:{}", parent.selected_artifact_case_id()),
-                        format!("dependency-node:{}", dependency.digest()),
-                        format!("dependency-receipt:{}", receipt.receipt_digest()),
-                    ],
+                    sites,
                 ),
             );
             receipt_rows.push(format!(
                 "{}:{}:{}:{}",
                 requirement.demand_id(),
+                dependency.digest(),
+                receipt.receipt_digest(),
+                receipt.main_digest()
+            ));
+            trust_rows.push(format!(
+                "{}:{:?}:{}:{}:{}",
+                receipt.trust_store_digest(),
+                receipt.issuer_kind(),
+                receipt.issuer_scope(),
+                receipt.revocation_epoch(),
+                receipt.verifier_build_digest().as_str()
+            ));
+        }
+        // A positive factory proof names its importing module explicitly.
+        // Discharge each claim against that exact node, independently of the
+        // representative an ordinary dependency-artifact demand selected.
+        // No token is returned if even one conditional proof is unfulfilled.
+        for (demand_id, claim) in &factory_claims {
+            let missing = || DependencyReceiptCompositionError::MissingGraphEdge {
+                demand_id: demand_id.clone(),
+            };
+            let requirement = schedule
+                .requirements()
+                .iter()
+                .find(|requirement| {
+                    requirement.authenticates_dependency_artifact()
+                        && requirement.dependency().package == claim.package
+                        && requirement.dependency().artifact_case == claim.artifact_case
+                        && requirement.dependency().accepted_contract_digest
+                            == claim.accepted_contract_digest
+                        && requirement.dependency().specifier == claim.specifier
+                })
+                .ok_or_else(missing)?;
+            let mut selected = expected_dependencies.iter().filter(|identity| {
+                identity.package_name == claim.package
+                    && identity.artifact_case == claim.artifact_case
+                    && identity.semantic_digest == claim.accepted_contract_digest
+                    && identity.importer == claim.importer
+                    && identity.resolved_import_root == claim.resolved_import_root
+            });
+            let dependency = selected.next().ok_or_else(missing)?;
+            if selected.next().is_some() {
+                return Err(missing());
+            }
+            let receipt = receipt_map.get(dependency.digest()).ok_or_else(|| {
+                DependencyReceiptCompositionError::MissingReceipt {
+                    dependency: dependency.digest().into(),
+                }
+            })?;
+            let dependency_gating = gating.get(dependency.digest()).ok_or_else(|| {
+                DependencyReceiptCompositionError::DependencyOutsideGraph {
+                    dependency: dependency.digest().into(),
+                }
+            })?;
+            authenticate_dependency_receipt(
+                parent,
+                requirement,
+                dependency,
+                dependency_gating,
+                receipt,
+                issuer,
+                revocation_epoch,
+                None,
+            )?;
+            if !claim.is_closed_in(dependency_gating.certified_candidate)
+                || !receipt.contains_closed_claim_id(&claim.semantic_claim_id)
+            {
+                return Err(DependencyReceiptCompositionError::MissingClosedClaim {
+                    demand_id: demand_id.clone(),
+                    semantic_claim_id: claim.semantic_claim_id.clone(),
+                });
+            }
+            if verifier_build_digest.as_deref() != Some(receipt.verifier_build_digest().as_str()) {
+                return Err(DependencyReceiptCompositionError::VerifierBuildDisagreement);
+            }
+            receipt_rows.push(format!(
+                "factory-return-discharge:{demand_id}:{}:{}:{}:{}:{}",
+                claim.export,
+                claim.semantic_claim_id,
                 dependency.digest(),
                 receipt.receipt_digest(),
                 receipt.main_digest()
@@ -1900,6 +3770,10 @@ impl VerifiedDependencyComposition {
             trust_root: composition_root("dependency-trust", graph_root, &trust_rows),
             verifier_build_digest,
             semantic_dependency_count: expected_dependencies.len(),
+            census_requirements_root: type_facts
+                .and_then(super::type_facts::VerifiedTypeFactsEvidence::dependency_census_root),
+            factory_requirements_root: type_facts
+                .and_then(super::type_facts::VerifiedTypeFactsEvidence::factory_requirements_root),
         })
     }
 
@@ -1908,6 +3782,18 @@ impl VerifiedDependencyComposition {
         plan: &CertificationPlan,
     ) -> Result<(), DependencyReceiptCompositionError> {
         if self.demand_graph_root != plan.demand_graph().root().as_str() {
+            return Err(DependencyReceiptCompositionError::ParentTransplant);
+        }
+        Ok(())
+    }
+
+    pub(super) fn verify_type_facts_requirements(
+        &self,
+        type_facts: &super::type_facts::VerifiedTypeFactsEvidence,
+    ) -> Result<(), DependencyReceiptCompositionError> {
+        if self.census_requirements_root != type_facts.dependency_census_root()
+            || self.factory_requirements_root != type_facts.factory_requirements_root()
+        {
             return Err(DependencyReceiptCompositionError::ParentTransplant);
         }
         Ok(())
@@ -1941,25 +3827,109 @@ impl VerifiedDependencyComposition {
     }
 }
 
+/// Authenticates one dependency receipt against the edge the parent accepted.
+///
+/// # The gated dependency
+///
+/// The parent accepted the dependency's proposal as *planned* — the edge's
+/// `accepted_contract_digest`, which is also the node identity's
+/// `semantic_digest`. Recipe gating may then have withheld `creates` closure
+/// candidates from that node, so the contract its receipt certifies is a
+/// **weakening** of the accepted proposal: the same document with those domains
+/// opened. Requiring the receipt's digest to equal the accepted digest would
+/// refuse every such graph; accepting any digest would let a receipt for some
+/// other document compose. What is required instead is that the certified
+/// document be *exactly* that weakening, established three ways:
+///
+/// 1. the accepted proposal's digest is the edge's digest (the parent accepted
+///    what this node was planned with);
+/// 2. the weakening is re-derived here, independently of gating, from the
+///    accepted proposal and the node's withheld records
+///    (`super::withheld_weakening`), and its digest is what the receipt — and
+///    the receipt's own bindings — carry;
+/// 3. the plan that was actually certified is that same document, so nothing
+///    between gating and issuance substituted another.
+///
+/// A parent demand that *relied* on a withheld closure still refuses on its
+/// own, and `creates` is the domain where that can happen: its census follows
+/// callees, so `dependency_creates_claims` names the dependency claims the
+/// parent composed from and the caller checks each against this receipt
+/// (`MissingClosedClaim`). The claim-id condition inside this function is a
+/// second, narrower guard for callers that name a dependency claim directly;
+/// see the comment at it for why a planning-built `DependencyClosure`
+/// requirement deliberately does not reach it.
+/// ADR 0020 adds one independent premise: a live-verified creates census of
+/// the exact parent demand can prove that claim without any dependency
+/// semantic assumption. Receipt identity and weakening still authenticate,
+/// and the census evidence root is bound into the composition witness.
+#[allow(clippy::too_many_arguments)]
 fn authenticate_dependency_receipt(
     parent: &CertificationPlan,
     requirement: &DependencyCompositionRequirement,
     dependency: &CanonicalDependencyNodeIdentity,
+    gating: &DependencyGating<'_>,
     receipt: &AuthenticatedPolicy2Receipt,
     issuer: &ConfiguredReceiptIssuer,
     revocation_epoch: u64,
+    independent_creates_census: Option<&str>,
 ) -> Result<(), DependencyReceiptCompositionError> {
     let bindings = receipt.bindings();
+    if dependency.semantic_digest != requirement.dependency().accepted_contract_digest {
+        return Err(DependencyReceiptCompositionError::ReceiptMismatch {
+            field: "accepted contract digest",
+            actual: dependency.semantic_digest.clone(),
+            expected: requirement.dependency().accepted_contract_digest.clone(),
+        });
+    }
+    if gating.accepted_candidate.semantic_digest().as_str() != dependency.semantic_digest {
+        return Err(DependencyReceiptCompositionError::ReceiptMismatch {
+            field: "accepted candidate digest",
+            actual: gating.accepted_candidate.semantic_digest().as_str().into(),
+            expected: dependency.semantic_digest.clone(),
+        });
+    }
+    let certified_digest = if gating.withheld.is_empty() && gating.withheld_operations.is_empty() {
+        dependency.semantic_digest.clone()
+    } else {
+        let weaken = |error: super::RecipeGatingError| {
+            DependencyReceiptCompositionError::WithheldWeakening {
+                dependency: dependency.digest().into(),
+                reason: error.to_string(),
+            }
+        };
+        // The node applies its operation withdrawals first, in
+        // `recipe_gated_with_operations`, and gates closures over the plan that
+        // re-planning produced. Re-deriving in the other order would compare a
+        // digest of a document the node never certified.
+        let weakened = if gating.withheld_operations.is_empty() {
+            gating.accepted_candidate.clone()
+        } else {
+            super::withheld_operation_weakening(
+                gating.accepted_candidate,
+                gating.withheld_operations,
+            )
+            .map_err(weaken)?
+        };
+        let weakened = super::withheld_weakening(&weakened, gating.withheld).map_err(weaken)?;
+        if weakened.semantic_digest() != gating.certified_candidate.semantic_digest() {
+            return Err(DependencyReceiptCompositionError::ReceiptMismatch {
+                field: "gated candidate digest",
+                actual: gating.certified_candidate.semantic_digest().as_str().into(),
+                expected: weakened.semantic_digest().as_str().into(),
+            });
+        }
+        weakened.semantic_digest().as_str().to_owned()
+    };
     let checks = [
         (
             "semantic digest",
             receipt.semantic_digest().as_str(),
-            requirement.dependency().accepted_contract_digest.as_str(),
+            certified_digest.as_str(),
         ),
         (
             "binding semantic digest",
             bindings.semantic_digest.as_str(),
-            dependency.semantic_digest.as_str(),
+            certified_digest.as_str(),
         ),
         (
             "importer",
@@ -2007,8 +3977,36 @@ fn authenticate_dependency_receipt(
     {
         return Err(DependencyReceiptCompositionError::TrustMismatch);
     }
-    if let Some(semantic_claim_id) = requirement.semantic_claim_id()
+    // Reads the *dependency's* claim, which is a different field from the
+    // parent's claim the census lookups use.
+    //
+    // They used to be one field, and that was the defect measured in § 44-45
+    // of `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`.
+    // Demand planning fills a `DependencyClosure` subject's claim id from the
+    // *parent's* own proposal over the parent's own closure candidate, which
+    // is what `creates_census` and `dependency_creates_claims` both want --
+    // and this condition then asked the *dependency's* receipt to contain it.
+    // `NormalizedContract::claim_id` digests package identity, so that
+    // comparison had no satisfying assignment: every closure candidate on a
+    // node with a dependency was refused here, and the refusal named the
+    // parent's own claim as the dependency claim it was waiting for.
+    //
+    // Splitting the field is what makes each reader's meaning explicit.
+    // Planning sets no dependency claim, so it does not reach this condition
+    // -- and nothing is lost by that, which is a fact about the domains
+    // rather than a concession. `creates` is the one domain whose census
+    // follows callees, so it is the one whose closure a dependency can
+    // contradict, and its dependency claims are named exactly by
+    // `dependency_creates_claims` and checked against this same receipt by
+    // the caller. `reads` and `returns` have no callee walk by construction
+    // (`census_reads_domain`, `census_returns_domain`): a `reads` claim is
+    // about accesses in the export's own body, and a read reached through a
+    // caller-supplied value is the caller's (ADR 0034), so a dependency's own
+    // reads cannot contradict it. There is no dependency claim for those
+    // domains to name, because the semantics create none.
+    if let Some(semantic_claim_id) = requirement.dependency_semantic_claim_id()
         && !receipt.contains_closed_claim_id(semantic_claim_id)
+        && independent_creates_census.is_none()
     {
         return Err(DependencyReceiptCompositionError::MissingClosedClaim {
             demand_id: requirement.demand_id().into(),
@@ -2019,10 +4017,12 @@ fn authenticate_dependency_receipt(
 }
 
 #[cfg(test)]
+#[allow(clippy::too_many_arguments)]
 pub(super) fn authenticate_dependency_claim_for_test(
     parent: &CertificationPlan,
     requirement: &DependencyCompositionRequirement,
     dependency: &CanonicalDependencyNodeIdentity,
+    dependency_plan: &CertificationPlan,
     receipt: &AuthenticatedPolicy2Receipt,
     issuer: &ConfiguredReceiptIssuer,
     revocation_epoch: u64,
@@ -2030,14 +4030,21 @@ pub(super) fn authenticate_dependency_claim_for_test(
 ) -> Result<(), DependencyReceiptCompositionError> {
     let mut requirement = requirement.clone();
     requirement.parent_export = Some("test-parent".into());
-    requirement.semantic_claim_id = Some(semantic_claim_id.into());
+    requirement.dependency_semantic_claim_id = Some(semantic_claim_id.into());
     authenticate_dependency_receipt(
         parent,
         &requirement,
         dependency,
+        &DependencyGating {
+            accepted_candidate: &dependency_plan.selected_candidate,
+            certified_candidate: &dependency_plan.selected_candidate,
+            withheld: &[],
+            withheld_operations: &[],
+        },
         receipt,
         issuer,
         revocation_epoch,
+        None,
     )
 }
 
@@ -2112,6 +4119,12 @@ pub enum DependencyReceiptCompositionError {
     VerifierBuildDisagreement,
     #[error("dependency composition evidence was transplanted to another parent plan")]
     ParentTransplant,
+    #[error("canonical dependency node {dependency} is outside the planned graph")]
+    DependencyOutsideGraph { dependency: String },
+    #[error(
+        "the withheld closures of dependency node {dependency} do not re-derive a weakening of its accepted proposal: {reason}"
+    )]
+    WithheldWeakening { dependency: String, reason: String },
 }
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
@@ -2130,36 +4143,175 @@ pub enum DependencyCompositionError {
 mod tests {
     use super::*;
 
+    /// A node identity whose digest is computed the way production computes
+    /// it, over every field including the absolute `importer`. The digest is
+    /// what the old order tie-broke on, so a plaintext stand-in whose salt is
+    /// a shared prefix would make the digest order degenerate to the field
+    /// order and the salt-independence test vacuous.
+    fn order_identity(
+        package: &str,
+        version: &str,
+        entrypoint: &str,
+        conditions: &[&str],
+        runtime_target: &str,
+        importer: &str,
+    ) -> CanonicalDependencyNodeIdentity {
+        let mut identity = CanonicalDependencyNodeIdentity {
+            registry_origin: "https://registry.npmjs.org".into(),
+            package_manager: "bun".into(),
+            package_name: package.into(),
+            package_version: version.into(),
+            integrity: "sha512-test".into(),
+            lockfile_digest: "sha256:lock".into(),
+            lock_locator: format!("{package}@{version}"),
+            entrypoint: entrypoint.into(),
+            conditions: conditions.iter().map(|value| (*value).to_owned()).collect(),
+            // The one path-salted field the old order tie-broke on.
+            importer: importer.into(),
+            resolution_kind: "Exports".into(),
+            runtime_target: runtime_target.into(),
+            runtime_digest: "sha256:runtime".into(),
+            declarations_target: "build/index.d.ts".into(),
+            declarations_digest: "sha256:declarations".into(),
+            closure_root: "sha256:closure".into(),
+            resolved_import_root: format!("sha256:{importer}"),
+            snapshot_root: "sha256:snapshot".into(),
+            provenance_root: "sha256:provenance".into(),
+            artifact_case: "artifact-case:test".into(),
+            semantic_digest: "sha256:semantic".into(),
+            source_dependencies_root: "sha256:sources".into(),
+            digest: String::new(),
+        };
+        identity.digest = node_identity_digest(&identity);
+        identity
+    }
+
     #[test]
     fn type_facts_request_order_is_package_coordinate_first_and_digest_last() {
+        let left = order_identity("@scope/a", "2.0.0", ".", &["import"], "build/index.js", "z");
+        let right = order_identity("@scope/b", "1.0.0", ".", &["import"], "build/index.js", "a");
         assert!(
-            compare_type_facts_request_coordinates(
-                ("@scope/a", "2.0.0", ".", "sha256:z"),
-                ("@scope/b", "1.0.0", ".", "sha256:a"),
-            )
-            .is_lt()
+            compare_type_facts_request_coordinates(order_key(&left), order_key(&right)).is_lt()
         );
+        let left = order_identity("pkg", "1.0.0", "./a", &["import"], "build/a.js", "z");
+        let right = order_identity("pkg", "1.0.0", "./b", &["import"], "build/b.js", "a");
         assert!(
-            compare_type_facts_request_coordinates(
-                ("pkg", "1.0.0", "./a", "sha256:z"),
-                ("pkg", "1.0.0", "./b", "sha256:a"),
-            )
-            .is_lt()
+            compare_type_facts_request_coordinates(order_key(&left), order_key(&right)).is_lt()
         );
+        let left = order_identity("pkg", "1.0.0", ".", &["import"], "build/index.js", "z");
+        let right = order_identity("pkg", "2.0.0", ".", &["import"], "build/index.js", "a");
         assert!(
-            compare_type_facts_request_coordinates(
-                ("pkg", "1.0.0", ".", "sha256:z"),
-                ("pkg", "2.0.0", ".", "sha256:a"),
-            )
-            .is_lt()
+            compare_type_facts_request_coordinates(order_key(&left), order_key(&right)).is_lt()
         );
+        // Fewest conditions first, and only then the condition list itself.
+        // `["import"]` is what an ordinary consumer selects; every opt-in case
+        // is a superset of it, and several of those sort *before* it
+        // lexicographically.
+        let plain = order_identity("pkg", "1.0.0", ".", &["import"], "build/index.js", "z");
+        for extra in ["@scope/private-condition", "development", "solid", "zzz"] {
+            let opt_in = order_identity(
+                "pkg",
+                "1.0.0",
+                ".",
+                &sorted_conditions(&["import", extra]),
+                "src/index.ts",
+                "a",
+            );
+            assert!(
+                compare_type_facts_request_coordinates(order_key(&plain), order_key(&opt_in))
+                    .is_lt(),
+                "the unconditional case must precede an opt-in case adding {extra:?}"
+            );
+        }
+        let left = order_identity("pkg", "1.0.0", ".", &["a", "import"], "build/index.js", "z");
+        let right = order_identity("pkg", "1.0.0", ".", &["b", "import"], "build/index.js", "a");
         assert!(
-            compare_type_facts_request_coordinates(
-                ("pkg", "1.0.0", ".", "sha256:a"),
-                ("pkg", "1.0.0", ".", "sha256:b"),
-            )
-            .is_lt()
+            compare_type_facts_request_coordinates(order_key(&left), order_key(&right)).is_lt()
         );
+    }
+
+    fn sorted_conditions<'a>(conditions: &[&'a str]) -> Vec<&'a str> {
+        let mut sorted = conditions.to_vec();
+        sorted.sort_unstable();
+        sorted
+    }
+
+    fn order_key(identity: &CanonicalDependencyNodeIdentity) -> TypeFactsRequestOrderKey<'_> {
+        type_facts_request_order_key(identity)
+    }
+
+    /// The regression: alternative artifact cases of one package share name,
+    /// version and entrypoint, and their canonical identity digests are salted
+    /// by the absolute installed paths of the run. Deriving the order over
+    /// every input permutation, under two different salts, must give one
+    /// answer — with the unconditional case, the runtime an ordinary consumer
+    /// resolves, first and the publisher-private TypeScript source last.
+    ///
+    /// This fails on both of the orders it replaces: on the digest tie-break
+    /// (the answer changes with the salt) and on the bare condition-list
+    /// tie-break (`src/index.ts` first, `build/modern/index.js` last).
+    #[test]
+    fn type_facts_request_order_of_alternative_cases_is_independent_of_path_salt() {
+        let case = |conditions: &[&str], runtime_target: &str, salt: &str| {
+            order_identity(
+                "@tanstack/query-persist-client-core",
+                "5.102.5",
+                ".",
+                &sorted_conditions(conditions),
+                runtime_target,
+                salt,
+            )
+        };
+        let derive = |salt: &str, permutation: [usize; 3]| {
+            let published = [
+                (
+                    ["@tanstack/custom-condition", "import"].as_slice(),
+                    "src/index.ts",
+                ),
+                (["development", "import"].as_slice(), "build/dev.js"),
+                (["import"].as_slice(), "build/modern/index.js"),
+            ];
+            let mut cases = permutation
+                .iter()
+                .map(|index| {
+                    let (conditions, runtime_target) = published[*index];
+                    case(conditions, runtime_target, salt)
+                })
+                .collect::<Vec<_>>();
+            cases.sort_by(|left, right| {
+                compare_type_facts_request_coordinates(order_key(left), order_key(right))
+            });
+            cases
+                .into_iter()
+                .map(|identity| identity.runtime_target)
+                .collect::<Vec<_>>()
+        };
+        let expected = vec![
+            "build/modern/index.js".to_owned(),
+            "src/index.ts".to_owned(),
+            "build/dev.js".to_owned(),
+        ];
+        // Every permutation of the three cases, under two salts that differ
+        // the way two runs' temporary install roots differ.
+        for permutation in [
+            [0, 1, 2],
+            [0, 2, 1],
+            [1, 0, 2],
+            [1, 2, 0],
+            [2, 0, 1],
+            [2, 1, 0],
+        ] {
+            for salt in [
+                "/private/tmp/solid-checker-ecosystem-aaaaaa/node_modules",
+                "/private/tmp/solid-checker-ecosystem-zzzzzz/node_modules",
+            ] {
+                assert_eq!(
+                    derive(salt, permutation),
+                    expected,
+                    "{permutation:?} {salt}"
+                );
+            }
+        }
     }
 
     fn id(package: &str) -> DependencyNodeIdentity {
@@ -2252,5 +4404,222 @@ mod tests {
             selection.integrity,
             "sha512-AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ=="
         );
+    }
+
+    const PNPM_INTEGRITY: &str = "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+
+    fn pnpm_lock(body: &str) -> String {
+        format!(
+            "lockfileVersion: '9.0'\n\nsettings:\n  autoInstallPeers: true\n\npackages:\n\n{body}"
+        )
+    }
+
+    fn pnpm_entry() -> String {
+        format!("  '@corvu/utils@0.3.2':\n    resolution: {{integrity: {PNPM_INTEGRITY}}}\n")
+    }
+
+    #[test]
+    fn pnpm_selection_is_derived_from_exact_bytes_and_rejects_absence() {
+        let lock = pnpm_lock(&format!("{}    engines: {{node: '>=10'}}\n", pnpm_entry()));
+        let selection = PublishedGraphLockSelection::from_pnpm_lock(
+            lock.as_bytes(),
+            "@corvu/utils@0.3.2",
+            "@corvu/utils",
+            "0.3.2",
+        )
+        .unwrap();
+        assert_eq!(selection.integrity, PNPM_INTEGRITY);
+        assert_eq!(selection.package_manager, "pnpm");
+        assert_eq!(selection.locator, "@corvu/utils@0.3.2");
+        assert_eq!(
+            selection.lockfile_digest,
+            format!("sha256:{:x}", Sha256::digest(lock.as_bytes()))
+        );
+        assert!(
+            PublishedGraphLockSelection::from_pnpm_lock(
+                lock.as_bytes(),
+                "missing@1.0.0",
+                "missing",
+                "1.0.0"
+            )
+            .is_err()
+        );
+    }
+
+    /// A real lockfile in the consumer corpus had been reformatted: keys
+    /// double-quoted, `resolution` wrapped across lines with a trailing comma.
+    /// A reader that assumed pnpm's own layout answers "no packages" for it --
+    /// fail-closed, but for the wrong reason -- so both layouts are pinned.
+    #[test]
+    fn pnpm_selection_reads_a_formatter_rewritten_lockfile() {
+        let lock = format!(
+            "lockfileVersion: \"9.0\"\n\npackages:\n  \"@corvu/utils@0.3.2\":\n    resolution:\n      {{\n        integrity: {PNPM_INTEGRITY},\n      }}\n    engines: {{ node: \">=10\" }}\n"
+        );
+        let selection = PublishedGraphLockSelection::from_pnpm_lock(
+            lock.as_bytes(),
+            "@corvu/utils@0.3.2",
+            "@corvu/utils",
+            "0.3.2",
+        )
+        .unwrap();
+        assert_eq!(selection.integrity, PNPM_INTEGRITY);
+    }
+
+    /// Major 6 wrote peer suffixes into `packages:` keys, so one `name@version`
+    /// could appear under several keys with no installed path to separate them.
+    /// Refusing the major is what makes "the key is the locator" sound.
+    #[test]
+    fn pnpm_selection_refuses_a_lockfile_major_before_9() {
+        let lock = format!(
+            "lockfileVersion: '6.0'\n\npackages:\n\n  /@corvu/utils@0.3.2:\n    resolution: {{integrity: {PNPM_INTEGRITY}}}\n"
+        );
+        let error = PublishedGraphLockSelection::from_pnpm_lock(
+            lock.as_bytes(),
+            "@corvu/utils@0.3.2",
+            "@corvu/utils",
+            "0.3.2",
+        )
+        .unwrap_err();
+        assert!(format!("{error}").contains("is not 9"), "{error}");
+    }
+
+    #[test]
+    fn pnpm_selection_refuses_a_repeated_packages_key() {
+        let lock = pnpm_lock(&format!(
+            "{}  '@corvu/utils@0.3.2':\n    resolution: {{integrity: sha512-BBBB==}}\n",
+            pnpm_entry()
+        ));
+        let error = PublishedGraphLockSelection::from_pnpm_lock(
+            lock.as_bytes(),
+            "@corvu/utils@0.3.2",
+            "@corvu/utils",
+            "0.3.2",
+        )
+        .unwrap_err();
+        assert!(
+            format!("{error}").contains("repeats packages key"),
+            "{error}"
+        );
+    }
+
+    /// Each of these can move a value from one entry to another, or redefine
+    /// `packages:` wholesale. A reader that skipped what it did not understand
+    /// would answer confidently from the wrong bytes.
+    #[test]
+    fn pnpm_selection_refuses_yaml_beyond_the_subset_it_reads() {
+        let entry = pnpm_entry();
+        for (name, lock) in [
+            ("anchor", pnpm_lock(&format!("  base: &shared\n{entry}"))),
+            ("alias", pnpm_lock(&format!("{entry}    extra: *shared\n"))),
+            ("merge key", pnpm_lock(&format!("{entry}    <<: *shared\n"))),
+            (
+                "second document",
+                format!("{}---\npackages:\n{entry}", pnpm_lock(&entry)),
+            ),
+            ("tab", pnpm_lock(&entry).replace("  '@corvu", "\t'@corvu")),
+        ] {
+            assert!(
+                PublishedGraphLockSelection::from_pnpm_lock(
+                    lock.as_bytes(),
+                    "@corvu/utils@0.3.2",
+                    "@corvu/utils",
+                    "0.3.2",
+                )
+                .is_err(),
+                "{name} was read instead of refused"
+            );
+        }
+    }
+
+    /// pnpm's locator is the `packages:` key itself, so a caller supplying any
+    /// other string is naming a record this lockfile does not hold.
+    /// `workspace:*` is a plain scalar, not an alias: in YAML `*` opens a node
+    /// only at a token boundary, and a bare `:` is not one. Every lockfile in
+    /// the demand corpus carries this line, so treating it as an alias refuses
+    /// all of them.
+    #[test]
+    fn pnpm_selection_reads_a_workspace_specifier_as_a_scalar() {
+        let lock = format!(
+            "lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      '@corvu/utils':\n        specifier: workspace:*\n        version: link:packages/utils\n\npackages:\n\n{}",
+            pnpm_entry()
+        );
+        let selection = PublishedGraphLockSelection::from_pnpm_lock(
+            lock.as_bytes(),
+            "@corvu/utils@0.3.2",
+            "@corvu/utils",
+            "0.3.2",
+        )
+        .unwrap();
+        assert_eq!(selection.integrity, PNPM_INTEGRITY);
+    }
+
+    #[test]
+    fn pnpm_selection_refuses_a_locator_that_is_not_the_exact_key() {
+        let lock = pnpm_lock(&pnpm_entry());
+        let error = PublishedGraphLockSelection::from_pnpm_lock(
+            lock.as_bytes(),
+            "accordion/@corvu/utils",
+            "@corvu/utils",
+            "0.3.2",
+        )
+        .unwrap_err();
+        assert!(
+            format!("{error}").contains("is not the exact key"),
+            "{error}"
+        );
+    }
+
+    /// A tarball, git or link dependency has no registry integrity. Leaving it
+    /// unselected refuses the graph; inventing a locator would authorize bytes
+    /// no registry can authenticate.
+    #[test]
+    fn pnpm_selection_refuses_a_package_with_no_registry_integrity() {
+        let lock = pnpm_lock(
+            "  '@corvu/utils@0.3.2':\n    resolution: {tarball: https://example.invalid/utils.tgz}\n",
+        );
+        assert!(
+            PublishedGraphLockSelection::from_pnpm_lock(
+                lock.as_bytes(),
+                "@corvu/utils@0.3.2",
+                "@corvu/utils",
+                "0.3.2",
+            )
+            .is_err()
+        );
+    }
+
+    /// The file name is the whole format decision, on both sides of the
+    /// boundary. Nothing sniffs content, so a lockfile under the wrong name is
+    /// refused rather than tried against the other reader.
+    #[test]
+    fn lockfile_dispatch_follows_the_file_name() {
+        let pnpm = pnpm_lock(&pnpm_entry());
+        let bun = format!(
+            r#"{{"packages":{{"@corvu/utils":["@corvu/utils@0.3.2","",{{}},"{PNPM_INTEGRITY}"],}},}}"#
+        );
+        let read = |path: &str, bytes: &[u8], locator: &str| {
+            PublishedGraphLockSelection::from_lockfile(
+                std::path::Path::new(path),
+                bytes,
+                locator,
+                "@corvu/utils",
+                "0.3.2",
+            )
+        };
+        assert_eq!(
+            read("/w/pnpm-lock.yaml", pnpm.as_bytes(), "@corvu/utils@0.3.2")
+                .unwrap()
+                .package_manager,
+            "pnpm"
+        );
+        assert_eq!(
+            read("/w/bun.lock", bun.as_bytes(), "@corvu/utils")
+                .unwrap()
+                .package_manager,
+            "bun"
+        );
+        assert!(read("/w/bun.lock", pnpm.as_bytes(), "@corvu/utils@0.3.2").is_err());
+        assert!(read("/w/pnpm-lock.yaml", bun.as_bytes(), "@corvu/utils").is_err());
+        assert!(read("/w/yarn.lock", pnpm.as_bytes(), "@corvu/utils@0.3.2").is_err());
     }
 }

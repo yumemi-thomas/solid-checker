@@ -1,0 +1,137 @@
+{
+  "format": "parameter-read-origin-correction",
+  "authoritative": false,
+  "before": {
+    "path": "/Users/thomas/Documents/Github/solid-checker/docs/package-contract-v2/phase21/2026-09-07-parameter-read-origin-counterexample.json",
+    "digest": "sha256:a795debc2322f5038f3bcd9aff99d0f590e3f553ea35579de16866f48a0bf47c"
+  },
+  "after": {
+    "path": "/private/tmp/parameter-origin-probe/initial-protocol40/audit.json",
+    "digest": "sha256:c239989b82ee57294931c90166b8aca174e511b3a04e33f8f622c7017bb906ca",
+    "audit": {
+      "format": "solid-checker-contract-certification-audit",
+      "auditVersion": 1,
+      "authoritative": false,
+      "replayable": false,
+      "status": "refused",
+      "package": {
+        "name": "parameter-origin-probe",
+        "version": "1.0.0"
+      },
+      "stage": "witness-acquisition",
+      "refusal": {
+        "owner": "certifier",
+        "demandId": "sha256:1a613288ae86dd8934a68012c9b788c41a54d1096faeb2025a5da3db97855394",
+        "family": "recursive-value-shape",
+        "reason": "solid-checker-rust: policy-2 proof finalization failed: Type Facts certification failed during live export-value verification: Type Facts demand sha256:1a613288ae86dd8934a68012c9b788c41a54d1096faeb2025a5da3db97855394 is locally open: recursive-value-shape (artifact-case:6d42c2ad417d359c695fe58c1264a8afa7f9400046c429f34522a4b83230056a:read): parameter-rooted read lacks positive original-input identity"
+      },
+      "stageDurationsMs": {
+        "artifactAcquisition": 0.72,
+        "proposalGeneration": 123.82,
+        "demandPlanning": 8.77,
+        "witnessAcquisition": 152.76
+      },
+      "graphPreparation": null,
+      "refusals": [],
+      "withheldClosures": [],
+      "demandPlans": [
+        {
+          "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+          "candidateSemanticDigest": "sha256:8a26c7969272e19239b6b0212c20cff7cd7ad75e240d87434353b6d9ccbaebe3",
+          "snapshotRoot": "sha256:db81eae0fb562435ba1336b477113098b3459c056effcefbe16b326f0a0e644f",
+          "provenanceRoot": "sha256:345c8ad50fdb6670a1c141a389c75add6806df88f46cbf8064dc4a0c61ddb996",
+          "demandGraphRoot": "sha256:298658aef245a4c6032dc71e73cde64b4065763e655072e9b9305334d6b4da86",
+          "demands": [
+            {
+              "family": "callable-path",
+              "id": "sha256:021043983ad14eb154932e4204f6cabc471e9de8f9ca99f0018e728163d00d6c",
+              "owner": "type-facts",
+              "satisfiedByArtifactSnapshot": false
+            },
+            {
+              "family": "export-identity",
+              "id": "sha256:04252722a9e9e5f22667b2773ca48b8e00ea67bd3f17d4eded704c05f7f12286",
+              "owner": "package-artifact",
+              "satisfiedByArtifactSnapshot": true
+            },
+            {
+              "family": "recursive-value-shape",
+              "id": "sha256:1a613288ae86dd8934a68012c9b788c41a54d1096faeb2025a5da3db97855394",
+              "owner": "type-facts",
+              "satisfiedByArtifactSnapshot": false
+            },
+            {
+              "family": "artifact-declarations",
+              "id": "sha256:2aefe15e4e669cf97e4f7a9791cc1a38b346518ff494f637640f45c4b3be44a9",
+              "owner": "package-artifact",
+              "satisfiedByArtifactSnapshot": true
+            },
+            {
+              "family": "operation-reachability",
+              "id": "sha256:4e893df767328495a49ee1c8fc03f20642470b28734eae4d41c1e547cdaf8f85",
+              "owner": "type-facts",
+              "satisfiedByArtifactSnapshot": false
+            },
+            {
+              "family": "export-resolution",
+              "id": "sha256:6b019b535a3d5a4d6febbeef8e6f842df0294fa91f579959a4ec100e6201f7f7",
+              "owner": "package-artifact",
+              "satisfiedByArtifactSnapshot": true
+            },
+            {
+              "family": "manifest-entrypoint",
+              "id": "sha256:9f26c3ead54d2d039c9a47f375728771d4e3878ae77213af882c7c9548971573",
+              "owner": "package-artifact",
+              "satisfiedByArtifactSnapshot": true
+            },
+            {
+              "family": "module-closure",
+              "id": "sha256:c4a80c0c3656cf53fc7730bfce086ab8c9b0a897b18d2497e82f5146e070262d",
+              "owner": "package-artifact",
+              "satisfiedByArtifactSnapshot": true
+            },
+            {
+              "family": "package-identity",
+              "id": "sha256:c8feabe48882569514d1b28e08ac48f98d51bacf9041b5fe65e535530aa3a633",
+              "owner": "package-artifact",
+              "satisfiedByArtifactSnapshot": true
+            },
+            {
+              "family": "operation-cardinality",
+              "id": "sha256:cd12a729c165ce83a189a6cec12022b715e56b4a29e065bc3ba2bca29e5c2c53",
+              "owner": "type-facts",
+              "satisfiedByArtifactSnapshot": false
+            },
+            {
+              "family": "selected-signature",
+              "id": "sha256:d1f17813154e8427d395808010aeaa976d58650ed5c3baaea2aec2714ba546d5",
+              "owner": "type-facts",
+              "satisfiedByArtifactSnapshot": false
+            },
+            {
+              "family": "recursive-value-shape",
+              "id": "sha256:e116f500db358d134e873d9278c63d10cbb0d111a7d4ab7b8edf9c85d7b4b940",
+              "owner": "type-facts",
+              "satisfiedByArtifactSnapshot": false
+            },
+            {
+              "family": "rest-spread-coverage",
+              "id": "sha256:e7b156ddb88c9f60050625cfd00a917267b0d32591d211fc03719d99b4ddbd18",
+              "owner": "type-facts",
+              "satisfiedByArtifactSnapshot": false
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "binary": {
+    "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/verify/solid-checker-rust",
+    "digest": "sha256:9050f74401c3b54bc808185ea5acb50bfacb05f412d766b702c4da6fb233a507"
+  },
+  "unchangedArchive": true,
+  "unchangedSource": true,
+  "invalidClaimNowRefused": true,
+  "newCatalogPublished": false,
+  "ecosystemCertificationGain": 0
+}

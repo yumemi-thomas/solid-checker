@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "c5c44fc9a6df27662d96fef2f3956062a333a8894d2de196f512dabb006cb4ab",
+            "closureSha256": "38035704547875f7cfe57dee2a017ee4e5ebeb417091f68eadbf04d567bfd407",
             "path": "./index.js",
             "sha256": "2ecd56eb18b7ff147a132b59344eb90270bc94b9c76666ec3e76a399d38229f2"
           },
@@ -14,8 +14,8 @@
           },
           "exports": {
             "getterFunction": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "getterObject": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
-            "getterResult": "summary-2fc45d622851089b087ed456f74d816348b1190522c2a63ed74b61b03d2e563f"
+            "getterObject": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+            "getterResult": "summary-c5b6fdd1cf17767811766a000f0c77b8e8431d8f0e87207209550472e0446638"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -39,8 +39,24 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-2fc45d622851089b087ed456f74d816348b1190522c2a63ed74b61b03d2e563f": {
+    "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76": {
       "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks"
+        ],
+        "proposedClosures": [
+          "callbacks"
+        ]
+      },
+      "shape": "plain"
+    },
+    "summary-c5b6fdd1cf17767811766a000f0c77b8e8431d8f0e87207209550472e0446638": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks"
+        ],
         "operations": [
           {
             "at": {
@@ -72,15 +88,14 @@
             }
           }
         ],
+        "proposedClosures": [
+          "callbacks"
+        ],
         "returns": [
           "return"
         ]
       },
       "shape": "callable"
-    },
-    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
-      "call": {},
-      "shape": "plain"
     },
     "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
       "call": {},

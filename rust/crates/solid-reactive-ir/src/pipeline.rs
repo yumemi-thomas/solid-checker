@@ -10,9 +10,7 @@ use std::{
 
 use crate::cache::{BuildCaches, ReusePlan, build_typescript_indexes};
 use crate::contract_semantics::AcceptedContractIndex;
-use crate::contracts::{
-    ResolvedContractBinding, accepted_bundled_returns, resolve_accepted_contract_imports,
-};
+use crate::contracts::{ResolvedContractBinding, resolve_accepted_contract_imports};
 use crate::identity::{SymbolId, SymbolName};
 use crate::indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
 use crate::reachability::{ReachabilityInputs, reachability_stage};
@@ -23,7 +21,7 @@ use crate::{
     ActionInvocation, AsyncRead, BuildError, BuildTimings, ContractExport,
     ContractGenerationObligation, LeafOwnerOperation, ObligationCounts, ObligationReach,
     OwnerRequirement, PrimitiveCreation, Program, ReactiveRead, ReactiveSourceKind, ReactiveWrite,
-    RuleOptions, Solid1xRuleOptions, StaticDefect, StaticViolation, location_order,
+    RuleOptions, StaticDefect, StaticViolation, location_order,
 };
 use crate::{
     cleanup, directives, owners, reactive_analysis, server_rules, static_api, static_rules,
@@ -47,6 +45,8 @@ pub(crate) struct ProgramDraft {
     pub(crate) leaf_operations: Vec<LeafOwnerOperation>,
     pub(crate) directive_creations: Vec<PrimitiveCreation>,
     pub(crate) missing_owners: Vec<OwnerRequirement>,
+    pub(crate) creates_proposal_walk: crate::CreatesProposalWalk,
+    pub(crate) merged_props_returns: crate::returns_walk::MergedPropsReturns,
     pub(crate) contract_exports: Arc<BTreeMap<String, ContractExport>>,
     pub(crate) contract_generation_obligations: Vec<ContractGenerationObligation>,
     pub(crate) strict_read_obligations: usize,
@@ -158,6 +158,8 @@ impl ProgramDraft {
                 factory_instances,
             },
             contract_binding: self.contract_binding,
+            creates_proposal_walk: self.creates_proposal_walk,
+            merged_props_returns: self.merged_props_returns,
         }
     }
 }
@@ -187,7 +189,6 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
     pub(crate) contracted: &'a HashMap<SymbolId, ResolvedContractBinding>,
     pub(crate) rule_options: &'a RuleOptions,
-    pub(crate) solid1x_rule_options: &'a Solid1xRuleOptions,
 }
 
 pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, BuildError> {
@@ -254,6 +255,8 @@ fn build_with_accepted_contract_inputs_measured_incremental(
     rule_options: &RuleOptions,
     caches: BuildCaches<'_>,
 ) -> Result<(Program, BuildTimings), BuildError> {
+    let external_contracts = contracts.external_packages();
+    let contracts = external_contracts.as_ref();
     let BuildCaches {
         ast_indexes: ast_indexes_cache,
         source_discovery: source_discovery_cache,
@@ -368,7 +371,6 @@ fn build_with_accepted_contract_inputs_measured_incremental(
     let substage_started = Instant::now();
     let mut resolved_contracts =
         resolve_accepted_contract_imports(facts, contracts, entities, dialect);
-    let bundled_returns = accepted_bundled_returns(facts, contracts);
     build_timings.contract_resolution = substage_started.elapsed();
     let missing_contract_exports = std::mem::take(&mut resolved_contracts.missing_exports);
     let semantic_lookup = SemanticLookup::new(
@@ -406,7 +408,6 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         symbol_names: &symbol_names,
         semantic_lookup,
         resolved_contracts: &resolved_contracts,
-        bundled_returns: &bundled_returns,
         runtime: &rule_options.runtime,
     };
     let discover = move || {
@@ -501,7 +502,6 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         symbols_by_root: &typescript_indexes.symbols_by_root,
         contracted: &resolved_contracts.by_symbol,
         rule_options,
-        solid1x_rule_options: &rule_options.solid1x,
     };
     static_rules::static_prepass(&analysis, &mut draft);
     clock.finish(&mut build_timings, ReactiveIrStage::StaticPrepass);
@@ -541,6 +541,13 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         &mut build_timings,
     );
     clock.finish(&mut build_timings, ReactiveIrStage::OwnerFixedPoint);
+    // The generator's own `creates` proposal walk. It reads the same callee
+    // resolution, primitive vocabulary, and accepted-contract bindings every
+    // stage above reads, and it decides only whether a `creates: []` *proposal*
+    // may be made; the claim is proved or refused by the certifier's
+    // implementation census. See `crate::CreatesProposalWalk`.
+    draft.creates_proposal_walk = crate::creates_walk::collect_project(&analysis);
+    draft.merged_props_returns = crate::returns_walk::collect_merged_props_returns(&analysis);
     // Static and compatibility passes deliberately operate on source facts.
     // Apply the compiler's stronger "this code was not emitted" fact once,
     // after every producer has run and before unresolved obligations are

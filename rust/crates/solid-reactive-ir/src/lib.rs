@@ -3,6 +3,7 @@ mod cache;
 mod cleanup;
 pub mod contract_semantics;
 mod contracts;
+mod creates_walk;
 mod directives;
 mod effect_api;
 mod execution_role;
@@ -16,6 +17,7 @@ mod pipeline;
 mod projection;
 mod reachability;
 mod reactive_analysis;
+pub mod returns_walk;
 mod runtime_semantics;
 mod server_rules;
 mod source_discovery;
@@ -26,10 +28,12 @@ mod timings;
 mod upstream_compat;
 
 pub use attribution::ObligationReach;
+pub use creates_walk::{CreatesDecline, CreatesDeclineKind, CreatesProposalWalk};
 pub use owners::function_binding_name;
 pub use pipeline::{build, build_with_accepted_contracts_measured};
+pub use returns_walk::{ReturnsDecline, valueless_completion};
 
-pub use upstream_compat::solid1x_options::{RuleOptions, RuleOverride, Solid1xRuleOptions};
+pub use upstream_compat::rule_options::{RuleOptions, RuleOverride};
 
 pub use findings::{
     DOCS_BASE_URL, EvidenceStep, Finding, RuleManifestIdentity, RuleMetadata, SolveTimings,
@@ -57,7 +61,7 @@ use contracts::{
 };
 pub use contracts::{
     ExportKindProof, export_kind_proof, export_kind_proof_from_entity, project_accepted_export,
-    raised_function_export,
+    project_export_semantics, raised_function_export,
 };
 use execution_role::{
     NamedCallbackRoles, allowed_callback_spans, assigned_member_function_contains, execution_role,
@@ -510,6 +514,22 @@ pub struct StaticDefect {
     pub uncertain: bool,
 }
 
+/// Where a package-contract obligation was raised.
+///
+/// [`ContractDefectSite::Import`] messages name the package, the export and the
+/// open claims and nothing else, so two of them differ only in which file did
+/// the importing -- repetition a reader cannot act on separately.
+/// [`ContractDefectSite::Argument`] messages are about one exact argument of one
+/// exact call, where the site *is* the content: a descriptor absorbed by a rest
+/// parameter and one observed through an `arguments` object are different facts
+/// about different code, and must stay separate findings.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ContractDefectSite {
+    Import,
+    Argument,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "kind")]
 pub enum StaticDefectKind {
@@ -525,6 +545,11 @@ pub enum StaticDefectKind {
         module: String,
         export: String,
         reexported: bool,
+        /// Where this was raised, which is what decides whether two of them are
+        /// interchangeable. The producer knows; the projection must not have to
+        /// infer it, because one `analysis_context` -- `unknown-contract-claims:
+        /// callbacks` -- is emitted from both kinds of site.
+        site: ContractDefectSite,
     },
     /// A package export has different certified summaries for different
     /// conditional runtime targets. The current project analysis has no
@@ -872,7 +897,10 @@ fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static st
                 validate_contract_return(property)?;
             }
         }
-        "argument" | "callback-result" | "callback-result-function" => {
+        // `merged-props` joins the parameter-carrying kinds rather than the
+        // reactive leaves: its whole content is *which* argument it reaches
+        // through to (ADR 0109), and a leaf's label would say nothing.
+        "argument" | "callback-result" | "callback-result-function" | "merged-props" => {
             if returned.parameter.is_none()
                 || !returned.label.is_empty()
                 || !returned.elements.is_empty()
@@ -1016,9 +1044,148 @@ pub struct ContractExport {
     /// knowledge is projected into the existing analysis indexes. This field
     /// is never decoded from or encoded into a package-contract document.
     pub open_claims: BTreeSet<contract_semantics::ClaimDomain>,
+    /// Whether the *accepted* contract this summary was projected from closes
+    /// `creates` with no item.
+    ///
+    /// Only [`crate::project_accepted_export`] sets it, and only from a
+    /// normalized accepted document. `false` is the fail-closed default a
+    /// locally generated summary keeps: a summary nothing projected states
+    /// nothing about a dependency's `creates`, and the generator's proposal
+    /// walk reads it that way.
+    pub creates_closed_empty: bool,
+    /// Whether the generator's own [`crate::CreatesProposalWalk`] found no call
+    /// inside this export's implementation that a `creates: []` proposal would
+    /// contradict.
+    ///
+    /// `false` is the default and the fail-closed answer: a summary no walk
+    /// reached proposes nothing. This is a *proposal* input — the claim itself
+    /// is proved, or refused, by the certifier's implementation census.
+    pub creates_walk_clean: bool,
+    /// Why that walk declined, when it did: every blocker reachable from this
+    /// export's implementation span, lexically and through the resolved local
+    /// call edges ([`crate::CreatesProposalWalk::declines_for`]).
+    ///
+    /// **Measurement, never evidence.** No claim is decided from it, it is
+    /// never encoded into a package-contract document, and an empty list means
+    /// only "no blocker was named" — for a summary no walk reached that is
+    /// silence, not a clean walk, which is what `creates_walk_clean` says.
+    pub creates_walk_declines: Vec<crate::CreatesDecline>,
+    /// Whether the generator's valueless-completion walk cleared this export's
+    /// implementation (ADR 0035): a block-bodied, non-`async`, non-generator
+    /// function whose own body carries no `return` with an expression. A
+    /// proposal input for `returns: []` and never a proof; `false` is
+    /// "do not propose", including for a summary no walk reached.
+    pub returns_walk_clean: bool,
+    /// The parameters this export's own body calls directly -- the callee is
+    /// the parameter itself, and the call is written in the body of the
+    /// function that declares it, outside any nested callable (ADR 0100). The
+    /// interprocedural pass writes an `inline` callback row for exactly that
+    /// shape and for a dialect primitive's inline position alike, and the wire
+    /// does not tell them apart; this set does, so the generator proposes a
+    /// described `callbacks` closure only for rows the implementation census
+    /// can confirm site for site. A proposal input, never evidence: empty is
+    /// "do not propose", and a summary no pass reached is empty.
+    pub direct_callback_parameters: BTreeSet<usize>,
+    /// ADR 0109: the parameter whose reactivity a props merge this export
+    /// returns carries, when the generator's own walk cleared the body
+    /// ([`crate::returns_walk::MergedPropsReturns`]).
+    ///
+    /// A proposal input and never a proof: `None` is "do not propose",
+    /// including for a summary no walk reached. The certifier re-derives every
+    /// premise from the producer's control-flow and call censuses.
+    pub merged_props_return: Option<usize>,
+    /// The accepted dependency export this summary was *projected from*, when
+    /// the public name is a cross-package re-export and nothing in this
+    /// package declares it.
+    ///
+    /// Only [`crate::project_accepted_export`] sets it, from the exact
+    /// accepted contract and export identity the projection resolved. `None`
+    /// is the fail-closed default every locally inferred summary keeps, and it
+    /// is never decoded from or encoded into a package-contract document.
+    ///
+    /// Re-emission reads it to decide *which* proposal filters apply. A
+    /// projected summary has no local implementation, so the generator's own
+    /// walks (`creates_walk_clean`, `returns_walk_clean`,
+    /// `direct_callback_parameters`) are all silent about it — and silence is
+    /// "do not propose". Applying them to an inherited summary therefore
+    /// discards the dependency's certified closure for every domain, which is
+    /// the defect `phase21/2026-09-15-closure-gap-plan.md` § 1 records. What
+    /// replaces them is not a weaker filter but a different premise: the
+    /// closure is the dependency's, and the certifier discharges it by
+    /// composition from the dependency's receipt rather than by a census of
+    /// bytes this artifact does not contain.
+    pub inherited_from: Option<InheritedExportOrigin>,
+}
+
+/// The accepted dependency export a re-exported public name was projected
+/// from: enough identity to name the claim in a plan sidecar and to attribute
+/// a proposal to the contract that owns it.
+///
+/// **Measurement and attribution, never authority.** Nothing downstream
+/// discharges a closure from these strings: the certifier rebinds the
+/// re-export independently, from the parent's snapshot-verified runtime
+/// binding and the dependency node's own plan, because a provenance field
+/// travelling through a document is exactly the kind of self-report the
+/// precision contract refuses to read as proof.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InheritedExportOrigin {
+    pub package_name: String,
+    pub package_version: String,
+    pub artifact_case: String,
+    pub semantic_digest: String,
+    pub entrypoint: String,
+    pub export: String,
 }
 
 impl ContractExport {
+    /// An identified export whose runtime kind could not be established.
+    /// This carries no negative or positive behavioral claims (ADR 0011).
+    #[must_use]
+    pub fn unknown_runtime_kind() -> Self {
+        Self {
+            kind: "unknown".into(),
+            reactive_reads: ContractClaim::Open,
+            returns: ContractClaim::Open,
+            callbacks: ContractClaim::Open,
+            owner_requirements: ContractClaim::Open,
+            async_behavior: ContractClaim::Open,
+            ..Self::default()
+        }
+    }
+
+    /// Whether this summary is a projection of an accepted dependency export
+    /// whose `domain` that dependency's contract **closes**.
+    ///
+    /// The consumer-side spelling of "closed" is the one
+    /// [`crate::project_accepted_export`] writes: a `Known` claim whose domain
+    /// is absent from `open_claims`, and for `creates` the domain's own
+    /// closed-and-empty flag, because `project_owner_requirements` keeps only
+    /// the obligation-imposing operations and a `creates` the dependency
+    /// publishes need not survive it.
+    ///
+    /// `false` for every locally inferred summary, and for every domain a
+    /// projection left open. It is the premise re-emission substitutes for the
+    /// local proposal walks, never an addition to them: a summary that is both
+    /// inherited and walked cannot exist, since a cross-package re-export has
+    /// no local symbol for a walk to reach.
+    #[must_use]
+    pub fn inherited_closure(&self, domain: contract_semantics::ClaimDomain) -> bool {
+        use contract_semantics::ClaimDomain;
+        if self.inherited_from.is_none() {
+            return false;
+        }
+        let closed = |claim_is_known: bool, domain: ClaimDomain| {
+            claim_is_known && !self.open_claims.contains(&domain)
+        };
+        match domain {
+            ClaimDomain::Creates => self.creates_closed_empty,
+            ClaimDomain::Returns => closed(!self.returns.is_open(), domain),
+            ClaimDomain::Reads => closed(!self.reactive_reads.is_open(), domain),
+            ClaimDomain::Callbacks => closed(!self.callbacks.is_open(), domain),
+            _ => false,
+        }
+    }
+
     /// Whether this summary contains any domain that only a runtime function
     /// may carry. A `value` export with one of these domains is internally
     /// inconsistent even when the domain is open: absence of proof is not a
@@ -1050,6 +1217,20 @@ impl ContractExport {
     }
 }
 
+/// Where a composed reactive-read row was composed from: the export whose own
+/// read this row is, and the ordinal of that read in *that* export's own list.
+///
+/// The ordinal is what makes the claim addressable: `normalize_export` names a
+/// read operation `read-<ordinal>` over the same list in the same order, so
+/// `ComposedReactiveRead { export: "createPolled", read: 0 }` names exactly
+/// `createPolled:operation:read-0` and nothing else. A name alone would name a
+/// set.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ComposedReactiveRead {
+    pub export: String,
+    pub read: usize,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContractReactiveRead {
     pub kind: String,
@@ -1067,6 +1248,33 @@ pub struct ContractReactiveRead {
     /// named path can be runtime-probed without guessing which property to
     /// instrument.
     pub path: Option<Vec<String>>,
+    /// The symbol of the summary node this row was composed from, when the
+    /// read was discovered in *another* node and reached this one across a
+    /// call edge. Unresolved provenance: an internal node identity, never
+    /// published.
+    ///
+    /// [`contract_export_summaries`] resolves it to `composed_from` and clears
+    /// it, so an emitted contract never carries it and a consumer can never
+    /// read a provenance the aggregation could not name. It is a field rather
+    /// than a side table because the per-node projection is cached and
+    /// parallel: the node that discovers a read is knowable there, and the
+    /// export it is published under is not.
+    ///
+    /// The symbol's own text rather than the interned identity, because this
+    /// type crosses the crate boundary and the interner does not. It is only
+    /// ever compared for equality against another symbol's text.
+    pub composed_owner: Option<String>,
+    /// The published provenance: this row's read is the named export's own,
+    /// performed through this export's call to it.
+    ///
+    /// `None` is every case the aggregation could not name exactly — an owner
+    /// that is not an export of this project, an owner exported under more
+    /// than one name, an owner whose own read list does not carry a row with
+    /// this row's identity, and a row the export performs itself. A consumer
+    /// reads `None` as "no provenance stated" and falls back to requiring the
+    /// export's own evidence; provenance may only ever *add* a discharge
+    /// route.
+    pub composed_from: Option<ComposedReactiveRead>,
 }
 
 /// When a `tracked` callback row runs, relative to the export returning.
@@ -1163,7 +1371,7 @@ impl PackageContract {
         name: &str,
         summary: &ContractExport,
     ) -> Result<(), String> {
-        if name.is_empty() || !matches!(summary.kind.as_str(), "function" | "value") {
+        if name.is_empty() || !matches!(summary.kind.as_str(), "function" | "value" | "unknown") {
             return Err(format!(
                 "package contract export {entrypoint}:{name} has unsupported kind {:?}",
                 summary.kind
@@ -1335,6 +1543,21 @@ pub struct Program {
     /// the attested resolution then bound or refused.
     #[serde(default)]
     pub contract_binding: ContractBindingCounts,
+    /// Which call sites forbid *proposing* a closed `creates` domain.
+    ///
+    /// Deliberately not on the wire: it is generation-time input, and its
+    /// [`Default`] refuses every span, so a deserialized `Program` proposes
+    /// nothing rather than proposing everything.
+    #[serde(skip)]
+    pub creates_proposal_walk: CreatesProposalWalk,
+    /// ADR 0109's proposal input: which parameter's reactivity a props merge
+    /// returned by each function carries.
+    ///
+    /// Off the wire for the same reason as the walk above, and with the same
+    /// fail-closed [`Default`]: an absent entry is "do not propose", so a
+    /// deserialized `Program` proposes none of these rather than all of them.
+    #[serde(skip)]
+    pub merged_props_returns: returns_walk::MergedPropsReturns,
 }
 
 /// How contract binding answered across the program's declarations.
@@ -1512,6 +1735,8 @@ impl IncrementalBuilder {
         contracts: &contract_semantics::AcceptedContractIndex,
         rule_options: &RuleOptions,
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
+        let external_contracts = contracts.external_packages();
+        let contracts = external_contracts.as_ref();
         let total_started = Instant::now();
         let lookup_started = Instant::now();
         let identity = BuildIdentity {
@@ -1828,8 +2053,8 @@ fn location_order(left: &Location, right: &Location) -> std::cmp::Ordering {
 /// give it, which is why this type exists:
 ///
 /// 1. A name the dialect does not export is not an error. `useUser()` is a
-///    call like any other, and the bundled contracts are keyed by *spelling*,
-///    so an unrecognised callee has to keep the one it was written with.
+///    call like any other; an unrecognised callee retains its spelling for
+///    diagnostics without gaining built-in runtime semantics.
 /// 2. Even a recognised primitive is spelled into diagnostics and hints, and
 ///    the spelling is dialect-specific.
 ///
@@ -1866,8 +2091,7 @@ impl PrimitiveName {
         }
     }
 
-    /// The source spelling. For messages and for the spelling-keyed bundled
-    /// contract table -- never for asking what a callee *is*.
+    /// The source spelling for messages, never for asking what a callee is.
     fn as_str(&self) -> &str {
         match self {
             Self::Known(_, spelling) => spelling,
@@ -2050,15 +2274,17 @@ mod tests {
             PrimitiveName::new("projectSpecificHelper", &solid_dialect::Solid2),
             PrimitiveName::Other(_)
         ));
-        // The same spelling can be vocabulary in one dialect and not the
-        // other: `flush` is 2.0-only, `batch` is 1.x-only.
+        // `flush` is 2.0 vocabulary; `batch` is 1.x's and 2.0 does not have
+        // it, so the same spelling resolves in one vocabulary and not another.
+        // This used to be shown against the 1.x dialect directly; with one
+        // vocabulary it is shown the way a consumer would meet it.
         assert!(matches!(
-            PrimitiveName::new("flush", &solid_dialect::Solid1x),
-            PrimitiveName::Other(_)
+            PrimitiveName::new("flush", &solid_dialect::Solid2),
+            PrimitiveName::Known(Primitive::Flush, "flush")
         ));
         assert!(matches!(
-            PrimitiveName::new("batch", &solid_dialect::Solid1x),
-            PrimitiveName::Known(Primitive::Batch, "batch")
+            PrimitiveName::new("batch", &solid_dialect::Solid2),
+            PrimitiveName::Other(_)
         ));
     }
 
@@ -2195,6 +2421,7 @@ mod tests {
                 end_byte: start + 11,
             },
             origin_context: symbol.into(),
+            owner: None,
         }
     }
 
@@ -3112,5 +3339,29 @@ mod tests {
             ..missing_view
         };
         assert!(!present_view.dependency_matches(&missing, &dependency));
+
+        let direct_members = vec![vec![crate::interproc::ParameterMemberInvocation {
+            parameter: 0,
+            path: vec!["of".into(), "values".into()],
+            in_owner_body: true,
+        }]];
+        let direct_view = InterproceduralResultView {
+            invoked_parameter_members: &direct_members,
+            ..present_view
+        };
+        let direct_state = InterproceduralResultDependencyState::Function {
+            name: nodes[0].name.clone(),
+            summary: Vec::new(),
+            invoked_parameters: Vec::new(),
+            invoked_parameter_members: direct_members[0].clone(),
+        };
+        let mut captured_members = direct_members.clone();
+        captured_members[0][0].in_owner_body = false;
+        let captured_view = InterproceduralResultView {
+            invoked_parameter_members: &captured_members,
+            ..direct_view
+        };
+        assert!(direct_view.dependency_matches(&direct_state, &dependency));
+        assert!(!captured_view.dependency_matches(&direct_state, &dependency));
     }
 }

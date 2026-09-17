@@ -32,7 +32,13 @@ const TRUST_CONFIGURATION_FORMAT: &str = "solid-checker-policy2-trust-configurat
 const TRUST_CONFIGURATION_VERSION: u16 = 1;
 const MAX_STRING_BYTES: usize = 16 * 1024;
 const MAX_ROOTS: usize = 256;
-const RECEIPT_WITNESS_FAMILIES: [&str; 17] = [
+/// Every witness family a policy-2 receipt must bind, in canonical order.
+///
+/// Public so an out-of-crate test issuer can construct a complete
+/// [`Policy2ReceiptBindings`] without duplicating the list; the roots
+/// themselves carry the authority, and [`Policy2ReceiptBindings::validate`]
+/// still requires exactly these keys.
+pub const RECEIPT_WITNESS_FAMILIES: [&str; 17] = [
     "package-identity",
     "manifest-entrypoint",
     "export-resolution",
@@ -79,6 +85,16 @@ pub struct Policy2ReceiptBindings {
     pub importer: String,
     pub specifier: String,
     pub resolved_import_root: String,
+    /// The importer-free, path-free identity of the artifact this contract was
+    /// proven about. `resolved_import_root` answers "which resolver answer,
+    /// from which file"; this answers "which published artifact", so a consumer
+    /// that resolved the same artifact from its own file can match the
+    /// acceptance. See `policy2_artifact_acceptance_root`.
+    ///
+    /// Empty means the receipt states none -- it was issued before this binding
+    /// existed -- and that acceptance stays importer-only.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub artifact_acceptance_root: String,
     pub semantic_digest: String,
     pub artifact_provenance_root: String,
     pub snapshot_root: String,
@@ -138,6 +154,15 @@ impl Policy2ReceiptBindings {
         ] {
             validate_digest(value).map_err(|_| Policy2ReceiptError::InvalidBinding { field })?;
         }
+        // Stated or absent, never malformed: an acceptance issued before this
+        // binding existed carries none, and gets importer-only matching.
+        if !self.artifact_acceptance_root.is_empty() {
+            validate_digest(&self.artifact_acceptance_root).map_err(|_| {
+                Policy2ReceiptError::InvalidBinding {
+                    field: "artifactAcceptanceRoot",
+                }
+            })?;
+        }
         if self.witness_roots.len() != RECEIPT_WITNESS_FAMILIES.len()
             || !RECEIPT_WITNESS_FAMILIES
                 .iter()
@@ -172,6 +197,12 @@ pub struct ConfiguredReceiptIssuer {
 }
 
 impl ConfiguredReceiptIssuer {
+    pub(super) fn sign_controlled_execution(&self, payload: &[u8]) -> [u8; 64] {
+        self.signing_key
+            .sign(&super::controlled_execution::signature_message(payload))
+            .to_bytes()
+    }
+
     pub fn persistent_local(
         scope: impl Into<String>,
         seed: [u8; 32],
@@ -562,6 +593,12 @@ struct ReceiptPayload {
     importer: String,
     specifier: String,
     resolved_import_root: String,
+    // Added after the first receipts were issued. Absent means "this receipt
+    // states no artifact identity", which keeps it importer-only; it is skipped
+    // when empty so an older receipt re-encodes to the exact bytes it was
+    // signed over.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    artifact_acceptance_root: String,
     semantic_digest: String,
     artifact_provenance_root: String,
     snapshot_root: String,
@@ -652,6 +689,29 @@ pub fn policy2_main_semantic_digest(canonical_main: &[u8]) -> Result<String, Pol
         .map(|(_, contract)| contract.semantic_digest().as_str().to_owned())
 }
 
+/// Recomputes the closed-claims root from an already canonical policy-2 main.
+///
+/// The consumer rebinds this root when it authenticates a receipt, so an
+/// issuer cannot assert a closure the document does not carry. Exposed
+/// alongside [`policy2_main_semantic_digest`] so an out-of-crate issuer can
+/// bind it without reaching into the semantic model.
+pub fn policy2_main_closed_claims_root(
+    canonical_main: &[u8],
+) -> Result<String, Policy2ReceiptError> {
+    let (_, contract) = validate_canonical_main(canonical_main)?;
+    let selected = contract
+        .artifact_cases()
+        .first()
+        .ok_or(Policy2ReceiptError::InvalidBinding {
+            field: "closedClaimsRoot",
+        })?
+        .id
+        .clone();
+    solid_reactive_ir::contract_semantics::proof::policy2_closed_claims_root(&contract, &selected)
+        .map(|digest| digest.as_str().to_owned())
+        .map_err(|error| Policy2ReceiptError::MainDocument(error.to_string()))
+}
+
 /// Canonical identity of the complete resolver answer selected for one
 /// importer/specifier pair. The resolved record is already path-normalized by
 /// the host boundary; stable struct order plus BTreeMap export order makes the
@@ -673,6 +733,87 @@ pub fn policy2_resolved_import_root(
     );
     hash.update(encoded);
     Ok(format!("sha256:{:x}", hash.finalize()))
+}
+
+/// Canonical identity of the *artifact* a contract was proven about, with no
+/// importer and no absolute path in it.
+///
+/// The twin of [`policy2_resolved_import_root`], and deliberately a much
+/// smaller commitment. That root answers "which resolver answer, from which
+/// file"; this one answers "which published artifact, reached how", so an
+/// acceptance can be matched by a consumer that resolved the same artifact from
+/// one of its own files.
+///
+/// What it commits to, and why each is load-bearing:
+///
+/// - **package name, version and integrity** — the integrity is the tarball
+///   hash, so it fixes every byte the contract was proven about. Name and
+///   version are redundant against it and are included so a mismatch names
+///   itself rather than reading as an unrelated digest.
+/// - **requested entrypoint** — `.` and `./immutable` are different artifacts
+///   of the same package with different exports.
+/// - **export conditions** — these *select* the artifact. A contract proven
+///   under `import` must never be applied to a consumer that resolved the same
+///   specifier under `require`, so the condition set is part of the identity
+///   rather than context around it.
+///
+/// Deliberately excluded: the importer, every absolute path, and the resolver
+/// trace. Those are what make `resolvedImportRoot` unmatchable by a consumer,
+/// and none of them is a property of the artifact.
+pub fn policy2_artifact_acceptance_root(
+    resolved: &ResolvedImport,
+    export_conditions: &[String],
+) -> Result<String, Policy2ReceiptError> {
+    resolved
+        .validate()
+        .map_err(|error| Policy2ReceiptError::ResolvedImport(error.to_string()))?;
+    Ok(policy2_artifact_acceptance_root_for_identity(
+        &resolved.package_name,
+        &resolved.package_version,
+        &resolved.package_integrity,
+        &resolved.requested_entrypoint,
+        export_conditions,
+    ))
+}
+
+/// The same root, computed from the five identity fields alone.
+///
+/// A resolved import is how a certifier and an installed-tree consumer state
+/// this identity, and both should keep using
+/// [`policy2_artifact_acceptance_root`] so the resolution is validated. The
+/// compiled-in accepted-contract tier has no resolved import to validate: a
+/// bundle is a published artifact, described by exactly these five fields, and
+/// the absolute paths a `ResolvedImport` carries belong to the machine that
+/// certified it. Sharing the hash rather than restating it is what keeps the
+/// two tiers matchable against each other.
+#[must_use]
+pub fn policy2_artifact_acceptance_root_for_identity(
+    package_name: &str,
+    package_version: &str,
+    package_integrity: &str,
+    requested_entrypoint: &str,
+    export_conditions: &[String],
+) -> String {
+    let mut conditions = export_conditions.to_vec();
+    conditions.sort();
+    conditions.dedup();
+    let mut hash = Sha256::new();
+    hash.update(b"solid-checker:policy2-artifact-acceptance:v1");
+    // Length-prefix every field: without it "a" + "bc" and "ab" + "c" are the
+    // same preimage, and a package could be renamed into another's identity.
+    let mut field = |value: &str| {
+        hash.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_be_bytes());
+        hash.update(value.as_bytes());
+    };
+    field(package_name);
+    field(package_version);
+    field(package_integrity);
+    field(requested_entrypoint);
+    field(&conditions.len().to_string());
+    for condition in &conditions {
+        field(condition);
+    }
+    format!("sha256:{:x}", hash.finalize())
 }
 
 #[must_use]
@@ -885,6 +1026,7 @@ fn payload_bindings(payload: &ReceiptPayload) -> Policy2ReceiptBindings {
         importer: payload.importer.clone(),
         specifier: payload.specifier.clone(),
         resolved_import_root: payload.resolved_import_root.clone(),
+        artifact_acceptance_root: payload.artifact_acceptance_root.clone(),
         semantic_digest: payload.semantic_digest.clone(),
         artifact_provenance_root: payload.artifact_provenance_root.clone(),
         snapshot_root: payload.snapshot_root.clone(),
@@ -918,6 +1060,10 @@ fn binding_mismatch(
         (
             "resolvedImportRoot",
             actual.resolved_import_root == expected.resolved_import_root,
+        ),
+        (
+            "artifactAcceptanceRoot",
+            actual.artifact_acceptance_root == expected.artifact_acceptance_root,
         ),
         (
             "semanticDigest",
@@ -1014,6 +1160,7 @@ fn payload(
         main_digest: digest_bytes(main),
         importer: bindings.importer.clone(),
         specifier: bindings.specifier.clone(),
+        artifact_acceptance_root: bindings.artifact_acceptance_root.clone(),
         resolved_import_root: bindings.resolved_import_root.clone(),
         semantic_digest: bindings.semantic_digest.clone(),
         artifact_provenance_root: bindings.artifact_provenance_root.clone(),
@@ -1276,6 +1423,15 @@ struct CatalogEntry<'a> {
     bindings: &'a Policy2ReceiptBindings,
     status: CatalogStatus,
     import: &'a ResolvedImport,
+    /// The export conditions `artifactAcceptanceRoot` was computed over.
+    ///
+    /// Recorded because the root is a digest and a consumer cannot invert it.
+    /// Without this a consumer could only *guess* the set — and the guess in
+    /// `default_condition_artifact_identity` was the constant `["import"]`, so
+    /// a project declaring its real conditions (`node, import` for a Node
+    /// target, say) was refused while a project declaring the wrong ones was
+    /// admitted. Declaring honestly broke it; that is why this field exists.
+    export_conditions: &'a [String],
 }
 
 #[derive(Clone, Copy, Serialize)]
@@ -1295,6 +1451,7 @@ pub fn publish_policy2_catalog(
     receipt: &[u8],
     authenticated: &AuthenticatedPolicy2Receipt,
     resolved_import: &ResolvedImport,
+    export_conditions: &[String],
 ) -> Result<PublishedPolicy2Catalog, ReceiptPublicationError> {
     let (_, normalized) = validate_canonical_main(canonical_main)
         .map_err(|error| ReceiptPublicationError::Unauthenticated(error.to_string()))?;
@@ -1355,6 +1512,7 @@ pub fn publish_policy2_catalog(
             bindings: &authenticated.bindings,
             status,
             import: resolved_import,
+            export_conditions,
         }],
     })
     .map_err(|error| ReceiptPublicationError::Io(error.to_string()))?;

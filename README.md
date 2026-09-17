@@ -76,26 +76,35 @@ downloads only the binary matching your platform.
 
 ## Solid compatibility
 
-The release treats Solid 1.x and Solid 2.0 as separate dialects over one shared
-analysis engine:
+**This build analyzes Solid 2.0 only.**
 
-| | Solid 1.x | Solid 2.0 |
-| --- | --- | --- |
-| Audited runtime | `solid-js@1.9.14` | `solid-js@2.0.0-rc.0` and `@solidjs/web@2.0.0-rc.0` |
-| Dialect id | `solid-v1` | `solid-v2` |
-| Rule names | `v1/<rule>` | Unprefixed |
-| Catalog | 18 rules | 26 rules |
-| Effect model | `createEffect(fn, initialValue?, options?)` | `createEffect(compute, apply)` |
-| Async boundary | `Suspense` / `createResource` | `Loading` / async computations |
-| Lifecycle | `onMount`; cleanup via `onCleanup` | `onSettled`; leaf cleanup returned from callbacks |
-| Directives | `use:` | `ref` directive factories |
-| Props helpers | `mergeProps` / `splitProps` | `merge` / `omit` |
+| | Solid 2.0 |
+| --- | --- |
+| Audited runtime | `solid-js@2.0.0-rc.3`, `@solidjs/signals@2.0.0-rc.3` and `@solidjs/web@2.0.0-rc.3` |
+| Dialect id | `solid-v2` |
+| Rule names | Unprefixed |
+| Catalog | 27 rules |
+| Effect model | `createEffect(compute, apply)` |
+| Async boundary | `Loading` / async computations |
+| Lifecycle | `onSettled`; leaf cleanup returned from callbacks |
+| Directives | `ref` directive factories |
+| Props helpers | `merge` / `omit` |
+
+Solid 1.x was retired in 2026-09 ([ADR 0110](docs/adr/0110-the-checker-analyzes-solid-2-only.md)).
+A project whose resolved `solid-js` is a major this build has no vocabulary for
+is **refused outright** — one `SC9013 unsupported-solid-runtime` result naming
+the `package.json` that decided it, and no other findings — rather than analyzed
+under a language it does not run. An absent or unclassifiable install still gets
+the Solid 2.0 default, because that is an absence rather than a contradicted
+answer.
 
 The checker detects the installed `solid-js` major automatically. Use
-`--dialect solid-v1` or `--dialect solid-v2` only when a package manager or
-fixture prevents version discovery. Solid 2.0 is still a release candidate, so
-its bundled contracts intentionally require the exact audited RC; a later RC
-must be reviewed before it can certify a project.
+`--dialect solid-v2` only when a package manager or fixture prevents version
+discovery; passing it also overrides the refusal above, so it is appropriate
+only when the resolved manifest misreports what will actually be installed.
+Solid 2.0 is still a release candidate, so its bundled contracts intentionally
+require the exact audited RC; a later RC must be reviewed before it can certify
+a project.
 
 See [the workspace architecture](rust/ARCHITECTURE.md#version-ownership-at-a-glance)
 for where version-specific code belongs and [the rule index](docs/rules/README.md)
@@ -168,7 +177,7 @@ Run `solid-checker --help` for the full list. The options you'll reach for most:
 | Option | Description |
 | --- | --- |
 | `--project <PATH>` | TypeScript project to analyze (default: `tsconfig.json`). |
-| `--dialect <solid-v1\|solid-v2>` | Override automatic Solid major-version detection. |
+| `--dialect solid-v2` | Override automatic Solid major-version detection. Also overrides the unsupported-runtime refusal. |
 | `--format <default\|text\|json>` | Output format. `default` prints framed source excerpts, `text` is compact, `json` is machine-readable. |
 | `--certify` | Exit non-zero unless the project is fully certified. Use this in CI. |
 | `--preset <NAME>` | Enable a catalog preset (repeatable; the compatibility `preferences` preset is currently available). |

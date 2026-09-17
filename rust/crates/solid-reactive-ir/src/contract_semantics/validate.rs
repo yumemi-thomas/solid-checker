@@ -220,9 +220,53 @@ fn normalize_call(call: &mut CallSemantics, path: &str) -> Result<(), ModelError
         .sort_by(|left, right| left.id.cmp(&right.id));
 
     validate_call_claims(&call.claims, &call.operations, &resources, path)?;
+    validate_proposed_closures(call, path)?;
     normalize_operation_graph(&mut call.edges, &call.operations, &operation_ids, path)?;
     normalize_guard_partition(&mut call.guards, &operation_ids, path)?;
     Ok(())
+}
+
+/// A proposed closure labels a closure this document *states*, so the label
+/// is well-formed only over a domain the document actually closes, and only
+/// over a domain a certifier has a closure proof mode for — a proposal nothing
+/// can decide is a refused row, never a weaker document.
+fn validate_proposed_closures(call: &CallSemantics, path: &str) -> Result<(), ModelError> {
+    for domain in call.proposed_closures() {
+        if !domain.is_proposable() {
+            return Err(ModelError::InvalidKnowledge {
+                path: format!("{path}.proposedClosures"),
+                reason: format!(
+                    "call domain {} has no closure proof mode and cannot be proposed",
+                    claim_domain_name(*domain)
+                ),
+            });
+        }
+        if !call.claim_state(*domain).is_open() {
+            continue;
+        }
+        return Err(ModelError::Contradiction {
+            path: format!("{path}.proposedClosures"),
+            reason: format!(
+                "call domain {} is proposed closed and states no closure",
+                claim_domain_name(*domain)
+            ),
+        });
+    }
+    Ok(())
+}
+
+const fn claim_domain_name(domain: ClaimDomain) -> &'static str {
+    match domain {
+        ClaimDomain::Callbacks => "callbacks",
+        ClaimDomain::Reads => "reads",
+        ClaimDomain::Writes => "writes",
+        ClaimDomain::Creates => "creates",
+        ClaimDomain::Invalidates => "invalidates",
+        ClaimDomain::Throws => "throws",
+        ClaimDomain::Returns => "returns",
+        ClaimDomain::Cleanups => "cleanups",
+        ClaimDomain::Disposals => "disposals",
+    }
 }
 
 fn normalize_knowledge<T: Ord>(
@@ -385,6 +429,36 @@ fn normalize_operation(
     }
     if let Some(output) = &mut operation.output {
         normalize_value(output, resources, &format!("{op_path}.output"))?;
+    }
+    if let Some(composed) = &operation.composed_from {
+        let composed_path = format!("{op_path}.composedFrom");
+        require_text(&composed.export, &format!("{composed_path}.export"))?;
+        require_text(&composed.operation.0, &format!("{composed_path}.operation"))?;
+        // Only a `read` operation may state provenance today. The premise a
+        // consumer discharges it with is a reachable, uncaptured *call* whose
+        // callee resolves to the named export, and that premise was reviewed
+        // for the read families alone: an `invoke` operation's provenance
+        // would additionally have to compose the callback binding, and a
+        // `create`'s would have to compose the owner relation. Publishing one
+        // without the premise that answers it is a fact carried with no
+        // witness, which is exactly what the demand inventory exists to
+        // prevent.
+        if operation.kind != OperationKind::Read {
+            return contradiction(
+                composed_path,
+                "only a read operation may state composed provenance",
+            );
+        }
+        // Provenance names *another* export's operation. Operation ids are
+        // qualified by export, so an id this export also owns means the
+        // generator named itself — a self-composition, which is a cycle
+        // rather than a proof.
+        if operations.contains(&composed.operation) {
+            return contradiction(
+                composed_path,
+                "composed provenance names an operation of the composing export itself",
+            );
+        }
     }
     Ok(())
 }
@@ -661,11 +735,14 @@ fn normalize_value(
     path: &str,
 ) -> Result<(), ModelError> {
     match value {
+        // A merged props object carries no resource and no child shape: what it
+        // exposes is the caller's argument's, which this side never sees.
         ValueShape::Unknown
         | ValueShape::Plain
         | ValueShape::Parameter { .. }
         | ValueShape::Callable
         | ValueShape::Component
+        | ValueShape::MergedProps { .. }
         | ValueShape::RefApplication => {}
         ValueShape::Tuple(items) => {
             validate_open_nonempty(items, &format!("{path}.tuple-items"))?;
@@ -1095,6 +1172,17 @@ fn validate_call_claims(
                 "operation node lacks its corresponding positive call claim",
             );
         }
+        // NOT YET: "a `create` operation naming no resource is a
+        // contradiction" (`semantic-model.md` § creates, decision 2026-09-03,
+        // and the census plan's § 2.2 item 3) belongs exactly here. It cannot
+        // land before the two compiled-in Solid 1.x authority documents that
+        // carry that shape are corrected, and they cannot be corrected soundly
+        // today -- see `docs/precision-backlog.md`'s 2026-09-03 entry, which
+        // records the blocker with the code that proves it. The generator no
+        // longer produces the shape -- it emits no `create` operation at all
+        // (`inferred_contract.rs`'s `owner_requirement_operation`, pinned by
+        // `the_generator_emits_no_resourceless_create`) -- so nothing new can
+        // arrive here while the rule waits.
     }
     Ok(())
 }
@@ -1605,6 +1693,7 @@ fn visit_closed_value(
         | ValueShape::Action { .. }
         | ValueShape::Component
         | ValueShape::Cleanup { .. }
+        | ValueShape::MergedProps { .. }
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
     }
@@ -1762,6 +1851,11 @@ pub(super) fn open_proposed_closure(export: &mut ExportSemantics) -> Vec<ClaimPa
     if export.call.guards.cases.open_proposed_closure() {
         candidates.push(ClaimPath::GuardPartition);
     }
+    // Every marked domain is a closed call domain, so the loop above has just
+    // withdrawn all of them: the label goes with the closure it labelled, and
+    // a document whose closure was weakened while the label survived would not
+    // normalize.
+    export.call.proposed_closures.clear();
     for guarded in export.call.guards.cases.items_mut() {
         let operations = match guarded {
             GuardedCase::When { operations, .. } | GuardedCase::Otherwise { operations } => {
@@ -1997,6 +2091,7 @@ fn open_value_closure(
         | ValueShape::Action { .. }
         | ValueShape::Component
         | ValueShape::Cleanup { .. }
+        | ValueShape::MergedProps { .. }
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
     }
@@ -2022,6 +2117,7 @@ fn visit_value(value: &ValueShape, root: ValueRoot, path: ValuePath, claims: &mu
         | ValueShape::Action { .. }
         | ValueShape::Component
         | ValueShape::Cleanup { .. }
+        | ValueShape::MergedProps { .. }
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
         ValueShape::Tuple(items) => {

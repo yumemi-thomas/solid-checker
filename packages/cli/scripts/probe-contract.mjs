@@ -9,6 +9,7 @@ import process from "node:process";
 
 import { runNative } from "../bin/launcher.mjs";
 import { runProbeSessions } from "./contract-probe-driver.mjs";
+import { PROBE_WORKER_PROTOCOL } from "./contract-probe-harness.mjs";
 
 export const contractProbeHelp = `Usage:
   solid-checker contract probe <PROPOSAL> --request <FILE> [OPTIONS]
@@ -65,7 +66,7 @@ function native(args) {
 
 function producer() {
   const build = createHash("sha256").update(`${process.execPath}\0${process.version}`).digest("hex");
-  return { name: "solid-checker-node-probe-driver", version: "2", build: `sha256:${build}`, protocol: "solid-checker-runtime-probe-v2" };
+  return { name: "solid-checker-node-probe-driver", version: "3", build: `sha256:${build}`, protocol: PROBE_WORKER_PROTOCOL };
 }
 
 export async function probeContract(arguments_) {

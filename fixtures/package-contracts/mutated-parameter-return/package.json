@@ -1,0 +1,4 @@
+{
+  "name": "mutated-parameter-return", "version": "1.0.0", "type": "module",
+  "exports": { ".": { "types": "./index.d.ts", "import": "./index.ts" } }
+}

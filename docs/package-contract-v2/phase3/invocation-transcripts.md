@@ -268,3 +268,40 @@ schema 1. Protocol 4 adds `overloadCount`, includes it in selected-signature
 identity v2, and marks unresolved instantiable type leaves locally open. This
 lets policy 2 refuse cherry-picked overload closure without contaminating exact
 sibling value paths.
+
+Protocol 21 (2026-09-06) fixes what `overloadOrdinal` and `overloadCount` range
+over: the declarations that state a call signature — the bodiless overload
+declarations of the signature's kind, or the one bodied declaration when there
+is no other — rather than every declaration of the kind. Until then an
+overloaded function analyzed from source counted its implementation body and
+reported `overloadCount == len + 1`, which the consumer's completeness check
+refused. The count is part of the selected-signature identity, so the number
+moves with the meaning (docs/precision-backlog.md, "Protocol 21").
+
+Protocol 22 (2026-09-06, ADR 0038) lets an export's *root* implementation
+transcript state `parameterPremises`: its `uncensusedInvokingForms` was
+classified with each parameter bound to the type the export's declared call
+signature gives that position, on a checked twin of the JavaScript file, rather
+than to an unannotated parameter's `any`. Each entry's `type` is the declared
+type's printed form, byte-identical to the export transcript's
+`callSignature.parameters[i].value.type.text`, which is how the consumer binds
+the premise to the signature it already holds. `parameterPremiseRefusal` is
+diagnostic only. An empty form list on a premised transcript means "no form
+under the declared signature", which a protocol-21 consumer would read as "no
+form at all", so the handshake moves although the fields are additive.
+
+Protocol 23 (2026-09-06, ADR 0038 helper premises) carries a premise to a
+local helper. A *premised* transcript states `callArgumentPremises`: for each
+call or construction whose callee is an identifier resolving to a declaration
+in the program's own runtime source, with no spread, the type the twin's
+checker gave every argument slot that is not `any` — text plus an opaque
+`identity` binding the text to a declaration. A consumer following that call
+copies the entry onto the helper's local-declaration demand as
+`exportValueDemand.parameterPremises` (part of the demand digest), and the
+producer classifies the helper's form census on a spelled twin carrying one
+`@param` per premised slot, held to the same falsifier; the helper's transcript
+then states `parameterPremises` equal to the demand's, or none — the client
+refuses anything in between, and refuses a premise on a demand that is not a
+local declaration. A protocol-22 consumer refused any premise on a local
+declaration and never asked for one, so the handshake moves although every
+field is additive.

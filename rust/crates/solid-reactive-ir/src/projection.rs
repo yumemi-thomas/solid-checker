@@ -73,6 +73,7 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             module,
             export,
             reexported,
+            ..
         } => {
             if defect.analysis_context.starts_with("obsolete-policy1-receipt:") {
                 (
@@ -294,6 +295,16 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 .starts_with("unknown-contract-claims:") =>
         {
             "the imported package contract explicitly marks a required effect claim as unknown"
+        }
+        // The acceptance gate and the missing-summary case shared this arm, and
+        // its wording is only true of the second: at the acceptance gate there
+        // is no contract to have a summary in. Split, because a reader acts on
+        // the difference — one is `contract certify`, the other is an audit of
+        // a contract that already exists.
+        StaticDefectKind::PackageContractExportMissing { .. }
+            if defect.analysis_context == crate::contracts::UNACCEPTED_IMPORT_CONTEXT =>
+        {
+            "this project accepted no contract for the imported package"
         }
         StaticDefectKind::PackageContractExportMissing { .. } => {
             "the imported package has a contract, but this export has no effect summary"
@@ -535,12 +546,10 @@ pub fn project_findings(
                 .map(|operation| project_finding(FindingSeed::LeafOperation(operation), catalog)),
         );
     }
-    findings.extend(
-        program
-            .static_defects
-            .iter()
-            .map(|defect| project_finding(FindingSeed::StaticDefect(defect), catalog)),
-    );
+    findings.extend(collapse_unaccepted_contract_defects(
+        &program.static_defects,
+        catalog,
+    ));
     findings.extend(
         program
             .static_violations
@@ -692,6 +701,181 @@ pub fn suppress_findings_owned_by_enabled_rules(
 /// Projects one seed. Used by the backend for package-contract issues that
 /// are discovered after the reactive [`Program`] has been built.
 #[must_use]
+/// The acceptance gate says one thing — "this project has no accepted contract
+/// for that package" — and it used to say it once per import site.
+///
+/// Measured on `solid-primitives-next/site`: 88 of the project's 191 findings
+/// were this, and they named **17 packages**. Sixty-four of them were the same
+/// sentence about `@solid-primitives/utils`. The per-site repetition carried no
+/// information a reader could act on separately: the fix is one `contract
+/// certify` per package, not per import, and nothing distinguishes the sites.
+///
+/// So they collapse to one finding per package, anchored at the first site and
+/// carrying every other site in `related_locations` — visible in JSON output
+/// and counted in the default renderer's help line. **Nothing is dropped**; the
+/// same locations reach the same consumers, grouped by the thing that would fix
+/// them.
+///
+/// The claim gates collapse too, one level finer, and for the same reason —
+/// but only where they were raised at an *import*.
+/// `unknown-contract-claims:` does say something specific about *that export* —
+/// which is why it is not folded into the package — but at an import binding it
+/// says nothing specific about the *site*: the message names the package, the
+/// export and the open domains, and nothing else. Repeating it at every import
+/// of that export is the same non-information the acceptance gate used to emit
+/// per site.
+///
+/// At an *argument* it is a different finding, and `analysis_context` cannot
+/// tell the two apart: `unknown-contract-claims:callbacks` is emitted both by
+/// `push_unknown_contract_claims` at a binding and by `interproc` at one exact
+/// call argument. So the producer records it — [`ContractDefectSite`] — and
+/// this reads it. Getting that wrong is not theoretical: grouping argument
+/// sites by export collapsed `package-callback-arguments-consumer` from four
+/// findings to two, merging a rest parameter that absorbs a descriptor with an
+/// `arguments` object that observes one, which is the distinction that fixture
+/// exists to pin.
+///
+/// Measured while bundling: a five-file project importing four `@kobalte/utils`
+/// exports produced 35 findings that were 7 distinct sentences, each repeated
+/// five times with an empty `related_locations`. The same project with no
+/// accepted contract produced 1. Delivering contracts must not cost a reader
+/// that trade.
+///
+/// So the rule is: defects whose projected finding would be identical except
+/// for its location become one finding. For the acceptance gate that is the
+/// whole package, because no export-specific claim has been read yet; for a
+/// claim gate it is the exact `(package, export, claims)`. A group of one keeps
+/// its exact original wording either way.
+fn collapse_unaccepted_contract_defects(
+    defects: &[StaticDefect],
+    catalog: &impl CatalogWording,
+) -> Vec<Finding> {
+    /// What makes two of these defects interchangeable.
+    #[derive(Clone, Copy, Eq, Hash, PartialEq)]
+    enum Interchangeable<'a> {
+        /// The acceptance gate: the import matched no accepted contract at all,
+        /// so no export-specific claim has been read yet and every site in the
+        /// package has the same answer.
+        Package(&'a str),
+        /// A claim gate: an accepted contract leaves these exact domains open
+        /// for this exact export. Different exports, and different open
+        /// domains, are different findings.
+        Claim(&'a str, &'a str, &'a str),
+    }
+
+    fn interchangeable(defect: &StaticDefect) -> Option<Interchangeable<'_>> {
+        let StaticDefectKind::PackageContractExportMissing {
+            module,
+            export,
+            site,
+            ..
+        } = &defect.kind
+        else {
+            return None;
+        };
+        // An obligation raised at an exact argument of an exact call keeps its
+        // own finding: the site *is* the content there. Only a name entering a
+        // file -- a binding, a namespace member, a re-export specifier --
+        // produces the identical sentence twice.
+        if *site == crate::ContractDefectSite::Argument {
+            return None;
+        }
+        // The exact context, not "not one of the specific prefixes": a defect
+        // raised because an *accepted* contract has no summary for this export
+        // is about that export, and collapsing it under the package would say
+        // the package has no contract when it does.
+        Some(
+            if defect.analysis_context == crate::contracts::UNACCEPTED_IMPORT_CONTEXT {
+                Interchangeable::Package(module.as_str())
+            } else {
+                Interchangeable::Claim(
+                    module.as_str(),
+                    export.as_str(),
+                    defect.analysis_context.as_str(),
+                )
+            },
+        )
+    }
+
+    // First-seen order, so the anchor of each group is the first site the
+    // analysis reached and the output order does not depend on a hash.
+    let mut order: Vec<Interchangeable<'_>> = Vec::new();
+    let mut grouped: std::collections::HashMap<Interchangeable<'_>, Vec<&StaticDefect>> =
+        std::collections::HashMap::new();
+    let mut findings = Vec::new();
+    for defect in defects {
+        match interchangeable(defect) {
+            Some(key) => {
+                let group = grouped.entry(key).or_insert_with(|| {
+                    order.push(key);
+                    Vec::new()
+                });
+                group.push(defect);
+            }
+            // Everything else keeps its own finding, in place.
+            None => findings.push(project_finding(FindingSeed::StaticDefect(defect), catalog)),
+        }
+    }
+    for key in order {
+        let group = &grouped[&key];
+        let mut finding = project_finding(FindingSeed::StaticDefect(group[0]), catalog);
+        let Interchangeable::Package(module) = key else {
+            // A claim group keeps the message it already has -- it names the
+            // package, the export and the open domains, which is the whole
+            // content -- and gains the other sites.
+            if group.len() > 1 {
+                finding
+                    .related_locations
+                    .extend(group[1..].iter().map(|defect| defect.location.clone()));
+            }
+            findings.push(finding);
+            continue;
+        };
+        if group.len() > 1 {
+            let mut exports = group
+                .iter()
+                .filter_map(|defect| match &defect.kind {
+                    StaticDefectKind::PackageContractExportMissing { export, .. } => {
+                        Some(export.as_str())
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            exports.sort_unstable();
+            exports.dedup();
+            let named = exports.len().min(6);
+            let listed = exports[..named].join(", ");
+            let remainder = exports.len() - named;
+            finding.message = format!(
+                "this project has no accepted reactivity contract for {module}; solid-checker \
+                 cannot tell whether its exports read reactive values, take tracked callbacks, or \
+                 return accessors, so code flowing through them cannot be certified. {} export{} \
+                 used across {} import site{}: {listed}{}",
+                exports.len(),
+                if exports.len() == 1 { "" } else { "s" },
+                group.len(),
+                if group.len() == 1 { "" } else { "s" },
+                if remainder == 0 {
+                    String::new()
+                } else {
+                    format!(", and {remainder} more")
+                }
+            );
+            finding.hint = format!(
+                "Accept one contract for {module} and every site above is answered at once: \
+                 generate a stable-v1 proposal for the exact installed artifact, certify it, and \
+                 register the document/receipt pair under .solid-checker/. See \
+                 docs/package-contracts.md for the workflow."
+            );
+            finding
+                .related_locations
+                .extend(group[1..].iter().map(|defect| defect.location.clone()));
+        }
+        findings.push(finding);
+    }
+    findings
+}
+
 pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> Finding {
     let wording = catalog.wording(seed);
     let location = primary_location(seed);

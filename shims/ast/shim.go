@@ -11,6 +11,7 @@ import ast "github.com/microsoft/typescript-go/internal/ast"
 import _ "unsafe"
 
 type Diagnostic = ast.Diagnostic
+type SourceFileParseOptions = ast.SourceFileParseOptions
 
 //go:linkname GetNodeAtPosition github.com/microsoft/typescript-go/internal/ast.GetNodeAtPosition
 func GetNodeAtPosition(file *ast.SourceFile, position int, includeJSDoc bool) *ast.Node
@@ -191,6 +192,9 @@ func IsQualifiedName(node *ast.Node) bool
 //go:linkname IsReturnStatement github.com/microsoft/typescript-go/internal/ast.IsReturnStatement
 func IsReturnStatement(node *ast.Node) bool
 
+//go:linkname IsShorthandPropertyAssignment github.com/microsoft/typescript-go/internal/ast.IsShorthandPropertyAssignment
+func IsShorthandPropertyAssignment(node *ast.Node) bool
+
 //go:linkname IsSpreadElement github.com/microsoft/typescript-go/internal/ast.IsSpreadElement
 func IsSpreadElement(node *ast.Node) bool
 
@@ -226,6 +230,18 @@ const KindJsxSelfClosingElement = ast.KindJsxSelfClosingElement
 const KindMinusToken = ast.KindMinusToken
 const KindPlusToken = ast.KindPlusToken
 const KindPropertySignature = ast.KindPropertySignature
+
+// KindFirstNode is the compiler's own boundary between tokens — trivia,
+// literals, punctuation, identifiers, and keywords — and the node kinds above
+// them. Everything strictly below it is a token, which is the only way to say
+// "this is not a syntactic construct" without restating a 160-entry list that
+// a compiler bump could silently extend.
+const KindFirstNode = ast.KindFirstNode
+
+// NodeFlagsUsing is set on the declaration list of both `using x = …` and
+// `await using x = …`; the latter additionally sets NodeFlagsConst, which is
+// why testing this one bit covers both spellings.
+const NodeFlagsUsing = ast.NodeFlagsUsing
 const KindQuestionQuestionToken = ast.KindQuestionQuestionToken
 const KindTrueKeyword = ast.KindTrueKeyword
 const KindUndefinedKeyword = ast.KindUndefinedKeyword
@@ -242,3 +258,7 @@ type Kind = ast.Kind
 const SymbolFlagsAlias = ast.SymbolFlagsAlias
 const SymbolFlagsOptional = ast.SymbolFlagsOptional
 const SymbolFlagsValue = ast.SymbolFlagsValue
+const SymbolFlagsClass = ast.SymbolFlagsClass
+const SymbolFlagsInterface = ast.SymbolFlagsInterface
+const SymbolFlagsEnum = ast.SymbolFlagsEnum
+const SymbolFlagsTypeAlias = ast.SymbolFlagsTypeAlias

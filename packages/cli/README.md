@@ -101,7 +101,12 @@ longer matches the installed version:
 solid-checker contract check
 ```
 
-Packages are reported as bundled, accepted, unverified, stale, unbound, or
+Core runtime packages are reported as `builtin`, meaning the selected Solid
+dialect supplies their modeled behavior without a package receipt. This is
+model selection, not independent certification or installed-artifact
+authentication. A core package outside that dialect is `unsupported-runtime`.
+
+External packages are reported as certified, unverified, stale, unbound, or
 missing; every uncertifying status names its remedy, and the command exits
 non-zero when action is required. `unbound` means no exact project import
 occurrence matches the catalog entry. `stale` means document, receipt, package,
@@ -151,8 +156,13 @@ once, caches its snapshot, and projects matching findings into Oxlint. Set
 or a solution-style root config that only references application configs.
 
 By default the analysis picks its dialect from the `solid-js` version the
-project resolves. Set `settings.solidChecker.dialect` to `"solid-v1"` or
-`"solid-v2"` to override detection for every rule the adapter runs.
+project resolves. This build analyzes **Solid 2.0 only**: a project whose
+resolved `solid-js` is a major it has no vocabulary for is refused outright
+with `SC9013 unsupported-solid-runtime` and no other findings, rather than
+analyzed under the wrong language (ADR 0110). Set
+`settings.solidChecker.dialect` to `"solid-v2"` to override detection for every
+rule the adapter runs — which also overrides that refusal, and is appropriate
+only when the resolved manifest misreports what will actually be installed.
 When package contracts or rendering proofs depend on deployment conditions,
 set `settings.solidChecker.runtime` with explicit `target`, `build`,
 `rendering`, `conditions`, and `frameworkTransforms` fields. Incomplete or
@@ -160,18 +170,17 @@ contradictory selections remain uncertifiable; the adapter includes the full
 selection in its analysis cache identity.
 
 Every catalog rule is also its own ESLint rule, so a project can disable one
-finding without losing the rest: unprefixed names
-(`solid-checker/strict-read-untracked`) come from the Solid 2.0 catalog, and
-`v1/`-prefixed names (`solid-checker/v1/no-destructure`) come from the Solid
-1.x catalog. A `v1/` rule analyzes with the 1.x dialect on its own when the
-configuration has not chosen one. All rules of one dialect share a single
-cached analysis run, so enabling an entire catalog still spawns the checker
-once per project.
+finding without losing the rest; the names are unprefixed
+(`solid-checker/strict-read-untracked`), since the Solid 2.0 catalog is the
+only one that ships. The `v1/`-prefixed names went with the 1.x catalog — see
+`docs/rule-catalog-migration.md` for mapping an existing `v1/` suppression onto
+its 2.0 identity. All rules of one dialect share a single cached analysis run,
+so enabling an entire catalog still spawns the checker once per project.
 
-The plugin ships three flat configs. `configs.recommended` enables only
+The plugin ships two flat configs. `configs.recommended` enables only
 `solid-checker/certification`, which reports every finding through one rule.
-`configs.v1` and `configs.v2` enable their catalog's rules at each rule's
-native severity and turn `certification` off. The configs compose in either
+`configs.v2` enables its catalog's rules at each rule's native severity and
+turns `certification` off. The configs compose in either
 order: each finding reports exactly once, per rule. Even when a listing such
 as `[configs.v1, configs.recommended]` re-enables `certification` (flat
 config resolves each rule from the later entry), certification skips every
@@ -183,8 +192,7 @@ The adapter discovers shipped dialect catalogs by enumerating
 id, compatibility `config` key, and optional rule `namespace`; adding a catalog
 does not require a JavaScript registry or version branch.
 
-Project-wide rule enablement and per-rule options (for example
-`v1/prefer-classlist`'s `classnames`) live in the project's
+Project-wide rule enablement and per-rule options live in the project's
 `.solid-checker/rule-options.json`, which the native analysis
 discovers itself — not in ESLint rule configuration. The adapter runs one
 analysis per project, so a single discovered file is what keeps ESLint, the

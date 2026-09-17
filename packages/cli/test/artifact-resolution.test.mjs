@@ -11,6 +11,7 @@ import {
   writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import {
@@ -23,13 +24,45 @@ import {
   resolvePackageDependencyPlanClosure,
   isCustomCondition,
   isPrivateNamespacedCondition,
+  MODULE_EMISSION_FLAVOR,
+  declarationFileFlavor,
+  moduleEmission,
+  nonEmittingModuleTarget,
   nonModuleTargetExtension,
   resolvePackageExport,
   selectPackageExportTarget,
-  selectTypeScriptApi
+  selectTypeScriptApi,
+  coreRuntimeSpecifier
 } from "../scripts/artifact-resolution.mjs";
 
 const roots = [];
+
+describe("the core-runtime specifier predicate", () => {
+  // Behaviour only. Whether this list *is* the core runtime is checked from
+  // the side that owns the list: `module_closure::tests::
+  // the_core_runtime_package_list_agrees_with_the_typescript_census` reads
+  // this file and compares it to `Dialect::primitive_defining_packages`. The
+  // closure is computed twice and the two censuses must agree byte for byte
+  // about which imports are an opaque frontier.
+  test("reaches an archive and its subpaths, and nothing that merely resembles one", () => {
+    for (const name of ["solid-js", "@solidjs/signals", "@solidjs/web"]) {
+      expect(coreRuntimeSpecifier(name), name).toBe(true);
+      expect(coreRuntimeSpecifier(`${name}/store`), `${name}/store`).toBe(true);
+    }
+    for (const other of [
+      "@solidjs",
+      "@solidjs/router",
+      "@solidjs/meta",
+      "@solid-primitives/scheduled",
+      "solid-jsx",
+      "solid-js-signals",
+      "my-solid-js",
+      ""
+    ]) {
+      expect(coreRuntimeSpecifier(other), JSON.stringify(other)).toBe(false);
+    }
+  });
+});
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -59,6 +92,41 @@ function target(root, manifest, conditions, axis = "runtime", resolutionKind = "
 }
 
 describe("standalone package-export resolution", () => {
+  test("declaration imports retain acquisition edges without runtime hazards", () => {
+    const base = fileURLToPath(new URL("../../../fixtures/package-contracts/declaration-import-closure/", import.meta.url));
+    for (const [directory, name, runtimeImport] of [
+      ["declarations-only", "probe-declaration-only", false],
+      ["runtime-import", "probe-runtime-import", true]
+    ]) {
+      const root = join(base, directory);
+      const result = resolvePackageArtifactClosure({
+        importer: join(root, "consumer.mjs"), specifier: name,
+        packageRoot: root, integrity: "sha512:fixture"
+      });
+      expect(result.externalDependencies).toEqual(expect.arrayContaining([
+        expect.objectContaining({ axis: "declarations", specifier: "source-types" })
+      ]));
+      expect(result.closure.hazards.map(h => h.source)).toEqual(
+        runtimeImport ? ["./index.js:source-types"] : []
+      );
+      expect(result.closure.dependencies).toEqual([]);
+      expect(result.closure.entries).toEqual(expect.arrayContaining([
+        expect.objectContaining({ role: "declaration", path: "./index.d.ts" })
+      ]));
+    }
+  });
+
+  test("declaration-only narrowing retains unresolved private specifiers", () => {
+    const root = fixture({ name: "private-types", version: "1.0.0",
+      imports: { "#platform": { browser: "./platform.js" } },
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+    }, { "index.js": "export function noop() {}",
+      "index.d.ts": 'import "#platform"; export declare function noop(): void;' });
+    const result = resolvePackageArtifactClosure({ importer: join(root, "consumer.mjs"),
+      specifier: "private-types", packageRoot: root, integrity: "sha512:fixture" });
+    expect(result.closure.hazards.map(h => h.source)).toEqual(["./index.d.ts:#platform"]);
+  });
+
   test("preserves nested ordered branches for every supported custom condition", () => {
     const manifest = {
       name: "matrix",
@@ -246,6 +314,22 @@ describe("standalone package-export resolution", () => {
     expect(declarations.trace.branch).toBe("/exports/./types");
   });
 
+  test("continues to late types only when the earlier branch has no declaration", () => {
+    const manifest = { name: "late-types", version: "1.0.0", type: "module",
+      exports: { ".": { import: "./index.mjs", types: "./index.d.ts" } } };
+    const files = { "index.mjs": "export const value = 1;",
+      "index.d.ts": "export declare const value: number;" };
+    const root = fixture(manifest, files);
+    expect(target(root, manifest, [], "declarations").trace.branch).toBe("/exports/./types");
+    expect(target(root, manifest, []).file.path).toBe(join(root, "index.mjs"));
+    const sibling = fixture(manifest, { ...files, "index.d.mts": files["index.d.ts"] });
+    expect(target(sibling, manifest, [], "declarations").trace.branch).toBe("/exports/./import");
+    const missing = fixture(manifest, { "index.d.ts": files["index.d.ts"] });
+    expect(() => target(missing, manifest, [])).toThrowError(
+      expect.objectContaining({ code: "target-not-found" }));
+    expect(target(missing, manifest, [], "declarations").file.path).toBe(join(missing, "index.d.ts"));
+  });
+
   test("substitutes declaration extensions from the selected runtime module format", () => {
     for (const [runtimeExtension, declarationExtension] of [
       [".mjs", ".d.mts"],
@@ -276,7 +360,7 @@ describe("standalone package-export resolution", () => {
   });
 
   test("keeps JavaScript and TypeScript sources as declaration fallbacks", () => {
-    for (const extension of [".js", ".jsx", ".ts", ".tsx"]) {
+    for (const extension of [".mjs", ".js", ".jsx", ".ts", ".tsx"]) {
       const manifest = {
         name: `source-fallback-${extension.slice(1)}`,
         version: "1.0.0",
@@ -315,9 +399,15 @@ describe("standalone package-export resolution", () => {
         ])
       );
 
-      expect(() => target(root, manifest, [], "declarations")).toThrowError(
-        expect.objectContaining({ code: "declarations-not-found" })
-      );
+      if (runtimeExtension === ".mjs") {
+        expect(target(root, manifest, [], "declarations").file.path).toBe(
+          join(root, "dist/index.mjs")
+        );
+      } else {
+        expect(() => target(root, manifest, [], "declarations")).toThrowError(
+          expect.objectContaining({ code: "declarations-not-found" })
+        );
+      }
     }
   });
 
@@ -700,6 +790,24 @@ describe("exact artifact records and closure", () => {
     expect(record.declarationExports).toEqual(["declarationOnly", "shared"]);
   });
 
+  test("named default declarations do not invent public named exports", () => {
+    for (const kind of ["function", "class"]) {
+      for (const named of [false, true]) {
+        const manifest = { name: "default-census", version: "1.0.0", type: "module",
+          exports: { ".": { types: "./index.d.ts", import: "./index.js" } } };
+        const extra = named ? "\nexport { Local };" : "";
+        const root = fixture(manifest, {
+          "index.js": `export default ${kind} Local${kind === "function" ? "()" : ""} {}${extra}`,
+          "index.d.ts": `export default ${kind} Local${kind === "function" ? "(): void;" : " {}"}${extra}`
+        });
+        const record = resolvePackageArtifacts({ importer: join(root, "consumer.mjs"),
+          specifier: manifest.name, packageRoot: root, integrity: "sha512:test" });
+        expect(record.declarationExports).toEqual(named ? ["Local", "default"] : ["default"]);
+        expect(Object.keys(record.exports).sort()).toEqual(named ? ["Local", "default"] : ["default"]);
+      }
+    }
+  });
+
   test("declaration census retains namespaces without granting an exact binding", () => {
     const manifest = {
       name: "namespace-census",
@@ -748,7 +856,6 @@ describe("exact artifact records and closure", () => {
       integrity: "sha512:test"
     });
     expect(planned.closure.hazards.map(hazard => hazard.source)).toEqual([
-      "./index.d.ts:external-types/subpath",
       "./index.js:external-runtime"
     ]);
     expect(planned.externalDependencies).toEqual([
@@ -1687,6 +1794,64 @@ describe("exact artifact records and closure", () => {
     })).toThrow(/accepted dependency .* has no exact runtime binding for export/);
   });
 
+  test("a re-export from the built-in runtime foundation is unbound, not a refusal", () => {
+    // `solid-js`, `@solidjs/signals` and `@solidjs/web` have no package
+    // contract by design (ADR 0027), so a binding demand on one can never be
+    // met. `canonicalClosure` already exempts them; this pins the
+    // export-binding half, which did not, and refused the whole artifact case
+    // of any package re-exporting a core name.
+    //
+    // The emitter drops the same names from the document
+    // (`export_binds_core_runtime`), so the two censuses agree the name is not
+    // part of this package's surface. On 2026-09-15 the missing exemption left
+    // `@solid-primitives/utils@6.4.1`'s `.` entrypoint -- 820 consumer call
+    // sites -- with no contract at all.
+    const root = fixture(
+      {
+        name: "core-reexporter",
+        version: "1.0.0",
+        exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+      },
+      {
+        "index.js": 'export { isServer } from "solid-js/web";\nexport const own = 1;\n',
+        "index.d.ts":
+          'export declare const isServer: boolean;\nexport declare const own: number;\n'
+      }
+    );
+    const resolved = resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "core-reexporter",
+      packageRoot: root,
+      integrity: "sha512:test",
+      acceptedDependencies: {}
+    });
+    expect(Object.keys(resolved.exports)).toEqual(["own"]);
+  });
+
+  test("a re-export from an ordinary unaccepted dependency still refuses", () => {
+    // The falsifier: only core is exempt. Anything else keeps the refusal,
+    // because an ordinary dependency's contract can be supplied and this one
+    // was not.
+    const root = fixture(
+      {
+        name: "ordinary-reexporter",
+        version: "1.0.0",
+        exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+      },
+      {
+        "index.js": 'export { child } from "accepted";\n',
+        "index.d.ts": 'export declare const child: number;\n'
+      }
+    );
+    expect(() => resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "ordinary-reexporter",
+      packageRoot: root,
+      integrity: "sha512:test",
+      acceptedDependencies: {}
+    })).toThrow(/accepted dependency accepted has no exact runtime binding for export child/);
+  });
+
   test("names the missing accepted dependency for an import-then-export binding", () => {
     const root = fixture(
       {
@@ -2116,6 +2281,165 @@ test("non-module target extensions are exactly the non-executable resource list"
   expect(nonModuleTargetExtension("./bin")).toBeUndefined();
 });
 
+describe("module emission answers both premises from one shared corpus", () => {
+  // `fixtures/module-emission/cases.json` is read by *both* implementations:
+  // this suite and `solid_facts::ast::emission`'s tests. That is the whole
+  // mechanism holding the TypeScript and Oxc statement tables together — a
+  // divergence between them refuses a whole proposal in the field, so it has to
+  // be a test failure here first. Never edit a verdict to match an
+  // implementation; work out which side is wrong.
+  const corpus = JSON.parse(
+    readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "../../../fixtures/module-emission/cases.json"),
+      "utf8"
+    )
+  );
+
+  const render = answer =>
+    answer.verdict === "emitting" ? `emitting:${answer.kind}` : answer.verdict;
+  const shown = verdict => (typeof verdict === "string" ? verdict : `emitting:${verdict.emitting}`);
+  const satisfied = (verdict, answer) =>
+    verdict === "refused" ? answer !== "non-emitting" : shown(verdict) === answer;
+
+  test("the corpus envelope is the audited one", () => {
+    expect(corpus.format).toBe("solid-checker-module-emission-cases");
+    expect(corpus.casesVersion).toBe(1);
+    expect(corpus.cases.length).toBeGreaterThanOrEqual(100);
+    expect(new Set(corpus.cases.map(entry => entry.name)).size).toBe(corpus.cases.length);
+  });
+
+  test("every case answers exactly what the corpus records, under both premises", () => {
+    const mismatches = [];
+    for (const entry of corpus.cases) {
+      for (const [column, flavor] of [
+        ["module", MODULE_EMISSION_FLAVOR.Module],
+        ["declarationFile", MODULE_EMISSION_FLAVOR.DeclarationFile]
+      ]) {
+        const answer = render(moduleEmission(entry.source, flavor));
+        if (!satisfied(entry[column], answer)) {
+          mismatches.push(`${entry.name} [${column}]: answered ${answer}, corpus says ${shown(entry[column])}`);
+        }
+      }
+    }
+    expect(mismatches).toEqual([]);
+  });
+
+  test("no case is answered non-emitting under both premises by accident", () => {
+    // The two premises are not a fallback chain: exactly one runs per member,
+    // chosen by suffix. This pins the cases where they deliberately disagree,
+    // so a change that collapsed them into one would fail here.
+    const disagreeing = corpus.cases.filter(
+      entry =>
+        (entry.module === "non-emitting") !== (entry.declarationFile === "non-emitting")
+    );
+    expect(disagreeing.map(entry => entry.name).sort()).toEqual([
+      "ambient module with a side-effect import",
+      "ambient module with an expression statement",
+      "ambient module with an initializer",
+      "declare class with a static block",
+      "declare class with an accessor initializer",
+      "declare const with an initializer",
+      "declare global with a body",
+      "declare namespace with a function body",
+      "default export of a declared const",
+      "export star",
+      "export star as namespace",
+      "h types/hyperscript.d.ts",
+      "h types/index.d.ts",
+      "named value re-export",
+      "universal types/index.d.ts"
+    ].sort());
+  });
+});
+
+describe("the runtime target's suffix selects exactly one premise", () => {
+  const answer = (body, name) => {
+    const root = mkdtempSync(join(tmpdir(), "solid-checker-emission-"));
+    roots.push(root);
+    const path = join(root, name);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, body);
+    return nonEmittingModuleTarget(path);
+  };
+
+  test("a declaration suffix selects the declaration-file premise", () => {
+    for (const name of ["index.d.ts", "index.d.mts", "index.d.cts", "INDEX.D.TS"]) {
+      expect(declarationFileFlavor(name)).toBe(MODULE_EMISSION_FLAVOR.DeclarationFile);
+    }
+    for (const name of ["index.ts", "index.js", "index.mjs", "index.tsx", "index", "adts.ts"]) {
+      expect(declarationFileFlavor(name)).toBe(MODULE_EMISSION_FLAVOR.Module);
+    }
+  });
+
+  test("identical bytes get one answer per premise, and the suffix picks it", () => {
+    // The bytes-only premise is blind to the filename: an ambient declaration
+    // in a runtime member is answered exactly as in a `.d.ts`.
+    const ambient = "export declare function createRenderer(): void;\n";
+    for (const name of ["member.js", "member.mjs", "member.ts", "member.tsx", "member"]) {
+      expect(answer(ambient, name), name).toEqual({
+        statements: 1,
+        arm: "erasable-statements"
+      });
+    }
+    expect(answer(ambient, "member.d.ts")).toEqual({
+      statements: 1,
+      arm: "declaration-file"
+    });
+
+    // `@solidjs/universal`'s barrel: a declaration file emits no module and so
+    // no re-export either, while the identical bytes in a runtime member are a
+    // working barrel and must refuse.
+    const barrel = 'export * from "./universal.js";\n';
+    expect(answer(barrel, "index.d.ts")).toEqual({ statements: 1, arm: "declaration-file" });
+    for (const name of ["index.ts", "index.js", "index.mjs"]) {
+      expect(answer(barrel, name), name).toBeUndefined();
+    }
+
+    // A `.d.ts` carrying an implementation is not the declaration file its
+    // suffix claims, even though the bytes-only premise erases it.
+    expect(answer("declare const value = 1;\n", "index.d.ts")).toBeUndefined();
+    expect(answer("declare const value = 1;\n", "index.ts")).toEqual({
+      statements: 1,
+      arm: "erasable-statements"
+    });
+  });
+
+  test("a module that declares nothing is not an answer under either premise", () => {
+    for (const name of ["index.ts", "index.d.ts"]) {
+      expect(answer("", name), name).toBeUndefined();
+      expect(answer("// only a comment\n", name), name).toBeUndefined();
+      expect(answer("export {};\n", name), name).toBeUndefined();
+    }
+  });
+
+  test("bytes that are not text, too large, or absent are not an answer", () => {
+    const root = mkdtempSync(join(tmpdir(), "solid-checker-emission-"));
+    roots.push(root);
+    const binary = join(root, "member.d.ts");
+    writeFileSync(binary, Buffer.from([0xff, 0xfe, 0x00, 0x41]));
+    expect(nonEmittingModuleTarget(binary)).toBeUndefined();
+    expect(nonEmittingModuleTarget(join(root, "absent.d.ts"))).toBeUndefined();
+    // The byte bound can only lose a disposition, never invent one.
+    const huge = join(root, "huge.d.ts");
+    writeFileSync(huge, `export type T = 1;\n${"// padding\n".repeat(60_000)}`);
+    expect(nonEmittingModuleTarget(huge)).toBeUndefined();
+  });
+
+  test("the answer is memoized by exact bytes, not by path", () => {
+    const root = mkdtempSync(join(tmpdir(), "solid-checker-emission-"));
+    roots.push(root);
+    const first = join(root, "a.d.ts");
+    const second = join(root, "b.d.ts");
+    writeFileSync(first, "export type T = 1;\n");
+    writeFileSync(second, "export type T = 1;\n");
+    expect(nonEmittingModuleTarget(first)).toEqual(nonEmittingModuleTarget(second));
+    // Same path, different bytes: the memo key is the content, so the answer
+    // must move.
+    writeFileSync(first, "export const value = 1;\n");
+    expect(nonEmittingModuleTarget(first)).toBeUndefined();
+  });
+});
+
 test("export target selection reports the conditions traversed and target presence", () => {
   const root = fixture(
     {
@@ -2146,4 +2470,99 @@ test("export target selection reports the conditions traversed and target presen
     "vendor/source",
     "target"
   ]);
+});
+
+describe("a package with no exports field", () => {
+  // Node's ESM_RESOLVE applies PACKAGE_EXPORTS_RESOLVE only when `exports` is
+  // present. Without it, `pkg/sub` is LEGACY path resolution, so the package
+  // restricts nothing and `not-exported` is a false statement about it. Three
+  // real dependencies made this observable: `picomatch@2.3.2` (no `exports`,
+  // `lib/utils.js`, requested extensionless), `fetch-blob@3.2.0` (no
+  // `exports`, `from.js`) and `dayjs@1.11.23` (no `exports`,
+  // `plugin/relativeTime.js`).
+  const manifest = { name: "legacy-package", version: "1.0.0", main: "index.js", types: "./index.d.ts" };
+  const files = {
+    "index.js": "module.exports = {};\n",
+    "index.d.ts": "export declare const value: number;\n",
+    "from.js": "module.exports = {};\n",
+    "from.d.ts": "export declare const from: () => void;\n",
+    "lib/utils.js": "module.exports = {};\n",
+    "plugin/relativeTime.js": "module.exports = {};\n",
+    "nested/index.js": "module.exports = {};\n"
+  };
+
+  const select = (root, entrypoint, axis = "runtime") =>
+    selectPackageExportTarget({ packageRoot: root, manifest, entrypoint, conditions: [], axis });
+
+  test("resolves an exact subpath rather than answering not-exported", () => {
+    const root = fixture(manifest, files);
+    const selected = select(root, "./from.js");
+    expect(selected.path).toBe(join(root, "from.js"));
+    expect(selected.exists).toBe(true);
+    expect(selected.trace.branch).toBe("legacy:subpath");
+    // No condition was consulted, because there was no map to consult one in.
+    expect(selected.conditions).toEqual([]);
+    expect(select(root, "./plugin/relativeTime.js").path).toBe(
+      join(root, "plugin/relativeTime.js")
+    );
+  });
+
+  test("resolves an extensionless subpath through the CommonJS candidates", () => {
+    const root = fixture(manifest, files);
+    expect(select(root, "./lib/utils").path).toBe(join(root, "lib/utils.js"));
+    expect(select(root, "./nested").path).toBe(join(root, "nested/index.js"));
+  });
+
+  test("reports a subpath the package does not ship as absent, not as excluded", () => {
+    const root = fixture(manifest, files);
+    let error;
+    try {
+      select(root, "./absent.js");
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(ArtifactResolutionError);
+    // An absence, which the closure walk already dispositions, and never the
+    // exclusion claim that refuses an artifact case.
+    expect(error.code).toBe("target-not-found");
+  });
+
+  test("answers the declaration axis for a subpath too", () => {
+    const root = fixture(manifest, files);
+    expect(select(root, "./from.js", "declarations").path).toBe(join(root, "from.d.ts"));
+  });
+
+  test("still answers not-exported when an exports map excludes the subpath", () => {
+    // The `solid-js` 2.0 shape: `./web` is absent and `./types/*` does not
+    // match it. This is the claim that refuses an artifact case, and it is
+    // reachable only with a map present.
+    const mapped = {
+      name: "mapped-package",
+      version: "1.0.0",
+      exports: {
+        ".": { types: "./index.d.ts", import: "./index.js" },
+        "./refresh": "./from.js",
+        "./types/*": "./types/*",
+        "./package.json": "./package.json"
+      }
+    };
+    const root = fixture(mapped, files);
+    let error;
+    try {
+      selectPackageExportTarget({ packageRoot: root, manifest: mapped, entrypoint: "./web", conditions: [] });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(ArtifactResolutionError);
+    expect(error.code).toBe("not-exported");
+    // ...and a pattern that does match is a match.
+    expect(
+      selectPackageExportTarget({
+        packageRoot: root,
+        manifest: { ...mapped, exports: { ...mapped.exports, "./*": "./*" } },
+        entrypoint: "./lib/utils.js",
+        conditions: []
+      }).path
+    ).toBe(join(root, "lib/utils.js"));
+  });
 });

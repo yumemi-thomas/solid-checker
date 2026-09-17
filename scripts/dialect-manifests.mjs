@@ -108,6 +108,8 @@ function generateContracts(check) {
   const args = [
     "+1.97",
     "run",
+    "--profile",
+    process.env.SOLID_CHECKER_CARGO_PROFILE || "dev",
     "--manifest-path",
     "rust/Cargo.toml",
     "-p",

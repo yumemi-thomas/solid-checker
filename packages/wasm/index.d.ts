@@ -89,6 +89,32 @@ export interface AcceptedContractInput {
   import: ResolvedImport
 }
 
+/**
+ * What the host resolved one imported specifier to, in its own installed tree.
+ *
+ * Used only to decide whether a contract compiled into this build is about
+ * *this* project's artifact. The host states it the way it states `typeFacts`:
+ * this build has no filesystem, so nothing here is checked against a lockfile.
+ * What that does not weaken is the acceptance itself — an identity that does
+ * not reproduce a bundled contract's signed artifact root admits nothing, so a
+ * wrong or invented entry yields no contract rather than the wrong one. Omit a
+ * package the host cannot state exactly.
+ */
+export interface InstalledPackage {
+  /** The specifier as written in the source. Admission is keyed by it. */
+  specifier: string
+  name: string
+  version: string
+  /** The registry tarball's subresource integrity, from the host's lockfile. */
+  integrity: string
+  /**
+   * The file this specifier resolves to, relative to the installed package
+   * root — `dist/index.js` or `dist/index.d.ts`. It selects between two
+   * acceptances that share a declaration file.
+   */
+  resolvedTarget: string
+}
+
 export interface CheckRequest {
   projectId: string
   /**
@@ -103,6 +129,21 @@ export interface CheckRequest {
   typeFacts: unknown
   /** Receipt-validated contracts. Missing imports remain uncertifiable. */
   acceptedContracts?: AcceptedContractInput[]
+  /**
+   * The installed tree, for the compiled-in accepted contracts only. Contracts
+   * passed in `acceptedContracts` stay keyed by their own importer and are
+   * unaffected. Absent means no compiled-in contract applies.
+   */
+  installedPackages?: InstalledPackage[]
+  /**
+   * The export conditions the host resolved under. Conditions select the
+   * artifact, so an absent or empty set admits nothing rather than assuming
+   * `import` — a contract proven under `import` must never reach a consumer
+   * that resolved under `require`.
+   */
+  exportConditions?: string[]
+  /** Whether contracts compiled into this build may apply. Defaults to true. */
+  bundledContracts?: boolean
 }
 
 export interface PlanRequest {

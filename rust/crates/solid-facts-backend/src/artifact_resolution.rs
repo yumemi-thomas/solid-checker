@@ -101,6 +101,38 @@ pub enum ClosureHazardKind {
     MutableUnboundGlobal,
     UnmaterializedTransform,
     UnacceptedExternalDependency,
+    /// A property accessor installed at run time somewhere in this closure —
+    /// a `Proxy`, a getter descriptor, or a swapped prototype.
+    ///
+    /// Affects `reads` alone. It is the premise the `reads` implementation
+    /// census cannot obtain from the producer, because a read through such an
+    /// accessor records no form at all; see
+    /// `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
+    /// § 7-§ 9.
+    RuntimeAccessorInstallation,
+}
+
+impl ClosureHazardKind {
+    /// The kind's stable wire name — the same kebab-case spelling `serde`
+    /// gives it, so a hazard named in a decline record and the same hazard
+    /// serialized into a closure manifest read alike.
+    ///
+    /// `the_hazard_kind_names_match_their_serialization` pins the two
+    /// together; a variant added with a name only here would otherwise
+    /// silently disagree with every manifest.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::NonliteralDynamicLoading => "nonliteral-dynamic-loading",
+            Self::Eval => "eval",
+            Self::NativeCode => "native-code",
+            Self::OpaqueWasm => "opaque-wasm",
+            Self::MutableUnboundGlobal => "mutable-unbound-global",
+            Self::UnmaterializedTransform => "unmaterialized-transform",
+            Self::UnacceptedExternalDependency => "unaccepted-external-dependency",
+            Self::RuntimeAccessorInstallation => "runtime-accessor-installation",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -414,6 +446,50 @@ impl ClosureManifest {
             .any(|entry| entry.role == role && entry.path == path && entry.digest == digest)
     }
 
+    /// Whether anything in this closure installs a property accessor at run
+    /// time, which is the premise the `reads` implementation census cannot
+    /// obtain for itself.
+    ///
+    /// Asked by the proposal generator, not only by the consumer: a `reads`
+    /// closure proposed over such a closure would be a claim no census can
+    /// refuse, because a read through an installed accessor records no form
+    /// at all. `open_domains` withdraws it on the consumer side too, but by
+    /// then the candidate has already been planned and bound.
+    #[must_use]
+    pub fn installs_runtime_accessor(&self) -> bool {
+        self.hazards
+            .iter()
+            .any(|hazard| hazard.kind == ClosureHazardKind::RuntimeAccessorInstallation)
+    }
+
+    /// Every (domain, hazard) pair this closure opens for `export`, in
+    /// manifest order.
+    ///
+    /// The same selection [`Self::open_domains`] makes, before it collapses to
+    /// a domain set. It exists because the collapse is what made an opened
+    /// domain unexplainable: the export ends up with the domain open and
+    /// nothing anywhere says which hazard did it, so "why did this export's
+    /// `reads` not propose" could only be answered by reading the package.
+    /// See `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
+    /// § 25.
+    pub(crate) fn domain_openings(
+        &self,
+        export: &str,
+    ) -> impl Iterator<Item = (ClaimDomain, &ClosureHazard)> {
+        self.hazards
+            .iter()
+            .filter(move |hazard| {
+                hazard.affected_exports.is_empty()
+                    || hazard.affected_exports.iter().any(|name| name == export)
+            })
+            .flat_map(|hazard| {
+                hazard
+                    .affected_domains
+                    .iter()
+                    .map(move |domain| ((*domain).into(), hazard))
+            })
+    }
+
     fn open_domains(&self, export: &str) -> BTreeSet<ClaimDomain> {
         self.hazards
             .iter()
@@ -709,23 +785,47 @@ pub(crate) fn resolved_external_export_targets(
     resolved: &ResolvedImport,
 ) -> Result<BTreeSet<(String, String)>, ContractFailure> {
     let mut targets = BTreeSet::new();
-    for target in resolved
-        .exports
-        .values()
-        .flat_map(|binding| [&binding.runtime, &binding.declarations])
-    {
+    let self_dependency = resolved.closure.dependencies.iter().any(|edge| {
+        edge.package_name == resolved.package_name
+            && (edge.specifier == resolved.package_name
+                || edge
+                    .specifier
+                    .starts_with(&format!("{}/", resolved.package_name)))
+    });
+    for (target, role, root) in resolved.exports.values().flat_map(|binding| {
+        [
+            (
+                &binding.runtime,
+                ClosureFileRole::Runtime,
+                &resolved.runtime,
+            ),
+            (
+                &binding.declarations,
+                ClosureFileRole::Declaration,
+                &resolved.declarations,
+            ),
+        ]
+    }) {
         let relative = package_relative_path(&target.module, resolved);
+        let digest = normalize_digest(&target.module.digest)
+            .map_err(|error| invalid_identity(error.to_string()))?;
         let nested_package = relative.as_deref().is_some_and(|path| {
             Path::new(path)
                 .components()
                 .any(|component| component.as_os_str() == "node_modules")
         });
-        if relative.is_none() || nested_package {
-            targets.insert((
-                target.module.path.clone(),
-                normalize_digest(&target.module.digest)
-                    .map_err(|error| invalid_identity(error.to_string()))?,
-            ));
+        // ADR 0012: a self-package semantic edge may own another entrypoint's
+        // target even though its file is inside this package directory. This
+        // is catalog rebinding, not native planning authority: discovery has
+        // already authenticated the exact resolved-import root, and private
+        // proposal projection cannot issue receipts.
+        let self_target = self_dependency
+            && relative.as_deref().is_some_and(|path| {
+                package_relative_path(root, resolved).as_deref() != Some(path)
+                    && !resolved.closure.contains(role, path, &digest)
+            });
+        if relative.is_none() || nested_package || self_target {
+            targets.insert((target.module.path.clone(), digest));
         }
     }
     Ok(targets)
@@ -784,6 +884,7 @@ pub(crate) fn proposal_identity(
             manifest,
         },
         ArtifactCase {
+            initialization: None,
             id: identity,
             entrypoint: resolved.requested_entrypoint.clone(),
             resolution_trace,
@@ -887,6 +988,23 @@ fn bind_exports(
 ) -> Result<ArtifactCase, ContractFailure> {
     for (name, export) in &mut case.exports {
         let binding = resolved.exports.get(name).ok_or_else(|| {
+            // Deliberately still a refusal, and the third of the three
+            // censuses that have to agree about the built-in runtime
+            // foundation. The emitter drops a name whose every export binds
+            // core (`export_binds_core_runtime`), and the resolver returns it
+            // unbound (`bindExport`'s `coreRuntimeSpecifier` arm), because
+            // `solid-js`, `@solidjs/signals` and `@solidjs/web` have no package
+            // contract by design (ADR 0027). So a document that *does* name one
+            // here disagrees with the emitter that produced it -- a stale
+            // document, or a hand-edited one -- and loosening this to skip the
+            // name would accept that disagreement silently.
+            //
+            // Nothing here can name the core case more precisely: `name` is an
+            // export name, not a specifier, and the document records no origin
+            // for it — deciding "core-owned" needs the re-export chain, which
+            // is the emitter's input and not this function's. So this stays the
+            // generic refusal, and the invariant it rests on is stated above
+            // rather than re-derived here.
             invalid_identity(format!(
                 "resolved artifact has no exact runtime/declaration binding for export {name:?}"
             ))
@@ -936,9 +1054,42 @@ fn bind_export_target(
         });
     }
     let path = package_relative_path(&target.module, resolved).ok_or_else(|| {
-        invalid_identity(format!(
-            "{role:?} target for export {public_name:?} is outside the resolved package"
-        ))
+        // "outside the resolved package" is true of every re-export whose
+        // target lives in a dependency, and says nothing about why the
+        // dependency did not bind it. A hoisted install puts that dependency
+        // beside the resolved package rather than below it, so the filesystem
+        // prefix cannot name the owner -- the installed layout can, exactly:
+        // the last `node_modules/<package>` segment of the resolver's own
+        // path. Absolute paths stay out of the message so a refusal signature
+        // does not carry the temporary install root.
+        invalid_identity(match installed_package_module(&target.module.path) {
+            Some((owner, module)) => format!(
+                "{role:?} target for export {public_name:?} is re-exported from dependency \
+                 {owner:?} (module {module:?}), which {}",
+                if external_targets.is_empty() {
+                    "no planned dependency binds because the resolved package has none".to_owned()
+                } else if let bound @ 1.. = external_targets
+                    .iter()
+                    .filter(|(path, _)| {
+                        installed_package_module(path)
+                            .is_some_and(|(candidate, _)| candidate == owner)
+                    })
+                    .count()
+                {
+                    format!(
+                        "is planned and binds {bound} other module target(s), none of them this one"
+                    )
+                } else {
+                    "no planned dependency binds; the planned dependencies contribute no target \
+                     in that package"
+                        .to_owned()
+                }
+            ),
+            None => format!(
+                "{role:?} target for export {public_name:?} is outside the resolved package \
+                 and lies in no installed package"
+            ),
+        })
     })?;
     let is_root = package_relative_path(root, resolved).as_deref() == Some(path.as_str())
         && normalize_digest(&root.digest).ok().as_deref() == Some(digest.as_str());
@@ -971,6 +1122,26 @@ fn artifact_matches(
     package_relative_path(actual, resolved)
         .is_some_and(|path| normalize_contract_path(&expected.path) == path)
         && normalize_digest(&actual.digest).is_ok_and(|digest| expected.digest.as_str() == digest)
+}
+
+/// The installed package a module path lies in, and that module's path within
+/// it, taken from the last `node_modules/<package>` segment of the path.
+///
+/// Diagnostics only: this names the owner of a target the resolved package
+/// could not claim, so a refusal says *which* dependency was re-exported from
+/// instead of only that the target was elsewhere. It is never an identity —
+/// authentication stays with the planned dependency's own snapshot.
+fn installed_package_module(path: &str) -> Option<(String, String)> {
+    let (_, tail) = path.rsplit_once("/node_modules/")?;
+    let mut segments = tail.split('/');
+    let first = segments.next()?;
+    let owner = if first.starts_with('@') {
+        format!("{first}/{}", segments.next()?)
+    } else {
+        first.to_owned()
+    };
+    let module = segments.collect::<Vec<_>>().join("/");
+    (!owner.is_empty() && !module.is_empty()).then_some((owner, module))
 }
 
 fn package_relative_path(file: &ResolvedFile, resolved: &ResolvedImport) -> Option<String> {
@@ -1231,6 +1402,128 @@ mod tests {
         format!("sha256:{}", byte.to_string().repeat(64))
     }
 
+    /// Every hazard kind's `name` is the spelling `serde` gives it.
+    ///
+    /// The two are read side by side: a decline record names the hazard that
+    /// opened a domain, and a closure manifest serializes the same hazard. A
+    /// variant whose hand-written name drifted from its kebab-case
+    /// serialization would make the two disagree about the same fact, which
+    /// is the failure mode this repository already paid for once with the
+    /// dual hazard census.
+    #[test]
+    fn the_hazard_kind_names_match_their_serialization() {
+        for kind in [
+            ClosureHazardKind::NonliteralDynamicLoading,
+            ClosureHazardKind::Eval,
+            ClosureHazardKind::NativeCode,
+            ClosureHazardKind::OpaqueWasm,
+            ClosureHazardKind::MutableUnboundGlobal,
+            ClosureHazardKind::UnmaterializedTransform,
+            ClosureHazardKind::UnacceptedExternalDependency,
+            ClosureHazardKind::RuntimeAccessorInstallation,
+        ] {
+            let serialized = serde_json::to_string(&kind).unwrap();
+            assert_eq!(
+                serialized.trim_matches('"'),
+                kind.name(),
+                "{kind:?} serializes as {serialized} but names itself {}",
+                kind.name()
+            );
+        }
+    }
+
+    /// `domain_openings` reports the same selection `open_domains` collapses,
+    /// hazard by hazard, including the export filter.
+    #[test]
+    fn a_hazard_opening_names_the_domain_and_the_hazard_that_opened_it() {
+        let manifest = ClosureManifest {
+            entries: vec![],
+            dependencies: vec![],
+            hazards: vec![
+                ClosureHazard {
+                    kind: ClosureHazardKind::RuntimeAccessorInstallation,
+                    source: "./owned.js:1119-1124".into(),
+                    affected_exports: vec![],
+                    affected_domains: vec![AffectedClaimDomain::Reads],
+                },
+                ClosureHazard {
+                    kind: ClosureHazardKind::UnacceptedExternalDependency,
+                    source: "./index.js:solid-js".into(),
+                    affected_exports: vec!["named".into()],
+                    affected_domains: vec![
+                        AffectedClaimDomain::Reads,
+                        AffectedClaimDomain::Creates,
+                    ],
+                },
+            ],
+            packages: vec![],
+            digest: repeated_digest('0'),
+        };
+
+        // An empty `affected_exports` is every export of the case; a named one
+        // reaches only that export.
+        let other = manifest.domain_openings("other").collect::<Vec<_>>();
+        assert_eq!(other.len(), 1);
+        assert_eq!(other[0].0, ClaimDomain::Reads);
+        assert_eq!(
+            other[0].1.kind,
+            ClosureHazardKind::RuntimeAccessorInstallation
+        );
+
+        let named = manifest.domain_openings("named").collect::<Vec<_>>();
+        assert_eq!(
+            named.len(),
+            3,
+            "one accessor hazard, two dependency domains"
+        );
+        // And it never disagrees with the set the binding actually opens.
+        assert_eq!(
+            named
+                .iter()
+                .map(|(domain, _)| *domain)
+                .collect::<BTreeSet<_>>(),
+            manifest.open_domains("named")
+        );
+    }
+
+    #[test]
+    fn an_unclaimed_export_target_names_the_installed_package_that_owns_it() {
+        // The hoisted case the message exists for: `motion-solidjs`
+        // re-exports `addScaleCorrector`, whose runtime target lives beside
+        // it rather than below it, so the package root prefix cannot name the
+        // owner and the installed layout has to.
+        assert_eq!(
+            installed_package_module(
+                "/tmp/probe/node_modules/motion-dom/dist/es/projection/styles/scale-correction.mjs"
+            ),
+            Some((
+                "motion-dom".into(),
+                "dist/es/projection/styles/scale-correction.mjs".into()
+            ))
+        );
+        // A scoped name is two segments, and the *last* node_modules wins so a
+        // nested install is charged to the package it was installed under.
+        assert_eq!(
+            installed_package_module(
+                "/tmp/probe/node_modules/a/node_modules/@scope/name/dist/index.js"
+            ),
+            Some(("@scope/name".into(), "dist/index.js".into()))
+        );
+        // Nothing to name: no installed package, a bare package root with no
+        // module below it, and a scope with no name after it. Each answers
+        // absence rather than a guess, and the caller falls back to the
+        // location-free wording.
+        assert_eq!(installed_package_module("/tmp/probe/src/index.js"), None);
+        assert_eq!(
+            installed_package_module("/tmp/probe/node_modules/only"),
+            None
+        );
+        assert_eq!(
+            installed_package_module("/tmp/probe/node_modules/@scope"),
+            None
+        );
+    }
+
     fn repeated_wire_digest(byte: char) -> String {
         byte.to_string().repeat(64)
     }
@@ -1324,6 +1617,54 @@ mod tests {
             .unwrap()
             .normalize()
             .unwrap()
+    }
+
+    #[test]
+    fn self_package_dependency_targets_require_the_self_edge_and_keep_local_roots() {
+        let closure = ClosureManifest::new(vec![], vec![], vec![]).unwrap();
+        let mut resolved = resolved_import(closure);
+        resolved.exports.get_mut("value").unwrap().runtime.module = ResolvedFile {
+            path: "/project/node_modules/example/other/index.js".into(),
+            real_path: None,
+            digest: repeated_digest('e'),
+        };
+        assert!(
+            resolved_external_export_targets(&resolved)
+                .unwrap()
+                .is_empty()
+        );
+        for (package_name, specifier, expected) in [
+            ("foreign", "foreign", false),
+            ("example", "example-lookalike", false),
+            ("example", "example", true),
+            ("example", "example/other", true),
+        ] {
+            resolved.closure = ClosureManifest::new(
+                vec![],
+                vec![AcceptedDependencyEdge {
+                    specifier: specifier.into(),
+                    package_name: package_name.into(),
+                    artifact_case: "dependency-case".into(),
+                    accepted_contract_digest: repeated_digest('f'),
+                }],
+                vec![],
+            )
+            .unwrap();
+            let targets = resolved_external_export_targets(&resolved).unwrap();
+            assert_eq!(targets.len(), usize::from(expected));
+            let candidate = normalized_contract(&resolved);
+            // Even with the supplied edge, ordinary binding without planned
+            // targets still refuses. This helper grants no planning authority.
+            assert!(select_and_bind(&candidate, &resolved).is_err());
+            assert_eq!(
+                select_and_bind_with_external_targets(&candidate, &resolved, &targets).is_ok(),
+                expected
+            );
+            assert!(!targets.contains(&(
+                resolved.runtime.path.clone(),
+                resolved.runtime.digest.clone()
+            )));
+        }
     }
 
     #[test]

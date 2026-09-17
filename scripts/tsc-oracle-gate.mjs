@@ -377,6 +377,15 @@ const EXEMPT = {
   "package-contract-incomplete": "asks whether a package ships a usable reactivity contract, which is an analyzability fact about an external artifact; no snippet against real Solid typings can express it",
   "v1/package-contract-incomplete": "same -- the subject is a third-party package's contract, not Solid's types",
   "server-function-module-directive": "needs a module-level \"use server\" prologue and the project's server surface",
+  // The one catalog identity with no source subject at all. It is decided by
+  // dialect detection from the nearest node_modules/solid-js/package.json,
+  // before any source is read, and it is emitted without passing through the
+  // rules engine -- so there is no snippet to compile and no expression for
+  // TypeScript to have an opinion about. The absolute rule is satisfied
+  // vacuously rather than by evidence, which is why this is an exemption and
+  // not a case. Its own pin is in `dialects_process`, run in the one feature
+  // configuration where the refusal is reachable.
+  "unsupported-solid-runtime": "the subject is which solid-js version is installed, not any expression in the project; no snippet can express it and tsc has nothing to say about it",
 };
 
 const catalogRules = catalogEntries.map((rule) => rule.name);

@@ -103,6 +103,7 @@
       "additionalProperties": false,
       "required": ["artifact", "declarations", "exports"],
       "properties": {
+        "initialization": { "enum": ["inert"] },
         "artifact": { "$ref": "#/$defs/runtimeArtifact" },
         "declarations": { "$ref": "#/$defs/file" },
         "transform": { "$ref": "#/$defs/file" },
@@ -128,6 +129,7 @@
       "additionalProperties": false,
       "required": ["resolution", "artifact", "declarations", "exports"],
       "properties": {
+        "initialization": { "enum": ["inert"] },
         "resolution": { "$ref": "#/$defs/resolution" },
         "artifact": { "$ref": "#/$defs/runtimeArtifact" },
         "declarations": { "$ref": "#/$defs/file" },
@@ -180,6 +182,11 @@
       "additionalProperties": false,
       "properties": {
         "closed": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/callDomain" }
+        },
+        "proposedClosures": {
           "type": "array",
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/callDomain" }
@@ -287,7 +294,18 @@
           "type": "array",
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/nonemptyString" }
-        }
+        },
+        "composedFrom": { "$ref": "#/$defs/composedFrom" }
+      }
+    },
+    "composedFrom": {
+      "description": "The export and operation of the SAME artifact case this operation was composed from: the behaviour this operation describes is that export's own operation, performed through this export's call to it. `operation` is the target's own local operation id (`read-0`), never a qualified one -- a document cannot name an operation outside the artifact case that carries it. Optional and additive: an operation that omits it makes no provenance claim, and a consumer then requires this export's own evidence for the row. Only a `read` operation may carry it. A consumer must not read it as authority: it names a target to prove against, and discharging it requires proving both that this export really calls that export (by resolved declaration, never by name) and that the target's own claim for the named operation holds.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["export", "operation"],
+      "properties": {
+        "export": { "$ref": "#/$defs/nonemptyString" },
+        "operation": { "$ref": "#/$defs/nonemptyString" }
       }
     },
     "event": {
@@ -537,6 +555,7 @@
         { "$ref": "#/$defs/asyncIterableValue" },
         { "$ref": "#/$defs/reactiveValue" },
         { "$ref": "#/$defs/storeValue" },
+        { "$ref": "#/$defs/mergedPropsValue" },
         { "$ref": "#/$defs/actionValue" },
         { "$ref": "#/$defs/componentValue" },
         { "$ref": "#/$defs/cleanupValue" },
@@ -667,6 +686,16 @@
         "resource": { "$ref": "#/$defs/nonemptyString" },
         "closed": { "type": "array", "uniqueItems": true, "items": { "const": "capabilities" } },
         "capabilities": { "$ref": "#/$defs/capabilityClaims" }
+      }
+    },
+    "mergedPropsValue": {
+      "description": "ADR 0109. An object whose property reads reach through to the caller's argument at `from`: what a props merge yields. Conditional on purpose \u2014 a merge creates no reactive source, it carries its arguments'. A consumer asserts reactivity of this value exactly when the argument it passed at `from` is itself reactive, and asserts nothing otherwise; reading it as a store would claim reactivity of a merge of plain objects.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "from"],
+      "properties": {
+        "kind": { "const": "merged-props" },
+        "from": { "type": "integer", "minimum": 0 }
       }
     },
     "capabilityClaims": {

@@ -15,6 +15,8 @@ pub(super) enum RuntimeArgumentBehavior {
     InlineCallback,
     /// The argument may be retained and invoked after the runtime call returns.
     DeferredCallback,
+    /// Storage exposes the value to later code without proving invocation.
+    RetainedValue,
     /// The argument value may be read, copied, or retained, but is not invoked.
     ValueOnly,
 }
@@ -205,13 +207,13 @@ pub(super) fn argument_behavior(
 
         // Collection insertion retains a callable value without invoking it.
         "Array.push" | "Array.unshift" if call.kind == CallKind::Call && callable => {
-            Some(RuntimeArgumentBehavior::DeferredCallback)
+            Some(RuntimeArgumentBehavior::RetainedValue)
         }
         "Set.add" | "WeakSet.add" if call.kind == CallKind::Call && callable => {
-            Some(RuntimeArgumentBehavior::DeferredCallback)
+            Some(RuntimeArgumentBehavior::RetainedValue)
         }
         "Map.set" | "WeakMap.set" if call.kind == CallKind::Call && argument == 1 && callable => {
-            Some(RuntimeArgumentBehavior::DeferredCallback)
+            Some(RuntimeArgumentBehavior::RetainedValue)
         }
 
         // Object.assign reads/copies properties but does not invoke a source
@@ -296,7 +298,7 @@ pub(super) fn proven_array_method_argument_behavior(
 ) -> Option<RuntimeArgumentBehavior> {
     match method {
         "push" | "unshift" if potentially_callable(callability) => {
-            Some(RuntimeArgumentBehavior::DeferredCallback)
+            Some(RuntimeArgumentBehavior::RetainedValue)
         }
         _ => None,
     }
@@ -479,7 +481,7 @@ mod tests {
                 callability(Callability::Callable),
                 0,
             ),
-            Some(RuntimeArgumentBehavior::DeferredCallback)
+            Some(RuntimeArgumentBehavior::RetainedValue)
         );
         assert_eq!(
             argument_behavior(

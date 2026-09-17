@@ -2,27 +2,27 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "v1/jsx-no-duplicate-props",
-      "code": "SC8003",
+      "rule": "reactive-handler-frozen",
+      "code": "SC1007",
       "kind": "violation",
-      "severity": "error",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 1618,
-      "end": 1625,
+      "start": 3924,
+      "end": 3928,
       "fixes": 0
     },
     {
-      "rule": "v1/jsx-no-duplicate-props",
-      "code": "SC8003",
+      "rule": "reactive-handler-frozen",
+      "code": "SC1007",
       "kind": "violation",
-      "severity": "error",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2213,
-      "end": 2218,
+      "start": 3938,
+      "end": 3942,
       "fixes": 0
     },
     {
-      "rule": "v1/jsx-no-duplicate-props",
+      "rule": "jsx-no-duplicate-props",
       "code": "SC8003",
       "kind": "violation",
       "severity": "error",
@@ -32,7 +32,7 @@
       "fixes": 0
     },
     {
-      "rule": "v1/jsx-no-duplicate-props",
+      "rule": "jsx-no-duplicate-props",
       "code": "SC8003",
       "kind": "violation",
       "severity": "error",
@@ -42,7 +42,7 @@
       "fixes": 0
     },
     {
-      "rule": "v1/uncalled-accessor",
+      "rule": "uncalled-accessor",
       "code": "SC1005",
       "kind": "violation",
       "severity": "warning",
@@ -52,7 +52,7 @@
       "fixes": 0
     },
     {
-      "rule": "v1/reactive-handler-frozen",
+      "rule": "reactive-handler-frozen",
       "code": "SC1007",
       "kind": "violation",
       "severity": "warning",
@@ -62,7 +62,7 @@
       "fixes": 0
     },
     {
-      "rule": "v1/reactive-handler-frozen",
+      "rule": "reactive-handler-frozen",
       "code": "SC1007",
       "kind": "violation",
       "severity": "warning",

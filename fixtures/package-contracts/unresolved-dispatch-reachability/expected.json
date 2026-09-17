@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "9734cf1f6d2b86cc879fde29da0db6b189bf5c84e25e653c0a1ae3b120910ac4",
+            "closureSha256": "85699bd24a9061c30865f699c28e4a579d8ae320f34d448c37eaf93a7f22fa62",
             "path": "./index.js",
             "sha256": "1f733be26cbaac826b5d611d3ec37f5c5422a03d1b1289b3b21ed7529371e446"
           },
@@ -13,8 +13,8 @@
             "sha256": "c0d84fa06d769ef701d23e804ede3db7ba2bcf1e1f8cf3982b35c0b82e93baf7"
           },
           "exports": {
-            "Isolated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "Reaches": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            "Isolated": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "Reaches": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -26,10 +26,10 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "fixture:sha256:3ea41164157d85a3a1bd2c45b7943c55ad32b641d51c28175f8c4cafd8de490a",
+    "integrity": "fixture:sha256:9a1eb444e89c33664278f699e2c8bb218bd69465513c1b30d96025d0a8fddf1e",
     "manifest": {
       "path": "./package.json",
-      "sha256": "3ea41164157d85a3a1bd2c45b7943c55ad32b641d51c28175f8c4cafd8de490a"
+      "sha256": "9a1eb444e89c33664278f699e2c8bb218bd69465513c1b30d96025d0a8fddf1e"
     },
     "name": "unresolved-dispatch-reachability",
     "version": "1.0.0"
@@ -38,8 +38,37 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
-      "call": {},
+    "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
+          "creates"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "reads": []
+      },
       "shape": "callable"
     }
   }

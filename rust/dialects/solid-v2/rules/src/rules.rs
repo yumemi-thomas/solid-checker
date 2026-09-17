@@ -36,6 +36,15 @@ pub enum Rule {
     ServerFunctionModuleDirective,
     ServerFunctionRichArgument,
     PackageContractIncomplete,
+    /// The only identity in this catalog the rules engine never produces.
+    ///
+    /// Analysis decides whether every other rule applies; this one is decided
+    /// *before* analysis, by dialect detection, and is emitted straight to the
+    /// reporting path (`main.rs`, at the selection site). It lives in the
+    /// catalog anyway because it is an externally visible diagnostic identity:
+    /// adapters resolve its code and severity here, `docs/rules/` documents
+    /// it, and a suppression naming it has to be a known rule. See ADR 0110.
+    UnsupportedSolidRuntime,
     JsxNoDuplicateProps,
     PreferFor,
     PreferShow,
@@ -53,7 +62,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 26] = [
+    pub const ALL: [Self; 27] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -77,6 +86,7 @@ impl Rule {
         Self::ServerFunctionModuleDirective,
         Self::ServerFunctionRichArgument,
         Self::PackageContractIncomplete,
+        Self::UnsupportedSolidRuntime,
         Self::JsxNoDuplicateProps,
         Self::PreferFor,
         Self::PreferShow,
@@ -166,6 +176,13 @@ impl Rule {
             Self::PackageContractIncomplete => {
                 ("SC9005", "package-contract-incomplete", "error", true)
             }
+            // Uncertifiable, not a violation: the project's own code is not
+            // the defect. The checker cannot model the runtime it installs,
+            // so it states that and proves nothing else -- reporting a
+            // violation here would assert something about source it never
+            // analyzed. Error severity because the alternative is a silent
+            // analysis under the wrong language.
+            Self::UnsupportedSolidRuntime => ("SC9013", "unsupported-solid-runtime", "error", true),
             Self::JsxNoDuplicateProps => ("SC8003", "jsx-no-duplicate-props", "error", false),
             Self::PreferFor => ("SC8014", "prefer-for", "error", false),
             Self::PreferShow => ("SC8015", "prefer-show", "warning", false),

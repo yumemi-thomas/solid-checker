@@ -1,0 +1,3513 @@
+{
+  "diagnostic": true,
+  "baseReportDigest": "sha256:1f94bbe1309b743d5b4b4ed760ef67e5da8414a84664826ac384194d2fb92025",
+  "afterReportDigest": "sha256:6cc119135c9b8c4742612da6a283f3841c99c0c17ef2c125afd982f77185e3ed",
+  "rows": [
+    {
+      "probeId": "@corvu-next/accordion@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/calendar@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/dialog@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/disclosure@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/dismissible@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/drawer@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/focus-trap@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/list@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/otp-field@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/persistent@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/popover@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/presence@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/prevent-scroll@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/resizable@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/tooltip@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/transition-size@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/utils@0.1.5|solid2|only",
+      "beforeCases": 34,
+      "afterCases": 34,
+      "identicalClaimSets": 34,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu/accordion@0.2.5|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu/calendar@0.1.2|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu/dialog@0.2.4|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu/disclosure@0.2.2|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu/drawer@0.2.4|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu/otp-field@0.1.4|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu/popover@0.2.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu/resizable@0.2.5|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu/tooltip@0.2.2|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu/utils@0.4.2|solid1|only",
+      "beforeCases": 34,
+      "afterCases": 34,
+      "identicalClaimSets": 34,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@kobalte/core@0.13.13|solid1|only",
+      "beforeCases": 577,
+      "afterCases": 577,
+      "identicalClaimSets": 577,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@kobalte/core@2.0.0-alpha.0|solid2|only",
+      "beforeCases": 122,
+      "afterCases": 122,
+      "identicalClaimSets": 122,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@kobalte/solidbase@0.6.13|solid1|only",
+      "beforeCases": 66,
+      "afterCases": 66,
+      "identicalClaimSets": 66,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@kobalte/utils@0.9.2|solid1|only",
+      "beforeCases": 23,
+      "afterCases": 23,
+      "identicalClaimSets": 23,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@kobalte/utils@2.0.0-alpha.0|solid2|only",
+      "beforeCases": 8,
+      "afterCases": 8,
+      "identicalClaimSets": 8,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/debugger@0.28.1|solid1|only",
+      "beforeCases": 4,
+      "afterCases": 4,
+      "identicalClaimSets": 4,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/extension-adapter@0.12.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/frontend@0.15.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/locator@0.16.7|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/logger@0.9.11|solid1|only",
+      "beforeCases": 4,
+      "afterCases": 4,
+      "identicalClaimSets": 4,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/overlay@0.33.5|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/shared@0.20.0|solid1|only",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "identicalClaimSets": 6,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/transform@0.10.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/ui@0.10.3|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/a11y@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/a11y@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/active-element@2.1.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/active-element@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/active-element@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/analytics@0.2.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/analytics@2.0.0-next.2|solid2|floor",
+      "beforeCases": 4,
+      "afterCases": 4,
+      "identicalClaimSets": 4,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/analytics@2.0.0-next.2|solid2|head",
+      "beforeCases": 4,
+      "afterCases": 4,
+      "identicalClaimSets": 4,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/async@0.0.101-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/async@0.0.101-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/audio@1.4.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/audio@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/audio@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/autofocus@0.1.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/bounds@0.1.7|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/bounds@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/bounds@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/broadcast-channel@0.1.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/broadcast-channel@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/broadcast-channel@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/clipboard@1.6.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/clipboard@2.0.0-next.17|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/clipboard@2.0.0-next.17|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/connectivity@0.4.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/connectivity@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/connectivity@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/context@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/context@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/controlled-props@0.1.4|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/controlled-signal@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/controlled-signal@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/cookies@0.0.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/cookies@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/cookies@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/cookies-store@1.1.11|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/countdown@1.0.9|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/cursor@0.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/cursor@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/cursor@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/date@2.1.8|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/date@3.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/date@3.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/date-difference@1.0.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/db-store@1.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/debounce@1.3.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/deep@0.3.7|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/deep@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/deep@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/destructure@0.2.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/destructure@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/destructure@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/devices@1.3.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/devices@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/devices@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-bus@1.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-bus@3.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-bus@3.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-dispatcher@0.1.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-dispatcher@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-dispatcher@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-listener@2.4.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-listener@3.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-listener@3.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-props@0.3.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-props@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-props@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/fetch@2.5.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/filesystem@1.3.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/filesystem@3.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/filesystem@3.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/flux-store@0.1.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/focus@1.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/focus@1.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/form@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/form@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/fullscreen@1.3.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/fullscreen@2.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/fullscreen@2.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/geolocation@1.5.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/geolocation@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/geolocation@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/gestures@1.2.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/gestures@3.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/gestures@3.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/graphql@3.0.0-next.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/history@0.2.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/history@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/history@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/i18n@2.2.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/i18n@3.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/i18n@3.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/idle@0.2.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/idle@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/idle@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/immutable@2.0.0-next.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/input-mask@0.3.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/input-mask@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/input-mask@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/interaction@1.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/interaction@1.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/intersection-observer@2.2.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/jsx-parser@0.2.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/jsx-tokenizer@1.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/jsx-tokenizer@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/jsx-tokenizer@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/keyboard@1.3.7|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/keyboard@2.0.0-next.5|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/keyboard@2.0.0-next.5|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/keyed@1.5.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/keyed@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/keyed@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/lifecycle@0.1.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/lifecycle@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/lifecycle@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/list@0.1.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/list@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/list@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/list-state@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/list-state@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/map@0.7.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/map@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/map@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/marker@0.2.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/marker@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/marker@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/masonry@0.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/masonry@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/masonry@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/match@0.0.100|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/match@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/match@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/media@2.3.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/media@4.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/media@4.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mediastream@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mediastream@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/memo@1.5.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/memo@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/memo@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mouse@2.1.7|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mouse@4.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mouse@4.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mutable@1.1.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mutable@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mutable@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mutation-observer@1.2.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mutation-observer@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mutation-observer@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/notification@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/notification@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/orientation@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/orientation@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/page-utilities@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/page-utilities@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/page-visibility@2.1.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/pagination@0.5.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/pagination@1.0.0-next.6|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/pagination@1.0.0-next.6|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/permission@1.3.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/permission@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/permission@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/platform@0.2.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/platform@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/platform@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/pointer@0.3.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/pointer@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/pointer@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/presence@0.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/presence@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/presence@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/promise@1.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/promise@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/promise@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/props@3.2.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/props@4.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/props@4.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/queue@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/queue@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/raf@2.3.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/raf@4.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/raf@4.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/range@0.2.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/range@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/range@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/reducer@0.0.101|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/refs@1.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/refs@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/refs@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/resize-observer@2.2.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/resize-observer@4.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/resize-observer@4.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/resource@0.4.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/rootless@1.5.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/rootless@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/rootless@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/scheduled@1.5.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/scheduled@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/scheduled@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/script-loader@2.3.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/script-loader@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/script-loader@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/scroll@2.1.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/scroll@3.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/scroll@3.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/selection@0.1.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/selection@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/selection@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/sensors@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/sensors@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/set@0.7.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/set@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/set@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/share@2.2.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/share@4.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/share@4.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/signal-builders@0.2.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/signal-builders@1.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/signal-builders@1.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/sortable@1.0.0-next.0|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/sortable@1.0.0-next.0|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/spring@0.1.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/spring@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/spring@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/sse@0.0.103|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/sse@1.0.0-next.2|solid2|floor",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/sse@1.0.0-next.2|solid2|head",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/start@0.0.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/state-machine@0.1.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/state-machine@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/state-machine@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/static-store@0.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/static-store@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/static-store@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/storage@4.4.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/storage@5.0.0-next.4|solid2|floor",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/storage@5.0.0-next.4|solid2|head",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/stream@0.7.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/styles@0.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/styles@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/styles@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/throttle@1.2.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/timer@1.4.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/timer@1.4.5-next.1|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/timer@1.4.5-next.1|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/transition-group@1.1.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/transition-group@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/transition-group@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/trigger@1.2.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/trigger@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/trigger@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/tween@1.4.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/tween@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/tween@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/upload@0.1.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/upload@1.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/upload@1.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/url@0.2.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/url@0.2.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/utils@6.4.1|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/utils@7.0.0-next.4|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/vibrate@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/vibrate@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/video@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/video@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/virtual@0.2.5|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/visibility-observer@2.0.1|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/websocket@1.4.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/websocket@2.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/websocket@2.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/workers@2.0.1-next.1|solid2|floor",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/workers@2.0.1-next.1|solid2|head",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/diagnostics@2.0.0-rc.3|solid2|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/element@2.0.0-rc.3|solid2|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/h@2.0.0-rc.3|solid2|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/html@2.0.0-rc.3|solid2|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/image@0.1.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/meta@0.29.4|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/meta@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/meta@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/router@1.0.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/router@2.0.0-next.18|solid2|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/signals@2.0.0-rc.3|solid2|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/start@2.0.3|solid1|only",
+      "beforeCases": 10,
+      "afterCases": 10,
+      "identicalClaimSets": 10,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/start-devtools@1.0.0-next.4|solid2|floor",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "identicalClaimSets": 6,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/start-devtools@1.0.0-next.4|solid2|head",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "identicalClaimSets": 6,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/universal@2.0.0-rc.3|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/vite-plugin@3.0.0-next.34|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/vite-plugin@3.0.0-next.34|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/web@2.0.0-rc.3|solid2|only",
+      "beforeCases": 26,
+      "afterCases": 26,
+      "identicalClaimSets": 26,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/ai-devtools-core@0.5.8|solid1|only",
+      "beforeCases": 10,
+      "afterCases": 10,
+      "identicalClaimSets": 10,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/charts@0.15.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/devtools@0.14.2|solid1|only",
+      "beforeCases": 5,
+      "afterCases": 5,
+      "identicalClaimSets": 5,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/devtools-a11y@0.2.2|solid1|only",
+      "beforeCases": 4,
+      "afterCases": 4,
+      "identicalClaimSets": 4,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/devtools-ui@0.7.1|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/devtools-utils@0.7.0|solid1|only",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "identicalClaimSets": 6,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/form-devtools@1.0.0-alpha.2|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/hotkeys-devtools@0.9.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/pacer-devtools@1.4.0|solid1|only",
+      "beforeCases": 8,
+      "afterCases": 8,
+      "identicalClaimSets": 8,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-ai-devtools@0.2.71|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-charts@0.15.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-devtools@0.8.12|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-form@2.0.0-alpha.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-form-devtools@1.0.0-alpha.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-hotkeys@0.10.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-hotkeys-devtools@0.7.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-pacer@0.22.0|solid1|only",
+      "beforeCases": 13,
+      "afterCases": 13,
+      "identicalClaimSets": 13,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-pacer-devtools@0.14.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-query@5.102.5|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-query@6.0.0-rc.0|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-query@6.0.0-rc.0|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-query-devtools@5.102.5|solid1|only",
+      "beforeCases": 5,
+      "afterCases": 5,
+      "identicalClaimSets": 5,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|floor",
+      "beforeCases": 5,
+      "afterCases": 5,
+      "identicalClaimSets": 5,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|head",
+      "beforeCases": 5,
+      "afterCases": 5,
+      "identicalClaimSets": 5,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-query-persist-client@5.102.5|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-query-persist-client@6.0.0-rc.0|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-query-persist-client@6.0.0-rc.0|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-router@1.170.30|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-router@2.0.0-rc.2|solid2|floor",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-router@2.0.0-rc.2|solid2|head",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-devtools@1.167.1|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-devtools@2.0.0-rc.2|solid2|floor",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-devtools@2.0.0-rc.2|solid2|head",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-ssr-query@1.167.2-pre.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-ssr-query@2.0.0-rc.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-ssr-query@2.0.0-rc.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-start@1.168.47|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-start@2.0.0-rc.2|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-start@2.0.0-rc.2|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-start-client@1.168.29|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-start-client@2.0.0-rc.2|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-start-client@2.0.0-rc.2|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-start-config@1.120.20|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-store@0.11.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-table@9.1.2|solid1|only",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "identicalClaimSets": 6,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-table-devtools@9.2.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-virtual@3.13.37|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/table-devtools@9.2.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "beforeCases": 18,
+      "afterCases": 18,
+      "identicalClaimSets": 18,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "motion-solidjs@0.6.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "motion-solidjs@0.7.0-beta.4|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "motion-solidjs@0.7.0-beta.4|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "solid-devtools@0.34.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "solid-js@1.9.14|solid1|only",
+      "beforeCases": 39,
+      "afterCases": 39,
+      "identicalClaimSets": 39,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "solid-js@2.0.0-rc.3|solid2|only",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "identicalClaimSets": 6,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "solid-recharts@1.0.1|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "solid-recharts@2.0.0-beta.1|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "solid-recharts@2.0.0-beta.1|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    }
+  ],
+  "totalBefore": 1532,
+  "totalAfter": 1533,
+  "physicalSelectionsAndClaimsPreserved": true,
+  "exactClosureIdentitiesPreserved": true,
+  "metricChanged": false
+}

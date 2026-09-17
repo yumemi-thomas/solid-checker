@@ -6,8 +6,65 @@ pub(super) fn semantic_digest(
     package: &PackageIdentity,
     artifact_cases: &[ArtifactCase],
 ) -> Digest {
+    // Two disjoint digest families, separated by their domain string.
+    //
+    // `composed_from` is written through `option`, which stamps a
+    // discriminator whether or not the field is set — so folding it into the
+    // one stream unconditionally would move the digest of every contract that
+    // carries any operation at all, and with it every already-issued policy-2
+    // receipt for such a contract, while `schemaVersion` and
+    // `semanticModelVersion` both stay 1. That is a receipt-compatibility
+    // break, which version 1 does not get to make.
+    //
+    // Omitting the `None` encoding inside a single family is not the
+    // alternative: a streaming hash carries no descriptor, so a field written
+    // only when present is self-delimiting merely by argument about how the
+    // neighbouring fields happen to encode. Domain separation gets both
+    // properties honestly. A contract with no composed operation emits the
+    // legacy stream **byte for byte** and keeps its digest and its receipts; a
+    // contract with at least one emits the provenance stream under a different
+    // domain. Each family is injective on its own, and the two cannot collide
+    // because the domain is the length-prefixed first thing written. The
+    // family is a function of the contract, so it is not a mode a caller can
+    // choose.
+    //
+    // `proposed_closures` is the same shape one field later, and the two
+    // features are independent, so the families are the four combinations
+    // rather than three. A proposed closure is not knowledge about the
+    // package — the domain it names stays open — but it *is* what the
+    // certifier's candidate universe is derived from, so a document that
+    // proposes one plans a different demand graph and must not share the
+    // identity a receipt binds with one that proposes nothing.
+    let composed = artifact_cases.iter().any(|case| {
+        case.exports.values().any(|export| {
+            export
+                .call
+                .operations
+                .iter()
+                .any(|operation| operation.composed_from.is_some())
+        })
+    });
+    let proposed_closure = artifact_cases.iter().any(|case| {
+        case.exports
+            .values()
+            .any(|export| !export.call.proposed_closures().is_empty())
+    });
     let mut writer = CanonicalWriter::new();
-    writer.text(SEMANTIC_DIGEST_DOMAIN);
+    let initialization = artifact_cases
+        .iter()
+        .any(|case| case.initialization.is_some());
+    if initialization {
+        writer.text("solid-checker:semantic-module-initialization:v1");
+    }
+    writer.text(match (composed, proposed_closure) {
+        (false, false) => SEMANTIC_DIGEST_DOMAIN,
+        (true, false) => SEMANTIC_DIGEST_DOMAIN_COMPOSED,
+        (false, true) => SEMANTIC_DIGEST_DOMAIN_PROPOSED_CLOSURE,
+        (true, true) => SEMANTIC_DIGEST_DOMAIN_COMPOSED_PROPOSED_CLOSURE,
+    });
+    writer.composed_provenance = composed;
+    writer.proposed_closure = proposed_closure;
+    writer.initialization = initialization;
     writer.u16(SEMANTIC_MODEL_VERSION);
     writer.package(package);
     writer.sequence(artifact_cases, CanonicalWriter::artifact_case);
@@ -31,21 +88,40 @@ pub(super) fn semantic_claim_id(
     SemanticClaimId::from_sha256(writer.finish())
 }
 
-struct CanonicalWriter(Sha256);
+struct CanonicalWriter {
+    hash: Sha256,
+    /// Whether this stream belongs to the provenance digest family.
+    ///
+    /// Set once, from the contract, by [`semantic_digest`]; false for every
+    /// other entry point, all of which encode identities rather than
+    /// operations and so cannot reach the field it gates. When false the
+    /// operation encoding is the legacy one byte for byte.
+    composed_provenance: bool,
+    /// Whether this stream belongs to a proposed-closure digest family. Set
+    /// the same way, from the contract, and false for every other entry point.
+    proposed_closure: bool,
+    /// Separate digest family: legacy cases retain their exact old stream.
+    initialization: bool,
+}
 
 impl CanonicalWriter {
     fn new() -> Self {
-        Self(Sha256::new())
+        Self {
+            hash: Sha256::new(),
+            composed_provenance: false,
+            proposed_closure: false,
+            initialization: false,
+        }
     }
 
     fn finish(self) -> [u8; 32] {
-        self.0.finalize().into()
+        self.hash.finalize().into()
     }
 
     fn bytes(&mut self, bytes: &[u8]) {
-        self.0
+        self.hash
             .update(u64::try_from(bytes.len()).unwrap_or(u64::MAX).to_be_bytes());
-        self.0.update(bytes);
+        self.hash.update(bytes);
     }
 
     fn text(&mut self, value: &str) {
@@ -53,23 +129,23 @@ impl CanonicalWriter {
     }
 
     fn bool(&mut self, value: bool) {
-        self.0.update([u8::from(value)]);
+        self.hash.update([u8::from(value)]);
     }
 
     fn u8(&mut self, value: u8) {
-        self.0.update([value]);
+        self.hash.update([value]);
     }
 
     fn u16(&mut self, value: u16) {
-        self.0.update(value.to_be_bytes());
+        self.hash.update(value.to_be_bytes());
     }
 
     fn u32(&mut self, value: u32) {
-        self.0.update(value.to_be_bytes());
+        self.hash.update(value.to_be_bytes());
     }
 
     fn usize(&mut self, value: usize) {
-        self.0
+        self.hash
             .update(u64::try_from(value).unwrap_or(u64::MAX).to_be_bytes());
     }
 
@@ -126,6 +202,12 @@ impl CanonicalWriter {
 
     fn artifact_case(&mut self, case: &ArtifactCase) {
         self.artifact_case_subject_identity(case);
+        if self.initialization {
+            self.u8(match case.initialization {
+                None => 0,
+                Some(ModuleInitializationClaim::Inert) => 1,
+            });
+        }
         self.stability(case.stability);
         self.usize(case.exports.len());
         for (name, export) in &case.exports {
@@ -300,6 +382,16 @@ impl CanonicalWriter {
 
     fn call(&mut self, call: &CallSemantics) {
         self.call_claims(&call.claims);
+        // Written only in the proposed-closure families, so a contract that
+        // proposes nothing hashes the legacy stream byte for byte. The set is
+        // a `BTreeSet`, so the order is the vocabulary's own.
+        if self.proposed_closure {
+            let proposed = call.proposed_closures();
+            self.usize(proposed.len());
+            for domain in proposed {
+                self.claim_domain(*domain);
+            }
+        }
         self.sequence(&call.operations, Self::operation);
         self.sequence(&call.edges, Self::edge);
         self.sequence(&call.resources, Self::resource);
@@ -369,6 +461,26 @@ impl CanonicalWriter {
         for resource in &operation.resources {
             self.resource_id(resource);
         }
+        // Provenance is part of the operation's claim, so it is part of the
+        // operation's identity: "this export reads that accessor" and "this
+        // export reads that accessor through its call to `createPolled`" are
+        // two different claims about the same row, and a digest that could not
+        // tell them apart would let a receipt for one authenticate the other.
+        //
+        // Written only in the provenance family, and there through `option`,
+        // which stamps its discriminator either way. In the legacy family this
+        // whole encoding is absent, so a contract with no composed operation
+        // hashes exactly the bytes it hashed before the field existed. See
+        // [`semantic_digest`] for why the families are separated rather than
+        // merged.
+        if self.composed_provenance {
+            self.option(operation.composed_from.as_ref(), Self::composed_from);
+        }
+    }
+
+    fn composed_from(&mut self, composed: &ComposedFrom) {
+        self.text(&composed.export);
+        self.operation_id(&composed.operation);
     }
 
     fn operation_kind(&mut self, kind: OperationKind) {
@@ -776,6 +888,13 @@ impl CanonicalWriter {
             ValueShape::ServerFunctionReference { resource } => {
                 self.u8(16);
                 self.option(resource.as_ref(), Self::resource_id);
+            }
+            // Appended, never inserted: a discriminant is part of the semantic
+            // digest, so renumbering an existing shape would move every receipt
+            // that ever described one.
+            ValueShape::MergedProps { from } => {
+                self.u8(17);
+                self.u16(*from);
             }
         }
     }

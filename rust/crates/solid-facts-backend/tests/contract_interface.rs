@@ -87,6 +87,13 @@ fn inferred_entrypoint_workflow_refuses_a_same_named_export_from_the_wrong_subpa
             owner_requirements: ContractClaim::Known(Vec::new()),
             async_behavior: ContractClaim::Known(String::new()),
             open_claims: Default::default(),
+            creates_closed_empty: false,
+            creates_walk_clean: false,
+            creates_walk_declines: Vec::new(),
+            returns_walk_clean: false,
+            direct_callback_parameters: Default::default(),
+            inherited_from: None,
+            merged_props_return: None,
         },
     )]);
 
@@ -127,15 +134,29 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
                 label: String::new(),
                 parameter: Some(0),
                 path: None,
+                composed_owner: None,
+                composed_from: None,
             }]),
             returns: ContractClaim::Known(None),
             callbacks: ContractClaim::Known(Vec::new()),
             owner_requirements: ContractClaim::Known(Vec::new()),
             async_behavior: ContractClaim::Known(String::new()),
             open_claims: Default::default(),
+            creates_closed_empty: false,
+            creates_walk_clean: false,
+            creates_walk_declines: Vec::new(),
+            // ADR 0035: the closure this test rebinds is the `returns: []`
+            // proposal, which only a consuming package's walk-clean function
+            // export publishes — so the package below is not a dialect one.
+            returns_walk_clean: true,
+            direct_callback_parameters: Default::default(),
+            inherited_from: None,
+            merged_props_return: None,
         },
     )]);
     let mut primary = resolved();
+    primary.package_name = "fixture-package".into();
+    primary.specifier = "fixture-package".into();
     primary.runtime_trace = ResolutionTrace {
         branch: "/exports/./node".into(),
         steps: vec![ResolutionTraceStep {
@@ -151,7 +172,7 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
         }],
     };
     let first = encode_inferred_entrypoint_workflow(
-        "solid-js",
+        "fixture-package",
         "2.0.0-rc.3",
         ".",
         exports.clone(),
@@ -160,6 +181,8 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
     )
     .unwrap();
     let mut alternate = resolved();
+    alternate.package_name = "fixture-package".into();
+    alternate.specifier = "fixture-package".into();
     alternate.runtime_trace = ResolutionTrace {
         branch: "/exports/./browser".into(),
         steps: vec![ResolutionTraceStep {
@@ -169,7 +192,7 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
     };
     alternate.declaration_trace = primary.declaration_trace.clone();
     let second = encode_inferred_entrypoint_workflow(
-        "solid-js",
+        "fixture-package",
         "2.0.0-rc.3",
         ".",
         exports,

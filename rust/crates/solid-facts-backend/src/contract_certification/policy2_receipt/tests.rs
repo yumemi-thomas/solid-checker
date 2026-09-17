@@ -1,4 +1,7 @@
 use super::*;
+
+/// The set every fixture receipt in this file is issued over.
+const CONDITIONS: &[String] = &[];
 use crate::ContractFailure;
 use crate::artifact_resolution::{
     ClosureManifest, ClosurePackageIdentity, ResolutionAuthority, ResolutionTrace,
@@ -41,6 +44,7 @@ fn bindings(main: &[u8]) -> Policy2ReceiptBindings {
         importer: "/workspace/src/App.tsx".into(),
         specifier: "@solid-primitives/debounce".into(),
         resolved_import_root: root("resolved-import"),
+        artifact_acceptance_root: root("artifact-acceptance"),
         semantic_digest,
         artifact_provenance_root: root("provenance"),
         snapshot_root: root("snapshot"),
@@ -233,6 +237,66 @@ fn canonical_mutation(receipt: &[u8], mutate: impl FnOnce(&mut ReceiptDocument))
 }
 
 type BindingMutation = (&'static str, fn(&mut Policy2ReceiptBindings));
+
+#[test]
+fn probe_execution_profiles_refuse_at_the_existing_consumer_boundary() {
+    let main = canonical_main(MAIN);
+    let normalized = contract_document::decode(&main)
+        .unwrap()
+        .normalize()
+        .unwrap();
+    let mut bindings = bindings(&main);
+    bindings.closed_claims_root =
+        solid_reactive_ir::contract_semantics::proof::policy2_closed_claims_root(
+            &normalized,
+            &normalized.artifact_cases()[0].id,
+        )
+        .unwrap()
+        .as_str()
+        .into();
+    let receipt = issue_builtin_policy2_receipt(&main, &bindings, "profile-control").unwrap();
+    let entry = BuiltInReceiptEntry {
+        entry_digest: digest_bytes(&receipt),
+        verifier_build_digest: bindings.verifier_build_digest.clone(),
+    };
+    crate::contract_interface::load_authenticated_policy2_embedded_contract(
+        &main, &receipt, &bindings, &entry,
+    )
+    .expect("the unmodified receipt must cross the active consumer boundary");
+    for profile in [
+        serde_json::Value::Null,
+        serde_json::json!("published-bytes"),
+        serde_json::json!({
+            "name": "node-strip-esm-import-free-v1",
+            "inputDigest": root("source"),
+            "outputDigest": root("derived"),
+            "transformerDigest": root("transformer"),
+            "moduleFormat": "module",
+            "resolution": "exact-node-esm",
+        }),
+        serde_json::json!({"name": "typescript-esnext", "version": "5.9.3"}),
+    ] {
+        let mut extended: serde_json::Value = serde_json::from_slice(&receipt).unwrap();
+        extended["payload"]["executionProfile"] = profile.clone();
+        let bytes = serde_json::to_vec(&extended).unwrap();
+        let Err(error) = crate::contract_interface::load_authenticated_policy2_embedded_contract(
+            &main, &bytes, &bindings, &entry,
+        ) else {
+            panic!("an unsupported execution profile granted consumer knowledge");
+        };
+        assert!(
+            matches!(&error, ContractFailure::ReceiptAuthentication { message }
+            if message.contains("unknown field `executionProfile`")),
+            "{error}"
+        );
+        let mut extended = serde_json::to_value(&bindings).unwrap();
+        extended["executionProfile"] = profile.clone();
+        assert!(serde_json::from_value::<Policy2ReceiptBindings>(extended).is_err());
+        let mut extended = serde_json::to_value(resolved_import()).unwrap();
+        extended["executionProfile"] = profile;
+        assert!(serde_json::from_value::<ResolvedImport>(extended).is_err());
+    }
+}
 
 #[test]
 fn local_and_portable_receipts_require_configured_external_trust() {
@@ -650,6 +714,128 @@ fn resolved_import_root_binds_the_declaration_export_census() {
     );
 }
 
+/// The whole point of the acceptance root: two consumers that resolved the same
+/// published artifact get the same identity, even though their imports do not.
+#[test]
+fn artifact_acceptance_root_ignores_the_importer_and_every_path() {
+    let resolved = resolved_import();
+    let conditions = ["import".to_owned()];
+    let original = policy2_artifact_acceptance_root(&resolved, &conditions).unwrap();
+
+    let mut elsewhere = resolved.clone();
+    elsewhere.importer = "/other/project/src/Widget.tsx".into();
+    elsewhere.package_root = "/other/project/node_modules/@solid-primitives/debounce".into();
+    elsewhere.runtime.path = format!("{}/dist/index.js", elsewhere.package_root);
+    elsewhere.declarations.path = format!("{}/dist/index.d.ts", elsewhere.package_root);
+
+    assert_eq!(
+        original,
+        policy2_artifact_acceptance_root(&elsewhere, &conditions).unwrap(),
+        "a different importer and install path is the same artifact"
+    );
+    assert_ne!(
+        policy2_resolved_import_root(&resolved).unwrap(),
+        policy2_resolved_import_root(&elsewhere).unwrap(),
+        "and the resolver-answer root still separates them, which is why a \
+         second root was needed rather than a reinterpretation of that one"
+    );
+}
+
+/// Each field is the artifact's identity, so changing any one of them must not
+/// keep an acceptance that was issued for the other.
+#[test]
+fn artifact_acceptance_root_binds_every_field_it_commits_to() {
+    let resolved = resolved_import();
+    let conditions = ["import".to_owned()];
+    let original = policy2_artifact_acceptance_root(&resolved, &conditions).unwrap();
+
+    for field in [
+        "package name",
+        "package version",
+        "package integrity",
+        "entrypoint",
+    ] {
+        let mut changed = resolved.clone();
+        match field {
+            // The specifier travels with the name and the entrypoint:
+            // `validate` requires it to belong to the resolved package and to
+            // carry the entrypoint as its subpath.
+            "package name" => {
+                changed.package_name = "@solid-primitives/scheduled".into();
+                changed.specifier = "@solid-primitives/scheduled".into();
+            }
+            "package version" => changed.package_version = "9.9.9".into(),
+            "package integrity" => {
+                changed.package_integrity = format!("sha512-{}", "B".repeat(86));
+            }
+            _ => {
+                changed.requested_entrypoint = "./immutable".into();
+                changed.specifier = format!("{}/immutable", changed.package_name);
+            }
+        }
+
+        assert_ne!(
+            original,
+            policy2_artifact_acceptance_root(&changed, &conditions).unwrap(),
+            "{field} is artifact identity"
+        );
+    }
+}
+
+/// Conditions *select* the artifact, so a contract proven under `import` must
+/// not carry an acceptance a `require` consumer can match. Order and repetition
+/// are not identity, though: the same set spelled differently is the same set.
+#[test]
+fn artifact_acceptance_root_binds_the_condition_set_but_not_its_spelling() {
+    let resolved = resolved_import();
+    let import_only = policy2_artifact_acceptance_root(&resolved, &["import".to_owned()]).unwrap();
+
+    assert_ne!(
+        import_only,
+        policy2_artifact_acceptance_root(&resolved, &["require".to_owned()]).unwrap(),
+        "a different condition selects a different artifact"
+    );
+    assert_ne!(
+        import_only,
+        policy2_artifact_acceptance_root(&resolved, &["import".to_owned(), "browser".to_owned()])
+            .unwrap(),
+        "an additional condition selects a different artifact"
+    );
+    assert_eq!(
+        policy2_artifact_acceptance_root(&resolved, &["browser".to_owned(), "import".to_owned()])
+            .unwrap(),
+        policy2_artifact_acceptance_root(
+            &resolved,
+            &[
+                "import".to_owned(),
+                "browser".to_owned(),
+                "browser".to_owned()
+            ]
+        )
+        .unwrap(),
+        "order and repetition are spelling, not identity"
+    );
+}
+
+/// Without length prefixes, `"ab" + "c"` and `"a" + "bc"` share a preimage, and
+/// one package could be renamed into another's acceptance.
+#[test]
+fn artifact_acceptance_root_separates_adjacent_fields() {
+    let mut left = resolved_import();
+    left.package_name = "@scope/ab".into();
+    left.specifier = "@scope/ab".into();
+    left.package_version = "1.0.0".into();
+    let mut right = left.clone();
+    right.package_name = "@scope/a".into();
+    right.specifier = "@scope/a".into();
+    right.package_version = "b1.0.0".into();
+
+    assert_ne!(
+        policy2_artifact_acceptance_root(&left, &["import".to_owned()]).unwrap(),
+        policy2_artifact_acceptance_root(&right, &["import".to_owned()]).unwrap(),
+    );
+}
+
 #[test]
 fn publication_commits_one_pointer_after_both_content_objects() {
     let main = canonical_main(MAIN);
@@ -679,7 +865,14 @@ fn publication_commits_one_pointer_after_both_content_objects() {
     let mut changed_receipt = receipt.clone();
     changed_receipt.push(b' ');
     assert!(matches!(
-        publish_policy2_catalog(&root, &main, &changed_receipt, &authenticated, &resolved),
+        publish_policy2_catalog(
+            &root,
+            &main,
+            &changed_receipt,
+            &authenticated,
+            &resolved,
+            CONDITIONS
+        ),
         Err(ReceiptPublicationError::Unauthenticated(_))
     ));
     assert!(!root.exists());
@@ -692,12 +885,26 @@ fn publication_commits_one_pointer_after_both_content_objects() {
         bindings.semantic_digest
     );
     assert!(matches!(
-        publish_policy2_catalog(&root, &alternate_main, &receipt, &authenticated, &resolved),
+        publish_policy2_catalog(
+            &root,
+            &alternate_main,
+            &receipt,
+            &authenticated,
+            &resolved,
+            CONDITIONS
+        ),
         Err(ReceiptPublicationError::Unauthenticated(_))
     ));
     assert!(!root.exists());
-    let published =
-        publish_policy2_catalog(&root, &main, &receipt, &authenticated, &resolved).unwrap();
+    let published = publish_policy2_catalog(
+        &root,
+        &main,
+        &receipt,
+        &authenticated,
+        &resolved,
+        CONDITIONS,
+    )
+    .unwrap();
     assert_eq!(fs::read(&published.main_path).unwrap(), main);
     assert_eq!(fs::read(&published.receipt_path).unwrap(), receipt);
     let pointer: serde_json::Value =
@@ -769,6 +976,7 @@ fn normal_catalog_discovery_authenticates_the_published_policy2_entry() {
         &receipt,
         &authenticated,
         &resolved,
+        std::slice::from_ref(&"import".to_owned()),
     )
     .unwrap();
     let configuration = Policy2TrustConfiguration::new(trust, Some(issuer.scope().into())).unwrap();

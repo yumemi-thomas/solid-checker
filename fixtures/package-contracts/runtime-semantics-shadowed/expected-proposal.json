@@ -2,7 +2,7 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:cd94f9d0f661b6298877f139a61812cdc32a5e3be3b789733d81180d57a15120",
+  "semanticDigest": "sha256:84cf494204accb3170fd685dda035a0dee59931af7035a5b3ff7b5c21c40e6f8",
   "closureCandidates": [
     {
       "claimId": "claim:v1:sha256:26b34c07519671278ee74d03744518b0429a77eaf8c1dd5d1438cb504aa141dc",
@@ -20,25 +20,6 @@
         "path": {
           "kind": "call",
           "domain": "reads"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:4ca6f6fe26edc254fae9bbccffcf2c8b183e217280a3692a54a43151909407a2",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.js",
-        "runtimeDigest": "sha256:45f510a72f7a2d7878a834789c78accf296ca531187b744e0afaa1d7ce48612b",
-        "declarationsPath": "./index.js",
-        "declarationsDigest": "sha256:45f510a72f7a2d7878a834789c78accf296ca531187b744e0afaa1d7ce48612b",
-        "closureDigest": "sha256:c1005ad3f2e0fb95c2f958ac22e738bf240be2634265bc423eaabf37f66aea57"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:abc0f02acb3f6ab91c24b77151b89e610bde52d96c4bc9a7f258959501c95ba6",
-        "export": "shadowedResizeObserver",
-        "path": {
-          "kind": "call",
-          "domain": "returns"
         }
       }
     },
@@ -98,6 +79,25 @@
         "path": {
           "kind": "call",
           "domain": "invalidates"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:4ca6f6fe26edc254fae9bbccffcf2c8b183e217280a3692a54a43151909407a2",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.js",
+        "runtimeDigest": "sha256:45f510a72f7a2d7878a834789c78accf296ca531187b744e0afaa1d7ce48612b",
+        "declarationsPath": "./index.js",
+        "declarationsDigest": "sha256:45f510a72f7a2d7878a834789c78accf296ca531187b744e0afaa1d7ce48612b",
+        "closureDigest": "sha256:c1005ad3f2e0fb95c2f958ac22e738bf240be2634265bc423eaabf37f66aea57"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:abc0f02acb3f6ab91c24b77151b89e610bde52d96c4bc9a7f258959501c95ba6",
+        "export": "shadowedResizeObserver",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
         }
       }
     },

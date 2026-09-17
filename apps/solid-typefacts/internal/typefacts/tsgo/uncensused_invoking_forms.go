@@ -1,0 +1,2786 @@
+package tsgo
+
+import (
+	"sort"
+	"strings"
+
+	"github.com/microsoft/typescript-go/shim/ast"
+	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts"
+)
+
+// nonInvokingNodeKinds is the reviewed list of *non-token* node kinds that
+// provably cannot invoke user code by being evaluated. It is the whole of what
+// keeps the classifier's default at refusal: a kind that is neither classified
+// into a named UncensusedInvokingFormKind nor listed here is recorded as
+// UncensusedUnclassifiedInvokingForm, so a kind a future compiler revision
+// adds refuses on arrival instead of passing in silence.
+//
+// Membership is a claim, one kind at a time, that evaluating a node of this
+// kind reaches no user code *of its own accord*. It says nothing about the
+// node's children: they are walked, and each is classified on its own. So a
+// CallExpression is listed — the call census records it — and an
+// ObjectLiteralExpression is listed even though `{ x: a.x }` invokes a getter,
+// because that getter is the PropertyAccessExpression child's row.
+//
+// Membership is also a claim about *every position* a node of the kind can
+// occupy, which is why three kinds the compiler reinterprets in
+// assignment-target position are absent: ArrayLiteralExpression,
+// PropertyAssignment, and ShorthandPropertyAssignment are read as
+// destructuring patterns there (checker.checkDestructuringAssignment) and do
+// invoke, so classifyInvokingFormLocked's switch asks which position the node
+// is in before answering. YieldExpression is absent for the neighbouring
+// reason: `yield*` drives an iterator and a plain `yield` does not, so the
+// switch decides on the asterisk.
+//
+// Names are the compiler's own, with the "Kind" prefix removed, which is what
+// nodeKindName answers. Only *non-token* kinds belong here: a kind below
+// ast.KindFirstNode is already cleared by classifyInvokingFormLocked's first
+// step, so listing one would be dead weight that reads as a reviewed claim.
+// There are 123 entries.
+var nonInvokingNodeKinds = map[string]struct{}{
+	// Names and type syntax. None of it is evaluated at runtime.
+	"QualifiedName":               {},
+	"TypeParameter":               {},
+	"PropertySignature":           {},
+	"MethodSignature":             {},
+	"CallSignature":               {},
+	"ConstructSignature":          {},
+	"IndexSignature":              {},
+	"TypePredicate":               {},
+	"TypeReference":               {},
+	"FunctionType":                {},
+	"ConstructorType":             {},
+	"TypeQuery":                   {},
+	"TypeLiteral":                 {},
+	"ArrayType":                   {},
+	"TupleType":                   {},
+	"OptionalType":                {},
+	"RestType":                    {},
+	"UnionType":                   {},
+	"IntersectionType":            {},
+	"ConditionalType":             {},
+	"InferType":                   {},
+	"ParenthesizedType":           {},
+	"ThisType":                    {},
+	"TypeOperator":                {},
+	"IndexedAccessType":           {},
+	"MappedType":                  {},
+	"LiteralType":                 {},
+	"NamedTupleMember":            {},
+	"TemplateLiteralType":         {},
+	"TemplateLiteralTypeSpan":     {},
+	"ImportType":                  {},
+	"ExpressionWithTypeArguments": {},
+
+	// Declarations. Declaring a callable does not run it; its body is walked
+	// as part of this implementation with Captured set, exactly as the call
+	// census walks it. A get/set accessor *declaration* is listed for the same
+	// reason a function declaration is: the invocation is at the access site,
+	// which is where UncensusedGetAccessor is recorded.
+	"Parameter":                   {},
+	"PropertyDeclaration":         {},
+	"MethodDeclaration":           {},
+	"ClassStaticBlockDeclaration": {},
+	"Constructor":                 {},
+	"GetAccessor":                 {},
+	"SetAccessor":                 {},
+	"FunctionDeclaration":         {},
+	"FunctionExpression":          {},
+	"ArrowFunction":               {},
+	"ClassDeclaration":            {},
+	"ClassExpression":             {},
+	"InterfaceDeclaration":        {},
+	"TypeAliasDeclaration":        {},
+	"EnumDeclaration":             {},
+	"EnumMember":                  {},
+	"ModuleDeclaration":           {},
+	"ModuleBlock":                 {},
+	"VariableDeclaration":         {},
+	"MissingDeclaration":          {},
+	"SemicolonClassElement":       {},
+	"HeritageClause":              {},
+	"JSTypeAliasDeclaration":      {},
+
+	// Module syntax. Never evaluated inside a function body, and listed so a
+	// nested `declare module` block cannot refuse a whole transcript.
+	"NamespaceExportDeclaration": {},
+	"ImportEqualsDeclaration":    {},
+	"ImportDeclaration":          {},
+	"ImportClause":               {},
+	"NamespaceImport":            {},
+	"NamedImports":               {},
+	"ImportSpecifier":            {},
+	"ExportAssignment":           {},
+	"ExportDeclaration":          {},
+	"NamedExports":               {},
+	"NamespaceExport":            {},
+	"ExportSpecifier":            {},
+	"ExternalModuleReference":    {},
+	"ImportAttributes":           {},
+	"ImportAttribute":            {},
+	"JSImportDeclaration":        {},
+
+	// Expressions that evaluate their children and combine the results
+	// without reaching any user code themselves.
+	//
+	// ObjectLiteralExpression is listed for *both* of its positions. As a value
+	// it combines its members' results. As an assignment pattern,
+	// `({ a } = src)`, each member performs its own Get on the source value,
+	// and that read is the member's row — PropertyAssignment and
+	// ShorthandPropertyAssignment are classified in the switch above, exactly
+	// as an object pattern's reads are its BindingElements' rows. What the
+	// literal itself adds in that position is at most a null check.
+	// ArrayLiteralExpression is deliberately *not* listed: in assignment-target
+	// position it drives the iteration protocol, which is nobody else's row.
+	"ObjectLiteralExpression": {},
+	"ObjectBindingPattern":    {},
+	"ConditionalExpression":   {},
+	"OmittedExpression":       {},
+	"MetaProperty":            {},
+	"TemplateSpan":            {},
+	// The call census owns both of these. They are the only two kinds listed
+	// here because another census records them rather than because they invoke
+	// nothing.
+	"CallExpression": {},
+	"NewExpression":  {},
+	// Erased at runtime: the value is the operand's, unchanged.
+	"TypeAssertionExpression": {},
+	"AsExpression":            {},
+	"SatisfiesExpression":     {},
+	"NonNullExpression":       {},
+	"ParenthesizedExpression": {},
+	// `typeof x` and `void x` read no property of the operand's value.
+	// `delete obj.x` reaches a proxy's deleteProperty trap and nothing else;
+	// proxy traps are out of the producer's reach entirely (see
+	// UncensusedInvokingForm's doc comment), and the property access itself is
+	// the operand's own row.
+	"TypeOfExpression": {},
+	"VoidExpression":   {},
+	"DeleteExpression": {},
+
+	// Statements and clauses. Control flow reaches no user code of its own;
+	// `switch` compares with strict equality, which performs no coercion.
+	"Block":               {},
+	"EmptyStatement":      {},
+	"VariableStatement":   {},
+	"ExpressionStatement": {},
+	"IfStatement":         {},
+	"DoStatement":         {},
+	"WhileStatement":      {},
+	"ForStatement":        {},
+	// `for…in` enumerates own and inherited enumerable string keys. On a plain
+	// object that reaches nothing; on a proxy it reaches the ownKeys trap,
+	// which is the proxy limit recorded on UncensusedInvokingForm and not
+	// something a marker here could establish either way.
+	"ForInStatement":    {},
+	"ContinueStatement": {},
+	"BreakStatement":    {},
+	"ReturnStatement":   {},
+	"SwitchStatement":   {},
+	"CaseBlock":         {},
+	"CaseClause":        {},
+	"DefaultClause":     {},
+	"LabeledStatement":  {},
+	"ThrowStatement":    {},
+	"TryStatement":      {},
+	"CatchClause":       {},
+	"DebuggerStatement": {},
+	"SourceFile":        {},
+	"SyntaxList":        {},
+
+	// JSX structure. The enclosing element, self-closing element, or fragment
+	// already carries an UncensusedJSXElement row, which is the refusal; its
+	// scaffolding adds nothing. A JsxSpreadAttribute is deliberately absent —
+	// it reads every own enumerable property of a value the producer cannot
+	// enumerate, so it is classified as an unresolved accessor access.
+	// JsxText and JsxTextAllWhiteSpaces are absent for the opposite reason:
+	// they are *token* kinds, below ast.KindFirstNode, and the token boundary
+	// clears them before this list is consulted.
+	"JsxOpeningElement":  {},
+	"JsxClosingElement":  {},
+	"JsxOpeningFragment": {},
+	"JsxClosingFragment": {},
+	"JsxAttributes":      {},
+	"JsxAttribute":       {},
+	"JsxExpression":      {},
+	"JsxNamespacedName":  {},
+
+	// Transform artifacts a parsed body never contains, listed so that their
+	// presence in some future synthetic tree is not a refusal.
+	"SyntheticExpression":          {},
+	"NotEmittedStatement":          {},
+	"NotEmittedTypeElement":        {},
+	"PartiallyEmittedExpression":   {},
+	"SyntheticReferenceExpression": {},
+}
+
+// coercingBinaryOperators are the binary operators that apply ToPrimitive (or
+// ToNumber/ToString, which go through it) to their operands. `===`/`!==` and
+// the logical and comma operators are absent because they coerce nothing;
+// `instanceof` is absent because it has its own kind; `in` is absent because
+// it reaches only a proxy's `has` trap, which is out of reach.
+//
+// Compound assignments are included: `total += obj` coerces exactly as
+// `total + obj` does.
+var coercingBinaryOperators = map[string]struct{}{
+	"PlusToken":                                    {},
+	"MinusToken":                                   {},
+	"AsteriskToken":                                {},
+	"AsteriskAsteriskToken":                        {},
+	"SlashToken":                                   {},
+	"PercentToken":                                 {},
+	"LessThanToken":                                {},
+	"GreaterThanToken":                             {},
+	"LessThanEqualsToken":                          {},
+	"GreaterThanEqualsToken":                       {},
+	"EqualsEqualsToken":                            {},
+	"ExclamationEqualsToken":                       {},
+	"LessThanLessThanToken":                        {},
+	"GreaterThanGreaterThanToken":                  {},
+	"GreaterThanGreaterThanGreaterThanToken":       {},
+	"AmpersandToken":                               {},
+	"BarToken":                                     {},
+	"CaretToken":                                   {},
+	"PlusEqualsToken":                              {},
+	"MinusEqualsToken":                             {},
+	"AsteriskEqualsToken":                          {},
+	"AsteriskAsteriskEqualsToken":                  {},
+	"SlashEqualsToken":                             {},
+	"PercentEqualsToken":                           {},
+	"LessThanLessThanEqualsToken":                  {},
+	"GreaterThanGreaterThanEqualsToken":            {},
+	"GreaterThanGreaterThanGreaterThanEqualsToken": {},
+	"AmpersandEqualsToken":                         {},
+	"BarEqualsToken":                               {},
+	"CaretEqualsToken":                             {},
+}
+
+// coercingUnaryOperators are the prefix operators that coerce their operand.
+// `!` is absent (ToBoolean reaches no user code), `typeof` and `void` and
+// `delete` are their own node kinds.
+var coercingUnaryOperators = map[string]struct{}{
+	"PlusToken":       {},
+	"MinusToken":      {},
+	"TildeToken":      {},
+	"PlusPlusToken":   {},
+	"MinusMinusToken": {},
+}
+
+func nodeKindName(node *ast.Node) string {
+	if node == nil {
+		return ""
+	}
+	return strings.TrimPrefix(node.KindString(), "Kind")
+}
+
+// uncensusedInvokingFormCensusLocked classifies every node of an
+// implementation body that can invoke user code and that
+// implementationCallCensusLocked does not record.
+//
+// It walks the *same* body with the *same* walker as the call census, so the
+// two never disagree about which callable frame a position sits in or whether
+// invoking the export reaches it. What it does not share is the call census's
+// jump withholding: dropping a row there keeps an over-optimistic Reach off
+// the wire, and here dropping a row is silence — the exact failure this census
+// exists to prevent. An over-optimistic Reach on a marker can only make a
+// consumer refuse a form that might not have run, which is the safe direction.
+//
+// The empty slice and the nil slice mean the same thing on the wire and both
+// mean "every form I walked was a call, a construction, or provably
+// non-invoking". A consumer distinguishes that positive claim from a producer
+// that has no opinion by the handshake protocol, never by the field's
+// emptiness.
+func (p *project) uncensusedInvokingFormCensusLocked(
+	implementation *ast.Node,
+) []typefacts.UncensusedInvokingForm {
+	var forms []typefacts.UncensusedInvokingForm
+	roots := p.parameterSubjectRootsLocked(implementation)
+	p.walkImplementationBodyLocked(
+		implementation,
+		func(node *ast.Node, enclosing *ast.Node, reach typefacts.Reachability) {
+			// walkImplementationBodyLocked starts at implementation.Body(), so
+			// the implementation node itself is never observed and needs no
+			// filter here.
+			kind, recorded := p.classifyInvokingFormLocked(node)
+			if !recorded {
+				return
+			}
+			form := typefacts.UncensusedInvokingForm{
+				Kind:     kind,
+				NodeKind: nodeKindName(node),
+				Location: nodeLocation(node),
+				Reach:    reach,
+				Captured: enclosing != nil,
+			}
+			if enclosing != nil {
+				enclosingLocation := nodeLocation(enclosing)
+				form.EnclosingCallable = &enclosingLocation
+			}
+			if kind == typefacts.UncensusedCoercion {
+				form.CoercionPremise = p.coercionPremiseLocked(node)
+				form.CoercionSubjectRoot, form.CoercionSubjectRootRefusal, form.CoercionSubjectParameters =
+					p.coercionSubjectRootLocked(implementation, node, roots)
+			}
+			if _, _, subject := p.accessorFormSubjectParameterLocked(node, kind, roots); subject != nil {
+				form.SubjectParameter = subject.parameter
+				form.SubjectWrite = subject.write
+				form.SubjectRoot = subject.derivation
+				form.SubjectDeclaration = subject.declaration
+				form.SubjectImport = subject.imported
+				form.SubjectLocalLiteralResults = subject.literalResults
+			}
+			if form.SubjectRoot == "" && (kind == typefacts.UncensusedGetAccessor ||
+				kind == typefacts.UncensusedSetAccessor || kind == typefacts.UncensusedPropertyAccessUnknownAccessor) {
+				subject, write := accessorFormSubjectExpression(node)
+				if premise := p.localLiteralResultLocked(subject); premise != nil {
+					form.LocalLiteralResult = premise
+					form.SubjectWrite = write
+				}
+				// Diagnostic only, and stated only where nothing rooted: which
+				// leg the subject fell off. A consumer counts these to choose
+				// what to review next and admits nothing on their account.
+				if subject != nil {
+					form.SubjectRootRefusal = p.subjectRootRefusalLocked(implementation, subject, roots)
+				}
+			}
+			forms = append(forms, form)
+		},
+	)
+	return forms
+}
+
+// subjectRoot is one entry of the premise set: the parameter slot whose value
+// a name holds, and the derivation that rooted it there.
+type subjectRoot struct {
+	index      int
+	derivation typefacts.SubjectRootDerivation
+	// ADR 0093: for `parameter-or-own-result`, the premise of every source
+	// that is a call this program's own code allocates the result of. One per
+	// such source, in source order; empty for every other derivation.
+	literalResults []typefacts.LocalLiteralResultPremise
+}
+
+// parameterSubjectRoots is the premise set for one declaration: every name
+// whose value is the caller's, keyed by symbol, or nil when the declaration
+// admits none.
+//
+// ADR 0034 seeded it with the parameters themselves. ADR 0043 closes it under
+// the reads the census already dispositions, because **naming an intermediate
+// must not change whose value it is**: `const style = props.style` reaches
+// exactly what `props.style` reaches, and `function f({ x })` reaches exactly
+// what `function f(a)` plus `a.x` reaches. Four legs, and each is separately
+// reviewed in the ADR:
+//
+//   - a parameter whose binding is a plain identifier with no initializer and
+//     no rest token, written nowhere in its file (ADR 0034, unchanged);
+//   - a name an **object binding pattern in parameter position** binds, when
+//     the parameter carries no default — the pattern reads a property of the
+//     caller's argument, so what it binds is the caller's;
+//   - a name a **local variable declaration** binds from an initializer that
+//     is itself rooted, to a fixpoint, so a chain of intermediates roots too;
+//   - a **defaulted** parameter whose default expression is a reference to a
+//     parameter rooted the first way. The value is then caller-supplied under
+//     either branch — the argument at this slot, or the argument at the
+//     default's — which is a different claim, and it travels under its own
+//     derivation spelling so a consumer that has reviewed only ADR 0034 can
+//     refuse it.
+//
+// What stays out, and why: a **rest** parameter and a **rest** element,
+// because the array or object is the engine's rather than the caller's; a
+// binding element carrying its own default, and a parameter pattern carrying
+// one, because the default value is an object *this* code created; a name
+// bound by a `for…of` or `for…in` head, which has no initializer to root; a
+// symbol with more than one declaration, whose running declaration this walk
+// cannot choose. The whole declaration is excluded when it mentions
+// `arguments` or `eval`, either of which can rebind a name without a visible
+// assignment.
+type parameterSubjectRoots struct {
+	bySymbol map[*ast.Symbol]subjectRoot
+	// pending is ADR 0050's co-induction: the written bindings whose rooting
+	// is being decided. A reference to one while it is being decided answers
+	// selfRootIndex, which agrees with whatever the other sources settle on —
+	// the same least-fixpoint argument that makes `currentElement =
+	// currentElement.parent` terminate at the parameter it started from.
+	pending map[*ast.Symbol]struct{}
+}
+
+func (p *project) parameterSubjectRootsLocked(implementation *ast.Node) *parameterSubjectRoots {
+	if implementation == nil || mentionsArgumentsOrEval(implementation) {
+		return nil
+	}
+	roots := &parameterSubjectRoots{
+		bySymbol: make(map[*ast.Symbol]subjectRoot),
+		pending:  make(map[*ast.Symbol]struct{}),
+	}
+	parameters := implementation.Parameters()
+	for index, parameter := range parameters {
+		declaration := parameter.AsParameterDeclaration()
+		name := parameter.Name()
+		if declaration == nil || name == nil || declaration.DotDotDotToken != nil ||
+			parameter.Initializer() != nil {
+			continue
+		}
+		root := subjectRoot{index: index, derivation: typefacts.SubjectRootParameter}
+		if ast.IsIdentifier(name) {
+			symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(name))
+			if symbol == nil || p.parameterIsWrittenLocked(implementation, index, symbol) {
+				continue
+			}
+			roots.bySymbol[symbol] = root
+			continue
+		}
+		// The pattern destructures the caller's argument directly. Its own
+		// reads record no form — the body walk starts at the body, so a
+		// parameter's pattern is never observed — but what it binds is a
+		// property of the caller's object, exactly as a receiver chain's
+		// innermost read is.
+		p.rootBoundNamesLocked(implementation, name, root, roots)
+	}
+	// A defaulted parameter whose default names another rooted parameter. Run
+	// after the seed so the default's own slot is already known, and taking
+	// only a source rooted as a plain parameter: a default naming a *defaulted*
+	// parameter is a second hop this ADR does not review.
+	for index, parameter := range parameters {
+		declaration := parameter.AsParameterDeclaration()
+		name := parameter.Name()
+		initializer := parameter.Initializer()
+		if declaration == nil || name == nil || initializer == nil ||
+			declaration.DotDotDotToken != nil || !ast.IsIdentifier(name) {
+			continue
+		}
+		defaulted := identityPreservingUnwrap(initializer)
+		if defaulted == nil || !ast.IsIdentifier(defaulted) {
+			continue
+		}
+		source := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(defaulted))
+		if source == nil {
+			continue
+		}
+		if root, rooted := roots.bySymbol[source]; !rooted ||
+			root.derivation != typefacts.SubjectRootParameter {
+			continue
+		}
+		symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(name))
+		if symbol == nil || p.parameterIsWrittenLocked(implementation, index, symbol) {
+			continue
+		}
+		if _, taken := roots.bySymbol[symbol]; taken {
+			continue
+		}
+		roots.bySymbol[symbol] = subjectRoot{
+			index:      index,
+			derivation: typefacts.SubjectRootParameterDefault,
+		}
+	}
+	// ADR 0091: a parameter the body **writes**, every value of which is the
+	// caller's argument at this very slot. ADR 0050 made this argument for a
+	// local binding; a parameter is the same question with one extra source
+	// that is the caller's by construction — the slot itself.
+	//
+	// Run after the seed so a source naming another parameter already
+	// resolves. Sources rooted at a *different* slot refuse: the value is the
+	// caller's either way, but the receipt names one slot and naming the wrong
+	// one would say the caller passed something it did not.
+	for index, parameter := range parameters {
+		declaration := parameter.AsParameterDeclaration()
+		name := parameter.Name()
+		if declaration == nil || name == nil || declaration.DotDotDotToken != nil ||
+			!ast.IsIdentifier(name) || parameter.Initializer() != nil {
+			continue
+		}
+		symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(name))
+		if symbol == nil {
+			continue
+		}
+		if _, taken := roots.bySymbol[symbol]; taken {
+			continue
+		}
+		if !p.parameterIsWrittenLocked(implementation, index, symbol) {
+			continue
+		}
+		// Pending before the sources resolve, so `current = current.parent`
+		// reads as the co-inductive self-reference ADR 0050 admits rather than
+		// as an unrooted name.
+		roots.pending[symbol] = struct{}{}
+		sources, enumerated := p.parameterValueSourcesLocked(implementation, symbol)
+		// `parameterIsWrittenLocked` said this binding is written, so a source
+		// list that saw no write is the two predicates disagreeing, not a
+		// parameter with nothing assigned to it. Admitting on an empty list
+		// would root a binding whose every write went unenumerated, which is
+		// the one way this join can be unsound; refuse instead.
+		admitted := enumerated && len(sources) > 0
+		// ADR 0093: a source that is neither the slot nor another rooted name
+		// may still be a value *this program allocated* — the shape ADR 0091
+		// left open, `b = stringStyleToObject(b)`. Reading an own property of
+		// such a value reaches a data property, which is ADR 0044's argument,
+		// so the binding holds one of two values and each is excused by a
+		// derivation already reviewed. That is ADR 0090's structure, and the
+		// derivation is named apart for the same reason: a consumer that
+		// reviewed only the purely caller-rooted reading must refuse this one.
+		var literalResults []typefacts.LocalLiteralResultPremise
+		for _, source := range sources {
+			root := p.subjectRootLocked(source, roots)
+			if root != nil && root.parameter != nil &&
+				root.derivation == typefacts.SubjectRootParameter &&
+				(*root.parameter == index || *root.parameter == selfRootIndex) {
+				continue
+			}
+			premise := p.localLiteralResultLocked(source)
+			if premise == nil {
+				admitted = false
+				break
+			}
+			literalResults = append(literalResults, *premise)
+		}
+		delete(roots.pending, symbol)
+		if admitted {
+			derivation := typefacts.SubjectRootParameter
+			if len(literalResults) > 0 {
+				derivation = typefacts.SubjectRootParameterOrOwnResult
+			}
+			roots.bySymbol[symbol] = subjectRoot{
+				index:          index,
+				derivation:     derivation,
+				literalResults: literalResults,
+			}
+		}
+	}
+
+	// ADR 0090: a parameter whose default is a data-only literal. Run after
+	// both passes above so a slot either of them already took keeps its
+	// stronger, purely caller-rooted reading; this one is a join over two arms
+	// and only one of them is the caller's.
+	for index, parameter := range parameters {
+		declaration := parameter.AsParameterDeclaration()
+		name := parameter.Name()
+		initializer := parameter.Initializer()
+		if declaration == nil || name == nil || initializer == nil ||
+			declaration.DotDotDotToken != nil || !ast.IsIdentifier(name) {
+			continue
+		}
+		if !ownDataOnlyLiteral(identityPreservingUnwrap(initializer)) {
+			continue
+		}
+		symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(name))
+		// Written, and the join loses its second arm: an assigned value is
+		// neither the caller's argument nor the default's literal, and this
+		// premise has nothing to say about it.
+		if symbol == nil || p.parameterIsWrittenLocked(implementation, index, symbol) {
+			continue
+		}
+		if _, taken := roots.bySymbol[symbol]; taken {
+			continue
+		}
+		roots.bySymbol[symbol] = subjectRoot{
+			index:      index,
+			derivation: typefacts.SubjectRootParameterDefaultLiteral,
+		}
+	}
+	p.rootLocalDeclarationsLocked(implementation, roots)
+	return roots
+}
+
+// ownLiteralDeclarationLocked answers the variable declaration a name is bound
+// to when this program initialized it from an object or array literal, or from
+// an object pattern's rest element (ADR 0044), and nil otherwise.
+//
+// The lookup is by **symbol**, not by file, because the shape that matters is a
+// module-level lookup table declared in one module and read in another: at the
+// use site the identifier binds an import, so the declaration this premise is
+// about lives behind an alias. The write check is asked over the declaring
+// file, which is where an assignment to that binding would be.
+//
+// Memoized per symbol. A premise twin is a different program with different
+// symbols, so its entries never mix with the accepted program's.
+func (p *project) ownLiteralDeclarationLocked(symbol *ast.Symbol) *ast.Node {
+	if symbol == nil {
+		return nil
+	}
+	if declaration, computed := p.ownLiteralSymbols[symbol]; computed {
+		return declaration
+	}
+	declaration := p.resolveOwnLiteralDeclarationLocked(symbol)
+	if p.ownLiteralSymbols == nil {
+		p.ownLiteralSymbols = make(map[*ast.Symbol]*ast.Node)
+	}
+	p.ownLiteralSymbols[symbol] = declaration
+	return declaration
+}
+
+func (p *project) resolveOwnLiteralDeclarationLocked(symbol *ast.Symbol) *ast.Node {
+	target := symbol
+	if target.Flags&ast.SymbolFlagsAlias != 0 {
+		target = p.canonicalSymbol(p.formChecker().GetAliasedSymbol(target))
+		if target == nil {
+			return nil
+		}
+	}
+	if len(target.Declarations) != 1 || target.Declarations[0] == nil {
+		return nil
+	}
+	declaration := target.Declarations[0]
+	switch {
+	case ast.IsVariableDeclaration(declaration):
+		name := declaration.Name()
+		if name == nil || !ast.IsIdentifier(name) {
+			return nil
+		}
+		initializer := declaration.Initializer()
+		if initializer == nil || !ownDataOnlyLiteral(identityPreservingUnwrap(initializer)) {
+			return nil
+		}
+	case ast.IsBindingElement(declaration):
+		// A **rest** element of an object pattern: CopyDataProperties builds
+		// what it binds, so its own properties are data properties whatever the
+		// source's were — the same fact ADR 0043 excludes a rest element from
+		// *parameter* rooting for. An array pattern's rest element is not here:
+		// its elements come from the source's iterator, which is the source's
+		// code and an iteration question.
+		name := declaration.Name()
+		if name == nil || !ast.IsIdentifier(name) || !isObjectRestElementName(name) {
+			return nil
+		}
+	default:
+		return nil
+	}
+	if p.symbolIsAssignedLocked(target, declaration) {
+		return nil
+	}
+	return declaration
+}
+
+// isObjectRestElementName reports whether an identifier is the binding of a
+// **rest** element of an object pattern.
+func isObjectRestElementName(name *ast.Node) bool {
+	parent := name.Parent
+	if parent == nil || !ast.IsBindingElement(parent) {
+		return false
+	}
+	element := parent.AsBindingElement()
+	if element == nil || element.DotDotDotToken == nil {
+		return false
+	}
+	return parent.Parent != nil && ast.IsObjectBindingPattern(parent.Parent)
+}
+
+// ownDataOnlyLiteral reports whether an expression is an object or array
+// literal every own property of which the specification creates as a **data**
+// property.
+//
+// For an object literal that means no `get`/`set` member and no `__proto__:`
+// member — the second sets the prototype rather than a property, which would
+// replace the one prototype chain this premise reasons about. A spread member
+// is admitted: CopyDataProperties creates data properties whatever the source
+// held, which is the whole point. A method or a shorthand is a data property
+// holding a function.
+//
+// For an array literal every element is created by index with
+// CreateDataPropertyOrThrow, a spread element included, so no member needs
+// inspecting at all.
+func ownDataOnlyLiteral(node *ast.Node) bool {
+	if node == nil {
+		return false
+	}
+	switch {
+	case ast.IsArrayLiteralExpression(node):
+		return true
+	case ast.IsObjectLiteralExpression(node):
+		for _, property := range node.AsObjectLiteralExpression().Properties.Nodes {
+			switch nodeKindName(property) {
+			case "GetAccessor", "SetAccessor":
+				return false
+			}
+			if name := property.Name(); name != nil && ast.IsIdentifier(name) &&
+				name.Text() == "__proto__" {
+				return false
+			}
+			if name := property.Name(); name != nil && ast.IsStringLiteral(name) &&
+				name.Text() == "__proto__" {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// parameterIsWrittenLocked answers the ADR 0029 write question for one
+// parameter. Under a premise twin (ADR 0038) it is asked of the *accepted*
+// program's node for the same parameter: the twin is the same file with one
+// comment added, so the answer is the same, and the accepted program has
+// already walked that file's assignment targets once — where the twin's cold
+// checker would walk the whole file again for every twin built over it.
+func (p *project) parameterIsWrittenLocked(implementation *ast.Node, index int, symbol *ast.Symbol) bool {
+	if twin := p.formTwin; twin != nil && implementation == twin.implementation && twin.original != nil {
+		originals := twin.original.Parameters()
+		if index >= len(originals) || originals[index].Name() == nil {
+			return true
+		}
+		original := p.canonicalSymbol(p.checker.GetSymbolAtLocation(originals[index].Name()))
+		return original == nil || p.symbolIsAssignedLocked(original, twin.original)
+	}
+	return p.symbolIsAssignedLocked(symbol, implementation)
+}
+
+// mentionsArgumentsOrEval reports whether any identifier in the subtree spells
+// `arguments` or `eval`. Direct eval and mapped arguments can mutate a binding
+// without a visible assignment to its symbol, so a premise about an unwritten
+// binding refuses the mention rather than guessing strictness.
+func mentionsArgumentsOrEval(root *ast.Node) bool {
+	var dynamic bool
+	var scan func(*ast.Node)
+	scan = func(node *ast.Node) {
+		if node == nil || dynamic {
+			return
+		}
+		if ast.IsIdentifier(node) && (node.Text() == "eval" || node.Text() == "arguments") {
+			dynamic = true
+			return
+		}
+		node.ForEachChild(func(child *ast.Node) bool { scan(child); return dynamic })
+	}
+	scan(root)
+	return dynamic
+}
+
+// rootBoundNamesLocked roots every plain identifier an object binding pattern
+// binds at `root`, and recurses through a nested object pattern because that
+// reads a property of a property of the same value.
+//
+// A rest element is skipped: the object it binds is one the engine built with
+// CopyDataProperties, not the caller's. An element carrying its own default is
+// skipped: it may hold an object *this* code created.
+func (p *project) rootBoundNamesLocked(
+	implementation *ast.Node,
+	pattern *ast.Node,
+	root subjectRoot,
+	roots *parameterSubjectRoots,
+) bool {
+	if pattern == nil || !ast.IsObjectBindingPattern(pattern) {
+		return false
+	}
+	var added bool
+	for _, element := range pattern.AsBindingPattern().Elements.Nodes {
+		binding := element.AsBindingElement()
+		name := element.Name()
+		if binding == nil || name == nil || binding.DotDotDotToken != nil ||
+			binding.Initializer != nil {
+			continue
+		}
+		if ast.IsObjectBindingPattern(name) {
+			added = p.rootBoundNamesLocked(implementation, name, root, roots) || added
+			continue
+		}
+		if !ast.IsIdentifier(name) {
+			continue
+		}
+		added = p.rootNameLocked(implementation, name, root, roots) || added
+	}
+	return added
+}
+
+// rootNameLocked roots one declared identifier at `root`, when its symbol has
+// exactly this one declaration and nothing in its file writes it.
+//
+// The single-declaration check is the same reasoning the census's own
+// `census_local_binding_is_stable` applies to a callee: a name the binder
+// merged from two declarations has a running declaration this walk cannot
+// choose, so it is refused rather than guessed.
+func (p *project) rootNameLocked(
+	implementation *ast.Node,
+	name *ast.Node,
+	root subjectRoot,
+	roots *parameterSubjectRoots,
+) bool {
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(name))
+	if symbol == nil || len(symbol.Declarations) != 1 {
+		return false
+	}
+	if _, taken := roots.bySymbol[symbol]; taken {
+		return false
+	}
+	if p.symbolIsAssignedLocked(symbol, implementation) {
+		return false
+	}
+	roots.bySymbol[symbol] = root
+	return true
+}
+
+// rootLocalDeclarationsLocked roots every local declaration in the
+// implementation's subtree whose initializer is itself rooted, to a fixpoint
+// so that `const a = p.x; const b = a.y;` roots both.
+//
+// The derivation travels with the value: a local bound from a
+// `parameter-default` root is caller-supplied under exactly the same two
+// branches, and says so.
+func (p *project) rootLocalDeclarationsLocked(
+	implementation *ast.Node,
+	roots *parameterSubjectRoots,
+) {
+	var declarations []*ast.Node
+	var collect func(*ast.Node)
+	collect = func(node *ast.Node) {
+		if node == nil {
+			return
+		}
+		if ast.IsVariableDeclaration(node) {
+			declarations = append(declarations, node)
+		}
+		node.ForEachChild(func(child *ast.Node) bool { collect(child); return false })
+	}
+	collect(implementation)
+	for range declarations {
+		var added bool
+		for _, declaration := range declarations {
+			name := declaration.Name()
+			initializer := declaration.Initializer()
+			if name == nil || initializer == nil {
+				continue
+			}
+			// Only a caller-provenance root propagates through a local
+			// binding. An own literal roots a direct reference alone
+			// (ADR 0044): what one of its properties *holds* is an arbitrary
+			// value, so `const item = table[key]` names nothing this premise
+			// can speak for.
+			//
+			// ADR 0090's join is excluded for that same reason, and it carries
+			// a parameter slot so the check above does not catch it: on its
+			// default arm the subject is a literal *this program* wrote, whose
+			// property values are arbitrary expressions. `const d = options.delay`
+			// under `options = { delay: makeThing() }` names one of them.
+			root := p.subjectRootLocked(initializer, roots)
+			if root == nil || root.parameter == nil ||
+				root.derivation == typefacts.SubjectRootParameterDefaultLiteral {
+				continue
+			}
+			derived := subjectRoot{index: *root.parameter, derivation: root.derivation}
+			switch {
+			case ast.IsIdentifier(name):
+				added = p.rootNameLocked(implementation, name, derived, roots) || added
+			case ast.IsObjectBindingPattern(name):
+				added = p.rootBoundNamesLocked(implementation, name, derived, roots) || added
+			}
+		}
+		if !added {
+			return
+		}
+	}
+}
+
+// subjectRootLocked answers the root a subject expression's value carries: the
+// expression, after identity-preserving unwrapping, is either a reference to a
+// rooted name or a chain of property, element and optional-chain reads whose
+// innermost receiver is one. Anything else — a call result, a module binding, a
+// nested callable's own parameter, a literal — answers nil.
+func (p *project) subjectRootLocked(
+	subject *ast.Node, roots *parameterSubjectRoots,
+) *resolvedSubject {
+	if roots == nil {
+		return nil
+	}
+	// An own literal roots only a **direct** reference. `table[key]` reads a
+	// data property of the literal, but what that property *holds* is an
+	// arbitrary value, so `table[key].member` is a second read this premise
+	// says nothing about — and refuses, while the inner one clears.
+	if direct := identityPreservingUnwrap(subject); direct != nil && ast.IsIdentifier(direct) {
+		if symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(direct)); symbol != nil {
+			if _, caller := roots.bySymbol[symbol]; !caller {
+				// A symbol the caller-provenance legs rooted keeps that
+				// reading: it is the stronger fact and the one a consumer of
+				// ADR 0034 has reviewed.
+				if declaration := p.ownLiteralDeclarationLocked(symbol); declaration != nil {
+					location := nodeLocation(declaration)
+					return &resolvedSubject{
+						derivation:  typefacts.SubjectRootOwnLiteral,
+						declaration: &location,
+					}
+				}
+			}
+		}
+	}
+	node := identityPreservingUnwrap(subject)
+	for node != nil && (ast.IsPropertyAccessExpression(node) || nodeKindName(node) == "ElementAccessExpression") {
+		node = identityPreservingUnwrap(node.Expression())
+	}
+	if node == nil {
+		return nil
+	}
+	// ADR 0048: the value a call to a **caller-supplied callee** handed back.
+	// What the caller's own function returned is the caller's, by the argument
+	// ADR 0042 already makes about what its iterable yielded, so the walk stops
+	// here rather than at an identifier.
+	if ast.IsCallExpression(node) {
+		callee := p.subjectRootLocked(node.Expression(), roots)
+		if callee == nil || callee.parameter == nil ||
+			callee.derivation != typefacts.SubjectRootParameter {
+			return nil
+		}
+		index := *callee.parameter
+		return &resolvedSubject{
+			parameter: &index, derivation: typefacts.SubjectRootParameterResult,
+		}
+	}
+	// ADR 0050: a value that is one of several, each rooted. A conditional and
+	// the short-circuit operators hand back one of their arms, so if every arm
+	// is rooted at the same slot the result is too — the same join the written
+	// binding rests on, written as an expression instead of as assignments.
+	if arms := subjectJoinArms(node); arms != nil {
+		var joined *resolvedSubject
+		for _, arm := range arms {
+			root := p.subjectRootLocked(arm, roots)
+			if root == nil || root.parameter == nil ||
+				root.derivation != typefacts.SubjectRootParameter {
+				return nil
+			}
+			if joined == nil {
+				joined = root
+				continue
+			}
+			if *joined.parameter != *root.parameter && *root.parameter != selfRootIndex {
+				if *joined.parameter != selfRootIndex {
+					return nil
+				}
+				joined = root
+			}
+		}
+		return joined
+	}
+	if !ast.IsIdentifier(node) {
+		return nil
+	}
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(node))
+	if symbol == nil {
+		return nil
+	}
+	root, rooted := roots.bySymbol[symbol]
+	if !rooted {
+		// ADR 0050: a binding the file writes, every value of which is rooted.
+		if written := p.writtenBindingRootLocked(symbol, roots); written != nil {
+			root, rooted = *written, true
+		}
+	}
+	if !rooted {
+		// ADR 0104: a name this module imports from a bare specifier. Last,
+		// so every caller-provenance leg above keeps its stronger reading --
+		// a consumer of ADR 0034 has reviewed those, and this one it must
+		// review separately.
+		if imported := p.dependencyMemberRootLocked(node); imported != nil {
+			return &resolvedSubject{
+				derivation: typefacts.SubjectRootDependencyMember,
+				imported:   imported,
+			}
+		}
+		return nil
+	}
+	index := root.index
+	return &resolvedSubject{
+		parameter:      &index,
+		derivation:     root.derivation,
+		literalResults: root.literalResults,
+	}
+}
+
+// subjectRootRefusalLocked classifies **why** a subject did not root. It is a
+// diagnostic and grants nothing: it runs only after subjectRootLocked has
+// already answered nil, and no caller may admit anything on its account.
+//
+// It deliberately re-walks rather than being threaded through the rooting
+// logic. Threading a reason out of subjectRootLocked would put a diagnostic
+// concern inside the premise, where a later edit could make the reason decide
+// something; keeping it beside means the worst a drift can do is misname a
+// refusal. `everyStatedRefusalAccompaniesAnAbsentRoot` pins the one invariant
+// that matters — a form states a root or a reason, never both and never
+// neither.
+func (p *project) subjectRootRefusalLocked(
+	implementation *ast.Node, subject *ast.Node, roots *parameterSubjectRoots,
+) typefacts.SubjectRootRefusalReason {
+	if roots == nil {
+		return typefacts.SubjectRefusalArgumentsOrEval
+	}
+	node := identityPreservingUnwrap(subject)
+	for node != nil && (ast.IsPropertyAccessExpression(node) || nodeKindName(node) == "ElementAccessExpression") {
+		node = identityPreservingUnwrap(node.Expression())
+	}
+	if node == nil {
+		return typefacts.SubjectRefusalUnclassifiedSubject
+	}
+	if ast.IsCallExpression(node) {
+		return typefacts.SubjectRefusalCallResult
+	}
+	if nodeKindName(node) == "ThisKeyword" {
+		return typefacts.SubjectRefusalThisExpression
+	}
+	if !ast.IsIdentifier(node) {
+		return typefacts.SubjectRefusalNotAReference
+	}
+	// The raw symbol first: `canonicalSymbol` walks the alias chain to the
+	// original declaration, so asking it about aliasing always answers no and
+	// every import would be filed as whatever it resolves to.
+	raw := p.formChecker().GetSymbolAtLocation(node)
+	if raw == nil {
+		return typefacts.SubjectRefusalUnclassifiedSubject
+	}
+	if raw.Flags&ast.SymbolFlagsAlias != 0 {
+		return typefacts.SubjectRefusalImportedBinding
+	}
+	symbol := p.canonicalSymbol(raw)
+	if symbol == nil || len(symbol.Declarations) == 0 || symbol.Declarations[0] == nil {
+		return typefacts.SubjectRefusalUnclassifiedSubject
+	}
+	declaration := symbol.Declarations[0]
+	if nodeKindName(declaration) == "Parameter" {
+		// It reached here, so the roots map does not hold it. For a parameter
+		// of *this* declaration the reason is that the body writes it — an
+		// unwritten one would have rooted, and since ADR 0091 so would a
+		// written one whose every value is rooted. A parameter of a nested
+		// callable is a different binding entirely.
+		if declaration.Parent == implementation {
+			return typefacts.SubjectRefusalWrittenParameter
+		}
+		return typefacts.SubjectRefusalNestedParameter
+	}
+	sourceFile := ast.GetSourceFileOfNode(declaration)
+	// Declared outside the artifact's own runtime source — a `declare const` in
+	// a typings file, or a global the program's default libraries declare.
+	// Every premise in this family turns on what the artifact's own code
+	// assigned, and a declaration file assigns nothing, so the scope and shape
+	// below would describe a binding none of them could reach anyway.
+	//
+	// `formIsRuntimeSourceFile` alone is not that question: it asks whether a
+	// file is in the *program*, which `lib.dom.d.ts` is. Without the
+	// declaration-file half, `window` classified as a module binding with no
+	// initializer — true of the declaration, and silent about the code. Every
+	// other caller of that predicate pairs the two the same way.
+	if sourceFile != nil &&
+		(sourceFile.IsDeclarationFile || !p.formIsRuntimeSourceFile(sourceFile)) {
+		return typefacts.SubjectRefusalAmbientDeclaration
+	}
+	moduleScope := sourceFile != nil && declaration.Parent != nil &&
+		declaration.Parent.Parent != nil && declaration.Parent.Parent.Parent == sourceFile.AsNode()
+	return subjectBindingRefusal(moduleScope, p.bindingRefusalShapeLocked(symbol, declaration))
+}
+
+// bindingRefusalShape is which of ADR 0044's conditions a binding failed, as a
+// scope-independent shape. `subjectBindingRefusal` pairs it with the scope.
+type bindingRefusalShape int
+
+const (
+	bindingShapeOther bindingRefusalShape = iota
+	bindingShapeFromCall
+	bindingShapeUninitialized
+	bindingShapeAccessorLiteral
+	bindingShapeWritten
+)
+
+// bindingRefusalShapeLocked answers why ADR 0044's own-literal premise did not
+// reach a variable binding. Diagnostic only: every branch is a refusal already,
+// and this only says which one.
+func (p *project) bindingRefusalShapeLocked(
+	symbol *ast.Symbol, declaration *ast.Node,
+) bindingRefusalShape {
+	if !ast.IsVariableDeclaration(declaration) {
+		return bindingShapeOther
+	}
+	// Asked first: an assigned binding refuses whatever its initializer is, so
+	// naming the initializer would name a condition that was not the blocking
+	// one.
+	if p.symbolIsAssignedLocked(symbol, declaration) {
+		return bindingShapeWritten
+	}
+	initializer := declaration.Initializer()
+	if initializer == nil {
+		return bindingShapeUninitialized
+	}
+	unwrapped := identityPreservingUnwrap(initializer)
+	switch {
+	case unwrapped == nil:
+		return bindingShapeOther
+	case ast.IsCallExpression(unwrapped) || ast.IsNewExpression(unwrapped):
+		return bindingShapeFromCall
+	case (ast.IsObjectLiteralExpression(unwrapped) || ast.IsArrayLiteralExpression(unwrapped)) &&
+		!ownDataOnlyLiteral(unwrapped):
+		return bindingShapeAccessorLiteral
+	default:
+		return bindingShapeOther
+	}
+}
+
+func subjectBindingRefusal(
+	moduleScope bool, shape bindingRefusalShape,
+) typefacts.SubjectRootRefusalReason {
+	if moduleScope {
+		switch shape {
+		case bindingShapeFromCall:
+			return typefacts.SubjectRefusalModuleFromCall
+		case bindingShapeUninitialized:
+			return typefacts.SubjectRefusalModuleUninitialized
+		case bindingShapeAccessorLiteral:
+			return typefacts.SubjectRefusalModuleAccessorLiteral
+		case bindingShapeWritten:
+			return typefacts.SubjectRefusalModuleWritten
+		default:
+			return typefacts.SubjectRefusalModuleBinding
+		}
+	}
+	switch shape {
+	case bindingShapeFromCall:
+		return typefacts.SubjectRefusalLocalFromCall
+	case bindingShapeUninitialized:
+		return typefacts.SubjectRefusalLocalUninitialized
+	case bindingShapeAccessorLiteral:
+		return typefacts.SubjectRefusalLocalAccessorLiteral
+	case bindingShapeWritten:
+		return typefacts.SubjectRefusalLocalWritten
+	default:
+		return typefacts.SubjectRefusalLocalBinding
+	}
+}
+
+// subjectJoinArms answers the expressions a value-carrying join hands back —
+// the two branches of a conditional, and the two operands of `??`, `||` and
+// `&&` — or nil for anything else. Each arm is a value the whole expression can
+// evaluate to, so rooting them all roots the result.
+func subjectJoinArms(node *ast.Node) []*ast.Node {
+	if ast.IsConditionalExpression(node) {
+		conditional := node.AsConditionalExpression()
+		if conditional == nil {
+			return nil
+		}
+		return []*ast.Node{conditional.WhenTrue, conditional.WhenFalse}
+	}
+	if !ast.IsBinaryExpression(node) {
+		return nil
+	}
+	binary := node.AsBinaryExpression()
+	if binary == nil || binary.OperatorToken == nil {
+		return nil
+	}
+	switch nodeKindName(binary.OperatorToken) {
+	case "QuestionQuestionToken", "BarBarToken", "AmpersandAmpersandToken":
+		return []*ast.Node{binary.Left, binary.Right}
+	}
+	return nil
+}
+
+// selfRootIndex marks a reference to the binding whose rooting is currently
+// being decided. It never leaves writtenBindingRootLocked's own evaluation:
+// outside it the pending set is empty, so no caller can observe it.
+const selfRootIndex = -1
+
+// writtenBindingRootLocked roots a binding the file **writes** when every value
+// it can hold is rooted at one parameter (ADR 0050).
+//
+// ADRs 0034 and 0043 refuse a written binding, and the reason they give is
+// that the premise is not flow-sensitive. This needs no flow sensitivity: if
+// *every* value the binding can hold is the caller's, then whichever one it
+// holds at the read is the caller's, and which branch assigned it never comes
+// up. The sources are the declaration's own initializer and the right-hand
+// side of every plain assignment to it; a reference to the binding itself is
+// admitted co-inductively, which is the chain rule ADR 0034 already applies to
+// `a.b.c` written as a loop.
+//
+// A declaration with **no** initializer contributes `undefined`, which reaches
+// no user code — reading a member of it throws before any lookup.
+func (p *project) writtenBindingRootLocked(
+	symbol *ast.Symbol, roots *parameterSubjectRoots,
+) *subjectRoot {
+	if symbol == nil || roots == nil {
+		return nil
+	}
+	if _, deciding := roots.pending[symbol]; deciding {
+		return &subjectRoot{index: selfRootIndex, derivation: typefacts.SubjectRootParameter}
+	}
+	if len(symbol.Declarations) != 1 || symbol.Declarations[0] == nil {
+		return nil
+	}
+	declaration := symbol.Declarations[0]
+	if !ast.IsVariableDeclaration(declaration) {
+		return nil
+	}
+	name := declaration.Name()
+	if name == nil || !ast.IsIdentifier(name) {
+		return nil
+	}
+	sourceFile := ast.GetSourceFileOfNode(declaration)
+	if sourceFile == nil || !p.formIsRuntimeSourceFile(sourceFile) {
+		return nil
+	}
+	sources, ok := p.bindingValueSourcesLocked(sourceFile, symbol, declaration)
+	if !ok {
+		return nil
+	}
+	roots.pending[symbol] = struct{}{}
+	defer delete(roots.pending, symbol)
+	index := selfRootIndex
+	for _, source := range sources {
+		root := p.subjectRootLocked(source, roots)
+		if root == nil || root.parameter == nil ||
+			root.derivation != typefacts.SubjectRootParameter {
+			return nil
+		}
+		if *root.parameter == selfRootIndex {
+			continue
+		}
+		if index != selfRootIndex && index != *root.parameter {
+			// Two different slots: the binding holds the caller's value either
+			// way, but the receipt names one slot, and naming the wrong one
+			// would say the caller passed something it did not.
+			return nil
+		}
+		index = *root.parameter
+	}
+	if index == selfRootIndex {
+		// Every source was the binding itself, so nothing anchors it.
+		return nil
+	}
+	root := subjectRoot{index: index, derivation: typefacts.SubjectRootParameter}
+	roots.bySymbol[symbol] = root
+	return &root
+}
+
+// bindingValueSourcesLocked answers every expression a binding can take its
+// value from — its own initializer, and the right-hand side of each plain
+// assignment to it — or false when some write is one this build cannot read a
+// single value out of.
+//
+// A **compound** assignment (`x += y`) yields a coercion result, an **update**
+// (`x++`) a number this walk has no expression for, a **destructuring** target
+// a property of something else, and a `for…of`/`for…in` head an element of an
+// iteration. Each of those refuses the whole binding rather than being skipped:
+// a source left out would make the join a claim about some of the values.
+//
+// A declaration with no initializer contributes no source at all, because the
+// value is then `undefined` and a member read of it throws before any lookup.
+func (p *project) bindingValueSourcesLocked(
+	sourceFile *ast.SourceFile, symbol *ast.Symbol, declaration *ast.Node,
+) ([]*ast.Node, bool) {
+	var sources []*ast.Node
+	if initializer := declaration.Initializer(); initializer != nil {
+		sources = append(sources, initializer)
+	}
+	ok := true
+	var visit func(*ast.Node)
+	visit = func(node *ast.Node) {
+		if node == nil || !ok {
+			return
+		}
+		if ast.IsIdentifier(node) && !ast.IsPartOfTypeNode(node) &&
+			isAssignmentTargetIdentifier(node) &&
+			p.assignedBindingSymbol(p.formChecker(), node) == symbol {
+			parent := node.Parent
+			if parent == nil || !ast.IsBinaryExpression(parent) {
+				ok = false
+				return
+			}
+			binary := parent.AsBinaryExpression()
+			if binary == nil || binary.Left != node || binary.OperatorToken == nil ||
+				nodeKindName(binary.OperatorToken) != "EqualsToken" {
+				ok = false
+				return
+			}
+			sources = append(sources, binary.Right)
+		}
+		node.ForEachChild(func(child *ast.Node) bool { visit(child); return !ok })
+	}
+	visit(sourceFile.AsNode())
+	if !ok {
+		return nil, false
+	}
+	return sources, true
+}
+
+// parameterValueSourcesLocked answers every expression whose value a parameter
+// binding can hold *after* its slot — the right-hand side of each plain
+// assignment to it within the declaration being censused — or `false` when any
+// write is a shape this premise cannot enumerate.
+//
+// The parameter's own slot is not a source here: it is the caller's argument by
+// construction, and the caller is the one provenance this premise is about. The
+// refusing shapes mirror ADR 0050's for a local binding, and for the same
+// reason: a compound assignment, an update expression, a destructuring target
+// and a `for…of`/`for…in` head each refuse the whole binding rather than being
+// skipped, because a skipped write is a value nobody enumerated.
+func (p *project) parameterValueSourcesLocked(
+	implementation *ast.Node, symbol *ast.Symbol,
+) ([]*ast.Node, bool) {
+	var sources []*ast.Node
+	ok := true
+	var visit func(*ast.Node)
+	visit = func(node *ast.Node) {
+		if node == nil || !ok {
+			return
+		}
+		if ast.IsIdentifier(node) && !ast.IsPartOfTypeNode(node) &&
+			isAssignmentTargetIdentifier(node) &&
+			p.assignedBindingSymbol(p.formChecker(), node) == symbol {
+			parent := node.Parent
+			if parent == nil || !ast.IsBinaryExpression(parent) {
+				ok = false
+				return
+			}
+			binary := parent.AsBinaryExpression()
+			if binary == nil || binary.Left != node || binary.OperatorToken == nil ||
+				nodeKindName(binary.OperatorToken) != "EqualsToken" {
+				ok = false
+				return
+			}
+			sources = append(sources, binary.Right)
+		}
+		node.ForEachChild(func(child *ast.Node) bool { visit(child); return !ok })
+	}
+	visit(implementation)
+	if !ok {
+		return nil, false
+	}
+	return sources, true
+}
+
+// resolvedSubject is what one form's subject resolved to: the derivation that
+// rooted it, and exactly the accompanying fact that derivation carries — a
+// parameter index for the caller-provenance derivations, a declaration
+// location for the own-literal one.
+type resolvedSubject struct {
+	parameter      *int
+	derivation     typefacts.SubjectRootDerivation
+	declaration    *typefacts.Location
+	imported       *typefacts.ImportedModuleMember
+	write          bool
+	literalResults []typefacts.LocalLiteralResultPremise
+}
+
+// subjectParameterLocked answers the parameter a subject is rooted at under
+// **ADR 0034's premise alone** — the value the caller passed at that slot.
+//
+// Consumers of the wider root set read the derivation and decide for
+// themselves; this narrow reading exists for the `this` receiver of a
+// `.call`/`.apply`, whose consumer has reviewed that premise and no other.
+func (p *project) subjectParameterLocked(subject *ast.Node, roots *parameterSubjectRoots) *int {
+	root := p.subjectRootLocked(subject, roots)
+	if root == nil || root.derivation != typefacts.SubjectRootParameter {
+		return nil
+	}
+	return root.parameter
+}
+
+// accessorFormSubjectParameterLocked states the subject parameter of an
+// accessor form on a property or element access node, together with whether
+// the access is in write position (ADR 0034, extended by ADR 0040).
+//
+// Three kinds qualify: `get-accessor` and `set-accessor`, where the compiler
+// resolved the member to an accessor declaration, and
+// `property-access-unknown-accessor`, where it bound no data property at all.
+// A `delete` stays unstated — it reaches a `deleteProperty` trap rather than
+// an accessor, and no ADR has reviewed it — and so does every other form: a
+// destructuring pattern, a spread, an iteration, a coercion.
+//
+// The write flag is the position, not a second premise: `axis.min = v` runs a
+// setter, `axis.min += 1` runs the getter and then the setter, and both are
+// code on the object the caller handed over. Stating the position is what lets
+// one consumer treat the two alike and another — a `writes` census, where the
+// assignment is the export's own act — refuse exactly the write.
+func (p *project) accessorFormSubjectParameterLocked(
+	node *ast.Node,
+	kind typefacts.UncensusedInvokingFormKind,
+	roots *parameterSubjectRoots,
+) (*int, bool, *resolvedSubject) {
+	if roots == nil {
+		return nil, false, nil
+	}
+	switch kind {
+	case typefacts.UncensusedGetAccessor, typefacts.UncensusedSetAccessor,
+		typefacts.UncensusedPropertyAccessUnknownAccessor,
+		typefacts.UncensusedIterationProtocol:
+	case typefacts.UncensusedInstanceOf:
+		// ADR 0047: the operator's whole reach is `Symbol.hasInstance` on its
+		// **right** operand, so that operand is the subject and it is resolved
+		// its own way — as a constructor rather than as a value whose members
+		// are read.
+		return p.instanceOfSubjectLocked(node, roots)
+	default:
+		return nil, false, nil
+	}
+	subjectExpression, write := accessorFormSubjectExpression(node)
+	if subjectExpression == nil {
+		return nil, false, nil
+	}
+	root := p.subjectRootLocked(subjectExpression, roots)
+	if root == nil {
+		return nil, false, nil
+	}
+	root.write = write
+	return root.parameter, write, root
+}
+
+// instanceOfSubjectLocked resolves the constructor of an `instanceof` to the
+// premise under which the operator reaches no code this export registers
+// (ADR 0047).
+//
+// `x instanceof C` performs GetMethod(C, @@hasInstance) and calls it when there
+// is one; otherwise OrdinaryHasInstance reads `C.prototype` and walks `x`'s
+// prototype chain, which runs nothing. So the question is only ever *whose*
+// `Symbol.hasInstance` C could carry, and there are three answers this build
+// has reviewed:
+//
+//   - a parameter of the censused declaration, under the root premises
+//     ADR 0034 established: whatever C carries, the caller installed it;
+//   - a declaration of the **default library**: the engine's own constructor,
+//     whose `Symbol.hasInstance` is `Function.prototype`'s;
+//   - a class **this program** declares with no heritage clause and no static
+//     computed member: nothing on its prototype chain can carry one.
+//
+// Everything else — an imported constructor, a class with a superclass, a call
+// result, a member read — answers nothing and refuses.
+func (p *project) instanceOfSubjectLocked(
+	node *ast.Node, roots *parameterSubjectRoots,
+) (*int, bool, *resolvedSubject) {
+	binary := node.AsBinaryExpression()
+	if binary == nil {
+		return nil, false, nil
+	}
+	constructor := identityPreservingUnwrap(binary.Right)
+	if constructor == nil {
+		return nil, false, nil
+	}
+	if root := p.subjectRootLocked(constructor, roots); root != nil && root.parameter != nil {
+		return root.parameter, false, root
+	}
+	if !ast.IsIdentifier(constructor) {
+		return nil, false, nil
+	}
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(constructor))
+	if symbol == nil || len(symbol.Declarations) == 0 {
+		return nil, false, nil
+	}
+	// The default library declares a global constructor twice — an `interface
+	// Error` beside a `var Error: ErrorConstructor` — so this arm asks that
+	// *every* declaration be the library's rather than that there be one. That
+	// is the stronger reading anyway: a global the program also augments is
+	// not purely the engine's.
+	library := true
+	for _, declaration := range symbol.Declarations {
+		file := ast.GetSourceFileOfNode(declaration)
+		if declaration == nil || file == nil || !p.formProgram().IsSourceFileDefaultLibrary(file.Path()) {
+			library = false
+			break
+		}
+	}
+	if library {
+		return nil, false, &resolvedSubject{derivation: typefacts.SubjectRootDefaultLibrary}
+	}
+	if len(symbol.Declarations) != 1 || symbol.Declarations[0] == nil {
+		return nil, false, nil
+	}
+	declaration := symbol.Declarations[0]
+	sourceFile := ast.GetSourceFileOfNode(declaration)
+	if sourceFile == nil {
+		return nil, false, nil
+	}
+	if !ownHasInstanceFreeClass(declaration) || !p.formIsRuntimeSourceFile(sourceFile) {
+		return nil, false, nil
+	}
+	if p.symbolIsAssignedLocked(symbol, declaration) {
+		return nil, false, nil
+	}
+	location := nodeLocation(declaration)
+	return nil, false, &resolvedSubject{
+		derivation:  typefacts.SubjectRootOwnClass,
+		declaration: &location,
+	}
+}
+
+// ownHasInstanceFreeClass reports whether a declaration is a class no
+// `Symbol.hasInstance` can reach through.
+//
+// A **heritage clause** disqualifies it outright: `C[Symbol.hasInstance]` is
+// looked up along C's own prototype chain, which for `class C extends B` runs
+// through B, and B is a value this walk does not have. Any **computed member
+// name** disqualifies it because `[Symbol.hasInstance]` is exactly how one is
+// written and a computed key is not statically a name — asked of every member
+// rather than of the static ones alone, which costs a handful of classes and
+// spares this premise a modifier test it would have to get exactly right.
+func ownHasInstanceFreeClass(declaration *ast.Node) bool {
+	if declaration == nil || !ast.IsClassDeclaration(declaration) {
+		return false
+	}
+	class := declaration.AsClassDeclaration()
+	if class == nil {
+		return false
+	}
+	if class.HeritageClauses != nil && len(class.HeritageClauses.Nodes) != 0 {
+		return false
+	}
+	if class.Members == nil {
+		return true
+	}
+	for _, member := range class.Members.Nodes {
+		if name := member.Name(); name != nil && nodeKindName(name) == "ComputedPropertyName" {
+			return false
+		}
+	}
+	return true
+}
+
+// accessorFormSubjectExpression answers the expression whose value the form
+// reads properties *of*, and whether the access is in write position, or nil
+// when this form's shape is one no ADR has reviewed.
+//
+// Four node kinds qualify, and each names its subject differently:
+//
+//   - a property or element access — the receiver, `node.Expression()`;
+//   - an object spread (`{ ...a }`) or a JSX prop spread — the spread operand,
+//     which the runtime reads every own enumerable property of, invoking each
+//     getter among them (ADR 0041);
+//   - a binding element of an object pattern — the value the *outermost*
+//     enclosing pattern destructures. A nested pattern reads a property of the
+//     same value, so rooting the outermost source roots every element under it,
+//     and a rest element reads whatever own properties remain of that same
+//     value.
+//
+// A `delete` names no subject: it reaches a `deleteProperty` trap rather than
+// an accessor, and no ADR has reviewed that reach.
+func accessorFormSubjectExpression(node *ast.Node) (*ast.Node, bool) {
+	switch {
+	case ast.IsPropertyAccessExpression(node), nodeKindName(node) == "ElementAccessExpression":
+		if parent := node.Parent; parent != nil && nodeKindName(parent) == "DeleteExpression" {
+			return nil, false
+		}
+		return node.Expression(), ast.GetAssignmentTarget(node) != nil
+	case nodeKindName(node) == "SpreadAssignment", nodeKindName(node) == "JsxSpreadAttribute":
+		return node.Expression(), false
+	case nodeKindName(node) == "BindingElement":
+		return bindingPatternSubjectExpression(node), false
+	case nodeKindName(node) == "ForOfStatement":
+		// The iterated value (ADR 0042). Its `Symbol.iterator`, the `next`
+		// calls that follow, and any `return` on early exit all sit on this
+		// value.
+		//
+		// `for await…of` states nothing: it drives `Symbol.asyncIterator` and
+		// the promise machinery that awaits each result, a reach no ADR has
+		// reviewed, so it refuses whatever it is rooted at.
+		statement := node.AsForInOrOfStatement()
+		if statement == nil || statement.AwaitModifier != nil {
+			return nil, false
+		}
+		return node.Expression(), false
+	case nodeKindName(node) == "SpreadElement":
+		return node.Expression(), false
+	case nodeKindName(node) == "ArrayBindingPattern":
+		// A pattern has no operand: the iterated value is what the enclosing
+		// declaration initializes it from, which is the same question an
+		// object pattern's binding elements ask.
+		return bindingPatternSubjectExpression(node), false
+	}
+	return nil, false
+}
+
+// bindingPatternSubjectExpression answers the expression the outermost binding
+// pattern containing `element` destructures, or nil when this build has not
+// reviewed where that value comes from.
+//
+// Only a variable declaration with an initializer qualifies, and that is not a
+// restriction on parameter patterns so much as a fact about where forms come
+// from: the body walk starts at the body, so a *parameter's* own pattern is
+// never observed and records no form to root. What it binds is rooted instead,
+// by parameterSubjectRootsLocked (ADR 0043).
+func bindingPatternSubjectExpression(element *ast.Node) *ast.Node {
+	// Called with a binding *element* for an object pattern's reads and with
+	// the array *pattern itself* for the iteration it performs; the climb is
+	// the same either way.
+	outermost := element
+	for outermost.Parent != nil {
+		switch nodeKindName(outermost.Parent) {
+		case "ObjectBindingPattern", "ArrayBindingPattern", "BindingElement":
+			outermost = outermost.Parent
+			continue
+		}
+		break
+	}
+	parent := outermost.Parent
+	if parent == nil || !ast.IsVariableDeclaration(parent) {
+		return nil
+	}
+	return parent.Initializer()
+}
+
+// thisProtocolCallLocked states the receiver of a `.call` or `.apply` whose
+// resolved callee is the default library's Function.prototype member, together
+// with the parameter its `this` argument is rooted at (ADR 0034). The consumer
+// decides which receivers it has reviewed; this side only states the facts.
+func (p *project) thisProtocolCallLocked(
+	node *ast.Node,
+	callee *typefacts.ResolvedDeclaration,
+	roots *parameterSubjectRoots,
+) (*typefacts.ResolvedDeclaration, *int) {
+	if node == nil || !ast.IsCallExpression(node) || callee == nil || !callee.StandardLibrary {
+		return nil, nil
+	}
+	if callee.Name != "call" && callee.Name != "apply" {
+		return nil, nil
+	}
+	expression := identityPreservingUnwrap(node.Expression())
+	if expression == nil || !ast.IsPropertyAccessExpression(expression) {
+		return nil, nil
+	}
+	_, _, _, receiver := p.implementationCallTargetLocked(expression.Expression())
+	if receiver == nil {
+		return nil, nil
+	}
+	var thisParameter *int
+	if arguments := node.Arguments(); len(arguments) > 0 && exactArgumentSlots(node) > 0 {
+		thisParameter = p.subjectParameterLocked(arguments[0], roots)
+	}
+	return receiver, thisParameter
+}
+
+// classifyInvokingFormLocked answers the marker kind for one node, or false
+// when the node provably invokes nothing of its own accord.
+//
+// The order of the switch is the order of the vocabulary, and the *final*
+// arm is the one that matters: anything that is neither a token, nor a
+// classified form, nor a reviewed non-invoking kind is
+// UncensusedUnclassifiedInvokingForm. There is no "ignore" default.
+func (p *project) classifyInvokingFormLocked(
+	node *ast.Node,
+) (typefacts.UncensusedInvokingFormKind, bool) {
+	// Tokens — trivia, literals, punctuation, identifiers, keywords — carry no
+	// evaluation of their own. Taking the boundary from the compiler rather
+	// than listing the 166 kinds below it means a keyword a future revision
+	// adds is covered without an edit here.
+	if node.Kind < ast.KindFirstNode {
+		return "", false
+	}
+	name := nodeKindName(node)
+	switch name {
+	case "TaggedTemplateExpression":
+		return typefacts.UncensusedTaggedTemplate, true
+	case "Decorator":
+		return typefacts.UncensusedDecorator, true
+	case "JsxElement", "JsxSelfClosingElement", "JsxFragment":
+		return typefacts.UncensusedJSXElement, true
+	case "ForOfStatement", "SpreadElement", "ArrayBindingPattern":
+		// All three drive `Symbol.iterator` (or `Symbol.asyncIterator`, for
+		// `for await…of`, which is a ForOfStatement carrying an await
+		// modifier) and then the iterator's own `next` and `return`.
+		return p.iterationFormLocked(node)
+	case "YieldExpression":
+		if yield := node.AsYieldExpression(); yield != nil && yield.AsteriskToken != nil {
+			// `yield*` drives the delegate's iterator exactly as `for…of`
+			// does, over the operand's own type.
+			return p.iterationProtocolFormLocked(yield.Expression)
+		}
+		// A plain `yield` suspends; it invokes nothing. Whether a generator's
+		// body runs at all is a reachability question about the caller's `next`
+		// calls, which this census does not answer and does not pretend to.
+		return "", false
+	case "ArrayLiteralExpression":
+		// As a *value* an array literal only combines its elements' results:
+		// `[a.x]` invokes a getter, but that getter is the child access's own
+		// row. In assignment-target position the compiler reinterprets the same
+		// node kind as a destructuring pattern (checkDestructuringAssignment),
+		// and `[a, b] = src` drives src's `Symbol.iterator` and that
+		// iterator's `next`/`return` exactly as an ArrayBindingPattern does in
+		// a declaration. `=` is an assignment, not a coercing operator, so
+		// nothing else in this classifier would see it.
+		//
+		// ast.GetAssignmentTarget is what separates the two positions — the
+		// same question the parameter-use census asks — and it walks up through
+		// nested patterns, parentheses, and non-null assertions, so
+		// `[{ a }] = src` and `for ([a] of pairs)` are both answered here.
+		//
+		// Unlike the three kinds above, this arm asks no type question and
+		// records unconditionally. It has no operand to ask about: the iterated
+		// value is the assignment's right-hand side, or — inside
+		// `for ([a] of pairs)` — the element type of a *different* node's
+		// iteration, and GetTypeAtLocation on the literal answers with the
+		// shape of the pattern rather than of the source, which is the same
+		// trap objectAssignmentPatternMemberFormLocked documents. Deriving the
+		// source here is its own premise, so the form stands until one is
+		// written.
+		if ast.GetAssignmentTarget(node) != nil {
+			return typefacts.UncensusedIterationProtocol, true
+		}
+		return "", false
+	case "PropertyAssignment", "ShorthandPropertyAssignment":
+		return p.objectAssignmentPatternMemberFormLocked(node)
+	case "VariableDeclarationList":
+		if node.Flags&ast.NodeFlagsUsing != 0 {
+			// Both `using x = …` and `await using x = …`: scope exit reaches
+			// `Symbol.dispose` or `Symbol.asyncDispose` on every value the
+			// list declared.
+			return typefacts.UncensusedUsingDispose, true
+		}
+		return "", false
+	case "SpreadAssignment", "JsxSpreadAttribute":
+		// Object spread and JSX prop spread copy every own enumerable
+		// property of a value whose runtime shape the producer cannot
+		// enumerate, invoking each getter among them. That is precisely "the
+		// checker cannot tell whether the member is an accessor", so it is
+		// recorded under that kind rather than as an unclassified form.
+		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
+	case "PropertyAccessExpression", "ElementAccessExpression":
+		return p.accessorFormLocked(node)
+	case "BindingElement":
+		// A binding element in an *object* pattern names a property, and
+		// reading it invokes that property's getter. In an array pattern it is
+		// positional, and the ArrayBindingPattern row above already covers the
+		// iteration it performs.
+		parent := node.Parent
+		if parent == nil || nodeKindName(parent) != "ObjectBindingPattern" {
+			return "", false
+		}
+		return p.bindingElementAccessorFormLocked(node, parent)
+	case "ComputedPropertyName":
+		// The key expression is coerced to a property key, which reaches
+		// `Symbol.toPrimitive`/`toString` on an object-typed key.
+		return p.coercionFormLocked(node.Expression())
+	case "AwaitExpression":
+		return p.awaitFormLocked(node)
+	case "TemplateExpression":
+		return p.templateCoercionFormLocked(node)
+	case "BinaryExpression":
+		return p.binaryFormLocked(node)
+	case "PrefixUnaryExpression", "PostfixUnaryExpression":
+		return p.unaryFormLocked(node)
+	}
+	if _, listed := nonInvokingNodeKinds[name]; listed {
+		return "", false
+	}
+	// Every JSDoc node kind, by prefix. They are comment content: the compiler
+	// may attach them to a tree but nothing in them is evaluated. The prefix
+	// is used rather than today's thirty-six names so that a JSDoc tag a future
+	// revision adds does not become an unclassified invoking form.
+	if strings.HasPrefix(name, "JSDoc") {
+		return "", false
+	}
+	return typefacts.UncensusedUnclassifiedInvokingForm, true
+}
+
+// accessorFormLocked classifies a property or element access by what the
+// checker knows about the member it reaches.
+//
+// A resolved symbol whose declarations include a get or set accessor is that
+// accessor, and which of the two is decided by whether the access is an
+// assignment target — the same question ast.GetAssignmentTarget answers for
+// the parameter-use census. A resolved symbol with no accessor declaration is
+// a plain data property or a method, and reading it invokes nothing: no row. An
+// *unresolved* member is neither, and it is recorded, because absence of a
+// symbol is not evidence of a plain property.
+func (p *project) accessorFormLocked(
+	node *ast.Node,
+) (typefacts.UncensusedInvokingFormKind, bool) {
+	queried := node.Name()
+	elementAccess := queried == nil
+	if elementAccess {
+		// An element access has no name node, and querying the access itself
+		// resolves nothing at all — literal key or not. The compiler names the
+		// accessed member from the *argument expression*, and only when that
+		// expression is an exact string or numeric literal
+		// (checker.getSymbolAtLocation's KindStringLiteral/KindNumericLiteral
+		// arm). A computed key therefore has nothing to query, and refuses.
+		queried = exactElementAccessKey(node)
+	}
+	if queried == nil {
+		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
+	}
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(queried))
+	if symbol == nil {
+		if p.engineOwnedIndexReadLocked(node, queried, elementAccess) {
+			return "", false
+		}
+		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
+	}
+	return p.accessorKindForSymbolLocked(symbol, ast.GetAssignmentTarget(node) != nil)
+}
+
+// engineOwnedIndexReadLocked answers whether an element access the compiler
+// could not resolve to a member symbol nevertheless provably invokes nothing:
+// a **numeric literal** key into a value whose every type constituent is an
+// engine-owned indexed container.
+//
+// The unresolved symbol is not the anomaly here, it is the expected answer. A
+// numeric index into `Array<T>` reaches the interface's *index signature*, and
+// an index signature declares no property symbol at all — so `arr[0]` and
+// `match[1]` arrive here having resolved nothing, exactly as a computed key
+// does, and were recorded identically before this premise existed. What
+// separates them is that the member reached is the engine's own storage rather
+// than an unknown one.
+//
+// Three restrictions, each of which the table in engine_indexed_containers.go
+// does not carry:
+//
+//   - **Element access only.** A property access that resolved no symbol is an
+//     unknown member of an unknown shape and stays recorded.
+//   - **A numeric literal only.** A string-literal key names a *declared*
+//     member, and one that resolved to nothing is exactly the unresolved case;
+//     admitting it here would read "the checker found no member" as "no member
+//     is reached", which is the failure awaitFormLocked's comment names.
+//   - **Read position only.** A write to an index runs no setter on an engine
+//     array either, but SubjectWrite is load-bearing for the `writes` and
+//     `invalidates` domains, and dropping the row would drop that mark. The
+//     position is refused rather than modelled; no measured case needs it.
+func (p *project) engineOwnedIndexReadLocked(
+	node *ast.Node, queried *ast.Node, elementAccess bool,
+) bool {
+	if !elementAccess || nodeKindName(queried) != "NumericLiteral" {
+		return false
+	}
+	if ast.GetAssignmentTarget(node) != nil {
+		return false
+	}
+	return p.provablyEngineOwnedIndexedLocked(node.Expression())
+}
+
+// exactElementAccessKey answers the node to query for the member an element
+// access reaches, or nil when the key is not statically a property name. Only
+// an exact string or numeric literal is one: the compiler resolves the
+// property from such a literal and from nothing else, so every other key —
+// an identifier, a template with substitutions, an expression — refuses.
+func exactElementAccessKey(node *ast.Node) *ast.Node {
+	access := node.AsElementAccessExpression()
+	if access == nil || access.ArgumentExpression == nil {
+		return nil
+	}
+	switch nodeKindName(access.ArgumentExpression) {
+	case "StringLiteral", "NoSubstitutionTemplateLiteral", "NumericLiteral":
+		return access.ArgumentExpression
+	}
+	return nil
+}
+
+// objectAssignmentPatternMemberFormLocked classifies one member of an object
+// *assignment* pattern — `({ a } = src)`, `({ a: x } = src)` — by what the
+// checker knows about the property the member reads from the source value.
+//
+// In a value position the same two node kinds invoke nothing of their own
+// accord: `const o = { a }` builds an object and reads no property of any
+// other value. What separates the positions is ast.GetAssignmentTarget on the
+// containing literal, which is the same question the parameter-use census
+// asks, and which the compiler answers the same way by reinterpreting the
+// literal through checkDestructuringAssignment.
+//
+// The property is resolved with the compiler's own
+// GetPropertySymbolOfDestructuringAssignment rather than through
+// GetTypeAtLocation on the literal: in an assignment pattern the literal's
+// expression type is the shape of the *pattern*, not of the source, so
+// resolving a member through it would answer about the wrong value. A member
+// the compiler cannot resolve — a computed or non-identifier key, an `any`
+// source, an index signature — is recorded as an unresolved accessor, because
+// absence of a symbol is not evidence of a plain data property.
+func (p *project) objectAssignmentPatternMemberFormLocked(
+	member *ast.Node,
+) (typefacts.UncensusedInvokingFormKind, bool) {
+	pattern := member.Parent
+	if pattern == nil || !ast.IsObjectLiteralExpression(pattern) ||
+		ast.GetAssignmentTarget(pattern) == nil {
+		return "", false
+	}
+	name := member.Name()
+	if name == nil || !ast.IsIdentifier(name) {
+		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
+	}
+	symbol := p.canonicalSymbol(p.formChecker().GetPropertySymbolOfDestructuringAssignment(name))
+	if symbol == nil {
+		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
+	}
+	// Destructuring only reads.
+	return p.accessorKindForSymbolLocked(symbol, false)
+}
+
+// bindingElementAccessorFormLocked resolves the property one object-pattern
+// binding element destructures, through the pattern's own type rather than
+// through the element's local binding — the local name resolves to the new
+// variable, which says nothing about the property being read.
+func (p *project) bindingElementAccessorFormLocked(
+	node *ast.Node,
+	pattern *ast.Node,
+) (typefacts.UncensusedInvokingFormKind, bool) {
+	if element := node.AsBindingElement(); element == nil || element.DotDotDotToken != nil {
+		// A rest element reads *every* remaining own enumerable property of the
+		// source, invoking each getter among them, and it names none of them —
+		// its own identifier names the new object. Resolving that identifier as
+		// a property key would be a category error: on a source that happens to
+		// carry a `rest` property, `const { ...rest } = src` would answer about
+		// that property and could clear the row entirely.
+		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
+	}
+	name := node.PropertyName()
+	if name == nil {
+		name = node.Name()
+	}
+	if name == nil || !ast.IsIdentifier(name) {
+		// A computed property name is not statically a key.
+		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
+	}
+	patternType := p.formChecker().GetTypeAtLocation(pattern)
+	if patternType == nil {
+		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
+	}
+	symbol := p.canonicalSymbol(p.formChecker().GetPropertyOfType(patternType, name.Text()))
+	if symbol == nil {
+		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
+	}
+	// Destructuring only reads.
+	return p.accessorKindForSymbolLocked(symbol, false)
+}
+
+// accessorKindForSymbolLocked answers the accessor kind of one resolved member
+// symbol, or false when reading that member provably invokes nothing.
+//
+// **The premise, stated exactly.** "The declarations include no accessor,
+// therefore reading the member invokes nothing" holds only when the
+// declarations inspected here *are* the bytes that run. A hand-written
+// `index.d.ts` may declare `readonly value: number` over a published `.js`
+// getter; the symbol resolved through that declaration carries no GetAccessor
+// node at all, so the premise would silently certify a getter this census
+// never saw. Every declaration must therefore sit in a file the analyzed
+// snapshot carries as runtime source — a non-declaration file of the accepted
+// program, which is exactly the set the producer publishes as Sources(). A
+// declaration in any other file, or in no file at all, is recorded as an
+// unresolved accessor.
+//
+// The default library is the one admissible exception, and it is not a
+// weakening: `lib.*.d.ts` describes the engine, whose implementation is not
+// user code, so no `lib`-declared member can reach a user callable however the
+// engine implements it. Without the exception every `arr.length` would refuse.
+//
+// Two limits remain, and neither is closed here. The premise is about
+// *declarations*, so a subclass that redeclares a plain member as a getter is
+// invisible when the static type names the base declaration; and a Proxy trap
+// is outside every producer census, for the reason UncensusedInvokingForm's
+// doc comment gives.
+func (p *project) accessorKindForSymbolLocked(
+	symbol *ast.Symbol,
+	assignmentTarget bool,
+) (typefacts.UncensusedInvokingFormKind, bool) {
+	if len(symbol.Declarations) == 0 {
+		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
+	}
+	get, set := false, false
+	for _, declaration := range symbol.Declarations {
+		if !p.declarationCarriesRuntimeBytesLocked(declaration) {
+			return typefacts.UncensusedPropertyAccessUnknownAccessor, true
+		}
+		switch nodeKindName(declaration) {
+		case "GetAccessor":
+			get = true
+		case "SetAccessor":
+			set = true
+		}
+	}
+	switch {
+	case assignmentTarget && set:
+		return typefacts.UncensusedSetAccessor, true
+	case assignmentTarget && get:
+		// A get-only accessor written to. The write reaches no setter, but the
+		// member is an accessor and the position is not one this census was
+		// reviewed for, so it refuses under the accessor it does resolve.
+		return typefacts.UncensusedGetAccessor, true
+	case get:
+		return typefacts.UncensusedGetAccessor, true
+	case set:
+		// A set-only accessor read answers undefined and invokes nothing, but
+		// the member is an accessor; refuse rather than model the asymmetry.
+		return typefacts.UncensusedSetAccessor, true
+	}
+	return "", false
+}
+
+// declarationCarriesRuntimeBytesLocked answers whether the accessor premise
+// above may read a declaration node: the node sits either in the default
+// library, whose declarations describe the engine rather than user code, or in
+// a non-declaration file of the accepted program, which is the runtime source
+// set the producer publishes as its snapshot.
+//
+// It is deliberately a statement about the *analyzed program* and not about
+// package boundaries. A dependency's own `.ts`/`.js` file that the program
+// pulled in is runtime source here, and a consumer whose claim needs a
+// narrower artifact boundary must check the declaration's path itself.
+func (p *project) declarationCarriesRuntimeBytesLocked(declaration *ast.Node) bool {
+	sourceFile := ast.GetSourceFileOfNode(declaration)
+	if sourceFile == nil {
+		return false
+	}
+	if p.program.IsSourceFileDefaultLibrary(sourceFile.Path()) {
+		return true
+	}
+	return !sourceFile.IsDeclarationFile && p.formIsRuntimeSourceFile(sourceFile)
+}
+
+// engineOwnedIterableContainers is the reviewed list of default-library
+// interfaces whose declaration of `[Symbol.iterator]` is the engine's own
+// iterator factory *and* whose values are objects the engine itself created, so
+// that the iterator the factory returns — and therefore that iterator's `next`
+// and `return` — is engine code as well. Nothing here can reach a user
+// callable however the engine implements it, which is the same premise
+// accessorKindForSymbolLocked states for `lib`-declared members.
+//
+// The two halves of that premise are why the *protocol* interfaces are
+// deliberately absent, and their absence is the whole precision of this table:
+// `Iterable`, `IterableIterator`, `IteratorObject`, `Iterator`, `ArrayIterator`,
+// `MapIterator`, `SetIterator`, `StringIterator`, `RegExpStringIterator`,
+// `SegmentIterator` and `Segments` all declare `[Symbol.iterator]` in the
+// default library, but every one of them is a structural contract a user object
+// satisfies — so the factory named by the declaration is not the factory that
+// runs. `Generator` is the sharpest case and the reason to state this rather
+// than infer it: a generator's `next` runs a user function body. This is
+// exactly the `Promise` versus `PromiseLike` split that
+// provablyEngineOwnedThenLocked draws, for the same reason.
+//
+// Every DOM and web-worker collection is absent too — `NodeList`,
+// `URLSearchParams`, `Headers`, `FormData` and some forty others. Their
+// iterators are engine code in fact, but they were not reviewed here, and "the
+// browser probably owns it" is not a premise; defaultLibraryMemberInvokers
+// keeps the same rule about growing a table.
+//
+// Two limits remain, and they are the ones every declaration-based premise in
+// this file carries. A value whose static type is `Array<T>` while the runtime
+// object is a subclass overriding `[Symbol.iterator]` answers from the base
+// declaration, and a Proxy is outside every producer census. A constrained type
+// parameter clears through its constraint's apparent type for the same reason
+// `await value` does when `T extends Promise<number>`.
+var engineOwnedIterableContainers = containerSet(
+	// lib.es2015.iterable.d.ts.
+	"Array", "ReadonlyArray", "String", "IArguments",
+	"Set", "ReadonlySet", "Map", "ReadonlyMap",
+	"Int8Array", "Uint8Array", "Uint8ClampedArray",
+	"Int16Array", "Uint16Array", "Int32Array", "Uint32Array",
+	"Float32Array", "Float64Array",
+	// lib.es2020.bigint.d.ts and lib.es2025.float16.d.ts. A project whose lib
+	// omits either declares no such global, and the name simply never resolves.
+	"BigInt64Array", "BigUint64Array", "Float16Array",
+)
+
+// iterationFormLocked classifies one of the three syntaxes that drive the
+// iteration protocol by what the checker knows about the value being iterated.
+//
+// `for await…of` is *always* recorded and is the one arm here that asks no type
+// question. It resolves `Symbol.asyncIterator` first — declared in the default
+// library only by `AsyncIterable`, `AsyncIterableIterator`, `AsyncGenerator`
+// and `AsyncIteratorObject`, every one of them a structural contract whose
+// `next` is a user function body — and when the value carries none of them it
+// falls back to the sync protocol and `await`s each result, invoking whatever
+// `then` those values carry. Neither half has an engine-owned case worth a
+// table row, so the form stands.
+func (p *project) iterationFormLocked(
+	node *ast.Node,
+) (typefacts.UncensusedInvokingFormKind, bool) {
+	switch nodeKindName(node) {
+	case "ForOfStatement":
+		if statement := node.AsForInOrOfStatement(); statement == nil ||
+			statement.AwaitModifier != nil {
+			return typefacts.UncensusedIterationProtocol, true
+		}
+		return p.iterationProtocolFormLocked(node.Expression())
+	case "SpreadElement":
+		return p.iterationProtocolFormLocked(node.Expression())
+	case "ArrayBindingPattern":
+		// A binding pattern has no operand expression: the iterated value is
+		// the declaration's initializer or the parameter's declared type, and
+		// GetTypeAtLocation on the pattern answers with exactly that — the
+		// same question bindingElementAccessorFormLocked asks of an object
+		// pattern to resolve the property it reads. An *assignment* pattern is
+		// spelled ArrayLiteralExpression, not this kind, and is answered in
+		// classifyInvokingFormLocked without a type question.
+		return p.iterationProtocolClearedLocked(p.formChecker().GetTypeAtLocation(node))
+	}
+	return typefacts.UncensusedIterationProtocol, true
+}
+
+// iterationProtocolFormLocked records the iteration protocol unless the
+// operand's iterator is provably the engine's — because its *type* names a
+// reviewed engine container, or because the operand is a **rest parameter
+// binding**, whose array the engine itself creates.
+func (p *project) iterationProtocolFormLocked(
+	operand *ast.Node,
+) (typefacts.UncensusedInvokingFormKind, bool) {
+	if operand == nil {
+		return typefacts.UncensusedIterationProtocol, true
+	}
+	if p.isUnwrittenRestParameterReferenceLocked(operand) ||
+		p.isRestParameterAliasLocked(operand) {
+		return "", false
+	}
+	return p.iterationProtocolClearedLocked(p.formChecker().GetTypeAtLocation(operand))
+}
+
+// isRestParameterAliasLocked answers whether `operand` is a binding whose
+// **every** value is the array a rest parameter's own binding holds (ADR 0106).
+//
+// This is `isUnwrittenRestParameterReferenceLocked`'s argument followed one
+// hop, and nothing more: the engine builds a rest array with ArrayCreate at
+// every call, so it is an ordinary Array whose `Symbol.iterator` is
+// `Array.prototype`'s, and a binding that can only ever hold such an array
+// spreads through the same iterator. The shape is what every compiled
+// debounce-alike emits:
+//
+//	export function createMicrotask(fn) {
+//	    let args;
+//	    return (...a) => {
+//	        (args = a), calls++;
+//	        queueMicrotask(() => --calls === 0 && fn(...args));
+//	    };
+//	}
+//
+// `bindingValueSourcesLocked` is what makes "every value" real: it refuses the
+// whole binding when some write is one it cannot read a single value out of --
+// a compound assignment, an update, a destructuring target, a `for…of` head --
+// so a source left out cannot quietly become a claim about some of the values.
+//
+// A binding with no initializer and no assignment holds `undefined`, whose
+// spread throws before any lookup and reaches no user code. It is refused here
+// anyway: clearing a form on a value that can only throw states nothing worth
+// stating, and the empty source list is more likely to mean this walk saw
+// nothing than that the code does nothing.
+//
+// One hop, deliberately. A binding assigned from *another* such binding is a
+// join this does not attempt, because each hop is another place a write could
+// be missed and the corpus shows no case that needs it.
+func (p *project) isRestParameterAliasLocked(operand *ast.Node) bool {
+	operand = identityPreservingUnwrap(operand)
+	if operand == nil || !ast.IsIdentifier(operand) {
+		return false
+	}
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(operand))
+	if symbol == nil || len(symbol.Declarations) != 1 || symbol.Declarations[0] == nil {
+		return false
+	}
+	declaration := symbol.Declarations[0]
+	if !ast.IsVariableDeclaration(declaration) {
+		return false
+	}
+	name := declaration.Name()
+	if name == nil || !ast.IsIdentifier(name) {
+		return false
+	}
+	sourceFile := ast.GetSourceFileOfNode(declaration)
+	if sourceFile == nil || !p.formIsRuntimeSourceFile(sourceFile) {
+		return false
+	}
+	sources, ok := p.bindingValueSourcesLocked(sourceFile, symbol, declaration)
+	if !ok || len(sources) == 0 {
+		return false
+	}
+	for _, source := range sources {
+		if !p.isUnwrittenRestParameterReferenceLocked(source) {
+			return false
+		}
+	}
+	return true
+}
+
+// isUnwrittenRestParameterReferenceLocked answers whether `operand` is a
+// reference to a rest parameter binding that its declaration never writes.
+//
+// A rest parameter is the one binding whose value the *engine* constructs: the
+// specification builds it with ArrayCreate at every call, so it is an ordinary
+// Array, never a Proxy and never an object a caller shaped, and iterating or
+// spreading it reaches `Array.prototype[Symbol.iterator]` and nothing else.
+// That is the same standing the census already gives every default-library
+// member — `lib.*.d.ts` describes the engine, whose implementation is not user
+// code — rather than a new premise about the caller.
+//
+// The *type* cannot answer this. An untyped rest parameter is `any[]`, and an
+// `any[]`-typed value need not be an array at all; what makes this sound is the
+// binding's syntax, not its type. The binding must be unwritten for the same
+// reason ADR 0034 requires it: a reassigned `args` may hold anything by the
+// time it is read, and this disposition is not flow-sensitive.
+func (p *project) isUnwrittenRestParameterReferenceLocked(operand *ast.Node) bool {
+	operand = identityPreservingUnwrap(operand)
+	if operand == nil || !ast.IsIdentifier(operand) {
+		return false
+	}
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(operand))
+	if symbol == nil || len(symbol.Declarations) != 1 {
+		return false
+	}
+	declaration := symbol.Declarations[0]
+	if declaration == nil || nodeKindName(declaration) != "Parameter" {
+		return false
+	}
+	parameter := declaration.AsParameterDeclaration()
+	if parameter == nil || parameter.DotDotDotToken == nil {
+		return false
+	}
+	name := declaration.Name()
+	if name == nil || !ast.IsIdentifier(name) {
+		return false
+	}
+	enclosing := declaration.Parent
+	if enclosing == nil || mentionsArgumentsOrEval(enclosing) {
+		return false
+	}
+	return !p.symbolIsAssignedLocked(symbol, declaration)
+}
+
+func (p *project) iterationProtocolClearedLocked(
+	iterated *checker.Type,
+) (typefacts.UncensusedInvokingFormKind, bool) {
+	if p.provablyEngineOwnedIteratorLocked(iterated) {
+		return "", false
+	}
+	return typefacts.UncensusedIterationProtocol, true
+}
+
+// provablyEngineOwnedIteratorLocked answers whether *every* constituent of a
+// type carries a `[Symbol.iterator]` that engineOwnedIterableContainers vouches
+// for.
+//
+// The quantifier is the whole of it, for the reason
+// provablyEngineOwnedThenLocked's is: a union missing the member in one
+// constituent carries it in another, `any` and `unknown` and an unconstrained
+// type parameter enumerate no members at all, and an index-signature type such
+// as `Record<string, unknown>` declares no iterator while permitting one at
+// runtime. "The checker could not find `[Symbol.iterator]`" must never read as
+// "iterating this reaches no user code" — which is why a nil lookup refuses
+// here instead of clearing. That direction also means a non-iterable operand
+// records a form it cannot actually reach; iterating a number is a `tsc` error
+// and a runtime TypeError, and this census does not trade a fail-closed
+// quantifier for silence on code that does not run.
+//
+// The key is asked of the compiler rather than spelled: a well-known-symbol
+// member is stored under a name derived from the program's own
+// `SymbolConstructor` declaration when it has one. See
+// Checker_getPropertyNameForKnownSymbolName.
+//
+// An *optional* `[Symbol.iterator]?` refuses, matching the compiler's own
+// iterable resolver, which requires the member to be non-optional before it
+// will read the protocol off it.
+func (p *project) provablyEngineOwnedIteratorLocked(iterated *checker.Type) bool {
+	if iterated == nil {
+		return false
+	}
+	constituents := iterated.Distributed()
+	if len(constituents) == 0 {
+		return false
+	}
+	key := checker.Checker_getPropertyNameForKnownSymbolName(p.formChecker(), "iterator")
+	if key == "" {
+		return false
+	}
+	for _, constituent := range constituents {
+		if constituent == nil {
+			return false
+		}
+		if constituent.Flags()&(checker.TypeFlagsAny|checker.TypeFlagsUnknown) != 0 {
+			return false
+		}
+		iterator := p.formChecker().GetPropertyOfType(constituent, key)
+		if iterator == nil || iterator.Flags&ast.SymbolFlagsOptional != 0 {
+			return false
+		}
+		if !p.isDefaultLibraryMemberLocked(iterator, key, engineOwnedIterableContainers) {
+			return false
+		}
+	}
+	return true
+}
+
+// awaitFormLocked records an `await` unless *every* constituent of the awaited
+// value's type is provably one the runtime resolves without entering user
+// code: a primitive, which has no `then` to call, or a default-library
+// `Promise`, whose `then` is the engine's own.
+//
+// A `PromiseLike` is recorded: its `then` is whatever the value carries, which
+// is precisely a user callable the census cannot resolve.
+//
+// The quantifier is the whole of it, and it is per constituent for the same
+// reason coercionFormLocked's is. "The type has no `then` member" is not proof
+// that awaiting invokes nothing: a union missing `then` in one constituent
+// carries it in another, an unconstrained type parameter has no members the
+// checker can enumerate, and an index-signature type such as
+// `Record<string, unknown>` declares no `then` while permitting one at
+// runtime, whose Get would reach a getter and whose value `await` would call.
+// An earlier form of this function read a nil `then` lookup as proof and
+// stayed silent on all three. "The checker could not find a member" must never
+// read as "no member is reached here".
+func (p *project) awaitFormLocked(
+	node *ast.Node,
+) (typefacts.UncensusedInvokingFormKind, bool) {
+	operand := node.Expression()
+	if operand == nil {
+		return typefacts.UncensusedAwaitThen, true
+	}
+	if p.provablyEngineOwnedThenLocked(p.formChecker().GetTypeAtLocation(operand)) {
+		return "", false
+	}
+	return typefacts.UncensusedAwaitThen, true
+}
+
+func (p *project) provablyEngineOwnedThenLocked(value *checker.Type) bool {
+	if value == nil {
+		return false
+	}
+	constituents := value.Distributed()
+	if len(constituents) == 0 {
+		return false
+	}
+	for _, constituent := range constituents {
+		if constituent == nil {
+			return false
+		}
+		if constituent.Flags()&(checker.TypeFlagsAny|checker.TypeFlagsUnknown) != 0 {
+			return false
+		}
+		if constituent.Flags()&provablyNonObjectFlags != 0 {
+			// A primitive has no own `then`, and `await` on one resolves
+			// immediately. `Promise.prototype.then` cannot be reached from it.
+			continue
+		}
+		then := p.formChecker().GetPropertyOfType(constituent, "then")
+		if then == nil {
+			return false
+		}
+		if !p.isDefaultLibraryMemberLocked(then, "then", containerSet("Promise")) {
+			return false
+		}
+	}
+	return true
+}
+
+func (p *project) templateCoercionFormLocked(
+	node *ast.Node,
+) (typefacts.UncensusedInvokingFormKind, bool) {
+	template := node.AsTemplateExpression()
+	if template == nil || template.TemplateSpans == nil {
+		return "", false
+	}
+	for _, span := range template.TemplateSpans.Nodes {
+		if kind, recorded := p.coercionFormLocked(span.Expression()); recorded {
+			return kind, recorded
+		}
+	}
+	return "", false
+}
+
+func (p *project) binaryFormLocked(
+	node *ast.Node,
+) (typefacts.UncensusedInvokingFormKind, bool) {
+	binary := node.AsBinaryExpression()
+	if binary == nil || binary.OperatorToken == nil {
+		return "", false
+	}
+	operator := nodeKindName(binary.OperatorToken)
+	if operator == "InstanceOfKeyword" {
+		// `x instanceof C` reaches C[Symbol.hasInstance] when C defines it.
+		// Whether it does is a property of the runtime value, so the form is
+		// always recorded.
+		return typefacts.UncensusedInstanceOf, true
+	}
+	if (operator == "EqualsEqualsToken" || operator == "ExclamationEqualsToken") &&
+		(binary.Left.Kind == ast.KindNullKeyword || binary.Right.Kind == ast.KindNullKeyword) {
+		// IsLooselyEqual has a dedicated null/undefined arm. Comparing any
+		// value to the exact null literal does not apply ToPrimitive to that
+		// value (the browser's HTMLDDA special case does not invoke user code
+		// either). Children are still walked, so an access or call used to
+		// produce the other operand keeps its own row.
+		return "", false
+	}
+	if _, coercing := coercingBinaryOperators[operator]; !coercing {
+		return "", false
+	}
+	if kind, recorded := p.coercionFormLocked(binary.Left); recorded {
+		return kind, recorded
+	}
+	return p.coercionFormLocked(binary.Right)
+}
+
+func (p *project) unaryFormLocked(
+	node *ast.Node,
+) (typefacts.UncensusedInvokingFormKind, bool) {
+	var operator string
+	var operand *ast.Node
+	if ast.IsPrefixUnaryExpression(node) {
+		prefix := node.AsPrefixUnaryExpression()
+		operator = strings.TrimPrefix(prefix.Operator.String(), "Kind")
+		operand = prefix.Operand
+	} else if ast.IsPostfixUnaryExpression(node) {
+		postfix := node.AsPostfixUnaryExpression()
+		operator = strings.TrimPrefix(postfix.Operator.String(), "Kind")
+		operand = postfix.Operand
+	}
+	if _, coercing := coercingUnaryOperators[operator]; !coercing {
+		return "", false
+	}
+	return p.coercionFormLocked(operand)
+}
+
+// coercionPremiseLocked states what a `coercion` form's clearance would rest
+// on, or nil when no reviewed shape covers every operand (ADR 0045).
+//
+// The classifier above records the form as soon as one operand *may* be an
+// object, because a coercion of an object reaches its `Symbol.toPrimitive`,
+// `valueOf` or `toString`. This answers the question the classifier does not:
+// where does that operand's value come from? The one shape reviewed here is a
+// **call to this program's own runtime source** — the census already walks
+// such a callee and demands its transcript, so asking that transcript whether
+// its completion is a primitive costs no new evidence and no new trust.
+//
+// Every operand must be covered or nothing is stated: a premise that named
+// some operands and left others unexplained would read as a claim about the
+// whole form.
+// coercionSubjectRootLocked asks of a coercion form the question ADR 0034 asks
+// of a getter, as a diagnostic and nothing more.
+//
+// A coercing operator applies ToPrimitive to **every** one of its operands, and
+// ToPrimitive reaches `Symbol.toPrimitive`, `valueOf` and `toString` on
+// whichever of them is an object. So the argument ADR 0042 makes for an
+// iterated value — "the code that runs is the caller's exactly as a getter's
+// is" — can only reach a coercion when every operand is the caller's. One
+// operand this program built is one object whose `valueOf` this program owns,
+// and the form is then this program's act however the other operand rooted.
+//
+// That is why this states a derivation only when the operands **agree** on one,
+// and otherwise names why they did not. It grants nothing either way: no
+// premise reads these fields, and `census_form_shape_reads_the_subject` does
+// not admit a coercion. They exist so the size of the premise can be measured
+// before it is written rather than after (§ 66).
+func (p *project) coercionSubjectRootLocked(
+	implementation *ast.Node, node *ast.Node, roots *parameterSubjectRoots,
+) (typefacts.SubjectRootDerivation, typefacts.SubjectRootRefusalReason, []int) {
+	operands := coercionOperands(node)
+	if len(operands) == 0 {
+		return "", "", nil
+	}
+	agreed := typefacts.SubjectRootDerivation("")
+	// The slots the operands rooted at, deduplicated and strictly increasing
+	// (ADR 0092). One slot coerced against itself -- `a + a` -- is one claim
+	// about one parameter, and a receipt that named it twice would say
+	// something the form does not.
+	slots := map[int]bool{}
+	for _, operand := range operands {
+		// A provably primitive operand is skipped rather than refused. It has
+		// nothing for ToPrimitive to reach, so it cannot make the form this
+		// program's act and must not be counted as unrooted — `x + 1` is the
+		// common shape, and refusing on the literal would have reported this
+		// whole family as `not-a-reference` and hidden its real size. Same
+		// predicate the classifier itself uses.
+		if node := identityPreservingUnwrap(operand); node != nil &&
+			!p.mayBeObjectTypedLocked(p.formChecker().GetTypeAtLocation(node)) {
+			continue
+		}
+		root := p.subjectRootLocked(operand, roots)
+		if root == nil {
+			// The first operand that roots at nothing decides the answer, and
+			// its leg is the informative one: a form is refused by its weakest
+			// operand, not by the count of them.
+			return "", p.subjectRootRefusalLocked(implementation, operand, roots), nil
+		}
+		if root.parameter != nil {
+			slots[*root.parameter] = true
+		}
+		if agreed == "" {
+			agreed = root.derivation
+			continue
+		}
+		if agreed != root.derivation {
+			return "", typefacts.SubjectRefusalMixedOperandRoots, nil
+		}
+	}
+	// Every operand was provably primitive, so the classifier and this walk
+	// disagree about whether there was anything to coerce. State nothing
+	// rather than an agreement reached over no operands, exactly as
+	// `coercionPremiseLocked` refuses the same disagreement.
+	return agreed, "", sortedSlots(slots)
+}
+
+// sortedSlots answers the parameter slots as the wire states them: strictly
+// increasing, deduplicated, and nil rather than an empty list when nothing
+// rooted at a slot of this declaration.
+func sortedSlots(slots map[int]bool) []int {
+	if len(slots) == 0 {
+		return nil
+	}
+	ordered := make([]int, 0, len(slots))
+	for slot := range slots {
+		ordered = append(ordered, slot)
+	}
+	sort.Ints(ordered)
+	return ordered
+}
+
+func (p *project) coercionPremiseLocked(node *ast.Node) *typefacts.CoercionPremise {
+	operands := coercionOperands(node)
+	if len(operands) == 0 {
+		return nil
+	}
+	premise := &typefacts.CoercionPremise{}
+	seen := make(map[typefacts.Location]bool)
+	for _, operand := range operands {
+		visited := make(map[*ast.Node]bool)
+		if !p.operandIsPrimitiveOrRuntimeCallLocked(operand, premise, seen, visited, 0) {
+			return nil
+		}
+	}
+	if len(premise.Calls) == 0 {
+		// Every operand was provably a primitive, so the classifier would not
+		// have recorded the form at all. Reaching here means the walk and the
+		// classifier disagree; state nothing rather than a premise that rests
+		// on nothing.
+		return nil
+	}
+	return premise
+}
+
+// coercionOperands answers the expressions a coercing node applies ToPrimitive
+// to, or nil for a node kind this build has not reviewed. It mirrors the
+// classifier's own switch exactly: the two operands of a coercing binary
+// operator, each substitution of a template, and a coercing unary's operand.
+func coercionOperands(node *ast.Node) []*ast.Node {
+	switch {
+	case ast.IsBinaryExpression(node):
+		binary := node.AsBinaryExpression()
+		if binary == nil || binary.OperatorToken == nil {
+			return nil
+		}
+		if _, coercing := coercingBinaryOperators[nodeKindName(binary.OperatorToken)]; !coercing {
+			return nil
+		}
+		return []*ast.Node{binary.Left, binary.Right}
+	case nodeKindName(node) == "TemplateExpression":
+		template := node.AsTemplateExpression()
+		if template == nil || template.TemplateSpans == nil {
+			return nil
+		}
+		operands := make([]*ast.Node, 0, len(template.TemplateSpans.Nodes))
+		for _, span := range template.TemplateSpans.Nodes {
+			operands = append(operands, span.Expression())
+		}
+		return operands
+	case ast.IsPrefixUnaryExpression(node):
+		prefix := node.AsPrefixUnaryExpression()
+		if prefix == nil {
+			return nil
+		}
+		if _, coercing := coercingUnaryOperators[strings.TrimPrefix(prefix.Operator.String(), "Kind")]; !coercing {
+			return nil
+		}
+		return []*ast.Node{prefix.Operand}
+	case ast.IsPostfixUnaryExpression(node):
+		postfix := node.AsPostfixUnaryExpression()
+		if postfix == nil {
+			return nil
+		}
+		if _, coercing := coercingUnaryOperators[strings.TrimPrefix(postfix.Operator.String(), "Kind")]; !coercing {
+			return nil
+		}
+		return []*ast.Node{postfix.Operand}
+	}
+	return nil
+}
+
+const maxCoercionOperandDepth = 8
+
+// operandIsPrimitiveOrRuntimeCallLocked answers whether one operand's value is
+// provably a primitive or comes from a call into this program's own runtime
+// source, recording each such call.
+//
+// Four shapes carry a value without changing where it came from, and each is
+// followed: a conditional and the short-circuit operators, whose result is one
+// of their arms; and a reference to a local binding this file declares once,
+// writes nowhere, and initializes — naming an intermediate does not change
+// whose value it is, exactly as in ADR 0043. Everything else answers false.
+func (p *project) operandIsPrimitiveOrRuntimeCallLocked(
+	operand *ast.Node,
+	premise *typefacts.CoercionPremise,
+	seen map[typefacts.Location]bool,
+	visited map[*ast.Node]bool,
+	depth int,
+) bool {
+	if operand == nil || depth > maxCoercionOperandDepth {
+		return false
+	}
+	node := identityPreservingUnwrap(operand)
+	if node == nil {
+		return false
+	}
+	// The classifier's own test, asked of this operand alone: a value that is
+	// already a primitive has nothing for a coercion to reach.
+	if !p.mayBeObjectTypedLocked(p.formChecker().GetTypeAtLocation(node)) {
+		return true
+	}
+	switch {
+	case ast.IsCallExpression(node):
+		if p.formRuntimeCalleeDeclarationLocked(node) == nil {
+			return false
+		}
+		location := nodeLocation(node)
+		if !seen[location] {
+			seen[location] = true
+			premise.Calls = append(premise.Calls, location)
+		}
+		return true
+	case ast.IsConditionalExpression(node):
+		conditional := node.AsConditionalExpression()
+		if conditional == nil {
+			return false
+		}
+		return p.operandIsPrimitiveOrRuntimeCallLocked(conditional.WhenTrue, premise, seen, visited, depth+1) &&
+			p.operandIsPrimitiveOrRuntimeCallLocked(conditional.WhenFalse, premise, seen, visited, depth+1)
+	case ast.IsBinaryExpression(node):
+		binary := node.AsBinaryExpression()
+		if binary == nil || binary.OperatorToken == nil {
+			return false
+		}
+		switch nodeKindName(binary.OperatorToken) {
+		case "QuestionQuestionToken", "BarBarToken", "AmpersandAmpersandToken":
+			return p.operandIsPrimitiveOrRuntimeCallLocked(binary.Left, premise, seen, visited, depth+1) &&
+				p.operandIsPrimitiveOrRuntimeCallLocked(binary.Right, premise, seen, visited, depth+1)
+		}
+		return false
+	case ast.IsIdentifier(node):
+		declaration := p.singleUnwrittenLocalInitializerLocked(node)
+		if declaration == nil || visited[declaration] {
+			return false
+		}
+		visited[declaration] = true
+		return p.operandIsPrimitiveOrRuntimeCallLocked(
+			declaration.Initializer(), premise, seen, visited, depth+1,
+		)
+	}
+	return false
+}
+
+// formRuntimeCalleeDeclarationLocked is runtimeCalleeDeclarationLocked asked
+// through the *form* checker and the *form* source-file set.
+//
+// The distinction is the whole reason it exists. Its sibling answers about the
+// accepted program, which is what `calleesWorthPremisingLocked` needs before
+// any twin is built; this one runs inside the form census, where the node may
+// belong to a premise twin's file. Asking the accepted checker about a twin
+// node resolves nothing, and asking `isCurrentSourceFile` about the twin's own
+// file answers false — so a same-file helper, which is exactly the shape this
+// premise is for, would never be found.
+func (p *project) formRuntimeCalleeDeclarationLocked(call *ast.Node) *ast.Node {
+	callee := identityPreservingUnwrap(call.Expression())
+	if callee == nil || !ast.IsIdentifier(callee) {
+		return nil
+	}
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(callee))
+	if symbol == nil || len(symbol.Declarations) == 0 || symbol.Declarations[0] == nil {
+		return nil
+	}
+	declaration := symbol.Declarations[0]
+	sourceFile := ast.GetSourceFileOfNode(declaration)
+	if sourceFile == nil || sourceFile.IsDeclarationFile || !p.formIsRuntimeSourceFile(sourceFile) {
+		return nil
+	}
+	switch {
+	case ast.IsFunctionDeclaration(declaration):
+		return declaration
+	case ast.IsVariableDeclaration(declaration):
+		initializer := identityPreservingUnwrap(declaration.Initializer())
+		if initializer != nil && (ast.IsArrowFunction(initializer) || ast.IsFunctionExpression(initializer)) {
+			return initializer
+		}
+	}
+	return nil
+}
+
+// singleUnwrittenLocalInitializerLocked answers the variable declaration an
+// identifier is bound to when the binding is a plain identifier this program
+// declares exactly once, writes nowhere in its file, and initializes. Nil
+// otherwise — a written binding may hold something else by the time the
+// coercion runs, and a binding with two declarations has a running one this
+// walk cannot choose.
+func (p *project) singleUnwrittenLocalInitializerLocked(name *ast.Node) *ast.Node {
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(name))
+	if symbol == nil || len(symbol.Declarations) != 1 || symbol.Declarations[0] == nil {
+		return nil
+	}
+	declaration := symbol.Declarations[0]
+	if !ast.IsVariableDeclaration(declaration) || declaration.Initializer() == nil {
+		return nil
+	}
+	bound := declaration.Name()
+	if bound == nil || !ast.IsIdentifier(bound) {
+		return nil
+	}
+	sourceFile := ast.GetSourceFileOfNode(declaration)
+	if sourceFile == nil || !p.formIsRuntimeSourceFile(sourceFile) {
+		return nil
+	}
+	if p.symbolIsAssignedLocked(symbol, declaration) {
+		return nil
+	}
+	return declaration
+}
+
+// primitiveCompletionLocked answers whether the value this implementation
+// hands its caller is provably a primitive, on the very program the census is
+// being classified over (ADR 0045). An async function's return type is a
+// `Promise` and a generator's a `Generator`, so the completion form needs no
+// separate test: neither is a primitive. An explicit never return type states
+// that there is no normal completion, hence no object-valued one (ADR 0090).
+// This says nothing about calls executed before that non-completion; the
+// consumer must still census them before using the completion fact.
+func (p *project) primitiveCompletionLocked(implementation *ast.Node) bool {
+	if implementation == nil {
+		return false
+	}
+	signature := p.formChecker().GetSignatureFromDeclaration(implementation)
+	if signature == nil {
+		return false
+	}
+	returned := checker.Checker_getReturnTypeOfSignature(p.formChecker(), signature)
+	if returned == nil {
+		return false
+	}
+	return !p.mayBeObjectTypedLocked(returned)
+}
+
+// coercionFormLocked records a coercion unless the operand is provably not an
+// object. `any`, `unknown`, a type parameter, and every other type the
+// producer cannot decompose are *not* provably non-object, so they are
+// recorded: this is the fail-closed direction, and "the checker could not tell"
+// must never read as "no coercion happens here".
+func (p *project) coercionFormLocked(
+	operand *ast.Node,
+) (typefacts.UncensusedInvokingFormKind, bool) {
+	if operand == nil {
+		return "", false
+	}
+	if !p.mayBeObjectTypedLocked(p.formChecker().GetTypeAtLocation(operand)) {
+		return "", false
+	}
+	return typefacts.UncensusedCoercion, true
+}
+
+// provablyNonObjectFlags are the type flags that, on their own, establish that
+// a value is a primitive and therefore has no `Symbol.toPrimitive`, `valueOf`,
+// or `toString` a coercion could reach in user code.
+const provablyNonObjectFlags = checker.TypeFlagsStringLike |
+	checker.TypeFlagsNumberLike |
+	checker.TypeFlagsBooleanLike |
+	checker.TypeFlagsBigIntLike |
+	checker.TypeFlagsESSymbolLike |
+	checker.TypeFlagsUndefined |
+	checker.TypeFlagsNull |
+	checker.TypeFlagsVoid |
+	checker.TypeFlagsNever
+
+func (p *project) mayBeObjectTypedLocked(value *checker.Type) bool {
+	if value == nil {
+		return true
+	}
+	// Distributed deliberately returns no constituents for never. The bottom
+	// flag is the affirmative fact that there can be no object-valued result,
+	// not an inference from an empty list. Keep the empty-list refusal below
+	// for every type that does not state this fact (ADR 0090, protocol 35).
+	if value.Flags()&checker.TypeFlagsNever != 0 {
+		return false
+	}
+	constituents := value.Distributed()
+	if len(constituents) == 0 {
+		return true
+	}
+	for _, constituent := range constituents {
+		if constituent == nil {
+			return true
+		}
+		if constituent.Flags()&provablyNonObjectFlags == 0 {
+			return true
+		}
+	}
+	return false
+}

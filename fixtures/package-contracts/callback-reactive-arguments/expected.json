@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "84086c28badc37be8938e8c88fdb1b3158db36628f1377281edc28054eabcd54",
+            "closureSha256": "e4dcc6f3b61ad54f2b9000aedf6d3b93d0784d418c430c079838acd233b319e0",
             "path": "./index.js",
             "sha256": "9cac85e64e6a7649af44ab1afe3d06867c22dd22a3f671b34f852deb75b401d6"
           },
@@ -13,7 +13,7 @@
             "sha256": "9cac85e64e6a7649af44ab1afe3d06867c22dd22a3f671b34f852deb75b401d6"
           },
           "exports": {
-            "mapValue": "summary-8435ce063fc32c1614f4d38f662eccfacacc622b12cff30a7d333a2000d44361"
+            "mapValue": "summary-676426a5139a457513c23a73ef70eef2d99433fea20028c5f447ea221003528b"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -25,10 +25,10 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "fixture:sha256:c65628378fba568262129af2ea6053a784ed9168673a87f61d8904a5b878cccd",
+    "integrity": "fixture:sha256:431f77c773acd2c16a154d306967291a6479d8e7d793fb9fd7ade55b24b3f9e6",
     "manifest": {
       "path": "./package.json",
-      "sha256": "c65628378fba568262129af2ea6053a784ed9168673a87f61d8904a5b878cccd"
+      "sha256": "431f77c773acd2c16a154d306967291a6479d8e7d793fb9fd7ade55b24b3f9e6"
     },
     "name": "callback-reactive-arguments",
     "version": "1.0.0"
@@ -37,7 +37,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-8435ce063fc32c1614f4d38f662eccfacacc622b12cff30a7d333a2000d44361": {
+    "summary-676426a5139a457513c23a73ef70eef2d99433fea20028c5f447ea221003528b": {
       "call": {
         "callbacks": [
           {
@@ -47,6 +47,10 @@
             },
             "operation": "callback-0"
           }
+        ],
+        "closed": [
+          "callbacks",
+          "reads"
         ],
         "operations": [
           {
@@ -73,7 +77,12 @@
               "event": "call"
             }
           }
-        ]
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
       },
       "shape": "callable"
     }

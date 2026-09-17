@@ -1,0 +1,216 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "7c3489c813e6155f787fdb81cf94c6856cfb46ac8ceac2441649329fdc17f0b8",
+            "path": "./index.js",
+            "sha256": "9e5345c7fcc7c65e2627d5326a5007a8edcbc3c8529d040e910629b1af103949"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "19f6dfe65a8013568ea0d041bea18b76ec700f1e92dce463765fb9072302c494"
+          },
+          "exports": {
+            "invokesCallerAccessor": "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d",
+            "invokesCallerMember": "summary-2d137f26c377787379e2382d0cd2f74a7880b2dd8520aca7192ad5f9cc068967",
+            "invokesCallerMemberLater": "summary-cd719acaeb7892d543fd8085c736eafff7bd10635b9a9cab7fec9f739afcc2bb",
+            "plainArithmetic": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "readsCallerElement": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "readsCallerMember": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "readsOwnLiteral": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    },
+    "./owned": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "a10edeffb7bbbe1de4c8b73e990e69ddc1538b5c65d9b1c75692732ccd7e0f68",
+            "path": "./owned.js",
+            "sha256": "5d2865ca5229ac3be404d2e9f319eaa1e1abe0e22baf208ca9d64847306cdb95"
+          },
+          "declarations": {
+            "path": "./owned.d.ts",
+            "sha256": "e739ade4ab959227bd28a9d7b6d0f0d953924ba1e7f8c02f11e901ef46cca891"
+          },
+          "exports": {
+            "observedReads": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "readsOwnProxy": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "readsOwnProxyElement": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1owned/default",
+            "typesBranch": "/exports/.~1owned/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:cff4440e76029fcf1359c9b9d962b5955cb3dfa761855faf60ad9e629e403501",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "cff4440e76029fcf1359c9b9d962b5955cb3dfa761855faf60ad9e629e403501"
+    },
+    "name": "implementation-census-reads-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-2d137f26c377787379e2382d0cd2f74a7880b2dd8520aca7192ad5f9cc068967": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "of",
+                  "values"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
+          "creates"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-cd719acaeb7892d543fd8085c736eafff7bd10635b9a9cab7fec9f739afcc2bb": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
+          "creates",
+          "returns"
+        ],
+        "returns": []
+      },
+      "shape": "callable"
+    }
+  }
+}

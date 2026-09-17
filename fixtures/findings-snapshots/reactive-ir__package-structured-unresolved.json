@@ -2,7 +2,7 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "v1/package-contract-incomplete",
+      "rule": "package-contract-incomplete",
       "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
@@ -12,7 +12,7 @@
       "fixes": 0
     },
     {
-      "rule": "v1/reactive-dispatch-unresolved",
+      "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
@@ -22,7 +22,7 @@
       "fixes": 0
     },
     {
-      "rule": "v1/reactive-dispatch-unresolved",
+      "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
@@ -32,7 +32,7 @@
       "fixes": 0
     },
     {
-      "rule": "v1/reactive-dispatch-unresolved",
+      "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",

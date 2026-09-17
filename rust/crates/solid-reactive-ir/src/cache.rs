@@ -213,20 +213,26 @@ pub(crate) struct InterproceduralGraphContribution {
     /// behavior and make an ambiguous call look certified.
     pub(crate) dispatches: Vec<(Span, Vec<SymbolId>)>,
     pub(crate) invoked_parameters: Vec<(Span, usize)>,
+    /// `(owner, parameter index)` for a parameter the owner calls *itself*,
+    /// directly, in its own body -- `function f(cb) { cb() }` -- which is the
+    /// one `callbacks` row the implementation census can confirm site for
+    /// site (ADR 0100). Recorded beside the row rather than in it: the wire
+    /// spells this and a primitive's inline position with the same word.
+    pub(crate) direct_callback_parameters: Vec<(Span, usize)>,
     /// `(owner, parameter index)` for a parameter whose caller-supplied value
     /// this function neither invokes nor observes inertly — it stores it, hands
     /// it on, or returns it. See
     /// `interproc::push_unaccounted_parameter_escapes`.
     pub(crate) escaped_parameters: Vec<(Span, usize)>,
-    /// A member invoked on a parameter: `(owner, parameter index, access
-    /// path)` for `function invoke(reader) { reader.read() }`. The path is the
+    /// A member invoked on a parameter, with its owner and execution context,
+    /// for `function invoke(reader) { reader.read() }`. The path is the
     /// whole chain from the parameter -- `reader.source.read()` records
     /// `["source", "read"]`, not `["read"]` -- and is empty when the
     /// parameter's own value is read, or when no segment could be named
     /// exactly. The implementation is not a property of the owner -- each call
     /// site supplies it -- so this records the obligation and leaves
     /// resolution to the site.
-    pub(crate) invoked_parameter_members: Vec<(Span, usize, Vec<String>)>,
+    pub(crate) invoked_parameter_members: Vec<(Span, crate::interproc::ParameterMemberInvocation)>,
     pub(crate) callbacks: Vec<(Span, ContractCallback)>,
     pub(crate) callback_forwardings: Vec<(
         Span,
@@ -260,7 +266,7 @@ pub(crate) enum InterproceduralResultDependencyState {
         name: Option<String>,
         summary: Vec<SummaryRead>,
         invoked_parameters: Vec<usize>,
-        invoked_parameter_members: Vec<(usize, Vec<String>)>,
+        invoked_parameter_members: Vec<crate::interproc::ParameterMemberInvocation>,
     },
     Returned(Vec<SummaryRead>),
     Inline(Vec<SummaryRead>),
@@ -302,6 +308,16 @@ pub(crate) struct ContractExportFragment {
     pub(crate) direct: Vec<(String, ContractExport)>,
     pub(crate) syntax: Vec<(String, ContractExport, bool)>,
     pub(crate) dependencies: HashSet<ContractNodeKey>,
+    /// The export name to summary-node symbol bindings this file publishes.
+    ///
+    /// It answers the one question a per-node projection cannot: under which
+    /// exported name is the node that discovered a composed read published?
+    /// Aggregation inverts these, and a node exported under more than one
+    /// name — or under none — publishes no provenance at all. This is a
+    /// nomination for aggregation to resolve, never authority: the certifier
+    /// re-derives the same binding from the compiler's own authenticated
+    /// export table before it discharges anything.
+    pub(crate) owners: Vec<(String, SymbolId)>,
 }
 
 #[derive(Default)]

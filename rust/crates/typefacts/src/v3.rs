@@ -36,18 +36,287 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:aeb7900e0c359221ef14f0bd705358d516249d50a67db5063a33c00dcbac3c84";
-/// 10 reports exact per-callable return-carry edges for an exported runtime
-/// implementation. A consumer can compose a callable returned by a callable
-/// the implementation returns without treating byte nesting, storage, or an
-/// unproven return site as execution.
+    "sha256:797e0d75efeee42d36c8214f960f06d8b1702f936087db7a5a48d09044a604d3";
+/// 17 says that an empty uncensused-form census includes the reviewed
+/// ECMAScript case `value == null` / `value != null`: an exact null literal
+/// takes the loose-equality nullish arm and does not invoke a coercion hook on
+/// the other operand. The wire shape is unchanged, so the handshake is the
+/// discriminator between producers with and without that classifier premise.
 ///
-/// A protocol-9 client rejects the new field and a protocol-9 producer omits
-/// it, so this is a break
-/// rather than a compatible extension and the number is what says so. The
-/// digest and build id still move with it, and the handshake refuses a producer
-/// that differs on any one of the three.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 10;
+/// 16 adds an explicit unchanged whole-parameter identity on return sites.
+/// Missing identity is open, independently of concrete type completeness.
+///
+/// 15 stops the producer answering a question about a jump region with silence,
+/// and says which of two different things a control-flow marker means.
+///
+/// The implementation call census used to **drop** every row lying in a region
+/// a `break` or `continue` makes non-universal, so as to keep an
+/// over-optimistic `reachable` off the wire. It now emits the row with
+/// `reach: unknown` — the weakest non-negative value, strictly weaker than the
+/// row that was withheld, so no positive claim gains anything. What dropping
+/// cost was the claim in the other direction: a dropped call is a
+/// `CallExpression`, so it leaves no `uncensusedInvokingForms` row either, and
+/// `switch (kind) { case "mount": render(App, el); break; }` published nothing
+/// at all about `render`.
+///
+/// [`crate::ControlFlowCensus::incompleteness`] then classifies each
+/// `unsupported` marker, per construct and at its location.
+/// `reachability-lower-bound` is a construct walked in full — a loop, a
+/// `switch`, a `try` — whose every enclosed site is recorded and none of which
+/// is called `unreachable` on its account, so only the *guarantee* is
+/// unmodelled and a may-execute enumeration of the callables inside stands.
+/// `flow-unaccounted` is a construct whose flow the census cannot account for
+/// in either direction, and it is the producer's classifier default, so a
+/// marker nobody classified refuses on arrival rather than passing as the
+/// admissible arm. `unsupported` keeps its exact meaning and its consumers.
+///
+/// **The number moves for the same reason as 14.** An absent `incompleteness`
+/// beside a nonempty `unsupported` is a producer with no classification, a
+/// present empty one is the claim that nothing is unmodelled, and serde cannot
+/// separate them. A protocol-14 producer's silence would read to a protocol-15
+/// consumer as the admissible arm, which is the unsound direction, so the
+/// handshake is the discriminator. In the other direction a protocol-14
+/// consumer rejects a protocol-15 census outright: `ControlFlowCensus` denies
+/// unknown fields.
+///
+/// 14 added the two facts an implementation census needs and neither the call
+/// census nor `complete` could carry.
+///
+/// `uncensusedInvokingForms` on
+/// [`crate::ExportImplementationTranscript`] names, per form, every syntactic
+/// position that can invoke user code and that `calls` does not record —
+/// `calls` holds `CallExpression` and `NewExpression` only. Its classifier's
+/// default is refusal: a node kind that is neither classified nor on the
+/// producer's reviewed list of provably non-invoking kinds arrives as
+/// `unclassified-invoking-form`, so a form nobody has thought of refuses
+/// rather than passing in silence.
+///
+/// **This is the whole reason the number moves rather than the field merely
+/// being additive.** An absent list and a present empty one are different
+/// facts — no opinion versus "every form I walked was a call, a construction,
+/// or provably non-invoking" — and serde cannot tell them apart, because the
+/// field defaults to empty. A protocol-13 producer's silence would therefore
+/// read to a protocol-14 consumer as the positive claim, which is exactly the
+/// unsound direction. The handshake is the discriminator, so the handshake has
+/// to move. (In the other direction a protocol-13 consumer rejects a
+/// protocol-14 transcript outright: `ExportImplementationTranscript` denies
+/// unknown fields.)
+///
+/// `localDeclarationLocation` on [`crate::ExportValueDemand`], answered by
+/// `localDeclaration` on [`crate::ExportValueTranscript`], asks for an
+/// implementation transcript of the function-like declaration at an exact
+/// source range. A census recurses into module-local helpers, and
+/// `implementationLocation` cannot reach one: it starts from an identifier and
+/// resolves through the export's runtime binding. The demand is hashed into
+/// the export-value demand digest, so a protocol-13 producer would answer a
+/// protocol-14 demand under a digest it computes differently.
+///
+/// 13 added `calleeSources` to the implementation call census: the traced value
+/// provenance of the *callee expression*, from the same
+/// `returnValueSourcesLocked` walk and under the same gates that answer
+/// `argumentSources` for an argument. It answers "what created the value being
+/// called", which no other field on `ImplementationCall` answers — `target`,
+/// `target_name`, `target_module`, `declaration` and `callee_parameter` state
+/// the callee's *resolution* and are unchanged. An empty list is the producer's
+/// silence, never a negative claim about the callee.
+///
+/// It is a break in both directions even though it is only additive:
+/// `ImplementationCall` denies unknown fields, so a protocol-12 consumer
+/// rejects a protocol-13 census outright, and a protocol-12 producer's silence
+/// on the field is indistinguishable from "traced nothing" for every call — a
+/// protocol-13 consumer reading it would conclude that no callee anywhere has
+/// provenance. The digest and build id move with the number, and the handshake
+/// refuses a producer that differs on any one of the three.
+///
+/// 12 added `argumentSources`: per written argument slot, the traced value
+/// provenance of the expression written there, from the same tracer that
+/// already answers it for a return site. It also *narrowed* that tracer's
+/// identifier arm, which followed a symbol's first declaration and so traced a
+/// reassignable binding to an initializer that may not be the value — a
+/// `ReturnSite.sources` a protocol-11 producer states and a protocol-12
+/// producer withholds.
+///
+/// 11 split the callable-path census into the members a value declares and the
+/// members it carries only through the compiler's apparent-type augmentation.
+// Protocol 42 marks original-input evidence limited to a loop's first entry.
+// Protocol 41 also binds the first receiver before a plain parameter assignment.
+// Protocol 40 binds original caller roots at exact opening-prefix property uses.
+// Protocol 39 adds affirmative unwritten parameter bindings tied to exact
+// implementation signature slots. These establish source identity, not shape.
+// Protocol 38 includes every union constituent in the premise identity and
+// spells complete imported unions in helper twins.
+// Protocol 37 binds an exact anonymous local callable through its own
+// compiler symbol rather than requiring a named enclosing variable.
+// Protocol 36 adds localLiteralResult: exact call, callee, allocation and
+// complete return sites for one local data-only result. The consumer binds
+// this derivation to the local execution census before granting access.
+// Protocol 35 classifies an explicit never type as non-object even though its
+// distributed constituent set is empty (ADR 0051). Coercions and completion
+// facts share this predicate: never states no normal object-valued completion,
+// never an unavailable type. Call-argument premises and helper echoes bind it.
+// Protocol 34 widens the `parameter` subject derivation to a binding the file
+// **writes**, when every value it can hold is rooted at one parameter
+// (ADR 0050). No flow analysis is involved: if every value is the caller's,
+// whichever one the read sees is the caller's.
+// Protocol 33 lets a `callArgumentPremise` cover the slots a call does **not**
+// write (ADR 0049): such a parameter receives `undefined` at run time, a
+// primitive, which is a stronger premise than an unannotated parameter's `any`
+// and is what lets a premise chain survive a caller that omits an optional
+// argument.
+// Protocol 32 adds the `parameter-result` subject derivation (ADR 0048): the
+// value a call to a caller-supplied callee handed back, carrying the slot the
+// callee was rooted at.
+// Protocol 31 lets an `instanceof` form state whose `Symbol.hasInstance` its
+// operator can reach (ADR 0047), through the same `subjectRoot` vocabulary:
+// `parameter`/`parameter-default` for a caller-supplied constructor,
+// `default-library` for the engine's own, and `own-class` with
+// `subjectDeclaration` naming a class this program declares with no heritage
+// clause and no computed member.
+// Protocol 30 adds `spelling` on a `parameterPremise` (ADR 0046): a form of
+// the premise's type that resolves from a module which cannot name it
+// directly, `import("<specifier>").<Name>`. A helper premise is written into a
+// JavaScript module as a JSDoc `@param`, where a bare `Axis` resolves to
+// nothing; the caller's twin is where the spelling can be computed. The type
+// text and the identity remain the whole falsifier, and this side echoes the
+// spelling byte for byte — which is why the number moves: a protocol-29
+// consumer would demand a premise without it and refuse the transcript that
+// echoed one.
+// Protocol 29 adds `coercionPremise` on a `coercion` form and
+// `primitiveCompletion` on every implementation transcript (ADR 0045). A call
+// to a module-local helper types as `any` in compiled JavaScript however well
+// the package's declarations type that helper, so a sum of one refused
+// wherever the premise had typed everything else. The premise names the calls
+// the form's clearance rests on; the completion is the callee's own answer,
+// belonging to the premise its census was classified under.
+// Protocol 28 adds a third `subjectRoot` value, `own-literal` (ADR 0044): the
+// subject is a binding this program initialized from an object or array
+// literal, or from an object pattern's rest element, whose every own property
+// the specification creates with CreateDataPropertyOrThrow. It carries
+// `subjectDeclaration` and **no** `subjectParameter`, so a protocol-27
+// consumer requiring the index beside the derivation would refuse it.
+// Protocol 27 accompanies every stated `subjectParameter` with `subjectRoot`,
+// the derivation that rooted the subject at that slot, over a closed two-value
+// set (ADR 0043). `parameter` is ADR 0034's premise unchanged and now covers
+// three spellings of the same value — the parameter, a name its own object
+// binding pattern bound, and a name a local declaration bound from an
+// already-rooted initializer — because naming an intermediate does not change
+// whose value it is. `parameter-default` is the new claim: the slot carries a
+// default naming another rooted slot, so the value is caller-supplied under
+// either branch. A protocol-26 consumer received a subject with no derivation
+// and would read the second as the first.
+// Protocol 26 lets an iteration form state the parameter its iterated value is
+// rooted at, and a call state `calleeIteratedParameter` — the parameter-rooted
+// iterable whose iteration produced the callee (ADR 0042). A rest parameter's
+// array also stops being recorded as an iteration form: the engine builds it,
+// so iterating or spreading it reaches `Array.prototype` and nothing else.
+// Protocol 25 lets an object or JSX prop spread's operand and an object
+// binding pattern's source carry `subjectParameter` as well, so every form
+// that reads properties of a caller-supplied value states where that value
+// came from (ADR 0041). A protocol-24 producer roots only a property or
+// element access.
+// Protocol 24 lets an uncensused accessor form state its subject parameter in
+// **write** position as well, with `subjectWrite` saying which position it is
+// (ADR 0040). A protocol-23 consumer only ever saw a subject for a read, so
+// reading the field without the position would read a write into the caller's
+// object as a read of it.
+// Protocol 23 carries a premise to a local helper: a premised census states
+// `callArgumentPremises` — the type of each informative argument slot at every
+// call to a runtime-source declaration, on the twin — a local-declaration
+// demand may carry them back as `parameterPremises`, and the helper's
+// transcript echoes the entries its own twin bound (ADR 0038, helper
+// premises). A protocol-22 consumer refused any premise on a local declaration
+// and never asked for one, so the number moves although every field is
+// additive.
+// Protocol 22 lets an export's root implementation transcript state
+// `parameterPremises`: its uncensused-form census was classified with each
+// parameter bound to the type the export's declared call signature gives that
+// position rather than an unannotated JavaScript parameter's `any` (ADR 0038).
+// An empty form list on such a transcript means "no form under the declared
+// signature"; a protocol-21 consumer would read it as "no form at all".
+// Protocol 21 makes `overloadOrdinal` and `overloadCount` range over the
+// declarations that state a call signature — TypeScript's overload set, the
+// bodiless declarations — instead of every declaration of the signature's kind.
+// A protocol-20 producer counted an overloaded function's implementation body
+// when it analyzed source rather than a `.d.ts`, reported `overloadCount ==
+// len + 1`, and `require_complete_overload_set` refused the set as incomplete;
+// the selected-signature identity digest carries the count and moves with it.
+// Protocol 20 lets an implementation transcript state `implementationOf`: the
+// declaration whose body it walked when its declaration is a binding that
+// aliases that function by identity (`const defaultScheduler =
+// systemSetTimeoutZero`, followed through a sibling `.d.ts` to the runtime
+// module's export). A protocol-19 producer refused such a binding as
+// `implementationUnavailable`; a transcript without the field is a body of its
+// own declaration, on either protocol.
+// Protocol 19 states an implementation transcript's completion form — plain,
+// async, generator, async generator — so a `returns` census can refuse a
+// callable that hands its caller a promise or an iterator whatever its body
+// does (ADR 0035). An absent form on an older producer is not "plain".
+// Protocol 18 lets an uncensused form and a `.call`/`.apply` row state the
+// parameter their subject is rooted at (ADR 0034); an absent fact on an older
+// producer is never "not rooted".
+// Protocol 17 includes exact-null loose equality in the positive
+// uncensused-form classifier. Protocol 16 added unchanged-parameter identity.
+// Protocol 44 adds runtime export initializer derivations. These bind source
+// subjects only; imported call behavior still requires dependency evidence.
+// Protocol 46 binds one-hop original-input helper reads.
+// Protocol 47 adds the `parameter-default-literal` subject derivation
+// (ADR 0090): a parameter with a data-only literal default that its body never
+// writes holds either the caller's argument or the object that default freshly
+// created, and an accessor read is excused on each by a derivation already
+// reviewed. Spelled apart from `parameter-default`, which is caller-rooted on
+// both arms; the root does not propagate through a local binding.
+// Protocol 48 adds the diagnostic `subjectRootRefusal`: why an accessor form
+// rooted no subject. Never a premise; nothing is admitted on its account.
+// Protocol 49 widens `parameter` to a written parameter whose every assigned
+// value is rooted at that same slot (ADR 0091).
+// Protocol 50 refines the diagnostic `subjectRootRefusal` binding legs.
+// Protocol 51 adds the diagnostic `coercionSubjectRoot` and
+// `coercionSubjectRootRefusal`: the derivation every one of a coercion's
+// ToPrimitive operands agreed on, or why they did not. Never a premise, and
+// separate from `subjectRoot`, which is an accessor's receiver.
+// Protocol 52 adds `coercionSubjectParameters` and makes the caller-provenance
+// derivations of `coercionSubjectRoot` a premise (ADR 0092): the slots the
+// operands rooted at, which is what a receipt names. A consumer that reviewed
+// only protocol 51 read the derivation as a diagnostic, so the number moves.
+// Protocol 53 adds the `parameter-or-own-result` derivation and
+// `subjectLocalLiteralResults` (ADR 0093): a written parameter each of whose
+// values is either the caller's argument at this slot or a value this program
+// allocated and returned. Only one arm is the caller's, so the spelling is
+// apart from `parameter`.
+// Protocol 54 stops recording a form for a numeric-literal element access into
+// an engine-owned indexed container (ADR 0094). An index signature declares no
+// property symbol, so such a read resolved nothing and arrived as an unknown
+// accessor; where the container is one the engine allocated, the member reached
+// is its own storage and nothing user-written runs. This *removes* rows, so a
+// consumer that reviewed only protocol 53 would read the silence as a weaker
+// claim than it is, and the number moves.
+// Protocol 55 makes a class a callee (ADR 0095): a local-declaration demand
+// naming a class answers the constructor `new C(…)` runs, in both spellings,
+// with the class itself as the resolved declaration and the constructor as the
+// censused body. A heritage clause, a field initializer, a static block, a
+// computed member name, a decorator, a parameter property and an implicit
+// constructor each refuse by name through openReasons. A protocol-54 consumer
+// received `declarationNotExact` for every one of these, so the positive answer
+// is new and the number moves.
+// Protocol 56 states that a value export cannot be invoked (ADR 0099): an
+// export whose runtime value type has no call and no construct signature on
+// any constituent, and is neither any/unknown/never nor instantiable, answers
+// an implementation demand with `notCallableValue` beside its declaration and
+// the single open reason `valueNotCallable`, where protocol 55 answered
+// `callSignatureNotUnique`. A protocol-55 consumer would read the new open
+// reason as a refusal, so the number moves.
+// Protocol 57 states that an export is a default-library member by identity
+// (ADR 0103): a `const` binding, never written in its file, whose initializer
+// is a property access whose object and member both resolve to default-library
+// symbols, with the member declared on the named container's interface and
+// neither container nor member written, deleted or escaping as anything but a
+// read or a call, answers an implementation demand with `defaultLibraryAlias`
+// naming the container and member. The fact is stated *beside* the existing
+// open reason, never instead of it, so a protocol-56 consumer would still
+// refuse on `callSignatureNotUnique` or `implementationUnavailable` exactly as
+// before — but it would drop the new field, and a `deny_unknown_fields`
+// consumer would reject the transcript outright, so the number moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 59;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

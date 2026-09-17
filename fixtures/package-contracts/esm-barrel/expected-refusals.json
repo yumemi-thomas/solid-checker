@@ -1,0 +1,111 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "esm-barrel-package",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "bootstrapSource",
+      "domain": "reads",
+      "kind": "runtime-accessor-installation",
+      "package": "",
+      "callee": "",
+      "location": "./index.mjs:448-453",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "createAlias",
+      "domain": "reads",
+      "kind": "runtime-accessor-installation",
+      "package": "",
+      "callee": "",
+      "location": "./index.mjs:448-453",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "createConditional",
+      "domain": "reads",
+      "kind": "runtime-accessor-installation",
+      "package": "",
+      "callee": "",
+      "location": "./index.mjs:448-453",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "createFromMemberFactory",
+      "domain": "reads",
+      "kind": "runtime-accessor-installation",
+      "package": "",
+      "callee": "",
+      "location": "./index.mjs:448-453",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "createLocal",
+      "domain": "reads",
+      "kind": "runtime-accessor-installation",
+      "package": "",
+      "callee": "",
+      "location": "./index.mjs:448-453",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "createValue",
+      "domain": "reads",
+      "kind": "runtime-accessor-installation",
+      "package": "",
+      "callee": "",
+      "location": "./index.mjs:448-453",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "factoryComponent",
+      "domain": "reads",
+      "kind": "runtime-accessor-installation",
+      "package": "",
+      "callee": "",
+      "location": "./index.mjs:448-453",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    }
+  ]
+}

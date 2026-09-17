@@ -137,6 +137,10 @@ fn plan_file(
         }
     }
     for export in &file.ast.exports {
+        if let Some(binding) = &export.namespace_binding {
+            add_symbol(binding.span, true);
+            type_descriptor_spans.insert(binding.span);
+        }
         for item in export.specifiers.iter().chain(&export.declarations) {
             add_symbol(item.local.span, true);
             type_descriptor_spans.insert(item.local.span);
@@ -579,10 +583,14 @@ fn plan_file(
         planned.runtime_identity = planned.reference_space
             || file.ast.exports.iter().any(|export| {
                 export
-                    .specifiers
-                    .iter()
-                    .chain(&export.declarations)
-                    .any(|item| item.local.span == span)
+                    .namespace_binding
+                    .as_ref()
+                    .is_some_and(|binding| binding.span == span)
+                    || export
+                        .specifiers
+                        .iter()
+                        .chain(&export.declarations)
+                        .any(|item| item.local.span == span)
             });
         demands.push(planned);
     }

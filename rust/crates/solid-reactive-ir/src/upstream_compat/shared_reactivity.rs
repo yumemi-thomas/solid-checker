@@ -258,7 +258,7 @@ fn expected_function_got_expression(
             };
             if context.dialect.static_event_values_are_attributes()
                 && (static_string_expression(context, file, expression).is_some()
-                    || super::solid1x_syntax::expression_is_static_literal(file, expression))
+                    || super::syntax::expression_is_static_literal(file, expression))
             {
                 // Solid 1.x freezes this value into a plain attribute instead
                 // of installing it as a listener. It is therefore not a
@@ -563,6 +563,28 @@ fn no_direct_mutation(
         let name = name.as_str();
         let through_member = root != assignment.target;
         let kind = context.source_kinds.get(symbol).copied();
+        // A member chain rooted at a *call* writes to whatever that call
+        // returned, and this rule's claim -- the write is dropped because
+        // Solid handed out a readonly proxy -- is a claim about the reactive
+        // container, not about its value. Calling a signal accessor yields the
+        // stored value, so `el()!.style.color = "red"` mutates a DOM node and
+        // `obj().a = 2` mutates a plain object: both writes land, and neither
+        // is this rule's. Nine such findings were measured against
+        // `@kobalte/core`, every one of them wrong.
+        //
+        // Only the container binding itself is proven readonly here: `props`,
+        // a store root, or an accessor written through without being called.
+        // `peel_ts_sugar_span` peels `!` and `as` but never a call or a member,
+        // so the deliberate `(state as { count: number }).count = 1` case below
+        // still reaches its branch, and only the call form leaves.
+        if through_member
+            && file
+                .ast
+                .call_at(file.ast.peel_ts_sugar_span(root))
+                .is_some()
+        {
+            continue;
+        }
         // `createMutable` is the one Solid 1.x source whose proxy is designed
         // to be written through directly. It still behaves like a store for
         // reads, but treating that shared read shape as readonly recreates

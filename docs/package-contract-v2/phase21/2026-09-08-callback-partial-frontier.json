@@ -1,0 +1,3809 @@
+{
+  "diagnostic": true,
+  "reportPath": "rust/target/ecosystem-investigations/2026-09-08-callback-retry-full.json",
+  "reportDigest": "sha256:6cc119135c9b8c4742612da6a283f3841c99c0c17ef2c125afd982f77185e3ed",
+  "metricChanged": false,
+  "note": "Discovery only: explicit manifest names plus published accepted names; does not certify inapplicability or correct the coverage denominator.",
+  "rows": [
+    {
+      "probeId": "@corvu-next/utils@0.1.5|solid2|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-SeYuGR/node_modules/@corvu-next/utils/package.json",
+      "manifestDigest": "sha256:73cb9bd7c2ab37ebd9cd9a53c3efd0668d7ec0a7c9ab8b80318f9b9a1e88ac5e",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-91h1oT/@corvu-next__utils@0.1.5--solid2--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./components/FloatingArrow",
+        "./components/Fragment",
+        "./create/controllableSignal",
+        "./create/floating",
+        "./create/keyedContext",
+        "./create/once",
+        "./create/register",
+        "./create/size",
+        "./create/style",
+        "./create/tagName",
+        "./create/tooltip",
+        "./dom",
+        "./dynamic",
+        "./floating",
+        "./reactivity",
+        "./scroll"
+      ],
+      "explicitExpected": [
+        "."
+      ],
+      "missing": [],
+      "wildcard": true,
+      "coverage": {
+        "declaredEntrypoints": 4,
+        "declaredWildcard": true,
+        "certifiedEntrypoints": 17,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": []
+    },
+    {
+      "probeId": "@corvu/utils@0.4.2|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Qhf1qf/node_modules/@corvu/utils/package.json",
+      "manifestDigest": "sha256:96209a043248107781b5735e30a02db5e36f458b866dcd49efa82f1a9d608650",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-fn8GEu/@corvu__utils@0.4.2--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./components/FloatingArrow",
+        "./components/Fragment",
+        "./create/controllableSignal",
+        "./create/floating",
+        "./create/keyedContext",
+        "./create/once",
+        "./create/register",
+        "./create/size",
+        "./create/style",
+        "./create/tagName",
+        "./create/tooltip",
+        "./dom",
+        "./dynamic",
+        "./floating",
+        "./reactivity",
+        "./scroll"
+      ],
+      "explicitExpected": [
+        "."
+      ],
+      "missing": [],
+      "wildcard": true,
+      "coverage": {
+        "declaredEntrypoints": 4,
+        "declaredWildcard": true,
+        "certifiedEntrypoints": 17,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": []
+    },
+    {
+      "probeId": "@kobalte/core@0.13.13|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-ENyJlu/node_modules/@kobalte/core/package.json",
+      "manifestDigest": "sha256:d50e171aa9ca68e8b09f4a22fd57a19de07473f880cb712a3d7ef63a818fe85d",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-8vOWc5/@kobalte__core@0.13.13--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./accordion",
+        "./alert",
+        "./alert-dialog",
+        "./badge",
+        "./breadcrumbs",
+        "./button",
+        "./checkbox",
+        "./collapsible",
+        "./color-area",
+        "./color-channel-field",
+        "./color-field",
+        "./color-mode",
+        "./color-slider",
+        "./color-swatch",
+        "./color-wheel",
+        "./colors",
+        "./combobox",
+        "./context-menu",
+        "./dialog",
+        "./dismissable-layer",
+        "./dropdown-menu",
+        "./file-field",
+        "./hover-card",
+        "./i18n",
+        "./image",
+        "./link",
+        "./listbox",
+        "./menu",
+        "./menubar",
+        "./meter",
+        "./navigation-menu",
+        "./number-field",
+        "./pagination",
+        "./polymorphic",
+        "./popover",
+        "./popper",
+        "./primitives/create-collection",
+        "./primitives/create-controllable-signal",
+        "./primitives/create-disclosure-state",
+        "./primitives/create-dom-collection",
+        "./primitives/create-escape-key-down",
+        "./primitives/create-focus-scope",
+        "./primitives/create-form-reset-listener",
+        "./primitives/create-hide-outside",
+        "./primitives/create-interact-outside",
+        "./primitives/create-register-id",
+        "./primitives/create-size",
+        "./primitives/create-tag-name",
+        "./primitives/create-toggle-state",
+        "./primitives/create-transition",
+        "./progress",
+        "./radio-group",
+        "./rating",
+        "./search",
+        "./segmented-control",
+        "./select",
+        "./separator",
+        "./skeleton",
+        "./slider",
+        "./spin-button",
+        "./src/accordion/accordion-content.tsx",
+        "./src/accordion/accordion-context.tsx",
+        "./src/accordion/accordion-header.tsx",
+        "./src/accordion/accordion-item-context.tsx",
+        "./src/accordion/accordion-item.tsx",
+        "./src/accordion/accordion-root.tsx",
+        "./src/accordion/accordion-trigger.tsx",
+        "./src/accordion/index.tsx",
+        "./src/alert-dialog/alert-dialog-content.tsx",
+        "./src/alert-dialog/index.tsx",
+        "./src/alert/alert-root.tsx",
+        "./src/alert/index.tsx",
+        "./src/badge/badge-root.tsx",
+        "./src/badge/index.tsx",
+        "./src/breadcrumbs/breadcrumbs-context.tsx",
+        "./src/breadcrumbs/breadcrumbs-link.tsx",
+        "./src/breadcrumbs/breadcrumbs-root.tsx",
+        "./src/breadcrumbs/breadcrumbs-separator.tsx",
+        "./src/breadcrumbs/breadcrumbs.intl.ts",
+        "./src/breadcrumbs/index.tsx",
+        "./src/button/button-root.tsx",
+        "./src/button/index.tsx",
+        "./src/button/is-button.ts",
+        "./src/checkbox/checkbox-context.tsx",
+        "./src/checkbox/checkbox-control.tsx",
+        "./src/checkbox/checkbox-description.tsx",
+        "./src/checkbox/checkbox-error-message.tsx",
+        "./src/checkbox/checkbox-indicator.tsx",
+        "./src/checkbox/checkbox-input.tsx",
+        "./src/checkbox/checkbox-label.tsx",
+        "./src/checkbox/checkbox-root.tsx",
+        "./src/checkbox/index.tsx",
+        "./src/collapsible/collapsible-content.tsx",
+        "./src/collapsible/collapsible-context.tsx",
+        "./src/collapsible/collapsible-root.tsx",
+        "./src/collapsible/collapsible-trigger.tsx",
+        "./src/collapsible/index.tsx",
+        "./src/color-area/color-area-background.tsx",
+        "./src/color-area/color-area-context.tsx",
+        "./src/color-area/color-area-hidden-input-base.tsx",
+        "./src/color-area/color-area-hidden-input-x.tsx",
+        "./src/color-area/color-area-hidden-input-y.tsx",
+        "./src/color-area/color-area-root.tsx",
+        "./src/color-area/color-area-thumb.tsx",
+        "./src/color-area/color-area.intl.ts",
+        "./src/color-area/create-color-area-state.ts",
+        "./src/color-area/index.tsx",
+        "./src/color-channel-field/color-channel-field-root.tsx",
+        "./src/color-channel-field/index.tsx",
+        "./src/color-field/color-field-context.tsx",
+        "./src/color-field/color-field-input.tsx",
+        "./src/color-field/color-field-root.tsx",
+        "./src/color-field/index.tsx",
+        "./src/color-mode/color-mode-context.tsx",
+        "./src/color-mode/color-mode-provider.tsx",
+        "./src/color-mode/color-mode-script.tsx",
+        "./src/color-mode/index.tsx",
+        "./src/color-mode/storage-manager.ts",
+        "./src/color-mode/utils.ts",
+        "./src/color-slider/color-slider-context.tsx",
+        "./src/color-slider/color-slider-root.tsx",
+        "./src/color-slider/color-slider-thumb.tsx",
+        "./src/color-slider/color-slider-track.tsx",
+        "./src/color-slider/index.tsx",
+        "./src/color-swatch/color-swatch-root.tsx",
+        "./src/color-swatch/color-swatch.intl.ts",
+        "./src/color-swatch/index.tsx",
+        "./src/color-wheel/color-wheel-context.tsx",
+        "./src/color-wheel/color-wheel-input.tsx",
+        "./src/color-wheel/color-wheel-root.tsx",
+        "./src/color-wheel/color-wheel-thumb.tsx",
+        "./src/color-wheel/color-wheel-track.tsx",
+        "./src/color-wheel/color-wheel-value-label.tsx",
+        "./src/color-wheel/create-color-wheel-state.ts",
+        "./src/color-wheel/index.tsx",
+        "./src/color-wheel/utils.ts",
+        "./src/colors/index.tsx",
+        "./src/colors/intl.ts",
+        "./src/colors/utils.ts",
+        "./src/combobox/combobox-base.tsx",
+        "./src/combobox/combobox-content.tsx",
+        "./src/combobox/combobox-context.tsx",
+        "./src/combobox/combobox-control.tsx",
+        "./src/combobox/combobox-hidden-select.tsx",
+        "./src/combobox/combobox-icon.tsx",
+        "./src/combobox/combobox-input.tsx",
+        "./src/combobox/combobox-listbox.tsx",
+        "./src/combobox/combobox-portal.tsx",
+        "./src/combobox/combobox-root.tsx",
+        "./src/combobox/combobox-trigger.tsx",
+        "./src/combobox/combobox.intl.ts",
+        "./src/combobox/index.tsx",
+        "./src/context-menu/context-menu-content.tsx",
+        "./src/context-menu/context-menu-context.tsx",
+        "./src/context-menu/context-menu-root.tsx",
+        "./src/context-menu/context-menu-trigger.tsx",
+        "./src/context-menu/index.tsx",
+        "./src/dialog/dialog-close-button.tsx",
+        "./src/dialog/dialog-content.tsx",
+        "./src/dialog/dialog-context.tsx",
+        "./src/dialog/dialog-description.tsx",
+        "./src/dialog/dialog-overlay.tsx",
+        "./src/dialog/dialog-portal.tsx",
+        "./src/dialog/dialog-root.tsx",
+        "./src/dialog/dialog-title.tsx",
+        "./src/dialog/dialog-trigger.tsx",
+        "./src/dialog/dialog.intl.ts",
+        "./src/dialog/dialog/dialog.intl.ts",
+        "./src/dialog/index.tsx",
+        "./src/dismissable-layer/dismissable-layer-context.tsx",
+        "./src/dismissable-layer/dismissable-layer.tsx",
+        "./src/dismissable-layer/index.tsx",
+        "./src/dismissable-layer/layer-stack.tsx",
+        "./src/dropdown-menu/dropdown-menu-content.tsx",
+        "./src/dropdown-menu/dropdown-menu-root.tsx",
+        "./src/dropdown-menu/index.tsx",
+        "./src/file-field/file-field-context.tsx",
+        "./src/file-field/file-field-dropzone.tsx",
+        "./src/file-field/file-field-hidden-input.tsx",
+        "./src/file-field/file-field-item-context.tsx",
+        "./src/file-field/file-field-item-delete-trigger.tsx",
+        "./src/file-field/file-field-item-list.tsx",
+        "./src/file-field/file-field-item-name.tsx",
+        "./src/file-field/file-field-item-preview-image.tsx",
+        "./src/file-field/file-field-item-preview.tsx",
+        "./src/file-field/file-field-item-size.tsx",
+        "./src/file-field/file-field-item.tsx",
+        "./src/file-field/file-field-label.tsx",
+        "./src/file-field/file-field-root.tsx",
+        "./src/file-field/file-field-trigger.tsx",
+        "./src/file-field/file-field.intl.ts",
+        "./src/file-field/index.tsx",
+        "./src/file-field/util.ts",
+        "./src/form-control/create-form-control-field.tsx",
+        "./src/form-control/create-form-control.tsx",
+        "./src/form-control/form-control-context.tsx",
+        "./src/form-control/form-control-description.tsx",
+        "./src/form-control/form-control-error-message.tsx",
+        "./src/form-control/form-control-label.tsx",
+        "./src/form-control/index.ts",
+        "./src/hover-card/hover-card-content.tsx",
+        "./src/hover-card/hover-card-context.tsx",
+        "./src/hover-card/hover-card-portal.tsx",
+        "./src/hover-card/hover-card-root.tsx",
+        "./src/hover-card/hover-card-trigger.tsx",
+        "./src/hover-card/index.tsx",
+        "./src/hover-card/utils.ts",
+        "./src/i18n/create-collator.ts",
+        "./src/i18n/create-date-formatter.ts",
+        "./src/i18n/create-default-locale.ts",
+        "./src/i18n/create-filter.ts",
+        "./src/i18n/create-number-formatter.ts",
+        "./src/i18n/i18n-provider.tsx",
+        "./src/i18n/index.tsx",
+        "./src/i18n/utils.ts",
+        "./src/image/image-context.tsx",
+        "./src/image/image-fallback.tsx",
+        "./src/image/image-img.tsx",
+        "./src/image/image-root.tsx",
+        "./src/image/index.tsx",
+        "./src/index.tsx",
+        "./src/link/index.tsx",
+        "./src/link/link-root.tsx",
+        "./src/list/create-list-state.ts",
+        "./src/list/create-selectable-list.ts",
+        "./src/list/create-single-select-list-state.ts",
+        "./src/list/index.ts",
+        "./src/list/list-collection.ts",
+        "./src/list/list-keyboard-delegate.ts",
+        "./src/listbox/index.tsx",
+        "./src/listbox/listbox-context.tsx",
+        "./src/listbox/listbox-item-context.tsx",
+        "./src/listbox/listbox-item-description.tsx",
+        "./src/listbox/listbox-item-indicator.tsx",
+        "./src/listbox/listbox-item-label.tsx",
+        "./src/listbox/listbox-item.tsx",
+        "./src/listbox/listbox-root.tsx",
+        "./src/listbox/listbox-section.tsx",
+        "./src/live-announcer/index.ts",
+        "./src/live-announcer/live-announcer.tsx",
+        "./src/menu/index.tsx",
+        "./src/menu/menu-checkbox-item.tsx",
+        "./src/menu/menu-content-base.tsx",
+        "./src/menu/menu-content.tsx",
+        "./src/menu/menu-context.tsx",
+        "./src/menu/menu-group-context.tsx",
+        "./src/menu/menu-group-label.tsx",
+        "./src/menu/menu-group.tsx",
+        "./src/menu/menu-icon.tsx",
+        "./src/menu/menu-item-base.tsx",
+        "./src/menu/menu-item-description.tsx",
+        "./src/menu/menu-item-indicator.tsx",
+        "./src/menu/menu-item-label.tsx",
+        "./src/menu/menu-item.context.tsx",
+        "./src/menu/menu-item.tsx",
+        "./src/menu/menu-portal.tsx",
+        "./src/menu/menu-radio-group-context.tsx",
+        "./src/menu/menu-radio-group.tsx",
+        "./src/menu/menu-radio-item.tsx",
+        "./src/menu/menu-root-context.tsx",
+        "./src/menu/menu-root.tsx",
+        "./src/menu/menu-sub-content.tsx",
+        "./src/menu/menu-sub-trigger.tsx",
+        "./src/menu/menu-sub.tsx",
+        "./src/menu/menu-trigger.tsx",
+        "./src/menu/menu.tsx",
+        "./src/menu/utils.ts",
+        "./src/menubar/index.tsx",
+        "./src/menubar/menubar-context.tsx",
+        "./src/menubar/menubar-menu.tsx",
+        "./src/menubar/menubar-root.tsx",
+        "./src/menubar/menubar-trigger.tsx",
+        "./src/meter/index.tsx",
+        "./src/meter/meter-context.tsx",
+        "./src/meter/meter-fill.tsx",
+        "./src/meter/meter-label.tsx",
+        "./src/meter/meter-root.tsx",
+        "./src/meter/meter-track.tsx",
+        "./src/meter/meter-value-label.tsx",
+        "./src/navigation-menu/index.tsx",
+        "./src/navigation-menu/navigation-menu-arrow.tsx",
+        "./src/navigation-menu/navigation-menu-content.tsx",
+        "./src/navigation-menu/navigation-menu-context.tsx",
+        "./src/navigation-menu/navigation-menu-item.tsx",
+        "./src/navigation-menu/navigation-menu-menu.tsx",
+        "./src/navigation-menu/navigation-menu-portal.tsx",
+        "./src/navigation-menu/navigation-menu-root.tsx",
+        "./src/navigation-menu/navigation-menu-trigger.tsx",
+        "./src/navigation-menu/navigation-menu-viewport.tsx",
+        "./src/number-field/index.tsx",
+        "./src/number-field/number-field-context.tsx",
+        "./src/number-field/number-field-decrement-trigger.tsx",
+        "./src/number-field/number-field-hidden-input.tsx",
+        "./src/number-field/number-field-increment-trigger.tsx",
+        "./src/number-field/number-field-input.tsx",
+        "./src/number-field/number-field-root.tsx",
+        "./src/number-field/number-field-vary-trigger.tsx",
+        "./src/pagination/index.tsx",
+        "./src/pagination/pagination-context.tsx",
+        "./src/pagination/pagination-ellipsis.tsx",
+        "./src/pagination/pagination-item.tsx",
+        "./src/pagination/pagination-items.tsx",
+        "./src/pagination/pagination-next.tsx",
+        "./src/pagination/pagination-previous.tsx",
+        "./src/pagination/pagination-root.tsx",
+        "./src/polymorphic/index.tsx",
+        "./src/polymorphic/polymorphic.tsx",
+        "./src/popover/index.tsx",
+        "./src/popover/popover-anchor.tsx",
+        "./src/popover/popover-close-button.tsx",
+        "./src/popover/popover-content.tsx",
+        "./src/popover/popover-context.tsx",
+        "./src/popover/popover-description.tsx",
+        "./src/popover/popover-portal.tsx",
+        "./src/popover/popover-root.tsx",
+        "./src/popover/popover-title.tsx",
+        "./src/popover/popover-trigger.tsx",
+        "./src/popover/popover.intl.ts",
+        "./src/popper/index.tsx",
+        "./src/popper/popper-arrow.tsx",
+        "./src/popper/popper-context.tsx",
+        "./src/popper/popper-positioner.tsx",
+        "./src/popper/popper-root.tsx",
+        "./src/popper/utils.ts",
+        "./src/primitives/create-collection/create-collection.ts",
+        "./src/primitives/create-collection/get-item-count.ts",
+        "./src/primitives/create-collection/index.ts",
+        "./src/primitives/create-collection/utils.ts",
+        "./src/primitives/create-controllable-signal/create-controllable-signal.ts",
+        "./src/primitives/create-controllable-signal/index.ts",
+        "./src/primitives/create-disclosure-state/create-disclosure-state.ts",
+        "./src/primitives/create-disclosure-state/index.ts",
+        "./src/primitives/create-dom-collection/create-dom-collection-item.ts",
+        "./src/primitives/create-dom-collection/create-dom-collection.ts",
+        "./src/primitives/create-dom-collection/dom-collection-context.ts",
+        "./src/primitives/create-dom-collection/index.ts",
+        "./src/primitives/create-dom-collection/utils.ts",
+        "./src/primitives/create-escape-key-down/create-escape-key-down.ts",
+        "./src/primitives/create-escape-key-down/index.ts",
+        "./src/primitives/create-focus-scope/create-focus-scope.tsx",
+        "./src/primitives/create-focus-scope/index.ts",
+        "./src/primitives/create-form-reset-listener/create-form-reset-listener.ts",
+        "./src/primitives/create-form-reset-listener/index.ts",
+        "./src/primitives/create-hide-outside/create-hide-outside.ts",
+        "./src/primitives/create-hide-outside/index.ts",
+        "./src/primitives/create-interact-outside/create-interact-outside.ts",
+        "./src/primitives/create-interact-outside/index.ts",
+        "./src/primitives/create-register-id/create-register-id.ts",
+        "./src/primitives/create-register-id/index.ts",
+        "./src/primitives/create-size/create-size.ts",
+        "./src/primitives/create-size/index.ts",
+        "./src/primitives/create-tag-name/create-tag-name.ts",
+        "./src/primitives/create-tag-name/index.ts",
+        "./src/primitives/create-toggle-state/create-toggle-state.ts",
+        "./src/primitives/create-toggle-state/index.ts",
+        "./src/primitives/create-transition/create-transition.ts",
+        "./src/primitives/create-transition/get-transition-styles.ts",
+        "./src/primitives/create-transition/index.ts",
+        "./src/primitives/index.ts",
+        "./src/progress/index.tsx",
+        "./src/progress/progress-context.tsx",
+        "./src/progress/progress-fill.tsx",
+        "./src/progress/progress-label.tsx",
+        "./src/progress/progress-root.tsx",
+        "./src/progress/progress-track.tsx",
+        "./src/progress/progress-value-label.tsx",
+        "./src/radio-group/index.tsx",
+        "./src/radio-group/radio-group-context.tsx",
+        "./src/radio-group/radio-group-item-context.tsx",
+        "./src/radio-group/radio-group-item-control.tsx",
+        "./src/radio-group/radio-group-item-description.tsx",
+        "./src/radio-group/radio-group-item-indicator.tsx",
+        "./src/radio-group/radio-group-item-input.tsx",
+        "./src/radio-group/radio-group-item-label.tsx",
+        "./src/radio-group/radio-group-item.tsx",
+        "./src/radio-group/radio-group-label.tsx",
+        "./src/radio-group/radio-group-root.tsx",
+        "./src/rating/index.tsx",
+        "./src/rating/rating-context.tsx",
+        "./src/rating/rating-control.tsx",
+        "./src/rating/rating-hidden-input.tsx",
+        "./src/rating/rating-item-context.tsx",
+        "./src/rating/rating-item-control.tsx",
+        "./src/rating/rating-item-description.tsx",
+        "./src/rating/rating-item-label.tsx",
+        "./src/rating/rating-item.tsx",
+        "./src/rating/rating-label.tsx",
+        "./src/rating/rating-root.tsx",
+        "./src/rating/utils.ts",
+        "./src/search/index.tsx",
+        "./src/search/search-context.tsx",
+        "./src/search/search-indicator.tsx",
+        "./src/search/search-no-result.tsx",
+        "./src/search/search-root.tsx",
+        "./src/search/utils.ts",
+        "./src/segmented-control/index.tsx",
+        "./src/segmented-control/segmented-control-context.tsx",
+        "./src/segmented-control/segmented-control-indicator.tsx",
+        "./src/segmented-control/segmented-control-item-input.tsx",
+        "./src/segmented-control/segmented-control-item.tsx",
+        "./src/segmented-control/segmented-control-root.tsx",
+        "./src/select/hidden-select-base.tsx",
+        "./src/select/index.tsx",
+        "./src/select/select-base.tsx",
+        "./src/select/select-content.tsx",
+        "./src/select/select-context.tsx",
+        "./src/select/select-hidden-select.tsx",
+        "./src/select/select-icon.tsx",
+        "./src/select/select-label.tsx",
+        "./src/select/select-listbox.tsx",
+        "./src/select/select-portal.tsx",
+        "./src/select/select-root.tsx",
+        "./src/select/select-trigger.tsx",
+        "./src/select/select-value.tsx",
+        "./src/selection/create-controllable-selection-signal.ts",
+        "./src/selection/create-multiple-selection-state.ts",
+        "./src/selection/create-selectable-collection.ts",
+        "./src/selection/create-selectable-item.ts",
+        "./src/selection/create-type-select.ts",
+        "./src/selection/index.ts",
+        "./src/selection/selection-manager.ts",
+        "./src/selection/types.ts",
+        "./src/selection/utils.ts",
+        "./src/separator/index.tsx",
+        "./src/separator/separator-root.tsx",
+        "./src/skeleton/index.tsx",
+        "./src/skeleton/skeleton-root.tsx",
+        "./src/slider/create-slider-state.ts",
+        "./src/slider/index.tsx",
+        "./src/slider/slider-context.tsx",
+        "./src/slider/slider-fill.tsx",
+        "./src/slider/slider-input.tsx",
+        "./src/slider/slider-root.tsx",
+        "./src/slider/slider-thumb.tsx",
+        "./src/slider/slider-track.tsx",
+        "./src/slider/slider-value-label.tsx",
+        "./src/slider/utils.ts",
+        "./src/spin-button/index.tsx",
+        "./src/spin-button/spin-button-root.tsx",
+        "./src/spin-button/spin-button.intl.ts",
+        "./src/switch/index.tsx",
+        "./src/switch/switch-context.tsx",
+        "./src/switch/switch-control.tsx",
+        "./src/switch/switch-description.tsx",
+        "./src/switch/switch-error-message.tsx",
+        "./src/switch/switch-input.tsx",
+        "./src/switch/switch-label.tsx",
+        "./src/switch/switch-root.tsx",
+        "./src/switch/switch-thumb.tsx",
+        "./src/tabs/index.tsx",
+        "./src/tabs/tabs-content.tsx",
+        "./src/tabs/tabs-context.tsx",
+        "./src/tabs/tabs-indicator.tsx",
+        "./src/tabs/tabs-keyboard-delegate.ts",
+        "./src/tabs/tabs-list.tsx",
+        "./src/tabs/tabs-root.tsx",
+        "./src/tabs/tabs-trigger.tsx",
+        "./src/text-field/index.tsx",
+        "./src/text-field/text-field-context.tsx",
+        "./src/text-field/text-field-input.tsx",
+        "./src/text-field/text-field-root.tsx",
+        "./src/text-field/text-field-text-area.tsx",
+        "./src/time-field/index.tsx",
+        "./src/time-field/time-field-context.tsx",
+        "./src/time-field/time-field-hidden-input.tsx",
+        "./src/time-field/time-field-input.tsx",
+        "./src/time-field/time-field-label.tsx",
+        "./src/time-field/time-field-root.tsx",
+        "./src/time-field/time-field-segment.tsx",
+        "./src/time-field/time-field-value-description.tsx",
+        "./src/time-field/time-field.intl.ts",
+        "./src/toast/index.tsx",
+        "./src/toast/toast-close-button.tsx",
+        "./src/toast/toast-context.tsx",
+        "./src/toast/toast-description.tsx",
+        "./src/toast/toast-list.tsx",
+        "./src/toast/toast-progress-fill.tsx",
+        "./src/toast/toast-progress-track.tsx",
+        "./src/toast/toast-region-context.tsx",
+        "./src/toast/toast-region.tsx",
+        "./src/toast/toast-root.tsx",
+        "./src/toast/toast-store.ts",
+        "./src/toast/toast-title.tsx",
+        "./src/toast/toast.intl.ts",
+        "./src/toast/toaster.ts",
+        "./src/toggle-button/index.tsx",
+        "./src/toggle-button/toggle-button-root.tsx",
+        "./src/toggle-group/index.tsx",
+        "./src/toggle-group/toggle-group-base.tsx",
+        "./src/toggle-group/toggle-group-context.tsx",
+        "./src/toggle-group/toggle-group-item.tsx",
+        "./src/toggle-group/toggle-group-root.tsx",
+        "./src/tooltip/index.tsx",
+        "./src/tooltip/tooltip-content.tsx",
+        "./src/tooltip/tooltip-context.tsx",
+        "./src/tooltip/tooltip-portal.tsx",
+        "./src/tooltip/tooltip-root.tsx",
+        "./src/tooltip/tooltip-trigger.tsx",
+        "./src/tooltip/utils.ts",
+        "./switch",
+        "./tabs",
+        "./text-field",
+        "./time-field",
+        "./toast",
+        "./toggle-button",
+        "./toggle-group",
+        "./tooltip"
+      ],
+      "explicitExpected": [
+        "."
+      ],
+      "missing": [],
+      "wildcard": true,
+      "coverage": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": true,
+        "certifiedEntrypoints": 508,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": []
+    },
+    {
+      "probeId": "@kobalte/core@2.0.0-alpha.0|solid2|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gbGjNz/node_modules/@kobalte/core/package.json",
+      "manifestDigest": "sha256:15417622f5d59088663b1dd498fcbeba26bb5cb7ad4d8e199fc890aa1a3fd77a",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-XIuP5M/@kobalte__core@2.0.0-alpha.0--solid2--only.json.accepted-catalog",
+      "accepted": [
+        "./accordion",
+        "./alert",
+        "./alert-dialog",
+        "./badge",
+        "./breadcrumbs",
+        "./button",
+        "./checkbox",
+        "./collapsible",
+        "./color-area",
+        "./color-channel-field",
+        "./color-field",
+        "./color-mode",
+        "./color-slider",
+        "./color-swatch",
+        "./color-wheel",
+        "./colors",
+        "./combobox",
+        "./context-menu",
+        "./dialog",
+        "./drawer",
+        "./dropdown-menu",
+        "./file-field",
+        "./hover-card",
+        "./i18n",
+        "./image",
+        "./link",
+        "./listbox",
+        "./menubar",
+        "./meter",
+        "./navigation-menu",
+        "./number-field",
+        "./otp-field",
+        "./pagination",
+        "./polymorphic",
+        "./popover",
+        "./popper",
+        "./primitives/create-collection",
+        "./primitives/create-disclosure-state",
+        "./primitives/create-dom-collection",
+        "./primitives/create-register-id",
+        "./primitives/create-tag-name",
+        "./primitives/create-toggle-state",
+        "./progress",
+        "./radio-group",
+        "./rating",
+        "./resizable",
+        "./search",
+        "./segmented-control",
+        "./select",
+        "./separator",
+        "./skeleton",
+        "./slider",
+        "./spin-button",
+        "./switch",
+        "./tabs",
+        "./text-field",
+        "./time-field",
+        "./toast",
+        "./toggle-button",
+        "./toggle-group",
+        "./tooltip"
+      ],
+      "explicitExpected": [],
+      "missing": [],
+      "wildcard": true,
+      "coverage": {
+        "declaredEntrypoints": 1,
+        "declaredWildcard": true,
+        "certifiedEntrypoints": 61,
+        "rootCertified": false
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": []
+    },
+    {
+      "probeId": "@kobalte/solidbase@0.6.13|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-mFGRE7/node_modules/@kobalte/solidbase/package.json",
+      "manifestDigest": "sha256:c85287338a8f8fa4a0df93c5146c392d37922520597ad8429ea87b348a32ddab",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-jjxmgX/@kobalte__solidbase@0.6.13--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "./config",
+        "./config/sidebar",
+        "./default-theme",
+        "./default-theme/Layout.jsx",
+        "./default-theme/components/Article.jsx",
+        "./default-theme/components/Badges.jsx",
+        "./default-theme/components/CopyPageLink.jsx",
+        "./default-theme/components/Features.jsx",
+        "./default-theme/components/Footer.jsx",
+        "./default-theme/components/Header.jsx",
+        "./default-theme/components/Hero.jsx",
+        "./default-theme/components/LastUpdated.jsx",
+        "./default-theme/components/Link.jsx",
+        "./default-theme/components/LocaleSelector.jsx",
+        "./default-theme/components/Preview.jsx",
+        "./default-theme/components/ProjectSelector.jsx",
+        "./default-theme/components/TableOfContents.jsx",
+        "./default-theme/components/ThemeSelector.jsx",
+        "./default-theme/components/VersionSelector.jsx",
+        "./default-theme/components/vendor/DocSearch.jsx",
+        "./default-theme/context.jsx",
+        "./default-theme/default-components.js",
+        "./default-theme/fonts.js",
+        "./default-theme/frontmatter.js",
+        "./default-theme/globals.js",
+        "./default-theme/index.js",
+        "./default-theme/mdx-components.jsx",
+        "./default-theme/pace.js",
+        "./default-theme/sidebar.js",
+        "./default-theme/text.js",
+        "./default-theme/utils.js",
+        "./mdx",
+        "./server"
+      ],
+      "explicitExpected": [
+        "./client",
+        "./config",
+        "./config/sidebar",
+        "./config/route",
+        "./server",
+        "./default-theme",
+        "./mdx"
+      ],
+      "missing": [
+        "./client",
+        "./config/route"
+      ],
+      "wildcard": true,
+      "coverage": {
+        "declaredEntrypoints": 8,
+        "declaredWildcard": true,
+        "certifiedEntrypoints": 33,
+        "rootCertified": false
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": "./client",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency virtual:solidbase/components has no exact runtime binding for export mdxComponents"
+        },
+        {
+          "entrypoint": "./client",
+          "conditions": [
+            "solid"
+          ],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency virtual:solidbase/components has no exact runtime binding for export mdxComponents"
+        },
+        {
+          "entrypoint": "./config/route",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "unavailable-published-target",
+          "reason": "resolved target <package-root>/src/config/route-config.js is not a file"
+        }
+      ],
+      "missingReportedInapplicabilities": []
+    },
+    {
+      "probeId": "@kobalte/utils@0.9.2|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-eRlde6/node_modules/@kobalte/utils/package.json",
+      "manifestDigest": "sha256:f842d7ef23937987b9ee55e433a18820d50db444eff244b0b7534d2f0dd11fe8",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-9PQW3O/@kobalte__utils@0.9.2--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./src/array.ts",
+        "./src/assertion.ts",
+        "./src/create-generate-id.ts",
+        "./src/create-global-listeners.ts",
+        "./src/dom.ts",
+        "./src/enums.ts",
+        "./src/events.ts",
+        "./src/external.ts",
+        "./src/focus-manager.ts",
+        "./src/focus-without-scrolling.ts",
+        "./src/get-scroll-parent.ts",
+        "./src/index.ts",
+        "./src/is-virtual-event.ts",
+        "./src/noop.ts",
+        "./src/number.ts",
+        "./src/platform.ts",
+        "./src/polygon.ts",
+        "./src/props.ts",
+        "./src/run-after-transition.ts",
+        "./src/styles.ts",
+        "./src/tabbable.ts"
+      ],
+      "explicitExpected": [
+        "."
+      ],
+      "missing": [],
+      "wildcard": true,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": true,
+        "certifiedEntrypoints": 22,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": []
+    },
+    {
+      "probeId": "@kobalte/utils@2.0.0-alpha.0|solid2|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-OgvRgg/node_modules/@kobalte/utils/package.json",
+      "manifestDigest": "sha256:86014ad7527df755c8e1cb22876c22610f8bc9bbbe831623e664cd3627d18c03",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-nAiYnR/@kobalte__utils@2.0.0-alpha.0--solid2--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./src/events.ts",
+        "./src/get-scroll-parent.ts",
+        "./src/index.ts",
+        "./src/number.ts",
+        "./src/polygon.ts",
+        "./src/styles.ts"
+      ],
+      "explicitExpected": [
+        "."
+      ],
+      "missing": [],
+      "wildcard": true,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": true,
+        "certifiedEntrypoints": 7,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": []
+    },
+    {
+      "probeId": "@solid-devtools/debugger@0.28.1|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-h3k5r1/node_modules/@solid-devtools/debugger/package.json",
+      "manifestDigest": "sha256:ec5c9f9c1b55e9e18b197cd0e905703173a4b70fbb4a29bc0466e4400f632ead",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-b9kgSw/@solid-devtools__debugger@0.28.1--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./index",
+        "./setup",
+        "./types"
+      ],
+      "explicitExpected": [
+        ".",
+        "./bundled"
+      ],
+      "missing": [
+        "./bundled"
+      ],
+      "wildcard": true,
+      "coverage": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": true,
+        "certifiedEntrypoints": 4,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./bundled",
+          "conditions": [
+            "@solid-devtools/source"
+          ],
+          "stage": "artifact-case",
+          "class": "unpublished-conditional-target",
+          "reason": "runtime target is unpublished behind private namespaced export condition(s) \"@solid-devtools/source\""
+        }
+      ]
+    },
+    {
+      "probeId": "@solid-devtools/frontend@0.15.4|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LGeiRu/node_modules/@solid-devtools/frontend/package.json",
+      "manifestDigest": "sha256:9eafa7f61ef8d6a6bad1ba4ebddfda1521cf90bc4969834a8e92be83cfc0d71c",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-wbIYAM/@solid-devtools__frontend@0.15.4--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./dist/styles.css"
+      ],
+      "missing": [
+        "./dist/styles.css"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./dist/styles.css",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".css\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@solid-devtools/shared@0.20.0|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-L2Knga/node_modules/@solid-devtools/shared/package.json",
+      "manifestDigest": "sha256:0794f9fbdca93e3834baec7c712a55db15386b899e149028d0623782ecaebb64",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-ePvor3/@solid-devtools__shared@0.20.0--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "./detect",
+        "./primitives",
+        "./theme"
+      ],
+      "explicitExpected": [
+        "."
+      ],
+      "missing": [
+        "."
+      ],
+      "wildcard": true,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": true,
+        "certifiedEntrypoints": 3,
+        "rootCertified": false
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/index.js has no runtime ESM exports"
+        },
+        {
+          "entrypoint": ".",
+          "conditions": [
+            "@solid-devtools/source"
+          ],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/src/index.ts has no runtime ESM exports"
+        }
+      ],
+      "missingReportedInapplicabilities": []
+    },
+    {
+      "probeId": "@solid-devtools/ui@0.10.3|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-AyRr2z/node_modules/@solid-devtools/ui/package.json",
+      "manifestDigest": "sha256:4a976feda5977b4dd9f5247da736fb0f4e2fefd1f593d201292b47a38208b65d",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-UgH5pX/@solid-devtools__ui@0.10.3--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "./animation",
+        "./icons",
+        "./theme"
+      ],
+      "explicitExpected": [
+        ".",
+        "./css",
+        "./theme",
+        "./animation",
+        "./icons"
+      ],
+      "missing": [
+        ".",
+        "./css"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 5,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 3,
+        "rootCertified": false
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./css",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".css\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@solid-primitives/sse@0.0.103|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gyvtjM/node_modules/@solid-primitives/sse/package.json",
+      "manifestDigest": "sha256:7ae55652fac7fb7339cf3043058e405c5b77ab87b330b0339f6e349ab04dc82f",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-xN6dcj/@solid-primitives__sse@0.0.103--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./worker"
+      ],
+      "explicitExpected": [
+        ".",
+        "./worker",
+        "./worker-handler"
+      ],
+      "missing": [
+        "./worker-handler"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 2,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": "./worker-handler",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/worker-handler.js has no runtime ESM exports"
+        }
+      ],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./worker-handler",
+          "conditions": [
+            "@solid-primitives/source"
+          ],
+          "stage": "artifact-case",
+          "class": "unpublished-conditional-target",
+          "reason": "runtime target is unpublished behind private namespaced export condition(s) \"@solid-primitives/source\""
+        }
+      ]
+    },
+    {
+      "probeId": "@solid-primitives/sse@1.0.0-next.2|solid2|floor",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-8aHR3J/node_modules/@solid-primitives/sse/package.json",
+      "manifestDigest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-zo3eWP/@solid-primitives__sse@1.0.0-next.2--solid2--floor.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./worker"
+      ],
+      "explicitExpected": [
+        ".",
+        "./worker",
+        "./worker-handler"
+      ],
+      "missing": [
+        "./worker-handler"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 2,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": "./worker-handler",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/worker-handler.js has no runtime ESM exports"
+        }
+      ],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./worker-handler",
+          "conditions": [
+            "@solid-primitives/source"
+          ],
+          "stage": "artifact-case",
+          "class": "unpublished-conditional-target",
+          "reason": "runtime target is unpublished behind private namespaced export condition(s) \"@solid-primitives/source\""
+        }
+      ]
+    },
+    {
+      "probeId": "@solid-primitives/sse@1.0.0-next.2|solid2|head",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-M3CK9g/node_modules/@solid-primitives/sse/package.json",
+      "manifestDigest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-ZIMKtq/@solid-primitives__sse@1.0.0-next.2--solid2--head.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./worker"
+      ],
+      "explicitExpected": [
+        ".",
+        "./worker",
+        "./worker-handler"
+      ],
+      "missing": [
+        "./worker-handler"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 2,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": "./worker-handler",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/worker-handler.js has no runtime ESM exports"
+        }
+      ],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./worker-handler",
+          "conditions": [
+            "@solid-primitives/source"
+          ],
+          "stage": "artifact-case",
+          "class": "unpublished-conditional-target",
+          "reason": "runtime target is unpublished behind private namespaced export condition(s) \"@solid-primitives/source\""
+        }
+      ]
+    },
+    {
+      "probeId": "@solidjs/diagnostics@2.0.0-rc.3|solid2|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-VcNMpM/node_modules/@solidjs/diagnostics/package.json",
+      "manifestDigest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-gXPaGs/@solidjs__diagnostics@2.0.0-rc.3--solid2--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./browser",
+        "./protocol"
+      ],
+      "explicitExpected": [
+        ".",
+        "./vitest",
+        "./browser",
+        "./playwright",
+        "./protocol",
+        "./package.json"
+      ],
+      "missing": [
+        "./vitest",
+        "./playwright",
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 6,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 3,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": "./vitest",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/vitest.js has no runtime ESM exports"
+        }
+      ],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@solidjs/h@2.0.0-rc.3|solid2|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-WO05xZ/node_modules/@solidjs/h/package.json",
+      "manifestDigest": "sha256:1c1e3d212e1360ec1d357c64d2bc705cf667542b271b3722f35cca7f3678508a",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-PrhVMf/@solidjs__h@2.0.0-rc.3--solid2--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./jsx-dev-runtime",
+        "./jsx-runtime"
+      ],
+      "explicitExpected": [
+        ".",
+        "./jsx-runtime",
+        "./jsx-dev-runtime"
+      ],
+      "missing": [],
+      "wildcard": true,
+      "coverage": {
+        "declaredEntrypoints": 4,
+        "declaredWildcard": true,
+        "certifiedEntrypoints": 3,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": []
+    },
+    {
+      "probeId": "@solidjs/image@0.1.0|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-m77WdE/node_modules/@solidjs/image/package.json",
+      "manifestDigest": "sha256:df7159d67291e2c16939f81d3afbe189d1f4d8a6684a11a8f4e32eecab7c544f",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-JkGB7s/@solidjs__image@0.1.0--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./vite"
+      ],
+      "explicitExpected": [
+        ".",
+        "./env",
+        "./vite",
+        "./package.json",
+        "./style.css"
+      ],
+      "missing": [
+        "./env",
+        "./package.json",
+        "./style.css"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 5,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 2,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./env",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-emitting-module-target",
+          "applicability": "verifier-proved-type-only",
+          "reason": "runtime target emits no JavaScript (declaration-file): 2 module-level statement(s)"
+        },
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        },
+        {
+          "entrypoint": "./style.css",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".css\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@solidjs/signals@2.0.0-rc.3|solid2|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Fa4I2F/node_modules/@solidjs/signals/package.json",
+      "manifestDigest": "sha256:22d27a9ebdc7b4fbfc65b9857bbea96ea60d3617697fd628b42b6e1253ffdb76",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-xXxbYZ/@solidjs__signals@2.0.0-rc.3--solid2--only.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@solidjs/start@2.0.3|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-0zJufV/node_modules/@solidjs/start/package.json",
+      "manifestDigest": "sha256:3d43a212c9343554fef042cbb800f395fa9d4e91b73feff6d49d661d1db0eeb5",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-S2jRuu/@solidjs__start@2.0.3--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./client/spa",
+        "./config",
+        "./fns/client",
+        "./fns/server",
+        "./http",
+        "./middleware",
+        "./router",
+        "./server",
+        "./server/spa"
+      ],
+      "explicitExpected": [
+        ".",
+        "./config",
+        "./server",
+        "./client",
+        "./router",
+        "./server/spa",
+        "./client/spa",
+        "./middleware",
+        "./http",
+        "./env",
+        "./fns/server",
+        "./fns/client",
+        "./serialization"
+      ],
+      "missing": [
+        "./client",
+        "./env",
+        "./serialization"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 13,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 10,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": "./client",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency solid-js/web has no exact runtime binding for export hydrate"
+        },
+        {
+          "entrypoint": "./serialization",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency seroval has no exact runtime binding for export OpaqueReference"
+        }
+      ],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./env",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-emitting-module-target",
+          "applicability": "verifier-proved-type-only",
+          "reason": "runtime target emits no JavaScript (declaration-file): 3 module-level statement(s)"
+        }
+      ]
+    },
+    {
+      "probeId": "@solidjs/universal@2.0.0-rc.3|solid2|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LyCDbm/node_modules/@solidjs/universal/package.json",
+      "manifestDigest": "sha256:b52653c9af8719c0b8dac561879d865e599e991b6bbeb796265ddbbd9d008af5",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-f8hTQI/@solidjs__universal@2.0.0-rc.3--solid2--only.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        "."
+      ],
+      "missing": [],
+      "wildcard": true,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": true,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": []
+    },
+    {
+      "probeId": "@solidjs/vite-plugin@3.0.0-next.34|solid2|floor",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gvHOnQ/node_modules/@solidjs/vite-plugin/package.json",
+      "manifestDigest": "sha256:eb7d2c4545dc9c5545250024a324841ac5675623f3e8223e98628c45c280ee81",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-T1tJOZ/@solidjs__vite-plugin@3.0.0-next.34--solid2--floor.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./virtual-solid-manifest",
+        "./boundary-modules"
+      ],
+      "missing": [
+        "./virtual-solid-manifest",
+        "./boundary-modules"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": "./boundary-modules",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "unsupported-condition-environment",
+          "reason": "./boundary-modules selects no active package-export condition"
+        },
+        {
+          "entrypoint": "./virtual-solid-manifest",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "unsupported-condition-environment",
+          "reason": "./virtual-solid-manifest selects no active package-export condition"
+        }
+      ],
+      "missingReportedInapplicabilities": []
+    },
+    {
+      "probeId": "@solidjs/vite-plugin@3.0.0-next.34|solid2|head",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-jWEtc0/node_modules/@solidjs/vite-plugin/package.json",
+      "manifestDigest": "sha256:eb7d2c4545dc9c5545250024a324841ac5675623f3e8223e98628c45c280ee81",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-8roYrF/@solidjs__vite-plugin@3.0.0-next.34--solid2--head.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./virtual-solid-manifest",
+        "./boundary-modules"
+      ],
+      "missing": [
+        "./virtual-solid-manifest",
+        "./boundary-modules"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": "./boundary-modules",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "unsupported-condition-environment",
+          "reason": "./boundary-modules selects no active package-export condition"
+        },
+        {
+          "entrypoint": "./virtual-solid-manifest",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "unsupported-condition-environment",
+          "reason": "./virtual-solid-manifest selects no active package-export condition"
+        }
+      ],
+      "missingReportedInapplicabilities": []
+    },
+    {
+      "probeId": "@solidjs/web@2.0.0-rc.3|solid2|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-xuxv9A/node_modules/@solidjs/web/package.json",
+      "manifestDigest": "sha256:ee9b514b90b06b679d2376c5b5a993c0391aa66ec744e453ec3e534babd30e8e",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-QlnHzq/@solidjs__web@2.0.0-rc.3--solid2--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./frames",
+        "./frames/client",
+        "./frames/server",
+        "./server-functions",
+        "./server-functions/client",
+        "./server-functions/rich-args",
+        "./server-functions/server",
+        "./storage"
+      ],
+      "explicitExpected": [
+        ".",
+        "./jsx-runtime",
+        "./jsx-dev-runtime",
+        "./storage",
+        "./serialization",
+        "./serialization/decode",
+        "./server-functions",
+        "./server-functions/server",
+        "./server-functions/client",
+        "./server-functions/rich-args",
+        "./frames",
+        "./frames/server",
+        "./frames/client"
+      ],
+      "missing": [
+        "./jsx-runtime",
+        "./jsx-dev-runtime",
+        "./serialization",
+        "./serialization/decode"
+      ],
+      "wildcard": true,
+      "coverage": {
+        "declaredEntrypoints": 14,
+        "declaredWildcard": true,
+        "certifiedEntrypoints": 9,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": "./jsx-dev-runtime",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/dev.js has no runtime ESM exports"
+        },
+        {
+          "entrypoint": "./jsx-runtime",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/web.js has no runtime ESM exports"
+        }
+      ],
+      "missingReportedInapplicabilities": []
+    },
+    {
+      "probeId": "@tanstack/ai-devtools-core@0.5.8|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-eThkxS/node_modules/@tanstack/ai-devtools-core/package.json",
+      "manifestDigest": "sha256:bdb151fd48d4c9fe1ea536fda57a7c5161a3af61f67ef95a59ee3bcfbbaba97c",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-cxbWuc/@tanstack__ai-devtools-core@0.5.8--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./production"
+      ],
+      "explicitExpected": [
+        ".",
+        "./production",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 2,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/charts@0.15.0|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-4sutny/node_modules/@tanstack/charts/package.json",
+      "manifestDigest": "sha256:d68f5d7cbcb16342187072ae867fd9eefcbd83ec824ab0eae3140306ee80b641",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-xZUvle/@tanstack__charts@0.15.0--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "./solid"
+      ],
+      "explicitExpected": [
+        ".",
+        "./adapter",
+        "./adapter/renderer",
+        "./alpine",
+        "./angular",
+        "./area",
+        "./area-x",
+        "./arrow",
+        "./bar",
+        "./band",
+        "./box",
+        "./canvas",
+        "./crosshair",
+        "./cursor",
+        "./cursor/host",
+        "./d3/area-x",
+        "./d3/shape",
+        "./difference",
+        "./dom",
+        "./dodge",
+        "./dot",
+        "./export",
+        "./facet",
+        "./focus",
+        "./focus/guide",
+        "./focus/mark",
+        "./focus/disabled",
+        "./frame",
+        "./group",
+        "./geo",
+        "./hexagon",
+        "./hierarchy/tree",
+        "./hierarchy/treemap",
+        "./hierarchy/sunburst",
+        "./interaction/signal",
+        "./interaction/brush",
+        "./interaction/cursor",
+        "./interaction/handle",
+        "./interaction/zoom",
+        "./legend",
+        "./line",
+        "./link",
+        "./lit",
+        "./motion",
+        "./motion/definition",
+        "./network/force",
+        "./network/sankey",
+        "./octane",
+        "./octane/canvas",
+        "./octane/core",
+        "./mark/composite",
+        "./mark/decorative",
+        "./spring",
+        "./spatial/contour",
+        "./spatial/delaunay",
+        "./spatial/density",
+        "./spatial/hexbin",
+        "./spatial/voronoi",
+        "./svelte",
+        "./mark/scale-values",
+        "./polar",
+        "./preact",
+        "./react",
+        "./react/canvas",
+        "./react/core",
+        "./react/tooltip",
+        "./react-native",
+        "./react-native/tooltip",
+        "./universal",
+        "./reconcile",
+        "./rect",
+        "./regression",
+        "./selection",
+        "./renderer",
+        "./ridgeline",
+        "./rule",
+        "./runtime",
+        "./scales/band",
+        "./scales/linear",
+        "./scales/ordinal",
+        "./scales/point",
+        "./scene",
+        "./solid",
+        "./svg",
+        "./svg/renderer",
+        "./svg/resources",
+        "./stack",
+        "./transform",
+        "./transform/bin",
+        "./transform/bin-time",
+        "./transform/bin-xy",
+        "./transform/cumulative",
+        "./transform/fold",
+        "./transform/group",
+        "./transform/mosaic",
+        "./transform/normalize",
+        "./transform/rank",
+        "./transform/reduce",
+        "./transform/select",
+        "./transform/stack",
+        "./transform/waterfall",
+        "./transform/rolling-window",
+        "./text",
+        "./tick",
+        "./tooltip",
+        "./tooltip/model",
+        "./tooltip/portal",
+        "./types",
+        "./vector",
+        "./violin",
+        "./view",
+        "./vue",
+        "./waffle"
+      ],
+      "missing": [
+        ".",
+        "./adapter",
+        "./adapter/renderer",
+        "./alpine",
+        "./angular",
+        "./area",
+        "./area-x",
+        "./arrow",
+        "./bar",
+        "./band",
+        "./box",
+        "./canvas",
+        "./crosshair",
+        "./cursor",
+        "./cursor/host",
+        "./d3/area-x",
+        "./d3/shape",
+        "./difference",
+        "./dom",
+        "./dodge",
+        "./dot",
+        "./export",
+        "./facet",
+        "./focus",
+        "./focus/guide",
+        "./focus/mark",
+        "./focus/disabled",
+        "./frame",
+        "./group",
+        "./geo",
+        "./hexagon",
+        "./hierarchy/tree",
+        "./hierarchy/treemap",
+        "./hierarchy/sunburst",
+        "./interaction/signal",
+        "./interaction/brush",
+        "./interaction/cursor",
+        "./interaction/handle",
+        "./interaction/zoom",
+        "./legend",
+        "./line",
+        "./link",
+        "./lit",
+        "./motion",
+        "./motion/definition",
+        "./network/force",
+        "./network/sankey",
+        "./octane",
+        "./octane/canvas",
+        "./octane/core",
+        "./mark/composite",
+        "./mark/decorative",
+        "./spring",
+        "./spatial/contour",
+        "./spatial/delaunay",
+        "./spatial/density",
+        "./spatial/hexbin",
+        "./spatial/voronoi",
+        "./svelte",
+        "./mark/scale-values",
+        "./polar",
+        "./preact",
+        "./react",
+        "./react/canvas",
+        "./react/core",
+        "./react/tooltip",
+        "./react-native",
+        "./react-native/tooltip",
+        "./universal",
+        "./reconcile",
+        "./rect",
+        "./regression",
+        "./selection",
+        "./renderer",
+        "./ridgeline",
+        "./rule",
+        "./runtime",
+        "./scales/band",
+        "./scales/linear",
+        "./scales/ordinal",
+        "./scales/point",
+        "./scene",
+        "./svg",
+        "./svg/renderer",
+        "./svg/resources",
+        "./stack",
+        "./transform",
+        "./transform/bin",
+        "./transform/bin-time",
+        "./transform/bin-xy",
+        "./transform/cumulative",
+        "./transform/fold",
+        "./transform/group",
+        "./transform/mosaic",
+        "./transform/normalize",
+        "./transform/rank",
+        "./transform/reduce",
+        "./transform/select",
+        "./transform/stack",
+        "./transform/waterfall",
+        "./transform/rolling-window",
+        "./text",
+        "./tick",
+        "./tooltip",
+        "./tooltip/model",
+        "./tooltip/portal",
+        "./types",
+        "./vector",
+        "./violin",
+        "./view",
+        "./vue",
+        "./waffle"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 113,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": false
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": []
+    },
+    {
+      "probeId": "@tanstack/devtools-a11y@0.2.2|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-bhPjJD/node_modules/@tanstack/devtools-a11y/package.json",
+      "manifestDigest": "sha256:d00a88eec0ce24aedd73c58027110b320735dcb0047cb7c73d1fb8649fba58b2",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-8dd4TG/@tanstack__devtools-a11y@0.2.2--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "./core",
+        "./core/production",
+        "./solid",
+        "./solid/production"
+      ],
+      "explicitExpected": [
+        "./core",
+        "./core/production",
+        "./react",
+        "./react/production",
+        "./solid",
+        "./solid/production",
+        "./angular",
+        "./angular/production",
+        "./package.json"
+      ],
+      "missing": [
+        "./react",
+        "./react/production",
+        "./angular",
+        "./angular/production",
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 9,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 4,
+        "rootCertified": false
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": []
+    },
+    {
+      "probeId": "@tanstack/devtools-ui@0.7.1|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-vLlxkf/node_modules/@tanstack/devtools-ui/package.json",
+      "manifestDigest": "sha256:a0438c9f58912a33d22110dd272ae3a8bd9e429b091ef06252d1d15d177a43a2",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-u2mNg9/@tanstack__devtools-ui@0.7.1--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./icons",
+        "./internal"
+      ],
+      "explicitExpected": [
+        ".",
+        "./icons",
+        "./internal",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 4,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 3,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/devtools-utils@0.7.0|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-xppo2T/node_modules/@tanstack/devtools-utils/package.json",
+      "manifestDigest": "sha256:fede5602695a64bf594a6c666ec0aeb42fa11311b819ff3e7e56debf4fb23502",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-yi3zEI/@tanstack__devtools-utils@0.7.0--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "./solid",
+        "./solid/class"
+      ],
+      "explicitExpected": [
+        "./react",
+        "./preact",
+        "./solid",
+        "./solid/class",
+        "./vue",
+        "./svelte",
+        "./angular",
+        "./package.json"
+      ],
+      "missing": [
+        "./react",
+        "./preact",
+        "./vue",
+        "./svelte",
+        "./angular",
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 8,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 2,
+        "rootCertified": false
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": []
+    },
+    {
+      "probeId": "@tanstack/form-devtools@1.0.0-alpha.2|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-krbYze/node_modules/@tanstack/form-devtools/package.json",
+      "manifestDigest": "sha256:2911db57362315ecfb5fde39d85b8e9a6c108c806c7a15df37d90a286ab3ca87",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-nOeWeZ/@tanstack__form-devtools@1.0.0-alpha.2--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./production"
+      ],
+      "explicitExpected": [
+        ".",
+        "./production",
+        "./style.css",
+        "./package.json"
+      ],
+      "missing": [
+        "./style.css",
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 4,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 2,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        },
+        {
+          "entrypoint": "./style.css",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".css\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/hotkeys-devtools@0.9.0|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Ibhno3/node_modules/@tanstack/hotkeys-devtools/package.json",
+      "manifestDigest": "sha256:5ef03f75e7f0770569d0efa1437c219729ac71a0b861d4868caa17c908f78789",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-vVb3nO/@tanstack__hotkeys-devtools@0.9.0--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./production"
+      ],
+      "explicitExpected": [
+        ".",
+        "./production",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 2,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/pacer-devtools@1.4.0|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-DdkyLN/node_modules/@tanstack/pacer-devtools/package.json",
+      "manifestDigest": "sha256:c32d17afa22cc218ddc8a7c948606023fddaa217d3dd8ce32807a2c54512e132",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-0zgQLu/@tanstack__pacer-devtools@1.4.0--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./production"
+      ],
+      "explicitExpected": [
+        ".",
+        "./production",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 2,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-devtools@0.8.12|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-zfL8Ms/node_modules/@tanstack/solid-devtools/package.json",
+      "manifestDigest": "sha256:2833b23d37a4a851df0c4b09afb674cd58674e9330c66842635a2c71fce24e29",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-a8j8Hr/@tanstack__solid-devtools@0.8.12--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-form@2.0.0-alpha.2|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-YPe87i/node_modules/@tanstack/solid-form/package.json",
+      "manifestDigest": "sha256:3a0c8a9da5a069002b2f23c42a77b6fc5ff61abbdf19448bd5d43e9860648c79",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-0AVI1W/@tanstack__solid-form@2.0.0-alpha.2--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-form-devtools@1.0.0-alpha.2|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-mDUW0c/node_modules/@tanstack/solid-form-devtools/package.json",
+      "manifestDigest": "sha256:20f7f6b4880a366e31c5d5f2bdb581b4ba61a9a179993d5155ac780a9dd035ef",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-SJdexX/@tanstack__solid-form-devtools@1.0.0-alpha.2--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-hotkeys@0.10.0|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-VcA5o0/node_modules/@tanstack/solid-hotkeys/package.json",
+      "manifestDigest": "sha256:a26381ddcb7ceac8aa725aa79829b4f5301b2acd786093b94bcc918dc9f61133",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-BHZl49/@tanstack__solid-hotkeys@0.10.0--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-hotkeys-devtools@0.7.0|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-bQTuiO/node_modules/@tanstack/solid-hotkeys-devtools/package.json",
+      "manifestDigest": "sha256:1c4013560a24fb3f93025aecc4eea4360f8d4e360bd6907c35f2b38870183bc0",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-O7QNLM/@tanstack__solid-hotkeys-devtools@0.7.0--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-pacer@0.22.0|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-hjDvJ5/node_modules/@tanstack/solid-pacer/package.json",
+      "manifestDigest": "sha256:d4e9599abc3205346d06ac7b889703d1551ea4454d919f8f1f78eb1ebc3dec54",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-oHe4rL/@tanstack__solid-pacer@0.22.0--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./async-batcher",
+        "./async-debouncer",
+        "./async-queuer",
+        "./async-rate-limiter",
+        "./async-throttler",
+        "./batcher",
+        "./debouncer",
+        "./provider",
+        "./queuer",
+        "./rate-limiter",
+        "./throttler",
+        "./utils"
+      ],
+      "explicitExpected": [
+        ".",
+        "./async-batcher",
+        "./async-debouncer",
+        "./async-queuer",
+        "./async-rate-limiter",
+        "./async-throttler",
+        "./batcher",
+        "./debouncer",
+        "./provider",
+        "./queuer",
+        "./rate-limiter",
+        "./throttler",
+        "./types",
+        "./utils",
+        "./package.json"
+      ],
+      "missing": [
+        "./types",
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 15,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 13,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": "./types",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/pacer/types\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/pacer/types\" from <package-root>/dist/types/index.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        }
+      ],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-pacer-devtools@0.14.0|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-moKfvL/node_modules/@tanstack/solid-pacer-devtools/package.json",
+      "manifestDigest": "sha256:b56d96320ee7c82e36fdd3ca4fb6cb9e9ca5e3812cf5650d1a52b47553a729e7",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-8wRjt8/@tanstack__solid-pacer-devtools@0.14.0--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./production"
+      ],
+      "explicitExpected": [
+        ".",
+        "./production",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 2,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-router@1.170.30|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-WmU48P/node_modules/@tanstack/solid-router/package.json",
+      "manifestDigest": "sha256:a9144af4621f91637ac6c97b5800f56d077213884a3d498c98b3d5c17978ac22",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-rsdoeS/@tanstack__solid-router@1.170.30--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "./ssr/client"
+      ],
+      "explicitExpected": [
+        ".",
+        "./ssr/server",
+        "./ssr/client",
+        "./package.json"
+      ],
+      "missing": [
+        ".",
+        "./ssr/server",
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 4,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": false
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/router-core has no exact runtime binding for export DEFAULT_PROTOCOL_ALLOWLIST"
+        },
+        {
+          "entrypoint": ".",
+          "conditions": [
+            "solid"
+          ],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/router-core has no exact runtime binding for export DEFAULT_PROTOCOL_ALLOWLIST"
+        },
+        {
+          "entrypoint": ".",
+          "conditions": [
+            "development"
+          ],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/router-core has no exact runtime binding for export DEFAULT_PROTOCOL_ALLOWLIST"
+        },
+        {
+          "entrypoint": ".",
+          "conditions": [
+            "development",
+            "solid"
+          ],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/router-core has no exact runtime binding for export DEFAULT_PROTOCOL_ALLOWLIST"
+        },
+        {
+          "entrypoint": "./ssr/server",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/router-core/ssr/server\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/router-core/ssr/server\" from <package-root>/dist/esm/ssr/server.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        },
+        {
+          "entrypoint": "./ssr/server",
+          "conditions": [
+            "solid"
+          ],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/router-core/ssr/server\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/router-core/ssr/server\" from <package-root>/dist/source/ssr/server.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        }
+      ],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-router@2.0.0-rc.2|solid2|floor",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-34IY8B/node_modules/@tanstack/solid-router/package.json",
+      "manifestDigest": "sha256:2889d87208de73eff10bb2fcce2ad667dddac36fb93f7f5a54fcb97ba5889023",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-un4CJ7/@tanstack__solid-router@2.0.0-rc.2--solid2--floor.json.accepted-catalog",
+      "accepted": [
+        "./ssr/client"
+      ],
+      "explicitExpected": [
+        ".",
+        "./ssr/server",
+        "./ssr/client",
+        "./package.json"
+      ],
+      "missing": [
+        ".",
+        "./ssr/server",
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 4,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": false
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/router-core has no exact runtime binding for export DEFAULT_PROTOCOL_ALLOWLIST"
+        },
+        {
+          "entrypoint": ".",
+          "conditions": [
+            "solid"
+          ],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/router-core has no exact runtime binding for export DEFAULT_PROTOCOL_ALLOWLIST"
+        },
+        {
+          "entrypoint": "./ssr/server",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/router-core/ssr/server\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/router-core/ssr/server\" from <package-root>/dist/esm/ssr/server.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        },
+        {
+          "entrypoint": "./ssr/server",
+          "conditions": [
+            "solid"
+          ],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/router-core/ssr/server\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/router-core/ssr/server\" from <package-root>/dist/source/ssr/server.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        }
+      ],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-router@2.0.0-rc.2|solid2|head",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-negXXe/node_modules/@tanstack/solid-router/package.json",
+      "manifestDigest": "sha256:2889d87208de73eff10bb2fcce2ad667dddac36fb93f7f5a54fcb97ba5889023",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-aCNTq3/@tanstack__solid-router@2.0.0-rc.2--solid2--head.json.accepted-catalog",
+      "accepted": [
+        "./ssr/client"
+      ],
+      "explicitExpected": [
+        ".",
+        "./ssr/server",
+        "./ssr/client",
+        "./package.json"
+      ],
+      "missing": [
+        ".",
+        "./ssr/server",
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 4,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": false
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/router-core has no exact runtime binding for export DEFAULT_PROTOCOL_ALLOWLIST"
+        },
+        {
+          "entrypoint": ".",
+          "conditions": [
+            "solid"
+          ],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/router-core has no exact runtime binding for export DEFAULT_PROTOCOL_ALLOWLIST"
+        },
+        {
+          "entrypoint": "./ssr/server",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/router-core/ssr/server\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/router-core/ssr/server\" from <package-root>/dist/esm/ssr/server.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        },
+        {
+          "entrypoint": "./ssr/server",
+          "conditions": [
+            "solid"
+          ],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/router-core/ssr/server\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/router-core/ssr/server\" from <package-root>/dist/source/ssr/server.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        }
+      ],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-router-devtools@1.167.1|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-iOQpIq/node_modules/@tanstack/solid-router-devtools/package.json",
+      "manifestDigest": "sha256:99bb8bf101b612e8bea73dc46b256a6bd062c0239eb2de0a0fc264d3e0a39343",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-5h6QPA/@tanstack__solid-router-devtools@1.167.1--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-router-devtools@2.0.0-rc.2|solid2|floor",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-UGcdUX/node_modules/@tanstack/solid-router-devtools/package.json",
+      "manifestDigest": "sha256:7ae5f417df6ef80c8ea0bc1a8d3c78ef55520e4318c7583c9d9403da23b4283f",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-x8ZaFo/@tanstack__solid-router-devtools@2.0.0-rc.2--solid2--floor.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-router-devtools@2.0.0-rc.2|solid2|head",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-xomeJq/node_modules/@tanstack/solid-router-devtools/package.json",
+      "manifestDigest": "sha256:7ae5f417df6ef80c8ea0bc1a8d3c78ef55520e4318c7583c9d9403da23b4283f",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-SGtD46/@tanstack__solid-router-devtools@2.0.0-rc.2--solid2--head.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-router-ssr-query@1.167.2-pre.0|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-wdDH2L/node_modules/@tanstack/solid-router-ssr-query/package.json",
+      "manifestDigest": "sha256:077c36ee444f4f9344eed7e74951531ae4c594892a8ccd9fe9ad2243a8e90eea",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-sGKo6T/@tanstack__solid-router-ssr-query@1.167.2-pre.0--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-router-ssr-query@2.0.0-rc.2|solid2|floor",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-xeEpAu/node_modules/@tanstack/solid-router-ssr-query/package.json",
+      "manifestDigest": "sha256:390e4f2c2a8b4986a9d66896d57841693cfe9e65ce1060087d50659876f03d6a",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-iWsbhO/@tanstack__solid-router-ssr-query@2.0.0-rc.2--solid2--floor.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-router-ssr-query@2.0.0-rc.2|solid2|head",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-pLQH8I/node_modules/@tanstack/solid-router-ssr-query/package.json",
+      "manifestDigest": "sha256:390e4f2c2a8b4986a9d66896d57841693cfe9e65ce1060087d50659876f03d6a",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-R8WGlW/@tanstack__solid-router-ssr-query@2.0.0-rc.2--solid2--head.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-start@1.168.47|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-jLqxBH/node_modules/@tanstack/solid-start/package.json",
+      "manifestDigest": "sha256:d8eba8bc12825d4a5ae253fc2e67dc911507e120fc8f53d71e80b2f94c761a6a",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-1q6Wzj/@tanstack__solid-start@1.168.47--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "./plugin/rsbuild",
+        "./plugin/vite",
+        "./server-entry"
+      ],
+      "explicitExpected": [
+        ".",
+        "./client",
+        "./hydration",
+        "./client-rpc",
+        "./server-rpc",
+        "./ssr-rpc",
+        "./server",
+        "./plugin/vite",
+        "./plugin/rsbuild",
+        "./server-entry",
+        "./server-only",
+        "./client-only",
+        "./package.json"
+      ],
+      "missing": [
+        ".",
+        "./client",
+        "./hydration",
+        "./client-rpc",
+        "./server-rpc",
+        "./ssr-rpc",
+        "./server",
+        "./server-only",
+        "./client-only",
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 13,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 3,
+        "rootCertified": false
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/solid-start-client/Hydrate has no exact runtime binding for export Hydrate"
+        },
+        {
+          "entrypoint": "./client",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/solid-start-client\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/solid-start-client\" from <package-root>/dist/esm/client.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        },
+        {
+          "entrypoint": "./client-only",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/esm/client-only.js has no runtime ESM exports"
+        },
+        {
+          "entrypoint": "./client-rpc",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/start-client-core/client-rpc\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/start-client-core/client-rpc\" from <package-root>/dist/esm/client-rpc.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        },
+        {
+          "entrypoint": "./hydration",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/solid-start-client/hydration has no exact runtime binding for export condition"
+        },
+        {
+          "entrypoint": "./server",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/solid-start-server\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/solid-start-server\" from <package-root>/dist/esm/server.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        },
+        {
+          "entrypoint": "./server-only",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/esm/server-only.js has no runtime ESM exports"
+        },
+        {
+          "entrypoint": "./server-rpc",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/start-server-core/createServerRpc has no exact runtime binding for export createServerRpc"
+        },
+        {
+          "entrypoint": "./ssr-rpc",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/start-server-core/createSsrRpc has no exact runtime binding for export createSsrRpc"
+        }
+      ],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-start@2.0.0-rc.2|solid2|floor",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-wyZNRX/node_modules/@tanstack/solid-start/package.json",
+      "manifestDigest": "sha256:302a5be2ce72270780a7ecd227029c04629d7ffa0aadb7eb7903130a83edfb84",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-ZDRBNz/@tanstack__solid-start@2.0.0-rc.2--solid2--floor.json.accepted-catalog",
+      "accepted": [
+        "./plugin/rsbuild",
+        "./plugin/vite",
+        "./server-entry"
+      ],
+      "explicitExpected": [
+        ".",
+        "./client",
+        "./hydration",
+        "./client-rpc",
+        "./server-rpc",
+        "./ssr-rpc",
+        "./server",
+        "./plugin/vite",
+        "./plugin/rsbuild",
+        "./server-entry",
+        "./server-only",
+        "./client-only",
+        "./package.json"
+      ],
+      "missing": [
+        ".",
+        "./client",
+        "./hydration",
+        "./client-rpc",
+        "./server-rpc",
+        "./ssr-rpc",
+        "./server",
+        "./server-only",
+        "./client-only",
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 13,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 3,
+        "rootCertified": false
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/solid-start-client/Hydrate has no exact runtime binding for export Hydrate"
+        },
+        {
+          "entrypoint": "./client",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/solid-start-client\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/solid-start-client\" from <package-root>/dist/esm/client.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        },
+        {
+          "entrypoint": "./client-only",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/esm/client-only.js has no runtime ESM exports"
+        },
+        {
+          "entrypoint": "./client-rpc",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/start-client-core/client-rpc\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/start-client-core/client-rpc\" from <package-root>/dist/esm/client-rpc.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        },
+        {
+          "entrypoint": "./hydration",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/solid-start-client/hydration has no exact runtime binding for export condition"
+        },
+        {
+          "entrypoint": "./server",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/solid-start-server\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/solid-start-server\" from <package-root>/dist/esm/server.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        },
+        {
+          "entrypoint": "./server-only",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/esm/server-only.js has no runtime ESM exports"
+        },
+        {
+          "entrypoint": "./server-rpc",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/start-server-core/createServerRpc has no exact runtime binding for export createServerRpc"
+        },
+        {
+          "entrypoint": "./ssr-rpc",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/start-server-core/createSsrRpc has no exact runtime binding for export createSsrRpc"
+        }
+      ],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-start@2.0.0-rc.2|solid2|head",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-6UTs61/node_modules/@tanstack/solid-start/package.json",
+      "manifestDigest": "sha256:302a5be2ce72270780a7ecd227029c04629d7ffa0aadb7eb7903130a83edfb84",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-Dfw285/@tanstack__solid-start@2.0.0-rc.2--solid2--head.json.accepted-catalog",
+      "accepted": [
+        "./plugin/rsbuild",
+        "./plugin/vite",
+        "./server-entry"
+      ],
+      "explicitExpected": [
+        ".",
+        "./client",
+        "./hydration",
+        "./client-rpc",
+        "./server-rpc",
+        "./ssr-rpc",
+        "./server",
+        "./plugin/vite",
+        "./plugin/rsbuild",
+        "./server-entry",
+        "./server-only",
+        "./client-only",
+        "./package.json"
+      ],
+      "missing": [
+        ".",
+        "./client",
+        "./hydration",
+        "./client-rpc",
+        "./server-rpc",
+        "./ssr-rpc",
+        "./server",
+        "./server-only",
+        "./client-only",
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 13,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 3,
+        "rootCertified": false
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/solid-start-client/Hydrate has no exact runtime binding for export Hydrate"
+        },
+        {
+          "entrypoint": "./client",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/solid-start-client\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/solid-start-client\" from <package-root>/dist/esm/client.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        },
+        {
+          "entrypoint": "./client-only",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/esm/client-only.js has no runtime ESM exports"
+        },
+        {
+          "entrypoint": "./client-rpc",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/start-client-core/client-rpc\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/start-client-core/client-rpc\" from <package-root>/dist/esm/client-rpc.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        },
+        {
+          "entrypoint": "./hydration",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/solid-start-client/hydration has no exact runtime binding for export condition"
+        },
+        {
+          "entrypoint": "./server",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/solid-start-server\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/solid-start-server\" from <package-root>/dist/esm/server.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        },
+        {
+          "entrypoint": "./server-only",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/esm/server-only.js has no runtime ESM exports"
+        },
+        {
+          "entrypoint": "./server-rpc",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/start-server-core/createServerRpc has no exact runtime binding for export createServerRpc"
+        },
+        {
+          "entrypoint": "./ssr-rpc",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/start-server-core/createSsrRpc has no exact runtime binding for export createSsrRpc"
+        }
+      ],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-start-client@1.168.29|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Fucv02/node_modules/@tanstack/solid-start-client/package.json",
+      "manifestDigest": "sha256:0bd9fac8500e37e1cfe91d500d3f4bcb63b628c3e4091db77ee4d2f0c76c9ae8",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-jLa1If/@tanstack__solid-start-client@1.168.29--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./Hydrate",
+        "./hydration"
+      ],
+      "explicitExpected": [
+        ".",
+        "./hydration",
+        "./Hydrate",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 4,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 3,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-start-client@2.0.0-rc.2|solid2|floor",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LDzW7F/node_modules/@tanstack/solid-start-client/package.json",
+      "manifestDigest": "sha256:dadddeb3add1c26127161f4772b0e71eabd1a6c4bab64477bf116d3162906a6d",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-AfzVjb/@tanstack__solid-start-client@2.0.0-rc.2--solid2--floor.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./Hydrate",
+        "./hydration"
+      ],
+      "explicitExpected": [
+        ".",
+        "./hydration",
+        "./Hydrate",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 4,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 3,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-start-client@2.0.0-rc.2|solid2|head",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3lvAFg/node_modules/@tanstack/solid-start-client/package.json",
+      "manifestDigest": "sha256:dadddeb3add1c26127161f4772b0e71eabd1a6c4bab64477bf116d3162906a6d",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-hsxsDg/@tanstack__solid-start-client@2.0.0-rc.2--solid2--head.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./Hydrate",
+        "./hydration"
+      ],
+      "explicitExpected": [
+        ".",
+        "./hydration",
+        "./Hydrate",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 4,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 3,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-start-config@1.120.20|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-8a0K2f/node_modules/@tanstack/solid-start-config/package.json",
+      "manifestDigest": "sha256:7c0c698efa3056426d3f15757fbe7735fb9ee5ef1dcc93c2522bf927d94f1e64",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-ITojyK/@tanstack__solid-start-config@1.120.20--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-store@0.11.1|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-tDsuJ8/node_modules/@tanstack/solid-store/package.json",
+      "manifestDigest": "sha256:ea5cc24d93a226e15a51dc6b5f74ae0db0938974d6afd5633b045d2a9e1b8f34",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-InnIa1/@tanstack__solid-store@0.11.1--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-table@9.1.2|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-tUePF3/node_modules/@tanstack/solid-table/package.json",
+      "manifestDigest": "sha256:3d53baa5ed321b3c3fbad0d6942e015352244b18d931472f738d7153f4795a44",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-JI18y3/@tanstack__solid-table@9.1.2--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./experimental-worker-plugin",
+        "./flex-render"
+      ],
+      "explicitExpected": [
+        ".",
+        "./static-functions",
+        "./experimental-worker-plugin",
+        "./flex-render",
+        "./package.json"
+      ],
+      "missing": [
+        "./static-functions",
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 5,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 3,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": "./static-functions",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/table-core/static-functions\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/table-core/static-functions\" from <package-root>/dist/static-functions.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        },
+        {
+          "entrypoint": "./static-functions",
+          "conditions": [
+            "solid"
+          ],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "solid-checker:unresolved-dependency-module=@tanstack/table-core/static-functions\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"@tanstack/table-core/static-functions\" from <package-root>/dist/static-functions.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+        }
+      ],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-table-devtools@9.2.0|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-blANBb/node_modules/@tanstack/solid-table-devtools/package.json",
+      "manifestDigest": "sha256:dc7eb9548d3426b6eb90dd4f88ec2d1873b91a2a62c4f5ef783cacd393585fc0",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-YBe0mA/@tanstack__solid-table-devtools@9.2.0--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./production"
+      ],
+      "explicitExpected": [
+        ".",
+        "./production",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 2,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-virtual@3.13.37|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-i153Vg/node_modules/@tanstack/solid-virtual/package.json",
+      "manifestDigest": "sha256:aafe961e22c2d77a57b38525a3d9e55125e791186a4588b9028458f41bda581a",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-oItWpg/@tanstack__solid-virtual@3.13.37--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "."
+      ],
+      "explicitExpected": [
+        ".",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 2,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/table-devtools@9.2.0|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-ESXKiT/node_modules/@tanstack/table-devtools/package.json",
+      "manifestDigest": "sha256:43308872e28527937181866ccb7f81754f802810ee0f1120171f225d8e538782",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-fB5Kcb/@tanstack__table-devtools@9.2.0--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./production"
+      ],
+      "explicitExpected": [
+        ".",
+        "./production",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 2,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-XDox04/node_modules/corvu/package.json",
+      "manifestDigest": "sha256:56aeca07c831d01f2777bf2913927d82d20b31077340893a3a894f61d4f9ac04",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-f7JxTB/corvu@0.7.2--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "./accordion",
+        "./calendar",
+        "./dialog",
+        "./disclosure",
+        "./drawer",
+        "./otp-field",
+        "./popover",
+        "./resizable",
+        "./tooltip"
+      ],
+      "explicitExpected": [],
+      "missing": [],
+      "wildcard": true,
+      "coverage": {
+        "declaredEntrypoints": 1,
+        "declaredWildcard": true,
+        "certifiedEntrypoints": 9,
+        "rootCertified": false
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": []
+    },
+    {
+      "probeId": "solid-devtools@0.34.5|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-tgbmXO/node_modules/solid-devtools/package.json",
+      "manifestDigest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-RmWEfw/solid-devtools@0.34.5--solid1--only.json.accepted-catalog",
+      "accepted": [
+        "./vite"
+      ],
+      "explicitExpected": [
+        ".",
+        "./setup",
+        "./vite",
+        "./babel",
+        "./package.json"
+      ],
+      "missing": [
+        ".",
+        "./setup",
+        "./babel",
+        "./package.json"
+      ],
+      "wildcard": false,
+      "coverage": {
+        "declaredEntrypoints": 5,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": false
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/index_noop.js has no runtime ESM exports"
+        },
+        {
+          "entrypoint": ".",
+          "conditions": [
+            "browser"
+          ],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/index_noop.js has no runtime ESM exports"
+        },
+        {
+          "entrypoint": ".",
+          "conditions": [
+            "browser",
+            "development"
+          ],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/index.js has no runtime ESM exports"
+        },
+        {
+          "entrypoint": "./setup",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @solid-devtools/debugger/setup has no exact declarations binding for export setElementInterface"
+        },
+        {
+          "entrypoint": "./setup",
+          "conditions": [
+            "browser"
+          ],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @solid-devtools/debugger/setup has no exact declarations binding for export setElementInterface"
+        },
+        {
+          "entrypoint": "./setup",
+          "conditions": [
+            "browser",
+            "development"
+          ],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @solid-devtools/debugger/setup has no exact runtime binding for export setElementInterface"
+        }
+      ],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": ".",
+          "conditions": [
+            "@solid-devtools/source"
+          ],
+          "stage": "artifact-case",
+          "class": "unpublished-conditional-target",
+          "reason": "runtime target is unpublished behind private namespaced export condition(s) \"@solid-devtools/source\""
+        },
+        {
+          "entrypoint": ".",
+          "conditions": [
+            "@solid-devtools/source",
+            "browser"
+          ],
+          "stage": "artifact-case",
+          "class": "unpublished-conditional-target",
+          "reason": "runtime target is unpublished behind private namespaced export condition(s) \"@solid-devtools/source\""
+        },
+        {
+          "entrypoint": ".",
+          "conditions": [
+            "@solid-devtools/source",
+            "browser",
+            "development"
+          ],
+          "stage": "artifact-case",
+          "class": "unpublished-conditional-target",
+          "reason": "runtime target is unpublished behind private namespaced export condition(s) \"@solid-devtools/source\""
+        },
+        {
+          "entrypoint": "./babel",
+          "conditions": [
+            "@solid-devtools/source"
+          ],
+          "stage": "artifact-case",
+          "class": "unpublished-conditional-target",
+          "reason": "runtime target is unpublished behind private namespaced export condition(s) \"@solid-devtools/source\""
+        },
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        },
+        {
+          "entrypoint": "./setup",
+          "conditions": [
+            "@solid-devtools/source"
+          ],
+          "stage": "artifact-case",
+          "class": "unpublished-conditional-target",
+          "reason": "runtime target is unpublished behind private namespaced export condition(s) \"@solid-devtools/source\""
+        },
+        {
+          "entrypoint": "./setup",
+          "conditions": [
+            "@solid-devtools/source",
+            "browser"
+          ],
+          "stage": "artifact-case",
+          "class": "unpublished-conditional-target",
+          "reason": "runtime target is unpublished behind private namespaced export condition(s) \"@solid-devtools/source\""
+        },
+        {
+          "entrypoint": "./setup",
+          "conditions": [
+            "@solid-devtools/source",
+            "browser",
+            "development"
+          ],
+          "stage": "artifact-case",
+          "class": "unpublished-conditional-target",
+          "reason": "runtime target is unpublished behind private namespaced export condition(s) \"@solid-devtools/source\""
+        }
+      ]
+    },
+    {
+      "probeId": "solid-js@1.9.14|solid1|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-g3snVP/node_modules/solid-js/package.json",
+      "manifestDigest": "sha256:52ee61ea826e59a5ec36f6ce91bafb7d38bf99ab04b3a6217993fb17af6037c0",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-ow4qzC/solid-js@1.9.14--solid1--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./dist/server.js",
+        "./h",
+        "./h/dist/h.js",
+        "./h/jsx-dev-runtime",
+        "./h/jsx-runtime",
+        "./html",
+        "./html/dist/html.js",
+        "./store",
+        "./store/dist/dev.js",
+        "./store/dist/server.js",
+        "./store/dist/store.js",
+        "./universal",
+        "./universal/dist/dev.js",
+        "./universal/dist/universal.js",
+        "./web",
+        "./web/dist/dev.js",
+        "./web/dist/server.js",
+        "./web/dist/web.js",
+        "./web/storage"
+      ],
+      "explicitExpected": [
+        ".",
+        "./jsx-runtime",
+        "./jsx-dev-runtime",
+        "./store",
+        "./web",
+        "./web/storage",
+        "./universal",
+        "./h",
+        "./h/jsx-runtime",
+        "./h/jsx-dev-runtime",
+        "./html",
+        "./package.json"
+      ],
+      "missing": [
+        "./jsx-runtime",
+        "./jsx-dev-runtime",
+        "./package.json"
+      ],
+      "wildcard": true,
+      "coverage": {
+        "declaredEntrypoints": 23,
+        "declaredWildcard": true,
+        "certifiedEntrypoints": 20,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [
+        {
+          "entrypoint": "./jsx-dev-runtime",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/solid.js has no runtime ESM exports"
+        },
+        {
+          "entrypoint": "./jsx-runtime",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/solid.js has no runtime ESM exports"
+        }
+      ],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    },
+    {
+      "probeId": "solid-js@2.0.0-rc.3|solid2|only",
+      "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-wgjAzx/node_modules/solid-js/package.json",
+      "manifestDigest": "sha256:e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b",
+      "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-z2aeqP/solid-js@2.0.0-rc.3--solid2--only.json.accepted-catalog",
+      "accepted": [
+        ".",
+        "./refresh"
+      ],
+      "explicitExpected": [
+        ".",
+        "./refresh",
+        "./package.json"
+      ],
+      "missing": [
+        "./package.json"
+      ],
+      "wildcard": true,
+      "coverage": {
+        "declaredEntrypoints": 4,
+        "declaredWildcard": true,
+        "certifiedEntrypoints": 2,
+        "rootCertified": true
+      },
+      "missingGenerationRefusals": [],
+      "missingReportedInapplicabilities": [
+        {
+          "entrypoint": "./package.json",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "non-module-target",
+          "reason": "runtime target extension \".json\" is not an executable module"
+        }
+      ]
+    }
+  ]
+}

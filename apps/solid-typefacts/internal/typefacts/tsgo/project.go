@@ -83,6 +83,35 @@ type project struct {
 	// rather than once per returned-callable resolution. Checker-owned symbol
 	// pointers make it generation-scoped, like runtimePaths.
 	assignedSymbols map[*ast.SourceFile]map[*ast.Symbol]struct{}
+	// ownLiteralSymbols memoizes ADR 0044's answer per symbol: the variable
+	// declaration a name is bound to when this program initialized it from an
+	// object or array literal, or nil. Keyed by symbol rather than by file
+	// because a module-level lookup table is read through an *import* at its
+	// use site, so the declaration is behind an alias. A premise twin is a
+	// different program with different symbols and never shares entries.
+	ownLiteralSymbols map[*ast.Symbol]*ast.Node
+	// formTwin is set for exactly the duration of an uncensused-form census
+	// classified under a declared-signature premise (ADR 0038): the checked
+	// twin of the implementation's file whose checker answers every type and
+	// symbol question the form classifiers ask. Nil otherwise, which routes
+	// those questions to the accepted program's own checker. It is a field
+	// rather than a parameter because the classifiers are reached through
+	// canonicalSymbol and symbolIsAssignedLocked, which every other census
+	// shares; see formChecker.
+	formTwin *premiseTwin
+	// premiseCensuses memoizes, per generation, the outcome of classifying an
+	// implementation's form census under a declared-signature premise, keyed
+	// by the implementation's span and the exact annotation the twin carried.
+	// Every proof family of an export demands the same implementation
+	// transcript, and the twin — a program rebuild and a cold checker — is
+	// the one part of that transcript worth not paying nine times.
+	premiseCensuses map[premiseCensusKey]premiseCensusResult
+	// premiseWorth memoizes, per generation, whether a runtime-source
+	// declaration's own form census — or that of a callee reachable from it —
+	// records a form a type can clear, which is what decides whether a caller's
+	// twin is worth building for the argument premises it would carry
+	// (calleesWorthPremisingLocked).
+	premiseWorth map[*ast.Node]bool
 	// calleeInvocations memoizes what a callable's body does with its own
 	// parameters, per callee symbol *and the depth it was asked at*, for the
 	// accepted generation. The descent reads a whole body per callee and real
@@ -118,6 +147,25 @@ type project struct {
 	// types. TypeToString is presentation work, not a semantic decision, and
 	// is disproportionately allocation-heavy when repeated per call.
 	typeDescriptors map[*checker.Type]*typefacts.TypeDescriptor
+	// apparentFunctionMembers is the global `Function` interface's member
+	// names for the accepted generation, sorted. The callable-path census asks
+	// for them once per callable node, and the answer is a property of the
+	// program's lib and augmentations, not of the node. The resolved flag
+	// distinguishes "not asked yet" from "asked, and this program declares no
+	// global Function".
+	apparentFunctionMembers         []string
+	apparentFunctionMembersResolved bool
+	// objectMemberNames is the global `Object` interface's member names.
+	// Cross-alternative census reconciliation asks whether a name could be
+	// answered by the `Object` fallback the declared census never enumerates,
+	// and must not synthesize an absence for one. The resolved flag separates
+	// "not asked yet" from "asked, and this program declares no global
+	// Object" — the latter suppresses every absence, because without the set
+	// an absence cannot be told from a fallback member. Dropped with
+	// apparentFunctionMembers; both are properties of the program's lib and
+	// augmentations.
+	objectMemberNames         map[string]struct{}
+	objectMemberNamesResolved bool
 	// declarationShapes caches diagnostic-free exported contracts for the
 	// accepted program generation. Incremental updates need only emit the
 	// candidate generation's shape; semantically affected files are evicted
@@ -268,6 +316,8 @@ func (p *project) ReleaseAnalysisState() {
 	}
 	p.checker = nil
 	p.checkerPool.drop()
+	p.premiseCensuses = nil
+	p.premiseWorth = nil
 	p.idsBySymbol = make(map[*ast.Symbol]typefacts.SymbolID)
 	p.symbolsByID = make(map[typefacts.SymbolID]*ast.Symbol)
 	p.exportedIdentities = nil
@@ -281,6 +331,10 @@ func (p *project) ReleaseAnalysisState() {
 	p.callDiagnostics = nil
 	p.callDemandScratch = nil
 	p.typeDescriptors = nil
+	p.apparentFunctionMembers = nil
+	p.apparentFunctionMembersResolved = false
+	p.objectMemberNames = nil
+	p.objectMemberNamesResolved = false
 	p.nextSymbol = 0
 	p.referenceIndex.releaseAnalysisState()
 }
@@ -542,6 +596,8 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.checker = typeChecker
 	p.checkerPool = program.GetCheckerPool().(*singleCheckerPool)
 	p.release = release
+	p.premiseCensuses = nil
+	p.premiseWorth = nil
 	p.fs = candidateFS
 	p.versions = candidateVersions
 	p.generation++
@@ -579,6 +635,10 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.callDiagnostics = nil
 	p.callDemandScratch = nil
 	p.typeDescriptors = nil
+	p.apparentFunctionMembers = nil
+	p.apparentFunctionMembersResolved = false
+	p.objectMemberNames = nil
+	p.objectMemberNamesResolved = false
 	p.nextSymbol = 0
 
 	stageStarted = time.Now()
@@ -1566,6 +1626,10 @@ func (p *project) Close() error {
 	p.callDiagnostics = nil
 	p.callDemandScratch = nil
 	p.typeDescriptors = nil
+	p.apparentFunctionMembers = nil
+	p.apparentFunctionMembersResolved = false
+	p.objectMemberNames = nil
+	p.objectMemberNamesResolved = false
 	p.declarationShapes = nil
 	p.exportedIdentities = nil
 	p.exportedIdentitiesByRef = nil
@@ -1804,13 +1868,46 @@ func (p *project) canonicalSymbol(symbol *ast.Symbol) *ast.Symbol {
 		if symbol == nil || symbol.Flags&ast.SymbolFlagsAlias == 0 {
 			break
 		}
-		original := p.checker.GetAliasedSymbol(symbol)
+		original := p.formChecker().GetAliasedSymbol(symbol)
 		if original == nil || original == symbol {
 			break
 		}
 		symbol = original
 	}
 	return symbol
+}
+
+// formChecker is the checker the uncensused-form census asks: the premise
+// twin's while one is active (ADR 0038), the accepted program's otherwise.
+// Every symbol the twin's classifiers see was bound by the twin program, and
+// asking the accepted checker about it would answer about a node it never
+// checked; every symbol outside a twin census is the accepted program's.
+func (p *project) formChecker() *checker.Checker {
+	if p.formTwin != nil {
+		return p.formTwin.checker
+	}
+	return p.checker
+}
+
+// formProgram is formChecker's sibling: the program the form census is being
+// classified over, so a question about a file's role — whether it is the
+// default library — is asked of the same program that resolved the symbol.
+func (p *project) formProgram() *compiler.Program {
+	if p.formTwin != nil {
+		return p.formTwin.program
+	}
+	return p.program
+}
+
+// formIsRuntimeSourceFile is isCurrentSourceFile's reading for the form
+// census: the twin's own source file object is the accepted program's file at
+// that path re-parsed with one comment added, so a declaration inside it is
+// the same runtime bytes the accepted program carries.
+func (p *project) formIsRuntimeSourceFile(sourceFile *ast.SourceFile) bool {
+	if p.formTwin != nil && sourceFile == p.formTwin.file {
+		return true
+	}
+	return p.isCurrentSourceFile(sourceFile)
 }
 
 func declarationKind(node *ast.Node) string {

@@ -13,13 +13,13 @@
             "sha256": "ea636f9ab60ed96f0cb27e6fd5bb62f90d67dafcb13d30eabe1b64c90a8807b7"
           },
           "exports": {
-            "computedInside": "summary-727ca00293381462803319304db5cdfa633ff798b1664628da75d234bfc92057",
-            "computedRoot": "summary-243c0896345b0138a9d564a5638badaf87e6867df08a1e1b7dbfaf540cb1b690",
-            "disagreeingPaths": "summary-243c0896345b0138a9d564a5638badaf87e6867df08a1e1b7dbfaf540cb1b690",
-            "oneSegment": "summary-a37ff153126039ec122f9cab4d84ac7e59a46e3e605aeba1d24559f39bc74162",
-            "readModuleLocal": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "threeSegments": "summary-2c9fe53b9060246879346b8cd158d1e1b161fdbe30fa89bf644317897e2ff50d",
-            "twoSegments": "summary-5726ceffc5bd09482d970fc69fced485e6b7887a3c42aaa9d74e0f9feda73574"
+            "computedInside": "summary-8360c291f4d847894f154a2159befbe1f7a8ddda503cf50cf7b63a922fffca30",
+            "computedRoot": "summary-c792da561a3e511d210f87ee39f8733cf215844d7926a5b8bc1bf525be5ae97e",
+            "disagreeingPaths": "summary-c325818cc2036acd020cceb47adde29d4d17bce6701e871b268dbf3ebecd5191",
+            "oneSegment": "summary-482d3b4e01fa58e8cd68c3b1eb7d895544bc7f1c9c95d4cd9f8a6a7e46c46188",
+            "readModuleLocal": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "threeSegments": "summary-e741f468739ed91f8bd455f0bff6eb3303225ddbf572316dbf2bc3b3fbef301b",
+            "twoSegments": "summary-a1d1ac830dc137d22208787a2ab54de916d9b1b4690cd5286be32669381c7ad9"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -43,8 +43,165 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-243c0896345b0138a9d564a5638badaf87e6867df08a1e1b7dbfaf540cb1b690": {
+    "summary-482d3b4e01fa58e8cd68c3b1eb7d895544bc7f1c9c95d4cd9f8a6a7e46c46188": {
       "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "slice"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-8360c291f4d847894f154a2159befbe1f7a8ddda503cf50cf7b63a922fffca30": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "source"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-a1d1ac830dc137d22208787a2ab54de916d9b1b4690cd5286be32669381c7ad9": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "source",
+                  "slice"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-c325818cc2036acd020cceb47adde29d4d17bce6701e871b268dbf3ebecd5191": {
+      "call": {
+        "closed": [
+          "reads"
+        ],
         "operations": [
           {
             "at": {
@@ -71,14 +228,65 @@
             }
           }
         ],
+        "proposedClosures": [
+          "reads"
+        ],
         "reads": [
           "read-0"
         ]
       },
       "shape": "callable"
     },
-    "summary-2c9fe53b9060246879346b8cd158d1e1b161fdbe30fa89bf644317897e2ff50d": {
+    "summary-c792da561a3e511d210f87ee39f8733cf215844d7926a5b8bc1bf525be5ae97e": {
       "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": []
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-e741f468739ed91f8bd455f0bff6eb3303225ddbf572316dbf2bc3b3fbef301b": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -109,123 +317,14 @@
             }
           }
         ],
-        "reads": [
-          "read-0"
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-5726ceffc5bd09482d970fc69fced485e6b7887a3c42aaa9d74e0f9feda73574": {
-      "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "read-0",
-            "inputs": [
-              {
-                "index": 0,
-                "kind": "parameter",
-                "path": [
-                  "source",
-                  "slice"
-                ]
-              }
-            ],
-            "kind": "read",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
+        "proposedClosures": [
+          "reads",
+          "creates"
         ],
         "reads": [
           "read-0"
         ]
       },
-      "shape": "callable"
-    },
-    "summary-727ca00293381462803319304db5cdfa633ff798b1664628da75d234bfc92057": {
-      "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "read-0",
-            "inputs": [
-              {
-                "index": 0,
-                "kind": "parameter",
-                "path": [
-                  "source"
-                ]
-              }
-            ],
-            "kind": "read",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "reads": [
-          "read-0"
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-a37ff153126039ec122f9cab4d84ac7e59a46e3e605aeba1d24559f39bc74162": {
-      "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "read-0",
-            "inputs": [
-              {
-                "index": 0,
-                "kind": "parameter",
-                "path": [
-                  "slice"
-                ]
-              }
-            ],
-            "kind": "read",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "reads": [
-          "read-0"
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
-      "call": {},
       "shape": "callable"
     }
   }

@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -106,6 +107,35 @@ const ownershipOracleCache = openGateCache({
 
 const manifest = JSON.parse(readFileSync(CASES_PATH, "utf8"));
 const ledger = JSON.parse(readFileSync(LEDGER_PATH, "utf8"));
+
+// The externally visible rule names each dialect's catalog declares.
+//
+// Needed because an `absent` clause naming a rule *no* catalog declares cannot
+// fail: nothing can ever emit it, so the clause is satisfied by any
+// implementation, including one that emits nothing at all. Eleven cases were
+// written that way -- each naming an upstream rule the checker deliberately
+// does not carry -- and every one of them asserted nothing. Recorded in
+// docs/precision-backlog.md, 2026-09-16.
+//
+// Discovered rather than named, so retiring or adding a dialect is a change to
+// the shipped manifests and not to this gate. Naming them cost a `make verify`
+// failure the day the 1.x catalog was retired.
+const catalogRules = Object.fromEntries(
+  readdirSync(join(ROOT, "packages/cli/lib"))
+    .filter((file) => /^rules-solid-v\d+\.json$/.test(file))
+    .map((file) => {
+    const dialect = file.replace(/^rules-|\.json$/g, "");
+    const document = JSON.parse(readFileSync(join(ROOT, "packages/cli/lib", file), "utf8"));
+    const rules = Array.isArray(document) ? document : (document.rules ?? document);
+    const names = Array.isArray(rules)
+      ? rules.map((rule) => (typeof rule === "string" ? rule : rule.name))
+      : Object.keys(rules);
+    return [dialect, new Set(names)];
+  })
+);
+if (Object.keys(catalogRules).length === 0) {
+  throw new Error("no rules-solid-v*.json catalogs found; the absent-clause guard would be vacuous");
+}
 const failures = [];
 
 if (manifest.schemaVersion !== 1) fail(failures, "cases.json: schemaVersion must be 1");
@@ -168,7 +198,46 @@ for (const [index, testCase] of (manifest.cases ?? []).entries()) {
   const expected = testCase.expect?.findings;
   const absent = testCase.expect?.absent;
   if (!Array.isArray(expected) || !Array.isArray(absent)) fail(failures, `${label}: expect.findings and expect.absent must be arrays`);
-  if ((expected?.length ?? 0) === 0 && (absent?.length ?? 0) === 0) fail(failures, `${label}: a negative case must name at least one absent rule or family`);
+  // A negative case has to assert something that can fail. Three shapes do:
+  // an expected finding, an `absent` clause naming a rule this dialect's
+  // catalog actually declares, or `silent: true` -- "this source emits no
+  // finding at all", which is falsifiable by any emission.
+  //
+  // Requiring a *named* absent rule and nothing else is what produced the
+  // vacuous cases: an author with no rule to name reached for the upstream
+  // name the checker deliberately does not implement, and the requirement
+  // defeated itself.
+  const silent = testCase.expect?.silent === true;
+  const declared = catalogRules[testCase.dialect] ?? new Set();
+  const effective = (clause) =>
+    clause.rule
+      ? declared.has(clause.rule)
+      : [...declared].some((name) => name.startsWith(clause.family));
+  for (const clause of absent ?? []) {
+    if (clause.rule === undefined && clause.family === undefined) {
+      fail(failures, `${label}: an absent clause must name a rule or a family`);
+    } else if (!effective(clause)) {
+      fail(
+        failures,
+        `${label}: absent ${clause.rule ?? clause.family} is not declared by the ${testCase.dialect} catalog, so the clause cannot fail and asserts nothing. Use "silent": true to assert the source emits nothing, and record a deliberately unimplemented upstream rule in the case's "note".`
+      );
+    }
+  }
+  if ((expected?.length ?? 0) === 0 && (absent?.length ?? 0) === 0 && !silent) {
+    fail(failures, `${label}: a negative case must name at least one absent rule or family, or set "silent": true`);
+  }
+  // Case-level TypeScript ownership: the diagnostic is TypeScript's and the
+  // checker carries **no rule at all** for the shape. The per-finding
+  // `typescript-owned` form cannot say that -- it needs a rule and a code to
+  // name the finding that must not be emitted, and inventing one (a rule no
+  // catalog declares, under a fabricated code) would put a fiction in a corpus
+  // whose whole point is exactness. Paired with `silent: true` this asserts
+  // both halves without naming anything that does not exist.
+  for (const [diagnosticIndex, diagnostic] of (testCase.expect?.typescript ?? []).entries()) {
+    const diagnosticLabel = `${label} typescript[${diagnosticIndex}]`;
+    if (!/^TS\d+$/.test(diagnostic.code ?? "")) fail(failures, `${diagnosticLabel}: code must be TS<number>`);
+    spanOf(testCase, diagnostic.span, diagnosticLabel);
+  }
   const findingSpans = [];
   for (const [findingIndex, expectation] of (expected ?? []).entries()) {
     const findingLabel = `${label} finding[${findingIndex}]`;
@@ -208,8 +277,22 @@ for (const [index, row] of (ledger.cases ?? []).entries()) {
 if (requireComplete && ledger.cases.some((row) => row.disposition === "pending")) fail(failures, "migration ledger still contains pending rows");
 if (requireRetained) {
   const retained = new Set(["reactivity", "no-destructure", "components-return-once", "jsx-no-duplicate-props", "prefer-classlist", "prefer-for", "prefer-show", "jsx-no-undef"]);
-  const pending = ledger.cases.filter((row) => retained.has(row.upstreamCase.split("__")[0]) && row.disposition !== "migrated");
-  if (pending.length) fail(failures, `${pending.length} retained-rule ledger rows are not migrated`);
+  // A retained-rule case must be migrated, or dropped for a reason this gate
+  // recognizes. The guard exists to stop a case being dropped *silently*, not
+  // to forbid dropping one: eslint-plugin-solid targets Solid 1.x, so retiring
+  // the 1.x dialect (ADR 0110) made every upstream case unanalyzable by this
+  // build at once. Each such row now carries that reason, and any other
+  // disposition still fails here.
+  const RETIREMENT_REASON = "retired (ADR 0110)";
+  const unexplained = ledger.cases.filter(
+    (row) =>
+      retained.has(row.upstreamCase.split("__")[0]) &&
+      row.disposition !== "migrated" &&
+      !(row.disposition === "dropped" && (row.reason ?? "").includes(RETIREMENT_REASON))
+  );
+  if (unexplained.length) {
+    fail(failures, `${unexplained.length} retained-rule ledger rows are neither migrated nor dropped for a recorded reason`);
+  }
 }
 
 if (failures.length) {
@@ -361,6 +444,19 @@ for (const value of resolved.values()) {
     const ownEnd = ownStart + byteLength(testCase.source.text);
     if (!claimed.has(index) && finding.primaryLocation.startByte < ownEnd && ownStart < finding.primaryLocation.endByte) fail(failures, `${label}: unclaimed ${finding.rule}/${finding.id} at ${finding.primaryLocation.startByte}..${finding.primaryLocation.endByte}`);
   });
+  for (const [diagnosticIndex, expected] of (testCase.expect.typescript ?? []).entries()) {
+    const diagnosticLabel = `${label} typescript[${diagnosticIndex}]`;
+    const span = spanOf(testCase, expected.span, diagnosticLabel);
+    if (!diagnostics.some((diagnostic) => diagnostic.code === expected.code && diagnostic.start === span.start && diagnostic.end === span.end)) {
+      fail(failures, `${diagnosticLabel}: missing ${expected.code} at ${span.start}..${span.end}`);
+    }
+  }
+  if (testCase.expect.silent === true && actual.length) {
+    fail(
+      failures,
+      `${label}: declared silent but emitted ${actual.length} finding(s): ${actual.map((finding) => finding.rule).join(", ")}`
+    );
+  }
   for (const absent of testCase.expect.absent) {
     const matched = actual.filter((finding) => absent.rule ? finding.rule === absent.rule : finding.rule.startsWith(absent.family));
     if (matched.length) fail(failures, `${label}: absent ${absent.rule ?? absent.family} emitted ${matched.length} finding(s)`);

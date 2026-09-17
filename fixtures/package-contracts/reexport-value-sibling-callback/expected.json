@@ -13,8 +13,8 @@
             "sha256": "2b70b524370f2e43401a8d6941bd4f9f344c2fe781f8d54f267d8413dd2d0fe1"
           },
           "exports": {
-            "PREFIX": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
-            "subscribe": "summary-1e894f7835b78b11b2f89340a930e972546c1b597833c2f245deb58699ebad1e"
+            "PREFIX": "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5",
+            "subscribe": "summary-af541cfd2e71ac60435cca0ac3f565ebfba5ee970831dd5b46df9a803f1c7fb5"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -38,8 +38,28 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-1e894f7835b78b11b2f89340a930e972546c1b597833c2f245deb58699ebad1e": {
+    "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5": {
       "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
+      },
+      "shape": "plain"
+    },
+    "summary-af541cfd2e71ac60435cca0ac3f565ebfba5ee970831dd5b46df9a803f1c7fb5": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -68,15 +88,15 @@
             }
           }
         ],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
         "reads": [
           "read-0"
         ]
       },
       "shape": "callable"
-    },
-    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
-      "call": {},
-      "shape": "plain"
     }
   }
 }

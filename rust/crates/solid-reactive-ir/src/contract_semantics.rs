@@ -30,6 +30,34 @@ pub const SEMANTIC_MODEL_VERSION: u16 = 1;
 pub const SEMANTIC_DIGEST_ALGORITHM: &str = "sha256";
 /// Domain separator frozen for semantic-model version 1 contract identities.
 pub const SEMANTIC_DIGEST_DOMAIN: &str = "solid-checker:normalized-package-contract";
+/// The digest domain for a contract in which at least one operation states
+/// composed provenance.
+///
+/// A second domain rather than a second model version, because the model is
+/// unchanged: `composedFrom` is an additive optional field, every document
+/// that omits it still validates, and `semanticModelVersion` stays 1. What
+/// needs separating is the *byte stream*, so that a contract with no composed
+/// operation keeps hashing exactly what it hashed before the field existed —
+/// and with it every policy-2 receipt already issued for it. A contract that
+/// does carry provenance is a new document making a new claim, and it gets a
+/// digest in its own family.
+pub const SEMANTIC_DIGEST_DOMAIN_COMPOSED: &str =
+    "solid-checker:normalized-package-contract:composed-provenance";
+/// The digest domain for a contract in which at least one export proposes a
+/// call domain for closure proof (`CallSemantics::proposed_closures`).
+///
+/// The same reasoning as `SEMANTIC_DIGEST_DOMAIN_COMPOSED`, one field later,
+/// and the two features are independent: a contract may carry either, both, or
+/// neither, so there are four domains and not three. Each is a distinct
+/// length-prefixed first write, so the families cannot collide, and every
+/// contract that proposes nothing keeps hashing exactly what it hashed before
+/// the marker existed.
+pub const SEMANTIC_DIGEST_DOMAIN_PROPOSED_CLOSURE: &str =
+    "solid-checker:normalized-package-contract:proposed-closure";
+/// The digest domain for a contract carrying composed provenance *and* a
+/// proposed closure.
+pub const SEMANTIC_DIGEST_DOMAIN_COMPOSED_PROPOSED_CLOSURE: &str =
+    "solid-checker:normalized-package-contract:composed-provenance:proposed-closure";
 pub const SEMANTIC_CLAIM_ID_VERSION: u16 = 1;
 
 /// Local knowledge for one immediate collection-valued claim domain.
@@ -274,8 +302,16 @@ pub struct ExportIdentity {
     pub declarations: ExportTargetIdentity,
 }
 
+/// An explicit proposal about evaluation of the selected runtime module.
+/// Absence is not a claim; only authenticated proof can make this knowledge.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ModuleInitializationClaim {
+    Inert,
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ArtifactCase {
+    pub initialization: Option<ModuleInitializationClaim>,
     pub id: String,
     pub entrypoint: String,
     pub resolution_trace: Vec<ResolutionStep>,
@@ -658,6 +694,23 @@ impl ExportSemantics {
         validate::open_proposed_closure(self)
     }
 
+    /// Republishes the named call domains as *proposed* closures: the domain
+    /// closed over the positive items it already carries, and labelled as the
+    /// generator's proposal rather than a reviewed claim.
+    ///
+    /// The inverse of the weakening [`Self::open_proposed_closure`] performs,
+    /// used by the proposal generator on exactly the domains a certifier has a
+    /// census for. See [`CallSemantics::proposed_closures`].
+    pub fn propose_closures(&mut self, domains: impl IntoIterator<Item = ClaimDomain>) {
+        for domain in domains {
+            match self.call.claims.operation_claim_mut(domain) {
+                Some(claim) => claim.close_verified(),
+                None => self.call.claims.callbacks.close_verified(),
+            };
+            self.call.proposed_closures.insert(domain);
+        }
+    }
+
     fn close_verified_claim(&mut self, claim: &ClaimPath) -> Result<(), ModelError> {
         validate::close_verified_claim(self, claim)
     }
@@ -669,10 +722,148 @@ impl ExportSemantics {
     /// finite set of domains. A complete negative becomes unknown and a
     /// complete positive becomes partial; unrelated call and recursive value
     /// knowledge is unchanged.
+    /// Opening a domain also withdraws its *proposal*. A proposal is an offer
+    /// to prove closure over exactly the knowledge the document states; an
+    /// opaque closure frontier or a recipe-gated withholding that reopens the
+    /// domain has invalidated that offer, so leaving the marker in place would
+    /// let the candidate outlive the fact it was derived from — and would make
+    /// `withheld_weakening` a no-op, since the certifier would rediscover the
+    /// candidate it had just withheld.
     pub fn open_call_domains(&mut self, domains: impl IntoIterator<Item = ClaimDomain>) {
         for domain in domains {
             self.call.claims.open(domain);
+            self.call.proposed_closures.remove(&domain);
         }
+    }
+
+    /// Clears `composed_from` naming any withdrawn `(export, operation)` of
+    /// this artifact case.
+    ///
+    /// The sibling half of [`Self::withhold_operations`], which can only see
+    /// its own export. Provenance is an *additional* discharge route, never the
+    /// only one, so clearing it weakens the document and never strengthens it.
+    pub fn clear_composed_provenance(&mut self, withdrawn: &BTreeSet<(String, OperationId)>) {
+        for operation in &mut self.call.operations {
+            if operation.composed_from.as_ref().is_some_and(|composed| {
+                withdrawn.contains(&(composed.export.clone(), composed.operation.clone()))
+            }) {
+                operation.composed_from = None;
+            }
+        }
+    }
+
+    /// Withdraws operations whose positive facts no census could certify, and
+    /// opens every domain that listed one.
+    ///
+    /// This is the weakening below [`Self::open_call_domains`]. Opening a
+    /// domain keeps every operation and only stops claiming the enumeration is
+    /// exhaustive; this *removes* an operation the document should never have
+    /// stated, and then opens its domain for the same reason — a shorter list
+    /// still marked closed would assert an absence the census never
+    /// established, which is a stronger claim than the one being withdrawn.
+    ///
+    /// The withdrawal is transitive within the export, because a reference to
+    /// a withdrawn operation describes nothing:
+    ///
+    /// - an operation triggered by a withdrawn one goes with it;
+    /// - an edge touching a withdrawn operation is removed;
+    /// - a callback invocation naming a withdrawn operation, or sourced from
+    ///   its output, is removed and opens `callbacks`;
+    /// - `composed_from` naming a withdrawn operation of *this* export is
+    ///   cleared, which only removes a discharge route and never adds one.
+    ///
+    /// Returns every id actually withdrawn, the seeds included, so a caller
+    /// can record the cascade rather than infer it. An id this export does not
+    /// carry contributes nothing.
+    pub fn withhold_operations(&mut self, seeds: &BTreeSet<OperationId>) -> BTreeSet<OperationId> {
+        let mut gone: BTreeSet<OperationId> = self
+            .call
+            .operations
+            .iter()
+            .filter(|operation| seeds.contains(&operation.id))
+            .map(|operation| operation.id.clone())
+            .collect();
+        loop {
+            let cascade: BTreeSet<OperationId> = self
+                .call
+                .operations
+                .iter()
+                .filter(|operation| !gone.contains(&operation.id))
+                .filter(|operation| match &operation.trigger {
+                    Some(Trigger::Operation(trigger)) => gone.contains(trigger),
+                    _ => false,
+                })
+                .map(|operation| operation.id.clone())
+                .collect();
+            if cascade.is_empty() {
+                break;
+            }
+            gone.extend(cascade);
+        }
+        if gone.is_empty() {
+            return gone;
+        }
+        let mut opened: BTreeSet<ClaimDomain> = BTreeSet::new();
+        for domain in ClaimDomain::ALL {
+            let Some(claim) = self.call.claims.operation_claim_mut(domain) else {
+                continue;
+            };
+            let removed = match claim {
+                KnowledgeSet::Unknown => continue,
+                KnowledgeSet::Partial(items) | KnowledgeSet::Complete(items) => {
+                    let before = items.len();
+                    items.retain(|id| !gone.contains(id));
+                    before != items.len()
+                }
+            };
+            if !removed {
+                continue;
+            }
+            // A domain emptied by the withdrawal is *unknown*, not an empty
+            // list. `Complete([])` proves the domain has no operations and
+            // `Partial([])` is refused outright ("partial knowledge must
+            // contain positive evidence"); the truth after withdrawing the
+            // only thing it listed is that this document no longer says.
+            if claim.items().is_empty() {
+                *claim = KnowledgeSet::Unknown;
+            }
+            opened.insert(domain);
+        }
+        let sourced_from_gone = |source: &ValueSource| match source {
+            ValueSource::OperationOutput { operation, .. } => gone.contains(operation),
+            _ => false,
+        };
+        let callbacks_changed = match &mut self.call.claims.callbacks {
+            KnowledgeSet::Unknown => false,
+            KnowledgeSet::Partial(items) | KnowledgeSet::Complete(items) => {
+                let before = items.len();
+                items.retain(|invocation| {
+                    !gone.contains(&invocation.operation) && !sourced_from_gone(&invocation.from)
+                });
+                before != items.len()
+            }
+        };
+        if callbacks_changed {
+            if self.call.claims.callbacks.items().is_empty() {
+                self.call.claims.callbacks = KnowledgeSet::Unknown;
+            }
+            opened.insert(ClaimDomain::Callbacks);
+        }
+        self.call
+            .operations
+            .retain(|operation| !gone.contains(&operation.id));
+        self.call
+            .edges
+            .retain(|edge| !gone.contains(&edge.from) && !gone.contains(&edge.to));
+        for operation in &mut self.call.operations {
+            if operation.composed_from.as_ref().is_some_and(|composed| {
+                composed.export == self.identity.public_name && gone.contains(&composed.operation)
+            }) {
+                operation.composed_from = None;
+            }
+        }
+        self.open_call_domains(opened);
+        gone
     }
 
     #[must_use]
@@ -710,6 +901,62 @@ impl ClaimDomain {
         Self::Cleanups,
         Self::Disposals,
     ];
+
+    /// The call domains a document may *propose* closed
+    /// (`CallSemantics::proposed_closures`).
+    ///
+    /// The behavioral call domains the certifier has a proof mode for — the
+    /// implementation census: `creates` (ADR 0008) and `returns` (ADR 0035,
+    /// the empty closure only). A candidate the certifier cannot decide is not
+    /// a weaker proposal, it is a refused row — every other domain refuses by
+    /// name at witness acquisition, and only these are recipe-gated, so a
+    /// proposal of one of the others could never close and could only turn a
+    /// row whose every other claim was proven into a refusal. The generator's
+    /// candidates for the other domains therefore stay in the proposal plan
+    /// sidecar as measurement, and this list grows one domain at a time as
+    /// each census lands.
+    /// `Reads` is admitted (2026-09-10) on a premise it does not obtain
+    /// itself: a `runtime-accessor-installation` closure hazard withdraws the
+    /// domain for a case whose reads the census structurally cannot refuse.
+    /// That hazard is computed twice, over two ASTs, and both must agree —
+    /// see § 10 of
+    /// `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`.
+    /// `Callbacks` is admitted (2026-09-12) for the empty enumeration only:
+    /// "this export invokes none of the callable arguments it is handed". The
+    /// implementation census proves it by there being no parameter-rooted
+    /// disposition in the same call walk `creates` runs, and the synthesized
+    /// veto contradicts it by observing invocation from inside the sampled
+    /// callback. ADR 0023's line holds by construction: the walk dispositions
+    /// calls, and retaining a callable is not one.
+    pub const PROPOSABLE: [Self; 4] = [Self::Creates, Self::Returns, Self::Reads, Self::Callbacks];
+
+    /// Whether a document may propose this domain for closure proof.
+    #[must_use]
+    pub fn is_proposable(self) -> bool {
+        Self::PROPOSABLE.contains(&self)
+    }
+
+    /// The domain's stable wire name, as every document, audit and refusal
+    /// sidecar spells it.
+    ///
+    /// One mapping, because there were two: the certifier had its own copy in
+    /// `contract_certification::type_facts`, and a generator-side record
+    /// needing the same names would have made a third. A name that drifts
+    /// between producer and consumer is the dual-census failure in miniature.
+    #[must_use]
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::Callbacks => "callbacks",
+            Self::Reads => "reads",
+            Self::Writes => "writes",
+            Self::Creates => "creates",
+            Self::Invalidates => "invalidates",
+            Self::Throws => "throws",
+            Self::Returns => "returns",
+            Self::Cleanups => "cleanups",
+            Self::Disposals => "disposals",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -788,6 +1035,26 @@ pub enum ResourceClaimDomain {
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct CallSemantics {
     claims: CallClaims,
+    /// The closed call domains this document *proposes* rather than asserts:
+    /// closure a generator inferred and offers for proof, not closure an audit
+    /// established.
+    ///
+    /// Each named domain is closed in `claims` — a proposal of a closure the
+    /// document does not state is meaningless, and normalization refuses it.
+    /// The closure has to be in the document because that is the only place a
+    /// closure ever is: `ProofPolicy2::inspect_candidates` rebuilds the
+    /// planner's candidate universe by weakening the candidate's own closed
+    /// claims, and the canonical main a receipt binds is the candidate
+    /// document itself. A candidate that stated its closure anywhere else —
+    /// a sidecar, a request field — would make the planner's universe a
+    /// caller's choice and would leave nothing for a receipt to bind.
+    ///
+    /// What the marker adds is the distinction the weakening used to carry:
+    /// an emitted proposal is otherwise byte-indistinguishable from a reviewed
+    /// document making the same claim. It is in the semantic digest for the
+    /// same reason `composed_from` is — the two documents mean different
+    /// things, and a receipt for one must not authenticate the other.
+    proposed_closures: BTreeSet<ClaimDomain>,
     pub operations: Vec<Operation>,
     pub edges: Vec<OperationEdge>,
     pub resources: Vec<Resource>,
@@ -805,11 +1072,28 @@ impl CallSemantics {
     ) -> Self {
         Self {
             claims,
+            proposed_closures: BTreeSet::new(),
             operations,
             edges,
             resources,
             guards,
         }
+    }
+
+    /// The same call semantics, additionally proposing the named domains for
+    /// closure proof. The domains' knowledge is untouched.
+    #[must_use]
+    pub fn with_proposed_closures(
+        mut self,
+        domains: impl IntoIterator<Item = ClaimDomain>,
+    ) -> Self {
+        self.proposed_closures.extend(domains);
+        self
+    }
+
+    #[must_use]
+    pub const fn proposed_closures(&self) -> &BTreeSet<ClaimDomain> {
+        &self.proposed_closures
     }
 
     #[must_use]
@@ -845,6 +1129,23 @@ impl CallClaims {
                 .operation_claim(domain)
                 .expect("non-callback claim has an operation domain")
                 .state(),
+        }
+    }
+
+    fn operation_claim_mut(
+        &mut self,
+        domain: ClaimDomain,
+    ) -> Option<&mut KnowledgeSet<OperationId>> {
+        match domain {
+            ClaimDomain::Callbacks => None,
+            ClaimDomain::Reads => Some(&mut self.reads),
+            ClaimDomain::Writes => Some(&mut self.writes),
+            ClaimDomain::Creates => Some(&mut self.creates),
+            ClaimDomain::Invalidates => Some(&mut self.invalidates),
+            ClaimDomain::Throws => Some(&mut self.throws),
+            ClaimDomain::Returns => Some(&mut self.returns),
+            ClaimDomain::Cleanups => Some(&mut self.cleanups),
+            ClaimDomain::Disposals => Some(&mut self.disposals),
         }
     }
 
@@ -1090,6 +1391,28 @@ pub enum BehaviorStrength {
     Guaranteed,
 }
 
+/// The `(export, operation)` an operation was composed from, inside the same
+/// artifact case.
+///
+/// A *positive* claim, not a hint: "the behaviour this operation describes is
+/// that export's own operation, performed through this export's call to it".
+/// The export is named because a consumer has to resolve the composing call's
+/// callee to it exactly, and the operation is named because a composed row
+/// says which of the target's operations it is — "some read of that export"
+/// would be a claim about a set.
+///
+/// Composition is intra-package and same-stack by construction. The operation
+/// id is qualified with this artifact case, so a provenance can never name
+/// another package's export; and a consumer must prove the composing call is
+/// a reachable, uncaptured *call*, so the composed row's `at: call /
+/// schedule: same-stack` stamp survives the hop rather than being inherited
+/// through a closure.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ComposedFrom {
+    pub export: String,
+    pub operation: OperationId,
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Operation {
     pub id: OperationId,
@@ -1104,6 +1427,13 @@ pub struct Operation {
     pub inputs: Vec<ValueShape>,
     pub output: Option<ValueShape>,
     pub resources: BTreeSet<ResourceId>,
+    /// The `(export, operation)` of the same artifact case this operation was
+    /// composed from, when the generator could name it exactly.
+    ///
+    /// `None` is every other case and keeps the operation's own evidence the
+    /// only route to discharging it. Provenance may only *add* a discharge
+    /// route, never remove one.
+    pub composed_from: Option<ComposedFrom>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -1330,6 +1660,21 @@ pub enum ValueShape {
     Store {
         resource: Option<ResourceId>,
         capabilities: KnowledgeSet<CapabilityClaim>,
+    },
+    /// An object whose property reads reach through to **the caller's argument
+    /// at `from`**: what a props merge yields (ADR 0109).
+    ///
+    /// Conditional, and that is the whole shape. A merge creates no reactive
+    /// source; it carries its arguments'. `solid-js@1.9.14` returns a `$PROXY`
+    /// only when some source is already a proxy or is a function, and otherwise
+    /// rebuilds the object preserving each source's own descriptors — so
+    /// `mergeProps({ a: 1 }, { b: 2 })` is plain and destructuring it loses
+    /// nothing. A [`ValueShape::Store`] here would assert reactivity the
+    /// runtime does not always produce; this shape asserts it exactly of a
+    /// caller who passed a reactive argument at `from`, and asserts nothing
+    /// otherwise.
+    MergedProps {
+        from: u16,
     },
     Action {
         transition: Option<ResourceId>,

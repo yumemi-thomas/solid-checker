@@ -19,12 +19,13 @@ use solid_facts_backend::{
     BackendError, ImportIdentityMeasurement, RequestedRuleEnablement, SemanticDemandOptions,
     SourceFile, TypeFactsProvider, TypeFactsSession, accepted_package_contract_statuses,
     analyze_project_accepted_measured_with_enablement, attest_import_identities,
-    build_project_native_measured_with_demands, bundled_first_party_contract_index,
-    contract_identity_scope, default_typefacts_executable, dialect,
-    encode_inferred_entrypoint_workflow_with_external_targets, merge_contract_proposals,
-    merge_plans, read_accepted_contract_catalog_with_trust, read_policy2_trust_configuration,
-    read_proposal_dependency_catalog_for_generation, review_contract_document,
-    semantic_demand_options_for_enablement, validate_contract_document,
+    build_project_native_measured_with_demands, contract_identity_scope,
+    default_typefacts_executable, dialect,
+    encode_inferred_entrypoint_workflow_with_external_targets,
+    external_package_contract_requirements, merge_contract_proposals, merge_plans,
+    read_accepted_contract_catalog_with_trust, read_external_contract_catalog_with_trust,
+    read_policy2_trust_configuration, read_proposal_dependency_catalog_for_generation,
+    review_contract_document, semantic_demand_options_for_enablement, validate_contract_document,
 };
 use solid_reactive_ir::{RuntimeBuild, RuntimeEnvironment, RuntimeRendering, RuntimeTarget};
 
@@ -64,6 +65,13 @@ struct Request {
     certify: bool,
     #[serde(default)]
     check_contracts: bool,
+    /// Whether the contracts compiled into this checker may be applied to this
+    /// project. On by default: a project that installed the exact artifact one
+    /// of them was proven about gets its claims without certifying anything
+    /// itself. `--no-bundled-contracts` turns the tier off for a run that must
+    /// depend on nothing but its own catalogs.
+    #[serde(default = "enabled")]
+    bundled_contracts: bool,
     #[serde(default)]
     validate_contract_paths: Vec<String>,
     #[serde(default)]
@@ -176,6 +184,11 @@ fn json_format() -> String {
     "json".into()
 }
 
+/// Serde default for a switch whose off state has to be written down.
+const fn enabled() -> bool {
+    true
+}
+
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ContractCertificationPlanningRequest {
@@ -193,12 +206,95 @@ struct ContractCertificationPlanningRequest {
     /// planning nested inside a graph node must leave this empty.
     #[serde(default)]
     source_dependencies: Vec<ContractCertificationSourceRequest>,
+    /// Artifact cases the generator recorded inapplicable and therefore omitted
+    /// from the proposal, each carrying the class it claims. The claim is
+    /// decided by the generator from the *installed* tree, which nothing has
+    /// authenticated, so every one of them is re-proved here against the
+    /// archive before planning proceeds.
+    #[serde(default)]
+    inapplicable_cases: Vec<ContractCertificationInapplicableCase>,
+    /// The probe recipe corpus the execution will be handed, so the plan
+    /// written for review is the recipe-gated plan the execution certifies
+    /// against (`CertificationPlan::recipe_gated`) rather than a plan naming a
+    /// `creates` demand that the transaction then withholds. Read only by
+    /// `--plan-contract-certification`; the execution request carries its own
+    /// harness triple.
+    #[serde(default)]
+    probe_recipe_corpus: String,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ContractCertificationInapplicableCase {
+    entrypoint: String,
+    #[serde(default)]
+    conditions: Vec<String>,
+    class: String,
+    #[serde(default)]
+    reason: String,
+}
+
+/// The only applicability class a proposal may declare for an omitted case
+/// today. Every other class the generator records — an unpublished conditional
+/// target, a non-module resource extension — is decided from the export map and
+/// the artifact's own member list, which Rust replays anyway; this one is
+/// decided from file *content*, so it is the one that needs re-proving.
+const NON_EMITTING_MODULE_TARGET: &str = "non-emitting-module-target";
+
+/// Re-proves every declared applicability claim against the authenticated
+/// archive. A claim the archive refutes refuses the whole proposal: the case it
+/// covers was omitted from the proposal on the strength of that claim, so
+/// accepting the proposal while the claim is false would silently delete a real
+/// refusal from the ledger.
+fn prove_declared_applicability(
+    archive: &solid_facts_backend::PublishedArchive,
+    claims: &[ContractCertificationInapplicableCase],
+) -> Result<(), Box<dyn std::error::Error>> {
+    if claims.is_empty() {
+        return Ok(());
+    }
+    for claim in claims {
+        if claim.class != NON_EMITTING_MODULE_TARGET {
+            return Err(format!(
+                "artifact case {} declares unprovable applicability class {:?}",
+                claim.entrypoint, claim.class
+            )
+            .into());
+        }
+    }
+    let snapshot = solid_facts_backend::ArtifactSnapshot::from_published(
+        archive,
+        solid_facts_backend::SnapshotLimits::policy_2(),
+    )
+    .map_err(|error| format!("declared artifact-case applicability cannot be replayed: {error}"))?;
+    for claim in claims {
+        let conditions = claim
+            .conditions
+            .iter()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>();
+        snapshot
+            .prove_non_emitting_module_target(&claim.entrypoint, &conditions)
+            .map_err(|error| {
+                format!(
+                    "artifact case {} (conditions [{}]) claims {} because {:?}, but {error}",
+                    claim.entrypoint,
+                    claim.conditions.join(","),
+                    claim.class,
+                    claim.reason
+                )
+            })?;
+    }
+    Ok(())
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ContractCertificationExecutionRequest {
     schema_version: u16,
+    /// Versions 6 through 9 only: a controlled invocation, never an accepted catalog.
+    #[serde(default)]
+    execution_profile: Option<String>,
     #[serde(default)]
     planning: Option<ContractCertificationPlanningRequest>,
     #[serde(default)]
@@ -213,6 +309,26 @@ struct ContractCertificationExecutionRequest {
     issuer_configuration: String,
     catalog_root: String,
     trust_configuration_output: String,
+    /// Where the runtime-probe harness image, the Node runtime it is launched
+    /// with, and the hand-authored recipe corpus live. All three or none:
+    /// without them a plan that proposes a closed claim domain refuses its
+    /// mandatory veto instead of certifying an unvetoed closure.
+    ///
+    /// The request deliberately cannot declare a sandbox kind or policy. The
+    /// verifier computes both from the scheme it actually runs
+    /// (`probe_harness::sandbox_policy_digest`), so no caller can assert an
+    /// isolation property the transaction does not have.
+    #[serde(default)]
+    probe_harness_root: String,
+    #[serde(default)]
+    probe_node_executable: String,
+    #[serde(default)]
+    probe_recipe_corpus: String,
+    /// ADR 0033: the real path of the pinned headless-shell executable. Read
+    /// only by execution request version 9; every other version ignores it, and
+    /// a version-9 request without it refuses by name inside the transaction.
+    #[serde(default)]
+    probe_browser_executable: String,
 }
 
 #[derive(Clone, Deserialize)]
@@ -332,29 +448,144 @@ struct ContractEmissionFactProgramKey {
     sources: Vec<CanonicalContractEmissionSource>,
 }
 
+/// Whether TypeScript reads this path as a declaration file.
+///
+/// This is not a semantic classification of the file's contents and never
+/// decides an applicability question — `non-emitting-module-target` owns that,
+/// against authenticated bytes. It answers exactly one mechanical question:
+/// *will the Type Facts producer report this path in its `Sources` operation?*
+/// The producer drops every source whose `IsDeclarationFile` is set
+/// (`apps/solid-typefacts/internal/typefacts/tsgo/project.go`), and tsgo sets
+/// that flag from the file name alone, so the same name test answers it here.
+///
+/// Mirrors `tspath.GetDeclarationFileExtension` byte for byte, including its
+/// third case: a `.ts` file whose *base name* also contains `.d.` (`x.d.web.ts`)
+/// is a declaration file, while a directory called `x.d.ts` on the path is not.
+/// Case-sensitive, like the `strings.HasSuffix` it mirrors. The generator's
+/// `isDeclarationFileName` and the replay's `is_declaration_file_name` are the
+/// other two spellings of this predicate; keep all three identical.
+fn is_typescript_declaration_file_name(path: &Path) -> bool {
+    let Some(base) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    if base.ends_with(".d.ts") || base.ends_with(".d.cts") || base.ends_with(".d.mts") {
+        return true;
+    }
+    base.ends_with(".ts") && base.contains(".d.")
+}
+
+/// The refusal for a module the emitter has to read facts for and the fact
+/// program does not contain.
+///
+/// For a declaration file, "not part of the TypeScript project" is false twice
+/// over: the generator wrote it into the project's `files` list, and the reason
+/// it is absent from the facts is that the producer omits every declaration
+/// file from `Sources`. Say exactly that much — the producer reports no source
+/// facts under this suffix — and nothing about what the file publishes, which
+/// is `non-emitting-module-target`'s question and is answered from bytes.
+///
+/// **This arm is defensive, and no path reaches it today.**
+/// `contract_emission_target_sources` refuses a declaration *entry file* before
+/// emission on the batch path, which is the primary path for every artifact
+/// case; the singleton fallback runs only for a non-primary member of an
+/// identity group, and `prepareArtifact`'s identity binds the entrypoint, so a
+/// group never has one. The recursive-walk call sites are additionally closed
+/// from the generator side: a local *value* edge whose only resolution is a
+/// declaration file now refuses at the closure census
+/// (`local-runtime-target-is-declaration-only`), so no chain walks into one.
+/// Both arms are therefore pinned by unit test, not by a fixture: no package
+/// can construct the reaching case.
+fn missing_fact_program_module(path: &Path) -> String {
+    if is_typescript_declaration_file_name(path) {
+        return format!(
+            "emit package contract: the fact program has no source for {}; its suffix makes it a TypeScript declaration file, for which the Type Facts producer reports no source facts",
+            path.display()
+        );
+    }
+    format!(
+        "emit package contract: entry file {} is not part of the TypeScript project",
+        path.display()
+    )
+}
+
 fn contract_emission_target_sources(
     target: &ContractEmissionBatchTarget,
     sources_by_path: &HashMap<PathBuf, SourceFile>,
 ) -> Result<Vec<CanonicalContractEmissionSource>, Box<dyn std::error::Error>> {
+    // The entry file is the one project file this target cannot do without: it
+    // is the module whose surface the contract describes. Every other name in
+    // `source_files` is a closure member the fact program reads *around* it.
+    // Resolving it up front is what lets the declaration rule below apply to
+    // the closure without ever applying to the entrypoint itself.
+    let entry_file = Path::new(&target.entry_file).canonicalize().map_err(|error| {
+        format!(
+            "contract emission batch target {} names entry file {}, which does not resolve on disk: {error}",
+            target.index, target.entry_file
+        )
+    })?;
     let mut selected = BTreeSet::new();
     let mut sources = Vec::with_capacity(target.source_files.len());
     for source_file in &target.source_files {
-        let canonical_path = Path::new(source_file).canonicalize()?;
+        // A source the batch names but that does not exist is a missing
+        // published target, never a source to skip below. Name the target by
+        // its entry file as well as its index: the index alone identifies
+        // nothing a reader can act on, and the offending path is frequently a
+        // closure member rather than the entrypoint's own file.
+        let canonical_path = Path::new(source_file).canonicalize().map_err(|error| {
+            format!(
+                "contract emission batch target {} for entry file {} names source {source_file}, which does not resolve on disk: {error}",
+                target.index, target.entry_file
+            )
+        })?;
         if !selected.insert(canonical_path.clone()) {
             continue;
         }
-        let source = sources_by_path
-            .get(&canonical_path)
-            .ok_or_else(|| {
-                format!(
-                    "contract emission batch target {} names source outside its configured project: {}",
-                    target.index, source_file
+        let Some(source) = sources_by_path.get(&canonical_path) else {
+            // A declaration *closure member* is expected to be absent here,
+            // and its absence is not a scoping fault: a target's project files
+            // are the compiler's root set, while `Sources` is the producer's
+            // fact-source report, and the producer omits every declaration file
+            // from the latter because it carries no runtime bytes to build
+            // facts for. The two roles are distinct — a declaration file is a
+            // *program* input, never a *fact source* — and the singleton
+            // emission path has always agreed, because it derives its sources
+            // from `configured_sources()` alone and never looks a target's
+            // project files up. Skipping it here restores that agreement; the
+            // file still reaches the producer's program through the tsconfig.
+            //
+            // Defense in depth, not the primary guard. The generator no longer
+            // puts a declaration file in a target's `sourceFiles` at all: an
+            // erased (`import type`) edge now reaches its target on the
+            // declarations axis, whose role `projectFiles` filters out, and a
+            // *value* edge whose only resolution is a declaration file refuses
+            // the artifact case outright
+            // (`local-runtime-target-is-declaration-only`). This branch must
+            // not assume that invariant holds, so it stays — pinned by unit
+            // test rather than by a fixture.
+            //
+            // The target's own entry file is never skipped. A declaration file
+            // there means this target has no runtime module at all, which is a
+            // refusal — stated here, where the reason is known, instead of
+            // reaching the emitter's vaguer project-membership guard.
+            if canonical_path.is_file() && is_typescript_declaration_file_name(&canonical_path) {
+                if canonical_path != entry_file {
+                    continue;
+                }
+                return Err(format!(
+                    "contract emission batch target {} names entry file {} as its own fact source; its suffix makes it a TypeScript declaration file, for which the Type Facts producer reports no source facts",
+                    target.index, target.entry_file
                 )
-            })?
-            .clone();
+                .into());
+            }
+            return Err(format!(
+                "contract emission batch target {} for entry file {} names source {source_file}, which the configured project does not report as a fact source",
+                target.index, target.entry_file
+            )
+            .into());
+        };
         sources.push(CanonicalContractEmissionSource {
             canonical_path,
-            source,
+            source: source.clone(),
         });
     }
     sources.sort_by(|left, right| left.canonical_path.cmp(&right.canonical_path));
@@ -510,12 +741,6 @@ fn certification_plan_from_request_in(
         )
         .into());
     }
-    let proposal = fs::read(&request.proposal).map_err(|error| {
-        format!(
-            "could not read certification proposal {}: {error}",
-            request.proposal
-        )
-    })?;
     let import_request = solid_facts_backend::ImportRequest {
         specifier: request.resolution.specifier.clone(),
         importer: request.resolution.importer.clone(),
@@ -538,6 +763,16 @@ fn certification_plan_from_request_in(
             )
         })?,
     )?;
+    // Before the proposal is even read: the cases it omits were omitted on the
+    // strength of these claims, so a false one refuses whatever the document
+    // says.
+    prove_declared_applicability(&archive, &request.inapplicable_cases)?;
+    let proposal = fs::read(&request.proposal).map_err(|error| {
+        format!(
+            "could not read certification proposal {}: {error}",
+            request.proposal
+        )
+    })?;
     // Root-path sources are evidence supply only, so one that cannot even be
     // assembled from its local bytes is dropped for the same reason Rust drops
     // one that will not authenticate: see `plan_contract_document_with_sources`.
@@ -563,7 +798,8 @@ fn certification_plan_from_request_in(
 fn certification_source_request(
     source: ContractCertificationSourceRequest,
 ) -> Result<solid_facts_backend::PublishedGraphSourceRequest, Box<dyn std::error::Error>> {
-    let lock = solid_facts_backend::PublishedGraphLockSelection::from_bun_lock(
+    let lock = solid_facts_backend::PublishedGraphLockSelection::from_lockfile(
+        std::path::Path::new(&source.lockfile),
         &fs::read(&source.lockfile)?,
         source.lock_locator,
         source.package_name.clone(),
@@ -621,8 +857,10 @@ fn certification_graph_node_from_request(
         fs::read(&planning.registry_metadata)?,
         fs::read(&planning.archive)?,
     )?;
-    let lock = solid_facts_backend::PublishedGraphLockSelection::from_bun_lock(
-        &fs::read(lockfile)?,
+    prove_declared_applicability(&archive, &planning.inapplicable_cases)?;
+    let lock = solid_facts_backend::PublishedGraphLockSelection::from_lockfile(
+        std::path::Path::new(&lockfile),
+        &fs::read(&lockfile)?,
         lock_locator,
         planning.resolution.package_name.clone(),
         planning.resolution.package_version.clone(),
@@ -672,7 +910,14 @@ fn write_contract_certification_plan(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let request: ContractCertificationPlanningRequest =
         serde_json::from_slice(&fs::read(request_path)?)?;
+    let recipe_corpus = request.probe_recipe_corpus.clone();
     let (plan, _) = certification_plan_from_request(request)?;
+    // The same gating the execution applies, so the plan an operator reviews
+    // names exactly the demands the transaction will make.
+    let gated = plan
+        .recipe_gated((!recipe_corpus.is_empty()).then(|| Path::new(recipe_corpus.as_str())))
+        .map_err(|error| format!("recipe-gated certification planning failed: {error}"))?;
+    let plan = gated.plan();
     let graph = plan.demand_graph();
     let snapshot_witnesses = plan
         .artifact_witness_bindings()
@@ -694,6 +939,7 @@ fn write_contract_certification_plan(
             "owner": certification_demand_owner(demand.family()),
             "satisfiedByArtifactSnapshot": snapshot_witnesses.contains(demand.id().as_str()),
         })).collect::<Vec<_>>(),
+        "withheldClosures": gated.withheld(),
     });
     let mut bytes = serde_json::to_vec_pretty(&output)?;
     bytes.push(b'\n');
@@ -711,6 +957,26 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
                 request_path.display()
             )
         })?)?;
+    let single_shape = request.planning.is_some()
+        && request.plannings.is_empty()
+        && request.graph.is_none()
+        && request.graphs.is_empty()
+        && request.graph_case_set.is_none();
+    let controlled_profile = request.execution_profile.as_deref();
+    let is_controlled = single_shape
+        && matches!(
+            (request.schema_version, controlled_profile),
+            (6, Some(solid_facts_backend::INERT_EXECUTION_PROFILE))
+                | (7, Some(solid_facts_backend::IMPORT_FREE_EXECUTION_PROFILE))
+                | (
+                    8,
+                    Some(solid_facts_backend::RELATIVE_GRAPH_EXECUTION_PROFILE)
+                )
+                | (9, Some(solid_facts_backend::BROWSER_EXECUTION_PROFILE))
+        );
+    if request.execution_profile.is_some() && !is_controlled {
+        return Err("unsupported execution profile; controlled execution requires version 6/inert, version 7/import-free, version 8/relative TypeScript graph, or version 9/browser CDP pipe and one planning".into());
+    }
     let is_single = request.schema_version == 1
         && request.planning.is_some()
         && request.plannings.is_empty()
@@ -749,9 +1015,10 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
         && !is_graph
         && !is_graph_case_set
         && !is_deduplicated_graph_case_set
+        && !is_controlled
     {
         return Err(
-            "certification execution version 1 requires one planning; version 2 requires at least two plannings; version 3 requires one finite graph; version 4 requires at least two finite graphs; version 5 requires one deduplicated finite graph case-set"
+            "certification execution version 1 requires one planning; version 2 requires at least two plannings; version 3 requires one finite graph; version 4 requires at least two finite graphs; version 5 requires one deduplicated finite graph case-set; version 6 requires one planning and executionProfile node-strip-inert-esm-v1; version 7 requires one planning and executionProfile node-strip-import-free-esm-v1; version 8 requires one planning and executionProfile node-strip-relative-ts-graph-esm-v1; version 9 requires one planning and executionProfile chromium-headless-shell-cdp-pipe-esm-v1"
                 .into(),
         );
     }
@@ -795,6 +1062,33 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
     })?;
     let pin = solid_facts_backend::TypeFactsProducerPin::configured(typefacts_path)
         .map_err(|error| format!("Type Facts producer pinning failed: {error}"))?;
+    let probes = probe_harness_configuration(&request)?;
+    let probes = probes.as_ref();
+
+    if is_controlled {
+        let planning = request
+            .planning
+            .ok_or("controlled execution planning disappeared")?;
+        let (plan, proposal) = certification_plan_from_request(planning)?;
+        let profile = controlled_profile.ok_or("controlled execution profile disappeared")?;
+        let result = plan.certify_and_execute(
+            profile,
+            &proposal,
+            &pin,
+            &issuer,
+            probes.ok_or("controlled execution requires the pinned probe harness and corpus")?,
+        )?;
+        let mut bytes = serde_json::to_vec_pretty(&result)?;
+        bytes.push(b'\n');
+        let output = Path::new(&request.catalog_root).join("controlled-execution.json");
+        write_atomic_file(&output, &bytes)?;
+        println!(
+            "controlled execution completed under {}: {}",
+            profile,
+            output.display()
+        );
+        return Ok(());
+    }
 
     if is_graph {
         return execute_contract_graph_certification(
@@ -803,6 +1097,7 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
             &pin,
             &issuer,
             issuer_document.revocation_epoch,
+            probes,
         );
     }
 
@@ -813,6 +1108,7 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
             &pin,
             &issuer,
             issuer_document.revocation_epoch,
+            probes,
         );
     }
 
@@ -823,6 +1119,7 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
             &pin,
             &issuer,
             issuer_document.revocation_epoch,
+            probes,
         );
     }
 
@@ -834,8 +1131,17 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
     let (plan, proposal) = certification_plan_from_request(planning)
         .map_err(|error| format!("certification planning failed: {error}"))?;
     let finalized = plan
-        .certify_value_only(&proposal, &pin, &issuer, issuer_document.revocation_epoch)
+        .certify_value_only(
+            &proposal,
+            &pin,
+            &issuer,
+            issuer_document.revocation_epoch,
+            probes,
+        )
         .map_err(|error| format!("policy-2 proof finalization failed: {error}"))?;
+    report_closure_candidates(None, &plan);
+    report_certified_closures(None, &finalized);
+    report_withheld_closures(None, &finalized)?;
     let trust_bytes =
         solid_facts_backend::encode_policy2_trust_configuration(finalized.trust_configuration())
             .map_err(|error| format!("policy-2 trust encoding failed: {error}"))?;
@@ -877,12 +1183,203 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
     Ok(())
 }
 
+/// One stdout line per closure candidate the transaction withheld by name,
+/// keyed by this marker. The CLI driver (`certify-contract.mjs`) collects them
+/// into the certification audit's `withheldClosures`; the accepted contract
+/// itself already says the domain is open, so nothing here is authority.
+const WITHHELD_CLOSURE_MARKER: &str = "solid-checker:withheld-closure=";
+
+/// One stdout line per operation a transaction withdrew from the document it
+/// published, because a positive fact the operation states could not be
+/// certified.
+///
+/// The rung below `withheldClosures`, and reported for the same reason: a
+/// certified contract weaker than the proposal it came from has to say so, or
+/// the weakening is indistinguishable from a generator that never made the
+/// claim — `docs/precision-backlog.md` § "A certified contract can be weaker
+/// than the proposal it came from".
+const WITHHELD_OPERATION_MARKER: &str = "solid-checker:withheld-operation=";
+
+/// One stdout line naming every closure candidate the *planner* derived from
+/// the proposal, before any gating.
+///
+/// The mirror of `plannedProposal` in the CLI's audit, and it exists for the
+/// same reason: a certified document that closes nothing can mean the
+/// proposal offered nothing, that the planner derived no candidate from what
+/// it offered, or that gating withheld them. The first is answered on the CLI
+/// side and the third by `withheldClosures`; this answers the second, which
+/// was the one boundary nothing could see through. Diagnostic only.
+const CLOSURE_CANDIDATE_MARKER: &str = "solid-checker:closure-candidates=";
+
+/// One stdout line naming what the canonical main a receipt binds actually
+/// closes, per export.
+///
+/// The last of four: the proposal offered N, the planner derived M
+/// candidates, gating withheld K, and this says what survived to the
+/// document. A closure present in the candidates and absent here, with no
+/// withheld record, is lost outside every mechanism meant to account for it.
+const CERTIFIED_CLOSURE_MARKER: &str = "solid-checker:certified-closures=";
+
+/// The node a graph-lane record belongs to, so a per-row census can attribute
+/// a closure to the package that carries it. `None` on the value-only lane,
+/// where every record is the root's.
+fn closure_record_node(
+    node: Option<&solid_facts_backend::CanonicalDependencyNodeIdentity>,
+) -> Option<serde_json::Value> {
+    node.map(|node| {
+        serde_json::json!({
+            "package": node.package_name,
+            "version": node.package_version,
+            "digest": node.digest(),
+        })
+    })
+}
+
+fn report_certified_closures(
+    node: Option<&solid_facts_backend::CanonicalDependencyNodeIdentity>,
+    finalized: &solid_facts_backend::FinalizedPolicy2Contract,
+) {
+    let mut record =
+        match solid_facts_backend::document_closed_call_domains(finalized.canonical_main()) {
+            Ok(rows) => {
+                // A tally beside the rows, because the consumer truncates the rows
+                // and a truncated breakdown reads as a smaller yield rather than
+                // as a partial one. Nine domains bound it, so it never truncates.
+                let mut by_domain: std::collections::BTreeMap<String, usize> =
+                    std::collections::BTreeMap::new();
+                for row in &rows {
+                    for domain in &row.closed {
+                        *by_domain.entry(domain.to_string()).or_default() += 1;
+                    }
+                }
+                serde_json::json!({
+                    "count": rows.len(),
+                    "closedByDomain": by_domain,
+                    "closed": rows
+                        .into_iter()
+                        .map(|row| serde_json::json!({
+                            "artifactCase": row.artifact_case,
+                            "export": row.export,
+                            "closed": row.closed,
+                        }))
+                        .collect::<Vec<_>>(),
+                })
+            }
+            Err(error) => serde_json::json!({ "unreadable": error.to_string() }),
+        };
+    if let (Some(object), Some(node)) = (record.as_object_mut(), closure_record_node(node)) {
+        object.insert("node".into(), node);
+    }
+    println!("{CERTIFIED_CLOSURE_MARKER}{record}");
+}
+
+fn report_closure_candidates(
+    node: Option<&solid_facts_backend::CanonicalDependencyNodeIdentity>,
+    plan: &solid_facts_backend::CertificationPlan,
+) {
+    let candidates = plan
+        .candidates()
+        .closure_candidates()
+        .iter()
+        .map(|closure| {
+            serde_json::json!({
+                "artifactCase": closure.artifact_case,
+                "export": closure.export,
+                "path": format!("{:?}", closure.path),
+            })
+        })
+        .collect::<Vec<_>>();
+    let mut record = serde_json::json!({ "count": candidates.len(), "candidates": candidates });
+    if let (Some(object), Some(node)) = (record.as_object_mut(), closure_record_node(node)) {
+        object.insert("node".into(), node);
+    }
+    println!("{CLOSURE_CANDIDATE_MARKER}{record}");
+}
+
+fn report_withheld_closures(
+    node: Option<&solid_facts_backend::CanonicalDependencyNodeIdentity>,
+    finalized: &solid_facts_backend::FinalizedPolicy2Contract,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for withheld in finalized.withheld_closures() {
+        let mut record = serde_json::to_value(withheld)?;
+        if let (Some(object), Some(node)) = (record.as_object_mut(), node) {
+            object.insert(
+                "node".into(),
+                serde_json::json!({
+                    "package": node.package_name,
+                    "version": node.package_version,
+                    "digest": node.digest(),
+                }),
+            );
+        }
+        println!("{WITHHELD_CLOSURE_MARKER}{record}");
+    }
+    for withheld in finalized.withheld_operations() {
+        let mut record = serde_json::json!({
+            "artifactCase": withheld.artifact_case,
+            "export": withheld.export,
+            "operation": withheld.operation,
+            "reason": withheld.reason,
+        });
+        if let (Some(object), Some(node)) = (record.as_object_mut(), node) {
+            object.insert(
+                "node".into(),
+                serde_json::json!({
+                    "package": node.package_name,
+                    "version": node.package_version,
+                    "digest": node.digest(),
+                }),
+            );
+        }
+        println!("{WITHHELD_OPERATION_MARKER}{record}");
+    }
+    Ok(())
+}
+
+/// The probe harness configuration this request supplies, or `None`.
+///
+/// All three paths or none: a partially configured harness is a refusal rather
+/// than a silently narrower binding. A plan that proposes no closed claim
+/// domain never needs one, so `None` is the ordinary case for every row in the
+/// corpus today.
+fn probe_harness_configuration(
+    request: &ContractCertificationExecutionRequest,
+) -> Result<Option<solid_facts_backend::ProbeHarnessConfiguration>, Box<dyn std::error::Error>> {
+    let supplied = [
+        &request.probe_harness_root,
+        &request.probe_node_executable,
+        &request.probe_recipe_corpus,
+    ];
+    if supplied.iter().all(|value| value.is_empty()) {
+        return Ok(None);
+    }
+    if supplied.iter().any(|value| value.is_empty()) {
+        return Err(
+            "probe harness configuration needs probeHarnessRoot, probeNodeExecutable, and probeRecipeCorpus together"
+                .into(),
+        );
+    }
+    let mut configuration = solid_facts_backend::ProbeHarnessConfiguration::new(
+        Path::new(&request.probe_harness_root),
+        Path::new(&request.probe_node_executable),
+        Path::new(&request.probe_recipe_corpus),
+    )
+    .map_err(|error| format!("probe harness configuration is invalid: {error}"))?;
+    if !request.probe_browser_executable.is_empty() {
+        configuration = configuration
+            .with_browser_executable(Path::new(&request.probe_browser_executable))
+            .map_err(|error| format!("probe harness configuration is invalid: {error}"))?;
+    }
+    Ok(Some(configuration))
+}
+
 fn execute_contract_case_set_certification(
     request_path: &Path,
     request: ContractCertificationExecutionRequest,
     pin: &solid_facts_backend::TypeFactsProducerPin,
     issuer: &solid_facts_backend::ConfiguredReceiptIssuer,
     revocation_epoch: u64,
+    probes: Option<&solid_facts_backend::ProbeHarnessConfiguration>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut plans = Vec::with_capacity(request.plannings.len());
     let mut proposal = None::<Vec<u8>>;
@@ -977,6 +1474,7 @@ fn execute_contract_case_set_certification(
         pin,
         issuer,
         revocation_epoch,
+        probes,
     )
     .map_err(|error| format!("policy-2 case-set finalization failed: {error}"))?;
     solid_facts_backend::report_certification_timing(
@@ -988,6 +1486,9 @@ fn execute_contract_case_set_certification(
     for ((plan, artifact_case_id, resolved_import_root, importer, specifier), finalized) in
         plans.into_iter().zip(finalized)
     {
+        report_closure_candidates(None, &plan);
+        report_certified_closures(None, &finalized);
+        report_withheld_closures(None, &finalized)?;
         let current_trust = solid_facts_backend::encode_policy2_trust_configuration(
             finalized.trust_configuration(),
         )
@@ -1110,6 +1611,7 @@ fn execute_contract_graph_certification(
     pin: &solid_facts_backend::TypeFactsProducerPin,
     issuer: &solid_facts_backend::ConfiguredReceiptIssuer,
     revocation_epoch: u64,
+    probes: Option<&solid_facts_backend::ProbeHarnessConfiguration>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let graph_request = request
         .graph
@@ -1117,7 +1619,7 @@ fn execute_contract_graph_certification(
         .ok_or("graph certification request disappeared")?;
     let graph = certification_graph_from_request(graph_request)?;
     let finalized = graph
-        .certify_value_only(pin, issuer, revocation_epoch)
+        .certify_value_only(pin, issuer, revocation_epoch, probes)
         .map_err(|error| format!("published graph finalization failed: {error}"))?;
     if finalized.graph_root() != graph.graph_root() {
         return Err("published graph finalization changed the graph root".into());
@@ -1128,6 +1630,15 @@ fn execute_contract_graph_certification(
     )
     .map_err(|error| format!("policy-2 graph trust encoding failed: {error}"))?;
     for node in finalized.nodes() {
+        report_withheld_closures(Some(node.identity()), node.finalized())?;
+        // The other two halves of the accounting, which the graph lanes used
+        // to drop: without them a composed row reports what gating took away
+        // and never what the planner derived or the receipt binds, so a
+        // corpus-scale closure yield cannot be read off a run at all.
+        if let Some(node_plan) = graph.plan(node.identity()) {
+            report_closure_candidates(Some(node.identity()), node_plan);
+        }
+        report_certified_closures(Some(node.identity()), node.finalized());
         let current = solid_facts_backend::encode_policy2_trust_configuration(
             node.finalized().trust_configuration(),
         )?;
@@ -1291,6 +1802,7 @@ fn execute_contract_graph_case_set_certification(
     pin: &solid_facts_backend::TypeFactsProducerPin,
     issuer: &solid_facts_backend::ConfiguredReceiptIssuer,
     revocation_epoch: u64,
+    probes: Option<&solid_facts_backend::ProbeHarnessConfiguration>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let graph_requests = match request.graph_case_set {
         Some(case_set) => expand_deduplicated_graph_case_set(case_set)?,
@@ -1317,6 +1829,7 @@ fn execute_contract_graph_case_set_certification(
         pin,
         issuer,
         revocation_epoch,
+        probes,
     )
     .map_err(|error| format!("published graph case-set finalization failed: {error}"))?;
 
@@ -1355,9 +1868,12 @@ fn execute_contract_graph_case_set_certification(
         fs::create_dir(&hidden_nodes)?;
         let mut published_root = None;
         for node in finalized.nodes() {
+            report_withheld_closures(Some(node.identity()), node.finalized())?;
             let node_plan = graph
                 .plan(node.identity())
                 .ok_or("finalized graph case node has no retained opaque plan")?;
+            report_closure_candidates(Some(node.identity()), node_plan);
+            report_certified_closures(Some(node.identity()), node.finalized());
             let node_root = if node.identity() == graph.root_identity() {
                 case_root.clone()
             } else {
@@ -1603,6 +2119,12 @@ fn verify_policy2_discovery(request_path: &Path) -> Result<(), Box<dyn std::erro
     }
     .ok_or("single-case or graph discovery request has no root planning")?;
     let catalog = catalog_root.join("accepted-contracts.json");
+    // The full reader, not the external-only one ordinary analysis uses: this
+    // check authenticates the catalog *this* certification wrote, and a core
+    // runtime package's own entry is exactly what the external-only reader
+    // withholds (ordinary analysis answers those imports from the built-in
+    // foundation, ADR 0027), so a core package's self-certification could never
+    // discover itself.
     let index = read_accepted_contract_catalog_with_trust(&catalog, Some(&trust))?;
     let importer = &planning.resolution.importer;
     let specifier = &planning.resolution.specifier;
@@ -1653,6 +2175,8 @@ fn verify_policy2_case_set_discovery(
             &case.catalog_digest,
             "policy-2 case-set catalog",
         )?;
+        // Full reader, for the same reason as the single-case check above: a
+        // core runtime package's own entry must be discoverable here.
         let index = read_accepted_contract_catalog_with_trust(&catalog, Some(trust))?;
         let selected =
             index
@@ -2151,6 +2675,17 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             "--emit-contract requires --contract-resolution and --emit-proposal-plan".into(),
         );
     }
+    // `detect_detailed` rather than `detect`: an installed Solid runtime this
+    // build has no dialect for is not a dialect choice, and collapsing it onto
+    // the default would analyze the project under a language it does not run.
+    // The refusal is carried to the analysis path below rather than raised
+    // here, because the contract-workflow modes in between do not analyze a
+    // Solid project and an installed runtime is none of their business.
+    //
+    // An explicit `--dialect` overrides detection outright, refusal included.
+    // That is the escape hatch for a resolved manifest that misreports what
+    // will actually be installed, and the rule page says so.
+    let mut unsupported_runtime = None;
     let dialect = match request.dialect.as_deref() {
         Some(id) => dialect::by_id(id).ok_or_else(|| {
             format!(
@@ -2162,11 +2697,25 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                     .join(", ")
             )
         })?,
-        None => dialect::detect(if request.contract_package_root.is_empty() {
-            Path::new(&request.project_id)
-        } else {
-            Path::new(&request.contract_package_root)
-        }),
+        None => {
+            let project = if request.contract_package_root.is_empty() {
+                Path::new(&request.project_id)
+            } else {
+                Path::new(&request.contract_package_root)
+            };
+            match dialect::detect_detailed(project) {
+                dialect::Detection::Installed { dialect, .. } => dialect,
+                dialect::Detection::Unsupported {
+                    installed,
+                    manifest,
+                    ..
+                } => {
+                    unsupported_runtime = Some((installed, manifest));
+                    dialect::default_dialect()
+                }
+                dialect::Detection::Defaulted { .. } => dialect::default_dialect(),
+            }
+        }
     };
     if !request.validate_contract_paths.is_empty() {
         for path in &request.validate_contract_paths {
@@ -2286,6 +2835,28 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         verify_policy2_discovery(Path::new(&request.verify_policy2_discovery))?;
         return Ok(0);
     }
+    // Refuse here: **before** the daemon branch below, not after it.
+    //
+    // `daemon::enabled()` defaults to on whenever `debug_assertions` is off,
+    // and `daemon::eligible` is satisfied by exactly the ordinary project
+    // check, so a release build takes `daemon::check` and returns from this
+    // function without ever reaching the analysis below. A refusal placed
+    // there would be correct in a debug build and silently absent in every
+    // shipped one -- and no gate here runs a release binary against an
+    // unsupported install, so nothing would have caught it.
+    if let Some((installed, manifest)) = unsupported_runtime {
+        let snapshot = solid_facts_backend::unsupported_runtime_snapshot(&installed, &manifest);
+        let emission = snapshot_emission::emit(
+            dialect,
+            &request.format,
+            &request.project_id,
+            &snapshot,
+            request.certify,
+            started.elapsed(),
+        )?;
+        io::stdout().write_all(&emission.output)?;
+        return Ok(emission.exit_code);
+    }
     #[cfg(unix)]
     {
         if request.serve {
@@ -2353,13 +2924,26 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     if let Some(batch) = contract_emission_batch.take() {
         // The union project opens one pinned Type Facts program. Before any
         // fact reuse, native code independently canonicalizes every target's
-        // complete source program and binds its source bytes and compiler
-        // options into the key below. Request-level dialect, runtime, rule,
-        // generation, Type Facts, and project inputs are bound as well. Only
-        // exact equal keys share the fact build; attestations, catalogs, IR,
-        // and entrypoint emission remain per target. The key is local to this
-        // process invocation and cannot cross a certification or fresh replay
-        // boundary.
+        // *fact sources* — the subset of its project files the producer reports
+        // in `Sources` — and binds their source bytes and compiler options into
+        // the key below. Request-level dialect, runtime, rule, generation, Type
+        // Facts, and project inputs are bound as well. Only exact equal keys
+        // share the fact build; attestations, catalogs, IR, and entrypoint
+        // emission remain per target. The key is local to this process
+        // invocation and cannot cross a certification or fresh replay boundary.
+        //
+        // The subset is the whole key, deliberately. A declaration member of a
+        // target's project files is not an input to the fact program: the
+        // producer never reports one (it emits no JavaScript, so there are no
+        // runtime bytes to build facts for), and it reaches the producer's
+        // TypeScript program through this batch's single tsconfig, which is the
+        // same document for every target in the batch. So two targets differing
+        // only in declaration members really do share one fact program, and
+        // grouping them together is correct rather than a widened key.
+        // Authentication of those bytes is not this key's job either: the
+        // generator binds every closure member, declaration files included,
+        // into each case's `closureSha256`, and certification replays it from
+        // the archive.
         let configured_sources = request.sources.clone();
         let mut sources_by_path = HashMap::new();
         for source in &configured_sources {
@@ -2504,12 +3088,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                     } else {
                         Some(PathBuf::from(&request.accepted_contract_catalog))
                     };
-                    let bundled = bundled_first_party_contract_index(
-                        dialect.id,
-                        &package_root,
-                        &facts,
-                        &request.runtime,
-                    )?;
+                    let requirements =
+                        external_package_contract_requirements(dialect.id, &package_root, &facts);
                     let trust = (!request.receipt_trust_configuration.is_empty())
                         .then(|| {
                             read_policy2_trust_configuration(Path::new(
@@ -2519,10 +3099,29 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                         .transpose()?;
                     let contracts = discovered_catalog
                         .as_deref()
-                        .map(|path| read_accepted_contract_catalog_with_trust(path, trust.as_ref()))
+                        .map(|path| read_external_contract_catalog_with_trust(path, trust.as_ref()))
                         .transpose()?
                         .unwrap_or_default()
-                        .with_fallback(bundled);
+                        .with_fallback(requirements);
+                    // An acceptance is issued for the file that imported the
+                    // package during certification. Admit the specifier
+                    // project-wide when this project's installed artifact is the
+                    // one that acceptance names — same integrity, entrypoint and
+                    // declared conditions. With no declared conditions this
+                    // admits nothing, because conditions select the artifact and
+                    // the analyzer has no facts of its own about them.
+                    let contracts = match discovered_catalog.as_deref() {
+                        Some(path) => contracts.with_admitted_artifacts(
+                            solid_facts_backend::admitted_project_artifacts(
+                                std::slice::from_ref(&path.to_path_buf()),
+                                trust.as_ref(),
+                                &package_root,
+                                &request.runtime.selected_conditions(),
+                                &facts,
+                            )?,
+                        ),
+                        None => contracts,
+                    };
                     let contracts = if request.proposal_dependency_catalog.is_empty() {
                         contracts
                     } else {
@@ -2659,25 +3258,41 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         } else {
             project.parent().unwrap_or_else(|| Path::new("."))
         };
-        let bundled =
-            bundled_first_party_contract_index(dialect.id, directory, &facts, &request.runtime)?;
-        let catalog = if request.accepted_contract_catalog.is_empty() {
-            let candidate = directory.join(".solid-checker/accepted-contracts.json");
-            candidate.is_file().then_some(candidate)
+        let requirements = external_package_contract_requirements(dialect.id, directory, &facts);
+        // Every catalog the local tier holds, not just `accepted-contracts.json`:
+        // certification publishes a case set for a package with more than one
+        // artifact case, and opening only the older spelling is what left a
+        // freshly certified contract unread. See `discovered_catalog_paths`.
+        let catalogs = if request.accepted_contract_catalog.is_empty() {
+            solid_facts_backend::discovered_catalog_paths(directory)?
         } else {
-            Some(PathBuf::from(&request.accepted_contract_catalog))
+            vec![PathBuf::from(&request.accepted_contract_catalog)]
         };
+        let catalog = catalogs.first().cloned();
         let trust = (!request.receipt_trust_configuration.is_empty())
             .then(|| {
                 read_policy2_trust_configuration(Path::new(&request.receipt_trust_configuration))
             })
             .transpose()?;
-        let contracts = catalog
-            .as_deref()
-            .map(|path| read_accepted_contract_catalog_with_trust(path, trust.as_ref()))
-            .transpose()?
-            .unwrap_or_default()
-            .with_fallback(bundled);
+        // Every tier, in the one order they are folded in. The *selected*
+        // condition set, not the raw `--runtime-condition` list:
+        // `selected_conditions` folds in `--runtime-target`, `--runtime-build`
+        // and `--rendering`, which is what a Solid app with SSR actually knows
+        // about itself. An app resolves different runtime files on the server
+        // and in the browser, and what its author can state is the environment,
+        // not the export-condition names the package happens to use. Declaring
+        // nothing still admits nothing, so the zero-configuration path is
+        // unchanged.
+        let contracts = solid_facts_backend::project_accepted_contracts(
+            directory,
+            &catalogs,
+            trust.as_ref(),
+            request.bundled_contracts,
+            &request.runtime.selected_conditions(),
+            &facts,
+            requirements,
+        )?;
+        let _ = &catalog;
         let statuses = accepted_package_contract_statuses(dialect, project, &facts, &contracts)?;
         let actionable = statuses
             .iter()
@@ -2721,7 +3336,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                     println!("No imported Solid packages need contracts.");
                 } else if actionable.is_empty() {
                     println!(
-                        "\nEvery imported Solid package has a contract for its installed version."
+                        "\nNo external package contract requirements remain; built-in runtime model support is reported separately."
                     );
                 } else {
                     println!(
@@ -2741,17 +3356,21 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         return Ok(i32::from(!actionable.is_empty()));
     }
     if diagnostics {
-        let discovered_catalog = if request.accepted_contract_catalog.is_empty() {
+        // Every catalog the local tier holds. `contract certify` publishes a
+        // *case set* whenever a package resolves to more than one artifact case,
+        // and discovery used to open only `accepted-contracts.json` — so a
+        // certified, signed, trusted contract was written and never read. See
+        // `discovered_catalog_paths`.
+        let discovered_catalogs = if request.accepted_contract_catalog.is_empty() {
             let project = Path::new(&facts.project_id);
             let directory = if project.is_dir() {
                 project
             } else {
                 project.parent().unwrap_or_else(|| Path::new("."))
             };
-            let candidate = directory.join(".solid-checker/accepted-contracts.json");
-            candidate.is_file().then_some(candidate)
+            solid_facts_backend::discovered_catalog_paths(directory)?
         } else {
-            Some(PathBuf::from(&request.accepted_contract_catalog))
+            vec![PathBuf::from(&request.accepted_contract_catalog)]
         };
         let project = Path::new(&facts.project_id);
         let directory = if project.is_dir() {
@@ -2759,26 +3378,37 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         } else {
             project.parent().unwrap_or_else(|| Path::new("."))
         };
-        let bundled =
-            bundled_first_party_contract_index(dialect.id, directory, &facts, &request.runtime)?;
+        let requirements = external_package_contract_requirements(dialect.id, directory, &facts);
         let trust = (!request.receipt_trust_configuration.is_empty())
             .then(|| {
                 read_policy2_trust_configuration(Path::new(&request.receipt_trust_configuration))
             })
             .transpose()?;
-        let contracts = discovered_catalog
-            .as_deref()
-            .map(|path| read_accepted_contract_catalog_with_trust(path, trust.as_ref()))
-            .transpose()?
-            .unwrap_or_default()
-            .with_fallback(bundled);
+        // Every tier, in the one order they are folded in. The *selected*
+        // condition set, not the raw `--runtime-condition` list:
+        // `selected_conditions` folds in `--runtime-target`, `--runtime-build`
+        // and `--rendering`, which is what a Solid app with SSR actually knows
+        // about itself. An app resolves different runtime files on the server
+        // and in the browser, and what its author can state is the environment,
+        // not the export-condition names the package happens to use. Declaring
+        // nothing still admits nothing, so the zero-configuration path is
+        // unchanged.
+        let contracts = solid_facts_backend::project_accepted_contracts(
+            directory,
+            &discovered_catalogs,
+            trust.as_ref(),
+            request.bundled_contracts,
+            &request.runtime.selected_conditions(),
+            &facts,
+            requirements,
+        )?;
         let contracts = if request.proposal_dependency_catalog.is_empty() {
             contracts
         } else {
             if request.emit_contract.is_empty() && request.emit_contract_batch.is_empty() {
                 return Err("--proposal-dependencies is private to contract emission".into());
             }
-            if discovered_catalog.is_some() || trust.is_some() {
+            if !discovered_catalogs.is_empty() || trust.is_some() {
                 return Err(
                     "--proposal-dependencies cannot be combined with accepted-contract receipt authority"
                         .into(),
@@ -2886,12 +3516,17 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut dialect_id: Option<String> = None;
     let mut accepted_contract_catalog = String::new();
     let mut receipt_trust_configuration = String::new();
+    // The export conditions this project resolves its imports under. Declared
+    // by the host because the analyzer has no condition facts of its own, and
+    // conditions select the artifact an acceptance was issued for.
+    let mut export_conditions = std::collections::BTreeSet::<String>::new();
     let mut proposal_dependency_catalog = String::new();
     let mut presets = Vec::new();
     let mut enable_rules = Vec::new();
     let mut format = "default".to_owned();
     let mut certify = false;
     let mut check_contracts = false;
+    let mut bundled_contracts = true;
     let mut validate_contract_paths = Vec::new();
     let mut emit_contract = String::new();
     let mut emit_contract_batch = String::new();
@@ -3127,6 +3762,18 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
                     .next()
                     .ok_or("--receipt-trust-configuration needs a path")?
             }
+            "--conditions" => {
+                let value = args
+                    .next()
+                    .ok_or("--conditions needs a comma-separated list")?;
+                export_conditions.extend(
+                    value
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|condition| !condition.is_empty())
+                        .map(str::to_owned),
+                );
+            }
             "--preset" => presets.push(args.next().ok_or("--preset needs a name")?),
             "--enable-rule" => {
                 enable_rules.push(args.next().ok_or("--enable-rule needs a rule name")?)
@@ -3134,6 +3781,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             "--format" => format = args.next().ok_or("--format needs a value")?,
             "--certify" => certify = true,
             "--check-contracts" => check_contracts = true,
+            "--no-bundled-contracts" => bundled_contracts = false,
             "--serve" => serve = true,
             "--help" | "-h" => help = true,
             "--validate-contract" => {
@@ -3317,6 +3965,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         format,
         certify,
         check_contracts,
+        bundled_contracts,
         validate_contract_paths,
         emit_contract,
         emit_contract_batch,
@@ -3348,7 +3997,20 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         contract_package_root,
         help,
         serve,
-        runtime,
+        // Both spellings, merged. `--conditions` takes a comma-separated list
+        // and `--runtime-condition` one name at a time; overwriting here
+        // discarded the latter entirely, and `packages/cli/eslint.cjs` emits
+        // exactly that flag for every configured condition. Since conditions
+        // select the artifact, dropping them silently disabled artifact
+        // admission for every ESLint-driven run.
+        runtime: RuntimeEnvironment {
+            conditions: {
+                let mut conditions = runtime.conditions.clone();
+                conditions.extend(export_conditions);
+                conditions
+            },
+            ..runtime
+        },
     })
 }
 
@@ -3899,6 +4561,9 @@ enum AttributionMechanism {
     Reachability,
     /// A contract-generation obligation naming its exported function directly.
     ObligationIdentity,
+    /// The obligation sits on a **re-export specifier**, so it belongs to the
+    /// one public name that specifier publishes.
+    ReexportSpecifier,
     /// Nothing identified the obligation's function, so every export of the
     /// entrypoint is marked. This is the surviving fail-closed rung.
     FallbackAll,
@@ -3912,6 +4577,7 @@ impl AttributionMechanism {
             Self::IdentityWidening => "identity-widening",
             Self::Reachability => "reachability",
             Self::ObligationIdentity => "obligation-identity",
+            Self::ReexportSpecifier => "reexport-specifier",
             Self::FallbackAll => "fallback-all",
         }
     }
@@ -4232,10 +4898,72 @@ fn attribute_unresolved_obligation(
     {
         return (AttributionMechanism::Reachability, names);
     }
+    if let Some(names) = export_names_at_reexport_specifier(index, location, exports) {
+        return (AttributionMechanism::ReexportSpecifier, names);
+    }
     (
         AttributionMechanism::FallbackAll,
         exports.keys().cloned().collect(),
     )
+}
+
+/// The one public name a re-export specifier publishes, when the obligation was
+/// filed at that specifier.
+///
+/// `export { opaque } from "dependency"` binds one public name to one module's
+/// export. The binding is immutable and its target lives in the dependency's
+/// archive, so an obligation about what that dependency's contract leaves open
+/// is a fact about `opaque` and about nothing else — above all it is not
+/// evidence about the body of a sibling this package declares itself.
+///
+/// The ladder had no rung for it and could not have had one from its existing
+/// material: the specifier encloses no function, its symbol is referenced
+/// nowhere else in the package, and no call reaches it, so every such
+/// obligation fell through all three rungs to `FallbackAll` and marked every
+/// export of the entrypoint unknown. `@kobalte/utils` raises eighteen of them
+/// from nine cross-package re-exports, which is what left `mergeDefaultProps`
+/// and `callHandler` publishing `closed: ["creates"]` alone — measured as
+/// `closed: [callbacks, creates, reads, returns]` for a local export beside a
+/// *closed* re-export and `closed: [creates]` for the same function beside an
+/// open one (`scripts/contract-dependency-reexport.test.mjs`).
+///
+/// **Why narrowing is sound rather than merely narrower.** A local export that
+/// actually *calls* a re-exported dependency function does not depend on this
+/// rung at all: that call raises its own obligation, filed inside the calling
+/// function, which the enclosing-chain rung attributes to exactly the exports
+/// that contain it. What falls through to here is only the obligation about the
+/// re-export *binding* — a fact about which name is published, not about any
+/// body — so attributing it to that name loses nothing.
+///
+/// Matched on the specifier's exact `local` span, which is where
+/// `resolve_contract_imports` files it — not on a containing statement, so a
+/// second obligation inside the same `export { … } from` names only its own
+/// specifier.
+///
+/// **`export *` deliberately gets no rung.** It publishes no specifier, so
+/// there is no syntax to attribute to, and widening stays the right answer
+/// there. So does a specifier whose exported name is not in this entrypoint's
+/// map: the obligation was raised in a module whose name this entry does not
+/// republish under that spelling, and guessing which one it became would be
+/// exactly the widening this rung exists to avoid.
+fn export_names_at_reexport_specifier(
+    index: UnresolvedExportIndex<'_>,
+    location: &typefacts::Location,
+    exports: &BTreeMap<String, solid_reactive_ir::ContractExport>,
+) -> Option<Vec<String>> {
+    let file = index.files_by_path.get(location.path.as_ref())?;
+    file.ast
+        .exports
+        .iter()
+        .filter(|export| !export.type_only && export.module.is_some())
+        .flat_map(|export| export.specifiers.iter())
+        .filter(|specifier| !specifier.type_only)
+        .find(|specifier| {
+            u64::from(specifier.local.span.start) == location.start_byte
+                && u64::from(specifier.local.span.end) == location.end_byte
+                && exports.contains_key(specifier.exported.as_str())
+        })
+        .map(|specifier| vec![specifier.exported.to_string()])
 }
 
 /// Whether the published `parameter-member` reactive-read row already carries
@@ -4294,12 +5022,23 @@ fn mark_unresolved_export_claims(
     exports: &mut BTreeMap<String, solid_reactive_ir::ContractExport>,
 ) {
     let (mechanism, names) = attribute_unresolved_obligation(index, &defect.location, exports);
+    let mut identity_only = Vec::new();
     let marked = names
         .into_iter()
         .filter(|name| {
-            exports
-                .get_mut(name)
-                .is_some_and(|summary| mark_summary_claims_unknown(summary, domains))
+            let Some(summary) = exports.get_mut(name) else {
+                return false;
+            };
+            if dispatch_independent_parameter_return(&defect.kind, summary) {
+                let mut independent_domains = domains;
+                independent_domains.returns = false;
+                if mark_summary_claims_unknown(summary, independent_domains) {
+                    identity_only.push(name.clone());
+                }
+                false
+            } else {
+                mark_summary_claims_unknown(summary, domains)
+            }
         })
         .collect::<Vec<_>>();
     report_unknown_claim_attribution(
@@ -4310,6 +5049,93 @@ fn mark_unresolved_export_claims(
         domains,
         &marked,
     );
+    if !identity_only.is_empty() {
+        let mut independent_domains = domains;
+        independent_domains.returns = false;
+        report_unknown_claim_attribution(
+            defect.kind.variant_name(),
+            &defect.analysis_context,
+            &defect.location,
+            mechanism,
+            independent_domains,
+            &identity_only,
+        );
+    }
+}
+
+fn dispatch_independent_parameter_return(
+    kind: &solid_reactive_ir::StaticDefectKind,
+    summary: &solid_reactive_ir::ContractExport,
+) -> bool {
+    // A parameter identity describes no properties of the returned value.
+    // Unlike a structured return, it cannot silently omit a reactive member
+    // supplied by unresolved dispatch. Keep the positive identity proposal;
+    // native certification still binds all return sites to the original input.
+    // This grants neither a returns closure nor a reactive-read claim, and
+    // missing contracts or unresolved structured returns still erase it.
+    matches!(
+        kind,
+        solid_reactive_ir::StaticDefectKind::ReactiveDispatchUnresolved { .. }
+    ) && summary
+        .returns
+        .known()
+        .and_then(Option::as_ref)
+        .is_some_and(|returned| {
+            returned.kind == "argument"
+                && returned.parameter.is_some()
+                && returned.elements.is_empty()
+                && returned.properties.is_empty()
+        })
+}
+
+#[cfg(test)]
+mod dispatch_identity_tests {
+    use super::*;
+    use solid_reactive_ir::{ContractClaim, ContractExport, ContractReturn, StaticDefectKind};
+
+    #[test]
+    fn dispatch_identity_preserves_only_a_positive_parameter_relation() {
+        let dispatch = StaticDefectKind::ReactiveDispatchUnresolved {
+            callee: "unresolved".into(),
+            member: None,
+        };
+        let mut summary = ContractExport {
+            kind: "function".into(),
+            returns: ContractClaim::Known(Some(ContractReturn {
+                kind: "argument".into(),
+                parameter: Some(0),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        assert!(dispatch_independent_parameter_return(&dispatch, &summary));
+        let structured = StaticDefectKind::StructuredReturnUnresolved {
+            function: "identity".into(),
+            property: "value".into(),
+            reason: "missing binding".into(),
+        };
+        assert!(!dispatch_independent_parameter_return(
+            &structured,
+            &summary
+        ));
+        for kind in ["object", "tuple", "accessor", "callback-result"] {
+            summary.returns = ContractClaim::Known(Some(ContractReturn {
+                kind: kind.into(),
+                parameter: Some(0),
+                ..Default::default()
+            }));
+            assert!(!dispatch_independent_parameter_return(&dispatch, &summary));
+        }
+        summary.returns = ContractClaim::Known(Some(ContractReturn {
+            kind: "argument".into(),
+            ..Default::default()
+        }));
+        assert!(!dispatch_independent_parameter_return(&dispatch, &summary));
+        summary.returns = ContractClaim::Known(None);
+        assert!(!dispatch_independent_parameter_return(&dispatch, &summary));
+        summary.returns = ContractClaim::Open;
+        assert!(!dispatch_independent_parameter_return(&dispatch, &summary));
+    }
 }
 
 /// Machine-readable context for a locally unresolved proposal domain.
@@ -4647,6 +5473,39 @@ fn emit_package_contract(
     }
     let resolution: solid_facts_backend::ResolvedImport =
         serde_json::from_slice(&fs::read(&request.contract_resolution)?)?;
+    if !request.contract_entry_file.is_empty()
+        && (resolution.runtime.path.ends_with(".mjs") || resolution.runtime.path.ends_with(".js"))
+        && resolution.transform.is_none()
+        && request.package_name == resolution.package_name
+        && request.package_version == resolution.package_version
+    {
+        let proof = fs::read_to_string(&request.contract_entry_file)
+            .ok()
+            .and_then(|source| {
+                if let Ok(proof) = solid_facts::ast::inert_javascript_module(&source) {
+                    return Some(proof);
+                }
+                if !resolution.exports.is_empty() {
+                    return None;
+                }
+                let proof =
+                    solid_facts::ast::inert_javascript_module_with_export_all(&source).ok()?;
+                inert_external_reexports_are_closed(
+                    facts,
+                    contracts,
+                    &resolution,
+                    Path::new(&request.contract_entry_file),
+                )
+                .then_some(proof)
+            });
+        if let Some(proof) = proof {
+            let proposal =
+                solid_facts_backend::encode_inert_entrypoint_workflow(&resolution, &proof, true)?;
+            fs::write(&request.emit_contract, proposal.document)?;
+            fs::write(&request.emit_proposal_plan, proposal.plan)?;
+            return Ok(());
+        }
+    }
     // SC9 findings are proof obligations, not permission to discard every
     // independently known export. After resolving the requested entrypoint we
     // attribute each one to the narrowest claim domain it can invalidate and
@@ -4685,6 +5544,42 @@ fn emit_package_contract(
             contracts,
             declaration_export_names,
         )?
+    };
+    // A name bound to an accepted dependency's exact export is not this
+    // package's to weaken. Both attribution channels above and below widen a
+    // *local* unresolved obligation onto export names, and the widest
+    // mechanism (`FallbackAll`) reaches every name in the map -- so
+    // `@kobalte/utils`, whose own `node.contains(element)`-shaped census
+    // refuses 41 times, reopened `access`'s proven callbacks claim and
+    // `Key`'s reads, creates and returns, none of which it implements. An ESM
+    // re-export binding is immutable and its target lives in the dependency's
+    // archive: no obligation located in this package's modules is evidence
+    // about that function's body. Snapshot those summaries and put them back
+    // once every channel has run, so the dependency's receipt-validated claim
+    // survives its importer's own uncertainty.
+    //
+    // Only names the projection itself answered are restored, so a locally
+    // implemented export -- including one that merely *calls* a dependency --
+    // keeps every bit of attribution it earns.
+    let dependency_bound = if request.contract_entry_file.is_empty() {
+        BTreeMap::new()
+    } else {
+        let entry_file = Path::new(&request.contract_entry_file).canonicalize()?;
+        let mut bound = BTreeMap::new();
+        for (name, summary) in &exports {
+            if accepted_reexport_summary_for_name(
+                facts,
+                &files_by_canonical_path,
+                contracts,
+                &entry_file,
+                name,
+            )?
+            .is_some()
+            {
+                bound.insert(name.clone(), summary.clone());
+            }
+        }
+        bound
     };
     let entry_entities_by_name = if request.contract_entry_file.is_empty() {
         HashMap::new()
@@ -4849,6 +5744,9 @@ fn emit_package_contract(
             &mut exports,
         );
     }
+    for (name, summary) in dependency_bound {
+        exports.insert(name, summary);
+    }
     // Unresolved-claim attribution deliberately enriches the inferred
     // summaries after the initial export-kind pass. Reconcile once more at
     // this final per-export boundary so a closed non-callable value can never
@@ -4870,6 +5768,11 @@ fn emit_package_contract(
         }
     }
     let mut external_targets = BTreeSet::new();
+    for name in exports.keys() {
+        if let Some(target) = accepted_declaration_reexport_target(contracts, &resolution, name)? {
+            external_targets.insert(target);
+        }
+    }
     if !request.contract_entry_file.is_empty() {
         let entry_file = Path::new(&request.contract_entry_file).canonicalize()?;
         for name in exports.keys() {
@@ -4909,8 +5812,163 @@ fn emit_package_contract(
     )?;
     fs::write(output, proposal.document)?;
     fs::write(&request.emit_proposal_plan, proposal.plan)?;
+    for withheld in &proposal.withheld {
+        // Stdout, one tab-separated line per withheld claim, keyed by the
+        // document path so a batch of targets sharing this process's streams
+        // stays unambiguous. Same discipline as
+        // `UNRESOLVED_DEPENDENCY_MODULE_MARKER`: parsing a withholding back
+        // out of prose would couple automation to wording. An export name and
+        // a role carry no tab or newline, and the reason is a fixed constant.
+        println!(
+            "{WITHHELD_OWNER_REQUIREMENT_MARKER}{}\t{}\t{}\t{}",
+            output.display(),
+            withheld.export,
+            withheld.role.role(),
+            withheld.role.reason()
+        );
+    }
+    for declined in &proposal.declined {
+        // Same discipline, wider: `<document>\t<export>\t<domain>\t<kind>\t
+        // <package>\t<callee>\t<location>\t<declaration>\t<shape>\t
+        // <spelling>`. An export name, a domain, a kind and a package/export
+        // identity carry no tab or newline; `location` is always the refusing
+        // *call*'s `path:start:end`, and `declaration` the refusing callee's,
+        // where the kind names one. A kind that names no such identity leaves
+        // its column empty, which the parser preserves rather than guesses at.
+        //
+        // The last two columns are **appended**, never inserted: `shape` and
+        // `spelling` are the unresolved callee's observed shape and the one
+        // concrete string it carries (`solid_reactive_ir::UnresolvedCalleeShape`),
+        // empty for every other kind. A parser written against the eight-column
+        // form still reads the first eight, and `kind` still says
+        // `unresolved-callee` for every shape, so no existing count moves.
+        // `spelling` is whitespace-free and length-bounded at the source.
+        println!(
+            "{DECLINED_CLOSURE_MARKER}{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            output.display(),
+            declined.export,
+            declined.domain,
+            declined.decline.name(),
+            declined.decline.package(),
+            declined.decline.callee_export(),
+            declined.decline.location(),
+            declined.decline.declaration(),
+            declined.decline.shape(),
+            declined.decline.shape_spelling()
+        );
+    }
+    for inherited in &proposal.inherited {
+        // `<document>\t<export>\t<domain>\t<package>\t<version>\t
+        // <artifactCase>\t<semanticDigest>\t<entrypoint>\t<dependencyExport>`.
+        // A package name, a version, a domain, an entrypoint, an export name, a
+        // case id and a digest carry no tab or newline.
+        println!(
+            "{INHERITED_CLOSURE_MARKER}{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            output.display(),
+            inherited.export,
+            inherited.domain,
+            inherited.origin.package_name,
+            inherited.origin.package_version,
+            inherited.origin.artifact_case,
+            inherited.origin.semantic_digest,
+            inherited.origin.entrypoint,
+            inherited.origin.export
+        );
+    }
     Ok(())
 }
+
+/// A source-only export-all shape is inert only when every runtime target it
+/// evaluates has an exact dependency contract proving both inert initialization
+/// and an empty runtime surface. Relative reexports, namespace exports and
+/// unresolved children stay outside this bounded recovery path.
+fn inert_external_reexports_are_closed(
+    facts: &solid_facts::ProjectFacts,
+    contracts: &solid_reactive_ir::contract_semantics::AcceptedContractIndex,
+    resolution: &solid_facts_backend::ResolvedImport,
+    entry_file: &Path,
+) -> bool {
+    let Some(file) = facts
+        .files
+        .iter()
+        .find(|file| same_canonical_path(Path::new(file.path.as_str()), entry_file))
+    else {
+        return false;
+    };
+    let mut runtime_reexport = false;
+    for export in file.ast.module_level_exports() {
+        if export.kind != solid_facts::ast::ExportKind::All || export.type_only {
+            continue;
+        }
+        runtime_reexport = true;
+        let Some(module) = export.module.as_deref() else {
+            return false;
+        };
+        if module.starts_with('.') || module.starts_with('#') || export.namespace.is_some() {
+            return false;
+        }
+        if !resolution
+            .closure
+            .dependencies
+            .iter()
+            .any(|dependency| dependency.specifier == module)
+        {
+            return false;
+        }
+        let Ok(contract) = contracts.contract(file.path.as_str(), module) else {
+            return false;
+        };
+        let case = contract.artifact_case();
+        if case.initialization
+            != Some(solid_reactive_ir::contract_semantics::ModuleInitializationClaim::Inert)
+            || !case.exports.is_empty()
+        {
+            return false;
+        }
+    }
+    runtime_reexport
+}
+
+/// The machine-readable half of a *claim* refusal, as
+/// [`UNRESOLVED_DEPENDENCY_MODULE_MARKER`] is for an artifact-case one.
+///
+/// Contract generation refuses by name. A claim it cannot publish leaves only
+/// an open domain behind, which is indistinguishable from a census that found
+/// nothing to claim — so the emitter states each withholding on this stable
+/// line, and the generator's refusal audit records it beside the artifact-case
+/// refusals it already keeps.
+const WITHHELD_OWNER_REQUIREMENT_MARKER: &str = "solid-checker:withheld-owner-requirement=";
+
+/// The machine-readable half of a *declined closure proposal*, beside
+/// [`WITHHELD_OWNER_REQUIREMENT_MARKER`].
+///
+/// One line per blocking call site the generator's `creates` walk named for an
+/// export whose closure it therefore did not propose
+/// (`solid_reactive_ir::CreatesProposalWalk`). A declined proposal leaves the
+/// same open domain behind as a census that found nothing to propose, and the
+/// difference is the whole measurement: which blocker, in which package, for
+/// which spelling. This is the line
+/// `scripts/dialect-audit-yield.mjs` ultimately ranks — it names what an audit
+/// would have to cover to make candidates appear on real rows at all.
+///
+/// It certifies nothing and is not part of either encoded artifact.
+const DECLINED_CLOSURE_MARKER: &str = "solid-checker:declined-closure=";
+
+/// The machine-readable half of an *inherited closure proposal*, beside the
+/// two markers above and under the same discipline.
+///
+/// One line per (export, domain) this generation proposed closed because the
+/// accepted dependency contract the name was projected from closes it — a
+/// cross-package re-export, where this package has no implementation and
+/// therefore no walk. Nothing in the emitted document or plan distinguishes
+/// such a proposal from one a local walk produced, and the two rest on
+/// completely different premises: a census of this archive's own bytes versus
+/// composition from a dependency's receipt. An auditor asking "how much of
+/// this contract is actually this package's claim" has no other way to tell.
+///
+/// It certifies nothing, is read by no certifier, and is not part of either
+/// encoded artifact.
+const INHERITED_CLOSURE_MARKER: &str = "solid-checker:inherited-closure=";
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -5233,25 +6291,52 @@ fn contract_exports_for_entry_file(
     let entry_facts = files_by_canonical_path
         .get(&entry_file)
         .copied()
-        .ok_or_else(|| {
-            format!(
-                "emit package contract: entry file {} is not part of the TypeScript project",
-                entry_file.display()
-            )
-        })?;
+        .ok_or_else(|| missing_fact_program_module(&entry_file))?;
     let mut exports = BTreeMap::new();
     for name in names {
         validate_module_export_precedence(&entry_facts.ast, &entry_file, &name)?;
-        let summary = match program.contract_exports.get(&name).cloned() {
+        if entry_facts
+            .ast
+            .module_level_exports()
+            .any(|export| !export.type_only && export.namespace.as_deref() == Some(name.as_str()))
+            && !entry_entities_by_name.contains_key(&name)
+        {
+            return Err(format!(
+                "emit package contract: namespace export {name:?} has no exact compiler entity"
+            )
+            .into());
+        }
+        // The accepted identity answers first, not second. A name this entry
+        // file re-exports from an accepted dependency has exactly one
+        // authoritative summary -- that dependency's own, projected from its
+        // receipt -- and this package contains no declaration that could say
+        // anything further about it. The project analysis nevertheless emits a
+        // syntax fragment for every export specifier, and an external
+        // `export { name } from "dependency"` has no local target to walk, so
+        // that fragment degrades to the bare value summary. Consulting
+        // `contract_exports` first therefore let that degenerate entry shadow
+        // the projection for every *named* re-export, leaving
+        // `accepted_reexport_summary_for_name` reachable only for `export *`:
+        // `@kobalte/utils` published `access`, `Key` and `mergeRefs` as
+        // `{"call":{}}` while the accepted `@solid-primitives/utils` contract
+        // it was generated against states `access`'s callbacks claim outright.
+        //
+        // The projection still answers `None` for everything that is not a
+        // re-export landing on exactly one accepted runtime identity -- a
+        // locally declared export, a purely relative re-export chain, an
+        // unresolved or namespace binding, or an ambiguous multi-identity
+        // chain (which refuses) -- so the local analysis remains the answer
+        // for every name this package actually implements.
+        let accepted_summary = accepted_reexport_summary_for_name(
+            facts,
+            files_by_canonical_path,
+            contracts,
+            &entry_file,
+            &name,
+        )?;
+        let summary = match accepted_summary {
             Some(summary) => summary,
-            None => accepted_reexport_summary_for_name(
-                facts,
-                files_by_canonical_path,
-                contracts,
-                &entry_file,
-                &name,
-            )?
-            .ok_or_else(|| {
+            None => program.contract_exports.get(&name).cloned().ok_or_else(|| {
                 format!(
                     "emit package contract: entry file {} exports {name:?}, but no semantic summary was produced",
                     entry_file.display()
@@ -5314,6 +6399,211 @@ type AcceptedReexportIdentity = (
 /// semantic owner of that surface. Keeping this adapter at emission time
 /// avoids manufacturing a local symbol while still preserving all receipt,
 /// importer, artifact-case, and export-target identity.
+/// Candidate normalization only. A local runtime export may have a direct
+/// declaration re-export without any runtime re-export. Bind that axis to the
+/// catalog's exact importer and export; native snapshot/receipt replay remains
+/// mandatory and is the authority for dependency installation selection.
+fn accepted_declaration_reexport_target(
+    contracts: &solid_reactive_ir::contract_semantics::AcceptedContractIndex,
+    resolution: &solid_facts_backend::ResolvedImport,
+    name: &str,
+) -> Result<Option<(String, String)>, Box<dyn std::error::Error>> {
+    let Some(binding) = resolution.exports.get(name) else {
+        return Ok(None);
+    };
+    declaration_reexport_target(
+        &resolution.declarations,
+        &binding.declarations,
+        name,
+        |importer, module, imported| {
+            let accepted = contracts.resolve_name(importer, module, imported).ok()?;
+            Some((
+                accepted.contract().package().clone(),
+                accepted.identity().declarations.clone(),
+            ))
+        },
+    )
+}
+
+fn declaration_reexport_target(
+    declaration: &solid_facts_backend::ResolvedFile,
+    target: &solid_facts_backend::ResolvedExportTarget,
+    name: &str,
+    lookup: impl Fn(
+        &str,
+        &str,
+        &str,
+    ) -> Option<(
+        solid_reactive_ir::contract_semantics::PackageIdentity,
+        solid_reactive_ir::contract_semantics::ExportTargetIdentity,
+    )>,
+) -> Result<Option<(String, String)>, Box<dyn std::error::Error>> {
+    let importer = &declaration.path;
+    let source = fs::read_to_string(importer)?;
+    if sha256_digest(source.as_bytes()) != declaration.digest {
+        return Ok(None);
+    }
+    let ast = solid_facts::ast::extract(importer, &source)?;
+    let mut candidates = Vec::new();
+    for export in ast
+        .module_level_exports()
+        .filter(|export| !export.type_only)
+    {
+        let Some(module) = export
+            .module
+            .as_deref()
+            .filter(|module| !module.starts_with('.'))
+        else {
+            continue;
+        };
+        for specifier in export
+            .specifiers
+            .iter()
+            .filter(|specifier| !specifier.type_only && specifier.exported == name)
+        {
+            let imported = export_specifier_local_name(&source, specifier, name);
+            let Some((package, expected)) = lookup(importer, module, imported) else {
+                continue;
+            };
+            if target.export_name != expected.export_name
+                || target.module.digest != expected.module.digest.as_str()
+            {
+                continue;
+            }
+            // The first manifest owns this target. Do not search past a nested
+            // package or accept a matching suffix from a different installation.
+            let target_path = Path::new(&target.module.path).canonicalize()?;
+            let Some(owner) = target_path.parent().and_then(|parent| {
+                parent
+                    .ancestors()
+                    .find(|directory| directory.join("package.json").is_file())
+            }) else {
+                continue;
+            };
+            let manifest_bytes = fs::read(owner.join("package.json"))?;
+            let manifest: serde_json::Value = serde_json::from_slice(&manifest_bytes)?;
+            if sha256_digest(&manifest_bytes) != package.manifest.digest.as_str()
+                || sha256_digest(&fs::read(&target_path)?) != expected.module.digest.as_str()
+                || manifest["name"].as_str() != Some(package.name.as_str())
+                || manifest["version"].as_str() != Some(package.version.as_str())
+                || owner
+                    .join(&expected.module.path)
+                    .canonicalize()
+                    .ok()
+                    .as_ref()
+                    != Some(&target_path)
+            {
+                continue;
+            }
+            candidates.push((target.module.path.clone(), target.module.digest.clone()));
+        }
+    }
+    Ok((candidates.len() == 1).then(|| candidates.remove(0)))
+}
+
+#[cfg(test)]
+mod declaration_reexport_tests {
+    use super::*;
+    use solid_facts_backend::{ResolvedExportTarget, ResolvedFile};
+    use solid_reactive_ir::contract_semantics::{
+        ArtifactIdentity, Digest, ExportTargetIdentity, PackageIdentity,
+    };
+
+    #[test]
+    fn declaration_reexport_candidate_binds_exact_import_and_artifact() {
+        let root = std::env::temp_dir().join(format!(
+            "declaration-reexport-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(root.join("dependency")).unwrap();
+        let manifest = br#"{"name":"types","version":"1.0.0"}"#;
+        let target_source = b"export declare function configure(): void;";
+        fs::write(root.join("dependency/package.json"), manifest).unwrap();
+        fs::write(root.join("dependency/setup.d.ts"), target_source).unwrap();
+        let source = b"export { configure as local } from 'types/setup';";
+        fs::write(root.join("parent.d.ts"), source).unwrap();
+        let declaration = ResolvedFile {
+            path: root.join("parent.d.ts").to_str().unwrap().into(),
+            real_path: None,
+            digest: sha256_digest(source),
+        };
+        let target = ResolvedExportTarget {
+            module: ResolvedFile {
+                path: root.join("dependency/setup.d.ts").to_str().unwrap().into(),
+                real_path: None,
+                digest: sha256_digest(target_source),
+            },
+            export_name: "configure".into(),
+        };
+        let artifact = |path: &str, bytes: &[u8]| ArtifactIdentity {
+            path: path.into(),
+            digest: Digest::parse(sha256_digest(bytes)).unwrap(),
+        };
+        let package = PackageIdentity {
+            name: "types".into(),
+            version: "1.0.0".into(),
+            integrity: "exact-test-integrity".into(),
+            manifest: artifact("./package.json", manifest),
+        };
+        let expected = ExportTargetIdentity {
+            module: artifact("./setup.d.ts", target_source),
+            export_name: "configure".into(),
+        };
+        let lookup = |importer: &str, module: &str, name: &str| {
+            (importer == declaration.path && module == "types/setup" && name == "configure")
+                .then(|| (package.clone(), expected.clone()))
+        };
+        let check = |d: &ResolvedFile, t: &ResolvedExportTarget| {
+            declaration_reexport_target(d, t, "local", lookup).unwrap()
+        };
+        assert!(check(&declaration, &target).is_some());
+        assert!(
+            declaration_reexport_target(&declaration, &target, "local", |_, _, _| None)
+                .unwrap()
+                .is_none()
+        );
+        let mut changed = target.clone();
+        changed.export_name = "other".into();
+        assert!(check(&declaration, &changed).is_none());
+        changed = target.clone();
+        changed.module.digest = sha256_digest(b"different");
+        assert!(check(&declaration, &changed).is_none());
+        fs::write(root.join("dependency/other.d.ts"), target_source).unwrap();
+        changed = target.clone();
+        changed.module.path = root.join("dependency/other.d.ts").to_str().unwrap().into();
+        assert!(check(&declaration, &changed).is_none());
+        let mut other_importer = declaration.clone();
+        other_importer.path = root.join("other.d.ts").to_str().unwrap().into();
+        fs::write(&other_importer.path, source).unwrap();
+        assert!(check(&other_importer, &target).is_none());
+        for text in [
+            "export type { configure as local } from 'types/setup';",
+            "export * from 'types/setup';",
+            "export { configure as local } from 'other/setup';",
+        ] {
+            fs::write(&declaration.path, text).unwrap();
+            let mut changed = declaration.clone();
+            changed.digest = sha256_digest(text.as_bytes());
+            assert!(check(&changed, &target).is_none());
+        }
+        fs::write(&declaration.path, source).unwrap();
+        fs::write(
+            root.join("dependency/package.json"),
+            br#"{"name":"types","version":"2.0.0"}"#,
+        )
+        .unwrap();
+        assert!(check(&declaration, &target).is_none());
+        fs::write(root.join("dependency/package.json"), manifest).unwrap();
+        fs::write(root.join("dependency/setup.d.ts"), b"changed bytes").unwrap();
+        assert!(check(&declaration, &target).is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
 fn accepted_reexport_summary_for_name(
     facts: &solid_facts::ProjectFacts,
     files_by_canonical_path: &HashMap<PathBuf, &solid_facts::FileFacts>,
@@ -5354,12 +6644,10 @@ fn collect_accepted_reexport_candidates(
     if !visiting.insert((path.clone(), name.to_owned())) {
         return Ok(());
     }
-    let file = files_by_canonical_path.get(&path).copied().ok_or_else(|| {
-        format!(
-            "emit package contract: entry file {} is not part of the TypeScript project",
-            path.display()
-        )
-    })?;
+    let file = files_by_canonical_path
+        .get(&path)
+        .copied()
+        .ok_or_else(|| missing_fact_program_module(&path))?;
     let consult_export_stars = validate_module_export_precedence(&file.ast, &path, name)?;
 
     for export in reexport_entries_for_name(&file.ast, name, consult_export_stars) {
@@ -5982,6 +7270,25 @@ type FunctionKey = (String, u32, u32);
 struct GeneratedOwnerRequirements {
     by_symbol: HashMap<String, Vec<solid_reactive_ir::OwnerRequirementOperation>>,
     by_function: HashMap<FunctionKey, Vec<solid_reactive_ir::OwnerRequirementOperation>>,
+    /// Functions whose implementation the `creates` proposal walk cleared, by
+    /// the same two identities the requirement maps use. Membership is the
+    /// *positive* answer, so an export neither map reaches proposes nothing.
+    clean_creates_walk_by_symbol: HashSet<String>,
+    clean_creates_walk_by_function: HashSet<FunctionKey>,
+    /// Why the walk declined, for the functions it refused, by the same two
+    /// identities. Measurement only; the proposal decision reads the sets
+    /// above and nothing here.
+    creates_walk_declines_by_symbol: HashMap<String, Vec<solid_reactive_ir::CreatesDecline>>,
+    creates_walk_declines_by_function: HashMap<FunctionKey, Vec<solid_reactive_ir::CreatesDecline>>,
+    /// Functions whose implementation the valueless-completion walk cleared
+    /// (ADR 0035), by the same two identities. Membership is the positive
+    /// answer a `returns: []` proposal needs.
+    clean_returns_walk_by_symbol: HashSet<String>,
+    clean_returns_walk_by_function: HashSet<FunctionKey>,
+    /// ADR 0109: the parameter a props merge the function returns carries the
+    /// reactivity of, by the same two identities. Absence is "do not propose".
+    merged_props_return_by_symbol: HashMap<String, usize>,
+    merged_props_return_by_function: HashMap<FunctionKey, usize>,
 }
 
 fn canonical_symbol_aliases(facts: &solid_facts::ProjectFacts) -> HashMap<String, String> {
@@ -6067,9 +7374,123 @@ fn generated_owner_requirements_by_symbol(
                 Some(canonical_symbol(&entity.symbol, aliases)),
             );
         }
+        // An anonymous callable bound by a plain `const`/`let` declarator —
+        // `export const f = () => …`, `const g = function () {}` — has no name
+        // node of its own, so the loop above never reaches it and every walk
+        // verdict for its body was lost: the export proposed nothing in any
+        // domain, however clean the body. The binding fact names the symbol
+        // instead. Only a single-identifier pattern whose initializer *is* a
+        // callable qualifies; a destructured, aliased or call-initialized
+        // binding is not "this function under this name", and stays silent.
+        for binding in &file.ast.bindings {
+            if binding.shape != solid_facts::ast::BindingShape::Identifier
+                || !binding.initializer_function
+                || binding.names.len() != 1
+            {
+                continue;
+            }
+            let Some(initializer) = binding.initializer else {
+                continue;
+            };
+            let Some(function) = file
+                .ast
+                .functions
+                .iter()
+                .filter(|function| initializer.contains(function.span))
+                .max_by_key(|function| function.span.end - function.span.start)
+            else {
+                continue;
+            };
+            let name = &binding.names[0];
+            let key = (
+                file.path.to_string(),
+                u64::from(name.span.start),
+                u64::from(name.span.end),
+            );
+            let Some(entity) = entities.get(&key) else {
+                continue;
+            };
+            if entity.symbol.is_empty() {
+                continue;
+            }
+            function_symbols
+                .entry((
+                    file.path.to_string(),
+                    function.span.start,
+                    function.span.end,
+                ))
+                .or_insert_with(|| Some(canonical_symbol(&entity.symbol, aliases)));
+        }
     }
 
     let mut indexed = GeneratedOwnerRequirements::default();
+    // The `creates` proposal walk's verdict, indexed by the same two
+    // identities. Every function is considered, not only those carrying an
+    // owner requirement: the two questions are independent, and a clean walk
+    // is exactly what a `creates: []` proposal needs.
+    for file in &facts.files {
+        for function in &file.ast.functions {
+            let span = (u64::from(function.span.start), u64::from(function.span.end));
+            let key = (
+                file.path.to_string(),
+                function.span.start,
+                function.span.end,
+            );
+            // The `returns` proposal walk's verdict (ADR 0035), independent of
+            // the `creates` one: syntax alone, no call resolution.
+            if solid_reactive_ir::valueless_completion(file, function).is_ok() {
+                if let Some(Some(symbol)) = function_symbols.get(&key) {
+                    indexed.clean_returns_walk_by_symbol.insert(symbol.clone());
+                }
+                indexed.clean_returns_walk_by_function.insert(key.clone());
+            }
+            // ADR 0109's walk, indexed the same way. It resolves a callee to a
+            // dialect primitive, so unlike the one above it is computed inside
+            // the IR with the entity tables in hand and only read here.
+            if let Some(parameter) = program
+                .merged_props_returns
+                .parameter_for(file.path.as_str(), span)
+            {
+                if let Some(Some(symbol)) = function_symbols.get(&key) {
+                    indexed
+                        .merged_props_return_by_symbol
+                        .insert(symbol.clone(), parameter);
+                }
+                indexed
+                    .merged_props_return_by_function
+                    .insert(key.clone(), parameter);
+            }
+            if !program
+                .creates_proposal_walk
+                .proposes(file.path.as_str(), span)
+            {
+                // Refused: record *why*, so "audit this primitive next" is a
+                // measured answer rather than a guess. The blockers are read
+                // once per function here, on the same pass and by the same two
+                // identities the positive verdict uses.
+                let declines = program
+                    .creates_proposal_walk
+                    .declines_for(file.path.as_str(), span);
+                if !declines.is_empty() {
+                    if let Some(Some(symbol)) = function_symbols.get(&key) {
+                        indexed
+                            .creates_walk_declines_by_symbol
+                            .entry(symbol.clone())
+                            .or_insert_with(|| declines.clone());
+                    }
+                    indexed
+                        .creates_walk_declines_by_function
+                        .entry(key)
+                        .or_insert(declines);
+                }
+                continue;
+            }
+            if let Some(Some(symbol)) = function_symbols.get(&key) {
+                indexed.clean_creates_walk_by_symbol.insert(symbol.clone());
+            }
+            indexed.clean_creates_walk_by_function.insert(key);
+        }
+    }
     for requirement in program.missing_owners.iter().filter(|requirement| {
         !requirement.runtime_uncertain
             && !requirement.conditional_owner
@@ -6112,6 +7533,40 @@ fn generated_owner_requirements_by_symbol(
     indexed
 }
 
+/// The function identity a `default` export's declaration sits in, which is the
+/// fail-closed fallback for an anonymous default with no name symbol.
+fn default_export_function_key(
+    facts: &solid_facts::ProjectFacts,
+    entry_file: &Path,
+) -> Option<FunctionKey> {
+    let file = facts
+        .files
+        .iter()
+        .find(|file| same_canonical_path(Path::new(file.path.as_str()), entry_file))?;
+    let default_span = file
+        .ast
+        .exports
+        .iter()
+        .filter(|export| !export.type_only && export.kind == solid_facts::ast::ExportKind::Default)
+        .flat_map(|export| export.declarations.iter())
+        .find(|specifier| !specifier.type_only && specifier.exported == "default")?
+        .local
+        .span;
+    let function = file
+        .ast
+        .functions
+        .iter()
+        .filter(|function| {
+            function.span.contains(default_span) && !function.body.contains(default_span)
+        })
+        .min_by_key(|function| function.span.end - function.span.start)?;
+    Some((
+        file.path.to_string(),
+        function.span.start,
+        function.span.end,
+    ))
+}
+
 /// Adds exact owner requirements observed inside the exact exported function
 /// to the generated package summary. The source project may report the
 /// function as open-world/uncertain because its callers are not enumerable;
@@ -6125,42 +7580,65 @@ fn attach_generated_owner_requirements(
     export_entity: Option<&typefacts::EntityFact>,
     mut summary: solid_reactive_ir::ContractExport,
 ) -> solid_reactive_ir::ContractExport {
-    let operations = export_entity
+    // Resolved once, because two independent verdicts are keyed by it: the
+    // owner requirements below, and the `creates` proposal walk. Reading the
+    // key out of the requirement map's own hit would conflate "this export's
+    // function was identified" with "it carries a requirement".
+    let symbol = export_entity
         .map(|entity| canonical_symbol(&entity.symbol, aliases))
-        .filter(|symbol| !symbol.is_empty())
-        .and_then(|symbol| generated.by_symbol.get(&symbol))
+        .filter(|symbol| !symbol.is_empty());
+    let default_function =
+        (export_name == "default").then(|| default_export_function_key(facts, entry_file));
+    let default_function = default_function.flatten();
+    // A proposal input, and only that: see `inferred_contract`'s `creates`
+    // decision and `solid_reactive_ir::CreatesProposalWalk`. `false` stays
+    // `false` when neither identity resolves.
+    summary.creates_walk_clean = symbol
+        .as_ref()
+        .is_some_and(|symbol| generated.clean_creates_walk_by_symbol.contains(symbol))
+        || default_function
+            .as_ref()
+            .is_some_and(|key| generated.clean_creates_walk_by_function.contains(key));
+    // ADR 0109's walk verdict, read by the same two identities and in the same
+    // order as the two above.
+    summary.merged_props_return = symbol
+        .as_ref()
+        .and_then(|symbol| generated.merged_props_return_by_symbol.get(symbol))
         .or_else(|| {
-            (export_name == "default").then(|| {
-                let file = facts
-                    .files
-                    .iter()
-                    .find(|file| same_canonical_path(Path::new(file.path.as_str()), entry_file))?;
-                let default_span = file
-                    .ast
-                    .exports
-                    .iter()
-                    .filter(|export| {
-                        !export.type_only && export.kind == solid_facts::ast::ExportKind::Default
-                    })
-                    .flat_map(|export| export.declarations.iter())
-                    .find(|specifier| !specifier.type_only && specifier.exported == "default")?
-                    .local
-                    .span;
-                let function = file
-                    .ast
-                    .functions
-                    .iter()
-                    .filter(|function| {
-                        function.span.contains(default_span)
-                            && !function.body.contains(default_span)
-                    })
-                    .min_by_key(|function| function.span.end - function.span.start)?;
-                generated.by_function.get(&(
-                    file.path.to_string(),
-                    function.span.start,
-                    function.span.end,
-                ))
-            })?
+            default_function
+                .as_ref()
+                .and_then(|key| generated.merged_props_return_by_function.get(key))
+        })
+        .copied();
+    // ADR 0035: the same shape for `returns: []`, read from the syntax walk.
+    summary.returns_walk_clean = symbol
+        .as_ref()
+        .is_some_and(|symbol| generated.clean_returns_walk_by_symbol.contains(symbol))
+        || default_function
+            .as_ref()
+            .is_some_and(|key| generated.clean_returns_walk_by_function.contains(key));
+    // The negative half, carried for measurement only: which blockers the walk
+    // named for this export. Attached whichever identity resolved it, in the
+    // same order the two `clean` sets are consulted.
+    if !summary.creates_walk_clean {
+        summary.creates_walk_declines = symbol
+            .as_ref()
+            .and_then(|symbol| generated.creates_walk_declines_by_symbol.get(symbol))
+            .or_else(|| {
+                default_function
+                    .as_ref()
+                    .and_then(|key| generated.creates_walk_declines_by_function.get(key))
+            })
+            .cloned()
+            .unwrap_or_default();
+    }
+    let operations = symbol
+        .as_ref()
+        .and_then(|symbol| generated.by_symbol.get(symbol))
+        .or_else(|| {
+            default_function
+                .as_ref()
+                .and_then(|key| generated.by_function.get(key))
         });
     let Some(operations) = operations else {
         return summary;
@@ -6194,14 +7672,14 @@ fn attach_generated_owner_requirements(
 /// A bare `kind: "value"` summary is the maximal certified negative claim —
 /// `validate_export` bars it from carrying even an open function domain — so it is
 /// publishable only against a proof that the export is not a function.
-/// [`solid_reactive_ir::export_kind_proof`] holds the whole rule; only its two
-/// closed answers publish anything here. `Unknown` (an `any`, `unknown`,
+/// [`solid_reactive_ir::export_kind_proof`] holds the whole rule. `Unknown` (an `any`, `unknown`,
 /// `never` or error type, which is what an untyped dependency leaves behind in
 /// a published `.js` artifact), `Mixed`, and an absent fact are the absence of
 /// that proof — on *either* of the two signature facts — and treating any of
 /// them as `value` is how `@solid-devtools/locator@0.16.7` came to publish
 /// "invokes no caller-supplied callback" for `addClickInterceptor(fn)`.
-/// Refusing costs the entrypoint; publishing costs the claim, which is worse.
+/// ADR 0011 preserves present unresolved answers as explicit unknown shape
+/// with wholly open behavior. An absent answer still refuses the entrypoint.
 /// See docs/package-contracts.md "Refused entrypoints versus failed
 /// generation".
 ///
@@ -6267,10 +7745,11 @@ fn reconcile_entry_export_kind(
         {
             Err("whose closed runtime kind is non-callable, but package contract value export summary cannot have function effects".into())
         }
-        solid_reactive_ir::ExportKindProof::Unresolvable(callability, constructability) => {
-            Err(format!(
-                "whose runtime kind no closed type answers ({callability:?}, {constructability:?})"
-            ))
+        // The exact runtime binding exists, but neither kind is proven.
+        // Publish no behavioral knowledge about it. The stable main's
+        // `shape: unknown` must survive projection and re-export (ADR 0011).
+        solid_reactive_ir::ExportKindProof::Unresolvable(_, _) => {
+            Ok(solid_reactive_ir::ContractExport::unknown_runtime_kind())
         }
         // Demanded and unanswered, not undemanded: `demand_plan` requests both
         // signature facts at every export specifier and every exported
@@ -6289,6 +7768,26 @@ fn reconcile_entry_export_kind(
 mod entry_export_kind_reconciliation_tests {
     use super::reconcile_entry_export_kind;
     use solid_reactive_ir::{ContractClaim, ContractExport, ExportKindProof};
+
+    #[test]
+    fn unresolved_runtime_kind_discards_inference_without_claiming_non_callability() {
+        let summary = ContractExport {
+            kind: "function".into(),
+            creates_walk_clean: true,
+            creates_closed_empty: true,
+            ..ContractExport::default()
+        };
+        let result = reconcile_entry_export_kind(
+            ExportKindProof::Unresolvable(
+                typefacts::Callability::Unknown,
+                typefacts::Constructability::Unknown,
+            ),
+            summary,
+        )
+        .unwrap();
+        assert_eq!(result, ContractExport::unknown_runtime_kind());
+        assert!(reconcile_entry_export_kind(ExportKindProof::Unanswered, result).is_err());
+    }
 
     // A closed non-callable proof carrying function domains is a contradiction
     // between two facts, not a cleanup opportunity: the one measured instance
@@ -6351,11 +7850,23 @@ fn entry_export_entity_indexed<'a>(
         return None;
     }
     let file = files_by_canonical_path.get(&entry_file).copied()?;
+    let consult_export_stars =
+        validate_module_export_precedence(&file.ast, &entry_file, name).ok()?;
     for export in file
         .ast
         .module_level_exports()
         .filter(|export| !export.type_only)
     {
+        if export.namespace.as_deref() == Some(name) {
+            let binding = export.namespace_binding.as_ref()?;
+            return entities_by_location
+                .get(&typefacts::Location {
+                    path: file.path.to_string().into(),
+                    start_byte: u64::from(binding.span.start),
+                    end_byte: u64::from(binding.span.end),
+                })
+                .copied();
+        }
         if let Some(specifier) = export
             .specifiers
             .iter()
@@ -6388,7 +7899,8 @@ fn entry_export_entity_indexed<'a>(
                 }
             }
         }
-        if export.kind == solid_facts::ast::ExportKind::All
+        if consult_export_stars
+            && is_bare_runtime_export_star(export)
             && let Some(module) = export.module.as_deref()
             && module.starts_with('.')
         {
@@ -6426,11 +7938,21 @@ fn entry_export_entity_with_visiting<'a>(
     // `namespace`, `declare module`, or `declare global` body binds a member
     // of that namespace object, not a name this module publishes. See
     // `AstFacts::module_level_exports`.
+    let consult_export_stars =
+        validate_module_export_precedence(&file.ast, &entry_file, name).ok()?;
     for export in file
         .ast
         .module_level_exports()
         .filter(|export| !export.type_only)
     {
+        if export.namespace.as_deref() == Some(name) {
+            let binding = export.namespace_binding.as_ref()?;
+            return facts.typescript.entities().find(|entity| {
+                entity.location.path.as_ref() == file.path.as_str()
+                    && entity.location.start_byte == u64::from(binding.span.start)
+                    && entity.location.end_byte == u64::from(binding.span.end)
+            });
+        }
         if let Some(specifier) = export
             .specifiers
             .iter()
@@ -6462,7 +7984,8 @@ fn entry_export_entity_with_visiting<'a>(
                 }
             }
         }
-        if export.kind == solid_facts::ast::ExportKind::All
+        if consult_export_stars
+            && is_bare_runtime_export_star(export)
             && let Some(module) = export.module.as_deref()
             && module.starts_with('.')
         {
@@ -6689,6 +8212,45 @@ mod certification_source_request_tests {
         .to_string()
     }
 
+    /// A real gzipped npm tarball with matching registry metadata, so the
+    /// applicability proof runs against authenticated bytes exactly as it does
+    /// in a certification.
+    fn published_archive(members: &[(&str, &[u8])]) -> solid_facts_backend::PublishedArchive {
+        let (archive, metadata) = published_archive_bytes(members);
+        solid_facts_backend::PublishedArchive::new(
+            "https://registry.npmjs.org",
+            "root-package",
+            "1.0.0",
+            metadata,
+            archive,
+        )
+        .expect("published coordinates")
+    }
+
+    fn published_archive_bytes(members: &[(&str, &[u8])]) -> (Vec<u8>, Vec<u8>) {
+        use base64::{Engine as _, engine::general_purpose::STANDARD};
+        use sha2::Sha512;
+        let mut archive = Vec::new();
+        {
+            let encoder = flate2::write::GzEncoder::new(&mut archive, flate2::Compression::none());
+            let mut builder = tar::Builder::new(encoder);
+            for (path, bytes) in members {
+                let mut header = tar::Header::new_gnu();
+                header.set_size(bytes.len() as u64);
+                header.set_mode(0o644);
+                header.set_entry_type(tar::EntryType::Regular);
+                header.set_cksum();
+                builder.append_data(&mut header, path, *bytes).unwrap();
+            }
+            builder.into_inner().unwrap().finish().unwrap();
+        }
+        let integrity = format!("sha512-{}", STANDARD.encode(Sha512::digest(&archive)));
+        let metadata = format!(
+            r#"{{"versions":{{"1.0.0":{{"name":"root-package","version":"1.0.0","dist":{{"integrity":"{integrity}","tarball":"https://registry.npmjs.org/root-package/-/root-package-1.0.0.tgz"}}}}}}}}"#
+        );
+        (archive, metadata.into_bytes())
+    }
+
     fn source() -> ContractCertificationSourceRequest {
         serde_json::from_str(
             r#"{
@@ -6727,6 +8289,306 @@ mod certification_source_request_tests {
             error.to_string(),
             "a graph node's planning must not carry its own declaration-only source set"
         );
+    }
+
+    /// A declared applicability claim reaches Rust as request data, defaults to
+    /// an empty list, and refuses an unparsable field rather than ignoring it.
+    #[test]
+    fn a_planning_request_carries_declared_applicability_claims() {
+        let absent: ContractCertificationPlanningRequest =
+            serde_json::from_str(&planning(Vec::new())).unwrap();
+        assert!(absent.inapplicable_cases.is_empty());
+
+        let declared: ContractCertificationPlanningRequest = serde_json::from_value({
+            let mut value: serde_json::Value = serde_json::from_str(&planning(Vec::new())).unwrap();
+            value["inapplicableCases"] = serde_json::json!([{
+                "entrypoint": "./types/universal.d.ts",
+                "conditions": [],
+                "class": "non-emitting-module-target",
+                "reason": "every module-level statement is non-emitting",
+            }]);
+            value
+        })
+        .unwrap();
+        assert_eq!(declared.inapplicable_cases.len(), 1);
+        assert_eq!(
+            declared.inapplicable_cases[0].class,
+            "non-emitting-module-target"
+        );
+
+        let mut unknown_field: serde_json::Value =
+            serde_json::from_str(&planning(Vec::new())).unwrap();
+        unknown_field["inapplicableCases"] = serde_json::json!([{
+            "entrypoint": "./types/universal.d.ts",
+            "class": "non-emitting-module-target",
+            "disposition": "trust me",
+        }]);
+        assert!(
+            serde_json::from_value::<ContractCertificationPlanningRequest>(unknown_field).is_err()
+        );
+    }
+
+    /// An empty claim list costs nothing: the request never builds a snapshot,
+    /// so the failure is the ordinary absent-artifact one.
+    #[test]
+    fn no_declared_claim_leaves_the_request_path_untouched() {
+        assert!(
+            prove_declared_applicability(&published_archive(&[]), &[]).is_ok(),
+            "an empty claim list must not even read the archive"
+        );
+    }
+
+    #[test]
+    fn a_declared_class_rust_cannot_prove_refuses_the_proposal() {
+        let claim = ContractCertificationInapplicableCase {
+            entrypoint: "./types/universal.d.ts".into(),
+            conditions: Vec::new(),
+            class: "verifier-trust-me".into(),
+            reason: String::new(),
+        };
+        let error = prove_declared_applicability(&published_archive(&[]), &[claim])
+            .expect_err("an unknown applicability class is not provable");
+        assert_eq!(
+            error.to_string(),
+            "artifact case ./types/universal.d.ts declares unprovable applicability class \"verifier-trust-me\""
+        );
+    }
+
+    /// The disagreement case: the generator omitted `./types/effects.d.ts` from
+    /// the proposal claiming it emits nothing, and the authenticated bytes say
+    /// otherwise. The whole proposal is refused, and the refusal names the case
+    /// and the first emitting statement.
+    #[test]
+    fn a_claim_the_archive_refutes_refuses_the_whole_proposal() {
+        let members: &[(&str, &[u8])] = &[
+            (
+                "package/package.json",
+                br#"{"name":"root-package","version":"1.0.0","exports":{".":"./dist/index.js","./types/*":"./types/*"}}"#,
+            ),
+            ("package/dist/index.js", b"export const answer = 42;"),
+            (
+                "package/types/effects.d.ts",
+                b"import { start } from \"./dep.js\";\nstart();",
+            ),
+            (
+                "package/types/pure.d.ts",
+                b"export declare function pure(): void;",
+            ),
+        ];
+        let claim = |entrypoint: &str| ContractCertificationInapplicableCase {
+            entrypoint: entrypoint.into(),
+            conditions: Vec::new(),
+            class: NON_EMITTING_MODULE_TARGET.into(),
+            reason: "every module-level statement is non-emitting".into(),
+        };
+
+        assert!(
+            prove_declared_applicability(
+                &published_archive(members),
+                &[claim("./types/pure.d.ts")]
+            )
+            .is_ok(),
+            "a true claim is proved from the archive"
+        );
+
+        let error = prove_declared_applicability(
+            &published_archive(members),
+            &[claim("./types/pure.d.ts"), claim("./types/effects.d.ts")],
+        )
+        .expect_err("a refuted claim refuses the proposal");
+        let rendered = error.to_string();
+        assert!(
+            rendered.contains("artifact case ./types/effects.d.ts"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("non-emitting-module-target"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("emits JavaScript"), "{rendered}");
+        assert!(
+            rendered.contains("value import at bytes 0..33"),
+            "{rendered}"
+        );
+    }
+
+    /// The graph-node converter has its own `prove_declared_applicability` call
+    /// site, and it must survive deletion just as the planning one does.
+    ///
+    /// This is a unit test rather than a process test on purpose: the graph lane
+    /// is only reachable through `--execute-contract-certification`, which
+    /// resolves the configured issuer *and* pins the Type Facts producer before
+    /// it converts any node — and a `cargo test` build of this binary carries no
+    /// producer digest, so a process-level graph test would refuse on the pin
+    /// before reaching the code under test. The converter itself is called here
+    /// with exactly the request shape that lane hands it.
+    #[test]
+    fn a_graph_node_refuses_a_declared_applicability_the_archive_refutes() {
+        let directory = std::env::temp_dir().join(format!(
+            "solid-checker-graph-applicability-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let (archive, metadata) = published_archive_bytes(&[
+            (
+                "package/package.json",
+                br#"{"name":"root-package","version":"1.0.0","exports":{".":"./dist/index.js","./types/*":"./types/*"}}"#,
+            ),
+            ("package/dist/index.js", b"export const answer = 42;"),
+            (
+                "package/types/effects.d.ts",
+                b"import { start } from \"./dep.js\";\nstart();\n",
+            ),
+            ("package/types/kinds.d.ts", b"export type Kind = 1;\n"),
+        ]);
+        let archive_path = directory.join("root-package-1.0.0.tgz");
+        let metadata_path = directory.join("root-package.json");
+        let proposal_path = directory.join("proposal.json");
+        fs::write(&archive_path, &archive).unwrap();
+        fs::write(&metadata_path, &metadata).unwrap();
+        // Readable, and never reached: the node converter reads the proposal
+        // before the archive, so these bytes have to exist, and the lockfile
+        // below is what a proved claim falls through to.
+        fs::write(&proposal_path, b"{}\n").unwrap();
+
+        let node = |entrypoint: &str| -> ContractCertificationGraphNodeRequest {
+            let mut planning: serde_json::Value =
+                serde_json::from_str(&planning(Vec::new())).unwrap();
+            planning["proposal"] = serde_json::json!(proposal_path.to_string_lossy());
+            planning["archive"] = serde_json::json!(archive_path.to_string_lossy());
+            planning["registryMetadata"] = serde_json::json!(metadata_path.to_string_lossy());
+            planning["inapplicableCases"] = serde_json::json!([{
+                "entrypoint": entrypoint,
+                "conditions": [],
+                "class": NON_EMITTING_MODULE_TARGET,
+                "reason": "runtime target emits no JavaScript",
+            }]);
+            serde_json::from_value(serde_json::json!({
+                "planning": planning,
+                "lockfile": "/does/not/exist/bun.lock",
+                "lockLocator": "root-package@1.0.0",
+                "sourceDependencies": [],
+            }))
+            .unwrap()
+        };
+
+        let Err(refuted) = certification_graph_node_from_request(node("./types/effects.d.ts"))
+        else {
+            panic!("a refuted claim must refuse the node");
+        };
+        let refuted = refuted.to_string();
+        assert!(
+            refuted.contains("artifact case ./types/effects.d.ts"),
+            "{refuted}"
+        );
+        assert!(refuted.contains("emits JavaScript"), "{refuted}");
+        assert!(refuted.contains("value import at bytes 0..33"), "{refuted}");
+
+        // The control: a proved claim gets past the same call site and fails on
+        // the (deliberately absent) lockfile instead.
+        let Err(proved) = certification_graph_node_from_request(node("./types/kinds.d.ts")) else {
+            panic!("this request has no lockfile and cannot plan");
+        };
+        let proved = proved.to_string();
+        assert!(
+            !proved.contains("declared artifact-case applicability"),
+            "{proved}"
+        );
+        fs::remove_dir_all(&directory).ok();
+    }
+
+    /// A graph node reads its lockfile through the format its *file name*
+    /// declares, so a pnpm-installed project reaches the same call site a Bun
+    /// one does.
+    ///
+    /// This is the only path that reaches `from_pnpm_lock` at all: certifying a
+    /// root package never does, which is why an end-to-end run cannot stand in
+    /// for this test. The major-6 case is the proof of dispatch rather than a
+    /// second refusal case -- only the pnpm reader emits it.
+    #[test]
+    fn a_graph_node_reads_a_pnpm_lockfile_named_by_its_file_name() {
+        let directory = std::env::temp_dir().join(format!(
+            "solid-checker-graph-pnpm-lock-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let (archive, metadata) = published_archive_bytes(&[
+            (
+                "package/package.json",
+                br#"{"name":"root-package","version":"1.0.0","exports":{".":"./dist/index.js"}}"#,
+            ),
+            ("package/dist/index.js", b"export const answer = 42;"),
+        ]);
+        let archive_path = directory.join("root-package-1.0.0.tgz");
+        let metadata_path = directory.join("root-package.json");
+        let proposal_path = directory.join("proposal.json");
+        fs::write(&archive_path, &archive).unwrap();
+        fs::write(&metadata_path, &metadata).unwrap();
+        fs::write(&proposal_path, b"{}\n").unwrap();
+
+        // `specifier: workspace:*` is carried deliberately: every lockfile in
+        // the demand corpus has it, and both readers once mistook it for a YAML
+        // alias and refused the whole file.
+        let integrity = "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+        let pnpm_lock = |major: &str| {
+            format!(
+                "lockfileVersion: '{major}'\n\nimporters:\n\n  .:\n    dependencies:\n      root-package:\n        specifier: workspace:*\n        version: link:packages/root\n\npackages:\n\n  'root-package@1.0.0':\n    resolution: {{integrity: {integrity}}}\n"
+            )
+        };
+        let write = |name: &str, body: String| {
+            let path = directory.join(name);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, body).unwrap();
+            path
+        };
+        // The pre-9 file keeps the same name in its own directory: the name is
+        // what selects the reader, so changing it would test something else.
+        let selecting = write("pnpm-lock.yaml", pnpm_lock("9.0"));
+        let stale_major = write("stale/pnpm-lock.yaml", pnpm_lock("6.0"));
+        let misnamed = write("bun.lock", pnpm_lock("9.0"));
+
+        let node = |lockfile: &std::path::Path| -> ContractCertificationGraphNodeRequest {
+            let mut planning: serde_json::Value =
+                serde_json::from_str(&planning(Vec::new())).unwrap();
+            planning["proposal"] = serde_json::json!(proposal_path.to_string_lossy());
+            planning["archive"] = serde_json::json!(archive_path.to_string_lossy());
+            planning["registryMetadata"] = serde_json::json!(metadata_path.to_string_lossy());
+            serde_json::from_value(serde_json::json!({
+                "planning": planning,
+                "lockfile": lockfile.to_string_lossy(),
+                "lockLocator": "root-package@1.0.0",
+                "sourceDependencies": [],
+            }))
+            .unwrap()
+        };
+
+        // The pnpm reader ran and selected: whatever this request fails on
+        // afterwards, it is not the lockfile.
+        if let Err(error) = certification_graph_node_from_request(node(&selecting)) {
+            let error = error.to_string();
+            assert!(!error.contains("pnpm lockfile"), "{error}");
+            assert!(!error.contains("no lockfile format"), "{error}");
+        }
+
+        // Only `from_pnpm_lock` emits this, so reaching it proves the dispatch.
+        let Err(stale) = certification_graph_node_from_request(node(&stale_major)) else {
+            panic!("a pre-9 pnpm lockfile must refuse the node");
+        };
+        assert!(stale.to_string().contains("is not 9"), "{stale}");
+
+        // Named `bun.lock`, so the Bun reader gets it and refuses; nothing
+        // retries it against the other parser.
+        let Err(misnamed) = certification_graph_node_from_request(node(&misnamed)) else {
+            panic!("a pnpm lockfile named bun.lock must refuse the node");
+        };
+        assert!(
+            misnamed
+                .to_string()
+                .contains("Bun lockfile cannot be decoded"),
+            "{misnamed}"
+        );
+
+        fs::remove_dir_all(&directory).ok();
     }
 
     /// The same node without the nested set gets past the refusal and fails on
@@ -6836,6 +8698,257 @@ mod contract_emission_fact_program_tests {
         changed.context.typefacts_arguments.push("--strict".into());
         assert_ne!(key, changed);
     }
+
+    /// `tspath.GetDeclarationFileExtension`, which is what decides whether the
+    /// producer reports a path in `Sources` at all.
+    #[test]
+    fn declaration_file_names_mirror_the_producer_predicate() {
+        for name in [
+            "/pkg/types/index.d.ts",
+            "/pkg/dist/index.d.mts",
+            "/pkg/dist/index.d.cts",
+            // TypeScript's third case: any `.ts` whose base name carries `.d.`.
+            "/pkg/dist/index.d.web.ts",
+        ] {
+            assert!(
+                is_typescript_declaration_file_name(Path::new(name)),
+                "{name}"
+            );
+        }
+        for name in [
+            "/pkg/src/index.ts",
+            "/pkg/src/index.tsx",
+            "/pkg/dist/index.js",
+            "/pkg/dist/index.mjs",
+            "/pkg/dist/index.d.js",
+            // A *directory* spelled like a declaration file is not one: the
+            // producer tests the base name only.
+            "/pkg/index.d.ts/impl.ts",
+        ] {
+            assert!(
+                !is_typescript_declaration_file_name(Path::new(name)),
+                "{name}"
+            );
+        }
+    }
+
+    struct SourceTree(PathBuf);
+
+    impl SourceTree {
+        fn new(label: &str) -> Self {
+            let nonce = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "solid-checker-emission-sources-{label}-{}-{nonce}",
+                std::process::id()
+            ));
+            fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+
+        fn write(&self, name: &str, text: &str) -> PathBuf {
+            let path = self.0.join(name);
+            fs::write(&path, text).unwrap();
+            path.canonicalize().unwrap()
+        }
+
+        fn absent(&self, name: &str) -> PathBuf {
+            self.0.join(name)
+        }
+    }
+
+    impl Drop for SourceTree {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn target(
+        index: usize,
+        entry_file: &Path,
+        source_files: &[&Path],
+    ) -> ContractEmissionBatchTarget {
+        ContractEmissionBatchTarget {
+            index,
+            output: "/scratch/proposal.json".into(),
+            plan: "/scratch/plan.json".into(),
+            resolution: "/scratch/resolution.json".into(),
+            entry_file: entry_file.to_string_lossy().into_owned(),
+            source_files: source_files
+                .iter()
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect(),
+        }
+    }
+
+    fn reported(paths: &[&Path]) -> HashMap<PathBuf, SourceFile> {
+        paths
+            .iter()
+            .map(|path| {
+                (
+                    path.to_path_buf(),
+                    SourceFile {
+                        path: path.to_string_lossy().into_owned(),
+                        source: std::sync::Arc::from(fs::read_to_string(path).unwrap().as_str()),
+                        compiler_options: solid_facts::compiler::CompilerOptions::default(),
+                    },
+                )
+            })
+            .collect()
+    }
+
+    /// The phase 21 M1 defect. A declaration file in an emitting target's
+    /// runtime closure is a program input the producer never reports as a fact
+    /// source, so requiring it manufactured a refusal whose message was false.
+    #[test]
+    fn a_declaration_closure_member_is_not_required_to_be_a_fact_source() {
+        let tree = SourceTree::new("closure-member");
+        let entry = tree.write(
+            "index.ts",
+            "import type { Options } from \"./options.js\";\n",
+        );
+        let options = tree.write(
+            "options.d.ts",
+            "export interface Options { name: string }\n",
+        );
+        let sources = reported(&[&entry]);
+
+        let selected =
+            contract_emission_target_sources(&target(0, &entry, &[&options, &entry]), &sources)
+                .expect("a declaration closure member must not refuse the target");
+        assert_eq!(
+            selected
+                .iter()
+                .map(|source| source.canonical_path.clone())
+                .collect::<Vec<_>>(),
+            vec![entry],
+            "the declaration member must be skipped, not substituted"
+        );
+    }
+
+    /// The entry file is the one project file the target cannot do without.
+    /// A declaration file there is a real refusal, and it says why rather than
+    /// claiming the file is outside a project the generator put it in.
+    #[test]
+    fn a_declaration_entry_file_refuses_with_its_actual_reason() {
+        let tree = SourceTree::new("declaration-entry");
+        let entry = tree.write("evaluated-default.d.ts", "export default 1;\n");
+        let sources = HashMap::new();
+
+        let error = contract_emission_target_sources(&target(7, &entry, &[&entry]), &sources)
+            .expect_err("a declaration entry file has no runtime module");
+        let error = error.to_string();
+        assert!(error.contains("target 7 names entry file"), "{error}");
+        assert!(error.contains(&entry.display().to_string()), "{error}");
+        assert!(
+            error.contains("its suffix makes it a TypeScript declaration file"),
+            "{error}"
+        );
+        assert!(error.contains("reports no source facts"), "{error}");
+        assert!(
+            !error.contains("outside its configured project"),
+            "the false claim must be gone: {error}"
+        );
+        assert!(!error.contains("runtime module"), "{error}");
+    }
+
+    /// A non-declaration source the project does not report stays fail-closed,
+    /// and the message now names the target's own entry file beside the batch
+    /// index — the attribution defect, where a sorted `sourceFiles` list made
+    /// the refusal appear to be about a closure member's entrypoint.
+    #[test]
+    fn an_unreported_runtime_source_refuses_and_names_its_target() {
+        let tree = SourceTree::new("unreported-runtime");
+        let entry = tree.write("index.ts", "export { helper } from \"./helper.js\";\n");
+        let helper = tree.write("helper.ts", "export function helper() {}\n");
+        let sources = reported(&[&entry]);
+
+        let error =
+            contract_emission_target_sources(&target(4, &entry, &[&helper, &entry]), &sources)
+                .expect_err("an unreported runtime source must stay fail-closed");
+        let error = error.to_string();
+        assert!(error.contains("target 4 for entry file"), "{error}");
+        assert!(error.contains(&entry.display().to_string()), "{error}");
+        assert!(error.contains(&helper.display().to_string()), "{error}");
+        assert!(
+            error.contains("does not report as a fact source"),
+            "{error}"
+        );
+    }
+
+    /// A directory spelled like a declaration file is not one, and is not
+    /// skipped. `is_file` is what stops a member kind the producer would never
+    /// have reported as a source from being waved through as one.
+    #[test]
+    fn a_declaration_named_directory_is_not_skipped() {
+        let tree = SourceTree::new("declaration-directory");
+        let entry = tree.write("index.ts", "export const a = 1;\n");
+        let directory = tree.0.join("options.d.ts");
+        fs::create_dir(&directory).unwrap();
+        let directory = directory.canonicalize().unwrap();
+        let sources = reported(&[&entry]);
+
+        let error =
+            contract_emission_target_sources(&target(3, &entry, &[&directory, &entry]), &sources)
+                .expect_err("a directory is not a declaration source");
+        let error = error.to_string();
+        assert!(error.contains("target 3 for entry file"), "{error}");
+        assert!(
+            error.contains("does not report as a fact source"),
+            "{error}"
+        );
+    }
+
+    /// A source that does not exist is a missing published target, never a
+    /// source to skip — including when it is spelled as a declaration file.
+    #[test]
+    fn an_absent_declaration_source_is_not_skipped() {
+        let tree = SourceTree::new("absent-declaration");
+        let entry = tree.write(
+            "index.ts",
+            "import type { Options } from \"./options.js\";\n",
+        );
+        let options = tree.absent("options.d.ts");
+        let sources = reported(&[&entry]);
+
+        let error =
+            contract_emission_target_sources(&target(2, &entry, &[&options, &entry]), &sources)
+                .expect_err("an absent source must refuse");
+        let error = error.to_string();
+        assert!(error.contains("target 2 for entry file"), "{error}");
+        assert!(error.contains("does not resolve on disk"), "{error}");
+    }
+
+    /// The emitter's own project-membership guard. Its declaration arm is
+    /// defensive — see `missing_fact_program_module` for why no path reaches
+    /// it — so both arms are pinned here rather than by a fixture.
+    #[test]
+    fn the_fact_program_membership_refusal_names_a_declaration_file_for_what_it_is() {
+        let declaration = missing_fact_program_module(Path::new("/pkg/types/hyperscript.d.ts"));
+        assert!(
+            declaration.contains("its suffix makes it a TypeScript declaration file"),
+            "{declaration}"
+        );
+        assert!(
+            declaration.contains("reports no source facts"),
+            "{declaration}"
+        );
+        // The message vouches for nothing beyond the producer's omission: what
+        // the file publishes is `non-emitting-module-target`'s question.
+        assert!(!declaration.contains("runtime module"), "{declaration}");
+        assert!(
+            !declaration.contains("is not part of the TypeScript project"),
+            "{declaration}"
+        );
+
+        let runtime = missing_fact_program_module(Path::new("/pkg/dist/index.js"));
+        assert_eq!(
+            runtime,
+            "emit package contract: entry file /pkg/dist/index.js is not part of the TypeScript project"
+        );
+    }
 }
 
 fn exported_names_for_file(
@@ -6849,12 +8962,10 @@ fn exported_names_for_file(
     if !visiting.insert(path.clone()) {
         return Ok(BTreeSet::new());
     }
-    let file = files_by_canonical_path.get(&path).copied().ok_or_else(|| {
-        format!(
-            "emit package contract: entry file {} is not part of the TypeScript project",
-            path.display()
-        )
-    })?;
+    let file = files_by_canonical_path
+        .get(&path)
+        .copied()
+        .ok_or_else(|| missing_fact_program_module(&path))?;
     let mut names = BTreeSet::new();
     // `module_level_exports`, not `exports`: an `export` nested in a
     // `namespace`, `declare module`, or `declare global` body binds a member of
@@ -6908,6 +9019,23 @@ fn exported_names_for_file(
             // above, through `type_only`; this proves the same thing for the
             // spelling that carries no marker. See `export_is_type_only`.
             if export_is_type_only(
+                facts,
+                files_by_canonical_path,
+                &path,
+                &name,
+                &mut HashSet::new(),
+            ) {
+                continue;
+            }
+            // A name this package only re-exports from the built-in runtime
+            // foundation is the dialect's to describe, not this package's, and
+            // nothing can ever bind it: core has no package contract by design
+            // (ADR 0027). Dropping it here is what keeps the three censuses
+            // agreeing -- the emitted document, `bind_exports`, and the JS
+            // resolver's `bindExport` -- and what lets every other export of
+            // the entrypoint survive instead of the whole artifact case
+            // refusing over one core name.
+            if export_binds_core_runtime(
                 facts,
                 files_by_canonical_path,
                 &path,
@@ -7026,6 +9154,143 @@ fn export_is_type_only(
         }
     }
     proven
+}
+
+/// Whether every export of `name` from `path` binds into the built-in runtime
+/// foundation.
+///
+/// `solid-js`, `@solidjs/signals` and `@solidjs/web` have no package contract
+/// **by design** (ADR 0027): ordinary analysis takes their behavior from the
+/// selected dialect, and `core_runtime_contract_reference` withholds one. A
+/// package that re-exports a core name therefore publishes a name nothing can
+/// ever bind — and every census downstream demands a binding for it, so the
+/// whole artifact case refuses over a name whose behavior the dialect already
+/// owns. That is what left `@solid-primitives/utils@6.4.1`'s `.` entrypoint
+/// with no contract on 2026-09-15 (`accepted dependency solid-js/web has no
+/// exact runtime binding for export isServer`), and with it every consumer of
+/// the 820 call sites that import it.
+///
+/// Omitting the name is not a claim that the export does not exist. It is ADR
+/// 0027's "missing native behavior stays unknown", stated in the one place
+/// that can state it: this package has no standing to describe a name it does
+/// not implement, and the dialect describes it already.
+///
+/// Mirrors `export_is_type_only` beside it in structure and in strictness:
+/// **every** export of the name must bind core, so a name also exported
+/// locally, or re-exported from an ordinary dependency, stays in the surface
+/// and keeps its existing refusal. Anything this walk cannot see proves
+/// nothing and returns `false`.
+fn export_binds_core_runtime(
+    facts: &solid_facts::ProjectFacts,
+    files_by_canonical_path: &HashMap<PathBuf, &solid_facts::FileFacts>,
+    path: &Path,
+    name: &str,
+    visiting: &mut HashSet<(PathBuf, String)>,
+) -> bool {
+    let Ok(path) = path.canonicalize() else {
+        return false;
+    };
+    if !visiting.insert((path.clone(), name.to_owned())) {
+        return false;
+    }
+    let Some(file) = files_by_canonical_path.get(&path).copied() else {
+        return false;
+    };
+    let mut proven = false;
+    for export in file.ast.module_level_exports() {
+        for specifier in export
+            .specifiers
+            .iter()
+            .chain(export.declarations.iter())
+            .filter(|specifier| specifier.exported.as_str() == name)
+        {
+            if export.type_only || specifier.type_only {
+                continue;
+            }
+            let local_name = file
+                .source_text(specifier.local.span)
+                .unwrap_or(specifier.exported.as_str());
+            let core = match export.module.as_deref() {
+                Some(module) if module.starts_with('.') => {
+                    resolve_relative_export(facts, &path, module).is_ok_and(|target| {
+                        export_binds_core_runtime(
+                            facts,
+                            files_by_canonical_path,
+                            &target,
+                            local_name,
+                            visiting,
+                        )
+                    })
+                }
+                Some(module) => solid_dialect::core_runtime_specifier(module),
+                None => local_import_binds_core_runtime(
+                    facts,
+                    files_by_canonical_path,
+                    file,
+                    &path,
+                    local_name,
+                    visiting,
+                ),
+            };
+            if !core {
+                return false;
+            }
+            proven = true;
+        }
+        // A locally declared export of the same name is this package's own,
+        // and settles the question against core immediately.
+        if export.module.is_none()
+            && file.ast.exported_bindings(export).any(|binding| {
+                binding
+                    .names
+                    .iter()
+                    .any(|declared| file.source_text(declared.span) == Some(name))
+            })
+        {
+            return false;
+        }
+    }
+    proven
+}
+
+/// The `import { x } from "solid-js/web"; export { x }` spelling of the above,
+/// which carries the same public identity but states no module at the export.
+fn local_import_binds_core_runtime(
+    facts: &solid_facts::ProjectFacts,
+    files_by_canonical_path: &HashMap<PathBuf, &solid_facts::FileFacts>,
+    file: &solid_facts::FileFacts,
+    path: &Path,
+    local_name: &str,
+    visiting: &mut HashSet<(PathBuf, String)>,
+) -> bool {
+    for import in &file.ast.imports {
+        for binding in &import.bindings {
+            if file.source_text(binding.local.span) != Some(local_name) {
+                continue;
+            }
+            if import.type_only || binding.type_only {
+                return false;
+            }
+            let Some(imported) = binding.imported.as_deref().or_else(|| {
+                (binding.kind == solid_facts::ast::ImportKind::Default).then_some("default")
+            }) else {
+                return false;
+            };
+            if !import.module.starts_with('.') {
+                return solid_dialect::core_runtime_specifier(&import.module);
+            }
+            return resolve_relative_export(facts, path, &import.module).is_ok_and(|target| {
+                export_binds_core_runtime(
+                    facts,
+                    files_by_canonical_path,
+                    &target,
+                    imported,
+                    visiting,
+                )
+            });
+        }
+    }
+    false
 }
 
 /// Whether the local name a bare `export { x }` specifier names is an import

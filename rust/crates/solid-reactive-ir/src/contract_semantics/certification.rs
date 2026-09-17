@@ -37,7 +37,11 @@ pub struct ArtifactSnapshotLimits {
 /// The source candidate list is deliberately not an argument. This typestate
 /// is constructed only by walking the normalized candidate, so a proof
 /// document cannot omit a proposed closure or positive operation from the
-/// planner's universe.
+/// planner's universe — and no caller can add one either. A generated proposal
+/// therefore states its closure in the document like any other candidate,
+/// labelled `CallSemantics::proposed_closures` to keep it distinguishable from
+/// a reviewed claim.
+#[derive(Clone)]
 pub struct CertificationCandidates {
     candidate_semantic_digest: Digest,
     proposal: NormalizedContract,
@@ -321,6 +325,11 @@ impl ProofPolicy2 {
                         path: SemanticClaimPath::Operation(operation.id.clone()),
                     }
                 }));
+                // One export's whole candidate universe, withdrawn from the
+                // returned proposal as it is read. A generated proposal states
+                // its `creates` closure like any other document and labels it
+                // `proposed_closures`; the label is withdrawn with the closure
+                // here, so the planning proposal offers nothing twice.
                 closure_candidates.extend(export.open_proposed_closure().into_iter().map(|path| {
                     SemanticClaimSubject {
                         artifact_case: artifact.id.clone(),
@@ -711,12 +720,15 @@ fn inventory_value_shape(
             value,
             facts,
         ),
+        // A merged props object has no child shape to inventory: its members
+        // are the caller's argument's, and this side has no premise about them.
         ValueShape::Unknown
         | ValueShape::Plain
         | ValueShape::Parameter { .. }
         | ValueShape::Callable
         | ValueShape::Reactive { .. }
         | ValueShape::Store { .. }
+        | ValueShape::MergedProps { .. }
         | ValueShape::Action { .. }
         | ValueShape::Component
         | ValueShape::Cleanup { .. }
@@ -756,6 +768,7 @@ const fn recursive_value_callability(shape: &ValueShape) -> DemandedCallability 
         | ValueShape::AsyncIterable(_)
         | ValueShape::Reactive { .. }
         | ValueShape::Store { .. }
+        | ValueShape::MergedProps { .. }
         | ValueShape::Action { .. }
         | ValueShape::Cleanup { .. }
         | ValueShape::RefApplication
@@ -1423,6 +1436,19 @@ impl WitnessBinding {
     pub fn demand_id(&self) -> &str {
         &self.demand_id
     }
+
+    #[must_use]
+    pub fn evidence_root(&self) -> &str {
+        &self.evidence_root
+    }
+
+    /// The witness sites this binding names, in the adapter's own order. Audit
+    /// and test material: coverage validation folds them into the evidence
+    /// root and authenticates none of them.
+    #[must_use]
+    pub fn site_ids(&self) -> &[String] {
+        &self.site_ids
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -2073,6 +2099,7 @@ mod tests {
             inputs: Vec::new(),
             output: None,
             resources: std::collections::BTreeSet::new(),
+            composed_from: None,
         };
         let call = CallSemantics::new(
             CallClaims::default(),

@@ -30,7 +30,6 @@ const PATHS = Object.freeze({
   callerProofAuthority: "packages/cli/scripts/verify-contract.mjs",
   certificationOrchestration: "packages/cli/scripts/certify-contract.mjs",
   typeFactsProtocol: "rust/crates/typefacts/src/v3.rs",
-  solidV1Compiler: "rust/dialects/solid-v1/compiler/src/lib.rs",
   solidV2Compiler: "rust/dialects/solid-v2/compiler/src/lib.rs"
 });
 

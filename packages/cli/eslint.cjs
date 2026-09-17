@@ -289,8 +289,17 @@ function projectFindings(context, program, findings) {
   const filename = contextFilename(context);
   for (const finding of findings) {
     const location = finding.primaryLocation;
-    if (location?.path && !samePath(location.path, filename)) continue;
-    const range = location ? findingRange(sourceCode, location) : [0, 0];
+    // A project-scoped finding is about the project, not about a file in it:
+    // the refusal to analyze an unsupported Solid runtime is located at the
+    // deciding `node_modules/solid-js/package.json`, which ESLint never lints.
+    // Matching it by path would drop it silently and leave the user with a
+    // clean run over a project that was never analyzed at all -- exactly the
+    // false certification the finding exists to prevent. So it is reported on
+    // every linted file, and its span is this file's origin rather than an
+    // offset into some other file's bytes.
+    const projectScoped = finding.subjectKind === "project";
+    if (!projectScoped && location?.path && !samePath(location.path, filename)) continue;
+    const range = location && !projectScoped ? findingRange(sourceCode, location) : [0, 0];
     context.report({
       node: program,
       loc: {
@@ -444,7 +453,8 @@ const DEPRECATED_RULE_KEYS = [
   ["component-props-destructure", "no-destructure"],
   ["component-returns-conditionally", "components-return-once"],
   ["expected-function-got-expression", "reactive-handler-frozen"],
-  ["v1/expected-function-got-expression", "v1/reactive-handler-frozen"],
+  // The `v1/` alias went with the 1.x catalog (ADR 0110): a deprecation alias
+  // can only delegate to a rule that still exists, and its target does not.
   ["resolve-in-reactive-scope", "resolve-in-tracked-scope"],
   ["sync-node-received-async", "sync-computation-received-async"]
 ];

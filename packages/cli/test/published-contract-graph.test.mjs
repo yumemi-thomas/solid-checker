@@ -4,9 +4,13 @@ import { test } from "vitest";
 import {
   bunLockLocatorForInstalledPackage,
   createBunLockSelectionIndex,
+  createPnpmLockSelectionIndex,
   PublishedGraphAcquisitionRefusal,
   discoverInstalledPublishedGraph,
   exactBunLockSelection,
+  exactLockSelection,
+  lockLocatorForInstalledPackage,
+  parsePnpmLockPackages,
   publishedGraphRequestKey
 } from "../scripts/published-contract-graph.mjs";
 
@@ -278,5 +282,152 @@ test("installed acquisition refuses cycles and builtins", () => {
     error =>
       error instanceof PublishedGraphAcquisitionRefusal &&
       error.kind === "unsupported-external-specifier"
+  );
+});
+
+
+// The pnpm reader is the acquisition half of a pair: Rust re-reads the same
+// bytes in `dependencies.rs` before any receipt, and these cases mirror the
+// `pnpm_selection_*` tests there. A subset either side reads and the other
+// refuses is the failure mode worth pinning, so the two rosters match.
+
+const PNPM_INTEGRITY =
+  "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+
+const pnpmEntry = `  '@corvu/utils@0.3.2':\n    resolution: {integrity: ${PNPM_INTEGRITY}}\n`;
+
+const pnpmLock = body =>
+  `lockfileVersion: '9.0'\n\nsettings:\n  autoInstallPeers: true\n\npackages:\n\n${body}`;
+
+const refusal = kind => error =>
+  error instanceof PublishedGraphAcquisitionRefusal && error.kind === kind;
+
+test("exact pnpm selection reads the packages key as the locator", () => {
+  const index = createPnpmLockSelectionIndex(
+    pnpmLock(`${pnpmEntry}    engines: {node: '>=10'}\n`)
+  );
+  assert.deepEqual(
+    exactLockSelection({
+      index,
+      packageManager: "pnpm",
+      lockfilePath: "/w/pnpm-lock.yaml",
+      packageRoot: "/w/node_modules/.pnpm/@corvu+utils@0.3.2_solid-js@1.9.14/node_modules/@corvu/utils",
+      packageName: "@corvu/utils",
+      packageVersion: "0.3.2"
+    }),
+    { locator: "@corvu/utils@0.3.2", integrity: PNPM_INTEGRITY }
+  );
+  assert.throws(
+    () =>
+      exactLockSelection({
+        index,
+        packageManager: "pnpm",
+        lockfilePath: "/w/pnpm-lock.yaml",
+        packageRoot: "/w/node_modules/missing",
+        packageName: "missing",
+        packageVersion: "1.0.0"
+      }),
+    refusal("missing-lock-selection")
+  );
+});
+
+test("the pnpm locator is the lock key, not the install path", () => {
+  // pnpm stores a package under `.pnpm/<name>@<version>_<peers>/node_modules/`,
+  // which names no key the lockfile wrote. Deriving a locator from that path --
+  // as Bun's tree requires -- would invent a string nothing can select.
+  assert.equal(
+    lockLocatorForInstalledPackage({
+      lockfilePath: "/w/pnpm-lock.yaml",
+      packageManager: "pnpm",
+      packageRoot: "/w/node_modules/.pnpm/@corvu+utils@0.3.2_solid-js@1.9.14/node_modules/@corvu/utils",
+      packageName: "@corvu/utils",
+      packageVersion: "0.3.2"
+    }),
+    "@corvu/utils@0.3.2"
+  );
+  assert.throws(
+    () =>
+      lockLocatorForInstalledPackage({
+        lockfilePath: "/w/yarn.lock",
+        packageManager: "yarn",
+        packageRoot: "/w/node_modules/@corvu/utils",
+        packageName: "@corvu/utils",
+        packageVersion: "0.3.2"
+      }),
+    refusal("unsupported-package-manager")
+  );
+});
+
+test("the pnpm reader reads a formatter-rewritten lockfile", () => {
+  // A real lockfile in the consumer corpus had been through Prettier: keys
+  // double-quoted, `resolution` wrapped across lines with a trailing comma. A
+  // reader that assumed pnpm's own layout answers "no packages" for it.
+  const selections = parsePnpmLockPackages(
+    `lockfileVersion: "9.0"\n\npackages:\n  "@corvu/utils@0.3.2":\n    resolution:\n      {\n        integrity: ${PNPM_INTEGRITY},\n      }\n    engines: { node: ">=10" }\n`
+  );
+  assert.deepEqual([...selections], [["@corvu/utils@0.3.2", PNPM_INTEGRITY]]);
+});
+
+test("the pnpm reader reads a workspace specifier as a scalar", () => {
+  // `workspace:*` is a plain scalar, not an alias: in YAML `*` opens a node only
+  // at a token boundary, and a bare `:` is not one. Every lockfile in the demand
+  // corpus carries this line, so treating it as an alias refuses all of them --
+  // which is exactly what both readers did until this case was written.
+  const selections = parsePnpmLockPackages(
+    `lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      '@corvu/utils':\n        specifier: workspace:*\n        version: link:packages/utils\n\npackages:\n\n${pnpmEntry}`
+  );
+  assert.deepEqual([...selections], [["@corvu/utils@0.3.2", PNPM_INTEGRITY]]);
+});
+
+test("the pnpm reader refuses a lockfile major before 9", () => {
+  // Major 6 wrote peer suffixes into `packages:` keys, so one name@version
+  // could appear under several keys with no installed path to separate them.
+  assert.throws(
+    () =>
+      parsePnpmLockPackages(
+        `lockfileVersion: '6.0'\n\npackages:\n\n  /@corvu/utils@0.3.2:\n    resolution: {integrity: ${PNPM_INTEGRITY}}\n`
+      ),
+    refusal("unsupported-lock-version")
+  );
+});
+
+test("the pnpm reader refuses a repeated packages key", () => {
+  assert.throws(
+    () =>
+      parsePnpmLockPackages(
+        pnpmLock(`${pnpmEntry}  '@corvu/utils@0.3.2':\n    resolution: {integrity: sha512-BBBB==}\n`)
+      ),
+    refusal("ambiguous-lock-selection")
+  );
+});
+
+test("the pnpm reader refuses YAML beyond the subset it reads", () => {
+  // Each of these can move a value from one entry to another, or redefine
+  // `packages:` wholesale; skipping what it did not understand would answer
+  // confidently from the wrong bytes.
+  for (const [name, source] of [
+    ["anchor", pnpmLock(`  base: &shared\n${pnpmEntry}`)],
+    ["alias", pnpmLock(`${pnpmEntry}    extra: *shared\n`)],
+    ["merge key", pnpmLock(`${pnpmEntry}    <<: *shared\n`)],
+    ["second document", `${pnpmLock(pnpmEntry)}---\npackages:\n${pnpmEntry}`],
+    ["tab", pnpmLock(pnpmEntry).replace("  '@corvu", "\t'@corvu")]
+  ]) {
+    assert.throws(
+      () => parsePnpmLockPackages(source),
+      refusal("unsupported-lock-syntax"),
+      `${name} was read instead of refused`
+    );
+  }
+});
+
+test("the pnpm reader selects no package without a registry integrity", () => {
+  // A tarball, git or link dependency cannot be authenticated against a
+  // registry, so leaving it unselected refuses the graph rather than naming it.
+  assert.throws(
+    () =>
+      parsePnpmLockPackages(
+        pnpmLock("  '@corvu/utils@0.3.2':\n    resolution: {tarball: https://example.invalid/utils.tgz}\n")
+      ),
+    refusal("missing-lock-selection")
   );
 });

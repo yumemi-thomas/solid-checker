@@ -25,6 +25,7 @@ import {
   MUTUALLY_EXCLUSIVE_CONDITION_AXES,
   RESOLVER_STANDARD_CONDITIONS,
   isPrivateNamespacedCondition,
+  nonEmittingModuleTarget,
   nonModuleTargetExtension,
   resolvePackageExport,
   selectPackageExportTarget
@@ -48,8 +49,21 @@ export const ARTIFACT_APPLICABILITY = Object.freeze({
  */
 export const ARTIFACT_DISPOSITION = Object.freeze({
   UnpublishedConditionalTarget: "unpublished-conditional-target",
-  NonModuleTarget: "non-module-target"
+  NonModuleTarget: "non-module-target",
+  NonEmittingModuleTarget: "non-emitting-module-target"
 });
+
+/**
+ * The dispositions whose premise is a property of *file content* rather than of
+ * the export map and the artifact's member list. Rust replays the export map
+ * and the member list for every case it certifies, so those two classes need no
+ * separate proof; a content premise is read from the installed tree here, which
+ * nothing has authenticated, so each such case travels to certification as a
+ * declared claim that the authenticated archive must re-prove.
+ */
+export const VERIFIER_PROVED_DISPOSITIONS = Object.freeze([
+  ARTIFACT_DISPOSITION.NonEmittingModuleTarget
+]);
 
 /**
  * The disposition of one exact artifact case, decided from the export-map
@@ -77,6 +91,36 @@ export const ARTIFACT_DISPOSITION = Object.freeze({
  * kind is a native-code/opaque-wasm hazard rather than "nothing to assert", and
  * still refuses. Assets remain ordinary closure members; this rule only says an
  * *entrypoint* must be a module.
+ *
+ * `non-emitting-module-target`: the selected runtime target emits no JavaScript
+ * at all (`nonEmittingModuleTarget`), so no consumer reaches a certifiable
+ * runtime surface here and an artifact case over it asserts nothing. Two
+ * premises answer that, and a member's suffix selects exactly one, which the
+ * recorded reason names:
+ *
+ * - `erasable-statements` — every module-level statement in the bytes is
+ *   erasable. Blind to the filename by construction: a `.js` member whose
+ *   content is `export declare function f(): void;` is answered exactly like
+ *   the identical bytes in a `.d.ts`.
+ * - `declaration-file` — the member's suffix is `.d.ts`/`.d.mts`/`.d.cts`, its
+ *   bytes parse under declaration-file grammar, and they contain no
+ *   implementation body, initializer, expression statement or side-effect
+ *   import. TypeScript decides declaration-file semantics by suffix and emits
+ *   nothing for such a file at all, including for the re-export forms a plain
+ *   module *would* emit — which is why `export * from "./universal.js"` is
+ *   answered here and refused under the other premise, where the same bytes are
+ *   a working barrel.
+ *
+ * It is deliberately narrower than "exports nothing", because a side-effect-only
+ * module exports nothing and emits everything. Two further boundaries keep it
+ * narrow: a module that declares nothing is not an answer (a zero-byte member,
+ * or one whose whole body is `export {}`, is what a broken build looks like),
+ * and the suffix is admitted only conjoined with the ambient parse and only for
+ * a member the archive has authenticated — which is what separates this from
+ * the pre-authentication `.d.ts` classification reverted on 2026-09-02.
+ *
+ * This is the one disposition decided from file content, so it is also the one
+ * that travels to certification as a claim the authenticated archive re-proves.
  */
 export function artifactCaseDisposition({
   manifest,
@@ -105,7 +149,19 @@ export function artifactCaseDisposition({
       reason: `runtime target extension ${JSON.stringify(extension)} is not an executable module`
     };
   }
-  if (selected.exists) return null;
+  if (selected.exists) {
+    const nonEmitting = nonEmittingModuleTarget(selected.path);
+    if (nonEmitting) {
+      return {
+        class: ARTIFACT_DISPOSITION.NonEmittingModuleTarget,
+        applicability: ARTIFACT_APPLICABILITY.TypeOnlyExport,
+        reason:
+          `runtime target emits no JavaScript (${nonEmitting.arm}): ` +
+          `${nonEmitting.statements} module-level statement(s)`
+      };
+    }
+    return null;
+  }
   const namespaced = selected.conditions.filter(condition =>
     isPrivateNamespacedCondition(condition)
   );
@@ -116,6 +172,162 @@ export function artifactCaseDisposition({
       `runtime target is unpublished behind private namespaced export condition(s) ` +
       `${namespaced.map(condition => JSON.stringify(condition)).join(", ")}`
   };
+}
+
+/**
+ * The declared applicability claims a proposal carries to certification: one
+ * row per recorded inapplicable case whose class is decided from file content.
+ * Rust re-proves each against the authenticated archive.
+ */
+export function declaredApplicabilityClaims(inapplicable) {
+  return inapplicable
+    .filter(row => VERIFIER_PROVED_DISPOSITIONS.includes(row.class))
+    .map(row => ({
+      entrypoint: row.entrypoint,
+      conditions: row.conditions ?? [],
+      class: row.class,
+      reason: row.reason
+    }));
+}
+
+/// The one line the native emitter writes ahead of its prose when an
+/// entrypoint re-exports a package with no exact accepted contract
+/// (`UNRESOLVED_DEPENDENCY_MODULE_MARKER` in
+/// rust/crates/solid-facts-backend/src/main.rs). It exists precisely so
+/// automation does not have to parse the sentence, which is why it, and not the
+/// sentence, is what the class below is decided from.
+const UNRESOLVED_DEPENDENCY_MODULE_MARKER = "solid-checker:unresolved-dependency-module=";
+
+/// The one line the native emitter writes for each claim it refused to publish
+/// (`WITHHELD_OWNER_REQUIREMENT_MARKER` in
+/// rust/crates/solid-facts-backend/src/main.rs), tab-separated as
+/// `<document path>\t<export>\t<role>\t<reason>`.
+///
+/// A withheld claim leaves only an open domain behind, which says the same
+/// thing as a census that found nothing to claim — so the withholding has to be
+/// stated rather than inferred. The document path keys the line because one
+/// batched emitter process writes for several artifact-case targets.
+const WITHHELD_OWNER_REQUIREMENT_MARKER = "solid-checker:withheld-owner-requirement=";
+
+/// Every withheld-claim line the emitter wrote for `documentPath`, as
+/// `{ export, role, reason }`. Lines for other targets of the same batch, and
+/// any other emitter output, are ignored.
+export function withheldClaimsFromEmitterOutput(stdout, documentPath) {
+  const claims = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    if (!line.startsWith(WITHHELD_OWNER_REQUIREMENT_MARKER)) continue;
+    const [document, exportName, role, ...reason] = line
+      .slice(WITHHELD_OWNER_REQUIREMENT_MARKER.length)
+      .split("\t");
+    if (document !== documentPath || !exportName || !role || reason.length === 0) continue;
+    claims.push({ export: exportName, role, reason: reason.join("\t").trim() });
+  }
+  return claims;
+}
+
+/// The one line the native emitter writes for each blocking call site that made
+/// it decline to *propose* a closed `creates` for an export
+/// (`DECLINED_CLOSURE_MARKER` in rust/crates/solid-facts-backend/src/main.rs),
+/// tab-separated as
+/// `<document path>\t<export>\t<domain>\t<kind>\t<package>\t<callee>\t<location>\t<declaration>\t<shape>\t<spelling>`.
+///
+/// A declined proposal leaves the same open domain behind as a census with
+/// nothing to propose, so the decline has to be stated rather than inferred —
+/// and *which* blocker it was is the measurement: it says what a dialect audit
+/// would have to cover before any candidate appears on a real row. Measurement
+/// only; nothing here certifies or refuses anything.
+const DECLINED_CLOSURE_MARKER = "solid-checker:declined-closure=";
+
+/// Every declined-closure line the emitter wrote for `documentPath`, as
+/// `{ export, domain, kind, package, callee, location, declaration, shape,
+/// spelling }`. Lines for other targets of the same batch, and any other
+/// emitter output, are ignored. `package`, `callee` and `declaration` are empty
+/// for the kinds that name no such identity, and are kept empty rather than
+/// filled in by guess.
+///
+/// `shape` and `spelling` are the last two columns and are read the same way:
+/// the observed shape of an `unresolved-callee`'s callee expression and the one
+/// concrete string it carries (`solid_reactive_ir::UnresolvedCalleeShape`).
+/// They are **appended** columns, so a line written by an emitter that predates
+/// them parses with both empty rather than failing, and `kind` still says
+/// `unresolved-callee` for every shape.
+export function declinedClosuresFromEmitterOutput(stdout, documentPath, packageRoot = null) {
+  // A blocking call site is a `path:start:end` inside the analyzed package, and
+  // the emitter states it absolutely because that is the only path it has. A
+  // snapshot of an absolute path is a snapshot of one machine, so the package
+  // root is folded to `<package-root>` here -- the same substitution
+  // `stableRefusalReason` makes for an artifact-case refusal, and for the same
+  // reason. Absent a root the location is kept verbatim rather than truncated
+  // by guess.
+  const relativize = value =>
+    packageRoot ? value.replaceAll(packageRoot, "<package-root>") : value;
+  const declined = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    if (!line.startsWith(DECLINED_CLOSURE_MARKER)) continue;
+    const [
+      document,
+      exportName,
+      domain,
+      kind,
+      packageName,
+      callee,
+      location,
+      declaration,
+      shape,
+      spelling
+    ] = line.slice(DECLINED_CLOSURE_MARKER.length).split("\t");
+    if (document !== documentPath || !exportName || !domain || !kind) continue;
+    declined.push({
+      export: exportName,
+      domain,
+      kind,
+      package: packageName ?? "",
+      callee: callee ?? "",
+      location: relativize((location ?? "").trim()),
+      declaration: relativize((declaration ?? "").trim()),
+      shape: (shape ?? "").trim(),
+      spelling: (spelling ?? "").trim()
+    });
+  }
+  return declined;
+}
+
+/// The refusal classes a census row can carry, named after what would change
+/// the answer.
+export const REFUSAL_CLASSES = Object.freeze({
+  /// This case needs an accepted contract for a dependency that was not in
+  /// scope. The published-dependency-graph lane is the answer for it: it
+  /// acquires, generates and certifies the dependency, then certifies this
+  /// case against it.
+  DependencyComposition: "dependency-composition",
+  /// A fact about the publisher's own bytes -- a `.cjs` entrypoint with no
+  /// declaration target, a `.d.ts` named as its own fact source, an entry file
+  /// whose runtime and declaration export sets do not intersect. No dependency
+  /// catalog moves it.
+  PublishedArtifact: "published-artifact",
+  /// The requested census cannot enumerate this export: a wildcard subpath is
+  /// a pattern, and only an explicit finite `--entrypoint` list names the
+  /// artifact cases it stands for.
+  RequestedCensus: "requested-census",
+  /// A proof-policy resource limit, not a semantic answer at all.
+  ResourceLimit: "resource-limit"
+});
+
+/// Which class an artifact-case refusal belongs to, decided from the error's
+/// own structure and never from its prose: an `ArtifactResolutionError` code
+/// raised by this package's own resolver, or the machine marker the native
+/// emitter writes on its own line. A consumer routing on the class therefore
+/// depends on the emitter's contract rather than on its wording.
+export function artifactRefusalClass(error) {
+  if (error instanceof ArtifactResolutionError) {
+    return error.code === "accepted-dependency-binding"
+      ? REFUSAL_CLASSES.DependencyComposition
+      : REFUSAL_CLASSES.PublishedArtifact;
+  }
+  return typeof error?.message === "string" &&
+    error.message.includes(UNRESOLVED_DEPENDENCY_MODULE_MARKER)
+    ? REFUSAL_CLASSES.DependencyComposition
+    : REFUSAL_CLASSES.PublishedArtifact;
 }
 
 export function artifactApplicabilityForRefusal(error) {
@@ -132,6 +344,12 @@ export function artifactApplicabilityForRefusal(error) {
     return error.message.includes("node_modules/")
       ? ARTIFACT_APPLICABILITY.UnsupportedArtifactShape
       : ARTIFACT_APPLICABILITY.MissingPublishedTarget;
+  }
+  // The specifier names a runtime module the package does not ship; only its
+  // declaration sibling exists. Same standing as an absent published target:
+  // a consumer reaches the entrypoint and the module it imports is not there.
+  if (error.code === "local-runtime-target-is-declaration-only") {
+    return ARTIFACT_APPLICABILITY.MissingPublishedTarget;
   }
   if (
     [
@@ -613,7 +831,8 @@ function writeCertificationInputs(output, plan, {
   certificationImporter,
   entrypoints,
   conditions,
-  certificationInputs
+  certificationInputs,
+  inapplicableCases = []
 }) {
   const digest = path => `sha256:${createHash("sha256").update(readFileSync(path)).digest("hex")}`;
   writeFileSync(
@@ -630,7 +849,8 @@ function writeCertificationInputs(output, plan, {
         conditions,
         document: { path: output, sha256: digest(output) },
         plan: { path: plan, sha256: digest(plan) },
-        certificationInputs
+        certificationInputs,
+        inapplicableCases
       },
       null,
       2
@@ -638,7 +858,19 @@ function writeCertificationInputs(output, plan, {
   );
 }
 
-function writeProposalRefusalAudit(output, manifest, refusals, inapplicable = []) {
+// Additive under the same envelope version, for the same reason `inapplicable`
+// is: a withheld *claim* is not an artifact-case refusal — the case still
+// certifies — so putting it in `refusals` would change every consumer's refusal
+// total. Its own array keeps "never counted as an artifact-case refusal" true
+// by construction.
+function writeProposalRefusalAudit(
+  output,
+  manifest,
+  refusals,
+  inapplicable = [],
+  withheldClaims = [],
+  declinedClosures = []
+) {
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(
     `${output}.refusals.json`,
@@ -648,7 +880,9 @@ function writeProposalRefusalAudit(output, manifest, refusals, inapplicable = []
         refusalVersion: 1,
         package: { name: manifest.name, version: manifest.version },
         refusals,
-        inapplicable
+        inapplicable,
+        withheldClaims,
+        declinedClosures
       },
       null,
       2
@@ -808,7 +1042,7 @@ async function analyzeArtifact({
   if (proposalDependencyCatalog) {
     analyzerArguments.push("--proposal-dependencies", proposalDependencyCatalog);
   }
-  await checked(
+  const emitted = await checked(
     analyzerArguments,
     packageRoot
   );
@@ -819,6 +1053,8 @@ async function analyzeArtifact({
     conditions,
     resolution,
     identity,
+    withheldClaims: withheldClaimsFromEmitterOutput(emitted.stdout, output),
+    declinedClosures: declinedClosuresFromEmitterOutput(emitted.stdout, output, packageRoot),
     analysisDurationMs: performance.now() - startedAt
   };
 }
@@ -910,8 +1146,9 @@ async function analyzeArtifactsBatch({
       if (proposalDependencyCatalog) {
         analyzerArguments.push("--proposal-dependencies", proposalDependencyCatalog);
       }
+      let emitted;
       try {
-        await checked(analyzerArguments, packageRoot);
+        emitted = await checked(analyzerArguments, packageRoot);
       } catch (error) {
         return batch.map(candidate => ({
           index: candidate.index,
@@ -941,6 +1178,12 @@ async function analyzeArtifactsBatch({
             conditions: candidate.prepared.conditions,
             resolution: candidate.prepared.resolution,
             identity: candidate.prepared.identity,
+            withheldClaims: withheldClaimsFromEmitterOutput(emitted.stdout, target.output),
+            declinedClosures: declinedClosuresFromEmitterOutput(
+              emitted.stdout,
+              target.output,
+              packageRoot
+            ),
             analysisDurationMs: Number.isFinite(result.durationNs)
               ? result.durationNs / 1_000_000
               : duration
@@ -1058,10 +1301,21 @@ export async function generatePackageContract(
   let emittedArtifactCases = 0;
   let certificationProposals = [];
   const inapplicable = [];
+  // Every claim the native emitter refused to publish, by name. Recorded for
+  // an artifact case that certified: the case is not refused, one claim of it
+  // is withheld, and the two are different census answers.
+  const withheldClaims = [];
+  // Why the generator declined to *propose* a closed `creates`, per blocking
+  // call site. Not a refusal and not a withheld claim: the artifact case
+  // certifies and no claim was derivable in the first place. Recorded because
+  // an unmade proposal is invisible in the document, and which blocker it was
+  // is what `scripts/dialect-audit-yield.mjs` ranks.
+  const declinedClosures = [];
   const refusals = wildcardRefusals.map(entrypoint => ({
     entrypoint,
     conditions: null,
     stage: "entrypoint-census",
+    class: REFUSAL_CLASSES.RequestedCensus,
     applicability: ARTIFACT_APPLICABILITY.RuntimeModule,
     reason: "wildcard export requires an explicit finite --entrypoint census"
   }));
@@ -1069,6 +1323,7 @@ export async function generatePackageContract(
     entrypoint,
     conditions: null,
     stage: "entrypoint-census",
+    class: REFUSAL_CLASSES.PublishedArtifact,
     applicability: ARTIFACT_APPLICABILITY.MissingPublishedTarget,
     reason: `wildcard export branch ${JSON.stringify(target)} has no published target`
   })));
@@ -1076,6 +1331,7 @@ export async function generatePackageContract(
     entrypoint,
     conditions: null,
     stage: "entrypoint-census",
+    class: REFUSAL_CLASSES.ResourceLimit,
     applicability: ARTIFACT_APPLICABILITY.RuntimeModule,
     reason: `finite wildcard expansion would require ${candidates} artifact-case candidates, exceeding the proof-policy resource limit of ${limit}`
   })));
@@ -1098,6 +1354,13 @@ export async function generatePackageContract(
           conditions,
           stage: "artifact-case",
           class: disposition.class,
+          // Only a content-premise disposition carries an applicability tag:
+          // it names the proof certification owes for this case. The
+          // export-map dispositions have nothing to prove and stay as they
+          // were recorded on 2026-08-31.
+          ...(disposition.applicability
+            ? { applicability: disposition.applicability }
+            : {}),
           reason: disposition.reason
         });
         caseIndex += 1;
@@ -1208,6 +1471,32 @@ export async function generatePackageContract(
     for (const outcome of outcomes) {
       if (outcome.proposal) {
         proposals.push(outcome.proposal);
+        for (const claim of outcome.proposal.withheldClaims ?? []) {
+          withheldClaims.push({
+            entrypoint: outcome.proposal.entrypoint,
+            conditions: outcome.proposal.conditions,
+            stage: "export-claim",
+            export: claim.export,
+            role: claim.role,
+            reason: claim.reason
+          });
+        }
+        for (const record of outcome.proposal.declinedClosures ?? []) {
+          declinedClosures.push({
+            entrypoint: outcome.proposal.entrypoint,
+            conditions: outcome.proposal.conditions,
+            stage: "closure-proposal",
+            export: record.export,
+            domain: record.domain,
+            kind: record.kind,
+            package: record.package,
+            callee: record.callee,
+            location: record.location,
+            declaration: record.declaration,
+            shape: record.shape,
+            spelling: record.spelling
+          });
+        }
         if (timing) {
           timing.analyzedTargets += 1;
           timing.targets.push({
@@ -1222,6 +1511,10 @@ export async function generatePackageContract(
           entrypoint,
           conditions,
           stage: "artifact-case",
+          // Decided from the error itself, here, where the error object is
+          // still in hand. A consumer choosing a certification lane reads this
+          // rather than re-parsing `reason`.
+          class: artifactRefusalClass(outcome.error),
           applicability: artifactApplicabilityForRefusal(outcome.error),
           reason: stableRefusalReason(outcome.error, { packageRoot, scratch })
         });
@@ -1231,7 +1524,14 @@ export async function generatePackageContract(
       // The benchmark and row ledger need the complete artifact-case census,
       // not only the first refusal repeated in the thrown message. Persist the
       // structured audit before taking the full-refusal exit.
-      writeProposalRefusalAudit(output, manifest, refusals, inapplicable);
+      writeProposalRefusalAudit(
+        output,
+        manifest,
+        refusals,
+        inapplicable,
+        withheldClaims,
+        declinedClosures
+      );
       const first = refusals[0];
       // When nothing refused, the refusal clause names no cause at all and the
       // signature is unclassifiable. Name the first inapplicable class and
@@ -1303,12 +1603,20 @@ export async function generatePackageContract(
             entrypoint: candidate.entrypoint,
             conditions: candidate.conditions,
             stage: "proposal-merge",
+            class: artifactRefusalClass(error),
             applicability: ARTIFACT_APPLICABILITY.RuntimeModule,
             reason: stableRefusalReason(error, { packageRoot, scratch })
           });
         }
         if (!fallback.merged) {
-          writeProposalRefusalAudit(output, manifest, refusals, inapplicable);
+          writeProposalRefusalAudit(
+        output,
+        manifest,
+        refusals,
+        inapplicable,
+        withheldClaims,
+        declinedClosures
+      );
           throw new Error("no independently mergeable artifact case remains");
         }
         emittedArtifactCases = fallback.acceptedCount;
@@ -1324,7 +1632,14 @@ export async function generatePackageContract(
       await checked(["--validate-contract", output], packageRoot);
     }
     if (timing) timing.validationMs = performance.now() - validationStartedAt;
-    writeProposalRefusalAudit(output, manifest, refusals, inapplicable);
+    writeProposalRefusalAudit(
+        output,
+        manifest,
+        refusals,
+        inapplicable,
+        withheldClaims,
+        declinedClosures
+      );
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -1338,6 +1653,12 @@ export async function generatePackageContract(
     artifactCases: emittedArtifactCases,
     refusedArtifactCases: refusals.length,
     inapplicableArtifactCases: inapplicable.length,
+    withheldClaims: withheldClaims.length,
+    declinedClosures: declinedClosures.length,
+    // The subset of the inapplicable census whose premise is file content.
+    // Certification carries these to Rust and refuses the whole proposal if the
+    // authenticated archive refutes one; see `VERIFIER_PROVED_DISPOSITIONS`.
+    inapplicableCases: declaredApplicabilityClaims(inapplicable),
     certificationInputs: certificationProposals.map(proposal => ({
       entrypoint: proposal.entrypoint,
       conditions: proposal.conditions,
@@ -1352,7 +1673,8 @@ export async function generatePackageContract(
     certificationImporter: options.certificationImporter,
     entrypoints: options.entrypoints,
     conditions: options.conditions,
-    certificationInputs: result.certificationInputs
+    certificationInputs: result.certificationInputs,
+    inapplicableCases: result.inapplicableCases
   });
   if (!quiet) {
     process.stdout.write(

@@ -12,12 +12,10 @@ use crate::owners::{
     typed_accessor_descriptor_at,
 };
 use crate::pipeline::parallel_file_chunk_results;
-use crate::source_discovery::{
-    AsyncSourceOptions, PropUse, PropsReactivityIndex, bundled_contract_location,
-};
+use crate::source_discovery::{AsyncSourceOptions, PropUse, PropsReactivityIndex};
 use crate::{
     ActionInvocation, AsyncRead, ContractReturn, ExecutionRole, ReactiveRead, ReactiveSourceKind,
-    ReactiveWrite, location, primitive_name,
+    ReactiveWrite, location,
 };
 
 use std::{
@@ -57,7 +55,6 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) contract_parameter_reads:
         &'a HashMap<SymbolId, Vec<(usize, String, String, Location)>>,
     pub(crate) contract_returns: &'a HashMap<SymbolId, (ContractReturn, Location)>,
-    pub(crate) bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
     pub(crate) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
     pub(crate) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) uncertain_prop_sources: &'a HashSet<SymbolId>,
@@ -421,25 +418,6 @@ impl LocalAccessContext<'_, '_> {
                     self.contract_returns
                         .get(symbol)
                         .cloned()
-                        .or_else(|| {
-                            let primitive = primitive_name(
-                                file.path.as_str(),
-                                factory.callee,
-                                factory.static_callee(&file.source),
-                                self.entities,
-                                self.symbol_names,
-                                self.lookup.dialect,
-                            )?;
-                            self.bundled_returns
-                                .get(primitive.as_str())
-                                .cloned()
-                                .map(|returned| {
-                                    (
-                                        returned,
-                                        bundled_contract_location(self.lookup.dialect, &primitive),
-                                    )
-                                })
-                        })
                         .map(|contract| (factory, contract))
                 });
             if let Some((factory, (returned, declaration))) = immediate_return {

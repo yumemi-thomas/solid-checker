@@ -76,73 +76,6 @@ struct EmbeddedBundle {
 
 const EMBEDDED_BUNDLES: &[EmbeddedBundle] = &[];
 
-struct NamedDocument {
-    name: &'static str,
-    document: &'static [u8],
-}
-
-macro_rules! solid1_authority_document {
-    ($stem:literal) => {
-        NamedDocument {
-            name: concat!($stem, ".json"),
-            document: include_bytes!(concat!(
-                "../../../../benchmarks/package-contract-v2/phase14/solid-v1-authority/",
-                $stem,
-                ".json"
-            )),
-        }
-    };
-}
-
-const SOLID1_AUTHORITY_INDEX_BYTES: &[u8] = include_bytes!(
-    "../../../../benchmarks/package-contract-v2/phase14/solid-v1-authority/authority-index.json"
-);
-
-const SOLID1_AUTHORITY_DOCUMENTS: &[NamedDocument] = &[
-    solid1_authority_document!("solid-root-browser-development"),
-    solid1_authority_document!("solid-root-browser-production"),
-    solid1_authority_document!("solid-root-node"),
-    solid1_authority_document!("solid-store-browser-development"),
-    solid1_authority_document!("solid-store-browser-production"),
-    solid1_authority_document!("solid-store-node"),
-    solid1_authority_document!("solid-web-browser-development"),
-    solid1_authority_document!("solid-web-browser-production"),
-    solid1_authority_document!("solid-web-node"),
-    solid1_authority_document!("solid-jsx-runtime-default"),
-    solid1_authority_document!("solid-jsx-dev-runtime-default"),
-    solid1_authority_document!("solid-universal-development"),
-    solid1_authority_document!("solid-universal-production"),
-    solid1_authority_document!("solid-h-jsx-runtime-default"),
-    solid1_authority_document!("solid-h-jsx-dev-runtime-default"),
-    solid1_authority_document!("solid-web-storage-default"),
-    solid1_authority_document!("scheduled-root-browser"),
-    solid1_authority_document!("scheduled-root-node"),
-    solid1_authority_document!("debounce-root-default"),
-    solid1_authority_document!("rootless-root-default"),
-];
-
-const EMBEDDED_SOLID1_BUNDLES: &[EmbeddedBundle] = &[];
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct Solid1Authority {
-    schema_version: u16,
-    format: String,
-    cases: Vec<Solid1AuthorityCase>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct Solid1AuthorityCase {
-    stem: String,
-    package: String,
-    selector: BundleSelector,
-    entrypoint: String,
-    document: String,
-    closure: ClosureManifest,
-    legacy_authority: String,
-}
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ConformanceReport {
@@ -277,9 +210,11 @@ pub(crate) fn solid2_rc3_bundles_with_measurements()
 
     // The checked corpus remains an oracle for proposal construction, but it
     // is not proof authority. Every case currently reaches at least the
-    // mandatory live probe gate, whose authenticated harness binding is still
-    // unavailable, so the policy-2 cut retires rather than grandfathers these
-    // policy-1 bundles.
+    // mandatory live probe gate, and while the harness binding itself now
+    // exists (`docs/adr/0006-probe-harness-binding.md`), no case has a
+    // hand-authored recipe for the closures it proposes, so a scheduled veto
+    // has nothing to run and refuses. The policy-2 cut therefore retires
+    // rather than grandfathers these policy-1 bundles.
     for ((package_name, artifact_id), (artifact, package)) in grouped {
         let complete = ContractProposal::new(package, vec![artifact]).normalize()?;
         let _ = (package_name, artifact_id, complete);
@@ -287,87 +222,12 @@ pub(crate) fn solid2_rc3_bundles_with_measurements()
     Ok(Vec::new())
 }
 
-/// Replays the normalized Solid 1 authority captured during the atomic Phase
-/// 14 migration and issues ordinary proof-bound receipts. The source documents
-/// already use the internal semantic model and stable-v1 wire format; no
-/// legacy summary IDs, variants, evidence tiers, or unknown sentinels are read.
-pub fn solid1_bundles() -> Result<Vec<FirstPartyBundle>, FirstPartyBundleError> {
-    Ok(solid1_bundles_with_measurements()?
-        .into_iter()
-        .map(|measured| measured.bundle)
-        .collect())
-}
-
-pub(crate) fn solid1_bundles_with_measurements()
--> Result<Vec<MeasuredFirstPartyBundle>, FirstPartyBundleError> {
-    let authority: Solid1Authority = serde_json::from_slice(SOLID1_AUTHORITY_INDEX_BYTES)?;
-    if authority.schema_version != 2
-        || authority.format != "solid-checker-phase14-solid1-normalized-authority"
-    {
-        return Err(inconsistent(
-            "Solid 1 authority has the wrong format or version",
-        ));
-    }
-    let sources = SOLID1_AUTHORITY_DOCUMENTS
-        .iter()
-        .map(|source| (source.name, source.document))
-        .collect::<BTreeMap<_, _>>();
-    if authority.cases.len() != sources.len() {
-        return Err(inconsistent(
-            "Solid 1 authority index and document census disagree",
-        ));
-    }
-    let mut seen = BTreeSet::new();
-    for case in authority.cases {
-        if case.legacy_authority.trim().is_empty() || !seen.insert(case.document.clone()) {
-            return Err(inconsistent(
-                "Solid 1 authority repeats a document or omits provenance",
-            ));
-        }
-        case.closure.validate()?;
-        let source = sources.get(case.document.as_str()).ok_or_else(|| {
-            inconsistent(format!(
-                "Solid 1 authority names missing document {}",
-                case.document
-            ))
-        })?;
-        let normalized = crate::contract_document::decode(source)
-            .and_then(|proposal| proposal.normalize())
-            .map_err(|error| {
-                inconsistent(format!(
-                    "Solid 1 authority {} cannot be decoded: {error}",
-                    case.document
-                ))
-            })?;
-        let [artifact] = normalized.artifact_cases() else {
-            return Err(inconsistent(format!(
-                "Solid 1 authority {} must contain exactly one artifact case",
-                case.document
-            )));
-        };
-        if normalized.package().name != case.package
-            || artifact.entrypoint != case.entrypoint
-            || artifact.dependency_closure
-                != solid_reactive_ir::contract_semantics::Digest::parse(
-                    case.closure.digest.clone(),
-                )?
-        {
-            return Err(inconsistent(format!(
-                "Solid 1 authority metadata disagrees with {}",
-                case.document
-            )));
-        }
-        let _ = (case.stem, case.selector, normalized);
-    }
-    if seen.len() != sources.len() {
-        return Err(inconsistent(
-            "Solid 1 authority carries an unindexed document",
-        ));
-    }
-    Ok(Vec::new())
-}
-
-/// Builds receipt-validated analyzer inputs for exact first-party imports
+/// Retired bundle-loader compatibility seam. Ordinary native, daemon and
+/// WASM analysis no longer calls this function (ADR 0027). Both source lists
+/// are empty; these historical checks must not be described as active runtime
+/// authentication. The audited closure and conformance material remain intact.
+///
+/// Historically built receipt-validated analyzer inputs for exact first-party imports
 /// whose installed package closure reproduces the checked published-file
 /// census for the selected dialect.
 /// A missing runtime/build selection, mutated file, unattested lock identity,
@@ -383,45 +243,6 @@ pub fn bundled_first_party_contract_index(
         BTreeMap<String, ClosureManifest>,
         BTreeSet<&str>,
     ) = match dialect_id {
-        "solid-v1" => {
-            let authority: Solid1Authority = serde_json::from_slice(SOLID1_AUTHORITY_INDEX_BYTES)
-                .map_err(|error| {
-                crate::ContractFailure::DocumentDecode {
-                    message: format!("decode checked Solid 1 closure census: {error}"),
-                }
-            })?;
-            let mut closures = BTreeMap::new();
-            for case in authority.cases {
-                case.closure.validate().map_err(|error| {
-                    crate::ContractFailure::InvalidSemanticModel {
-                        reason: error.to_string(),
-                    }
-                })?;
-                if let Some(existing) =
-                    closures.insert(case.closure.digest.clone(), case.closure.clone())
-                    && existing != case.closure
-                {
-                    return Err(crate::ContractFailure::InvalidSemanticModel {
-                        reason: format!(
-                            "Solid 1 authority assigns different closures to digest {:?}",
-                            case.closure.digest
-                        ),
-                    });
-                }
-            }
-            (
-                EMBEDDED_SOLID1_BUNDLES,
-                closures,
-                [
-                    "solid-js",
-                    "@solid-primitives/scheduled",
-                    "@solid-primitives/debounce",
-                    "@solid-primitives/rootless",
-                ]
-                .into_iter()
-                .collect(),
-            )
-        }
         "solid-v2" => {
             let report: ConformanceReport =
                 serde_json::from_slice(CONFORMANCE_BYTES).map_err(|error| {
@@ -457,42 +278,6 @@ pub fn bundled_first_party_contract_index(
             )?,
         );
     }
-    let solid1_selectors = if dialect_id == "solid-v1" {
-        let authority: Solid1Authority = serde_json::from_slice(SOLID1_AUTHORITY_INDEX_BYTES)
-            .map_err(|error| crate::ContractFailure::DocumentDecode {
-                message: format!("decode checked Solid 1 selectors: {error}"),
-            })?;
-        let mut selectors = BTreeMap::new();
-        for case in authority.cases {
-            let source = SOLID1_AUTHORITY_DOCUMENTS
-                .iter()
-                .find(|source| source.name == case.document)
-                .ok_or_else(|| crate::ContractFailure::DocumentDecode {
-                    message: format!(
-                        "Solid 1 authority references missing document {:?}",
-                        case.document
-                    ),
-                })?;
-            let contract = crate::contract_document::decode(source.document)
-                .and_then(|proposal| proposal.normalize())?;
-            if !has_local_closure(&contract) {
-                continue;
-            }
-            let digest = contract.semantic_digest().as_str().to_owned();
-            if let Some(existing) = selectors.insert(digest.clone(), case.selector.clone())
-                && existing != case.selector
-            {
-                return Err(crate::ContractFailure::InvalidSemanticModel {
-                    reason: format!(
-                        "Solid 1 semantic digest {digest:?} has contradictory selectors"
-                    ),
-                });
-            }
-        }
-        selectors
-    } else {
-        BTreeMap::new()
-    };
     let Some(attested) = &facts.resolved_imports else {
         return Ok(AcceptedContractIndex::default());
     };
@@ -551,13 +336,7 @@ pub fn bundled_first_party_contract_index(
             contract.package().name == package_name
                 && contract.package().version == package_version
                 && contract.artifact_case().entrypoint == entrypoint
-                && if dialect_id == "solid-v1" {
-                    solid1_selectors
-                        .get(contract.receipt().semantic_digest.as_str())
-                        .is_some_and(|selector| selector_selects(selector, runtime))
-                } else {
-                    environment_selects(contract.artifact_case(), runtime)
-                }
+                && environment_selects(contract.artifact_case(), runtime)
         }) else {
             continue;
         };
@@ -581,6 +360,7 @@ pub fn bundled_first_party_contract_index(
                 importer: key.0,
                 specifier: key.1,
                 contract: contract.clone(),
+                artifact_identity: None,
             });
         }
     }
@@ -658,15 +438,6 @@ fn lexical_install_root(
                 .is_some_and(|canonical| canonical == resolved))
         .then_some(candidate)
     })
-}
-
-fn selector_selects(selector: &BundleSelector, runtime: &RuntimeEnvironment) -> bool {
-    selector
-        .target
-        .is_none_or(|target| runtime.target.unwrap_or(RuntimeTarget::Browser) == target)
-        && selector
-            .build
-            .is_none_or(|build| runtime.build.unwrap_or(RuntimeBuild::Development) == build)
 }
 
 fn environment_selects(artifact: &ArtifactCase, runtime: &RuntimeEnvironment) -> bool {
@@ -809,15 +580,6 @@ fn file_digest(path: &Path) -> Option<String> {
     fs::read(path)
         .ok()
         .map(|bytes| format!("sha256:{:x}", sha2::Sha256::digest(bytes)))
-}
-
-fn has_local_closure(contract: &solid_reactive_ir::contract_semantics::NormalizedContract) -> bool {
-    contract.artifact_cases().iter().any(|artifact| {
-        artifact.exports.values().any(|export| {
-            let mut export = export.clone();
-            !export.open_proposed_closure().is_empty()
-        })
-    })
 }
 
 fn merge_checked_export(
@@ -1063,7 +825,6 @@ mod tests {
     #[test]
     fn policy1_checked_corpora_have_no_active_receipt_issued_bundles() {
         assert!(solid2_rc3_bundles().unwrap().is_empty());
-        assert!(solid1_bundles().unwrap().is_empty());
     }
 
     #[cfg(unix)]

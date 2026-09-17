@@ -233,6 +233,7 @@ impl Authority {
             ),
         };
         ArtifactCase {
+            initialization: None,
             id: id.into(),
             entrypoint: entrypoint.into(),
             resolution_trace: trace
@@ -371,6 +372,7 @@ fn operation(id: &str, kind: OperationKind, event: Event, min: u32) -> Operation
         inputs: vec![],
         output: None,
         resources: BTreeSet::new(),
+        composed_from: None,
     }
 }
 

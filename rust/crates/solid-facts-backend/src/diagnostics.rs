@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     fs, io,
     path::{Path, PathBuf},
     sync::Arc,
@@ -195,6 +195,8 @@ impl DiagnosticSession {
         contracts: &AcceptedContractIndex,
         enablement: RequestedRuleEnablement<'_>,
     ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
+        let external_contracts = contracts.external_packages();
+        let contracts = external_contracts.as_ref();
         let ir_started = Instant::now();
         let mut rule_options = discover_rule_options(project)?;
         rule_options.request_presets(enablement.presets.iter().cloned());
@@ -306,6 +308,68 @@ fn retain_enabled(
     })
 }
 
+/// The whole result for a project whose installed Solid runtime this build has
+/// no dialect for.
+///
+/// Not produced by the rules engine, and deliberately not reachable from it:
+/// there is no analysis behind it, so there is nothing for a rule to run on.
+/// Dialect detection builds this directly and hands it to the emission path.
+///
+/// **One finding, and never any others.** The refusal's entire claim is that
+/// the checker cannot model this project; a second finding beside it would be
+/// an assertion about source that was never analyzed under the language it
+/// actually runs. `metrics` is all zeroes for the same reason -- nothing was
+/// read, and reporting otherwise would overstate what happened.
+#[must_use]
+pub fn unsupported_runtime_snapshot(installed: &str, manifest: &Path) -> Snapshot {
+    let manifest = manifest.display().to_string();
+    Snapshot {
+        status: "uncertifiable".into(),
+        findings: vec![SnapshotFinding {
+            id: dialect::UNSUPPORTED_RUNTIME_CODE.into(),
+            rule: dialect::UNSUPPORTED_RUNTIME_RULE.into(),
+            kind: "uncertifiable".into(),
+            severity: "error".into(),
+            message: format!(
+                "solid-js {installed} is installed, and this build of solid-checker carries no dialect for it; the project was not analyzed"
+            ),
+            hint: "Upgrade the project to Solid 2.0, or use a checker release carrying the dialect for this runtime. Passing --dialect analyzes the project anyway, under a language it does not run."
+                .into(),
+            analysis_context: "dialect-detection".into(),
+            subject_kind: "project".into(),
+            primary_location: SourceLocation {
+                path: manifest.clone(),
+                start_byte: 0,
+                end_byte: 0,
+                line: 1,
+                column: 1,
+            },
+            related_locations: Vec::new(),
+            evidence: vec![SnapshotEvidence {
+                message: format!(
+                    "the nearest node_modules/solid-js above the project resolves here, and names version {installed}"
+                ),
+                location: Some(SourceLocation {
+                    path: manifest,
+                    start_byte: 0,
+                    end_byte: 0,
+                    line: 1,
+                    column: 1,
+                }),
+            }],
+            fixes: Vec::new(),
+        }],
+        package_summaries: Vec::new(),
+        metrics: Metrics {
+            files_analyzed: 0,
+            functions_analyzed: 0,
+            proof_obligations: 0,
+            cached_summaries: 0,
+            unresolved_obligations: 0,
+        },
+    }
+}
+
 fn snapshot_with_package_summaries(
     sources: &[SourceFile],
     package_summaries: Vec<PackageSummary>,
@@ -378,16 +442,34 @@ fn snapshot_with_package_summaries(
 }
 
 fn accepted_package_summaries(contracts: &AcceptedContractIndex) -> Vec<PackageSummary> {
+    let summary = |package: &solid_reactive_ir::contract_semantics::PackageIdentity,
+                   digest: &str| PackageSummary {
+        name: package.name.clone(),
+        version: package.version.clone(),
+        contract_hash: digest.into(),
+        evidence: "accepted".into(),
+        exports_analyzed: 0,
+    };
     let mut summaries = contracts
         .semantic_identity()
         .iter()
-        .map(|binding| PackageSummary {
-            name: binding.semantics.package.name.clone(),
-            version: binding.semantics.package.version.clone(),
-            contract_hash: binding.semantics.semantic_digest.as_str().into(),
-            evidence: "accepted".into(),
-            exports_analyzed: 0,
+        .map(|binding| {
+            summary(
+                &binding.semantics.package,
+                binding.semantics.semantic_digest.as_str(),
+            )
         })
+        // An acceptance admitted by artifact identity -- a project catalog
+        // certified from another file, or a contract compiled into this
+        // checker -- is one the analysis reads from. Reporting only the
+        // importer-keyed ones said a project that analysed against a bundled
+        // contract had accepted nothing.
+        .chain(contracts.admitted_contracts().map(|(_, contract)| {
+            summary(
+                contract.package(),
+                contract.semantic_identity().semantic_digest.as_str(),
+            )
+        }))
         .collect::<Vec<_>>();
     summaries.sort_by(|left, right| {
         (&left.name, &left.version, &left.contract_hash).cmp(&(
@@ -669,13 +751,13 @@ impl PackageContractStatus {
     pub fn needs_action(&self) -> bool {
         matches!(
             self.status.as_str(),
-            "missing" | "unverified" | "stale" | "unbound"
+            "missing" | "unverified" | "stale" | "unbound" | "unsupported-runtime"
         )
     }
 }
 
-/// Reports stable-v1 receipt coverage for every imported package that is
-/// either first-party to the selected dialect or declares a Solid dependency.
+/// Reports external receipt coverage and the separately identified built-in
+/// runtime foundation. Built-in model selection is not artifact certification.
 /// Coverage is complete only when every exact imported specifier binds in the
 /// already receipt-validated normalized index.
 pub fn accepted_package_contract_statuses(
@@ -700,6 +782,35 @@ pub fn accepted_package_contract_statuses(
     let resolved = facts.resolved_imports.as_ref();
     let mut statuses = Vec::new();
     for module in imported_package_roots(facts) {
+        if let Some(core_package) = core_runtime_package_for_status(&module, facts) {
+            let modeled = dialect
+                .vocabulary
+                .primitive_defining_packages()
+                .contains(&core_package);
+            statuses.push(PackageContractStatus {
+                name: module,
+                // `unsupported-runtime` is retained deliberately although a
+                // build carrying only the Solid 2 vocabulary cannot produce
+                // it: v2's `primitive_defining_packages` is the whole union
+                // across dialects, so every core package it can see is
+                // modelled. It is kept for the same reason `Version::V1` is --
+                // the seam has to exist before the next dialect needs it, and
+                // a status silently dropped from `--check-contracts` output
+                // and from the certification-blocking set is harder to
+                // reinstate than one that was never removed. See ADR 0110 and
+                // the retirement plan's step-3 notes.
+                status: if modeled { "builtin" } else { "unsupported-runtime" }.into(),
+                installed_integrity: None,
+                detail: Some(if modeled {
+                    format!("built-in runtime model {}; no package receipt is required; model selection is not installed-artifact authentication", dialect.vocabulary.runtime_model_identity())
+                } else {
+                    format!("this core package is outside the {} runtime model", dialect.id)
+                }),
+                remedy: (!modeled).then(|| "select a compatible Solid dialect and runtime; a core package contract cannot extend the built-in model".into()),
+                contract_path: String::new(),
+            });
+            continue;
+        }
         let installed = installed_package_manifest(project_directory, &module)?;
         let manifest = installed.as_ref().map(|(_, manifest)| manifest);
         if !first_party.contains(&module.as_str()) && !manifest.is_some_and(manifest_uses_solid) {
@@ -786,6 +897,48 @@ pub fn accepted_package_contract_statuses(
     Ok(statuses)
 }
 
+/// Reporting-only classification. An alias counts as core only when every
+/// exact import occurrence resolves to the same defining package. This does
+/// not authenticate its bytes or grant semantics to the source program.
+fn core_runtime_package_for_status<'a>(
+    module: &'a str,
+    facts: &'a ProjectFacts,
+) -> Option<&'a str> {
+    if solid_dialect::primitive_defining_package(module) {
+        return Some(module);
+    }
+    let resolved = facts.resolved_imports.as_ref()?;
+    let mut selected = None;
+    for file in &facts.files {
+        for import in file
+            .ast
+            .imports
+            .iter()
+            .filter(|import| package_root(&import.module) == module)
+        {
+            let solid_facts::SpecifierAttestation::Attested(answer) =
+                resolved.specifier(file.path.as_str(), import.span, &import.module)
+            else {
+                return None;
+            };
+            if answer.resolution != solid_facts::ImportResolution::NodeModules {
+                return None;
+            }
+            let package = answer
+                .resolver_package_name
+                .as_deref()
+                .or(answer.package_name.as_deref())?;
+            if !solid_dialect::primitive_defining_package(package)
+                || selected.is_some_and(|other| other != package)
+            {
+                return None;
+            }
+            selected = Some(package);
+        }
+    }
+    selected
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PackageManifest {
@@ -804,6 +957,275 @@ struct PackageManifest {
 /// Ambient-module and virtual test projects have no installed package and no
 /// manifest; both cases yield `None`, which every caller reads as "there is no
 /// installed version to disagree with".
+/// The specifiers this project may import under an existing acceptance,
+/// because its own installed artifact is the one that acceptance names.
+///
+/// Lives here rather than beside the catalog reader because the answer depends
+/// on the installed tree, which is this module's business: the package the
+/// specifier resolves to, its version, and the registry integrity its lockfile
+/// selected. A package whose installs disagree yields no integrity at all
+/// (`installed_package_integrity` returns `None`), so a project with two
+/// versions of one dependency admits neither — which is the nested-install case
+/// the importer key used to guard.
+pub fn admitted_project_artifacts(
+    catalogs: &[PathBuf],
+    trust: Option<&crate::contract_certification::Policy2TrustConfiguration>,
+    project_directory: &Path,
+    conditions: &std::collections::BTreeSet<String>,
+    facts: &solid_facts::ProjectFacts,
+) -> Result<Vec<(String, String)>, BackendError> {
+    let installed = |specifier: &str| installed_artifact_identity(project_directory, specifier);
+    let resolved_target =
+        |specifier: &str| resolved_target_identity(project_directory, facts, specifier);
+    crate::contract_interface::admitted_project_artifacts(
+        catalogs,
+        trust,
+        project_directory,
+        conditions,
+        &installed,
+        &resolved_target,
+    )
+    .map_err(|error| BackendError::Contract(error.to_string()))
+}
+
+/// The accepted-contract index ordinary analysis reads, from every tier this
+/// project can reach.
+///
+/// One function because the *order* is the rule, and three callers had to agree
+/// on it: the analysis, `contract check`, and the daemon. Project catalogs
+/// first, the compiled-in tier below them, and the missing-evidence markers
+/// last -- a project that certified a package itself keeps its own answer, a
+/// package this build carries a contract for stops raising an obligation the
+/// user cannot discharge, and everything else still raises one. Artifact
+/// admission runs project-first for the same reason.
+///
+/// Callers still resolve `catalogs` and `trust` themselves, because how a
+/// catalog is *selected* genuinely differs between them (an explicit `--catalog`
+/// overrides discovery; the emission path supplies neither). What must not
+/// differ is what happens afterwards.
+pub fn project_accepted_contracts(
+    directory: &Path,
+    catalogs: &[PathBuf],
+    trust: Option<&crate::contract_certification::Policy2TrustConfiguration>,
+    bundled: bool,
+    conditions: &std::collections::BTreeSet<String>,
+    facts: &solid_facts::ProjectFacts,
+    requirements: AcceptedContractIndex,
+) -> Result<AcceptedContractIndex, BackendError> {
+    let mut contracts = AcceptedContractIndex::default();
+    for path in catalogs {
+        contracts =
+            crate::contract_interface::read_external_contract_catalog_with_trust(path, trust)
+                .map_err(|error| BackendError::Contract(error.to_string()))?
+                .with_fallback(contracts);
+    }
+    if bundled {
+        contracts = contracts.with_fallback(
+            crate::accepted_bundles::compiled_in_accepted_contracts()
+                .map_err(|error| BackendError::Contract(error.to_string()))?,
+        );
+    }
+    let mut contracts = contracts.with_fallback(requirements);
+    // An acceptance is issued for the file that imported the package during
+    // certification. Admit the specifier project-wide when *this* project's
+    // installed artifact is the one that acceptance names -- same integrity,
+    // entrypoint and declared conditions. With no declared conditions this
+    // admits nothing, because conditions select the artifact and the analyzer
+    // has no facts of its own about them.
+    //
+    // One call per tier, in precedence order. `with_admitted_artifacts` keeps
+    // the first tier to claim a specifier, and it requires the identities
+    // *within* one call to agree -- which a project's own catalog and a
+    // contract compiled into this build have no reason to do, and no reason to
+    // be asked to.
+    let project = admitted_project_artifacts(catalogs, trust, directory, conditions, facts)?;
+    let project = agreed_admissions(&contracts, project);
+    if !project.is_empty() {
+        contracts = contracts.with_admitted_artifacts(project);
+    }
+    if bundled {
+        let bundles = admitted_bundled_artifacts(directory, conditions, facts)?;
+        let bundles = agreed_admissions(&contracts, bundles);
+        if !bundles.is_empty() {
+            contracts = contracts.with_admitted_artifacts(bundles);
+        }
+    }
+    Ok(contracts)
+}
+
+/// Keeps one acceptance per specifier, and only where every candidate for it
+/// claims the same thing.
+///
+/// `admissible_cases` narrows to a single case whenever the host declared its
+/// export conditions. It cannot when the host declared none — the ESLint and
+/// Oxlint case — and then it hands over every case that reaches the file this
+/// project resolved. That used to be decided by admitting when all candidates
+/// named the same *runtime file*, on the ground that they therefore describe
+/// the same bytes; a contract describes an entry file's export surface while
+/// its semantics depend on the whole module closure, and conditions select that
+/// closure, so agreeing on a path is not agreeing on a claim.
+///
+/// The comparison is the document's own content address for each export's
+/// claims ([`contract_document::export_claims_address`]), because the in-memory
+/// form cannot be compared directly: decoding qualifies every operation id with
+/// the artifact-case id, so two contracts that agree completely still differ in
+/// every `OperationId`. Measured on `@kobalte/utils@0.9.2`, whose two `.` cases
+/// -- `["import"]` and `["import","solid"]` -- differ in exactly that and in
+/// nothing else, for 13 of its 59 exports.
+///
+/// A candidate whose address cannot be computed answers nothing, so the
+/// specifier is dropped: this must add acceptances on proof, never on the
+/// absence of a comparison.
+fn agreed_admissions(
+    contracts: &AcceptedContractIndex,
+    candidates: Vec<(String, String)>,
+) -> Vec<(String, String)> {
+    let claims = |identity: &str| -> Option<BTreeMap<String, String>> {
+        let contract = contracts.contract_for_artifact(identity)?;
+        let case = contract.artifact_case();
+        case.exports
+            .iter()
+            .map(|(name, export)| {
+                crate::contract_document::export_claims_address(case, name, export)
+                    .ok()
+                    .map(|address| (name.clone(), address))
+            })
+            .collect()
+    };
+    let mut grouped: Vec<(String, Vec<String>)> = Vec::new();
+    for (specifier, identity) in candidates {
+        match grouped.iter_mut().find(|(name, _)| *name == specifier) {
+            Some((_, identities)) => identities.push(identity),
+            None => grouped.push((specifier, vec![identity])),
+        }
+    }
+    let mut admitted = Vec::new();
+    for (specifier, identities) in grouped {
+        let [first, rest @ ..] = identities.as_slice() else {
+            continue;
+        };
+        if rest.is_empty() {
+            // One candidate needs no comparison, but it still has to be an
+            // acceptance this index can serve, so that what comes back is
+            // exactly what will be admitted.
+            if contracts.contract_for_artifact(first).is_some() {
+                admitted.push((specifier, first.clone()));
+            }
+            continue;
+        }
+        let Some(expected) = claims(first) else {
+            continue;
+        };
+        if rest
+            .iter()
+            .all(|identity| claims(identity).is_some_and(|other| other == expected))
+        {
+            admitted.push((specifier, first.clone()));
+        }
+    }
+    admitted
+}
+
+/// Every lockfile [`project_accepted_contracts`] can consult when it decides
+/// whether an acceptance applies here.
+///
+/// Artifact admission recomputes the acceptance root from the *installed*
+/// tarball integrity, and the integrity comes from whichever lockfile the
+/// project's package manager wrote. A host that caches an answer across runs
+/// has to treat these as inputs, or an install that repacks a dependency at the
+/// same version keeps serving the previous verdict. Paths are returned whether
+/// or not they exist, so that a lockfile appearing is a change too.
+#[must_use]
+pub fn admission_input_paths(project_directory: &Path) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    for ancestor in project_directory.ancestors() {
+        paths.push(ancestor.join("package-lock.json"));
+        paths.push(ancestor.join("node_modules").join(".package-lock.json"));
+        paths.push(ancestor.join("bun.lock"));
+        paths.push(ancestor.join("pnpm-lock.yaml"));
+        paths.push(ancestor.join("yarn.lock"));
+    }
+    paths
+}
+
+/// The specifiers this project may import under a contract compiled into the
+/// checker.
+///
+/// The same two installed-tree facts answer both tiers, because the question is
+/// the same one: did *this* project resolve the artifact that acceptance was
+/// proven about. Only the source of the acceptances differs.
+pub fn admitted_bundled_artifacts(
+    project_directory: &Path,
+    conditions: &std::collections::BTreeSet<String>,
+    facts: &solid_facts::ProjectFacts,
+) -> Result<Vec<(String, String)>, BackendError> {
+    let installed = |specifier: &str| installed_artifact_identity(project_directory, specifier);
+    let resolved_target =
+        |specifier: &str| resolved_target_identity(project_directory, facts, specifier);
+    crate::accepted_bundles::admitted_bundle_artifacts(conditions, &installed, &resolved_target)
+        .map_err(|error| BackendError::Contract(error.to_string()))
+}
+
+fn installed_artifact_identity(
+    project_directory: &Path,
+    specifier: &str,
+) -> Option<(String, String, String)> {
+    let module = package_name_of_specifier(specifier)?;
+    let (directory, manifest) = installed_package_manifest(project_directory, &module).ok()??;
+    let integrity = installed_package_integrity(project_directory, &directory).ok()??;
+    Some((module, manifest.version, integrity))
+}
+
+/// What this project resolved the specifier to, relative to the installed
+/// package root -- the fact that lets an acceptance be bound to this project
+/// without the host having to declare export conditions it usually does not
+/// know. `None` whenever the project cannot state one exactly: an unresolved
+/// import, a specifier no importer reached, or two importers that disagree
+/// (a nested install), each of which admits nothing rather than picking.
+fn resolved_target_identity(
+    project_directory: &Path,
+    facts: &solid_facts::ProjectFacts,
+    specifier: &str,
+) -> Option<String> {
+    let module = package_name_of_specifier(specifier)?;
+    let (directory, _) = installed_package_manifest(project_directory, &module).ok()??;
+    let root = fs::canonicalize(&directory).ok()?;
+    let attested = facts.resolved_imports.as_ref()?;
+    let mut selected: Option<String> = None;
+    for (_, import) in attested.iter() {
+        if import.text.as_str() != specifier
+            || import.resolution == solid_facts::ImportResolution::Unresolved
+        {
+            continue;
+        }
+        let resolved = fs::canonicalize(Path::new(import.resolved_path.as_ref())).ok()?;
+        let relative = resolved
+            .strip_prefix(&root)
+            .ok()?
+            .to_string_lossy()
+            .replace('\\', "/");
+        if relative.is_empty() {
+            return None;
+        }
+        match &selected {
+            Some(existing) if existing != &relative => return None,
+            Some(_) => {}
+            None => selected = Some(relative),
+        }
+    }
+    selected
+}
+
+fn package_name_of_specifier(specifier: &str) -> Option<String> {
+    let mut parts = specifier.split('/');
+    let first = parts.next()?;
+    if first.starts_with('@') {
+        let second = parts.next()?;
+        return Some(format!("{first}/{second}"));
+    }
+    (!first.is_empty()).then(|| first.to_owned())
+}
+
 fn installed_package_manifest(
     project_directory: &Path,
     module: &str,
@@ -1042,7 +1464,74 @@ pub(crate) fn installed_package_integrity(
             }
         }
     }
+    if found.is_none() {
+        found = manifest_keyed_lockfile_integrity(project_directory, package_directory)?;
+    }
     Ok(found)
+}
+
+/// The pnpm and Yarn-classic arm of the search above.
+///
+/// Separate from the ancestor walk because neither lockfile is keyed by install
+/// path. pnpm's store path (`.pnpm/<name>@<version>_<peers>/node_modules/…`) is
+/// not a key, and Yarn classic is keyed by *descriptor* (`name@range`), several
+/// of which share one entry. Both are therefore selected by the installed
+/// manifest's own name and version, which means there is no per-path
+/// disambiguation to fold into the loop.
+///
+/// Consulted only when no npm or Bun lockfile answered, so an npm-installed
+/// tree keeps its existing answer. Within an ancestor, pnpm is asked first for
+/// the same reason: an established answer must not move.
+fn manifest_keyed_lockfile_integrity(
+    project_directory: &Path,
+    package_directory: &Path,
+) -> Result<Option<String>, BackendError> {
+    let manifest = package_directory.join("package.json");
+    let Ok(bytes) = fs::read(&manifest) else {
+        return Ok(None);
+    };
+    // Only the identity fields matter here, and `PackageManifest` does not
+    // carry the name, so read the two directly rather than widening a struct
+    // the rest of this module uses for dependency edges.
+    let Ok(manifest) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return Ok(None);
+    };
+    let (Some(name), Some(version)) = (
+        manifest.get("name").and_then(serde_json::Value::as_str),
+        manifest.get("version").and_then(serde_json::Value::as_str),
+    ) else {
+        return Ok(None);
+    };
+    type Reader = fn(&[u8], String, &str, &str) -> Option<String>;
+    let pnpm: Reader = |data, locator, name, version| {
+        crate::contract_certification::PublishedGraphLockSelection::from_pnpm_lock(
+            data, locator, name, version,
+        )
+        .ok()
+        .map(|selection| selection.integrity().to_owned())
+    };
+    let yarn: Reader = |data, locator, name, version| {
+        crate::contract_certification::PublishedGraphLockSelection::from_yarn_lock(
+            data, locator, name, version,
+        )
+        .ok()
+        .map(|selection| selection.integrity().to_owned())
+    };
+    for ancestor in project_directory.ancestors() {
+        for (file, read) in [("pnpm-lock.yaml", pnpm), ("yarn.lock", yarn)] {
+            let data = match fs::read(ancestor.join(file)) {
+                Ok(data) => data,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error.into()),
+            };
+            // A lockfile this checker cannot read is not a malformed *contract*
+            // and must not fail the run, exactly as for the npm arm. A Yarn
+            // Berry lockfile lands here: it records a cache checksum rather than
+            // the registry integrity, so it states no fact and admits nothing.
+            return Ok(read(&data, format!("{name}@{version}"), name, version));
+        }
+    }
+    Ok(None)
 }
 
 fn manifest_uses_solid(manifest: &PackageManifest) -> bool {
@@ -1090,7 +1579,6 @@ pub fn discover_rule_options(project: &Path) -> Result<RuleOptions, BackendError
             dialect::ALL.iter().any(|dialect| (dialect.has_rule)(rule))
                 || dialect::retired_rule(rule).is_some()
         },
-        |rule| dialect::by_id("solid-v1").is_some_and(|dialect| (dialect.has_rule)(rule)),
     )
 }
 
@@ -1121,7 +1609,6 @@ pub fn semantic_demand_options_for_enablement(
 fn discover_rule_options_with(
     project: &Path,
     has_rule: impl Fn(&str) -> bool,
-    owns_solid1x_options: impl Fn(&str) -> bool,
 ) -> Result<RuleOptions, BackendError> {
     let directory = if project.is_dir() {
         project
@@ -1132,15 +1619,10 @@ fn discover_rule_options_with(
         let candidate = ancestor.join(".solid-checker").join("rule-options.json");
         match fs::read_to_string(&candidate) {
             Ok(encoded) => {
-                return RuleOptions::parse_with_aliases(
-                    &encoded,
-                    &has_rule,
-                    &owns_solid1x_options,
-                    dialect::rule_alias,
-                )
-                .map_err(|error| {
-                    BackendError::RuleOptions(format!("{}: {error}", candidate.display()))
-                });
+                return RuleOptions::parse_with_aliases(&encoded, &has_rule, dialect::rule_alias)
+                    .map_err(|error| {
+                        BackendError::RuleOptions(format!("{}: {error}", candidate.display()))
+                    });
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error.into()),
@@ -1174,7 +1656,83 @@ mod tests {
     use solid_facts::{ProjectFacts, TypeScriptTable};
     use solid_reactive_ir::{RuntimeEnvironment, contract_semantics::AcceptedContractIndex};
 
-    use super::{DiagnosticSession, installed_package_integrity, retain_enabled};
+    use super::{
+        DiagnosticSession, agreed_admissions, installed_package_integrity, retain_enabled,
+    };
+
+    const MINIMAL: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../benchmarks/package-contract-v2/phase6/minimal-unknown.json"
+    ));
+
+    fn acceptance_from(bytes: &[u8]) -> solid_reactive_ir::contract_semantics::AcceptedContract {
+        let contract = crate::contract_document::decode(bytes)
+            .unwrap()
+            .normalize()
+            .unwrap();
+        let case = contract.artifact_cases()[0].id.clone();
+        solid_reactive_ir::contract_semantics::proof::project_untrusted_proposal_for_generation(
+            contract, &case,
+        )
+        .unwrap()
+    }
+
+    fn acceptance() -> solid_reactive_ir::contract_semantics::AcceptedContract {
+        acceptance_from(MINIMAL)
+    }
+
+    /// A host that declares no export conditions cannot narrow two acceptances
+    /// of one artifact to one, so both arrive here and this decides.
+    ///
+    /// It decides on what they *claim*. The rule this replaced admitted when
+    /// every candidate named the same runtime file, which compares where a case
+    /// came from: a contract describes an entry file's export surface while its
+    /// semantics depend on the whole module closure, and conditions select that
+    /// closure.
+    #[test]
+    fn two_candidates_for_one_specifier_are_admitted_only_when_they_agree() {
+        let both = || {
+            vec![
+                ("pkg".to_owned(), "left".to_owned()),
+                ("pkg".to_owned(), "right".to_owned()),
+            ]
+        };
+        let agreeing = AcceptedContractIndex::from_artifact_acceptances([
+            ("left".to_owned(), acceptance()),
+            ("right".to_owned(), acceptance()),
+        ]);
+        assert_eq!(
+            agreed_admissions(&agreeing, both()),
+            [("pkg".to_owned(), "left".to_owned())],
+            "two certifications that claim the same thing are one answer"
+        );
+
+        // One of them states a different export surface. Which describes what
+        // this project runs is exactly the question nothing here can answer, so
+        // neither may be applied.
+        let divergent = String::from_utf8(MINIMAL.to_vec())
+            .unwrap()
+            .replace(r#""version": "plain-value""#, r#""release": "plain-value""#);
+        assert_ne!(divergent.as_bytes(), MINIMAL, "the variant must differ");
+        let disagreeing = AcceptedContractIndex::from_artifact_acceptances([
+            ("left".to_owned(), acceptance()),
+            ("right".to_owned(), acceptance_from(divergent.as_bytes())),
+        ]);
+        assert!(
+            agreed_admissions(&disagreeing, both()).is_empty(),
+            "two different answers about one artifact must admit neither"
+        );
+
+        // One candidate needs no comparison, and an identity the index does not
+        // carry answers nothing.
+        assert_eq!(
+            agreed_admissions(&agreeing, vec![("pkg".to_owned(), "left".to_owned())]),
+            [("pkg".to_owned(), "left".to_owned())]
+        );
+        assert!(
+            agreed_admissions(&agreeing, vec![("pkg".to_owned(), "absent".to_owned())]).is_empty()
+        );
+    }
 
     fn scratch(label: &str) -> std::path::PathBuf {
         let path = std::env::temp_dir().join(format!(
@@ -1199,6 +1757,117 @@ mod tests {
         )
     }
 
+    /// Yarn classic states the registry integrity; Yarn Berry cannot.
+    ///
+    /// Both halves are the point. A v1 lockfile carries the tarball's
+    /// subresource integrity and is keyed by descriptor, so several entries can
+    /// reach one installed copy and they have to agree. Berry's `checksum:` is
+    /// a hash of the package's zip in Yarn's own cache, which is not the fact
+    /// artifact admission needs -- so a Berry project must state nothing rather
+    /// than state something that will never reproduce an acceptance root.
+    #[test]
+    fn yarn_states_an_integrity_only_where_the_format_carries_one() {
+        let root = scratch("yarn-integrity");
+        let project = root.join("app");
+        let package = project.join("node_modules/@scope/pkg");
+        std::fs::create_dir_all(&package).unwrap();
+        std::fs::write(
+            package.join("package.json"),
+            r#"{ "name": "@scope/pkg", "version": "1.0.0" }"#,
+        )
+        .unwrap();
+        let yarn = project.join("yarn.lock");
+        let write = |body: &str| std::fs::write(&yarn, body).unwrap();
+        // Real SHA-512 SRI values, because this reader goes through
+        // `PublishedGraphLockSelection`, which validates the shape. The npm arm
+        // reads its integrity straight out of JSON and does not, which is why
+        // the test above can use a placeholder and this one cannot.
+
+        // Two descriptors share one entry, which is the ordinary v1 shape.
+        write(concat!(
+            "# THIS IS AN AUTOGENERATED FILE\n",
+            "# yarn lockfile v1\n",
+            "\n",
+            "\"@scope/pkg@^1.0.0\", \"@scope/pkg@~1.0.0\":\n",
+            "  version \"1.0.0\"\n",
+            "  resolved \"https://registry.yarnpkg.com/@scope/pkg/-/pkg-1.0.0.tgz#abc\"\n",
+            "  integrity sha512-e8jH4SHIsKZrfxbOqcFlhtmvZTmN8kDtn5STzePihkjB9e2JGwBet9s14tcPSCl4hucoKEPpRI/PshjSzpvDvA==\n",
+            "  dependencies:\n",
+            "    version \"^9.9.9\"\n",
+        ));
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            Some("sha512-e8jH4SHIsKZrfxbOqcFlhtmvZTmN8kDtn5STzePihkjB9e2JGwBet9s14tcPSCl4hucoKEPpRI/PshjSzpvDvA==".to_owned()),
+            "a dependency literally named `version` sits at four spaces and is not a field"
+        );
+
+        // Two entries reaching the same installed copy must agree.
+        write(concat!(
+            "# yarn lockfile v1\n",
+            "\n",
+            "\"@scope/pkg@^1.0.0\":\n",
+            "  version \"1.0.0\"\n",
+            "  integrity sha512-e8jH4SHIsKZrfxbOqcFlhtmvZTmN8kDtn5STzePihkjB9e2JGwBet9s14tcPSCl4hucoKEPpRI/PshjSzpvDvA==\n",
+            "\n",
+            "\"@scope/pkg@~1.0.0\":\n",
+            "  version \"1.0.0\"\n",
+            "  integrity sha512-SDYM9+5CDQbpn73xotxh2JVn3K9xKVAhCBZxyB+Oqa+wQfndYGUs86G3v6Ln0Dn6QB32gt3ReqcmaG1HVZuskA==\n",
+        ));
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            None
+        );
+
+        // A git dependency has no registry tarball and so no integrity.
+        write(concat!(
+            "# yarn lockfile v1\n",
+            "\n",
+            "\"@scope/pkg@git+ssh://git@github.com/scope/pkg.git#abc\":\n",
+            "  version \"1.0.0\"\n",
+            "  resolved \"git+ssh://git@github.com/scope/pkg.git#abc\"\n",
+        ));
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            None,
+            "the `@` inside the URL is not the descriptor separator either"
+        );
+
+        // Berry. Refused as a format, not read as an empty classic file.
+        write(concat!(
+            "__metadata:\n",
+            "  version: 8\n",
+            "  cacheKey: 10c0\n",
+            "\n",
+            "\"@scope/pkg@npm:1.0.0\":\n",
+            "  version: 1.0.0\n",
+            "  resolution: \"@scope/pkg@npm:1.0.0\"\n",
+            "  checksum: 10c0/not-a-registry-integrity\n",
+        ));
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            None
+        );
+
+        // An npm lockfile beside it still wins: an established answer must not
+        // move because a second reader was added.
+        write(concat!(
+            "# yarn lockfile v1\n",
+            "\n",
+            "\"@scope/pkg@^1.0.0\":\n",
+            "  version \"1.0.0\"\n",
+            "  integrity sha512-e8jH4SHIsKZrfxbOqcFlhtmvZTmN8kDtn5STzePihkjB9e2JGwBet9s14tcPSCl4hucoKEPpRI/PshjSzpvDvA==\n",
+        ));
+        std::fs::write(
+            project.join("package-lock.json"),
+            lockfile(3, "node_modules/@scope/pkg", Some("sha512-npm")),
+        )
+        .unwrap();
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            Some("sha512-npm".to_owned())
+        );
+    }
+
     /// The lockfile read is the whole basis of integrity enforcement, and every
     /// way it can fail to produce a fact must produce *no* fact — never a
     /// verdict. `None` here means the contract keeps applying on version
@@ -1211,7 +1880,8 @@ mod tests {
         let package = project.join("node_modules/pkg");
         std::fs::create_dir_all(&package).unwrap();
 
-        // No lockfile at all: pnpm, Yarn, or a fresh checkout.
+        // No lockfile at all: a fresh checkout, or a manager none of these
+        // readers covers.
         assert_eq!(
             installed_package_integrity(&project, &package).unwrap(),
             None
@@ -1532,6 +2202,19 @@ mod tests {
         }
 
         for (old, current) in crate::dialect::RULE_ALIASES {
+            // An alias names a rule in one dialect's catalog, and a
+            // single-dialect build (`--no-default-features --features
+            // dialect-v2`, which `scripts/verify.sh` checks and which retiring
+            // 1.x makes the only build) compiles only one of them. An alias
+            // whose target no compiled-in catalog declares is not loadable
+            // here and is not this test's subject; the build that carries the
+            // target is where it is asserted.
+            if !crate::dialect::ALL
+                .iter()
+                .any(|dialect| (dialect.has_rule)(current))
+            {
+                continue;
+            }
             std::fs::write(
                 &document,
                 format!(

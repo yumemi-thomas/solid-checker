@@ -1,0 +1,45 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "d71f75772b440eebc0866018e3aa14204be0970fbf40c4640ace929498855c7b",
+            "path": "./index.ts",
+            "sha256": "9752777f0a665ee7017e424974ee489f2ff990526947109211d8f22212ca9fa7"
+          },
+          "declarations": {
+            "path": "./index.ts",
+            "sha256": "9752777f0a665ee7017e424974ee489f2ff990526947109211d8f22212ca9fa7"
+          },
+          "exports": {
+            "onSettled": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:2cf4eadb468e975f4bcfd8db6aafad7f32ffc5cd0ba4d8b3ccdc7d512e8dfb21",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "2cf4eadb468e975f4bcfd8db6aafad7f32ffc5cd0ba4d8b3ccdc7d512e8dfb21"
+    },
+    "name": "@solidjs/signals",
+    "version": "0.0.0-fixture"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

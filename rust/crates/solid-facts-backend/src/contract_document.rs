@@ -15,14 +15,15 @@ use serde_json::{Map as JsonMap, Value as JsonValue, json};
 use sha2::{Digest as _, Sha256};
 use solid_reactive_ir::contract_semantics::{
     ArrayLength, ArtifactCase, ArtifactIdentity, CallbackInvocation, CapabilityClaim,
-    CapabilityKnowledge, Cardinality, CardinalityScope, ContractProposal, Digest, EdgeKind, Event,
-    ExportIdentity, ExportSemantics, ExportTargetIdentity, Guard, GuardAtom, GuardPartition,
-    GuardedCase, KnowledgeSet, Lifetime, Literal, NormalizedContract, ObjectProperty,
-    ObservableCapability, Operation, OperationEdge, OperationId, OperationKind, OwnerCapabilities,
-    OwnerProduction, OwnerRelation, OwnerRequirements, OwnerSource, PackageIdentity, ReactiveRole,
-    Requirement, ResolutionStep, Resource, ResourceCapability, ResourceId, ResourceKind,
-    ResourceState, SEMANTIC_MODEL_VERSION, Schedule, StabilityKnowledge, Tracking, Trigger,
-    UpperBound, ValueKind, ValueShape, ValueSource,
+    CapabilityKnowledge, Cardinality, CardinalityScope, ClaimDomain, ContractProposal, Digest,
+    EdgeKind, Event, ExportIdentity, ExportSemantics, ExportTargetIdentity, Guard, GuardAtom,
+    GuardPartition, GuardedCase, KnowledgeSet, Lifetime, Literal, ModuleInitializationClaim,
+    NormalizedContract, ObjectProperty, ObservableCapability, Operation, OperationEdge,
+    OperationId, OperationKind, OwnerCapabilities, OwnerProduction, OwnerRelation,
+    OwnerRequirements, OwnerSource, PackageIdentity, ReactiveRole, Requirement, ResolutionStep,
+    Resource, ResourceCapability, ResourceId, ResourceKind, ResourceState, SEMANTIC_MODEL_VERSION,
+    Schedule, StabilityKnowledge, Tracking, Trigger, UpperBound, ValueKind, ValueShape,
+    ValueSource,
 };
 
 use crate::contract_interface::ContractFailure;
@@ -213,6 +214,14 @@ fn compact(
         if artifact_case.stability == StabilityKnowledge::Experimental {
             case.insert("stability".into(), json!("experimental"));
         }
+        if let Some(initialization) = artifact_case.initialization {
+            case.insert(
+                "initialization".into(),
+                match initialization {
+                    ModuleInitializationClaim::Inert => json!("inert"),
+                },
+            );
+        }
         case.insert("exports".into(), JsonValue::Object(exports));
         entrypoint_cases
             .entry(artifact_case.entrypoint.clone())
@@ -313,9 +322,59 @@ impl CompactIds {
         Ok(id.0.strip_prefix(&self.operation_prefix).unwrap_or(&id.0))
     }
 
+    /// The local spelling of an operation of *another* export of the same
+    /// artifact case.
+    ///
+    /// The prefix has to match exactly: an id that does not carry this
+    /// artifact case and that export is a provenance the document cannot
+    /// state, and emitting the qualified id verbatim would put another
+    /// artifact case's identity into a field this side re-qualifies with its
+    /// own on the way back in.
+    fn operation_in<'a>(
+        &self,
+        export: &str,
+        id: &'a OperationId,
+    ) -> Result<&'a str, ContractFailure> {
+        id.0.strip_prefix(&format!("{}:{export}:operation:", self.source_case))
+            .ok_or_else(|| ContractFailure::InvalidSemanticModel {
+                reason: format!(
+                    "composed provenance {:?} does not name an operation of {export:?} in this artifact case",
+                    id.0
+                ),
+            })
+    }
+
     fn resource<'a>(&self, id: &'a ResourceId) -> Result<&'a str, ContractFailure> {
         Ok(id.0.strip_prefix(&self.resource_prefix).unwrap_or(&id.0))
     }
+}
+
+/// The content address this encoder would give one export's claims.
+///
+/// Exactly the `summary-<sha256>` the document writes: `compact_summary`
+/// renders the export in the document's *local* operation spelling
+/// (`callback-0`), so the address depends on what the export claims and on
+/// nothing about where it was found. Two certifications of one published
+/// artifact therefore share it whenever they agree, which is the question
+/// artifact admission has to answer when a host declares no export conditions
+/// and two cases reach the file it resolved.
+///
+/// Reusing the encoder rather than restating it is the point. The in-memory
+/// form cannot be compared with `==`: decoding qualifies every operation id
+/// with the artifact-case id (`IdScope::operation_in`), so two contracts that
+/// claim the same thing differ in every `OperationId` they carry. Measured on
+/// `@kobalte/utils@0.9.2`, whose two `.` cases differ in exactly that and in
+/// nothing else, for 13 of 59 exports.
+pub(crate) fn export_claims_address(
+    artifact_case: &ArtifactCase,
+    public_name: &str,
+    export: &ExportSemantics,
+) -> Result<String, ContractFailure> {
+    let wire_case_id = compact_artifact_case_id(artifact_case)?;
+    let ids = CompactIds::new(&artifact_case.id, &wire_case_id, public_name);
+    let summary = compact_summary(export, &ids)?;
+    let key = serde_json::to_vec(&summary).map_err(document_decode)?;
+    Ok(format!("summary-{:x}", Sha256::digest(&key)))
 }
 
 fn compact_artifact_case_id(artifact_case: &ArtifactCase) -> Result<String, ContractFailure> {
@@ -383,6 +442,21 @@ fn compact_call(
     }
     if !closed.is_empty() {
         object.insert("closed".into(), json!(closed));
+    }
+    // A proposed closure is a sibling of `closed`, never a member of it: the
+    // domain it names stays open in this document, and a consumer that does
+    // not understand the key reads exactly the open domain it read before the
+    // key existed.
+    if !call.proposed_closures().is_empty() {
+        object.insert(
+            "proposedClosures".into(),
+            json!(
+                call.proposed_closures()
+                    .iter()
+                    .map(|domain| call_domain_name(*domain))
+                    .collect::<Vec<_>>()
+            ),
+        );
     }
     if !call.operations.is_empty() {
         object.insert(
@@ -534,6 +608,15 @@ fn compact_operation(
                     .map(|resource| Ok(json!(ids.resource(resource)?)))
                     .collect::<Result<_, ContractFailure>>()?,
             ),
+        );
+    }
+    if let Some(composed) = &operation.composed_from {
+        object.insert(
+            "composedFrom".into(),
+            json!({
+                "export": composed.export,
+                "operation": ids.operation_in(&composed.export, &composed.operation)?,
+            }),
         );
     }
     Ok(JsonValue::Object(object))
@@ -944,6 +1027,9 @@ fn compact_value(value: &ValueShape, ids: &CompactIds) -> Result<JsonValue, Cont
             resource,
             capabilities,
         } => compact_capability_value("store", None, resource, capabilities, ids)?,
+        // ADR 0109. One field, and it is the whole claim: which of the caller's
+        // arguments this object's property reads reach through to.
+        ValueShape::MergedProps { from } => json!({"kind": "merged-props", "from": from}),
         ValueShape::Action { transition } => {
             let mut node = json!({"kind": "action"});
             if let Some(transition) = transition {
@@ -1082,6 +1168,20 @@ const fn tracking_name(value: Tracking) -> &'static str {
         Tracking::Untracked => "untracked",
         Tracking::AmbientAtExecution => "ambient-at-execution",
         Tracking::Unknown => "unknown",
+    }
+}
+
+const fn call_domain_name(value: ClaimDomain) -> &'static str {
+    match value {
+        ClaimDomain::Callbacks => "callbacks",
+        ClaimDomain::Reads => "reads",
+        ClaimDomain::Writes => "writes",
+        ClaimDomain::Creates => "creates",
+        ClaimDomain::Invalidates => "invalidates",
+        ClaimDomain::Throws => "throws",
+        ClaimDomain::Returns => "returns",
+        ClaimDomain::Cleanups => "cleanups",
+        ClaimDomain::Disposals => "disposals",
     }
 }
 
@@ -1230,6 +1330,8 @@ enum WireEntrypoint {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WireUnconditionalEntrypoint {
+    #[serde(default, deserialize_with = "deserialize_initialization")]
+    initialization: Option<WireModuleInitialization>,
     artifact: WireRuntimeArtifact,
     declarations: WireFile,
     #[serde(default)]
@@ -1248,6 +1350,8 @@ struct WireConditionalEntrypoint {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WireArtifactCase {
+    #[serde(default, deserialize_with = "deserialize_initialization")]
+    initialization: Option<WireModuleInitialization>,
     resolution: WireResolution,
     artifact: WireRuntimeArtifact,
     declarations: WireFile,
@@ -1256,6 +1360,18 @@ struct WireArtifactCase {
     #[serde(default)]
     stability: Option<WireStability>,
     exports: BTreeMap<String, WireExportReference>,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum WireModuleInitialization {
+    Inert,
+}
+
+fn deserialize_initialization<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<WireModuleInitialization>, D::Error> {
+    WireModuleInitialization::deserialize(deserializer).map(Some)
 }
 
 #[derive(Clone, Deserialize)]
@@ -1319,6 +1435,11 @@ struct WireSummary {
 struct WireCall {
     #[serde(default)]
     closed: Vec<WireCallDomain>,
+    /// The domains this document proposes closed without claiming closure.
+    /// Additive to `schemaVersion: 1`: a document that omits it proposes
+    /// nothing, which is what every document said before the key existed.
+    #[serde(default, rename = "proposedClosures")]
+    proposed_closures: Vec<WireCallDomain>,
     #[serde(default)]
     callbacks: Option<Vec<WireCallback>>,
     #[serde(default)]
@@ -1404,6 +1525,22 @@ struct WireOperation {
     output: Option<WireValue>,
     #[serde(default)]
     resources: Vec<String>,
+    #[serde(default, rename = "composedFrom")]
+    composed_from: Option<WireComposedFrom>,
+}
+
+/// The `(export, operation)` a composed operation was composed from, inside
+/// the same artifact case.
+///
+/// The operation is named in the document's *local* spelling — `read-0`, the
+/// same spelling this export's own operation ids use — and is qualified with
+/// the named export by [`IdScope::operation_in`]. A document therefore cannot
+/// state a provenance outside its own artifact case at all: the qualification
+/// is this side's, not the document's.
+#[derive(Clone, Deserialize)]
+struct WireComposedFrom {
+    export: String,
+    operation: String,
 }
 
 #[derive(Clone, Copy, Deserialize)]
@@ -1970,6 +2107,12 @@ enum WireValueNode {
         #[serde(default)]
         capabilities: Option<Vec<WireCapabilityClaim>>,
     },
+    /// ADR 0109. `from` is required: a merged-props shape whose argument index
+    /// is absent states nothing at all, and defaulting it to zero would name a
+    /// parameter the producer never claimed.
+    MergedProps {
+        from: u16,
+    },
     Action {
         #[serde(default)]
         transition: Option<String>,
@@ -2084,6 +2227,7 @@ fn expand(document: WireDocument) -> Result<NormalizedContract, ContractFailure>
                     case.declarations,
                     case.transform,
                     case.stability,
+                    case.initialization,
                     case.exports,
                     &document.summaries,
                     &mut used_summaries,
@@ -2106,6 +2250,7 @@ fn expand(document: WireDocument) -> Result<NormalizedContract, ContractFailure>
                         case.declarations,
                         case.transform,
                         case.stability,
+                        case.initialization,
                         case.exports,
                         &document.summaries,
                         &mut used_summaries,
@@ -2192,6 +2337,7 @@ fn expand_artifact_case(
     declarations: WireFile,
     transform: Option<WireFile>,
     stability: Option<WireStability>,
+    initialization: Option<WireModuleInitialization>,
     exports: BTreeMap<String, WireExportReference>,
     summaries: &BTreeMap<String, WireSummary>,
     used_summaries: &mut BTreeSet<String>,
@@ -2267,6 +2413,9 @@ fn expand_artifact_case(
     }
 
     Ok(ArtifactCase {
+        initialization: initialization.map(|value| match value {
+            WireModuleInitialization::Inert => ModuleInitializationClaim::Inert,
+        }),
         id: case_id,
         entrypoint: entrypoint.into(),
         resolution_trace,
@@ -2317,18 +2466,29 @@ fn hash_text(hash: &mut Sha256, value: &str) {
 }
 
 struct IdScope {
+    case: String,
     prefix: String,
 }
 
 impl IdScope {
     fn new(case: &str, export: &str) -> Self {
         Self {
+            case: case.into(),
             prefix: format!("{case}:{export}"),
         }
     }
 
     fn operation(&self, id: &str) -> OperationId {
         OperationId(format!("{}:operation:{id}", self.prefix))
+    }
+
+    /// The qualified id of an operation of *another* export of the same
+    /// artifact case.
+    ///
+    /// The case comes from this scope, never from the document, so a stated
+    /// provenance is confined to the artifact case whose document stated it.
+    fn operation_in(&self, export: &str, id: &str) -> OperationId {
+        OperationId(format!("{}:{export}:operation:{id}", self.case))
     }
 
     fn resource(&self, id: &str) -> ResourceId {
@@ -2468,6 +2628,11 @@ fn expand_call(
         MAX_GUARD_CASES,
     )?;
     let closed = validate_closed(&call.closed, &WireCallDomain::ALL, "call.closed")?;
+    let proposed = validate_closed(
+        &call.proposed_closures,
+        &WireCallDomain::ALL,
+        "call.proposedClosures",
+    )?;
 
     let callbacks = call
         .callbacks
@@ -2521,7 +2686,27 @@ fn expand_call(
     let guards = expand_guard_partition(call.cases, ids)?;
     Ok(solid_reactive_ir::contract_semantics::CallSemantics::new(
         claims, operations, edges, resources, guards,
-    ))
+    )
+    // Whether the proposal is admissible at all — the domain open, and the
+    // domain one the certifier has a proof mode for — is a normalization
+    // invariant, refused by name in `validate_proposed_closures`.
+    .with_proposed_closures(proposed.into_iter().map(ClaimDomain::from)))
+}
+
+impl From<WireCallDomain> for ClaimDomain {
+    fn from(value: WireCallDomain) -> Self {
+        match value {
+            WireCallDomain::Callbacks => Self::Callbacks,
+            WireCallDomain::Reads => Self::Reads,
+            WireCallDomain::Writes => Self::Writes,
+            WireCallDomain::Creates => Self::Creates,
+            WireCallDomain::Invalidates => Self::Invalidates,
+            WireCallDomain::Throws => Self::Throws,
+            WireCallDomain::Returns => Self::Returns,
+            WireCallDomain::Cleanups => Self::Cleanups,
+            WireCallDomain::Disposals => Self::Disposals,
+        }
+    }
 }
 
 impl WireCallDomain {
@@ -2637,6 +2822,12 @@ fn expand_operation(operation: WireOperation, ids: &IdScope) -> Result<Operation
             .map(|value| expand_value(value, ids))
             .transpose()?,
         resources,
+        composed_from: operation.composed_from.as_ref().map(|composed| {
+            solid_reactive_ir::contract_semantics::ComposedFrom {
+                export: composed.export.clone(),
+                operation: ids.operation_in(&composed.export, &composed.operation),
+            }
+        }),
     })
 }
 
@@ -3181,6 +3372,7 @@ fn expand_value_node(
                 ids,
             )?,
         }),
+        WireValueNode::MergedProps { from } => Ok(ValueShape::MergedProps { from: *from }),
         WireValueNode::Action { transition } => Ok(ValueShape::Action {
             transition: transition.as_ref().map(|resource| ids.resource(resource)),
         }),
@@ -3279,6 +3471,84 @@ mod tests {
         env!("CARGO_MANIFEST_DIR"),
         "/../../../benchmarks/package-contract-v2/phase6/conditional-owned-effect.json"
     ));
+    /// The generator fixture that publishes a composed `read` operation.
+    ///
+    /// Included as a golden so `composedFrom` is exercised in **both**
+    /// directions by the round-trip below: `WireComposedFrom` and
+    /// `IdScope::operation_in` on the way in, `CompactIds::operation_in` on
+    /// the way out. A field that only ever encoded, or only ever decoded,
+    /// would pass every other test in this module.
+    const COMPOSED: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../fixtures/package-contracts/composed-operation-provenance/expected.json"
+    ));
+
+    /// The property artifact admission leans on: the address this computes for
+    /// an export is the very `summary-…` id the encoder writes for it.
+    ///
+    /// That is what makes it a valid comparator between two *different*
+    /// certifications of one published artifact. The encoder hashes the compact
+    /// form, whose operation spelling is local (`callback-0`) because
+    /// `CompactIds` strips the artifact-case qualification back off — so the
+    /// address depends on what the export claims and on nothing about where it
+    /// was found. The decoded form cannot be compared directly at all:
+    /// `IdScope::operation_in` qualifies every operation id with the
+    /// artifact-case id, which is what `@kobalte/utils@0.9.2`'s two `.` cases
+    /// differ in, for 13 of their 59 exports and in nothing else.
+    ///
+    /// Asserted against the *encoded* document rather than the fixture bytes:
+    /// these fixtures name their summaries by hand (`"signal-pair"`), and it is
+    /// the encoder's id this has to reproduce.
+    #[test]
+    fn an_export_claims_address_is_the_summary_id_the_encoder_writes() {
+        for bytes in [SIGNAL, CONDITIONAL, COMPOSED] {
+            let decoded = decode(bytes).unwrap();
+            let sidecars = decoded.sidecar_digests().unwrap();
+            let contract = decoded.normalize().unwrap();
+            let encoded = encode(&contract, &sidecars, false).unwrap();
+            let wire: serde_json::Value = serde_json::from_slice(&encoded).unwrap();
+            let case = &contract.artifact_cases()[0];
+            let stated = wire["entrypoints"][&case.entrypoint].clone();
+            let exports = stated
+                .get("cases")
+                .and_then(|cases| cases.get(0))
+                .unwrap_or(&stated)["exports"]
+                .clone();
+            assert!(!case.exports.is_empty());
+            for (name, export) in &case.exports {
+                let reference = &exports[name];
+                // An experimental export states `{summary, stability}`; every
+                // other one states the id directly.
+                let stated_id = reference
+                    .get("summary")
+                    .unwrap_or(reference)
+                    .as_str()
+                    .expect("the encoded document names this export's summary");
+                assert_eq!(
+                    export_claims_address(case, name, export).unwrap(),
+                    stated_id,
+                    "{name} must re-derive the address the encoder wrote"
+                );
+            }
+        }
+    }
+
+    /// And it moves when the claim moves, or admission would apply one of two
+    /// contracts that say different things about one artifact.
+    #[test]
+    fn an_export_claims_address_changes_with_the_claim() {
+        let contract = normalized(SIGNAL);
+        let case = &contract.artifact_cases()[0];
+        let (name, export) = case.exports.iter().next().expect("an export");
+        let before = export_claims_address(case, name, export).unwrap();
+        let mut altered = export.clone();
+        altered.shape = ValueShape::Unknown;
+        assert_ne!(
+            export_claims_address(case, name, &altered).unwrap(),
+            before,
+            "a different shape is a different claim"
+        );
+    }
 
     fn normalized(bytes: &[u8]) -> NormalizedContract {
         decode(bytes).unwrap().normalize().unwrap()
@@ -3312,7 +3582,7 @@ mod tests {
 
     #[test]
     fn all_goldens_round_trip_through_identical_normalized_semantics() {
-        for bytes in [MINIMAL, SIGNAL, CONDITIONAL] {
+        for bytes in [MINIMAL, SIGNAL, CONDITIONAL, COMPOSED] {
             let first = normalized(bytes);
             let encoded = encode(&first, &SidecarDigests::default(), true).unwrap();
             let second = normalized(&encoded);
@@ -3322,6 +3592,172 @@ mod tests {
                 encode(&second, &SidecarDigests::default(), true).unwrap()
             );
         }
+    }
+
+    #[test]
+    fn inert_initialization_is_explicit_round_tripped_and_identity_bound() {
+        let mut document: JsonValue = serde_json::from_slice(MINIMAL).unwrap();
+        document["entrypoints"]["."]["exports"] = json!({});
+        document["summaries"] = json!({});
+        let absent = normalized(&serde_json::to_vec(&document).unwrap());
+        document["entrypoints"]["."]["initialization"] = json!("inert");
+        let inert = normalized(&serde_json::to_vec(&document).unwrap());
+        assert_eq!(
+            inert.artifact_cases()[0].initialization,
+            Some(ModuleInitializationClaim::Inert)
+        );
+        assert_ne!(absent.semantic_digest(), inert.semantic_digest());
+        let encoded = encode(&inert, &SidecarDigests::default(), true).unwrap();
+        assert_eq!(inert, normalized(&encoded));
+        for unsupported in [JsonValue::Null, json!(false), json!("unknown"), json!({})] {
+            document["entrypoints"]["."]["initialization"] = unsupported;
+            assert!(decode(&serde_json::to_vec(&document).unwrap()).is_err());
+        }
+        document["entrypoints"]["."]
+            .as_object_mut()
+            .unwrap()
+            .remove("initialization");
+        assert_eq!(absent, normalized(&serde_json::to_vec(&document).unwrap()));
+    }
+
+    /// The composed golden really carries the field, and it survives the
+    /// round trip as the same `(export, operation)` pair.
+    ///
+    /// Without this the round-trip above would still pass if both directions
+    /// dropped `composedFrom` together.
+    #[test]
+    fn composed_provenance_survives_the_round_trip_in_both_directions() {
+        let normalized_contract = normalized(COMPOSED);
+        let composed = normalized_contract.artifact_cases()[0]
+            .exports
+            .values()
+            .flat_map(|export| export.call.operations.iter())
+            .filter_map(|operation| operation.composed_from.as_ref())
+            .collect::<Vec<_>>();
+        // Two rows in that fixture compose the same target: the export that
+        // only calls it, and the export that also reads its own signal.
+        assert_eq!(composed.len(), 2, "{composed:?}");
+        for provenance in composed {
+            assert_eq!(provenance.export, "readsItsOwnSignal");
+            // The qualified id is this side's, built from the artifact case
+            // and the named export — a document states only the local
+            // `read-0`.
+            assert!(
+                provenance
+                    .operation
+                    .0
+                    .ends_with(":readsItsOwnSignal:operation:read-0"),
+                "{:?}",
+                provenance.operation
+            );
+        }
+        let encoded = encode(&normalized_contract, &SidecarDigests::default(), true).unwrap();
+        assert!(
+            String::from_utf8_lossy(&encoded).contains("\"composedFrom\""),
+            "the encoder dropped the provenance"
+        );
+        assert_eq!(normalized(&encoded), normalized_contract);
+    }
+
+    /// `proposedClosures` labels a closure the document states, so it names a
+    /// subset of `closed`.
+    ///
+    /// Decoding must keep the closure and the label together, refuse a label
+    /// over a domain the document leaves open, refuse a duplicate the way
+    /// `closed` is refused, refuse a domain no census can decide, and refuse a
+    /// spelling outside the vocabulary instead of ignoring it.
+    #[test]
+    fn a_proposed_closure_labels_a_stated_closure_and_is_otherwise_refused() {
+        let document = |call: &str| {
+            format!(
+                r#"{{"format":"solid-reactivity-contract","schemaVersion":1,"semanticModelVersion":1,"package":{{"name":"consumer","version":"1.0.0","integrity":"sha512:test","manifest":{{"path":"package.json","sha256":"{a}"}}}},"summaries":{{"fn":{{"shape":"callable","call":{call}}}}},"entrypoints":{{".":{{"artifact":{{"path":"dist/index.js","sha256":"{b}","closureSha256":"{c}"}},"declarations":{{"path":"dist/index.d.ts","sha256":"{d}"}},"exports":{{"run":"fn"}}}}}},"sidecars":{{}}}}"#,
+                a = "a".repeat(64),
+                b = "b".repeat(64),
+                c = "c".repeat(64),
+                d = "d".repeat(64),
+            )
+            .into_bytes()
+        };
+
+        // A closure over a *positive* operation, which is the shape a real
+        // package produces and the corpus fixtures never do. `@corvu/utils`'
+        // `contains` reads `.contains` off parameter 0, so its `reads` is
+        // `Complete([read-0])` rather than an absence — and certifying that
+        // package produced an accepted document with no closures at all, no
+        // withheld records and no refusals (§ 14 of
+        // `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`).
+        //
+        // This is the first half of that: does a complete positive survive the
+        // decode/normalize round trip the certifier's candidate universe is
+        // rebuilt from? The operation is copied from the real document.
+        const POSITIVE_READ: &str = r#"{"closed":["reads"],"reads":["read-0"],"proposedClosures":["reads"],"operations":[{"at":{"event":"call","schedule":"same-stack"},"count":{"max":"many","min":0,"scope":"call"},"id":"read-0","inputs":[{"index":0,"kind":"parameter","path":["contains"]}],"kind":"read","tracking":"untracked","trigger":{"event":"call"}}]}"#;
+        let positive = normalized(&document(POSITIVE_READ));
+        let read_export = &positive.artifact_cases()[0].exports["run"];
+        assert!(
+            !read_export.claim_state(ClaimDomain::Reads).is_open(),
+            "a closure over one positive read is a closure: {:?}",
+            read_export.claim_state(ClaimDomain::Reads)
+        );
+        assert_eq!(
+            read_export.call.proposed_closures(),
+            &BTreeSet::from([ClaimDomain::Reads]),
+            "and it is still labelled as proposed"
+        );
+        let reencoded = encode(&positive, &SidecarDigests::default(), false).unwrap();
+        assert!(
+            String::from_utf8_lossy(&reencoded).contains(r#""closed":["reads"]"#),
+            "and it survives re-encoding: {}",
+            String::from_utf8_lossy(&reencoded)
+        );
+
+        let contract = normalized(&document(
+            r#"{"closed":["creates"],"creates":[],"proposedClosures":["creates"]}"#,
+        ));
+        let export = &contract.artifact_cases()[0].exports["run"];
+        assert!(
+            export
+                .operation_claim(ClaimDomain::Creates)
+                .unwrap()
+                .proves_absence(),
+            "the closure is the document's own claim"
+        );
+        assert_eq!(
+            export.call.proposed_closures(),
+            &BTreeSet::from([ClaimDomain::Creates]),
+            "and it is labelled as proposed rather than reviewed"
+        );
+        // And back out again, byte for byte in both directions.
+        let encoded = encode(&contract, &SidecarDigests::default(), false).unwrap();
+        assert!(String::from_utf8_lossy(&encoded).contains(r#""proposedClosures":["creates"]"#));
+        assert_eq!(normalized(&encoded), contract);
+
+        for (call, needle) in [
+            (r#"{"proposedClosures":["creates"]}"#, "states no closure"),
+            (
+                r#"{"closed":["creates"],"creates":[],"proposedClosures":["creates","creates"]}"#,
+                "duplicate closed domain",
+            ),
+            // `writes`, not `reads`: `reads` became proposable on 2026-09-10
+            // and this row needs a domain that still has no closure proof
+            // mode. See `ClaimDomain::PROPOSABLE`.
+            (
+                r#"{"closed":["writes"],"writes":[],"proposedClosures":["writes"]}"#,
+                "no closure proof mode",
+            ),
+        ] {
+            let error = decode(&document(call))
+                .and_then(|proposal| proposal.normalize())
+                .expect_err(&format!("{call} must be refused"));
+            assert!(
+                error.to_string().contains(needle),
+                "{call}: {error} does not name {needle:?}"
+            );
+        }
+
+        assert!(
+            decode(&document(r#"{"proposedClosures":["nonsense"]}"#)).is_err(),
+            "an unknown domain spelling must be refused, not ignored"
+        );
     }
 
     #[test]
@@ -3416,6 +3852,7 @@ mod tests {
             importer: "/pkg/index.js".into(),
             specifier: "dependency".into(),
             contract: accepted,
+            artifact_identity: None,
         }])
         .unwrap();
         let used = index

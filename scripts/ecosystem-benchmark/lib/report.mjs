@@ -17,6 +17,12 @@
 // `Date.parse` (a pure string→number function, not a clock read).
 
 import { FAMILIES } from "./families.mjs";
+import {
+  hasUsableDenominator,
+  isRequestScoped,
+  isCompleteCoverage,
+  isMeasuredCoverage
+} from "./certified-coverage.mjs";
 import { FAILURE_CLASSES } from "./classify.mjs";
 import {
   BEHAVIORAL_ROW_KINDS,
@@ -25,6 +31,7 @@ import {
   emptyDomainCounts
 } from "./contract-content.mjs";
 import { manifestStats } from "./manifest.mjs";
+import { buildDialectAuthorityCoverage, loadAuditedArchives } from "./dialect-authority.mjs";
 
 const SCHEMA_VERSION = 1;
 
@@ -145,6 +152,92 @@ function contractProducing(results) {
   );
 }
 
+// What a certified row actually covered, aggregated.
+//
+// "Verified" was one word for two outcomes: a row whose every declared
+// entrypoint carries a receipt, and a row where one of four does -- possibly
+// not even the root, the entrypoint nearly every consumer imports. Both read
+// as verified, so the corpus rate could rise while the surface under receipt
+// shrank. The split is computed from each row's own
+// `certificationAttempt.coverage`, which `lib/certified-coverage.mjs` reads
+// from the published catalog.
+//
+// `verifiedUnmeasured` is not folded into either half. A certified row whose
+// catalog could not be read is a gap in the measurement, and calling it partial
+// would be as wrong as calling it complete. A row whose *denominator* could not
+// be read (an unreadable manifest, `declaredEntrypoints: null`) is the same gap
+// seen from the other side, so `isMeasuredCoverage` -- not merely "coverage is
+// not null" -- is what separates the measured rows.
+function buildCertificationSummary(results) {
+  const attempts = results.filter(result => result.certificationAttempt?.attempted === true);
+  const verified = attempts.filter(result => result.certificationAttempt.status === "certified");
+  const coverageOf = result => result.certificationAttempt.coverage ?? null;
+  const complete = verified.filter(result => isCompleteCoverage(coverageOf(result)));
+  const measured = verified.filter(result => isMeasuredCoverage(coverageOf(result)));
+  const partial = measured.filter(result => !isCompleteCoverage(coverageOf(result)));
+  const lanes = {};
+  for (const result of attempts) {
+    const lane = result.certificationAttempt.lane;
+    if (typeof lane === "string" && lane) lanes[lane] = (lanes[lane] ?? 0) + 1;
+  }
+  return {
+    attempted: attempts.length,
+    verified: verified.length,
+    verifiedComplete: complete.length,
+    verifiedPartial: partial.length,
+    verifiedUnmeasured: verified.length - measured.length,
+    // Of the partial half: how many at least put the root under receipt. A
+    // partial row without its root describes only subpaths, which is a
+    // materially weaker answer than the same count including `.`.
+    verifiedPartialWithRoot: partial.filter(
+      result => coverageOf(result).rootCertified === true
+    ).length,
+    certifiedEntrypoints: measured.reduce(
+      (total, result) => total + coverageOf(result).certifiedEntrypoints,
+      0
+    ),
+    refused: attempts.filter(result => result.certificationAttempt.status !== "certified").length,
+    lanes: Object.fromEntries(
+      Object.entries(lanes).sort(([left], [right]) => left.localeCompare(right))
+    )
+  };
+}
+
+/// `k of n` for one row, with the root's presence spelled out rather than
+/// implied by the numbers -- `1 of 4` says nothing about *which* one.
+export function formatCoverage(attempt) {
+  if (attempt?.attempted !== true) return "";
+  if (attempt.status !== "certified") return "refused";
+  const coverage = attempt.coverage;
+  if (!coverage) return "certified (coverage not measured)";
+  const root = coverage.rootCertified ? "root" : "no root";
+  // An unreadable manifest leaves an exact numerator and no denominator at
+  // all. That is the same gap as an unreadable catalog and is printed as one,
+  // ahead of the wildcard branch: a `null` denominator has no wildcard status
+  // to report, and rendering it there printed "null declared via wildcard".
+  if (!isMeasuredCoverage(coverage)) {
+    return `unmeasured ${coverage.certifiedEntrypoints} of ? (${root})`;
+  }
+  const complete = isCompleteCoverage(coverage) ? "complete" : "partial";
+  // A probe-scoped row is measured against the subpaths it asked for; the
+  // manifest's count is reported beside it as what the package ships, never
+  // as the denominator (`isRequestScoped`).
+  if (isRequestScoped(coverage)) {
+    const declared = typeof coverage.declaredEntrypoints === "number"
+      ? `${coverage.declaredEntrypoints} declared`
+      : "? declared";
+    return `${complete} ${coverage.requestedCertified} of ${coverage.requestedEntrypoints} requested ` +
+      `(${declared}, ${root})`;
+  }
+  // No `k of n` when `n` is a wildcard pattern count -- see
+  // `hasUsableDenominator`. The certified count is still exact.
+  if (!hasUsableDenominator(coverage)) {
+    return `${complete} ${coverage.certifiedEntrypoints} certified, ` +
+      `${coverage.declaredEntrypoints} declared via wildcard (${root})`;
+  }
+  return `${complete} ${coverage.certifiedEntrypoints} of ${coverage.declaredEntrypoints} (${root})`;
+}
+
 function buildFamilySection(family, results) {
   const familyResults = results.filter(result => result?.family === family.id);
   const successes = familyResults.filter(result => result.outcome === "success");
@@ -182,6 +275,7 @@ function buildFamilySection(family, results) {
     partialCount: partials.length,
     failureCount: failures.length,
     successRate: computeSuccessRate(successes.length, familyResults.length),
+    certification: buildCertificationSummary(familyResults),
     failureGroups: buildFailureGroups(familyResults),
     results: [...familyResults].sort(comparePackageThenProbe)
   };
@@ -204,6 +298,7 @@ function buildTotals(results) {
     partialCount: partials.length,
     failureCount: failures.length,
     successRate: computeSuccessRate(successes.length, results.length),
+    certification: buildCertificationSummary(results),
     failureGroups: buildFailureGroups(results)
   };
 }
@@ -492,6 +587,15 @@ function emptyContentAccumulator() {
     behavioralRows: emptyBehavioralRows(),
     closureNotes: 0,
     attestedRuntimeNotes: 0,
+    // Why the generator declined to propose a closed `creates`. Additive, and
+    // measurement only: a decline is neither a refusal nor a withheld claim,
+    // it is the earlier "nothing was proposed, and here is what blocked it".
+    declinedClosures: 0,
+    declinedClosuresByKind: {},
+    dialectSilentBlockers: new Map(),
+    // The same measurement for the other, larger half of the declines: what
+    // shape the unresolved callees actually are.
+    unresolvedCalleeShapes: new Map(),
     packageStates: new Map(),
     wireSamples: {
       prettyMain: [],
@@ -521,6 +625,42 @@ function accumulateContent(accumulator, result) {
   addBehavioralRows(accumulator.behavioralRows, content.behavioralRows);
   accumulator.closureNotes += content.closureNotes ?? 0;
   accumulator.attestedRuntimeNotes += content.attestedRuntimeNotes ?? 0;
+  accumulator.declinedClosures += content.declinedClosures ?? 0;
+  for (const [kind, count] of Object.entries(content.declinedClosuresByKind ?? {})) {
+    accumulator.declinedClosuresByKind[kind] =
+      (accumulator.declinedClosuresByKind[kind] ?? 0) + count;
+  }
+  // Summed over rows, and the probe count kept beside it: one package with 40
+  // blocked exports and 20 packages with 2 each are different audit arguments,
+  // and a single total cannot tell them apart.
+  for (const blocker of content.dialectSilentBlockers ?? []) {
+    const key = `${blocker.package ?? ""}\u0000${blocker.export ?? ""}`;
+    const existing = accumulator.dialectSilentBlockers.get(key) ?? {
+      package: blocker.package ?? "",
+      export: blocker.export ?? "",
+      blockedExports: 0,
+      probes: 0
+    };
+    existing.blockedExports += blocker.blockedExports ?? 0;
+    existing.probes += 1;
+    accumulator.dialectSilentBlockers.set(key, existing);
+  }
+  // Summed the same way, and for the same reason: one row with 300 exports
+  // blocked by a member-property callee and 30 rows with 10 each are different
+  // arguments about where the resolver gap is.
+  for (const shape of content.unresolvedCalleeShapes ?? []) {
+    const key = String(shape.shape ?? "");
+    const existing = accumulator.unresolvedCalleeShapes.get(key) ?? {
+      shape: key,
+      blockedExports: 0,
+      records: 0,
+      probes: 0
+    };
+    existing.blockedExports += shape.blockedExports ?? 0;
+    existing.records += shape.records ?? 0;
+    existing.probes += 1;
+    accumulator.unresolvedCalleeShapes.set(key, existing);
+  }
   for (const field of Object.keys(accumulator.wireSamples)) {
     const value = content.wireBytes?.[field];
     if (Number.isFinite(value)) accumulator.wireSamples[field].push(value);
@@ -542,11 +682,39 @@ function accumulateContent(accumulator, result) {
   accumulator.packageStates.set(result.package, (previous ?? true) && Boolean(content.fullyProven));
 }
 
-function finalizeContentAccumulator(accumulator) {
+function finalizeContentAccumulator(accumulator, dialectSilentLimit = 10) {
   const packages = [...accumulator.packageStates.values()];
-  const { packageStates, wireSamples, ...counts } = accumulator;
+  const {
+    packageStates,
+    wireSamples,
+    dialectSilentBlockers,
+    unresolvedCalleeShapes,
+    ...counts
+  } = accumulator;
   return {
     ...counts,
+    // Top-N only: the full per-row lists stay on every row's own
+    // `contractContent`, which is what `scripts/dialect-audit-yield.mjs`
+    // aggregates, so truncating the summary loses nothing recoverable.
+    topDialectSilentBlockers: [...dialectSilentBlockers.values()]
+      .sort((left, right) => {
+        if (left.blockedExports !== right.blockedExports) {
+          return right.blockedExports - left.blockedExports;
+        }
+        if (left.probes !== right.probes) return right.probes - left.probes;
+        if (left.package !== right.package) return left.package < right.package ? -1 : 1;
+        return compareStrings(left.export, right.export);
+      })
+      .slice(0, dialectSilentLimit),
+    // Never truncated: the shape vocabulary is a fixed, small enumeration, so
+    // there is no long tail to cut and cutting it would hide a shape.
+    unresolvedCalleeShapes: [...unresolvedCalleeShapes.values()].sort((left, right) => {
+      if (left.blockedExports !== right.blockedExports) {
+        return right.blockedExports - left.blockedExports;
+      }
+      if (left.records !== right.records) return right.records - left.records;
+      return compareStrings(left.shape, right.shape);
+    }),
     wireBytes: Object.fromEntries(
       Object.entries(wireSamples).map(([field, values]) => [field, distribution(values)])
     ),
@@ -741,12 +909,45 @@ function buildBaselineComparison(baseline, currentResults) {
   newProbes.sort(compareStrings);
   removedProbes.sort(compareStrings);
 
+  // The certification half, compared separately. `outcome` is the generation
+  // result and says nothing about whether the row's receipt was issued: a row
+  // can keep emitting a complete contract while its certification goes from
+  // certified to refused, and that is the loss that matters once the corpus is
+  // measured by receipts. Twelve rows moved exactly that way between the
+  // 2026-09-04 pin and the commits that followed it, and nothing here saw it.
+  // A row the baseline certified that this run did not attempt counts too: an
+  // unattempted row issues no receipt either.
+  const certificationRegressions = [];
+  const certificationFixes = [];
+  const certified = result => result?.certificationAttempt?.status === "certified";
+  for (const [probeId, current] of currentByProbe) {
+    const prior = baselineByProbe.get(probeId);
+    if (!prior) continue;
+    const was = certified(prior);
+    const is = certified(current);
+    if (was === is) continue;
+    const entry = {
+      probeId,
+      package: current.package,
+      previousStatus: prior.certificationAttempt?.status ?? "not attempted",
+      currentStatus: current.certificationAttempt?.status ?? "not attempted",
+      currentReason: is ? null : (current.certificationAttempt?.reason ?? null)
+    };
+    (was ? certificationRegressions : certificationFixes).push(entry);
+  }
+  certificationRegressions.sort((left, right) => compareStrings(left.probeId, right.probeId));
+  certificationFixes.sort((left, right) => compareStrings(left.probeId, right.probeId));
+
   return {
     provided: true,
     regressionCount: regressions.length,
     fixCount: fixes.length,
     regressions,
     fixes,
+    certificationRegressionCount: certificationRegressions.length,
+    certificationFixCount: certificationFixes.length,
+    certificationRegressions,
+    certificationFixes,
     newProbes,
     removedProbes
   };
@@ -776,10 +977,26 @@ function describeScope(scope) {
   for (const family of scope.families ?? []) filters.push(`family ${family}`);
   for (const target of scope.solidTargets ?? []) filters.push(`solid${target}`);
   if (scope.probeIds?.length) filters.push(`${scope.probeIds.length} exact probe id(s)`);
+  if (scope.packages?.length) filters.push(`packages ${scope.packages.join(", ")}`);
   return (
     `PARTIAL -- ${filters.join(", ")} (${ran} probes run). ` +
     "Not comparable to a full-corpus run."
   );
+}
+
+/// The authority's reach over this corpus, or why it could not be read.
+///
+/// Read failures are recorded rather than thrown: losing a whole corpus run --
+/// hours of installs and certification -- because a pin file is unreadable
+/// would be a worse outcome than a report that says so. The gate side refuses
+/// on exactly this shape, so an unreadable pin never passes as coverage; see
+/// `minAuthorityCoveredRows` in `evaluateThresholds`.
+function buildDialectAuthoritySection(results, auditedArchives) {
+  try {
+    return buildDialectAuthorityCoverage(results, auditedArchives ?? loadAuditedArchives());
+  } catch (error) {
+    return { unreadable: String(error?.message ?? error) };
+  }
 }
 
 export function buildReport({
@@ -789,7 +1006,11 @@ export function buildReport({
   finishedAt,
   baseline = null,
   checker = null,
-  scope = null
+  scope = null,
+  // The audited-archive pins, injectable so a test can state its own. `null`
+  // reads the checked-in mirror of the dialect tables, which is what every
+  // real run does.
+  auditedArchives = null
 }) {
   const everyResult = Array.isArray(results) ? results.slice() : [];
   // Supplemental rows are unofficial forks and lookalikes. They are reported,
@@ -818,6 +1039,14 @@ export function buildReport({
     checker: {
       nativeBin: checker?.nativeBin ?? null,
       typeFactsBin: checker?.typeFactsBin ?? null,
+      // Proof configuration belongs to the measurement: changing recipes can
+      // change claims even when package versions and coverage are unchanged.
+      ...(checker && Object.hasOwn(checker, "probeRecipeCorpus")
+        ? { probeRecipeCorpus: checker.probeRecipeCorpus }
+        : {}),
+      ...(checker?.entrypointRecovery
+        ? { entrypointRecovery: checker.entrypointRecovery }
+        : {}),
       // The registry cache certification children were allowed to read, or
       // null when every registry byte was fetched fresh. Recorded so a wall
       // time can be read knowing whether it includes registry latency.
@@ -848,6 +1077,7 @@ export function buildReport({
       families: scope?.families ?? [],
       solidTargets: scope?.solidTargets ?? [],
       probeIds: scope?.probeIds ?? [],
+      ...(scope?.packages?.length ? { packages: scope.packages } : {}),
       includeSupplemental: scope?.includeSupplemental ?? false,
       probesRun: everyResult.length
     },
@@ -876,6 +1106,16 @@ export function buildReport({
     },
     combined: {
       topFailureSignatures: buildFailureGroups(allResults),
+      // The corpus-wide certification figure, split. Additive: `verified` is
+      // still the sum of the two halves, so a consumer reading only that
+      // number reads what it always did.
+      certification: buildCertificationSummary(allResults),
+      // What fraction of the corpus the dialect negative authority can answer
+      // about at all. Additive, and adjacent to `certification` on purpose: it
+      // is the denominator behind every `creates` claim that tier could ever
+      // close, and it decays on someone else's release schedule rather than on
+      // anything this repository does.
+      dialectNegativeAuthority: buildDialectAuthoritySection(allResults, auditedArchives),
       partialContracts: buildPartialContracts(allResults),
       // Additive: every field above and below describes generation
       // reachability, and this one alone describes the content of what was
@@ -909,6 +1149,36 @@ function formatRate(rate) {
   return `${rate.successes}/${rate.total} (${rate.percentage}%)`;
 }
 
+// The certification half of a section, and the reason it is not one number.
+//
+// A row is `verified-complete` only when every entrypoint its manifest declares
+// carries a receipt and the root is among them; anything else certified is
+// `verified-partial`, reported with how many of those at least covered the
+// root. `verified` stays printed as the sum so a reader comparing against an
+// older report has the same figure to compare.
+function renderCertificationLines(certification) {
+  if (!certification || certification.attempted === 0) return [];
+  const lines = [
+    `- Certification attempted: ${certification.attempted}`,
+    `- Verified (receipt issued): ${certification.verified}` +
+      ` -- ${certification.verifiedComplete} complete` +
+      `, ${certification.verifiedPartial} partial` +
+      ` (${certification.verifiedPartialWithRoot} of those with the root)` +
+      (certification.verifiedUnmeasured > 0
+        ? `, ${certification.verifiedUnmeasured} with unreadable coverage`
+        : ""),
+    `- Certified entrypoints (measured): ${certification.certifiedEntrypoints}`,
+    `- Exact certification refusals: ${certification.refused}`
+  ];
+  const lanes = Object.entries(certification.lanes);
+  if (lanes.length > 0) {
+    lines.push(
+      `- Proposal lanes: ${lanes.map(([lane, count]) => `${count} ${lane}`).join(", ")}`
+    );
+  }
+  return lines;
+}
+
 function renderFamilySection(section) {
   const lines = [];
   lines.push(`### ${section.label}`);
@@ -923,13 +1193,17 @@ function renderFamilySection(section) {
   lines.push(`- Success (complete contracts): ${formatRate(section.successRate)}`);
   lines.push(`- Partial contracts: ${section.partialCount ?? 0}`);
   lines.push(`- Failures: ${section.failureCount}`);
+  lines.push(...renderCertificationLines(section.certification));
   lines.push("");
 
   if (section.results.length > 0) {
-    lines.push("| Package | Version | Probe | Outcome | Class |");
-    lines.push("| --- | --- | --- | --- | --- |");
+    lines.push("| Package | Version | Probe | Outcome | Class | Verified |");
+    lines.push("| --- | --- | --- | --- | --- | --- |");
     for (const result of section.results) {
-      lines.push(`| ${result.package} | ${result.version} | ${result.probeKind} | ${result.outcome} | ${result.class} |`);
+      lines.push(
+        `| ${result.package} | ${result.version} | ${result.probeKind} | ${result.outcome} | ` +
+          `${result.class} | ${formatCoverage(result.certificationAttempt) || "-"} |`
+      );
     }
     lines.push("");
   }
@@ -1061,7 +1335,55 @@ function renderContractContentSection(content) {
   lines.push(
     `- Attested closure notes (record complete, runtime unbounded): ${content.attestedRuntimeNotes}`
   );
+  // The generator's own `creates` walk, from the other side: not what it
+  // proposed but what stopped it proposing. `dialect-silent` is the row to
+  // read -- a canonical primitive no dialect audit denies the domain for --
+  // because it is the only blocker an audit can clear.
+  lines.push(
+    `- Declined \`creates\` closure proposals (blocking call sites): ${content.declinedClosures ?? 0}` +
+      (Object.keys(content.declinedClosuresByKind ?? {}).length > 0
+        ? ` -- ${Object.entries(content.declinedClosuresByKind)
+            .map(([kind, count]) => `${count} ${kind}`)
+            .join(", ")}`
+        : "")
+  );
   lines.push("");
+
+  const blockers = content.topDialectSilentBlockers ?? [];
+  if (blockers.length > 0) {
+    lines.push("### Dialect-silent blockers (what an audit row would unblock)");
+    lines.push("");
+    lines.push("| Package | Export | Consumer exports blocked | Probes |");
+    lines.push("| --- | --- | ---: | ---: |");
+    for (const blocker of blockers) {
+      lines.push(
+        `| ${blocker.package || "(unresolved)"} | ${blocker.export} | ` +
+          `${blocker.blockedExports} | ${blocker.probes} |`
+      );
+    }
+    lines.push("");
+  }
+
+  const shapes = content.unresolvedCalleeShapes ?? [];
+  if (shapes.length > 0) {
+    lines.push("### Unresolved-callee shapes (what the unresolved callees are)");
+    lines.push("");
+    lines.push("| Shape | Consumer exports blocked | Call sites | Probes |");
+    lines.push("| --- | ---: | ---: | ---: |");
+    for (const shape of shapes) {
+      lines.push(
+        `| ${shape.shape || "(unclassified)"} | ${shape.blockedExports} | ` +
+          `${shape.records} | ${shape.probes} |`
+      );
+    }
+    lines.push("");
+    lines.push(
+      "The concrete spellings behind each shape stay on every row's own " +
+        "`contractContent.unresolvedCalleeShapes`; " +
+        "`bun scripts/dialect-audit-yield.mjs` ranks them across a whole report."
+    );
+    lines.push("");
+  }
 
   lines.push("### Proposal wire size");
   lines.push("");
@@ -1167,6 +1489,24 @@ function renderContractContentSection(content) {
   return lines.join("\n");
 }
 
+// The corpus-wide certification headline. One line, and it never says
+// "verified: N" on its own -- the split is the point.
+function renderHeadlineCertification(certification) {
+  if (!certification || certification.attempted === 0) return [];
+  const parts = [
+    `${certification.verifiedComplete} complete`,
+    `${certification.verifiedPartial} partial ` +
+      `(${certification.verifiedPartialWithRoot} with the root)`
+  ];
+  if (certification.verifiedUnmeasured > 0) {
+    parts.push(`${certification.verifiedUnmeasured} coverage unmeasured`);
+  }
+  return [
+    `- Verified: ${certification.verified}/${certification.attempted} attempted -- ` +
+      `${parts.join(", ")}; ${certification.certifiedEntrypoints} certified entrypoints`
+  ];
+}
+
 function renderCombinedSection(combined) {
   const lines = [];
 
@@ -1177,6 +1517,38 @@ function renderCombinedSection(combined) {
   lines.push(
     `- Phases: install ${timings.installDurationMs} ms, generation ${timings.generationDurationMs} ms, harness ${timings.harnessDurationMs} ms`
   );
+  lines.push("");
+
+  lines.push("### Dialect negative authority");
+  lines.push("");
+  const authority = combined.dialectNegativeAuthority;
+  if (!authority) {
+    lines.push("Not measured.");
+  } else if (authority.unreadable) {
+    lines.push(`Unreadable: ${authority.unreadable}`);
+  } else {
+    const share =
+      authority.coveragePercentage === null ? "n/a" : `${authority.coveragePercentage}%`;
+    lines.push(
+      `- Rows an audited archive identity could answer about: ${authority.rowsCovered} of ${authority.rows} (${share})`
+    );
+    lines.push(
+      "  - Name and version only, so an upper bound: the certifier also binds integrity and the manifest digest."
+    );
+    for (const dialect of authority.byDialect) {
+      lines.push(
+        `- ${dialect.id}: ${dialect.rowsCovered} of ${dialect.rows} rows, ` +
+          `${dialect.auditedArchives} audited archives, ${dialect.negativeRowCount} negative rows`
+      );
+    }
+    lines.push("- Installed versions of audited packages:");
+    for (const entry of authority.installedVersions) {
+      lines.push(
+        `  - ${entry.package}@${entry.version}: ${entry.rows} ` +
+          `row${entry.rows === 1 ? "" : "s"}${entry.audited ? " (audited)" : ""}`
+      );
+    }
+  }
   lines.push("");
 
   lines.push("### Top failure signatures");
@@ -1259,6 +1631,18 @@ function renderCombinedSection(combined) {
       // becoming complete, and printing "-> success" would overstate it.
       lines.push(`  - ${entry.probeId}: ${entry.previousClass} -> ${entry.currentClass}`);
     }
+    // Older reports built without the certification comparison carry no
+    // counts here; render nothing rather than a misleading zero.
+    if (typeof combined.baseline.certificationRegressionCount === "number") {
+      lines.push(`- Certification regressions: ${combined.baseline.certificationRegressionCount}`);
+      for (const entry of combined.baseline.certificationRegressions) {
+        lines.push(`  - ${entry.probeId}: ${entry.previousStatus} -> ${entry.currentStatus}`);
+      }
+      lines.push(`- Certification fixes: ${combined.baseline.certificationFixCount}`);
+      for (const entry of combined.baseline.certificationFixes) {
+        lines.push(`  - ${entry.probeId}: ${entry.previousStatus} -> ${entry.currentStatus}`);
+      }
+    }
     if (combined.baseline.newProbes.length > 0) lines.push(`- New probes: ${combined.baseline.newProbes.join(", ")}`);
     if (combined.baseline.removedProbes.length > 0) {
       lines.push(`- Removed probes: ${combined.baseline.removedProbes.join(", ")}`);
@@ -1295,6 +1679,7 @@ export function renderMarkdown(report) {
       `(rows: ${report.manifest?.rowCount ?? 0}, probes: ${report.manifest?.probeCount ?? 0})`
   );
   lines.push(`- Scope: ${describeScope(report.scope)}`);
+  lines.push(...renderHeadlineCertification(report.combined?.certification));
   lines.push("");
 
   lines.push("## Solid 1.x");
@@ -1376,6 +1761,71 @@ export function evaluateThresholds(report, thresholds = {}) {
         metric: "generatablePercentage",
         actual,
         minimum: globalGeneratable
+      });
+    }
+  }
+
+  // A ceiling on rows the baseline certified that this run did not. It is
+  // meaningful only against a baseline, so a threshold file that names it
+  // while the run supplied none is a configuration failure, not a pass: the
+  // gate this exists for is "no receipt lost against the pinned report", and
+  // silence about the pin cannot satisfy it.
+  const maxCertificationRegressions = thresholds?.global?.maxCertificationRegressions;
+  if (typeof maxCertificationRegressions === "number") {
+    const baseline = report.combined?.baseline;
+    if (!baseline?.provided) {
+      failures.push({
+        scope: "global",
+        metric: "certificationRegressions",
+        actual: null,
+        maximum: maxCertificationRegressions,
+        note: "no baseline supplied"
+      });
+    } else if ((baseline.certificationRegressionCount ?? 0) > maxCertificationRegressions) {
+      failures.push({
+        scope: "global",
+        metric: "certificationRegressions",
+        actual: baseline.certificationRegressionCount,
+        maximum: maxCertificationRegressions,
+        probes: baseline.certificationRegressions.map(entry => entry.probeId)
+      });
+    }
+  }
+
+  // A floor on how much of the corpus the dialect negative authority can
+  // still answer about. The authority is pinned to exact prereleases, so this
+  // number falls when the corpus moves to a release nobody has audited -- and
+  // it falls silently, because an unmatched identity is indistinguishable from
+  // any other withheld claim. A floor is what makes that a gate failure rather
+  // than a slow, invisible loss of a whole proof tier.
+  //
+  // A report that could not read the pins fails here for the same reason the
+  // baseline branch above does: silence about the authority cannot satisfy a
+  // claim about its reach.
+  const minAuthorityCoveredRows = thresholds?.global?.minAuthorityCoveredRows;
+  if (typeof minAuthorityCoveredRows === "number") {
+    const authority = report.combined?.dialectNegativeAuthority;
+    if (!authority || authority.unreadable || typeof authority.rowsCovered !== "number") {
+      failures.push({
+        scope: "global",
+        metric: "authorityCoveredRows",
+        actual: null,
+        minimum: minAuthorityCoveredRows,
+        note: authority?.unreadable
+          ? `audited archives unreadable: ${authority.unreadable}`
+          : "no authority coverage measured"
+      });
+    } else if (authority.rowsCovered < minAuthorityCoveredRows) {
+      failures.push({
+        scope: "global",
+        metric: "authorityCoveredRows",
+        actual: authority.rowsCovered,
+        minimum: minAuthorityCoveredRows,
+        // The versions the pin misses, so the failure names the re-audit it
+        // is asking for instead of only its own shortfall.
+        unaudited: (authority.installedVersions ?? [])
+          .filter(entry => !entry.audited)
+          .map(entry => `${entry.package}@${entry.version}`)
       });
     }
   }

@@ -57,6 +57,21 @@ impl SnapshotVerifiedExports {
         })
     }
 
+    /// Authenticated snapshot root of the package that *owns* `name`'s
+    /// declaration binding.
+    ///
+    /// `declaration_binding` returns a path relative to that owner, which for
+    /// an export re-exported from a dependency is the dependency's package and
+    /// not this snapshot's. Any consumer that turns the path into a module
+    /// specifier must join it onto the owner's root; this is how the owner is
+    /// identified, using the same root `verify_target` matches a planned
+    /// dependency by.
+    pub(super) fn declaration_binding_snapshot_root(&self, name: &str) -> Option<&str> {
+        self.bindings
+            .get(name)
+            .map(|binding| binding.declarations_snapshot_root.as_str())
+    }
+
     pub(super) fn runtime_binding(&self, name: &str) -> Option<(&str, &str, Span, &str)> {
         self.bindings.get(name).and_then(|binding| {
             binding.runtime_span.map(|span| {
@@ -68,6 +83,19 @@ impl SnapshotVerifiedExports {
                 )
             })
         })
+    }
+
+    /// The exact declaration-side reference replayed for this export. A
+    /// consumer must resolve this span in the authenticated owner snapshot;
+    /// the export spelling alone is never a callee identity.
+    pub(super) fn declaration_reference(&self, name: &str) -> Option<(&str, &str, Span, &str)> {
+        let binding = self.bindings.get(name)?;
+        Some((
+            &binding.declarations_path,
+            &binding.declarations_export,
+            binding.declarations_span?,
+            &binding.declarations_snapshot_root,
+        ))
     }
 
     pub(super) fn runtime_paths(&self) -> impl Iterator<Item = &str> {
@@ -110,6 +138,8 @@ pub(super) fn verify_snapshot_exports_with_dependencies(
     let mut replay = ExportReplay {
         snapshot,
         dependencies,
+        package_root: resolved.package_root.as_str(),
+        closure_entries: &resolved.closure.entries,
         descriptions: BTreeMap::new(),
     };
     let runtime_names = replay.exported_names(
@@ -388,6 +418,14 @@ struct BindingTarget {
 struct ExportReplay<'a> {
     snapshot: &'a ArtifactSnapshot,
     dependencies: &'a [&'a super::CertificationPlan],
+    /// This node's own installed package root and replayed closure entries,
+    /// which `external_dependency` uses to tell *this* package's dependency
+    /// edge from a homonymous edge reached through a descendant package (which
+    /// may name a different installed copy). Empty entries break no tie, so a
+    /// repeated specifier then stays refused, exactly as before this scope
+    /// existed.
+    package_root: &'a str,
+    closure_entries: &'a [crate::artifact_resolution::ClosureEntry],
     descriptions: BTreeMap<(ModuleAxis, String), ModuleDescription>,
 }
 
@@ -748,7 +786,58 @@ impl ExportReplay<'_> {
         }
         let description = self.description(path, axis)?;
         let mut names = description.direct.keys().cloned().collect::<BTreeSet<_>>();
-        names.extend(description.external_direct.keys().cloned());
+        // ...unless this package *is* the foundation. `solid-js` re-exporting
+        // from `solid-js/...` is publishing its own surface, and ADR 0027's
+        // reason for dropping a core re-export -- that the package has no
+        // standing to describe a name it only forwards -- does not apply to the
+        // package the dialect takes that behavior from. Without this guard the
+        // replay dropped thirteen of `solid-js`'s own exports (`For`, `Show`,
+        // `Switch`, `Suspense`, ...) and refused every graph that composed it.
+        let foreign_core = !solid_dialect::primitive_defining_package(self.snapshot.package_name());
+        // A name re-exported straight from the built-in runtime foundation is
+        // not part of this package's surface (ADR 0027): `solid-js`,
+        // `@solidjs/signals` and `@solidjs/web` have no package contract that
+        // could ever bind it, and ordinary analysis takes their behavior from
+        // the selected dialect instead. The emitter drops it, the resolver
+        // returns it unbound, and this replay is the fourth census that has to
+        // agree — it computes the surface the supplied export map is compared
+        // against, so keeping the name here refused every package with one core
+        // re-export beside its own exports (`@solid-primitives/utils`'
+        // `isServer`, `@solidjs/start`'s `mount`).
+        names.extend(
+            description
+                .external_direct
+                .iter()
+                .filter(|(_, (specifier, _))| {
+                    !(foreign_core && solid_dialect::core_runtime_specifier(specifier))
+                })
+                .map(|(name, _)| name.clone()),
+        );
+        // A local re-export of one is the same name by another route:
+        // `@solidjs/start`'s `dist/client/index.jsx` says
+        // `export { mount } from "./mount.js"`, and that file says
+        // `export { hydrate as mount } from "solid-js/web"`. The resolver
+        // follows the chain and drops it; so must this.
+        let core_bound = description
+            .direct
+            .iter()
+            .filter(|_| foreign_core)
+            .filter(|(_, target)| target.file != path && target.name != "*")
+            .map(|(name, target)| {
+                Ok::<_, ArtifactSnapshotError>(
+                    self.binds_core_runtime(
+                        &target.file,
+                        &target.name,
+                        axis,
+                        &mut BTreeSet::new(),
+                    )?
+                    .then(|| name.clone()),
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        for name in core_bound.into_iter().flatten() {
+            names.remove(&name);
+        }
         for target in description.stars {
             names.extend(
                 self.exported_names(&target, axis, visiting)?
@@ -807,6 +896,49 @@ impl ExportReplay<'_> {
         }
         visiting.remove(&identity);
         Ok(names)
+    }
+
+    /// Whether binding `name` from `path` terminates at the built-in runtime
+    /// foundation.
+    ///
+    /// Mirrors exactly the two arms of [`Self::bind_export`] that can reach an
+    /// external specifier by an exact name — a local re-export chain and a
+    /// direct external re-export — and answers `false` for every other shape.
+    /// A star is deliberately not followed: `exported_names` already takes a
+    /// star into an external package from that dependency's own verified
+    /// exports, which a core specifier has none of, so the name never arrives
+    /// by that route in the first place.
+    ///
+    /// Answering `false` when unsure keeps a name on the surface, which is the
+    /// conservative direction here: an extra name refuses loudly at the
+    /// intersection check, where a missing one would silently shrink a
+    /// published contract.
+    fn binds_core_runtime(
+        &mut self,
+        path: &str,
+        name: &str,
+        axis: ModuleAxis,
+        visiting: &mut BTreeSet<(ModuleAxis, String, String)>,
+    ) -> Result<bool, ArtifactSnapshotError> {
+        let identity = (axis, path.into(), name.into());
+        if !visiting.insert(identity.clone()) {
+            return Ok(false);
+        }
+        let description = self.description(path, axis)?;
+        let answer = if let Some((specifier, _)) = description.external_direct.get(name) {
+            solid_dialect::core_runtime_specifier(specifier)
+        } else if let Some(direct) = description.direct.get(name) {
+            let (file, target) = (direct.file.clone(), direct.name.clone());
+            if file == path || target == "*" {
+                false
+            } else {
+                self.binds_core_runtime(&file, &target, axis, visiting)?
+            }
+        } else {
+            false
+        };
+        visiting.remove(&identity);
+        Ok(answer)
     }
 
     fn bind_export(
@@ -877,14 +1009,44 @@ impl ExportReplay<'_> {
         }
     }
 
+    /// The one planned dependency that *this* package's own import of
+    /// `specifier` resolved to.
+    ///
+    /// `dependencies` is the whole authenticated descendant set, because an
+    /// export target can terminate more than one accepted re-export edge
+    /// away. The set therefore repeats a specifier whenever two packages in
+    /// the graph depend on the same one -- a diamond, which is the ordinary
+    /// shape, not an exceptional one (`motion-solidjs` and `framer-motion`
+    /// both depend on `motion-utils`). Selecting by specifier alone made every
+    /// such repeat ambiguous and bound nothing at all.
+    ///
+    /// A repeat is disambiguated by the importer, using the same authoritative
+    /// edge matcher `plan_published_contract_graph` checks node identity with:
+    /// the plan whose importer is a proven runtime or declaration module of
+    /// *this* package's replayed closure is this package's own edge, and a
+    /// homonymous specifier reached from a descendant package is a different
+    /// edge that may name a different installed copy. The narrowing is applied
+    /// only to break a tie, so a single unambiguous match keeps binding
+    /// exactly as before, and a tie no narrowing resolves stays refused.
     fn external_dependency(&self, specifier: &str) -> Option<&super::CertificationPlan> {
-        let mut matches = self
+        let matches = self
             .dependencies
             .iter()
             .copied()
-            .filter(|dependency| dependency.import_request.specifier == specifier);
-        let dependency = matches.next()?;
-        matches.next().is_none().then_some(dependency)
+            .filter(|dependency| dependency.import_request.specifier == specifier)
+            .collect::<Vec<_>>();
+        if let [dependency] = matches.as_slice() {
+            return Some(dependency);
+        }
+        let mut owned = matches.into_iter().filter(|dependency| {
+            super::dependencies::importer_is_closure_entry_module(
+                &dependency.import_request.importer,
+                self.package_root,
+                self.closure_entries,
+            )
+        });
+        let dependency = owned.next()?;
+        owned.next().is_none().then_some(dependency)
     }
 
     fn external_binding(
@@ -971,6 +1133,8 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            package_root: "/project/node_modules/source-types",
+            closure_entries: &[],
             descriptions: BTreeMap::new(),
         };
 
@@ -1007,6 +1171,8 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            package_root: "/project/node_modules/source-types",
+            closure_entries: &[],
             descriptions: BTreeMap::new(),
         };
 
@@ -1032,6 +1198,8 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            package_root: "/project/node_modules/source-types",
+            closure_entries: &[],
             descriptions: BTreeMap::new(),
         };
 
@@ -1116,6 +1284,8 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            package_root: "/project/node_modules/source-types",
+            closure_entries: &[],
             descriptions: BTreeMap::new(),
         };
 
@@ -1206,6 +1376,8 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            package_root: "/project/node_modules/source-types",
+            closure_entries: &[],
             descriptions: BTreeMap::new(),
         };
 
@@ -1334,6 +1506,8 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            package_root: "/project/node_modules/source-types",
+            closure_entries: &[],
             descriptions: BTreeMap::new(),
         };
 

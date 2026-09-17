@@ -40,34 +40,6 @@ fn write_scope_diagnostics_have_semantic_locations() {
 }
 
 #[test]
-fn solid_one_write_scope_reports_only_genuinely_tracked_execution() {
-    let Some(findings) = diagnostic_fixture("v1-write-scope") else {
-        return;
-    };
-    const SOURCE: &str = include_str!("../../../../fixtures/reactive-ir/v1-write-scope/App.tsx");
-    let starts = findings_for_rule(&findings, "v1/reactive-write-in-owned-scope")
-        .into_iter()
-        .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
-        .collect::<std::collections::HashSet<_>>();
-    let offset = |marker: &str| u64::try_from(SOURCE.find(marker).unwrap()).unwrap();
-
-    assert_eq!(
-        starts,
-        ["setCount(2)", "setCount(3)", "setCount(4)", "setCount(8)"]
-            .map(offset)
-            .into_iter()
-            .collect(),
-        "memo, effect, render-effect, and tracked JSX writes are the v1 SC2001 domain"
-    );
-    for marker in ["setCount(1)", "setCount(5)", "setCount(6)", "setCount(7)"] {
-        assert!(
-            !starts.contains(&offset(marker)),
-            "one-shot component, onMount, plain-helper, and event writes stay outside v1 SC2001: {marker}"
-        );
-    }
-}
-
-#[test]
 fn diagnostic_domains_match_the_solid_two_matrix() {
     for (fixture, rules) in [
         (
@@ -394,33 +366,6 @@ fn solid2_precision_corrections_are_end_to_end() {
 }
 
 #[test]
-fn solid_one_missing_wording_paths_are_end_to_end() {
-    let Some(findings) = diagnostic_fixture("no-owner-v1") else {
-        return;
-    };
-
-    assert_rule_findings(&findings, "v1/missing-owner", 3);
-    let owner_effects = findings_for_rule(&findings, "v1/missing-owner");
-    assert!(owner_effects.iter().any(|finding| {
-        finding["kind"] == "violation"
-            && finding["message"]
-                .as_str()
-                .is_some_and(|message| message.contains("without a reactive owner"))
-    }));
-    assert!(owner_effects.iter().any(|finding| {
-        finding["kind"] == "uncertifiable"
-            && finding["message"]
-                .as_str()
-                .is_some_and(|message| message.contains("component or an ordinary helper"))
-    }));
-    assert_eq!(
-        findings_for_rule(&findings, "v1/package-contract-incomplete").len(),
-        1,
-        "v1 package-contract wording path must run end to end: {findings:#?}"
-    );
-}
-
-#[test]
 fn declared_first_paint_and_opaque_options_split_the_async_rules() {
     let Some(findings) = diagnostic_fixture("async-boundary") else {
         return;
@@ -686,19 +631,6 @@ fn static_violation_evidence_describes_the_actual_proof() {
                 finding["evidence"][0]["message"]
                     .as_str()
                     .is_some_and(|message| message.contains("sync computation"))
-            })
-    );
-
-    let Some(stylistic) = diagnostic_fixture("upstream-divergences") else {
-        return;
-    };
-    assert!(
-        findings_for_rule(&stylistic, "v1/prefer-show")
-            .into_iter()
-            .all(|finding| {
-                finding["evidence"][0]["message"]
-                    .as_str()
-                    .is_some_and(|message| message.contains("conditional JSX expression"))
             })
     );
 }

@@ -110,11 +110,11 @@ test("certification diagnostics link directly to their rule documentation", () =
   assert.equal(
     plugin._testing.findingMessage({
       id: "SC1003",
-      rule: "v1/no-destructure",
+      rule: "no-destructure",
       message: "do not destructure reactive objects"
     }),
     "[SC1003] do not destructure reactive objects\n\n" +
-      "Docs: https://github.com/yumemi-thomas/solid-checker/blob/main/docs/rules/v1/no-destructure.md"
+      "Docs: https://github.com/yumemi-thomas/solid-checker/blob/main/docs/rules/no-destructure.md"
   );
 });
 
@@ -239,34 +239,26 @@ test("reuses an ESLint parser project before filesystem discovery", () => {
 
 test("per-rule surface: every discovered catalog identity is an ESLint rule", () => {
   const catalogs = Object.values(plugin._testing.manifests);
-  const v1 = catalogs.find(catalog => catalog.dialect === "solid-v1");
   const v2 = catalogs.find(catalog => catalog.dialect === "solid-v2");
+  // One catalog ships now (ADR 0110). The adapter still *discovers* catalogs
+  // from `lib/rules-solid-v*.json` rather than naming one, so a second dialect
+  // needs no adapter change -- which is why this asserts the discovered set
+  // rather than hard-coding a single manifest.
   assert.deepEqual(
     catalogs.map(catalog => catalog.dialect).sort(),
-    ["solid-v1", "solid-v2"]
+    ["solid-v2"]
   );
-  for (const entry of [...v1.rules, ...v2.rules]) {
-    assert.ok(plugin.rules[entry.name], `missing rule ${entry.name}`);
-  }
-  for (const entry of v1.rules) {
-    assert.ok(entry.name.startsWith("v1/"), `v1 catalog entry ${entry.name} must be namespaced`);
-  }
   for (const entry of v2.rules) {
+    assert.ok(plugin.rules[entry.name], `missing rule ${entry.name}`);
     assert.ok(!entry.name.includes("/"), `v2 stays unprefixed: ${entry.name}`);
   }
-  assert.equal(v1.namespace, "v1");
   assert.equal(v2.namespace, "");
-  // The two dialect configs enable exactly their default-enabled catalog, plus the
-  // certification switch-off that keeps them composable with `recommended`.
-  assert.equal(
-    Object.keys(plugin.configs.v1.rules).length,
-    v1.rules.filter(entry => entry.defaultEnabled).length + 1
-  );
+  // The dialect config enables exactly its default-enabled catalog, plus the
+  // certification switch-off that keeps it composable with `recommended`.
   assert.equal(
     Object.keys(plugin.configs.v2.rules).length,
     v2.rules.filter(entry => entry.defaultEnabled).length + 1
   );
-  assert.equal(plugin.configs.v1.rules["solid-checker/certification"], "off");
   assert.equal(plugin.configs.v2.rules["solid-checker/certification"], "off");
 });
 
@@ -407,7 +399,7 @@ process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
     report() {}
   };
   plugin._testing.snapshotCache.clear();
-  const listeners = plugin.rules["v1/prefer-classlist"].create(context);
+  const listeners = plugin.rules["prefer-show"].create(context);
   listeners.Program({ type: "Program" });
   listeners["Program:exit"]();
   const args = JSON.parse(readFileSync(calls, "utf8"));
@@ -422,7 +414,7 @@ test("deprecated rule keys delegate without entering dialect presets", () => {
     assert.equal(rule.meta.deprecated, true);
     assert.deepEqual(rule.meta.replacedBy, [currentName]);
     assert.ok(plugin.rules[currentName], `missing replacement ${currentName}`);
-    for (const config of [plugin.configs.v1, plugin.configs.v2]) {
+    for (const config of [plugin.configs.v2]) {
       assert.ok(!(`solid-checker/${oldName}` in config.rules));
     }
   }
@@ -433,11 +425,11 @@ test("recommended followed by a dialect config reports each finding once", () =>
   // maps in listed order is exactly what ESLint resolves.
   const merged = {
     ...plugin.configs.recommended.rules,
-    ...plugin.configs.v1.rules
+    ...plugin.configs.v2.rules
   };
   assert.equal(merged["solid-checker/certification"], "off");
 
-  const findings = [finding("SC1003", "v1/no-destructure", 0, 2)];
+  const findings = [finding("SC1003", "no-destructure", 0, 2)];
   const reported = [];
   lintPass(enabledRules(merged), syntheticContext({ findings }, reported));
   assert.equal(reported.length, 1);
@@ -450,14 +442,14 @@ test("a dialect config followed by recommended reports each finding once", () =>
   // per-file registry has to keep certification from re-reporting what the
   // per-rule rules own.
   const merged = {
-    ...plugin.configs.v1.rules,
+    ...plugin.configs.v2.rules,
     ...plugin.configs.recommended.rules
   };
   assert.equal(merged["solid-checker/certification"], "error");
 
   const findings = [
-    finding("SC1003", "v1/no-destructure", 0, 2),
-    finding("SC1001", "v1/strict-read-untracked", 3, 5)
+    finding("SC1003", "no-destructure", 0, 2),
+    finding("SC1001", "strict-read-untracked", 3, 5)
   ];
   const reported = [];
   lintPass(enabledRules(merged), syntheticContext({ findings }, reported));
@@ -468,8 +460,8 @@ test("a dialect config followed by recommended reports each finding once", () =>
 
 test("certification alone still reports every finding", () => {
   const findings = [
-    finding("SC1003", "v1/no-destructure", 0, 2),
-    finding("SC1001", "v1/strict-read-untracked", 3, 5)
+    finding("SC1003", "no-destructure", 0, 2),
+    finding("SC1001", "strict-read-untracked", 3, 5)
   ];
   const reported = [];
   lintPass(["certification"], syntheticContext({ findings }, reported));
@@ -481,11 +473,11 @@ test("per-rule registrations do not leak into a later certification-only pass", 
   // config, then again after the config dropped to certification only. The
   // second pass must report everything: registrations live for one pass.
   const findings = [
-    finding("SC1003", "v1/no-destructure", 0, 2),
-    finding("SC1001", "v1/strict-read-untracked", 3, 5)
+    finding("SC1003", "no-destructure", 0, 2),
+    finding("SC1001", "strict-read-untracked", 3, 5)
   ];
   const first = [];
-  lintPass(enabledRules(plugin.configs.v1.rules), syntheticContext({ findings }, first));
+  lintPass(enabledRules(plugin.configs.v2.rules), syntheticContext({ findings }, first));
   assert.equal(first.length, 2);
   assert.equal(plugin._testing.ownedRules.size, 0);
 
@@ -496,25 +488,25 @@ test("per-rule registrations do not leak into a later certification-only pass", 
 
 test("per-rule surface: a rule reports only the findings it owns", () => {
   const findings = [
-    finding("SC1003", "v1/no-destructure", 0, 2),
-    finding("SC1001", "v1/strict-read-untracked", 3, 5)
+    finding("SC1003", "no-destructure", 0, 2),
+    finding("SC1001", "strict-read-untracked", 3, 5)
   ];
   const reported = [];
-  lintPass(["v1/no-destructure"], syntheticContext({ findings }, reported));
+  lintPass(["no-destructure"], syntheticContext({ findings }, reported));
   assert.equal(reported.length, 1);
   assert.match(reported[0].data.message, /SC1003/);
 });
 
 test("per-rule surface: one snapshot load serves every rule of a dialect", () => {
   plugin._testing.snapshotCache.clear();
-  const findings = [finding("SC1003", "v1/no-destructure", 0, 2)];
+  const findings = [finding("SC1003", "no-destructure", 0, 2)];
   const snapshotPath = join(tmpdir(), `solid-checker-adapter-shared-${process.pid}.json`);
   writeFileSync(snapshotPath, JSON.stringify({ findings }));
   const reported = [];
   const base = syntheticContext(undefined, reported);
   base.settings = { solidChecker: { snapshotPath } };
   const before = plugin._testing.snapshotCache.size;
-  lintPass(["v1/no-destructure", "v1/strict-read-untracked"], base);
+  lintPass(["no-destructure", "strict-read-untracked"], base);
   assert.equal(plugin._testing.snapshotCache.size, before + 1);
   rmSync(snapshotPath);
 });
@@ -534,6 +526,52 @@ function enabledRules(merged) {
     .filter(([, severity]) => severity !== "off")
     .map(([name]) => name.slice("solid-checker/".length));
 }
+
+test("a project-scoped finding is reported on every linted file, not matched by path", () => {
+  // The unsupported-runtime refusal is located at the `node_modules/solid-js`
+  // manifest that decided the dialect. ESLint never lints that file, so the
+  // ordinary path match would drop it and hand the user a clean run over a
+  // project that was never analyzed -- the false certification the refusal
+  // exists to prevent. Reported on every file instead.
+  const refusal = {
+    id: "SC9013",
+    rule: "unsupported-solid-runtime",
+    kind: "uncertifiable",
+    severity: "error",
+    message: "solid-js 1.9.14 is installed, and this build of solid-checker carries no dialect for it; the project was not analyzed",
+    subjectKind: "project",
+    primaryLocation: {
+      path: "/tmp/app/node_modules/solid-js/package.json",
+      startByte: 0,
+      endByte: 0
+    }
+  };
+  const snapshot = { status: "uncertifiable", findings: [refusal] };
+
+  const reports = run(snapshot, "/tmp/app/src/App.tsx", "const a = 1;");
+  assert.equal(reports.length, 1, "the refusal reaches a file it does not name");
+  assert.match(reports[0].data.message, /SC9013/);
+  assert.deepEqual(reports[0].loc.start, { line: 1, column: 0 });
+  assert.deepEqual(
+    reports[0].loc.end,
+    { line: 1, column: 0 },
+    "the span is this file's origin, never an offset into the manifest's bytes"
+  );
+
+  // Every other file too: the whole project is unanalyzed, so no file in it
+  // may report clean.
+  assert.equal(run(snapshot, "/tmp/app/src/Other.tsx", "const b = 2;").length, 1);
+
+  // And the path match still governs everything that is not project-scoped:
+  // a file-scoped finding naming another file stays where it belongs.
+  const elsewhere = { ...refusal, subjectKind: "component-props", id: "SC1003" };
+  assert.equal(
+    run({ status: "violation", findings: [elsewhere] }, "/tmp/app/src/App.tsx", "const a = 1;")
+      .length,
+    0,
+    "dropping the project scope restores ordinary per-file matching"
+  );
+});
 
 function finding(id, rule, start, end) {
   return {

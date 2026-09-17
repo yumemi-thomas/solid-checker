@@ -1,0 +1,195 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "e1cda2c4eb5a4ceacd9587d28deaee9f8d9bbdf223b45a40b2888009486cc989",
+            "path": "./index.js",
+            "sha256": "dc3513c58440632d480d49be1c6e25ec0ec91d12761af2ea42ae5ed22d1eddf1"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "b7d3c9c3c5d7902806837473604ed13db1667be92712fa629ac9560ee4b2acf8"
+          },
+          "exports": {
+            "mount": "summary-149a510a6c897f51d9c2e768c3ba1d17782573dd058339ba0fa86a4be1996ce0"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    },
+    "./default-export": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "5d998ec91969e634f5dc0e30136248f24229a4072b9a8376d4cb74d3fc87e8f6",
+            "path": "./default-export.js",
+            "sha256": "a8131243af5d8e2534084c96b4a26225e2f7bced954a7c4166133c29ebd60705"
+          },
+          "declarations": {
+            "path": "./default-export.js",
+            "sha256": "a8131243af5d8e2534084c96b4a26225e2f7bced954a7c4166133c29ebd60705"
+          },
+          "exports": {
+            "default": "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1default-export",
+            "typesBranch": "/exports/.~1default-export"
+          }
+        }
+      ]
+    },
+    "./enum": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "de07cac49dbca9f0d0ac96fc584531ce575f292b5436f27a45e5ebcccfed8bde",
+            "path": "./runtime-enum.ts",
+            "sha256": "efee844b7898f3031e4a34c9cc2e2ce02814e37187180159e2413458e33093a6"
+          },
+          "declarations": {
+            "path": "./runtime-enum.ts",
+            "sha256": "efee844b7898f3031e4a34c9cc2e2ce02814e37187180159e2413458e33093a6"
+          },
+          "exports": {
+            "Direction": "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1enum",
+            "typesBranch": "/exports/.~1enum"
+          }
+        }
+      ]
+    },
+    "./runtime-barrel": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "8db7cd1288e2bb3d19efa33b60596f6042b4cecfe18149e655603a27645347fd",
+            "path": "./runtime-barrel.js",
+            "sha256": "3818059da34b6ca9f5de317f661eeaa025b9fe904f3c9616da8b423f70547d6c"
+          },
+          "declarations": {
+            "path": "./runtime-barrel.js",
+            "sha256": "3818059da34b6ca9f5de317f661eeaa025b9fe904f3c9616da8b423f70547d6c"
+          },
+          "exports": {
+            "start": "summary-531f27f0017c6b946639511260e54cfaa3d9358d2914244c0afbd3f102680f26"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1runtime-barrel",
+            "typesBranch": "/exports/.~1runtime-barrel"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:248944a1de2bf572d6b640b29ef2bfbffd34e6c300a6a0ff18c9662484f95ff2",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "248944a1de2bf572d6b640b29ef2bfbffd34e6c300a6a0ff18c9662484f95ff2"
+    },
+    "name": "non-emitting-module-target-control-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-149a510a6c897f51d9c2e768c3ba1d17782573dd058339ba0fa86a4be1996ce0": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
+      },
+      "shape": "plain"
+    },
+    "summary-531f27f0017c6b946639511260e54cfaa3d9358d2914244c0afbd3f102680f26": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b": {
+      "call": {},
+      "shape": "unknown"
+    }
+  }
+}

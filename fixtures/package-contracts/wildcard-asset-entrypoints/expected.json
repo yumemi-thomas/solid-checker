@@ -13,11 +13,53 @@
             "sha256": "b7d3c9c3c5d7902806837473604ed13db1667be92712fa629ac9560ee4b2acf8"
           },
           "exports": {
-            "mount": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+            "mount": "summary-149a510a6c897f51d9c2e768c3ba1d17782573dd058339ba0fa86a4be1996ce0"
           },
           "resolution": {
             "runtimeBranch": "/exports/./import",
             "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    },
+    "./assets/comments-only.js": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "5df3baceed84a1493ab5780ae10bd2bab09fcb3f07ee7a1dc51d6f6df99c9bed",
+            "path": "./assets/comments-only.js",
+            "sha256": "aba8d6eb41f592b1eb7a31bdc3ad3ae75ea0c0f8971a1502bc8f3f7f7a6b2cce"
+          },
+          "declarations": {
+            "path": "./assets/comments-only.js",
+            "sha256": "aba8d6eb41f592b1eb7a31bdc3ad3ae75ea0c0f8971a1502bc8f3f7f7a6b2cce"
+          },
+          "exports": {},
+          "initialization": "inert",
+          "resolution": {
+            "runtimeBranch": "/exports/.~1assets~1*",
+            "typesBranch": "/exports/.~1assets~1*"
+          }
+        }
+      ]
+    },
+    "./assets/empty.js": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "0259419a1216aa2551c2e108a90d8cbc8d0557b361928801e7a44cb3456d6f10",
+            "path": "./assets/empty.js",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "declarations": {
+            "path": "./assets/empty.js",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "exports": {},
+          "initialization": "inert",
+          "resolution": {
+            "runtimeBranch": "/exports/.~1assets~1*",
+            "typesBranch": "/exports/.~1assets~1*"
           }
         }
       ]
@@ -35,7 +77,7 @@
             "sha256": "c7bf5a4c429580f843d4f02cf94841e44aaf95ce23b0b26c612b992217bafcc9"
           },
           "exports": {
-            "render": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+            "render": "summary-149a510a6c897f51d9c2e768c3ba1d17782573dd058339ba0fa86a4be1996ce0"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1assets~1*",
@@ -59,7 +101,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+    "summary-149a510a6c897f51d9c2e768c3ba1d17782573dd058339ba0fa86a4be1996ce0": {
       "call": {
         "callbacks": [
           {
@@ -70,6 +112,13 @@
             "operation": "callback-0"
           }
         ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -88,7 +137,15 @@
               "event": "call"
             }
           }
-        ]
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": []
       },
       "shape": "callable"
     }

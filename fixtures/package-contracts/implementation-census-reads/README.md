@@ -1,0 +1,136 @@
+# `implementation-census-reads`
+
+The tracer for the `reads` implementation census, and the home of the first
+hand-authored `reads` probe recipe.
+
+## The claim under test
+
+`semantic-model.md` § reads **[Decision 2026-09-10]**: a property access on a
+store, props, or projection proxy is *this export's* read only when the proxy
+is a value the export **owns**. A read reached through a caller-supplied value
+is the caller's, on [ADR 0034](../../../docs/adr/0034-parameter-rooted-accessor-disposition.md)'s
+argument about whose code runs.
+
+So these exports split on the receiver's **provenance**, not on syntax. Every
+one is a property access or an invocation; what differs is whose value is
+underneath.
+
+| entrypoint | export | receiver | `reads: []` should |
+| --- | --- | --- | --- |
+| `.` | `plainArithmetic` | — | close |
+| `.` | `readsOwnLiteral` | own object literal (ADR 0044: data properties) | close |
+| `.` | `readsCallerMember` | caller's object, `.value` | close |
+| `.` | `readsCallerElement` | caller's object, `[key]` | close |
+| `.` | `invokesCallerAccessor` | caller's callable — the export's act is the invocation (census plan § 3.2), and since ADR 0100 that invocation is *described*: `callbacks` closes with one item | close |
+| `.` | `invokesCallerMember` | caller's object, `.of.values()` — a *member invocation*, which the generator describes as a `parameter-member` read item, and since [ADR 0101](../../../docs/adr/0101-described-reads-enumeration.md) the census confirms that enumeration site for site | **close with one item** |
+| `.` | `invokesCallerMemberLater` | the same member invocation inside a `queueMicrotask` callback | stays **open**: the generator proposes no closure for a captured member invocation, so there is nothing to confirm |
+| `./owned` | `readsOwnProxy` | a proxy **this module built** | **refuse** |
+| `./owned` | `readsOwnProxyElement` | the same, element access | **refuse** |
+| `./owned` | `observedReads` | — | **refuse**, and that is the point |
+
+`observedReads` reports how many times `ownProxy`'s trap ran, so a recipe can
+watch this module's own source. It touches no proxy itself and still refuses,
+because the refusal is a fact about a **closure**, not an export.
+
+## Two entrypoints, and why the split is the design
+
+The premise the census cannot obtain — "no accessor installed at run time
+reaches this read" — can only be attributed to the file that carries the
+installation. TypeScript types a `Proxy` as its target, so a read through one
+records no invoking form for any census to refuse
+([the design](../../../docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md)
+§ 6-§ 10), and the syntactic hazard is the only place it stays visible.
+
+So a single `new Proxy` anywhere in a file withdraws `reads` for every export
+in it. The proxy therefore lives in `./owned`, with its own closure. Splitting
+per *export* would need dataflow from the installing expression to each read's
+receiver, which nothing in this pipeline has.
+
+The rows above are the current behavior, not an intent. `reads` is in
+`ClaimDomain::PROPOSABLE`, the census decides it, and
+`a_reads_closure_reaches_a_receipt_through_its_mandatory_veto` carries
+`plainArithmetic`'s closure through its gate to a policy-2 receipt using
+`probe-recipes/plain-arithmetic.mjs`.
+
+`probe-recipes/recipes.json` is **not** what that test reads: it plans the
+package itself and asks the schedule for the live claim id, because the ids
+are content digests and the split moved every one of them. The manifest is
+kept as the hand-authored record of which module addresses which claim; treat
+its ids as stale until a run reprints them.
+
+## No `solid-js` import, deliberately
+
+The census cannot prove a receiver is not a proxy, so a real Solid store would
+add nothing this fixture does not already state, and would make every row
+depend on an accepted-dependency closure the way
+`implementation-census-creates`' README warns about. `ownProxy` is a bare
+`Proxy`, which is the same thing to the census: a value built by a *call*,
+whose subject root `census_form_disposition` does not clear.
+
+## Measured state (2026-09-10), and what is still open
+
+The generator proposes `reads: []` for **all eight** exports, including
+`readsOwnProxy` and `readsOwnProxyElement`, and the plan carries all eight as
+closure candidates with claim ids. That is the designed flow — a proposal is
+the generator's inference, and the certifier's census must re-prove it — but
+**whether the census refuses the two proxy rows has not been observed here**:
+the corpus gate stops at the proposal and plan, and certification needs the
+registry path. Until it is observed, this fixture states the intent and pins
+the candidates; it does not yet prove the refusal.
+
+## The recipes
+
+`probe-recipes/` holds the first `reads` recipes in the repository.
+
+- **`plain-arithmetic.mjs`** — runs the export, observes no read, emits
+  nothing. The closure stands because nothing contradicted it.
+- **`reads-own-proxy.mjs`** — runs the export and emits `read-operation`,
+  because the read really happens. It also asserts its *own* observation
+  fired, so a fixture edit that removes the trap fails the recipe instead of
+  silently passing the gate.
+
+- **`invokes-caller-accessor.mjs`** — the first recipe for a *described*
+  `callbacks` closure ([ADR 0100](../../../docs/adr/0100-described-callbacks-enumeration.md)).
+  `invokesCallerAccessor` calls its parameter directly in its own body, so the
+  generator's `inline` row is an item the census can confirm site for site —
+  `from` parameter 0, `at` the call event on the same stack — and the domain
+  is proposed *closed with that one item* rather than left partial. The recipe
+  hands the export a callable that knows whether the sample call is on the
+  stack and emits `callback-invocation` only for a run outside it; the
+  invocation itself is the census's to prove.
+  `a_described_callbacks_closure_reaches_a_receipt_through_its_mandatory_veto`
+  carries it to a receipt.
+
+`invokesCallerMember` has no hand recipe and needs none: a described `reads`
+enumeration is served by a synthesized veto (ADR 0101,
+`Observation::DescribedReads`), which hands the export a recording tripwire
+at every object slot and emits `read-operation` only for a member invocation
+outside the description.
+`a_described_reads_closure_reaches_a_receipt_through_its_mandatory_veto`
+carries it to a receipt with `reads` closed and non-empty. The empty
+enumeration keeps its hand recipes, for the reason below.
+
+`recipes.json` pins all three to the claim ids in `expected-proposal.json`;
+the two files move together, and a regenerated plan means regenerated claim
+ids.
+
+`recipes.json` here is documentary and was never loaded: the tracer tests
+assemble their own corpus from these modules and the *live* claim ids. It
+carried `"policy": 2` where `RecipeCorpus::load` requires the policy object,
+so it would have been refused outright; fixed, and
+`scripts/ecosystem-probe-recipes.test.mjs` now checks every fixture
+manifest's envelope.
+
+**Why hand-authored.** The observation is exact for this package precisely
+because its author knows that `ownProxy` is every reactive-shaped source the
+module owns. A synthesized veto cannot know that — it can only instrument
+values the *caller* supplied, which is the half § reads assigns to the caller.
+That is the argument in `phase21/2026-09-10-reads-veto-observation-design.md`
+for registering no synthesized observation for the domain, and this fixture is
+its worked example.
+
+Everything *around* the observation is mechanical, and
+`scripts/probe-recipe-scaffold.mjs` emits it — the claim id, the manifest
+entry, and the marker the two have to agree on. What it cannot emit is the
+three lines above, so the modules it writes throw until an author supplies
+them (§ 22 of the design).

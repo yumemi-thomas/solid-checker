@@ -1,0 +1,113 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "089cabdddad28452a42518ef55aebe89ef979c0288739f4e200dd46978f0b12d",
+            "path": "./index.js",
+            "sha256": "fdfb052eb440027f537f3ce189f959ab9a3db8f80aa051a11d81c7384232a2eb"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "97b4406bc42572fbfdc2d970b8511033be5b023255541df1fc8b97b96390a85f"
+          },
+          "exports": {
+            "captured": "summary-cd719acaeb7892d543fd8085c736eafff7bd10635b9a9cab7fec9f739afcc2bb",
+            "direct": "summary-0c823a7d1f42cf3e3b9b2ab88be701420852b5bc00b5cb41139727786e2f8413",
+            "mixed": "summary-cd719acaeb7892d543fd8085c736eafff7bd10635b9a9cab7fec9f739afcc2bb"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:4cc36dab600217c32ebfef2f8592e0dc201e38716a8ef7acb615df88bfb80183",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "4cc36dab600217c32ebfef2f8592e0dc201e38716a8ef7acb615df88bfb80183"
+    },
+    "name": "captured-parameter-member-read",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-0c823a7d1f42cf3e3b9b2ab88be701420852b5bc00b5cb41139727786e2f8413": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "of",
+                  "values"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [
+          "read-0"
+        ],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-cd719acaeb7892d543fd8085c736eafff7bd10635b9a9cab7fec9f739afcc2bb": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
+          "creates",
+          "returns"
+        ],
+        "returns": []
+      },
+      "shape": "callable"
+    }
+  }
+}
