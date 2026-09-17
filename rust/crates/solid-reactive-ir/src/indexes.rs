@@ -518,9 +518,24 @@ impl<'a> SemanticLookup<'a> {
     ///
     /// An exact resolved fact and nothing weaker: it is the callee's own
     /// `ResolvedDeclaration::origin_module`, never derived from the callee's
-    /// spelling or from an import statement standing nearby. Used to name the
-    /// package half of a [`crate::CreatesDeclineKind::DialectSilent`] record,
-    /// where a wrong package would misdirect the very audit the record ranks.
+    /// spelling or from an import statement standing nearby.
+    ///
+    /// **Exact, and frequently absent** — measured 2026-09-17, and worth
+    /// knowing before trusting it. Probed against the audited rc.3 install,
+    /// every `solid-js` primitive callee answered `None` here, so the caller
+    /// that names the package half of a
+    /// [`crate::CreatesDeclineKind::DialectSilent`] record reached its
+    /// import-statement fallback instead. That record's package is therefore
+    /// usually the *written specifier's* package rather than this one, which is
+    /// weaker than it reads: for `solid-js` it cannot tell a re-export of
+    /// `@solidjs/signals`' declaration from `solid-js`' own re-declaration.
+    ///
+    /// Nothing decides an audit on it. The proposal-side denial lookup moved to
+    /// [`Self::callee_declaration_source_file`] for exactly that reason, and the
+    /// census that proves a claim binds an archive. What remains is that the
+    /// decline record — an instrument for ranking *which primitive to audit
+    /// next* — can name a package coarser than the one whose bytes the call
+    /// reached.
     /// The file the callee's resolved declaration is written in.
     ///
     /// Distinct from [`Self::callee_origin_module`], and the distinction is the
