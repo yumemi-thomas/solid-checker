@@ -395,7 +395,7 @@ impl GenerationScope {
 /// question they were asking is the disjunction: the export does not subscribe
 /// this operation. Writing it as inequality against `Tracked` would also admit
 /// `Unknown`, which is an open claim rather than an answer.
-const fn export_does_not_subscribe(tracking: Tracking) -> bool {
+pub(crate) const fn export_does_not_subscribe(tracking: Tracking) -> bool {
     matches!(tracking, Tracking::Untracked | Tracking::AmbientAtExecution)
 }
 

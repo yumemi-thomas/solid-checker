@@ -10500,14 +10500,17 @@ fn described_callbacks(
                 operation.at, operation.schedule
             ));
         }
-        if operation.tracking != solid_reactive_ir::contract_semantics::Tracking::Untracked {
+        if !crate::inferred_contract::export_does_not_subscribe(operation.tracking) {
             // A tracked same-stack row is a dependency's invocation (`createMemo`
             // runs its computation before returning); the walk sees the
             // dependency call, not a call of the parameter, so nothing here
-            // could confirm it yet.
+            // could confirm it yet. That is the whole exclusion: a transparent
+            // wrapper says `ambient-at-execution` and is as confirmable as the
+            // `untracked` this used to name, which is why the question is asked
+            // once, beside the two enumeration predicates that ask it.
             return Err(format!(
-                "describes `{operation_id}` as {:?}, and the census confirms the generator's \
-                 untracked call-time invocation only",
+                "describes `{operation_id}` as {:?}, and the census confirms an invocation the \
+                 export does not subscribe only",
                 operation.tracking
             ));
         }
