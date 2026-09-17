@@ -31,6 +31,7 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
 
+import { dialectStubProblems } from "./lib/dialect-stubs.mjs";
 import { ancestorChainDigest, hashTree, openGateCache } from "./lib/gate-cache.mjs";
 import { gateConcurrency, mapPool } from "./lib/pool.mjs";
 
@@ -101,88 +102,16 @@ function fixtureProjects() {
   return found.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-/**
- * Holds every fixture dialect stub to being present, parseable, and tracked.
- *
- * Dialect selection follows the nearest `node_modules/solid-js/package.json`
- * above the project, and a stub that is missing, empty, or unparseable falls
- * back silently to the 2.0 default. Two ways that happens leave no other
- * trace: an empty `node_modules/solid-js/` directory (git cannot record an
- * empty directory, so the stub never arrives), and a stub with no
- * `.gitignore` exception under the repository-wide `**\/node_modules/` rule
- * (present locally, absent in CI). Either one turns a 1.x fixture into a 2.0
- * fixture whose snapshot then records the wrong catalog as if intended.
- *
- * `eslint-plugin-corpus-v1` shipped the first shape and `solid-reexport` the
- * second, so this is a check, not a hypothetical.
- */
-function checkDialectStubs() {
-  const tracked = new Set(
-    execFileSync("git", ["ls-files", "-z", "fixtures"], { cwd: root, encoding: "utf8" })
-      .split("\0")
-      .filter(Boolean)
-  );
-  const problems = [];
-  const groups = ["reactive-ir", "engine", "package-contracts", "ownership-cases", "partial-audit"];
-  /**
-   * Every `node_modules/solid-js` stub at any depth below `directory`, skipping
-   * the inside of `node_modules` trees themselves. A fixture may hold a nested
-   * package (`closed-domain-probe-gate/primitive-consumer/`) with a stub of its
-   * own, and a stub one level down is exactly as load-bearing for dialect
-   * selection -- and exactly as silently absent in CI without its `.gitignore`
-   * exception -- as one at the fixture root.
-   */
-  function* stubDirectories(directory) {
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const path = join(directory, entry.name);
-      if (entry.name === "node_modules") {
-        const stub = join(path, "solid-js");
-        if (existsSync(stub)) yield { stub, fixture: directory };
-        continue;
-      }
-      yield* stubDirectories(path);
-    }
-  }
-  for (const group of groups) {
-    const base = join(root, "fixtures", group);
-    if (!existsSync(base)) continue;
-    for (const entry of readdirSync(base, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      for (const { stub: stubDirectory, fixture } of stubDirectories(join(base, entry.name))) {
-        const manifest = join(stubDirectory, "package.json");
-        const id = relative(root, manifest);
-        if (!existsSync(manifest)) {
-          problems.push(`${id}: missing -- the fixture falls back to the 2.0 default dialect`);
-          continue;
-        }
-        let version;
-        try {
-          version = JSON.parse(readFileSync(manifest, "utf8")).version;
-        } catch (error) {
-          problems.push(`${id}: unparseable (${error.message})`);
-          continue;
-        }
-        if (typeof version !== "string" || version === "") {
-          problems.push(`${id}: no "version" -- dialect selection cannot resolve it`);
-        }
-        if (!tracked.has(id)) {
-          problems.push(
-            `${id}: not tracked by git -- add '!${relative(root, fixture)}/node_modules/'` +
-              ` and its '/**' twin to .gitignore, or the stub is absent in CI`
-          );
-        }
-      }
-    }
-  }
-  if (problems.length > 0) {
-    console.error("fixture dialect stubs are not usable:");
-    for (const problem of problems) console.error(`  ${problem}`);
-    process.exit(2);
-  }
+// Dialect stubs decide which catalog each fixture is checked under, so an
+// unusable one silently rewrites what a snapshot means. The check and its
+// reasoning live in `lib/dialect-stubs.mjs`, where a test can drive its failure
+// paths against a throwaway tree.
+const stubProblems = dialectStubProblems({ projectRoot: root });
+if (stubProblems.length > 0) {
+  console.error("fixture dialect stubs are not usable:");
+  for (const problem of stubProblems) console.error(`  ${problem}`);
+  process.exit(2);
 }
-
-checkDialectStubs();
 
 /**
  * Projects whose snapshots keep the message and hint text.

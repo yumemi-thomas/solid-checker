@@ -22755,3 +22755,61 @@ skips them by the rule it already had; and `pkg/contracts/bundled/solid-v1/`,
 which ADR 0110 § 4 keeps as audit records of bytes that still behave as
 audited — two of them are `include_bytes!` inputs to `policy2_receipt/tests.rs`
 and are not evidence that a 1.x project is analyzable.
+
+### The refusal only covered the majors that have names (2026-09-17)
+
+ADR 0110 § 1 closed a hole for Solid 1.x: a project whose installed `solid-js`
+this build carries no dialect for is refused with `SC9013` rather than analyzed
+under the default catalog. The refusal worked because `Version::V1` exists —
+detection could *classify* `1.9.14`, find no dialect behind it, and turn it
+down.
+
+`solid-js@3.0.0` had no such name. `Version::for_solid_js` answered `None` for
+every major it did not list, `detect_detailed` read `None` as "not a version",
+and "not a version" is `Detection::Defaulted`, which is the 2.0 catalog. So the
+hole ADR 0110 closed for 1.x was open for **every major after 2**, and would
+have stayed open until someone thought to add a variant — after the release,
+after the first report.
+
+`for_solid_js` now returns `Option<Classification>`, where the `Option` means
+"is this a version at all" and `Classification` means "is it a major this build
+names". `UnmodelledMajor(u32)` carries the major nobody here claims, and
+`Detection::Unsupported` holds the classification rather than a `Version`, so
+both shapes of "no dialect" refuse through one path. `Version::V1` now buys the
+refusal a *name*, not the refusal itself.
+
+**Major 0 classifies too, and that is a decision rather than a fallout.**
+`0.5.0` was previously "a major nobody has released" and defaulted; it is a
+released `solid-js` major, and a `0.0.0` placeholder stub is a contradicted
+answer about an install rather than an absence. Only `workspace:*`, an empty
+field, and anything whose leading component will not parse still default — the
+cases where the manifest genuinely does not say.
+
+`tests/fixtures/unsupported-runtime-future-major/` pins it at the process
+boundary, built the same way as `unsupported-runtime-v1`: its `App.tsx`
+destructures component props, so any build that analyzed the tree would report
+SC1003. SC9013 alone is what proves the refusal replaced the analysis, and
+SC1003 appearing there would mean a Solid 3 project had just been checked
+against Solid 2's rules.
+
+**`checkDialectStubs` had the same blind spot, and no test had ever seen it
+fail.** It held every fixture stub to being present, parseable and tracked, and
+noticed nothing about the major — so a fixture pinned to a version no dialect
+models would quietly be asserting a refusal, and its snapshot would record that
+as though intended. The check now reads the carried majors from
+`rust/dialects/*/dialect.json` (`solid-v2` is major 2, and `loadDialectManifests`
+already refuses an id that does not match its directory), so adding a dialect
+makes its major acceptable with no edit here.
+
+Verifying that arm meant editing a real fixture stub, which is exactly what
+these checks exist to prevent, so the check moved to
+`scripts/lib/dialect-stubs.mjs` and `scripts/dialect-stubs.test.mjs` drives all
+four failure classes against a throwaway `$TMPDIR` tree. That is worth saying
+plainly: three of those arms had shipped for months with no evidence beyond
+"the real tree passes", which is the same evidence a check that always returns
+`[]` would produce.
+
+Known limit, unchanged: detection reads the nearest
+`node_modules/solid-js/package.json` and nothing else. A project that installs
+no `solid-js` — or spells it `workspace:*` — still gets the default dialect
+without stating a version, and no refusal can be built on an absence.

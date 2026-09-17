@@ -408,14 +408,13 @@ pub const UNSUPPORTED_RUNTIME_RULE: &str = "unsupported-solid-runtime";
 
 /// What the dialect walk found, and where it found it.
 ///
-/// [`detect`] collapses this to a single dialect for callers that only need
-/// one. The three cases are kept apart here because they are **not** the same
-/// answer, and a caller that must refuse an unsupported runtime cannot tell
-/// them apart from a dialect alone:
+/// The three cases are **not** the same answer, and a caller that must refuse
+/// an unsupported runtime cannot tell them apart from a dialect alone:
 ///
 /// - an installed `solid-js` whose major this build carries,
-/// - an installed `solid-js` whose major this build has **no** dialect for,
-/// - nothing installed, or a version naming no released major.
+/// - an installed `solid-js` whose major this build has **no** dialect for —
+///   whether or not [`solid_dialect::Version`] even names that major,
+/// - nothing installed, or a manifest whose version field is not a version.
 ///
 /// Each case that read a manifest carries the exact path it read, because a
 /// refusal has to say *which* `package.json` decided it — the walk is
@@ -430,12 +429,22 @@ pub enum Detection {
         version: solid_dialect::Version,
         manifest: PathBuf,
     },
-    /// The nearest installed `solid-js` names a released major this build has
-    /// no dialect for. **Never a dialect**: there is no correct one to pick,
-    /// and picking the default would analyze the project under a language it
-    /// does not run. The caller refuses.
+    /// The nearest installed `solid-js` names a major this build has no
+    /// dialect for. **Never a dialect**: there is no correct one to pick, and
+    /// picking the default would analyze the project under a language it does
+    /// not run. The caller refuses.
+    ///
+    /// This covers both shapes of "no dialect". `Modelled(V1)` is a major the
+    /// build still recognises in order to refuse it; `UnmodelledMajor` is one
+    /// no variant names at all, which is the case a future `solid-js@3` lands
+    /// in. They refuse identically and on purpose: a dialect that has not been
+    /// written yet is not a reason to analyze a project under a different
+    /// language, and the alternative — `None` from
+    /// [`solid_dialect::Version::for_solid_js`] falling through to
+    /// [`Defaulted`](Self::Defaulted) — is precisely the silent-2.0 hole
+    /// ADR 0110 § 1 closed for 1.x.
     Unsupported {
-        version: solid_dialect::Version,
+        classification: solid_dialect::Classification,
         /// The `version` field exactly as the manifest spelled it. The
         /// refusal quotes this rather than the classified major, because
         /// "1.9.14" tells the reader which install to go and change and
@@ -443,10 +452,14 @@ pub enum Detection {
         installed: String,
         manifest: PathBuf,
     },
-    /// Nothing resolved, or the nearest manifest names no released major
-    /// (`workspace:*`, `0.5.0`, `3.0.0`). `manifest` is that unclassifiable
+    /// Nothing resolved, or the nearest manifest's version field is not a
+    /// version (`workspace:*`, an empty or absent field). `manifest` is that
     /// manifest when the walk stopped at one, and `None` when no
     /// `node_modules/solid-js` was found at all.
+    ///
+    /// A *number* never lands here. `0.5.0` and `3.0.0` are answers about an
+    /// installed runtime, and an answer this build cannot honour is refused
+    /// rather than defaulted; only an absence defaults.
     Defaulted { manifest: Option<PathBuf> },
 }
 
@@ -466,25 +479,27 @@ pub enum Detection {
 /// contradicted answer.
 #[must_use]
 pub fn detect_detailed(project: &Path) -> Detection {
-    let Some((version, installed, manifest)) = resolved_solid_version(project) else {
+    let Some((classification, installed, manifest)) = resolved_solid_version(project) else {
         return Detection::Defaulted { manifest: None };
     };
-    let Some(version) = version else {
+    let Some(classification) = classification else {
         return Detection::Defaulted {
             manifest: Some(manifest),
         };
     };
-    match by_version(version) {
-        Some(dialect) => Detection::Installed {
+    if let solid_dialect::Classification::Modelled(version) = classification
+        && let Some(dialect) = by_version(version)
+    {
+        return Detection::Installed {
             dialect,
             version,
             manifest,
-        },
-        None => Detection::Unsupported {
-            version,
-            installed,
-            manifest,
-        },
+        };
+    }
+    Detection::Unsupported {
+        classification,
+        installed,
+        manifest,
     }
 }
 
@@ -492,14 +507,14 @@ pub fn detect_detailed(project: &Path) -> Detection {
 /// `(classification, version as written, manifest path)`.
 ///
 /// The outer `Option` is "did the walk find a manifest carrying a version
-/// string at all"; the inner one is whether that string names a released
-/// major. They are separate answers and the caller needs both: a missing
-/// install and an install spelled `workspace:*` both default, but only the
-/// second can name the file that decided it. The raw version string rides
-/// along because a refusal has to quote what it actually read.
+/// string at all"; the inner one is whether that string is a version. They are
+/// separate answers and the caller needs both: a missing install and an
+/// install spelled `workspace:*` both default, but only the second can name
+/// the file that decided it. The raw version string rides along because a
+/// refusal has to quote what it actually read.
 fn resolved_solid_version(
     project: &Path,
-) -> Option<(Option<solid_dialect::Version>, String, PathBuf)> {
+) -> Option<(Option<solid_dialect::Classification>, String, PathBuf)> {
     let start = if project.is_dir() {
         project
     } else {
@@ -523,12 +538,13 @@ fn resolved_solid_version(
         else {
             continue;
         };
-        // A version string that names no released major ("workspace:*",
-        // "0.5.0", "3.0.0") stops the walk and answers `None` -- per
-        // `Version::for_solid_js`'s docs, refusing to classify is deliberate,
-        // and the caller falls back to the v2 default. This is the nearest
-        // `solid-js` the project would import; a resolvable-but-unclassifiable
-        // install is an answer, not an absence.
+        // Whatever the version field says, this is the nearest `solid-js` the
+        // project would import, so the walk stops here either way. A string
+        // that is not a version at all ("workspace:*") answers `None` and the
+        // caller falls back to the default; a major nobody here carries
+        // classifies as `UnmodelledMajor` and is refused, because a
+        // resolvable-but-uncarried install is a contradicted answer rather
+        // than an absence.
         return Some((
             solid_dialect::Version::for_solid_js(&version),
             version,
@@ -990,7 +1006,7 @@ mod tests {
                 version: solid_dialect::Version::V1,
                 ..
             } | Detection::Unsupported {
-                version: solid_dialect::Version::V1,
+                classification: solid_dialect::Classification::Modelled(solid_dialect::Version::V1,),
                 ..
             }
         ));
@@ -1006,7 +1022,7 @@ mod tests {
                 version: solid_dialect::Version::V2,
                 ..
             } | Detection::Unsupported {
-                version: solid_dialect::Version::V2,
+                classification: solid_dialect::Classification::Modelled(solid_dialect::Version::V2,),
                 ..
             }
         ));
@@ -1116,7 +1132,7 @@ mod tests {
             // A build without the 2.0 dialect still resolves the install and
             // still names the file; only the dialect is missing.
             Detection::Unsupported {
-                version: solid_dialect::Version::V2,
+                classification: solid_dialect::Classification::Modelled(solid_dialect::Version::V2),
                 installed,
                 manifest: read,
             } => {
@@ -1204,18 +1220,17 @@ mod tests {
         assert!(snapshot.package_summaries.is_empty());
     }
 
-    /// The step-4 hole, asserted rather than described.
+    /// A named major with no vocabulary behind it refuses.
     ///
-    /// A build carrying every released major's dialect can never answer
-    /// `Unsupported`, so this asserts the *reachable* half: with the 1.x
-    /// dialect compiled in, a 1.x install is `Installed`. The
-    /// `--no-default-features --features dialect-v2` arm compiles the other
-    /// half, where the same tree answers `Unsupported` and `detect` collapses
-    /// it onto the 2.0 default -- a 1.x project analyzed under the 2.0 catalog
-    /// and told nothing. Retiring the 1.x dialect makes that the only build,
-    /// which is why the refusal has to land in the same slice as the deletion.
+    /// This is the half of the refusal that `Version` can still express:
+    /// `V1` exists precisely so detection can *recognise* `1.9.14` in order to
+    /// turn it down. The other half -- a major no variant names at all --
+    /// classifies as `UnmodelledMajor` and is pinned end to end by
+    /// `a_major_this_build_does_not_name_is_refused_like_one_it_does` in
+    /// `tests/dialects_process.rs`, because its whole claim is about what the
+    /// process emits.
     #[test]
-    fn a_one_x_install_is_supported_exactly_while_its_dialect_is_compiled_in() {
+    fn a_named_major_with_no_dialect_behind_it_is_unsupported() {
         let root = std::env::temp_dir().join(format!(
             "solid-checker-dialect-unsupported-{}",
             std::process::id()
@@ -1236,7 +1251,9 @@ mod tests {
             matches!(
                 &detection,
                 Detection::Unsupported {
-                    version: solid_dialect::Version::V1,
+                    classification: solid_dialect::Classification::Modelled(
+                        solid_dialect::Version::V1,
+                    ),
                     ..
                 }
             ),

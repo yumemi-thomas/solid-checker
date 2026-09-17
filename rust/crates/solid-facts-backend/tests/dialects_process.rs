@@ -648,6 +648,55 @@ fn unsupported_runtime_refusal_replaces_the_analysis() {
     }
 }
 
+/// A major no `Version` variant names is refused exactly like 1.x is.
+///
+/// This is the half of ADR 0110 § 1 that 1.x could not pin. `Version::V1`
+/// exists, so a 1.x install has a classification to be refused on; an
+/// installed `solid-js@3.0.0` has none, and `for_solid_js` used to answer
+/// `None` for it — which `detect_detailed` read as "unclassifiable", which is
+/// [`Detection::Defaulted`], which is the 2.0 catalog. The hole ADR 0110
+/// closed for 1.x was open for every major after 2.
+///
+/// Same construction as the test above: `App.tsx` destructures component
+/// props, so any build that analyzes this tree reports SC1003. SC9013 alone
+/// proves the refusal replaced the analysis; SC1003 anywhere in the result
+/// would mean a Solid 3 project had just been checked against Solid 2's rules.
+#[test]
+fn a_major_this_build_does_not_name_is_refused_like_one_it_does() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let (code, snapshot) = run_checker("unsupported-runtime-future-major", &[]);
+    let ids = finding_ids(&snapshot);
+
+    assert_eq!(
+        ids,
+        vec!["SC9013".to_owned()],
+        "an uncarried future major refuses; analyzing it as 2.0 is the silent \
+         wrong-language outcome, and SC1003 here would be exactly that"
+    );
+    assert_eq!(snapshot["status"], "uncertifiable");
+    let finding = &snapshot["findings"][0];
+    assert_eq!(finding["rule"], "unsupported-solid-runtime");
+    assert_eq!(finding["kind"], "uncertifiable");
+    let message = finding["message"].as_str().unwrap();
+    assert!(
+        message.contains("3.0.0"),
+        "the refusal quotes the version it read, not a classified major: {message}"
+    );
+    let path = finding["primaryLocation"]["path"].as_str().unwrap();
+    assert!(
+        path.ends_with("unsupported-runtime-future-major/node_modules/solid-js/package.json"),
+        "the deciding manifest is the location, because it is the file to change: {path}"
+    );
+    assert_eq!(code, 0);
+    assert_eq!(
+        run_checker("unsupported-runtime-future-major", &["--certify"]).0,
+        1,
+        "an uncertifiable result fails certification"
+    );
+}
+
 /// `--check-contracts` under a refused runtime answers with the refusal, and
 /// specifically *not* with a contract report.
 ///

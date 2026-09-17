@@ -63,9 +63,12 @@ impl Version {
     /// with no vocabulary behind it. *Classifying* an installed runtime and
     /// *analyzing* it are different questions: detection has to recognise
     /// `1.9.14` as a released major in order to refuse it
-    /// (`SC9013 unsupported-solid-runtime`), and a build that had forgotten
-    /// 1.x existed would fall through to the default dialect and analyze a 1.x
-    /// project as 2.0 in silence — the exact outcome ADR 0110 forbids.
+    /// (`SC9013 unsupported-solid-runtime`).
+    ///
+    /// A major with no variant at all is not a hole for the same reason —
+    /// [`Version::for_solid_js`] answers [`Classification::UnmodelledMajor`]
+    /// and detection refuses that identically. The variant buys a *name* for
+    /// the refusal, not the refusal itself.
     ///
     /// Use [`DIALECTS`] to ask what the vocabularies on hand say; use this
     /// only when a specific version's vocabulary is the question.
@@ -77,7 +80,8 @@ impl Version {
         }
     }
 
-    /// The dialect a resolved `solid-js` version speaks.
+    /// What a resolved `solid-js` version string says about the language the
+    /// project runs.
     ///
     /// Takes the major component of a semver string and nothing else, so
     /// `2.0.0-rc.0` is 2.0 and `1.9.14` is 1.x. Prerelease and build metadata
@@ -87,26 +91,54 @@ impl Version {
     /// the same reason, although the detection path only ever passes exact
     /// installed versions.
     ///
-    /// Answers `None` rather than guessing when the string is not a version
-    /// or names a major nobody has released. A caller that cannot resolve the
-    /// package has to choose its own default; this type will not choose one
-    /// for it, because "no solid-js found" and "solid-js 3" deserve different
-    /// answers and a default here would erase the difference.
+    /// `None` means the string is **not a version** — `workspace:*`, an empty
+    /// field, anything whose leading component will not parse. That is an
+    /// absence: the caller falls back to its own default, which is what every
+    /// request without a resolvable `solid-js` has always received.
+    ///
+    /// A number that *is* a major always classifies, even when no variant here
+    /// names it, because [`Classification::UnmodelledMajor`] and `None` need
+    /// different answers from the caller and collapsing them is how an
+    /// installed `solid-js@3.0.0` would get analyzed as 2.0 in silence — the
+    /// hole ADR 0110 § 1 closed for 1.x, reopened for every major after this
+    /// one.
     #[must_use]
-    pub fn for_solid_js(version: &str) -> Option<Self> {
-        match version
+    pub fn for_solid_js(version: &str) -> Option<Classification> {
+        let major = version
             .trim()
             .trim_start_matches(['^', '~', '=', 'v', ' ', '>', '<'])
             .split(['.', '-', '+'])
             .next()?
             .parse::<u32>()
-            .ok()?
-        {
-            1 => Some(Self::V1),
-            2 => Some(Self::V2),
-            _ => None,
-        }
+            .ok()?;
+        Some(match major {
+            1 => Classification::Modelled(Self::V1),
+            2 => Classification::Modelled(Self::V2),
+            other => Classification::UnmodelledMajor(other),
+        })
     }
+}
+
+/// What an installed `solid-js` version string says about the language a
+/// project runs.
+///
+/// The distinction this type exists for is between a major this build has a
+/// *name* for and one it does not. Both may end in a refusal — [`Version::V1`]
+/// is named and carries no vocabulary — but only one of them can say which
+/// version it refused, and only one of them is a question the next dialect
+/// answers by adding a variant.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum Classification {
+    /// A major [`Version`] names. Whether this build also carries its
+    /// *vocabulary* is the separate question [`Version::dialect`] answers.
+    Modelled(Version),
+    /// A released major no [`Version`] variant names, carrying that major.
+    ///
+    /// This is a contradicted answer, not an absence: the project imports a
+    /// Solid this build does not speak, and analyzing it under the default
+    /// catalog would report findings in a language it does not run. Detection
+    /// refuses it with `SC9013` for exactly the reason it refuses 1.x.
+    UnmodelledMajor(u32),
 }
 
 /// A Solid primitive the checker models.
@@ -2422,16 +2454,25 @@ mod tests {
 
     #[test]
     fn a_resolved_solid_js_version_picks_its_dialect() {
-        assert_eq!(Version::for_solid_js("1.9.14"), Some(Version::V1));
+        use Classification::{Modelled, UnmodelledMajor};
+        assert_eq!(Version::for_solid_js("1.9.14"), Some(Modelled(Version::V1)));
         // 2.0 is still a prerelease; refusing to classify the RC would leave
         // every current 2.0 project on the caller's fallback.
-        assert_eq!(Version::for_solid_js("2.0.0-rc.0"), Some(Version::V2));
-        assert_eq!(Version::for_solid_js("^1.8.0"), Some(Version::V1));
-        assert_eq!(Version::for_solid_js("v2.0.0"), Some(Version::V2));
-        // No guessing: a major nobody has released and a string that is not a
-        // version both answer None, so the caller decides rather than
-        // inheriting a silent default from here.
-        assert_eq!(Version::for_solid_js("3.0.0"), None);
+        assert_eq!(
+            Version::for_solid_js("2.0.0-rc.0"),
+            Some(Modelled(Version::V2))
+        );
+        assert_eq!(Version::for_solid_js("^1.8.0"), Some(Modelled(Version::V1)));
+        assert_eq!(Version::for_solid_js("v2.0.0"), Some(Modelled(Version::V2)));
+        // A major nobody here names is still a major, and saying so is the
+        // whole point: `None` would send an installed Solid 3 to the caller's
+        // 2.0 default, which is the silent-wrong-language outcome ADR 0110
+        // closed for 1.x. Major 0 classifies the same way -- `solid-js@0.x`
+        // shipped, and a placeholder `0.0.0` stub is a contradicted answer
+        // about a real install rather than an absence.
+        assert_eq!(Version::for_solid_js("3.0.0"), Some(UnmodelledMajor(3)));
+        assert_eq!(Version::for_solid_js("0.5.0"), Some(UnmodelledMajor(0)));
+        // Not a version at all: the caller falls back, as it always has.
         assert_eq!(Version::for_solid_js("workspace:*"), None);
         assert_eq!(Version::for_solid_js(""), None);
     }
