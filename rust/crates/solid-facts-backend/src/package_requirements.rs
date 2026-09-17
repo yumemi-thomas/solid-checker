@@ -9,7 +9,6 @@ use solid_reactive_ir::contract_semantics::AcceptedContractIndex;
 /// of the historical first-party bundle generator. This index carries only
 /// missing-evidence markers; a catalog may fill them with accepted semantics.
 pub fn external_package_contract_requirements(
-    dialect_id: &str,
     project: &Path,
     facts: &solid_facts::ProjectFacts,
 ) -> AcceptedContractIndex {
@@ -27,21 +26,6 @@ pub fn external_package_contract_requirements(
                 && local_proposal_exists(project, &import.text)
             {
                 missing.insert((importer.to_owned(), import.text.to_string()));
-                continue;
-            }
-            // Preserve the previous discovery behavior for these external
-            // Solid 1 helpers. Their catalog/refusal entries still apply;
-            // changing their obligation discovery is a separate migration.
-            if dialect_id == "solid-v1"
-                && matches!(
-                    package,
-                    Some(
-                        "@solid-primitives/scheduled"
-                            | "@solid-primitives/debounce"
-                            | "@solid-primitives/rootless"
-                    )
-                )
-            {
                 continue;
             }
             if package.is_some()

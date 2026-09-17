@@ -3089,7 +3089,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                         Some(PathBuf::from(&request.accepted_contract_catalog))
                     };
                     let requirements =
-                        external_package_contract_requirements(dialect.id, &package_root, &facts);
+                        external_package_contract_requirements(&package_root, &facts);
                     let trust = (!request.receipt_trust_configuration.is_empty())
                         .then(|| {
                             read_policy2_trust_configuration(Path::new(
@@ -3258,7 +3258,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         } else {
             project.parent().unwrap_or_else(|| Path::new("."))
         };
-        let requirements = external_package_contract_requirements(dialect.id, directory, &facts);
+        let requirements = external_package_contract_requirements(directory, &facts);
         // Every catalog the local tier holds, not just `accepted-contracts.json`:
         // certification publishes a case set for a package with more than one
         // artifact case, and opening only the older spelling is what left a
@@ -3378,7 +3378,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         } else {
             project.parent().unwrap_or_else(|| Path::new("."))
         };
-        let requirements = external_package_contract_requirements(dialect.id, directory, &facts);
+        let requirements = external_package_contract_requirements(directory, &facts);
         let trust = (!request.receipt_trust_configuration.is_empty())
             .then(|| {
                 read_policy2_trust_configuration(Path::new(&request.receipt_trust_configuration))
@@ -8640,7 +8640,7 @@ mod contract_emission_fact_program_tests {
 
     fn context() -> ContractEmissionFactContext {
         ContractEmissionFactContext {
-            dialect: "solid-v1".into(),
+            dialect: "solid-v2".into(),
             typefacts_project: "/project/tsconfig.json".into(),
             typefacts_executable: "/bin/solid-typefacts".into(),
             typefacts_arguments: vec!["--protocol=3".into()],

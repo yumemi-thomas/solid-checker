@@ -770,12 +770,6 @@ pub fn accepted_package_contract_statuses(
         .parent()
         .ok_or_else(|| BackendError::Contract("tsconfig has no parent".into()))?;
     let first_party = match dialect.id {
-        "solid-v1" => &[
-            "solid-js",
-            "@solid-primitives/scheduled",
-            "@solid-primitives/debounce",
-            "@solid-primitives/rootless",
-        ][..],
         "solid-v2" => &["solid-js", "@solidjs/web", "@solidjs/signals"][..],
         _ => &[][..],
     };
@@ -1592,11 +1586,7 @@ pub fn semantic_demand_options_for_enablement(
     let mut options = discover_rule_options(project)?;
     options.request_presets(enablement.presets.iter().cloned());
     options.request_rules(enablement.rules.iter().cloned());
-    let rule = if dialect.id == "solid-v1" {
-        "v1/prefer-for"
-    } else {
-        "prefer-for"
-    };
+    let rule = "prefer-for";
     let metadata = (dialect.rule_metadata)(rule);
     Ok(SemanticDemandOptions {
         array_map_receiver_types: metadata.is_some_and(|metadata| {

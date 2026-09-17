@@ -27,6 +27,15 @@ use solid_reactive_ir::{Finding, Program, RuleMetadata, SolveTimings};
 ///
 /// Entries are permanent. Removing one turns a tolerated config back into a
 /// fatal error for the same user, so this list only grows.
+/// The note for every `v1/` identity the 1.x catalog still declared when it was
+/// deleted. They were not retired one at a time for reasons of their own, so
+/// they share one sentence rather than repeating eighteen variants of it.
+///
+/// The `v1/` rows listed individually in [`RETIRED_RULES`] keep their own
+/// notes: a reader whose `v1/imports` disable stopped working needs "this
+/// claim was TypeScript's", and "the dialect is gone" would not tell them that.
+const RETIRED_WITH_THE_V1_CATALOG: &str = "removed 2026-09-16: the Solid 1.x catalog was deleted with its dialect (ADR 0110); a project whose installed solid-js resolves to 1.x is refused with SC9013 rather than analyzed under another catalog";
+
 pub const RETIRED_RULES: &[(&str, &str)] = &[
     (
         "invalid-cleanup-return",
@@ -180,6 +189,37 @@ pub const RETIRED_RULES: &[(&str, &str)] = &[
     (
         "ssr-client-source-outside-loading-boundary",
         "merged 2026-08-20 into async-outside-loading-boundary; existing disables intentionally do not transfer to the wider rule",
+    ),
+    // The 18 the 1.x catalog still declared at deletion. Listed by name rather
+    // than matched by a `v1/` prefix so a typo inside the retired namespace is
+    // still refused -- the whole point of this document's validation is that a
+    // misspelling must not silently mean "defaults".
+    ("v1/strict-read-untracked", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/reactive-read-after-await", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/no-destructure", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/components-return-once", RETIRED_WITH_THE_V1_CATALOG),
+    (
+        "v1/reactive-write-in-owned-scope",
+        RETIRED_WITH_THE_V1_CATALOG,
+    ),
+    ("v1/missing-owner", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/missing-effect-function", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/uncalled-accessor", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/reactive-handler-frozen", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/no-direct-mutation", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/reactive-source-uncaptured", RETIRED_WITH_THE_V1_CATALOG),
+    (
+        "v1/reactive-dispatch-unresolved",
+        RETIRED_WITH_THE_V1_CATALOG,
+    ),
+    ("v1/jsx-no-duplicate-props", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/jsx-no-undef", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/prefer-classlist", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/prefer-for", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/prefer-show", RETIRED_WITH_THE_V1_CATALOG),
+    (
+        "v1/package-contract-incomplete",
+        RETIRED_WITH_THE_V1_CATALOG,
     ),
 ];
 
@@ -416,29 +456,14 @@ pub enum Detection {
 ///
 /// Deliberately **not** read from any loaded contract — a bundled contract
 /// carries the version the checker ships, not the one the project installed.
-/// Falls back to the default dialect when nothing resolves (no node_modules,
-/// a non-version like `workspace:*`, or a major nobody has released), which
-/// is what every request without an installed solid-js got before detection
-/// existed.
 ///
-/// **This collapses [`Detection::Unsupported`] onto the default dialect, and
-/// that is a hole, not a design.** It is unreachable in a build carrying every
-/// released major's dialect, and it is reachable today in the
-/// `--no-default-features --features dialect-v2` arm `scripts/verify.sh` runs:
-/// there, a 1.x project is analyzed under the 2.0 catalog and told nothing.
-/// Retiring the 1.x dialect makes that the *only* build, which is why step 4
-/// of `docs/2026-09-16-retire-solid-1x-plan.md` must land with step 3 and not
-/// after it. Callers that can emit a finding should read [`detect_detailed`]
-/// and refuse `Unsupported` rather than calling this.
-#[must_use]
-pub fn detect(project: &Path) -> &'static Dialect {
-    match detect_detailed(project) {
-        Detection::Installed { dialect, .. } => dialect,
-        Detection::Unsupported { .. } | Detection::Defaulted { .. } => default_dialect(),
-    }
-}
-
-/// [`detect`] with its reasoning intact. See [`Detection`].
+/// A `detect` that collapsed [`Detection::Unsupported`] onto the default
+/// dialect used to sit in front of this. It was the hole ADR 0110 § 1 closed:
+/// it analyzed a project under a language it does not run and told it nothing.
+/// Every caller reads the [`Detection`] and refuses `Unsupported` with
+/// `SC9013`; `Defaulted` — no `node_modules/solid-js`, or a manifest naming no
+/// released major — keeps the default, because an absence is not a
+/// contradicted answer.
 #[must_use]
 pub fn detect_detailed(project: &Path) -> Detection {
     let Some((version, installed, manifest)) = resolved_solid_version(project) else {
@@ -810,8 +835,8 @@ mod tests {
         );
         assert_eq!(
             RETIRED_RULES.len(),
-            39,
-            "eight pre-existing TypeScript redundancies plus 31 catalog-reduction identities"
+            57,
+            "eight pre-existing TypeScript redundancies, 31 catalog-reduction identities, and the 18 the 1.x catalog still declared when ADR 0110 deleted it"
         );
     }
 
@@ -992,7 +1017,10 @@ mod tests {
             r#"{"name":"solid-js","version":"workspace:*"}"#,
         )
         .unwrap();
-        assert_eq!(detect(&project).id, default_dialect().id);
+        assert!(matches!(
+            detect_detailed(&project),
+            Detection::Defaulted { manifest: Some(_) }
+        ));
         std::fs::remove_dir_all(&root).unwrap();
     }
 
@@ -1204,20 +1232,16 @@ mod tests {
         std::fs::write(&project, "{}").unwrap();
 
         let detection = detect_detailed(&project);
-        {
-            assert!(
-                matches!(
-                    &detection,
-                    Detection::Unsupported {
-                        version: solid_dialect::Version::V1,
-                        ..
-                    }
-                ),
-                "without the 1.x dialect, a 1.x install is unsupported, not a 2.0 project: {detection:?}"
-            );
-            // And this is the hole: `detect` answers the 2.0 default anyway.
-            assert_eq!(detect(&project).id, "solid-v2");
-        }
+        assert!(
+            matches!(
+                &detection,
+                Detection::Unsupported {
+                    version: solid_dialect::Version::V1,
+                    ..
+                }
+            ),
+            "a 1.x install is unsupported, not a 2.0 project: {detection:?}"
+        );
         std::fs::remove_dir_all(&root).unwrap();
     }
 }

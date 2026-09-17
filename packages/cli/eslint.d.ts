@@ -32,7 +32,7 @@ export interface SolidCheckerSettings {
   /** Receipt-issued stable-v1 contract catalog for exact imports. */
   acceptedContracts?: string;
   /** Force a dialect instead of detecting it from the project. */
-  dialect?: "solid-v1" | "solid-v2" | (string & {});
+  dialect?: "solid-v2" | (string & {});
   /** Exact runtime selection used for artifact cases and rendering proofs. */
   runtime?: SolidCheckerRuntimeSettings;
   /** Read a canonical JSON snapshot instead of starting an analysis process. */

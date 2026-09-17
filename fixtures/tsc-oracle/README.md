@@ -30,7 +30,7 @@ against those.
 
 | File | What it is |
 | --- | --- |
-| `packages.json` | The audited package versions per dialect, plus the `jsxImportSource` each needs. `v1` tracks the receipt-issued Solid 1 bundle index; `v2` tracks `pkg/contracts/bundled/runtime-lock.json`. |
+| `packages.json` | The audited package versions per dialect, plus the `jsxImportSource` each needs. `v2` — the only dialect this build carries — tracks `pkg/contracts/bundled/runtime-lock.json`. |
 | `rule-cases.json` | The executable half of the redundancy ledger: one case per rule whose positive spelling could plausibly also be a `tsc` error, with the two expectations it must satisfy — `expect` for TypeScript, `checker` for this checker — and a written reason. |
 
 The prose half of the ledger — every rule, its classification, and the actual
@@ -83,7 +83,7 @@ Three invariants tie the halves together:
   not, so there has to be a finding for the distinction to be about.
 - Every exact dialect catalog rule needs a **keystone**: a case pairing `expect: "silent"`
   with `checker: "reports"` — TypeScript says nothing and the rule still
-  speaks. A v1 finding cannot satisfy the v2 rule or vice versa. Checked-in
+  speaks. A finding from another dialect's catalog cannot satisfy it. Checked-in
   findings snapshots do not substitute for this executable evidence; coverage
   owns those artifacts with its own fresh-binary gate. Rules whose subject no
   snippet can express are listed, with reasons, in the gate's `EXEMPT` map.

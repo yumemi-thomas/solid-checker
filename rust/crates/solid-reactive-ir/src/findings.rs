@@ -33,9 +33,9 @@ pub struct RuleMetadata {
     pub presets: &'static [&'static str],
 }
 
-/// Base URL of the per-rule documentation pages in `docs/rules/`. Both
-/// dialect catalogs address their pages under it; the per-dialect part is the
-/// directory the rule name itself carries (`v1/...` or none).
+/// Base URL of the per-rule documentation pages in `docs/rules/`. Every
+/// dialect catalog addresses its pages under it; the per-dialect part is the
+/// directory the rule name itself carries — none, for the default surface.
 pub const DOCS_BASE_URL: &str =
     "https://github.com/yumemi-thomas/solid-checker/blob/main/docs/rules";
 
@@ -44,9 +44,9 @@ pub const DOCS_BASE_URL: &str =
 /// the shared wire shape and formatting.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RuleManifestIdentity {
-    /// Stable checker dialect id (`solid-v1`, `solid-v2`).
+    /// Stable checker dialect id (`solid-v2`).
     pub dialect: &'static str,
-    /// Backward-compatible ESLint flat-config name (`v1`, `v2`).
+    /// Backward-compatible ESLint flat-config name (`v2`).
     pub config: &'static str,
     /// Rule-name namespace without the slash, or empty for the default surface.
     pub namespace: &'static str,

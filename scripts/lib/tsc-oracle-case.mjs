@@ -43,10 +43,7 @@ export const catalogEntries = [
 ];
 export const catalogByName = new Map(catalogEntries.map((rule) => [rule.name, rule]));
 
-export const canonicalRule = (testCase) =>
-  testCase.dialect === "v1" && !testCase.rule.startsWith("v1/")
-    ? `v1/${testCase.rule}`
-    : testCase.rule;
+export const canonicalRule = (testCase) => testCase.rule;
 
 const slug = (name) => name.replace(/[^a-z0-9]+/gi, "-");
 
@@ -135,8 +132,8 @@ export const dialectBase = (dialect) => {
   // Package contracts require independently acquired registry integrity. The
   // audited oracle install uses Bun, so its lockfile must be visible from each
   // isolated checker project just as its node_modules tree is. Linking only
-  // node_modules made the stable-v1 consumer correctly refuse every exact
-  // first-party bundle even though TypeScript resolved the same package.
+  // node_modules made the consumer correctly refuse every exact first-party
+  // bundle even though TypeScript resolved the same package.
   ensureFileLink(join(base, "bun.lock"), join(root, "bun.lock"));
   const entry = { base };
   prepared.set(dialect, entry);

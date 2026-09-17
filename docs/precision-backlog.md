@@ -22687,3 +22687,71 @@ analyzed. Here `project_snapshot_findings` fails on a non-zero exit, so a
 fixture that stopped compiling cannot reach the assertion quietly; a comment
 now records why that is the separating fact rather than leaving a reader to
 wonder.
+
+### The last Solid 1.x analysis code was unreachable, not dead (2026-09-17)
+
+ADR 0110 § 1 retired the dialect and refused a 1.x install with `SC9013`, but
+five sites still carried 1.x *behaviour* underneath that refusal. They were
+individually harmless — nothing can reach them once detection refuses the
+project — and collectively they were a lie about what the build does, which is
+what made them worth removing rather than leaving.
+
+`effect_api.rs` held the largest one: two `match version` dispatches and a
+`v1_effect_function_status` helper modelling 1.x's one-argument `createEffect`.
+The version match did not simply go away. `Version::V1` survives for
+classification (ADR 0110 § 1 needs it to *recognise* `1.9.14` in order to
+refuse it), so the seam now answers at the top of the function and **fails
+closed** for any version it does not model — `Uncertain` for the missing-effect
+proof, `Uncertain` for owner registration, and `ArgumentShape` as the stated
+reason, because not knowing where a dialect puts its apply slot is exactly an
+argument-shape uncertainty. The match is deliberately still exhaustive: a
+`Version` variant added for a future major must be a compile error *here*,
+since where that dialect puts the apply slot is a question this seam has to be
+told and must never inherit from 2.0.
+
+The other four were branch removals with no semantic content left:
+`diagnostics.rs`'s first-party package list for `"solid-v1"`, its
+`v1/prefer-for` rule-name selection, and `package_requirements.rs`'s
+`@solid-primitives/{scheduled,debounce,rootless}` discovery carve-out — whose
+`dialect_id` parameter was its only reader, so the parameter went with it.
+
+`dialect::detect` went too. It was the hole ADR 0110 § 1 named: it collapsed
+`Detection::Unsupported` onto the default dialect, which is how a 1.x project
+got analyzed as 2.0 in silence. Only its own two tests still called it; both
+now read `detect_detailed`, which is what every production caller already did.
+
+**Eighteen identities, one reason, eighteen rows.** The 1.x catalog still
+declared 18 rules when it was deleted, and none was in `RETIRED_RULES` — so an
+existing `.solid-checker/rule-options.json` naming `v1/prefer-for` stopped
+parsing rather than becoming a no-op. They now share one `const`
+(`RETIRED_WITH_THE_V1_CATALOG`), because they were retired by one decision and
+not eighteen. The first attempt matched the `v1/` *prefix* in `retired_rule`
+instead, which is shorter and wrong: it also accepts `v1/no-such-rule`, and
+`compatibility_rule_identities_are_tolerated_and_typos_are_not` caught it
+immediately. That test is the rule this document's parser exists to enforce —
+a misspelling must not silently mean "defaults" — and it does not stop applying
+to a namespace just because the namespace is retired. The ledger's pre-existing
+`v1/` rows keep their own notes: a reader whose `v1/imports` disable stopped
+working needs "this claim was TypeScript's", not "the dialect is gone".
+`RETIRED_RULES` goes from 39 rows to 57.
+
+`tests/fixtures/preferences-v1-{enabled,disabled}` were deleted rather than
+retargeted: nothing referenced either directory, in Rust or in any script.
+
+**What the oracle lost, and what it did not.** `fixtures/tsc-oracle/packages.json`
+carried a `v1` project installing `solid-js@1.9.14`, and `rule-cases.json`
+holds 89 cases, all `v2`. So the gate was provisioning and version-verifying an
+install that no case compiled against. Removing it drops one npm install from
+every cold `make verify` and costs no coverage; `DIALECTS` (already `["v2"]` in
+`scripts/lib/tsc-oracle-case.mjs`) is now what validates a case's dialect and
+what builds the cache's tree list, rather than two literals that had drifted
+from it. The `v1/package-contract-incomplete` exemption went with the rule
+name; `package-contract-incomplete` keeps its own entry and its own reason.
+
+Remaining fail-closed and archival cases, unchanged by this: the `Version::V1`
+arm above (unreachable, fails closed); `RULE_ALIASES` entries whose targets are
+`v1/`-namespaced, which no compiled-in catalog declares, so the alias test
+skips them by the rule it already had; and `pkg/contracts/bundled/solid-v1/`,
+which ADR 0110 § 4 keeps as audit records of bytes that still behave as
+audited — two of them are `include_bytes!` inputs to `policy2_receipt/tests.rs`
+and are not evidence that a 1.x project is analyzable.

@@ -271,7 +271,7 @@ const collect = (program, sources) => {
  * the same tree, behind the same version check, instead of reimplementing it
  * and drifting.
  *
- * @param {"v1"|"v2"} dialect
+ * @param {"v2"} dialect
  * @returns {{root: string, jsxImportSource: string}}
  */
 export const oracleProject = (dialect) => ({
@@ -282,7 +282,7 @@ export const oracleProject = (dialect) => ({
 /**
  * Compile `inputs` against the real typings for `dialect`.
  *
- * @param {"v1"|"v2"} dialect
+ * @param {"v2"} dialect
  * @param {{name: string, code: string}[]} inputs
  * @returns diagnostics from a `strict` and a `loose` pass, plus the versions
  *          they were produced against.
@@ -332,8 +332,8 @@ const usage = () => {
   console.error(
     [
       "usage:",
-      "  bun scripts/tsc-oracle.mjs provision [--dialect v1|v2|all] [--force]",
-      "  bun scripts/tsc-oracle.mjs check --dialect v1|v2 (--file <path>... | --code <snippet>) [--json]",
+      "  bun scripts/tsc-oracle.mjs provision [--dialect v2|all] [--force]",
+      "  bun scripts/tsc-oracle.mjs check --dialect v2 (--file <path>... | --code <snippet>) [--json]",
       "  bun scripts/tsc-oracle.mjs versions [--json]",
     ].join("\n"),
   );

@@ -1,6 +1,0 @@
-{
-  "schemaVersion": 1,
-  "rules": {
-    "v1/prefer-show": { "enabled": false }
-  }
-}

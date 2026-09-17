@@ -641,7 +641,7 @@ fn answer(
         .project
         .parent()
         .ok_or("tsconfig has no parent directory")?;
-    let requirements = external_package_contract_requirements(state.dialect.id, directory, &facts);
+    let requirements = external_package_contract_requirements(directory, &facts);
     let trust = (!check.receipt_trust_configuration.is_empty())
         .then(|| read_policy2_trust_configuration(Path::new(&check.receipt_trust_configuration)))
         .transpose()?;

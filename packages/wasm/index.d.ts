@@ -118,9 +118,9 @@ export interface InstalledPackage {
 export interface CheckRequest {
   projectId: string
   /**
-   * Dialect id ("solid-v2" or "solid-v1"). The wasm build cannot inspect a
-   * node_modules tree, so an absent dialect means the default (solid-v2)
-   * rather than detection.
+   * Dialect id ("solid-v2"). The wasm build cannot inspect a node_modules
+   * tree, so an absent dialect means the default (solid-v2) rather than
+   * detection.
    */
   dialect?: string
   generation: number
@@ -149,9 +149,9 @@ export interface CheckRequest {
 export interface PlanRequest {
   projectId: string
   /**
-   * Dialect id ("solid-v2" or "solid-v1"). The wasm build cannot inspect a
-   * node_modules tree, so an absent dialect means the default (solid-v2)
-   * rather than detection.
+   * Dialect id ("solid-v2"). The wasm build cannot inspect a node_modules
+   * tree, so an absent dialect means the default (solid-v2) rather than
+   * detection.
    */
   dialect?: string
   generation: number

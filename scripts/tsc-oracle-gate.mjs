@@ -51,6 +51,7 @@ import { fileURLToPath } from "node:url";
 import { openGateCache } from "./lib/gate-cache.mjs";
 import { createWorkerPool, gateConcurrency, mapPool } from "./lib/pool.mjs";
 import {
+  DIALECTS,
   canonicalRule,
   catalogEntries,
   prepareDialectBases,
@@ -108,11 +109,8 @@ const validate = (testCase, index) => {
     failures.push(message);
     return { failures, skip: true };
   };
-  if (testCase.dialect !== "v1" && testCase.dialect !== "v2") {
-    return stop(`${label}: dialect must be exactly "v1" or "v2"`);
-  }
-  if (testCase.dialect === "v2" && testCase.rule.startsWith("v1/")) {
-    return stop(`${label}: a v2 case cannot name a v1/ catalog rule`);
+  if (!DIALECTS.includes(testCase.dialect)) {
+    return stop(`${label}: dialect must be one of ${DIALECTS.map((d) => JSON.stringify(d)).join(", ")}`);
   }
   if (testCase.sourceExtension !== undefined && !["ts", "tsx"].includes(testCase.sourceExtension)) {
     return stop(`${label}: sourceExtension must be exactly "ts" or "tsx"`);
@@ -231,10 +229,7 @@ const evaluate = (testCase, index, { perPass, checkerPasses }) => {
   // still pass. A distinct claim must be explicit at this case, not inferred
   // from the rule having been legitimate somewhere else.
   const distinctFindings = new Map(
-    (testCase.distinctFindings ?? []).map((entry) => [
-      testCase.dialect === "v1" && !entry.rule.startsWith("v1/") ? `v1/${entry.rule}` : entry.rule,
-      entry.why,
-    ]),
+    (testCase.distinctFindings ?? []).map((entry) => [entry.rule, entry.why]),
   );
   for (const [passName, diagnostics] of perPass) {
     const checker = checkerPasses.find(([name]) => name === passName)[1];
@@ -315,7 +310,7 @@ prepareDialectBases();
 // the same published .d.ts files report, and invalidating 322 TypeScript
 // programs for that unrelated event was the dominant warm-gate cost.
 const concurrency = gateConcurrency();
-const oracleRoots = [oracleProject("v1").root, oracleProject("v2").root];
+const oracleRoots = DIALECTS.map((dialect) => oracleProject(dialect).root);
 const typescriptCache = openGateCache({
   gate: "tsc-oracle-typescript",
   scriptPath: fileURLToPath(import.meta.url),
@@ -375,7 +370,6 @@ for (const [index, testCase] of ledger.cases.entries()) {
 // verdict on it.
 const EXEMPT = {
   "package-contract-incomplete": "asks whether a package ships a usable reactivity contract, which is an analyzability fact about an external artifact; no snippet against real Solid typings can express it",
-  "v1/package-contract-incomplete": "same -- the subject is a third-party package's contract, not Solid's types",
   "server-function-module-directive": "needs a module-level \"use server\" prologue and the project's server surface",
   // The one catalog identity with no source subject at all. It is decided by
   // dialect detection from the nearest node_modules/solid-js/package.json,

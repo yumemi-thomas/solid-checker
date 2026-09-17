@@ -17,6 +17,7 @@ import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { openGateCache } from "./lib/gate-cache.mjs";
+import { DIALECTS } from "./lib/tsc-oracle-case.mjs";
 import { oracleCompilerOptions, oracleProject, runOracle } from "./tsc-oracle.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -37,7 +38,7 @@ const normalizedStrings = (value = []) => [...new Set(value)].sort();
 const byteLength = (value) => Buffer.byteLength(value, "utf8");
 const overlaps = (a, b) => a.start < b.end && b.start < a.end;
 const safeName = (id) => id.replace(/[^a-zA-Z0-9._-]+/g, "__");
-const dialectShort = (dialect) => dialect === "solid-v1" ? "v1" : dialect === "solid-v2" ? "v2" : null;
+const dialectShort = (dialect) => dialect === "solid-v2" ? "v2" : null;
 
 const fail = (failures, message) => failures.push(message);
 
@@ -89,20 +90,17 @@ const locate = (variable, ...candidates) => {
 };
 const CHECKER = locate("SOLID_CHECKER_BIN", join(ROOT, "rust/target/debug/solid-checker-rust"));
 const TYPEFACTS = locate("SOLID_TYPEFACTS_BIN", join(ROOT, "bin/solid-typefacts"));
+const oracleRoots = DIALECTS.map((dialect) => oracleProject(dialect).root);
 const ownershipCache = openGateCache({
   gate: "ownership",
   scriptPath: fileURLToPath(import.meta.url),
   binaries: [CHECKER, TYPEFACTS, join(ROOT, "bin/solid-typefacts.buildinfo")],
-  trees: [oracleProject("v1").root, oracleProject("v2").root],
+  trees: oracleRoots,
 });
 const ownershipOracleCache = openGateCache({
   gate: "ownership-safe-fix-oracle",
   scriptPath: fileURLToPath(import.meta.url),
-  trees: [
-    oracleProject("v1").root,
-    oracleProject("v2").root,
-    join(ROOT, "packages/cli/node_modules/typescript"),
-  ],
+  trees: [...oracleRoots, join(ROOT, "packages/cli/node_modules/typescript")],
 });
 
 const manifest = JSON.parse(readFileSync(CASES_PATH, "utf8"));
@@ -188,7 +186,7 @@ for (const [index, testCase] of (manifest.cases ?? []).entries()) {
   else if (ids.has(testCase.id)) fail(failures, `${label}: duplicate id`);
   else ids.add(testCase.id);
   const short = dialectShort(testCase.dialect);
-  if (!short) fail(failures, `${label}: dialect must be solid-v1 or solid-v2`);
+  if (!short) fail(failures, `${label}: dialect must be solid-v2`);
   const extension = testCase.source?.extension;
   if (![".ts", ".tsx"].includes(extension)) fail(failures, `${label}: source.extension must be .ts or .tsx`);
   if (typeof testCase.source?.prelude !== "string" || typeof testCase.source?.text !== "string") fail(failures, `${label}: source prelude/text must be strings`);

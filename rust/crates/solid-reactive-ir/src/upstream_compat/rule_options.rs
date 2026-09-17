@@ -122,7 +122,7 @@ impl RuleOptions {
                 Ok(())
             } else {
                 // No rule in the shipped catalog takes options beyond
-                // `enabled`. The one that did was `v1/prefer-classlist`, whose
+                // `enabled`. The one that did was 1.x's `prefer-classlist`, whose
                 // `classnames` list went with the 1.x catalog (ADR 0110). The
                 // refusal stays because this module's whole point is that a
                 // typo must not silently mean "defaults" -- when a 2.0 rule
@@ -169,9 +169,9 @@ mod tests {
     fn known_rule(rule: &str) -> bool {
         matches!(
             rule,
-            "v1/prefer-classlist"
-                | "v1/no-destructure"
-                | "v1/no-direct-mutation"
+            "prefer-classlist"
+                | "no-destructure"
+                | "no-direct-mutation"
                 | "no-owner-cleanup"
                 | "no-owner-settled-cleanup"
                 | "strict-read-untracked"
@@ -207,7 +207,7 @@ mod tests {
             r#"{
               "schemaVersion": 1,
               "rules": {
-                "v1/no-direct-mutation": { "enabled": false },
+                "no-direct-mutation": { "enabled": false },
                 "no-owner-cleanup": { "enabled": false },
                 "strict-read-untracked": { "enabled": true }
               }
@@ -215,9 +215,9 @@ mod tests {
             known_rule,
         )
         .unwrap();
-        assert!(!options.is_enabled("v1/no-direct-mutation", true, &[]));
+        assert!(!options.is_enabled("no-direct-mutation", true, &[]));
         assert!(options.is_enabled("strict-read-untracked", true, &[]));
-        assert!(options.is_enabled("v1/no-destructure", true, &[]));
+        assert!(options.is_enabled("no-destructure", true, &[]));
         assert!(!options.is_enabled("no-owner-cleanup", true, &[]));
         assert!(options.is_enabled("no-owner-settled-cleanup", true, &[]));
     }
@@ -227,21 +227,21 @@ mod tests {
         assert!(RuleOptions::parse(r#"{ "schemaVersion": 2 }"#, known_rule).is_err());
         assert!(
             RuleOptions::parse(
-                r#"{ "schemaVersion": 1, "rules": { "v1/not-a-rule": {} } }"#,
+                r#"{ "schemaVersion": 1, "rules": { "not-a-rule": {} } }"#,
                 known_rule,
             )
             .is_err()
         );
         assert!(
             RuleOptions::parse(
-                r#"{ "schemaVersion": 1, "rules": { "v1/no-destructure": { "severity": "off" } } }"#,
+                r#"{ "schemaVersion": 1, "rules": { "no-destructure": { "severity": "off" } } }"#,
                 known_rule,
             )
             .is_err()
         );
         assert!(
             RuleOptions::parse(
-                r#"{ "schemaVersion": 1, "rules": { "v1/no-destructure": { "enabled": "no" } } }"#,
+                r#"{ "schemaVersion": 1, "rules": { "no-destructure": { "enabled": "no" } } }"#,
                 known_rule,
             )
             .is_err()
@@ -278,11 +278,11 @@ mod tests {
         assert!(options.is_enabled("prefer-for", false, &["preferences"]));
 
         let mut disabled = RuleOptions::parse(
-            r#"{ "schemaVersion": 1, "rules": { "v1/prefer-classlist": { "enabled": false } } }"#,
+            r#"{ "schemaVersion": 1, "rules": { "prefer-classlist": { "enabled": false } } }"#,
             known_rule,
         )
         .unwrap();
         disabled.request_presets(["preferences".into()]);
-        assert!(!disabled.is_enabled("v1/prefer-classlist", true, &["preferences"]));
+        assert!(!disabled.is_enabled("prefer-classlist", true, &["preferences"]));
     }
 }
