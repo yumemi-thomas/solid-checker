@@ -12,8 +12,10 @@ The documents serve two related checks:
 - bundle gates keep the two inventories consistent. An empty bundle index
   cannot establish that the analyzer consumes receipts.
 
-`solid-v1` covers published `solid-js@1.9.14` and exact scheduled, debounce,
-and rootless packages. `solid-v2` covers published RC.3 `solid-js`,
+`solid-v1` covered published `solid-js@1.9.14` and exact scheduled, debounce
+and rootless packages; it was deleted on 2026-09-17 with the rest of the Solid
+1.x artifacts, unread by any code, script or gate. `solid-v2` covers published
+RC.3 `solid-js`,
 `@solidjs/web`, and `@solidjs/signals`. Browser/node and
 development/production cases remain separate artifact cases; no consumer may
 choose one by export spelling alone.

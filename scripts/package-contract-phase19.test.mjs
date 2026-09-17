@@ -179,7 +179,16 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // which any code, script or gate read. Three files stay in that
       // directory: the bundle index the walker requires, and two documents
       // `policy2_receipt`'s tests compile in as fixtures.
-      stableMainDocuments: 154,
+      //
+      // 136 the same day, finishing the sweep: eighteen more went with
+      // `rust/crates/solid-dialect/contracts/solid-v1/` and the three unused
+      // `solid-1x-*` backend test-fixture trees. Nothing read any of them
+      // either. What still carries a 1.x name is deliberate and is not an
+      // artifact: the retirement plan, one audit document, and
+      // `fixtures/reactive-ir/solid-1x-leftovers`, which is a **Solid 2.0**
+      // fixture -- it pins that 1.x-only names written in a 2.0 project are
+      // caught.
+      stableMainDocuments: 136,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
