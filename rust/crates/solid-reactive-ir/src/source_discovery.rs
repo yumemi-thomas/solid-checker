@@ -829,19 +829,21 @@ pub(crate) fn discover_file_sources(
                         declaration,
                     ),
                 ));
+                // `Dialect::returns_reactive_tuple`, not a list: the list here
+                // was 1.x's (`createResource` is 1.x-only) and so missed 2.0's
+                // `createOptimistic` and `createOptimisticStore` entirely. That
+                // method's own documentation names this as the thing it exists
+                // to replace -- "shared code carried one hardcoded list that
+                // was neither dialect's".
                 let go_returned_source = binding.shape == solid_facts::ast::BindingShape::Array
-                    && matches!(
-                        resolved,
-                        Some(
-                            Primitive::CreateSignal
-                                | Primitive::CreateStore
-                                | Primitive::CreateResource
-                        )
-                    )
+                    && resolved
+                        .is_some_and(|primitive| lookup.dialect.returns_reactive_tuple(primitive))
                     && binding_returns_reactive_source(binding, call);
                 result.source_phases.push((
                     symbol.clone(),
-                    if go_returned_source && resolved == Some(Primitive::CreateStore) {
+                    if go_returned_source
+                        && resolved.is_some_and(|primitive| lookup.dialect.returns_store(primitive))
+                    {
                         2
                     } else if go_returned_source {
                         0
@@ -943,21 +945,20 @@ pub(crate) fn discover_file_sources(
             lookup.dialect,
         );
         let resolved = known_primitive(&primitive);
-        if !matches!(
-            resolved,
-            Some(Primitive::CreateSignal | Primitive::CreateStore | Primitive::CreateResource)
-        ) {
+        // Same seam as above, and the same reason.
+        if !resolved.is_some_and(|primitive| lookup.dialect.returns_reactive_tuple(primitive)) {
             continue;
         }
         let Some(symbol) = symbol else {
             continue;
         };
         let declaration = location(file.path.shared(), name);
-        let source_kind = if resolved == Some(Primitive::CreateStore) {
-            ReactiveSourceKind::Store
-        } else {
-            ReactiveSourceKind::Accessor
-        };
+        let source_kind =
+            if resolved.is_some_and(|primitive| lookup.dialect.returns_store(primitive)) {
+                ReactiveSourceKind::Store
+            } else {
+                ReactiveSourceKind::Accessor
+            };
         result.accessors.push((
             symbol.clone(),
             (

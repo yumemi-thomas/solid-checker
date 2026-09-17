@@ -75,12 +75,47 @@ one from the other would lose exactly those cases.
 - `docs/adding-a-dialect.md` names the method, so the next dialect meets it on
   the checklist instead of in a defect.
 
-## What this does not claim
+## The audit this ADR asked for (done 2026-09-17)
 
-The seam is now correct for *callback execution*. It is not a survey. This ADR
-was written after finding one violation while removing a dialect; the honest
-statement is that shared code still holds primitive-keyed logic elsewhere
-(`owners.rs`, `source_discovery.rs`, `static_api.rs`, `cleanup.rs`), and
-whether each is dispatch or version-specific behaviour has not been audited.
-That audit is the natural next piece of work, and it should happen before a
-third dialect rather than during one.
+The first draft said shared code still held primitive-keyed logic elsewhere and
+that nobody had checked whether each site was dispatch or version-specific
+behaviour. That audit ran, mechanically rather than by eye, and found two
+things.
+
+**24 of the 77 `Primitive` variants are named by no dialect this build
+carries** — `createResource`, `batch`, `onMount`, `mergeProps`, `Suspense` and
+twenty more. That is expected: `Primitive` is the shared vocabulary and
+`Version::V1` is retained deliberately so the `SC9013` refusal can recognize
+1.x. It is worth stating because a third of the enum is now vocabulary no
+carried dialect can produce, and a reader should not take a match arm on one as
+live code.
+
+**Only two shared-code sites still matched an unreachable variant**, both in
+`source_discovery.rs`, and both turned out to be the same defect rather than
+dead weight: a hardcoded `CreateSignal | CreateStore | CreateResource` list
+deciding which primitives return a destructurable reactive tuple. That is 1.x's
+list. It missed 2.0's `createOptimistic` and `createOptimisticStore` entirely,
+so a 2.0 project destructuring either was not recognized as binding a reactive
+source at those two sites.
+
+`Dialect::returns_reactive_tuple` already existed for exactly this, is used
+elsewhere in the same file, and its own documentation names the problem:
+*"Shared code carried one hardcoded list that was neither dialect's."* Both
+sites now ask it, and the store-versus-accessor kind beside them asks
+`Dialect::returns_store` instead of comparing to `CreateStore`.
+
+**Unpinned, and said so rather than left to be assumed.** Coverage is unchanged
+at 433 findings across 80 projects, because no fixture destructures
+`createOptimistic` or `createOptimisticStore`. The fix is therefore latent
+precision: correct, and exercised by nothing. A fixture that pins it needs a
+rule whose finding depends on source recognition, which is its own piece of
+work.
+
+The remaining sites — `owners.rs`, `static_api.rs`, `server_rules.rs`,
+`cleanup.rs`, `indexes.rs` — match only primitives a carried dialect names, so
+none is dead. Whether each *should* consult a seam rather than name a primitive
+is a separate question this ADR does not settle: several are genuine dispatch
+(routing on identity), and several encode role knowledge — "these three
+register a computation on the owner", "this one is the cleanup primitive" —
+that a future dialect might answer differently. They are listed here so the
+next dialect meets them deliberately.
