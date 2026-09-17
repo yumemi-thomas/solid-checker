@@ -44,6 +44,8 @@ fixtures/upstream-parity/.staging/
 # Dialect detection reads the installed solid-js version from these stubs.
 !fixtures/reactive-ir/dialect-solid-*/node_modules/
 !fixtures/reactive-ir/dialect-solid-*/node_modules/**
+!fixtures/reactive-ir/optimistic-tuple-destructure/node_modules/
+!fixtures/reactive-ir/optimistic-tuple-destructure/node_modules/**
 !fixtures/reactive-ir/jsx-census-gap-*/node_modules/
 !fixtures/reactive-ir/jsx-census-gap-*/node_modules/**
 !fixtures/reactive-ir/jsx-void-child-divergence-*/node_modules/

@@ -1,0 +1,75 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/optimistic-tuple-destructure/App.tsx",
+      "start": 995,
+      "end": 1002,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/optimistic-tuple-destructure/App.tsx",
+      "start": 1201,
+      "end": 1210,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/optimistic-tuple-destructure/App.tsx",
+      "start": 1381,
+      "end": 1387,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/optimistic-tuple-destructure/Assign.tsx",
+      "start": 1431,
+      "end": 1438,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/optimistic-tuple-destructure/Assign.tsx",
+      "start": 1666,
+      "end": 1675,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/optimistic-tuple-destructure/Assign.tsx",
+      "start": 1868,
+      "end": 1874,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/optimistic-tuple-destructure/Assign.tsx",
+      "start": 2085,
+      "end": 2095,
+      "fixes": 0
+    }
+  ]
+}

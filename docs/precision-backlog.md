@@ -23186,3 +23186,45 @@ every site that must be revisited (`effect_api.rs`'s exhaustive match is built
 for exactly that). Asserting a compile *failure* needs a `trybuild`-style
 harness this workspace does not carry, so the property is designed for and
 documented, not tested.
+
+### ADR 0111's unpinned fix is pinned, and it was narrower than the ADR said (2026-09-17)
+
+ADR 0111 replaced a hardcoded `CreateSignal | CreateStore | CreateResource` in
+`source_discovery.rs` with `Dialect::returns_reactive_tuple`, and recorded the
+result honestly as latent: "correct, and exercised by nothing... a fixture that
+pins it needs a rule whose finding depends on source recognition, which is its
+own piece of work." `fixtures/reactive-ir/optimistic-tuple-destructure` is that
+work. The rule is SC1001, which can only report a read it can trace to a
+source, so an unrecognised source produces *silence* — the failure shape an
+expected-findings snapshot catches and a green build does not.
+
+**Writing it corrected the ADR's description.** The ADR says "a 2.0 project
+destructuring either was not recognized as binding a reactive source at those
+two sites". Destructuring has two forms and only one was affected:
+
+- `const [count] = createOptimistic(0)` — a *declaration* — reaches source
+  discovery through the binding path, guarded by `creates_reactive_source`,
+  which has always named the optimistic primitives. This form worked
+  throughout.
+- `[count] = createOptimistic(0)` — an *assignment*, over `file.ast.assignments`
+  — is the path `returns_reactive_tuple` guards, and is the one that bound
+  nothing.
+
+Both are in the fixture, and the declaration half is what makes the assignment
+half mean something specific: dropping the two optimistic entries from
+`returns_reactive_tuple` removes exactly `count` and `row.label` from
+`Assign.tsx` and leaves all three `App.tsx` findings and both controls
+(`createSignal`, `createStore`) in place. Verified by doing it, twice — the
+first attempt read as "the fixture does not detect the regression" because the
+restored source had not been rebuilt, which is the checked-in-binary trap
+AGENTS.md documents, arrived at from the other direction.
+
+Both source files were type-checked against the audited typings first
+(`tsc-oracle.mjs check --dialect v2`, 0 diagnostics strict and loose), so every
+finding is something `tsc` does not already say. The stub keeps the two-slot
+tuple shape and `createOptimistic`'s `Exclude<T, Function>` parameter
+byte-faithful and flattens the accessor brand and setter overloads, which the
+claim does not depend on; the README says which and why.
+
+Coverage goes 80 projects / 433 findings to 81 / 440, and no existing snapshot
+moved.
