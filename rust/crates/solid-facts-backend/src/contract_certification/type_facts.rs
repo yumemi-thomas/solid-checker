@@ -7745,6 +7745,15 @@ fn require_returned_parameter_identity(
     open: &impl Fn(&str) -> TypeFactsCertificationError,
     sites: &mut Vec<String>,
 ) -> Result<(), TypeFactsCertificationError> {
+    // ADR 0105: see `refuse_construction`. The caller of `new` receives the
+    // instance, so an argument the constructor body returns proves nothing
+    // about what the export hands back.
+    if let Some(invocation) = implementation.invocation.as_deref() {
+        return Err(open(&format!(
+            "returned parameter identity refuses a construction (invocation {invocation:?}): `new` \
+             hands the caller the instance"
+        )));
+    }
     let flow = implementation
         .control_flow
         .as_ref()
@@ -11506,16 +11515,6 @@ fn primitive_return_sites(
     at: &str,
 ) -> Result<Vec<String>, String> {
     let control_flow = require_plain_classified_completion(implementation, at)?;
-    // ADR 0105: a construction's census walked a constructor body, and `new`
-    // hands the caller the instance whatever that body returns -- a primitive
-    // `return` in a constructor is discarded. The sites below would describe a
-    // completion the caller never receives.
-    if implementation.invocation.is_some() {
-        return Err(format!(
-            "primitive returns census refuses a construction at {at}: `new` hands the caller \
-             the instance, not the constructor body's completion"
-        ));
-    }
     if !implementation.primitive_completion {
         return Err(format!(
             "primitive returns census refuses an implementation at {at} whose completion the \
@@ -11564,6 +11563,21 @@ fn primitive_return_sites(
     Ok(sites)
 }
 
+/// `Err` when `implementation` censused a construction (ADR 0105), whose
+/// constructor body's completions are not what `new` hands the caller.
+fn refuse_construction(
+    implementation: &typefacts::ExportImplementationTranscript,
+    at: &str,
+) -> Result<(), String> {
+    match implementation.invocation.as_deref() {
+        None => Ok(()),
+        Some(invocation) => Err(format!(
+            "returns census refuses a construction at {at} (invocation {invocation:?}): `new` hands \
+             the caller the instance, not the constructor body's completion"
+        )),
+    }
+}
+
 /// The premises ADR 0035's empty closure and ADR 0109's merged props root
 /// share: a plain completion form, and a present, classified control-flow
 /// census. Shared rather than restated so the two arms cannot drift, and
@@ -11572,6 +11586,13 @@ fn require_plain_classified_completion<'a>(
     implementation: &'a typefacts::ExportImplementationTranscript,
     at: &str,
 ) -> Result<&'a typefacts::ControlFlowCensus, String> {
+    // Premise 0 (ADR 0105): a call. A construction's census walked a
+    // constructor body, and `new` hands the caller the instance whatever that
+    // body completes with -- a primitive `return` there is discarded, an object
+    // one replaces the instance -- so no completion read off it is what the
+    // caller receives. Every `returns` arm reads its completions through here,
+    // or through `require_returned_parameter_identity`, which refuses the same.
+    refuse_construction(implementation, at)?;
     // Premise 1: a plain callable. An `async` function hands its caller a
     // promise on every completion, a generator an iterator, whatever the body
     // does; an unclassified or unstated form is refused, never read as plain.
@@ -25318,6 +25339,104 @@ mod tests {
             .unwrap(),
         );
         refuses(unaccounted, "cannot account for a construct");
+    }
+
+    /// ADR 0105: `new` hands the caller the instance whatever the constructor
+    /// body completes with, so no `returns` census reads a construction's body
+    /// as the export's completion. Each shape's transcript certifies as a call
+    /// and refuses, unchanged but for the invocation form, as a construction.
+    #[test]
+    fn every_returns_census_refuses_a_construction() {
+        let as_construction = |implementation: &typefacts::ExportImplementationTranscript| {
+            let mut construction = implementation.clone();
+            construction.invocation = Some("construct".into());
+            construction
+        };
+        let refuses = |result: Result<Vec<String>, String>| {
+            let refusal = result.expect_err("a construction must refuse");
+            assert!(refusal.contains("refuses a construction"), "{refusal}");
+        };
+
+        // ADR 0035: a body that falls off its end.
+        let empty: typefacts::ExportImplementationTranscript = serde_json::from_value(json!({
+            "location": {"path": "/p/index.js", "startByte": 0, "endByte": 40},
+            "completionForm": "plain",
+            "controlFlow": {"returns": []}
+        }))
+        .unwrap();
+        census_returns_transcript(&empty).expect("a valueless call certifies");
+        refuses(census_returns_transcript(&as_construction(&empty)));
+
+        // ADR 0075: `return value`.
+        let identity: typefacts::ExportImplementationTranscript = serde_json::from_value(json!({
+            "location": {"path": "/p/index.js", "startByte": 0, "endByte": 40},
+            "completionForm": "plain",
+            "controlFlow": {"returns": [{
+                "location": {"path": "/p/index.js", "startByte": 20, "endByte": 30},
+                "reach": "reachable", "carryReach": "reachable",
+                "parameter": {"parameterIndex": 0},
+                "value": {"callability": "unknown", "constructability": "unknown", "primitive": {"unknown": true}}
+            }]}
+        }))
+        .unwrap();
+        census_parameter_returns_transcript(&identity, 0).expect("an identity call certifies");
+        refuses(census_parameter_returns_transcript(
+            &as_construction(&identity),
+            0,
+        ));
+
+        // ADR 0109: `return merge(defaults, props)`.
+        let merged: typefacts::ExportImplementationTranscript = serde_json::from_value(json!({
+            "location": {"path": "/p/index.js", "startByte": 0, "endByte": 50},
+            "completionForm": "plain",
+            "controlFlow": {"returns": [{
+                "location": {"path": "/p/index.js", "startByte": 10, "endByte": 40},
+                "reach": "reachable",
+                "value": {
+                    "callability": "nonCallable",
+                    "constructability": "nonConstructable",
+                    "primitive": {"mayBeNumber": false}
+                },
+                "sources": [{
+                    "kind": "callResult",
+                    "target": "merge#0",
+                    "targetName": "merge",
+                    "targetModule": "solid-js"
+                }]
+            }]},
+            "calls": [{
+                "location": {"path": "/p/index.js", "startByte": 17, "endByte": 39},
+                "reach": "reachable",
+                "kind": "call",
+                "targetName": "merge",
+                "targetModule": "solid-js",
+                "argumentParameters": [null, {"parameterIndex": 1}]
+            }]
+        }))
+        .unwrap();
+        census_merged_props_returns_transcript(&merged, 1).expect("a merge call certifies");
+        refuses(census_merged_props_returns_transcript(
+            &as_construction(&merged),
+            1,
+        ));
+
+        // ADR 0113: `return 1`.
+        let primitive = primitive_census_implementation(
+            json!([primitive_census_site(
+                10,
+                40,
+                "reachable",
+                Some(primitive_census_value(
+                    json!({"mayBeNumber": true}),
+                    "nonCallable"
+                ))
+            )]),
+            true,
+        );
+        census_primitive_returns_transcript(&primitive).expect("a primitive call certifies");
+        refuses(census_primitive_returns_transcript(&as_construction(
+            &primitive,
+        )));
     }
 
     /// ADR 0113's positive half: the operation stands on its own, so it reads

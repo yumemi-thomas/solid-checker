@@ -195,8 +195,9 @@ veto does not complete and the closure is withheld.
   operation, exactly.
 - `async` functions and generators, and a construction (ADR 0105): `new` hands
   the caller the instance whatever the constructor body returns, so a
-  construct transcript refuses before any site is read. The three older
-  `returns` arms do not check this yet; that is a separate fix.
+  construct transcript refuses before any site is read. The same day this
+  moved into the premise every `returns` arm shares, and into the
+  whole-parameter proof, which had not checked it.
 
 ## Consequences
 

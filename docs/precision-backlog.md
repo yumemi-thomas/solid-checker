@@ -1,5 +1,22 @@
 # Precision backlog
 
+## A constructor body's completions are not an export's `returns` (2026-09-23)
+
+Status: **fixed**. Since ADR 0105 a class export's implementation transcript
+censuses its constructor body and says so (`invocation: construct`), but the
+`returns` census never read that field. A hand-closed `returns: []` on a class
+whose constructor has no value return would have certified, although `new C()`
+always hands its caller a value: the instance, or an object the body returns in
+its place. No generated proposal reached it, because the generator's walks never
+propose `returns` for a class; the certifier must not rest on that. Every arm
+now refuses a construction in the premise they share
+(`require_plain_classified_completion`), and ADR 0075's whole-parameter proof
+refuses it in `require_returned_parameter_identity`, which serves both its census
+arm and its positive fact. The declared-signature proof of a return's output is
+left alone: for `new` the declared instance type is the right evidence. Pinned by
+`every_returns_census_refuses_a_construction`, one transcript per arm, each
+certifying as a call and refusing as a construction.
+
 ## A `returns` closure over a primitive completion (2026-09-23)
 
 Status: **implemented** (ADR 0113). `returns` now closes over one `return` whose
