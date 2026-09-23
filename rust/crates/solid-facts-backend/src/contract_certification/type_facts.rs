@@ -4175,9 +4175,20 @@ fn stated_not_callable_value(
 /// refusing exactly as it did before ADR 0103. Growing the table means
 /// answering the three questions for the new member, not noticing that a
 /// corpus row would close.
+///
+/// Question 2 answers `reads` and `creates`, and **not `callbacks`**: a
+/// getter the caller installed is its own code, so what it reads and builds is
+/// the caller's (ADR 0034), but running it is an invocation of a callable the
+/// caller supplied, which is what `callbacks` enumerates (`semantic-model.md`
+/// § callbacks names "a getter or setter reached by property access" and "a
+/// coercion reaching `Symbol.toPrimitive`, `valueOf`, or `toString`"). The
+/// members that reach caller code that way are listed with their reach in
+/// [`DEFAULT_LIBRARY_ALIAS_ARGUMENT_REACH`], and close `reads` and `creates`
+/// only.
 const REVIEWED_DEFAULT_LIBRARY_ALIASES: &[&str] = &[
     // Enumerate own enumerable keys/values/pairs. Invoke no caller callable.
-    // A getter on the argument is the caller's own code (ADR 0034).
+    // A getter on the argument is the caller's own code (ADR 0034), and
+    // `Object.entries` and `Object.values` run it: see the reach table below.
     "Object.keys",
     "Object.entries",
     "Object.values",
@@ -4199,6 +4210,49 @@ const REVIEWED_DEFAULT_LIBRARY_ALIASES: &[&str] = &[
     "Number.isNaN",
     "Object.is",
 ];
+
+/// The reviewed members that run code their caller supplied through an
+/// argument, and how: `callbacks` stays open for an alias of one of them
+/// (2026-09-24 amendment to ADR 0103).
+///
+/// `Object.keys` is absent deliberately: it reads each own key's descriptor
+/// and never its value, so an ordinary object runs no getter. A `Proxy`
+/// argument's traps are the census's standing blind spot (`semantic-model.md`
+/// § callbacks, Decision 2026-09-03), exactly as they are for a property read
+/// in any implementation, and are not a reach of this member. `Array.isArray`
+/// reads a proxy's target without a trap, and `Number.isFinite`,
+/// `Number.isInteger`, `Number.isNaN` and `Object.is` never convert their
+/// arguments.
+const DEFAULT_LIBRARY_ALIAS_ARGUMENT_REACH: &[(&str, &str)] = &[
+    (
+        "Object.entries",
+        "reads the value of each own enumerable property of its argument, which runs any getter the caller installed there",
+    ),
+    (
+        "Object.values",
+        "reads the value of each own enumerable property of its argument, which runs any getter the caller installed there",
+    ),
+    ("Math.floor", MATH_COERCION_REACH),
+    ("Math.ceil", MATH_COERCION_REACH),
+    ("Math.round", MATH_COERCION_REACH),
+    ("Math.trunc", MATH_COERCION_REACH),
+    ("Math.abs", MATH_COERCION_REACH),
+    ("Math.sign", MATH_COERCION_REACH),
+    ("Math.max", MATH_COERCION_REACH),
+    ("Math.min", MATH_COERCION_REACH),
+    ("Math.pow", MATH_COERCION_REACH),
+    ("Math.sqrt", MATH_COERCION_REACH),
+];
+
+const MATH_COERCION_REACH: &str = "converts its arguments with ToNumber, which runs an object argument's `Symbol.toPrimitive`, `valueOf` or `toString`";
+
+/// How a reviewed member reaches code its caller supplied, when it does.
+pub(super) fn default_library_alias_argument_reach(qualified: &str) -> Option<&'static str> {
+    DEFAULT_LIBRARY_ALIAS_ARGUMENT_REACH
+        .iter()
+        .find(|(member, _)| *member == qualified)
+        .map(|(_, reach)| *reach)
+}
 
 /// The reviewed alias at `index`, for the synthesized veto that has to name
 /// the member in generated source. `None` when the index is out of range,
@@ -4294,10 +4348,13 @@ pub(super) fn stated_default_library_alias(
 /// ADR 0103: close `reads`, `creates` or `callbacks` for an export that *is* a
 /// reviewed default-library member.
 ///
-/// The export is the built-in, by identity. A reviewed member invokes no
-/// callable its caller supplied (`callbacks`), builds no reactive source
-/// (`creates`), and reads nothing but its arguments' own properties, which is
-/// the caller's read under ADR 0034 (`reads`).
+/// The export is the built-in, by identity. A reviewed member builds no
+/// reactive source (`creates`) and reads nothing but its arguments' own
+/// properties, which is the caller's read under ADR 0034 (`reads`). It
+/// invokes no callable its caller passed, and `callbacks` closes unless it
+/// runs one the caller installed on an argument -- a getter, or the methods a
+/// numeric conversion calls -- which refuses by name with its reach
+/// ([`DEFAULT_LIBRARY_ALIAS_ARGUMENT_REACH`]).
 ///
 /// `returns` is deliberately **not** closed. These members do return values —
 /// `Object.keys` returns a fresh array — and whether that value is one the
@@ -4358,6 +4415,14 @@ fn census_default_library_alias_export(
         return Err(open(
             "a default-library alias closes only an empty enumeration, and this proposal names an operation",
         ));
+    }
+    if *domain == ClaimDomain::Callbacks
+        && let Some(reach) = default_library_alias_argument_reach(&qualified)
+    {
+        return Err(open(&format!(
+            "a default-library alias closes callbacks only for a member that runs no code its \
+             caller supplied, and `{qualified}` {reach}"
+        )));
     }
     let (runtime_path, runtime_export, _, _) =
         plan.verified_exports

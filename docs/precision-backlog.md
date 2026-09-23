@@ -1,5 +1,36 @@
 # Precision backlog
 
+## A default-library call's reach into its caller's argument (2026-09-24)
+
+Status: **fixed for aliases; open for calls.** `semantic-model.md` § callbacks
+counts a getter reached by property access and a coercion reaching
+`valueOf`/`toString`/`Symbol.toPrimitive` as invocations of caller-supplied
+code, and the ADR 0100 census refuses both on a parameter in ordinary code
+(`(o) => o.x` untyped, `+n`). A default-library member that does the same
+internally was not counted:
+
+- **Aliases (fixed).** ADR 0103's reviewed table closed `callbacks: []` for
+  `Object.entries`, `Object.values` and the `Math` members, and the
+  2026-09-23 amendment made the generator propose it, so
+  `@solid-primitives/utils`' `entries` certified `callbacks: []` although it
+  runs the getters of its argument. `DEFAULT_LIBRARY_ALIAS_ARGUMENT_REACH`
+  now keeps `callbacks` open for those members, refusing by name (ADR 0103,
+  amendment 2026-09-24); `reads` and `creates` still close.
+- **Calls (open).** `census_standard_library_admits` excuses every argument
+  rooted at a parameter as "the caller's code, under the caller's own
+  contract", which is right for `creates` and not for `callbacks`: `clamp`'s
+  `Math.max(n, min)` converts `n`, and a body's `Object.entries(o)` runs `o`'s
+  getters, and neither is counted. By the same reading of that function, an
+  invoker slot (`items.map(callback)` with `callback` a parameter and `items`
+  typed, so `.map` records no accessor form) is not counted either; no test
+  pins that yet, and there the generator proposes the item and the
+  synthesized veto's recording callables would contradict an empty claim, but
+  the census alone would not refuse one. Closing this
+  needs a reviewed reach per member (which arguments it converts, reads or
+  invokes), and ADR 0038's declared-signature premise would answer the
+  numeric conversions for a `number`-typed parameter. It moves `clamp` and
+  its kind from clean to some uses, so it is a decision of its own.
+
 ## A `returns` closure over the caller's arguments and fresh arrays of them (2026-09-23)
 
 Status: **implemented** (ADR 0115). `@solid-primitives/utils`' `asArray`

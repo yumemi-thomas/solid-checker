@@ -234,3 +234,46 @@ the proposal offers. `returns` stays unproposed, as above.
 `fixtures/package-contracts/member-alias-proposals` pins which shapes are
 marked, and `a_reviewed_default_library_alias_closes_by_identity` now certifies
 all three domains for `value-exports`' `entries`.
+
+## Amendment, 2026-09-24: `callbacks` stays open for a member that runs caller code
+
+Question 2 above answered two domains at once, and only one of them correctly.
+A getter the caller installed is the caller's code, so what it reads and builds
+is the caller's (ADR 0034): `reads` and `creates` close. But running it is this
+export invoking a callable its caller supplied, which is exactly what
+`callbacks` enumerates. `semantic-model.md` § callbacks names "a getter or
+setter reached by property access" and "a coercion reaching
+`Symbol.toPrimitive`, `valueOf`, or `toString`", and the ADR 0100 census refuses
+both on a parameter in ordinary code. So the table closed `callbacks: []` on
+members the census would have refused written out by hand, and the 2026-09-23
+amendment made it reachable: `entries` certified `callbacks: []` although
+`entries({ get a() { … } })` runs the getter.
+
+`DEFAULT_LIBRARY_ALIAS_ARGUMENT_REACH` now lists the reviewed members that run
+caller code through an argument, with how, and the census refuses `callbacks`
+for them by name:
+
+- `Object.entries` and `Object.values` read each own enumerable property's
+  value, which runs a getter;
+- every `Math` member converts its arguments with ToNumber, which runs an
+  object's `Symbol.toPrimitive`, `valueOf` or `toString`.
+
+`reads` and `creates` still close for them. `Object.keys` reads descriptors and
+never values, so an ordinary object runs nothing; `Array.isArray` reads a
+proxy's target without a trap; `Number.isFinite`, `Number.isInteger`,
+`Number.isNaN` and `Object.is` never convert. Those keep `callbacks: []`. A
+`Proxy` argument's traps stay the standing blind spot they are for every
+property read (§ callbacks, Decision 2026-09-03), not a reach of any member.
+
+The generator is unchanged: it still proposes `callbacks: []` for every member
+alias, because syntax cannot say whose member it is, and the refusal is the
+certifier's. `value-exports`' `entries` now pins it:
+`a_reviewed_default_library_alias_closes_by_identity` closes `reads` and
+`creates` and withholds `callbacks` on the getter reach.
+
+The same reach exists where no alias is involved, and this amendment does not
+close it: the call walk excuses a standard-library call's argument that is
+rooted at a parameter (`census_standard_library_admits`), so `Math.max(n, …)` in
+`clamp` and `Object.entries(o)` in a function body run caller code the
+`callbacks` census does not count. That is recorded in
+`docs/precision-backlog.md` (2026-09-24) as its own question.

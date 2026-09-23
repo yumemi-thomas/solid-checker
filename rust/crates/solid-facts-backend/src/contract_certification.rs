@@ -14301,12 +14301,42 @@ export const value = phantom;
                 Some(admitted)
             );
         }
+        // The 2026-09-24 amendment: a member that runs caller code through an
+        // argument -- a getter it reads, a conversion it performs -- is
+        // reviewed and keeps `callbacks` open. Every such member is one the
+        // table admits, and the members that reach nothing stay reachless.
+        use super::type_facts::default_library_alias_argument_reach;
+        for reaching in ["Object.entries", "Object.values", "Math.floor", "Math.max"] {
+            assert!(
+                reviewed_default_library_alias_index(reaching).is_some(),
+                "{reaching} is reviewed"
+            );
+            assert!(
+                default_library_alias_argument_reach(reaching).is_some(),
+                "{reaching} runs caller code through an argument"
+            );
+        }
+        for reachless in [
+            "Object.keys",
+            "Array.isArray",
+            "Number.isFinite",
+            "Number.isInteger",
+            "Number.isNaN",
+            "Object.is",
+        ] {
+            assert_eq!(
+                default_library_alias_argument_reach(reachless),
+                None,
+                "{reachless} runs no caller code"
+            );
+        }
     }
 
     /// ADR 0103 from both sides on one fixture: `entries` **is**
     /// `Object.entries`, a member the reviewed table admits, so its empty
-    /// `reads`, `creates` and `callbacks` close by identity with no recipe and
-    /// no sample.
+    /// `reads` and `creates` close by identity with no recipe and no sample.
+    /// Its `callbacks` refuses by name: `Object.entries` reads each enumerable
+    /// value of its argument, which runs the caller's getters (2026-09-24).
     ///
     /// This is the end-to-end half of the premise. The other half — a stated
     /// identity the reviewed table does not admit stays refused — is pinned by
@@ -14315,14 +14345,10 @@ export const value = phantom;
     /// boundary test below.
     #[test]
     fn a_reviewed_default_library_alias_closes_by_identity() {
-        // All three, one plan each: since 2026-09-23 the generator proposes
-        // `creates` and `callbacks` for a member alias beside `reads`, so each
-        // is a candidate a real proposal carries and not only a hand-closed one.
-        for domain in [
-            ClaimDomain::Reads,
-            ClaimDomain::Creates,
-            ClaimDomain::Callbacks,
-        ] {
+        // One plan each: since 2026-09-23 the generator proposes `creates` and
+        // `callbacks` for a member alias beside `reads`, so each is a candidate
+        // a real proposal carries and not only a hand-closed one.
+        for domain in [ClaimDomain::Reads, ClaimDomain::Creates] {
             let Some((_plan, outcome)) = value_exports_certify("entries", domain) else {
                 return;
             };
@@ -14341,6 +14367,27 @@ export const value = phantom;
                 call_domain_is_closed_in(finalized.canonical_main(), "entries", domain),
                 "entries {domain:?} must close on the stated identity"
             );
+        }
+
+        if let Some((_plan, outcome)) = value_exports_certify("entries", ClaimDomain::Callbacks) {
+            let finalized =
+                outcome.expect("entries callbacks: withholding still certifies the row");
+            assert!(
+                finalized.withheld_closures().iter().any(|record| {
+                    record.export == "entries"
+                        && record.domain == "callbacks"
+                        && record
+                            .reason
+                            .contains("`Object.entries` reads the value of each own")
+                }),
+                "entries callbacks must refuse on the getters it runs: {:?}",
+                finalized.withheld_closures()
+            );
+            assert!(!call_domain_is_closed_in(
+                finalized.canonical_main(),
+                "entries",
+                ClaimDomain::Callbacks
+            ));
         }
 
         // `returns` is deliberately outside the premise: these members do
