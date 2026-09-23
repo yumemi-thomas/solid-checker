@@ -61,11 +61,22 @@ import (
 // two twins; a slot the caller's twin typed `any` is stated nowhere and stays
 // `any` on the helper.
 //
+// A **rest parameter** is inside the premise as of 2026-09-18, and only in the
+// one shape where every slot still reads position-for-position: the declared
+// signature and the implementation both end in a rest parameter, at the same
+// index, with the same arity. The trailing slot is then held to the declared
+// rest parameter's own array type rather than to `getTypeAtPosition`'s element
+// type, which is what the twin's `...b` actually binds. The guard this replaced
+// refused every rest parameter outright; across the pinned corpus 46 census
+// refusals named it, over six exports in three packages, and the shape above is
+// all six of them (docs/precision-backlog.md, wall 1).
+//
 // What is deliberately outside this premise: an implementation whose
 // declaration is not in a declaration file (its parameter types are already
-// the checker's), a declaration with a rest parameter or a different arity
-// from its implementation, and a declaration whose anchor already carries a
-// JSDoc tag the compiler would read as a type.
+// the checker's), a declaration whose arity differs from its implementation's
+// or whose rest parameter is not matched by one at the same index, and a
+// declaration whose anchor already carries a JSDoc tag the compiler would read
+// as a type.
 
 // declaredSignaturePremise is the export's declared call signature as the
 // export-value transcript resolved it, handed to the implementation transcript
@@ -593,9 +604,6 @@ func (p *project) premiseAnnotationLocked(
 	if declarationFile == nil || !declarationFile.IsDeclarationFile {
 		return "", "declared signature is not in a declaration file"
 	}
-	if premise.signature.HasRestParameter() {
-		return "", "declared signature has a rest parameter"
-	}
 	declaredParameters := premise.signature.Parameters()
 	parameters := implementation.Parameters()
 	if len(parameters) != len(declaredParameters) {
@@ -604,8 +612,23 @@ func (p *project) premiseAnnotationLocked(
 			len(parameters), len(declaredParameters),
 		)
 	}
-	for _, parameter := range parameters {
-		if declaration := parameter.AsParameterDeclaration(); declaration == nil || declaration.DotDotDotToken != nil {
+	// A rest parameter is admitted only when both sides have one and it is the
+	// last parameter of both, so every slot still means the same thing on each
+	// side: a fixed slot is the declared type at that position, and the single
+	// trailing slot is the declared rest parameter's own array type. Anything
+	// else -- a rest on one side only, or a rest that is not last -- is refused,
+	// because there is then no position-for-position reading to hold the twin
+	// to.
+	restIndex := -1
+	if premise.signature.HasRestParameter() {
+		restIndex = len(declaredParameters) - 1
+	}
+	for index, parameter := range parameters {
+		declaration := parameter.AsParameterDeclaration()
+		if declaration == nil {
+			return "", "implementation has a rest parameter"
+		}
+		if (declaration.DotDotDotToken != nil) != (index == restIndex) {
 			return "", "implementation has a rest parameter"
 		}
 	}
@@ -638,6 +661,25 @@ func (p *project) premiseAnnotationLocked(
 	return "/** @type {typeof import(" + strconv.Quote(specifier) + ")." + name + "} */ ", ""
 }
 
+// declaredRestParameterTypeLocked answers a declared rest parameter's own
+// type -- the array, not its element -- from the accepted program's checker,
+// by asking its binding exactly as the twin side asks the implementation's.
+// Nil when the symbol carries no parameter declaration with a binding name,
+// which refuses the premise rather than guessing.
+func (p *project) declaredRestParameterTypeLocked(parameter *ast.Symbol) *checker.Type {
+	if parameter == nil || parameter.ValueDeclaration == nil {
+		return nil
+	}
+	if parameter.ValueDeclaration.AsParameterDeclaration() == nil {
+		return nil
+	}
+	name := parameter.ValueDeclaration.Name()
+	if name == nil {
+		return nil
+	}
+	return p.checker.GetTypeAtLocation(name)
+}
+
 // declaredSignatureTwinLocked builds and checks the premise twin for one
 // implementation whose annotation premiseAnnotationLocked already admitted,
 // or refuses with the reason. A refusal is not an error: the caller keeps the
@@ -653,8 +695,22 @@ func (p *project) declaredSignatureTwinLocked(
 ) (*premiseTwin, string) {
 	declaredParameters := premise.signature.Parameters()
 	expected := make([]slotPremise, len(declaredParameters))
+	restIndex := -1
+	if premise.signature.HasRestParameter() {
+		restIndex = len(declaredParameters) - 1
+	}
 	for index := range declaredParameters {
-		declared := checker.Checker_getTypeAtPosition(p.checker, premise.signature, index)
+		// `getTypeAtPosition` answers what an *argument* at that position must
+		// be, which for a rest slot is the element type -- while the twin's
+		// `...b` binds the array. Asking the declared parameter's own binding
+		// keeps the two sides comparing the same thing, from the same checker,
+		// under the same falsifier.
+		var declared *checker.Type
+		if index == restIndex {
+			declared = p.declaredRestParameterTypeLocked(declaredParameters[index])
+		} else {
+			declared = checker.Checker_getTypeAtPosition(p.checker, premise.signature, index)
+		}
 		if declared == nil {
 			return nil, fmt.Sprintf("parameter %d has no declared type", index)
 		}

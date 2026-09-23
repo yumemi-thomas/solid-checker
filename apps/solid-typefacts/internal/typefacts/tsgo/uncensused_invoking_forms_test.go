@@ -2999,3 +2999,153 @@ func TestClassConstructionResolvesToItsConstructor(t *testing.T) {
 		}
 	}
 }
+
+// TestSubjectRootLegsOfTheImmutableFamily records which premise each unrooted
+// subject of `@solid-primitives/utils/immutable` actually needs, because the
+// obvious reading of the census refusal is wrong and cost two write-ups.
+//
+// The refusal a consumer sees is "states no reviewed subject root, so whose
+// value it reads is undecided", and the natural conclusion — that a parameter
+// of the censused export read from inside a nested callable is not rooted — is
+// false. It *is* rooted, and the `capturedParameterIsStillTheCallers` row below
+// is the pin: `object[k]` inside a `reduce` callback states
+// `subjectRoot: parameter`, `captured: true`.
+//
+// What refuses instead is every subject the *package itself built*, reached
+// through one of three shapes. They are three different premises, and none of
+// them is a spelling of ADR 0043's parameter family:
+//
+//   - a callback's own parameter, bound to a value this package made and
+//     handed to a higher-order callee (`nested-parameter`). `pick`'s reduce
+//     accumulator is seeded `{}`; `omit` and `update` receive the copy that
+//     `withObjectCopy`/`withCopy` just made. Five of `update`'s five forms and
+//     one of `pick`'s two are this.
+//   - a local bound to the result of a local call (`local-binding-from-call`),
+//     which is `split`'s `shallowObjectCopy(object)`.
+//   - a rest parameter's element (`written-parameter`), which is `concat`'s
+//     `a[i]` — and ADR 0043 excludes rest deliberately, because the array is
+//     the engine's rather than the caller's.
+//
+// Refusing all three is *correct* today rather than merely conservative: an
+// accessor reached on an object the package built is this domain's business,
+// and closing `reads: []` over it would be the negative-from-missing-knowledge
+// the precision contract forbids. What each needs is a premise that the built
+// value carries no accessor — ADR 0044's family rather than ADR 0043's.
+func TestSubjectRootLegsOfTheImmutableFamily(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		// The leg of the one subject this shape is about, and whether the form
+		// is inside a nested callable.
+		wantRefusal  typefacts.SubjectRootRefusalReason
+		wantRoot     typefacts.SubjectRootDerivation
+		wantCaptured bool
+	}{
+		{
+			// The pin that refutes the obvious reading.
+			name:         "capturedParameterIsStillTheCallers",
+			body:         "export function subject(object, keys) { return keys.map(k => object[k]); }\n",
+			wantRoot:     typefacts.SubjectRootParameter,
+			wantCaptured: true,
+		},
+		{
+			// `pick`: the accumulator is the package's own `{}`.
+			name:         "callbackParameterBoundToOurOwnValue",
+			body:         "export function subject(keys) { return keys.reduce((out, k) => { out[k] = 1; return out; }, {}); }\n",
+			wantRefusal:  typefacts.SubjectRefusalNestedParameter,
+			wantCaptured: true,
+		},
+		{
+			// `split`: a local holding a local call's result.
+			name:        "localBoundToALocalCallResult",
+			body:        "function copyOf(o) { return Object.assign({}, o); }\nexport function subject(object, key) { const copy = copyOf(object); return copy[key]; }\n",
+			wantRefusal: typefacts.SubjectRefusalLocalFromCall,
+		},
+		{
+			// `concat`: the rest array is the engine's, not the caller's.
+			name:        "restParameterElement",
+			body:        "export function subject(...a) { const out = []; for (const i in a) out.push(a[i]); return out; }\n",
+			wantRefusal: typefacts.SubjectRefusalWrittenParameter,
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			forms := subjectRootFormsForTest(t, testCase.body)
+			// The subject this shape is about, not merely the first rooted
+			// form: `keys.map(…)` is itself a rooted access on a parameter, so
+			// the nesting has to be part of the match rather than only of the
+			// assertion.
+			var matched *typefacts.UncensusedInvokingForm
+			for index := range forms {
+				form := &forms[index]
+				if form.Captured != testCase.wantCaptured {
+					continue
+				}
+				if testCase.wantRoot != "" && form.SubjectRoot == testCase.wantRoot {
+					matched = form
+					break
+				}
+				if testCase.wantRefusal != "" && form.SubjectRootRefusal == testCase.wantRefusal {
+					matched = form
+					break
+				}
+			}
+			if matched == nil {
+				for _, form := range forms {
+					t.Logf("form kind=%s root=%q refusal=%q captured=%v",
+						form.Kind, form.SubjectRoot, form.SubjectRootRefusal, form.Captured)
+				}
+				t.Fatalf("no form with root %q / refusal %q", testCase.wantRoot, testCase.wantRefusal)
+			}
+			if testCase.wantRoot != "" && matched.SubjectRoot != testCase.wantRoot {
+				t.Fatalf("root = %q, want %q", matched.SubjectRoot, testCase.wantRoot)
+			}
+			if testCase.wantRefusal != "" && matched.SubjectRootRefusal != testCase.wantRefusal {
+				t.Fatalf("refusal = %q, want %q", matched.SubjectRootRefusal, testCase.wantRefusal)
+			}
+			if matched.Captured != testCase.wantCaptured {
+				t.Fatalf("captured = %v, want %v", matched.Captured, testCase.wantCaptured)
+			}
+		})
+	}
+}
+
+// One export's uncensused invoking forms, over a single-file JavaScript
+// implementation whose export is named `subject`.
+func subjectRootFormsForTest(t *testing.T, body string) []typefacts.UncensusedInvokingForm {
+	t.Helper()
+	dir := t.TempDir()
+	write := func(name, source string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(source), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("index.js", body)
+	write("tsconfig.json", `{"compilerOptions":{"strict":false,"module":"esnext","target":"esnext","moduleResolution":"bundler","allowJs":true,"checkJs":false,"types":[]},"files":["harness.ts","index.js"]}`)
+	harness := "import { subject } from \"./index.js\";\nvoid subject;\n"
+	write("harness.ts", harness)
+
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { opened.Close() })
+	analyzer := opened.(typefacts.ExportValueAnalyzer)
+	implStart := strings.Index(body, "subject")
+	queryStart := strings.Index(harness, "void subject") + len("void ")
+	answer, err := analyzer.ExportValueTranscripts(context.Background(), []typefacts.ExportValueDemand{{
+		Location: typefacts.Location{
+			Path: filepath.Join(dir, "harness.ts"), StartByte: queryStart, EndByte: queryStart + len("subject"),
+		},
+		ImplementationLocation: &typefacts.Location{
+			Path: filepath.Join(dir, "index.js"), StartByte: implStart, EndByte: implStart + len("subject"),
+		},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(answer.Transcripts) != 1 || answer.Transcripts[0].Implementation == nil {
+		t.Fatalf("transcripts = %#v, want one with an implementation", answer.Transcripts)
+	}
+	return answer.Transcripts[0].Implementation.UncensusedInvokingForms
+}

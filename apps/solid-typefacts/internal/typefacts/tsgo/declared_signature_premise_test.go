@@ -888,3 +888,149 @@ func TestCallArgumentPremisesReachALocalHelper(t *testing.T) {
 		t.Fatalf("subtract bound an unresolvable spelling: premises %#v, refusal %q", unresolvable.ParameterPremises, unresolvable.ParameterPremiseRefusal)
 	}
 }
+
+// A rest parameter, admitted 2026-09-18.
+//
+// The guard this replaced refused every declared rest parameter, so
+// `@solid-primitives/utils`' `substract` -- `(a, ...b) => { for (const n of b)
+// a -= n; return a; }` beside a `.d.ts` declaring
+// `(a: number, ...b: number[]) => number` -- was censused over its parameters'
+// own `any` and `a -= n` recorded a coercion form. Across the pinned corpus 46
+// census refusals named that guard, over six exports in three packages
+// (docs/precision-backlog.md, wall 1).
+//
+// `rest` is the shape now admitted; `restLeading` is the same fact with a
+// fixed slot before it, which is the published arithmetic exports' own shape.
+// The trailing slot is held to the declared rest parameter's *array* type, not
+// to `getTypeAtPosition`'s element type, so the premise the transcript states
+// is `number[]` -- what `...b` actually binds.
+//
+// The negatives keep every other rest shape out, because none of them has a
+// position-for-position reading to hold the twin to: a rest on the
+// implementation that the declaration does not have, a rest on the declaration
+// that the implementation does not have, and (through the arity guard) any
+// mismatch of count. `iterationReachability` stays on every one of these
+// transcripts and is not this premise's business: it is a
+// ControlFlowReachabilityLowerBound, which an empty-closure claim can only be
+// over-estimated by, and the corpus censuses already tolerate it -- 40 of the
+// arithmetic five's refusals name the coercion form and none names an open
+// transcript.
+func TestDeclaredSignaturePremiseAdmitsAMatchedRestParameter(t *testing.T) {
+	const runtime = `export function fixed(a, b) {
+  let r = 0;
+  r += a;
+  r += b;
+  return r;
+}
+
+export function rest(...b) {
+  let r = 0;
+  for (const n of b) r += n;
+  return r;
+}
+
+export function restLeading(a, ...b) {
+  for (const n of b) a -= n;
+  return a;
+}
+
+export function restOnlyInImplementation(a, ...b) {
+  for (const n of b) a -= n;
+  return a;
+}
+
+export function restOnlyInDeclaration(a, b) {
+  return a - b;
+}
+`
+	const declarations = `export declare function fixed(a: number, b: number): number;
+export declare function rest(...b: number[]): number;
+export declare function restLeading(a: number, ...b: number[]): number;
+export declare function restOnlyInImplementation(a: number, b: number[]): number;
+export declare function restOnlyInDeclaration(a: number, ...b: number[]): number;
+`
+	dir := t.TempDir()
+	write := func(name, source string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(source), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "pkg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write("tsconfig.json", `{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext","moduleResolution":"bundler","allowJs":true,"checkJs":false,"types":[]},"files":["harness.ts","pkg/index.js","pkg/index.d.ts"]}`)
+	write("pkg/index.js", runtime)
+	write("pkg/index.d.ts", declarations)
+	harness := "import { fixed, rest, restLeading, restOnlyInImplementation, restOnlyInDeclaration } from \"./pkg/index.js\";\n" +
+		"export const subjects = [fixed, rest, restLeading, restOnlyInImplementation, restOnlyInDeclaration];\n"
+	write("harness.ts", harness)
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = opened.Close() }()
+	analyzer, ok := opened.(typefacts.ExportValueAnalyzer)
+	if !ok {
+		t.Fatal("TypeScript-Go project does not implement ExportValueAnalyzer")
+	}
+
+	for _, testCase := range []struct {
+		name        string
+		wantPremise []string
+		wantRefusal string
+		wantForms   []typefacts.UncensusedInvokingFormKind
+	}{
+		// The control that proves the premise path is live here at all.
+		{"fixed", []string{"number", "number"}, "", nil},
+		{"rest", []string{"number[]"}, "", nil},
+		{"restLeading", []string{"number", "number[]"}, "", nil},
+		{"restOnlyInImplementation", nil, "implementation has a rest parameter",
+			[]typefacts.UncensusedInvokingFormKind{typefacts.UncensusedCoercion}},
+		{"restOnlyInDeclaration", nil, "implementation has a rest parameter",
+			[]typefacts.UncensusedInvokingFormKind{typefacts.UncensusedCoercion}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			subjectStart := strings.Index(harness, "subjects = [") + len("subjects = [")
+			offset := strings.Index(harness[subjectStart:], testCase.name)
+			if offset < 0 {
+				t.Fatalf("harness lists no %q", testCase.name)
+			}
+			implementationStart := strings.Index(runtime, "function "+testCase.name+"(") + len("function ")
+			answer, err := analyzer.ExportValueTranscripts(
+				context.Background(),
+				[]typefacts.ExportValueDemand{{
+					Location: typefacts.Location{
+						Path:      filepath.Join(dir, "harness.ts"),
+						StartByte: subjectStart + offset,
+						EndByte:   subjectStart + offset + len(testCase.name),
+					},
+					ImplementationLocation: &typefacts.Location{
+						Path:      filepath.Join(dir, "pkg", "index.js"),
+						StartByte: implementationStart,
+						EndByte:   implementationStart + len(testCase.name),
+					},
+				}},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(answer.Transcripts) != 1 || answer.Transcripts[0].Implementation == nil {
+				t.Fatalf("transcripts = %#v, want one carrying an implementation", answer.Transcripts)
+			}
+			got := answer.Transcripts[0].Implementation
+			if got.ParameterPremiseRefusal != testCase.wantRefusal {
+				t.Errorf("refusal = %q, want %q", got.ParameterPremiseRefusal, testCase.wantRefusal)
+			}
+			premised := make([]string, 0, len(got.ParameterPremises))
+			for _, premise := range got.ParameterPremises {
+				premised = append(premised, premise.Type)
+			}
+			if !slices.Equal(premised, testCase.wantPremise) {
+				t.Errorf("premises = %v, want %v", premised, testCase.wantPremise)
+			}
+			if forms := markerKinds(got.UncensusedInvokingForms); !slices.Equal(forms, testCase.wantForms) {
+				t.Errorf("forms = %v, want %v", kindStrings(forms), kindStrings(testCase.wantForms))
+			}
+		})
+	}
+}

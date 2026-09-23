@@ -11527,6 +11527,56 @@ fn certified_runtime_sources(plan: &CertificationPlan) -> std::collections::BTre
 /// Refusals are `String` because the *demand* owns the error: a census premise
 /// that fails is a refusal of the closure demand, not of the helper it was
 /// walking.
+/// The array spelling of a rest parameter's element type, or `None` when the
+/// element's own text cannot carry an `[]` suffix without changing what it
+/// means.
+///
+/// Only a plain type name is accepted — an identifier, optionally qualified,
+/// optionally with a `<…>` argument list that is itself balanced and made of
+/// the same. `number` becomes `number[]`. `number | string` does not, because
+/// `number | string[]` is a different type; nor does `() => void`, `number[]`,
+/// `readonly number[]`, or anything carrying a space outside a type-argument
+/// list. Refusing is free here: the premise is simply not admitted and the
+/// census keeps the parameters' own types, which is the more refusing reading.
+fn rest_array_spelling(element: &str) -> Option<String> {
+    if element.is_empty() {
+        return None;
+    }
+    let (head, arguments) = match element.split_once('<') {
+        Some((head, rest)) => (head, Some(rest.strip_suffix('>')?)),
+        None => (element, None),
+    };
+    if !is_qualified_type_name(head) {
+        return None;
+    }
+    if let Some(arguments) = arguments {
+        if arguments.is_empty() {
+            return None;
+        }
+        for argument in arguments.split(',') {
+            if !is_qualified_type_name(argument.trim()) {
+                return None;
+            }
+        }
+    }
+    Some(format!("{element}[]"))
+}
+
+/// Whether `text` is one identifier, or several joined by `.`, with nothing
+/// else in it — no spaces, no operators, no brackets.
+fn is_qualified_type_name(text: &str) -> bool {
+    if text.is_empty() {
+        return false;
+    }
+    text.split('.').all(|segment| {
+        let mut characters = segment.chars();
+        characters
+            .next()
+            .is_some_and(|first| first.is_ascii_alphabetic() || first == '_' || first == '$')
+            && characters.all(|next| next.is_ascii_alphanumeric() || next == '_' || next == '$')
+    })
+}
+
 /// The declared-signature premise of the root transcript (ADR 0038), bound and
 /// recorded.
 ///
@@ -11610,11 +11660,34 @@ fn census_root_premises(
             .as_ref()
             .map(|descriptor| descriptor.text.as_ref())
             .unwrap_or("");
-        if premise.r#type.is_empty() || premise.r#type.as_ref() != declared_text {
+        // A rest slot's parameter fact describes what an *argument* at that
+        // position must be -- the element -- while the premise describes what
+        // the implementation's `...b` binds, which is the array. The two are
+        // different facts about the same slot and the wire carries only the
+        // first, so the expected text is reconstructed here, and only for an
+        // element whose spelling is unambiguous under an `[]` suffix. Anything
+        // else -- a union, a function type, an array already, a `readonly`
+        // modifier -- is refused rather than guessed at, which keeps this
+        // strictly narrower than the equality every other slot gets.
+        let expected = if parameter.rest {
+            match rest_array_spelling(declared_text) {
+                Some(text) => text,
+                None => {
+                    return Err(format!(
+                        "creates census refuses a declared-signature premise at {at}: parameter \
+                         {position} is a rest parameter whose element type {declared_text:?} has \
+                         no unambiguous array spelling"
+                    ));
+                }
+            }
+        } else {
+            declared_text.to_owned()
+        };
+        if premise.r#type.is_empty() || premise.r#type.as_ref() != expected {
             return Err(format!(
                 "creates census refuses a declared-signature premise at {at}: parameter {position} \
                  is premised {:?} but the declared signature states {:?}",
-                premise.r#type, declared_text
+                premise.r#type, expected
             ));
         }
         sites.push(format!(
