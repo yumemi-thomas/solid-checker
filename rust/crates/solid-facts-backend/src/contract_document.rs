@@ -1033,6 +1033,7 @@ fn compact_value(value: &ValueShape, ids: &CompactIds) -> Result<JsonValue, Cont
         // ADR 0109. One field, and it is the whole claim: which of the caller's
         // arguments this object's property reads reach through to.
         ValueShape::MergedProps { from } => json!({"kind": "merged-props", "from": from}),
+        ValueShape::ArgumentArray { items } => json!({"kind": "argument-array", "items": items}),
         ValueShape::Action { transition } => {
             let mut node = json!({"kind": "action"});
             if let Some(transition) = transition {
@@ -2123,6 +2124,11 @@ enum WireValueNode {
     /// parameter the producer never claimed.
     MergedProps {
         from: u16,
+    },
+    /// ADR 0115. `items` is required for the same reason `from` is: an absent
+    /// list would read as `[]`, a claim the producer never made.
+    ArgumentArray {
+        items: Vec<u16>,
     },
     Action {
         #[serde(default)]
@@ -3390,6 +3396,9 @@ fn expand_value_node(
             )?,
         }),
         WireValueNode::MergedProps { from } => Ok(ValueShape::MergedProps { from: *from }),
+        WireValueNode::ArgumentArray { items } => Ok(ValueShape::ArgumentArray {
+            items: items.clone(),
+        }),
         WireValueNode::Action { transition } => Ok(ValueShape::Action {
             transition: transition.as_ref().map(|resource| ids.resource(resource)),
         }),
@@ -4298,11 +4307,19 @@ mod tests {
             serde_json::json!({"kind": "cleanup", "resource": "cleanup"}),
             serde_json::json!("ref-application"),
             serde_json::json!({"kind": "server-function-reference", "resource": "server"}),
+            serde_json::json!({"kind": "argument-array", "items": [0, 1]}),
+            serde_json::json!({"kind": "argument-array", "items": []}),
         ];
         for value in values {
             let value: WireValue = serde_json::from_value(value).unwrap();
             expand_value(&value, &ids).unwrap();
         }
+        // ADR 0115: an argument array with no `items` states nothing, and is
+        // refused rather than read as `[]`.
+        assert!(
+            serde_json::from_value::<WireValue>(serde_json::json!({"kind": "argument-array"}))
+                .is_err()
+        );
 
         let guard: WireGuard = serde_json::from_value(serde_json::json!({
             "all": [

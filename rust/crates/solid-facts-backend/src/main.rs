@@ -7297,6 +7297,9 @@ struct GeneratedOwnerRequirements {
     /// reactivity of, by the same two identities. Absence is "do not propose".
     merged_props_return_by_symbol: HashMap<String, usize>,
     merged_props_return_by_function: HashMap<FunctionKey, usize>,
+    argument_containers_by_symbol: HashMap<String, Vec<solid_reactive_ir::ArgumentContainer>>,
+    argument_containers_by_function:
+        HashMap<FunctionKey, Vec<solid_reactive_ir::ArgumentContainer>>,
 }
 
 fn canonical_symbol_aliases(facts: &solid_facts::ProjectFacts) -> HashMap<String, String> {
@@ -7476,6 +7479,20 @@ fn generated_owner_requirements_by_symbol(
                     .merged_props_return_by_function
                     .insert(key.clone(), parameter);
             }
+            // ADR 0115's walk, computed inside the IR for the same reason.
+            if let Some(containers) = program
+                .argument_container_returns
+                .containers_for(file.path.as_str(), span)
+            {
+                if let Some(Some(symbol)) = function_symbols.get(&key) {
+                    indexed
+                        .argument_containers_by_symbol
+                        .insert(symbol.clone(), containers.to_vec());
+                }
+                indexed
+                    .argument_containers_by_function
+                    .insert(key.clone(), containers.to_vec());
+            }
             if !program
                 .creates_proposal_walk
                 .proposes(file.path.as_str(), span)
@@ -7633,6 +7650,17 @@ fn attach_generated_owner_requirements(
         || default_function
             .as_ref()
             .is_some_and(|key| generated.clean_returns_walk_by_function.contains(key));
+    // ADR 0115's walk verdict, read by the same two identities.
+    summary.returns_argument_containers = symbol
+        .as_ref()
+        .and_then(|symbol| generated.argument_containers_by_symbol.get(symbol))
+        .or_else(|| {
+            default_function
+                .as_ref()
+                .and_then(|key| generated.argument_containers_by_function.get(key))
+        })
+        .cloned()
+        .unwrap_or_default();
     // ADR 0113: the walk's other positive answer, read the same way.
     summary.returns_value_completion = symbol
         .as_ref()

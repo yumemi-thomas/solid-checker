@@ -1737,6 +1737,84 @@ func (p *project) unwrittenParameterIdentityLocked(implementation, expression *a
 	return result
 }
 
+// maxReturnArms bounds ReturnSite.Arms. A tree past it, or past
+// maxReturnedCallableDepth, states no arms at all: a partial list would read as
+// exhaustive.
+const maxReturnArms = 16
+
+// returnArmsLocked decomposes a returned expression into the values it can
+// evaluate to (ADR 0115). Only a conditional or an array literal is decomposed;
+// every other expression is described by its return site's own fields. Each
+// conditional contributes both branches, except that a branch a literal
+// condition excludes is left out, exactly as carriedCallableLocationsLocked
+// reads the same tree. An async function hands its caller a promise whatever
+// the body returns, so it states no arms.
+func (p *project) returnArmsLocked(implementation, expression *ast.Node) []typefacts.ReturnArm {
+	if implementation == nil || expression == nil ||
+		ast.HasSyntacticModifier(implementation, ast.ModifierFlagsAsync) {
+		return nil
+	}
+	root := identityPreservingUnwrap(expression)
+	if root == nil || !(ast.IsConditionalExpression(root) || ast.IsArrayLiteralExpression(root)) {
+		return nil
+	}
+	var arms []typefacts.ReturnArm
+	complete := true
+	var visit func(*ast.Node, int)
+	visit = func(node *ast.Node, depth int) {
+		if !complete {
+			return
+		}
+		node = identityPreservingUnwrap(node)
+		if node == nil || depth > maxReturnedCallableDepth || len(arms) >= maxReturnArms {
+			complete = false
+			return
+		}
+		if ast.IsConditionalExpression(node) {
+			conditional := node.AsConditionalExpression()
+			if truthy, known := p.literalTruthinessLocked(conditional.Condition, 0); known {
+				if truthy {
+					visit(conditional.WhenTrue, depth+1)
+				} else {
+					visit(conditional.WhenFalse, depth+1)
+				}
+				return
+			}
+			visit(conditional.WhenTrue, depth+1)
+			visit(conditional.WhenFalse, depth+1)
+			return
+		}
+		value := p.invocationValueFactLocked(p.checker.GetTypeAtLocation(node))
+		arm := typefacts.ReturnArm{
+			Location:  nodeLocation(node),
+			Value:     &value,
+			Parameter: p.unwrittenParameterIdentityLocked(implementation, node),
+		}
+		if ast.IsArrayLiteralExpression(node) {
+			arm.ArrayLiteral = true
+			for _, element := range node.AsArrayLiteralExpression().Elements.Nodes {
+				if element == nil {
+					complete = false
+					return
+				}
+				entry := typefacts.ReturnArmElement{Location: nodeLocation(element)}
+				if ast.IsSpreadElement(element) {
+					entry.Spread = true
+				} else {
+					entry.Parameter = p.unwrittenParameterIdentityLocked(implementation, element)
+				}
+				arm.Elements = append(arm.Elements, entry)
+			}
+		}
+		arms = append(arms, arm)
+	}
+	visit(root, 0)
+	if !complete {
+		return nil
+	}
+	return arms
+}
+
 func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.ControlFlowCensus {
 	census := &typefacts.ControlFlowCensus{}
 	body := implementation.Body()
@@ -1752,6 +1830,7 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 			CarriedCallables: carried,
 			CarryReach:       &reachable,
 			Sources:          p.returnValueSourcesLocked(body),
+			Arms:             p.returnArmsLocked(implementation, body),
 		})
 		return census
 	}
@@ -1820,6 +1899,7 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 				Parameter:        p.returnedParameterIdentityLocked(implementation, node.Expression()),
 				CarriedCallables: carried, CarryReach: carryReach,
 				Sources: p.returnValueSourcesLocked(node.Expression()),
+				Arms:    p.returnArmsLocked(implementation, node.Expression()),
 			})
 			return flowState{reach: typefacts.Unreachable, carryReach: typefacts.Unreachable}
 		}

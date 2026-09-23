@@ -366,6 +366,66 @@ fn plan_file(
             runtime_value_domain_spans.insert(returned.span);
         }
     }
+    // ADR 0115: a returned conditional's branches, and the elements of a
+    // branch that is an array literal, are named by the symbol the generator's
+    // argument-container walk resolves them by. Only returned conditionals,
+    // and only as deep as the producer decomposes its arms.
+    let reference = |span: solid_facts::core::Span| {
+        file.ast.identifiers.iter().any(|identifier| {
+            identifier.span == span
+                && identifier.role == solid_facts::ast::IdentifierRole::Reference
+        })
+    };
+    let mut returned_conditionals = file
+        .ast
+        .returns
+        .iter()
+        .filter_map(|returned| returned.argument)
+        .chain(
+            file.ast
+                .functions
+                .iter()
+                .filter_map(|function| function.expression_return.as_ref())
+                .map(|returned| returned.span),
+        )
+        .map(|span| (span, 0usize))
+        .collect::<Vec<_>>();
+    while let Some((span, depth)) = returned_conditionals.pop() {
+        if depth > 8 {
+            continue;
+        }
+        let Some(conditional) = file
+            .ast
+            .conditional_expressions
+            .iter()
+            .find(|conditional| conditional.span == span)
+        else {
+            continue;
+        };
+        for (branch, array) in [
+            (
+                conditional.consequent,
+                conditional.consequent_array.as_deref(),
+            ),
+            (
+                conditional.alternate,
+                conditional.alternate_array.as_deref(),
+            ),
+        ] {
+            if let Some(elements) = array {
+                for element in elements.iter().flatten().copied() {
+                    if reference(element) {
+                        add_symbol(element, false);
+                    }
+                }
+            } else {
+                if reference(branch) {
+                    add_symbol(branch, false);
+                }
+                returned_conditionals.push((branch, depth + 1));
+            }
+        }
+    }
     for call in &file.ast.calls {
         for argument in &call.arguments {
             match argument.value {

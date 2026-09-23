@@ -116,6 +116,14 @@ pub(crate) fn synthesize(
             {
                 return None;
             }
+            if let Observation::ArgumentContainers(set) = observation
+                && !set
+                    .indices()
+                    .into_iter()
+                    .all(|index| identity_signatures_supported(signatures, index))
+            {
+                return None;
+            }
             Some((record, signatures, observation))
         })
         .collect::<Vec<_>>();
@@ -203,6 +211,9 @@ pub(crate) fn synthesize(
                                 "ADR 0101, described reads enumeration"
                             }
                             Observation::PrimitiveReturn => "ADR 0113, primitive return",
+                            Observation::ArgumentContainers(_) => {
+                                "ADR 0115, argument container returns"
+                            }
                             _ => "ADR 0036",
                         },
                         record.domain,
@@ -443,6 +454,12 @@ enum Observation {
     /// completion rules out. An empty-return observation would contradict
     /// every value this claim permits, so it is never substituted.
     PrimitiveReturn,
+    /// ADR 0115: returns that each hand back the caller's own argument or a
+    /// fresh array of the caller's arguments. The contradiction is a normal
+    /// completion whose result is none of them: not the argument at a claimed
+    /// index by SameValue, and not an object whose `length` and elements are
+    /// the claimed arguments by SameValue in order.
+    ArgumentContainers(ContainerSet),
     /// The `callbacks: []` claim. Observed from inside the sampled callback
     /// rather than at a checkpoint after the sample loop: a synthesized entry
     /// drains microtasks *after* `runProbeSession` returns, so a queued
@@ -568,7 +585,12 @@ fn candidate_observation(domain: &str, export: &ExportSemantics) -> Option<Obser
             if claim.items().is_empty() {
                 return Some(Observation::EmptyReturns);
             }
-            let [id] = claim.items() else { return None };
+            let [id] = claim.items() else {
+                // ADR 0115 is the one multi-return claim with a reviewed
+                // observation.
+                return ContainerSet::of(export, claim.items())
+                    .map(Observation::ArgumentContainers);
+            };
             let operation = export.operation(&id.0)?;
             match &operation.output {
                 Some(ValueShape::Parameter { index, path })
@@ -579,10 +601,114 @@ fn candidate_observation(domain: &str, export: &ExportSemantics) -> Option<Obser
                 Some(ValueShape::Plain) if operation.kind == OperationKind::Return => {
                     Some(Observation::PrimitiveReturn)
                 }
-                _ => None,
+                _ => ContainerSet::of(export, claim.items()).map(Observation::ArgumentContainers),
             }
         }
         _ => None,
+    }
+}
+
+/// The containers an ADR 0115 claim enumerates, small enough to stay `Copy`:
+/// at most four returns, each the argument at one index or an array of at most
+/// four of them. A claim past that is not synthesized, and its candidate stays
+/// withheld for want of a recipe.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ContainerSet {
+    len: u8,
+    slots: [ContainerSlot; 4],
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct ContainerSlot {
+    array: bool,
+    len: u8,
+    items: [u8; 4],
+}
+
+impl ContainerSet {
+    fn of(
+        export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+        items: &[solid_reactive_ir::contract_semantics::OperationId],
+    ) -> Option<Self> {
+        if items.is_empty() || items.len() > 4 {
+            return None;
+        }
+        let mut set = Self {
+            len: 0,
+            slots: [ContainerSlot::default(); 4],
+        };
+        for id in items {
+            let operation = export.operation(&id.0)?;
+            if operation.kind != OperationKind::Return {
+                return None;
+            }
+            let slot = match operation.output.as_ref()? {
+                ValueShape::Parameter { index, path } if path.is_empty() => ContainerSlot {
+                    array: false,
+                    len: 1,
+                    items: [u8::try_from(*index).ok()?, 0, 0, 0],
+                },
+                ValueShape::ArgumentArray { items } if items.len() <= 4 => {
+                    let mut slot = ContainerSlot {
+                        array: true,
+                        len: u8::try_from(items.len()).ok()?,
+                        items: [0; 4],
+                    };
+                    for (position, index) in items.iter().enumerate() {
+                        slot.items[position] = u8::try_from(*index).ok()?;
+                    }
+                    slot
+                }
+                _ => return None,
+            };
+            // The census refuses a claim that names one container twice, and
+            // so does this.
+            if set.slots().contains(&slot) {
+                return None;
+            }
+            set.slots[usize::from(set.len)] = slot;
+            set.len += 1;
+        }
+        // A lone whole parameter is ADR 0096's identity veto, never this one.
+        if set.len == 1 && !set.slots[0].array {
+            return None;
+        }
+        Some(set)
+    }
+
+    fn slots(&self) -> &[ContainerSlot] {
+        &self.slots[..usize::from(self.len)]
+    }
+
+    /// Every argument index the containers name, once each, ascending.
+    fn indices(&self) -> Vec<u16> {
+        let mut indices = self
+            .slots()
+            .iter()
+            .flat_map(|slot| slot.items[..usize::from(slot.len)].iter().copied())
+            .map(u16::from)
+            .collect::<Vec<_>>();
+        indices.sort_unstable();
+        indices.dedup();
+        indices
+    }
+
+    fn javascript(&self) -> String {
+        self.slots()
+            .iter()
+            .map(|slot| {
+                format!(
+                    "{{ array: {}, items: [{}] }}",
+                    slot.array,
+                    slot.items[..usize::from(slot.len)]
+                        .iter()
+                        .map(u8::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 }
 
@@ -635,6 +761,11 @@ impl Observation {
                 observation: "exact on a normal completion: Object.is(result, original argument at the claimed index) is false; object contents and throwing calls are not observed",
                 emit: "",
             },
+            Self::ArgumentContainers(_) => ReviewedObservation {
+                marker: "return-outside-containers",
+                observation: "exact on a normal completion for the argument returns: the result is not the argument at any claimed index by SameValue; for the array returns, not exact: an object whose length and elements equal the claimed arguments in order by SameValue satisfies it whether or not it is a fresh array; throwing calls are not observed",
+                emit: "",
+            },
             Self::PrimitiveReturn => ReviewedObservation {
                 marker: "return-not-primitive",
                 observation: "exact on a normal completion: typeof result is \"function\", or \"object\" and result is not null; throwing calls and unsampled inputs are not observed",
@@ -646,6 +777,17 @@ impl Observation {
     fn sample_tuples(self, signatures: &[typefacts::SelectedSignature]) -> Vec<Vec<String>> {
         match self {
             Self::ParameterReturn(index) => identity_sample_tuples(signatures, index),
+            Self::ArgumentContainers(set) => {
+                let mut tuples = Vec::new();
+                for index in set.indices() {
+                    for tuple in identity_sample_tuples(signatures, index) {
+                        if !tuples.contains(&tuple) {
+                            tuples.push(tuple);
+                        }
+                    }
+                }
+                tuples
+            }
             Self::NotCallable | Self::DefaultLibraryAlias(_) => Vec::new(),
             Self::DescribedCallbacks(_) => sample_tuples_with(signatures, true),
             Self::DescribedReads(mask) => reads_sample_tuples(signatures, mask),
@@ -672,6 +814,9 @@ impl Observation {
             }
             Self::PrimitiveReturn => {
                 "at most six tuples per overload, no variadic tail or structural object construction; an input outside the sample that makes the export return an object is not observed; throwing-only runs are incomplete and cannot satisfy the veto"
+            }
+            Self::ArgumentContainers(_) => {
+                "identity samples for each claimed index, distinct object/callable identities per slot; at most twelve tuples per index and overload, no variadic tail or structural object construction; an input outside the sample that selects another completion is not observed; throwing-only runs are incomplete and cannot satisfy the veto"
             }
             _ => {
                 "at most six tuples per overload; no variadic tail or structural object construction"
@@ -834,6 +979,9 @@ fn module_source(
     if observation == Observation::PrimitiveReturn {
         return primitive_return_module_source(specifier, export, signatures);
     }
+    if let Observation::ArgumentContainers(set) = observation {
+        return argument_container_module_source(specifier, export, set, signatures);
+    }
     if observation == Observation::NotCallable {
         return not_callable_module_source(specifier, export);
     }
@@ -852,6 +1000,7 @@ fn module_source(
         Observation::EmptyCallbacks => "callbacks",
         Observation::ParameterReturn(_)
         | Observation::PrimitiveReturn
+        | Observation::ArgumentContainers(_)
         | Observation::NotCallable
         | Observation::DefaultLibraryAlias(_)
         | Observation::DescribedCallbacks(_)
@@ -1233,6 +1382,84 @@ export async function runProbeSession(_session, harness) {{
 "#,
         specifier = serde_json::to_string(specifier).unwrap(),
         export = serde_json::to_string(export).unwrap(),
+    )
+}
+
+/// ADR 0115: the module for returns of argument containers.
+///
+/// Every sample is called and the marker fires when a normal completion is
+/// none of the claimed containers. SameValue is written with operators and the
+/// array check reads only the result's own `length` and elements in a plain
+/// loop, so a package that replaces an intrinsic during its import cannot bend
+/// the argument half. A throwing sample observes nothing, and a run with no
+/// normal completion throws so the gate is incomplete rather than satisfied by
+/// silence.
+fn argument_container_module_source(
+    specifier: &str,
+    export: &str,
+    set: ContainerSet,
+    signatures: &[typefacts::SelectedSignature],
+) -> String {
+    let tuples = Observation::ArgumentContainers(set)
+        .sample_tuples(signatures)
+        .into_iter()
+        .map(|arguments| format!("  [{}],", arguments.join(", ")))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        r#"// Synthesized argument-container return veto (ADR 0115).
+// Finite observations only falsify; the authenticated census proves closure.
+import * as subjectModule from {specifier};
+const subject = subjectModule[{export}];
+// SameValue without reading a mutable intrinsic after the subject's import.
+const sameValue = (left, right) => left === right
+  ? left !== 0 || 1 / left === 1 / right
+  : left !== left && right !== right;
+const containers = [{containers}];
+const holds = (result, args) => {{
+  for (const container of containers) {{
+    if (!container.array) {{
+      if (sameValue(result, args[container.items[0]])) return true;
+      continue;
+    }}
+    if (result === null || typeof result !== "object") continue;
+    let length;
+    try {{ length = result.length; }} catch {{ continue; }}
+    if (length !== container.items.length) continue;
+    let every = true;
+    for (let position = 0; position < container.items.length; position += 1) {{
+      let element;
+      try {{ element = result[position]; }} catch {{ every = false; break; }}
+      if (!sameValue(element, args[container.items[position]])) {{ every = false; break; }}
+    }}
+    if (every) return true;
+  }}
+  return false;
+}};
+const samples = [
+{tuples}
+];
+export async function runProbeSession(_session, harness) {{
+  harness.emit({{ marker: "call", kind: "call", phase: "enter" }});
+  if (typeof subject !== "function") throw new Error("synthesized veto: export is not callable");
+  let completed = 0;
+  let threw = 0;
+  for (const args of samples) {{
+    let result;
+    try {{ result = subject(...args); }} catch {{ threw += 1; continue; }}
+    completed += 1;
+    if (!holds(result, args)) {{
+      harness.emit({{ marker: "return-outside-containers", kind: "call", phase: "enter" }});
+    }}
+  }}
+  if (threw > 0) harness.emit({{ marker: "sample-threw", kind: "call", phase: "enter" }});
+  if (completed === 0) throw new Error("synthesized container veto: no sample completed normally");
+  harness.emit({{ marker: "call", kind: "call", phase: "exit" }});
+}}
+"#,
+        specifier = serde_json::to_string(specifier).unwrap(),
+        export = serde_json::to_string(export).unwrap(),
+        containers = set.javascript(),
     )
 }
 

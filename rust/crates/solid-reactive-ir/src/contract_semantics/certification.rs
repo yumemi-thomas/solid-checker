@@ -722,9 +722,11 @@ fn inventory_value_shape(
         ),
         // A merged props object has no child shape to inventory: its members
         // are the caller's argument's, and this side has no premise about them.
+        // An argument array's items are the caller's arguments too (ADR 0115).
         ValueShape::Unknown
         | ValueShape::Plain
         | ValueShape::Parameter { .. }
+        | ValueShape::ArgumentArray { .. }
         | ValueShape::Callable
         | ValueShape::Reactive { .. }
         | ValueShape::Store { .. }
@@ -769,6 +771,7 @@ const fn recursive_value_callability(shape: &ValueShape) -> DemandedCallability 
         | ValueShape::Reactive { .. }
         | ValueShape::Store { .. }
         | ValueShape::MergedProps { .. }
+        | ValueShape::ArgumentArray { .. }
         | ValueShape::Action { .. }
         | ValueShape::Cleanup { .. }
         | ValueShape::RefApplication

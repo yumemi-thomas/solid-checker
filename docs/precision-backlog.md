@@ -1,5 +1,26 @@
 # Precision backlog
 
+## A `returns` closure over the caller's arguments and fresh arrays of them (2026-09-23)
+
+Status: **implemented** (ADR 0115). `@solid-primitives/utils`' `asArray`
+(`value`, `[value]` or `[]`, 51 consumer sites) was proposed ADR 0113's plain
+return and refused, correctly: nothing could describe "the caller's argument,
+or a fresh array holding it". Now each such value is its own `return`, with the
+exact output `parameter i` or the new `argument-array [i, …]`, and the census
+decides the enumeration from the producer's arms of every return (handshake
+protocol 61: a returned conditional or array literal states its arms,
+exhaustively or not at all). A spread, a hole, a written parameter, an element
+that is no argument, and a claimed container no live completion hands back all
+refuse by name; the veto observes SameValue with operators. The consumer reads
+a union with no one shared reactive leaf as describing no reactive return, as
+it reads a local conditional whose branches disagree: contract returns are only
+read to find a reactive leaf, so this can hide a finding and never invent one.
+`implementation-census-creates`' `typedCoercion` (a clamp over its three
+parameters) now certifies three parameter returns instead of being refused a
+plain one. Remaining: a call of the argument (`access`'s and `accessWith`'s
+other branch) has no value shape, and the walk reads no parenthesized
+conditional, no logical expression and no lone returned `[]`.
+
 ## A registered computation gets a domain, and SC4001 can come from a generated contract (2026-09-23)
 
 Status: **implemented** (ADR 0114). An export that must be called under an

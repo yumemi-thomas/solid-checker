@@ -1412,6 +1412,36 @@ type ReturnSite struct {
 	// it may authorize execution of the value it returns.
 	CarryReach *Reachability               `cbor:"carryReach,omitempty" json:"carryReach,omitempty"`
 	Sources    []ImplementationValueSource `cbor:"sources,omitempty" json:"sources,omitempty"`
+	// Arms are the values this site can hand back when its expression is a
+	// conditional or an array literal (ADR 0115): the leaves of the
+	// conditional tree after identity-preserving wrappers, in source order, a
+	// branch a literal condition excludes left out. When present the list is
+	// exhaustive, because a conditional expression evaluates to one of its two
+	// branches; a tree too deep or too wide states no arms rather than some.
+	// Absent for every other expression, which the site's own fields describe.
+	Arms []ReturnArm `cbor:"arms,omitempty" json:"arms,omitempty"`
+}
+
+// ReturnArm is one value a return site can hand back (ADR 0115).
+type ReturnArm struct {
+	Location Location             `cbor:"location" json:"location"`
+	Value    *InvocationValueFact `cbor:"value,omitempty" json:"value,omitempty"`
+	// Parameter identifies an unchanged whole input binding, exactly as on
+	// ReturnSite. Absence carries no identity premise.
+	Parameter *ParameterValueSource `cbor:"parameter,omitempty" json:"parameter,omitempty"`
+	// ArrayLiteral marks an arm that is an array literal. Elements then lists
+	// every element in order, and is empty for `[]`.
+	ArrayLiteral bool               `cbor:"arrayLiteral,omitempty" json:"arrayLiteral,omitempty"`
+	Elements     []ReturnArmElement `cbor:"elements,omitempty" json:"elements,omitempty"`
+}
+
+// ReturnArmElement is one element of an array-literal ReturnArm.
+type ReturnArmElement struct {
+	Location Location `cbor:"location" json:"location"`
+	// Parameter identifies an unchanged whole input binding. Absence, a spread
+	// and a hole all carry no identity premise.
+	Parameter *ParameterValueSource `cbor:"parameter,omitempty" json:"parameter,omitempty"`
+	Spread    bool                  `cbor:"spread,omitempty" json:"spread,omitempty"`
 }
 
 // CallableReturnCensus is the exact return-carry census for one nested

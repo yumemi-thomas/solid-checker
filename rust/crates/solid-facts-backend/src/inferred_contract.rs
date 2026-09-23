@@ -113,10 +113,10 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
             // would refuse the row instead of proving anything.
             //
             // The returns census decides empty completion (ADR 0035), a single
-            // whole-parameter identity, one merged props root (ADR 0109) and
-            // one plain return over a primitive completion (ADR 0113). Other
-            // described return shapes remain partial; their enumeration has no
-            // complete census.
+            // whole-parameter identity, one merged props root (ADR 0109), one
+            // plain return over a primitive completion (ADR 0113) and returns
+            // of argument containers (ADR 0115). Other described return shapes
+            // remain partial; their enumeration has no complete census.
             let proposable = paths
                 .iter()
                 .filter_map(|path| match path {
@@ -196,6 +196,24 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                                         operation.kind == OperationKind::Return
                                             && matches!(&operation.output, Some(ValueShape::Parameter { path, .. }) if path.is_empty())
                                     }))
+                            })
+                        // ADR 0115: returns that each hand back an argument
+                        // container, which the census decides from the
+                        // producer's arms of every return.
+                        || export
+                            .operation_claim(ClaimDomain::Returns)
+                            .is_some_and(|claim| {
+                                claim.items().len() > 1
+                                    && claim.items().iter().all(|id| {
+                                        export.operation(&id.0).is_some_and(|operation| {
+                                            operation.kind == OperationKind::Return
+                                                && operation
+                                                    .output
+                                                    .as_ref()
+                                                    .and_then(solid_reactive_ir::ArgumentContainer::of)
+                                                    .is_some()
+                                        })
+                                    })
                             })
                 })
                 .collect::<Vec<_>>();
@@ -642,6 +660,30 @@ fn normalize_export(
                     || (summary.kind == "function" && summary.returns_walk_clean))
             {
                 KnowledgeSet::Complete(Vec::new())
+            } else if scope.publishes_bootstrapped_reactive_domains()
+                && summary.kind == "function"
+                && !summary.returns_argument_containers.is_empty()
+                && summary.inherited_from.is_none()
+                && matches!(&summary.async_behavior, ContractClaim::Known(protocol) if protocol.is_empty())
+            {
+                // ADR 0115, before ADR 0113's plain return because it is the
+                // narrower claim: the syntax walk saw nothing but the caller's
+                // own arguments and fresh arrays of them, so this proposes one
+                // `return` per container, each with its exact output, and the
+                // census decides the enumeration from the producer's arms of
+                // every return.
+                let mut ids = Vec::new();
+                for (index, container) in summary.returns_argument_containers.iter().enumerate() {
+                    let id = OperationId(format!("{prefix}return-{index}"));
+                    operations.push(operation(
+                        id.clone(),
+                        OperationKind::Return,
+                        Vec::new(),
+                        Some(container.value_shape()),
+                    ));
+                    ids.push(id);
+                }
+                KnowledgeSet::Complete(ids)
             } else if scope.publishes_bootstrapped_reactive_domains()
                 && summary.kind == "function"
                 && summary.returns_value_completion

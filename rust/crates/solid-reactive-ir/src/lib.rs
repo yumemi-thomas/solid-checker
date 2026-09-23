@@ -31,7 +31,7 @@ pub use attribution::ObligationReach;
 pub use creates_walk::{CreatesDecline, CreatesDeclineKind, CreatesProposalWalk};
 pub use owners::function_binding_name;
 pub use pipeline::{build, build_with_accepted_contracts_measured};
-pub use returns_walk::{ReturnsDecline, value_completion, valueless_completion};
+pub use returns_walk::{ArgumentContainer, ReturnsDecline, value_completion, valueless_completion};
 
 pub use upstream_compat::rule_options::{RuleOptions, RuleOverride};
 
@@ -1128,6 +1128,12 @@ pub struct ContractExport {
     /// decides them from the producer's identity fact and its reviewed member
     /// table. `false` is "do not propose".
     pub member_alias_initializer: bool,
+    /// ADR 0115's proposal input: the argument containers this export's own
+    /// completions hand back, when its syntax is nothing but conditionals over
+    /// its whole parameters and array literals of them, with at least two
+    /// distinct ones. Empty is "do not propose". The certifier decides it from
+    /// the producer's own arms of each return.
+    pub returns_argument_containers: Vec<ArgumentContainer>,
     /// The parameters this export's own body calls directly -- the callee is
     /// the parameter itself, and the call is written in the body of the
     /// function that declares it, outside any nested callable (ADR 0100). The
@@ -1621,6 +1627,9 @@ pub struct Program {
     /// deserialized `Program` proposes none of these rather than all of them.
     #[serde(skip)]
     pub merged_props_returns: returns_walk::MergedPropsReturns,
+    /// ADR 0115's proposal input, off the wire and fail-closed the same way.
+    #[serde(skip)]
+    pub argument_container_returns: returns_walk::ArgumentContainerReturns,
 }
 
 /// How contract binding answered across the program's declarations.

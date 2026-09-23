@@ -917,6 +917,12 @@ impl CanonicalWriter {
                 self.u8(17);
                 self.u16(*from);
             }
+            // ADR 0115. Appended for the same reason, and it needs no digest
+            // family: no document before it can carry the tag.
+            ValueShape::ArgumentArray { items } => {
+                self.u8(18);
+                self.sequence(items, |writer, index| writer.u16(*index));
+            }
         }
     }
 

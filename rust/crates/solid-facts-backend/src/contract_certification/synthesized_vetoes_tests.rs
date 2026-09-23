@@ -59,7 +59,10 @@ impl ObservationResult {
         self.markers.iter().any(|marker| {
             matches!(
                 marker.as_str(),
-                "return-value" | "return-outside-identity" | "return-not-primitive"
+                "return-value"
+                    | "return-outside-identity"
+                    | "return-not-primitive"
+                    | "return-outside-containers"
             )
         })
     }
@@ -567,6 +570,76 @@ fn the_primitive_return_module_emits_only_for_an_object_or_a_function() {
         "export function* subject() { return 1; }",
     ] {
         let observed = execute(implementation, Observation::PrimitiveReturn, &signatures);
+        assert!(observed.contradicted(), "{implementation}: {observed:?}");
+        assert!(observed.error.is_none(), "{implementation}: {observed:?}");
+    }
+}
+
+/// ADR 0115: returns of argument containers select their own observation --
+/// one whole parameter stays ADR 0096's identity veto -- and the module stays
+/// quiet on every claimed container and fires on anything else, a different
+/// object in a claimed position included.
+#[test]
+fn the_argument_container_module_emits_only_outside_the_claimed_containers() {
+    let returned = |id: &str, output: ValueShape| Operation {
+        id: OperationId(id.into()),
+        output: Some(output),
+        ..return_operation()
+    };
+    let operations = vec![
+        returned(
+            "return-0",
+            ValueShape::Parameter {
+                index: 0,
+                path: vec![],
+            },
+        ),
+        returned("return-1", ValueShape::ArgumentArray { items: vec![] }),
+        returned("return-2", ValueShape::ArgumentArray { items: vec![0] }),
+    ];
+    let claim = KnowledgeSet::complete(
+        operations
+            .iter()
+            .map(|operation| operation.id.clone())
+            .collect(),
+    );
+    let Some(observation @ Observation::ArgumentContainers(_)) =
+        candidate_observation("returns", &export_with_returns(claim, operations.clone()))
+    else {
+        panic!("argument containers select their own observation");
+    };
+    assert_eq!(
+        candidate_observation(
+            "returns",
+            &export_with_returns(
+                KnowledgeSet::complete(vec![operations[0].id.clone()]),
+                vec![operations[0].clone()]
+            )
+        ),
+        Some(Observation::ParameterReturn(0)),
+        "a lone whole parameter is the identity veto's"
+    );
+    let signatures = [signature(&[value_fact(
+        json!({"mayBeObject": true, "mayBeUndefined": true}),
+    )])];
+    for implementation in [
+        "export function subject(value) { return Array.isArray(value) ? value : value ? [value] : []; }",
+        "export function subject(value) { return [value]; }",
+        "export function subject(value) { return value; }",
+        "export function subject() { return []; }",
+    ] {
+        let observed = execute(implementation, observation, &signatures);
+        assert!(!observed.contradicted(), "{implementation}: {observed:?}");
+        assert!(observed.error.is_none(), "{implementation}: {observed:?}");
+    }
+    for implementation in [
+        "export function subject(value) { return { value }; }",
+        "export function subject(value) { return [value, value]; }",
+        "export function subject() { return [{}]; }",
+        "export function subject() { return {}; }",
+        "export function subject() { return 1; }",
+    ] {
+        let observed = execute(implementation, observation, &signatures);
         assert!(observed.contradicted(), "{implementation}: {observed:?}");
         assert!(observed.error.is_none(), "{implementation}: {observed:?}");
     }

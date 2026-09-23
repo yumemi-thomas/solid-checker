@@ -744,6 +744,7 @@ fn normalize_value(
         | ValueShape::Callable
         | ValueShape::Component
         | ValueShape::MergedProps { .. }
+        | ValueShape::ArgumentArray { .. }
         | ValueShape::RefApplication => {}
         ValueShape::Tuple(items) => {
             validate_open_nonempty(items, &format!("{path}.tuple-items"))?;
@@ -1725,6 +1726,7 @@ fn visit_closed_value(
         | ValueShape::Component
         | ValueShape::Cleanup { .. }
         | ValueShape::MergedProps { .. }
+        | ValueShape::ArgumentArray { .. }
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
     }
@@ -2131,6 +2133,7 @@ fn open_value_closure(
         | ValueShape::Component
         | ValueShape::Cleanup { .. }
         | ValueShape::MergedProps { .. }
+        | ValueShape::ArgumentArray { .. }
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
     }
@@ -2157,6 +2160,7 @@ fn visit_value(value: &ValueShape, root: ValueRoot, path: ValuePath, claims: &mu
         | ValueShape::Component
         | ValueShape::Cleanup { .. }
         | ValueShape::MergedProps { .. }
+        | ValueShape::ArgumentArray { .. }
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
         ValueShape::Tuple(items) => {

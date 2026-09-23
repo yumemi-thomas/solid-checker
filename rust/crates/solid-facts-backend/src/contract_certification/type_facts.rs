@@ -5083,6 +5083,7 @@ fn value_shape_constructor(value: &ValueShape) -> &'static str {
         } => "reactive/setter",
         ValueShape::Store { .. } => "store",
         ValueShape::MergedProps { .. } => "merged-props",
+        ValueShape::ArgumentArray { .. } => "argument-array",
         ValueShape::Action { .. } => "action",
         ValueShape::Component => "component",
         ValueShape::Cleanup { .. } => "cleanup",
@@ -7628,6 +7629,39 @@ fn require_operation_recursive_subject(
         let operation = exported
             .operation(&operation.0)
             .ok_or_else(|| open("recursive output operation is absent"))?;
+        // ADR 0115: one return of an argument-container claim. Each return's
+        // output is proved by the evidence the closure census reads, which
+        // requires every container the claim enumerates to be handed back by
+        // some live completion. ADR 0075's whole-parameter proof below would
+        // demand that *every* completion hand back this one parameter, which
+        // is the claim a union of containers does not make.
+        if let Some(returns) = exported.operation_claim(ClaimDomain::Returns)
+            && returns.items().iter().any(|id| id.0 == operation.id.0)
+            && let Some(containers) = argument_container_claim(exported, returns)
+        {
+            if operation.kind != OperationKind::Return
+                || !path.0.is_empty()
+                || callable.asserts_callable()
+            {
+                return Err(open(
+                    "an argument container output is proved only as the whole value an \
+                     export's return hands back",
+                ));
+            }
+            let (_, implementation) = require_export_implementation(plan, proof, transcript, open)?;
+            let at = format!(
+                "{}:{}..{}",
+                implementation.location.path,
+                implementation.location.start_byte,
+                implementation.location.end_byte
+            );
+            sites.extend(
+                argument_container_return_sites(implementation, &containers, &at)
+                    .map_err(|reason| open(&reason))?,
+            );
+            sites.push("recursive-operation-value:argument-container".into());
+            return Ok(());
+        }
         if let Some(ValueShape::Parameter {
             index,
             path: parameter_path,
@@ -11267,13 +11301,174 @@ fn census_returns_domain(
     {
         return census_primitive_returns_transcript(implementation).map_err(refuse);
     }
+    // ADR 0115: returns that each hand back the caller's own argument or a
+    // fresh array of the caller's arguments. After the single-operation arms,
+    // which decide their narrower claims themselves: one whole parameter is
+    // ADR 0075's.
+    if let Some(containers) = argument_container_claim(export, proposed) {
+        let at = format!(
+            "{}:{}..{}",
+            implementation.location.path,
+            implementation.location.start_byte,
+            implementation.location.end_byte
+        );
+        return argument_container_return_sites(implementation, &containers, &at).map_err(refuse);
+    }
     if !proposed.items().is_empty() {
         return Err(refuse(format!(
-            "a returns closure candidate must enumerate no operation, one whole-parameter return, one merged props root, or one plain return, but the proposal names {} unsupported operation(s)",
+            "a returns closure candidate must enumerate no operation, one whole-parameter return, one merged props root, one plain return, or returns of argument containers, but the proposal names {} unsupported operation(s)",
             proposed.items().len()
         )));
     }
     census_returns_transcript(implementation).map_err(refuse)
+}
+
+/// The containers a `returns` claim enumerates when it is ADR 0115's shape:
+/// every item a `return` whose output is an argument container, no two the
+/// same, and the claim not one ADR 0075's arm decides -- a lone whole
+/// parameter. `None` for every other claim.
+fn argument_container_claim(
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    proposed: &KnowledgeSet<solid_reactive_ir::contract_semantics::OperationId>,
+) -> Option<std::collections::BTreeSet<solid_reactive_ir::ArgumentContainer>> {
+    let mut containers = std::collections::BTreeSet::new();
+    for id in proposed.items() {
+        let operation = export.operation(&id.0)?;
+        if operation.kind != OperationKind::Return {
+            return None;
+        }
+        if !containers.insert(solid_reactive_ir::ArgumentContainer::of(
+            operation.output.as_ref()?,
+        )?) {
+            return None;
+        }
+    }
+    match containers.iter().collect::<Vec<_>>().as_slice() {
+        [] | [solid_reactive_ir::ArgumentContainer::Parameter(_)] => None,
+        _ => Some(containers),
+    }
+}
+
+/// The argument container one return arm hands back, when the producer's own
+/// facts name one: an unchanged whole input binding, or an array literal every
+/// element of which is one. A spread, a hole, and any other element are not.
+fn arm_container(arm: &typefacts::ReturnArm) -> Option<solid_reactive_ir::ArgumentContainer> {
+    let whole = |source: &typefacts::ParameterValueSource| {
+        source
+            .path
+            .is_empty()
+            .then(|| u16::try_from(source.parameter_index).ok())
+            .flatten()
+    };
+    if arm.array_literal {
+        return arm
+            .elements
+            .iter()
+            .map(|element| {
+                if element.spread {
+                    return None;
+                }
+                element.parameter.as_ref().and_then(whole)
+            })
+            .collect::<Option<Vec<_>>>()
+            .map(solid_reactive_ir::ArgumentContainer::Array);
+    }
+    arm.parameter
+        .as_ref()
+        .and_then(whole)
+        .map(solid_reactive_ir::ArgumentContainer::Parameter)
+}
+
+/// ADR 0115's evidence, shared by the closure census and each operation's
+/// positive fact so the two cannot drift.
+///
+/// Every value-carrying return the producer did not prove unreachable is
+/// accounted for, value by value: a return whose expression the producer
+/// decomposed ([`typefacts::ReturnSite::arms`], exhaustive when present) by
+/// each of its arms, any other by its own whole-parameter identity. Each value
+/// must be an argument container the claim enumerates, and each container the
+/// claim enumerates must be handed back by at least one such value, so a
+/// positive claim about any one of them is witnessed. A valueless completion
+/// is no `return` operation (`semantic-model.md` § returns) and needs no
+/// disposition. Beside it, the premises every `returns` arm shares: a call, a
+/// plain completion form, and a present, classified control-flow census.
+fn argument_container_return_sites(
+    implementation: &typefacts::ExportImplementationTranscript,
+    containers: &std::collections::BTreeSet<solid_reactive_ir::ArgumentContainer>,
+    at: &str,
+) -> Result<Vec<String>, String> {
+    let control_flow = require_plain_classified_completion(implementation, at)?;
+    let mut produced = std::collections::BTreeSet::new();
+    let mut sites = Vec::new();
+    for site in control_flow
+        .returns
+        .iter()
+        .filter(|site| site.reach != Reachability::Unreachable && site.value.is_some())
+    {
+        let values = if site.arms.is_empty() {
+            let whole = site
+                .parameter
+                .as_ref()
+                .filter(|source| source.path.is_empty())
+                .and_then(|source| u16::try_from(source.parameter_index).ok())
+                .map(solid_reactive_ir::ArgumentContainer::Parameter);
+            vec![(&site.location, whole)]
+        } else {
+            site.arms
+                .iter()
+                .map(|arm| (&arm.location, arm_container(arm)))
+                .collect()
+        };
+        for (location, container) in values {
+            let Some(container) = container else {
+                return Err(format!(
+                    "argument container returns census refuses a value at {}:{}..{}, reach {}, \
+                     that is neither the caller's unchanged argument nor an array literal of \
+                     them, for {at}",
+                    location.path,
+                    location.start_byte,
+                    location.end_byte,
+                    reachability_name(site.reach)
+                ));
+            };
+            if !containers.contains(&container) {
+                return Err(format!(
+                    "argument container returns census refuses a value at {}:{}..{} that hands \
+                     back {}, which the claim does not enumerate, for {at}",
+                    location.path,
+                    location.start_byte,
+                    location.end_byte,
+                    container.spelling()
+                ));
+            }
+            sites.push(format!(
+                "census-return-arm:{}:{}:{}:{}:{}",
+                location.path,
+                location.start_byte,
+                location.end_byte,
+                reachability_name(site.reach),
+                container.spelling()
+            ));
+            produced.insert(container);
+        }
+    }
+    if let Some(missing) = containers
+        .iter()
+        .find(|container| !produced.contains(*container))
+    {
+        return Err(format!(
+            "argument container returns census refuses a claim enumerating {} that no \
+             completion the producer did not prove unreachable hands back, for {at}",
+            missing.spelling()
+        ));
+    }
+    sites.push(format!(
+        "census-returns-argument-container-total:{}",
+        control_flow.returns.len()
+    ));
+    sites.sort();
+    sites.dedup();
+    Ok(sites)
 }
 
 fn census_parameter_returns_transcript(
@@ -14595,6 +14790,7 @@ const fn value_shape_kind_name(shape: &ValueShape) -> &'static str {
         ValueShape::Reactive { .. } => "reactive",
         ValueShape::Store { .. } => "store",
         ValueShape::MergedProps { .. } => "merged-props",
+        ValueShape::ArgumentArray { .. } => "argument-array",
         ValueShape::Action { .. } => "action",
         ValueShape::Component => "component",
         ValueShape::Cleanup { .. } => "cleanup",
@@ -25228,6 +25424,96 @@ mod tests {
             value["primitiveCompletion"] = json!(true);
         }
         serde_json::from_value(value).unwrap()
+    }
+
+    /// ADR 0115, the branches the real-producer tracer does not reach: a
+    /// returned conditional is read arm by arm, a site with no arms by its own
+    /// identity, a valueless or unreachable site needs nothing, and a spread
+    /// element or a container the claim does not enumerate refuses by name.
+    #[test]
+    fn argument_container_census_reads_every_arm_and_refuses_by_name() {
+        use solid_reactive_ir::ArgumentContainer;
+        let value = || primitive_census_value(json!({"mayBeObject": true}), "unknown");
+        let at = |start: u64, end: u64| json!({"path": "/p/index.js", "startByte": start, "endByte": end});
+        let identity = |index: usize| json!({"parameterIndex": index});
+        let conditional = |arms: serde_json::Value| {
+            let mut site = primitive_census_site(10, 40, "reachable", Some(value()));
+            site["arms"] = arms;
+            site
+        };
+        let containers = [
+            ArgumentContainer::Parameter(0),
+            ArgumentContainer::Array(vec![]),
+            ArgumentContainer::Array(vec![0]),
+        ]
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+        let census = |returns: serde_json::Value| {
+            argument_container_return_sites(
+                &primitive_census_implementation(returns, false),
+                &containers,
+                "/p/index.js:0..60",
+            )
+        };
+        // `asArray`, beside a bare `return;` and an unreachable object return.
+        let sites = census(json!([
+            primitive_census_site(1, 8, "reachable", None),
+            conditional(json!([
+                {"location": at(12, 17), "parameter": identity(0)},
+                {"location": at(20, 27), "arrayLiteral": true, "elements": [
+                    {"location": at(21, 26), "parameter": identity(0)}
+                ]},
+                {"location": at(30, 32), "arrayLiteral": true}
+            ])),
+            primitive_census_site(44, 52, "unreachable", Some(value())),
+        ]))
+        .unwrap();
+        assert_eq!(
+            sites,
+            vec![
+                "census-return-arm:/p/index.js:12:17:reachable:parameter-0".to_owned(),
+                "census-return-arm:/p/index.js:20:27:reachable:array[0]".to_owned(),
+                "census-return-arm:/p/index.js:30:32:reachable:array[]".to_owned(),
+                "census-returns-argument-container-total:3".to_owned(),
+            ]
+        );
+        let refuses = |returns: serde_json::Value, needle: &str| {
+            let refusal = census(returns).expect_err("the argument container census must refuse");
+            assert!(refusal.contains(needle), "{needle}: {refusal}");
+        };
+        // A spread element is no argument.
+        refuses(
+            json!([conditional(json!([
+                {"location": at(12, 17), "parameter": identity(0)},
+                {"location": at(20, 30), "arrayLiteral": true, "elements": [
+                    {"location": at(21, 29), "spread": true}
+                ]},
+                {"location": at(31, 33), "arrayLiteral": true}
+            ]))]),
+            "neither the caller's unchanged argument",
+        );
+        // A container the body hands back and the claim does not name.
+        refuses(
+            json!([conditional(json!([
+                {"location": at(12, 17), "parameter": identity(1)},
+                {"location": at(20, 27), "arrayLiteral": true, "elements": [
+                    {"location": at(21, 26), "parameter": identity(0)}
+                ]},
+                {"location": at(30, 32), "arrayLiteral": true}
+            ]))]),
+            "which the claim does not enumerate",
+        );
+        // A site with no arms is its own identity; a path into the argument is
+        // not the argument.
+        refuses(
+            json!([{
+                "location": at(10, 40),
+                "reach": "reachable",
+                "value": value(),
+                "parameter": {"parameterIndex": 0, "path": [{"kind": "property", "property": "value"}]}
+            }]),
+            "neither the caller's unchanged argument",
+        );
     }
 
     /// ADR 0113. One `plain` return closes over two independent answers: the

@@ -687,6 +687,16 @@ control-flow-decidable from the same transcript.
 `clientOnly` publishes two `return` operations but leaves `returns` *open*,
 which is partial positive and not closure.
 
+**[Decision 2026-09-23, ADR 0115]** a union of values is one `return` per
+distinct shape, and that is how a closed `returns` states one. An export that
+hands back its caller's argument or a fresh array of it -- `asArray`'s
+`value`, `[value]` and `[]` -- publishes three `return` operations, with outputs
+`parameter 0`, `argument-array [0]` and `argument-array []`, and closes
+`returns` over them. It is not one `return` whose output is a `choice`: the
+choice's alternatives would be a value closure of their own, which no census
+decides for an operation's output, while the enumeration of `return`
+operations is exactly what the `returns` census decides.
+
 ### cleanups
 
 `cleanups: [] closed` denies that one invocation of this export gives rise to
@@ -764,7 +774,11 @@ Required shapes:
 - component;
 - cleanup;
 - ref application;
-- server-function reference.
+- server-function reference;
+- argument array (ADR 0115): a fresh array whose elements, in order, are the
+  caller's own arguments at given indices. It is the one composite that carries
+  no local collection and no closure: it is exact by construction, which is
+  what lets a `return` state it as its whole output.
 
 Projection and snapshot are represented by observable capability and
 resource relationships unless RC.3 exposes a runtime-observable protocol that

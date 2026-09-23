@@ -1745,6 +1745,17 @@ pub enum ValueShape {
     MergedProps {
         from: u16,
     },
+    /// A **fresh** array whose elements, in order, are exactly the caller's own
+    /// arguments at `items` (ADR 0115): `[value]` is `[0]`, and `[]` is empty.
+    ///
+    /// Exact by construction, so it carries no knowledge set and no closure of
+    /// its own to decide: a `Tuple` of `Parameter`s would say the same thing
+    /// with a `tuple-items` closure beside it, which no census decides for an
+    /// operation's output. The array is the callee's, freshly built; what it
+    /// holds is the caller's.
+    ArgumentArray {
+        items: Vec<u16>,
+    },
     Action {
         transition: Option<ResourceId>,
     },

@@ -47,6 +47,7 @@ pub(crate) struct ProgramDraft {
     pub(crate) missing_owners: Vec<OwnerRequirement>,
     pub(crate) creates_proposal_walk: crate::CreatesProposalWalk,
     pub(crate) merged_props_returns: crate::returns_walk::MergedPropsReturns,
+    pub(crate) argument_container_returns: crate::returns_walk::ArgumentContainerReturns,
     pub(crate) contract_exports: Arc<BTreeMap<String, ContractExport>>,
     pub(crate) contract_generation_obligations: Vec<ContractGenerationObligation>,
     pub(crate) strict_read_obligations: usize,
@@ -160,6 +161,7 @@ impl ProgramDraft {
             contract_binding: self.contract_binding,
             creates_proposal_walk: self.creates_proposal_walk,
             merged_props_returns: self.merged_props_returns,
+            argument_container_returns: self.argument_container_returns,
         }
     }
 }
@@ -548,6 +550,8 @@ fn build_with_accepted_contract_inputs_measured_incremental(
     // implementation census. See `crate::CreatesProposalWalk`.
     draft.creates_proposal_walk = crate::creates_walk::collect_project(&analysis);
     draft.merged_props_returns = crate::returns_walk::collect_merged_props_returns(&analysis);
+    draft.argument_container_returns =
+        crate::returns_walk::collect_argument_container_returns(&analysis);
     // Static and compatibility passes deliberately operate on source facts.
     // Apply the compiler's stronger "this code was not emitted" fact once,
     // after every producer has run and before unresolved obligations are

@@ -456,7 +456,30 @@
         "parameter": { "$ref": "#/$defs/parameterValueSource" },
         "carriedCallables": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/location" } },
         "carryReach": { "enum": ["reachable", "unreachable", "unknown"] },
-        "sources": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/implementationValueSource" } }
+        "sources": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/implementationValueSource" } },
+        "arms": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/returnArm" } }
+      }
+    },
+    "returnArm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location"],
+      "properties": {
+        "location": { "$ref": "#/$defs/location" },
+        "value": { "$ref": "#/$defs/invocationValue" },
+        "parameter": { "$ref": "#/$defs/parameterValueSource" },
+        "arrayLiteral": { "type": "boolean" },
+        "elements": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/returnArmElement" } }
+      }
+    },
+    "returnArmElement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location"],
+      "properties": {
+        "location": { "$ref": "#/$defs/location" },
+        "parameter": { "$ref": "#/$defs/parameterValueSource" },
+        "spread": { "type": "boolean" }
       }
     },
     "callableReturnCarrySite": {

@@ -1683,6 +1683,49 @@ pub struct ReturnSite {
     pub carry_reach: Option<Reachability>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sources: Vec<ImplementationValueSource>,
+    /// The values this site can hand back when its expression is a conditional
+    /// or an array literal (ADR 0115, handshake protocol 61): the leaves of the
+    /// conditional tree after identity-preserving wrappers, in source order,
+    /// with a branch a literal condition excludes left out.
+    ///
+    /// **Present means exhaustive**: a conditional evaluates to one of its two
+    /// branches, and the producer states no arms at all for a tree past its
+    /// bounds rather than some of them. Empty for every other expression, which
+    /// this site's own fields describe.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arms: Vec<ReturnArm>,
+}
+
+/// One value a return site can hand back (ADR 0115).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReturnArm {
+    pub location: Location,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<InvocationValueFact>,
+    /// Positive identity of an unchanged whole input binding, exactly as on
+    /// [`ReturnSite::parameter`]. Absence is open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameter: Option<ParameterValueSource>,
+    /// The arm is an array literal, and [`Self::elements`] lists every one of
+    /// its elements in order; empty for `[]`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub array_literal: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub elements: Vec<ReturnArmElement>,
+}
+
+/// One element of an array-literal [`ReturnArm`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReturnArmElement {
+    pub location: Location,
+    /// Positive identity of an unchanged whole input binding. A spread, a hole
+    /// and any other expression carry none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameter: Option<ParameterValueSource>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub spread: bool,
 }
 
 /// Exact return-carry rows for one nested callable.

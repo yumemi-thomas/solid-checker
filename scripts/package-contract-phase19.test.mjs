@@ -209,7 +209,13 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // the fourth fixture contract the corpus authorizes: ADR 0114's consumer
       // arm, where a `compute` in `computations` makes an unowned call
       // SC4001 and the same export stating none reports nothing.
-      stableMainDocuments: 140,
+      //
+      // 142 the same day adds implementation-census-argument-returns', the
+      // corpus pin of ADR 0115's argument-container walk, and
+      // package-argument-container-consumer's, the fifth authorized fixture
+      // contract: a `returns` closed over the caller's argument and fresh
+      // arrays of it leaves nothing open at the import.
+      stableMainDocuments: 142,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

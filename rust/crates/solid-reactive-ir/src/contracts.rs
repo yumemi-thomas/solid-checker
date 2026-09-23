@@ -165,6 +165,7 @@ pub fn project_export_semantics(
         returns_walk_clean: false,
         returns_value_completion: false,
         member_alias_initializer: false,
+        returns_argument_containers: Vec::new(),
         direct_callback_parameters: BTreeSet::new(),
         // A projected dependency export has no body here to walk.
         merged_props_return: None,
@@ -343,8 +344,46 @@ fn project_return(
                 .operation(&id.0)
                 .is_some_and(|operation| matches!(operation.output, Some(ValueShape::Plain)))
         });
+    // ADR 0115: a closed claim whose every return hands back something exact
+    // -- a plain value, the caller's own argument, or a fresh array of the
+    // caller's arguments -- with no one reactive leaf they all share. The
+    // consumer's return is a single leaf, so it cannot say "the argument, or an
+    // array holding it", and it reads the union as describing no reactive
+    // return, exactly as it reads a local conditional whose branches disagree.
+    // Contract returns are only ever read to *find* a reactive leaf, so this
+    // can hide a finding and never invent one. A return whose output the
+    // projection drops (`[]`) is part of the union too: reading the claim as
+    // its one surviving leaf would say the export always returns that.
+    let exact_only = !knowledge.items().is_empty()
+        && knowledge.items().iter().all(|id| {
+            export.operation(&id.0).is_some_and(|operation| {
+                matches!(
+                    operation.output,
+                    Some(
+                        ValueShape::Plain
+                            | ValueShape::Parameter { .. }
+                            | ValueShape::ArgumentArray { .. }
+                    )
+                )
+            })
+        });
+    let dropped = knowledge
+        .items()
+        .iter()
+        .filter_map(|id| export.operation(&id.0))
+        .filter(|operation| {
+            operation
+                .output
+                .as_ref()
+                .and_then(project_return_shape)
+                .is_none()
+        })
+        .count();
     match (knowledge, returns.as_slice()) {
         (KnowledgeSet::Complete(items), []) if items.is_empty() || plain_only => {
+            ContractClaim::Known(None)
+        }
+        (KnowledgeSet::Complete(_), _) if exact_only && (returns.len() != 1 || dropped > 0) => {
             ContractClaim::Known(None)
         }
         (KnowledgeSet::Unknown, []) => ContractClaim::Open,
@@ -381,6 +420,22 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
             parameter: Some(usize::from(*index)),
             ..ContractReturn::default()
         }),
+        // ADR 0115: a fresh array of the caller's arguments is a tuple of
+        // argument leaves; `[]` holds nothing to name.
+        ValueShape::ArgumentArray { items } if !items.is_empty() => Some(ContractReturn {
+            kind: "tuple".into(),
+            elements: items
+                .iter()
+                .map(|index| {
+                    Some(ContractReturn {
+                        kind: "argument".into(),
+                        parameter: Some(usize::from(*index)),
+                        ..ContractReturn::default()
+                    })
+                })
+                .collect(),
+            ..ContractReturn::default()
+        }),
         ValueShape::Tuple(KnowledgeSet::Complete(items)) => Some(ContractReturn {
             kind: "tuple".into(),
             elements: items.iter().map(project_return_shape).collect(),
@@ -402,6 +457,7 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
         }
         ValueShape::Unknown
         | ValueShape::Plain
+        | ValueShape::ArgumentArray { .. }
         | ValueShape::Tuple(_)
         | ValueShape::Array { .. }
         | ValueShape::Object(_)
@@ -514,7 +570,9 @@ mod owner_requirement_projection_tests {
         ResourceId, ResourceKind, ResourceState, Schedule, StabilityKnowledge, Tracking, Trigger,
         UpperBound, ValueShape,
     };
-    use crate::{ContractClaim, ContractOwnerRequirement, OwnerRequirementOperation};
+    use crate::{
+        ContractClaim, ContractOwnerRequirement, ContractReturn, OwnerRequirementOperation,
+    };
 
     fn digest() -> Digest {
         Digest::parse(format!("sha256:{}", "a".repeat(64))).unwrap()
@@ -643,6 +701,84 @@ mod owner_requirement_projection_tests {
             ContractClaim::Open
         );
         assert!(open.contains(&ClaimDomain::Returns));
+    }
+
+    /// ADR 0115: returns of argument containers. A union with no one reactive
+    /// leaf reads as no reactive return, including one whose `[]` the
+    /// projection drops, which must not read as its one surviving leaf; a lone
+    /// fresh array is a tuple of its argument leaves; and an open claim over
+    /// the same returns stays open.
+    #[test]
+    fn argument_containers_project_as_their_one_leaf_or_as_no_reactive_return() {
+        let returned = |id: &str, output: ValueShape| {
+            let mut operation = operation(id, OperationKind::Return, &[]);
+            operation.output = Some(output);
+            operation
+        };
+        let parameter = |index| ValueShape::Parameter {
+            index,
+            path: Vec::new(),
+        };
+        let array = |items: &[u16]| ValueShape::ArgumentArray {
+            items: items.to_vec(),
+        };
+        let with_returns = |closed: bool, operations: Vec<Operation>| {
+            let ids = operations
+                .iter()
+                .map(|operation| operation.id.clone())
+                .collect::<Vec<_>>();
+            let mut claims = claims();
+            claims.returns = if closed {
+                KnowledgeSet::Complete(ids)
+            } else {
+                KnowledgeSet::Partial(ids)
+            };
+            export(claims, operations, Vec::new())
+        };
+        let project = |closed, operations| {
+            let mut open = BTreeSet::new();
+            let projected = project_return(&with_returns(closed, operations), &mut open);
+            (projected, open.contains(&ClaimDomain::Returns))
+        };
+
+        let as_array = || {
+            vec![
+                returned("return-0", parameter(0)),
+                returned("return-1", array(&[])),
+                returned("return-2", array(&[0])),
+            ]
+        };
+        assert_eq!(
+            project(true, as_array()),
+            (ContractClaim::Known(None), false)
+        );
+        assert_eq!(
+            project(
+                true,
+                vec![
+                    returned("return-0", parameter(0)),
+                    returned("return-1", array(&[]))
+                ]
+            ),
+            (ContractClaim::Known(None), false),
+            "the argument, or an empty array, is not the argument"
+        );
+        assert_eq!(
+            project(true, vec![returned("return-0", array(&[1]))]),
+            (
+                ContractClaim::Known(Some(ContractReturn {
+                    kind: "tuple".into(),
+                    elements: vec![Some(ContractReturn {
+                        kind: "argument".into(),
+                        parameter: Some(1),
+                        ..ContractReturn::default()
+                    })],
+                    ..ContractReturn::default()
+                })),
+                false
+            )
+        );
+        assert_eq!(project(false, as_array()), (ContractClaim::Open, true));
     }
 
     /// The shape the two frozen Solid 1.x authority documents still carry, and
@@ -1811,6 +1947,7 @@ fn contract_export_function(
         returns_walk_clean: false,
         returns_value_completion: false,
         member_alias_initializer: false,
+        returns_argument_containers: Vec::new(),
         // ADR 0100: a proposal input read beside the rows. Kept whether or not
         // the callbacks domain above stayed known -- the generator's filter
         // reads both, and an open domain proposes nothing either way.

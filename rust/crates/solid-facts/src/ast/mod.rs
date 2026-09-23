@@ -28,7 +28,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 42;
+pub const AST_FACTS_SCHEMA: u32 = 43;
 
 mod emission;
 mod inert_erasure;
@@ -778,6 +778,15 @@ pub struct ConditionalExpressionFact {
     pub test: Span,
     pub consequent: Span,
     pub alternate: Span,
+    /// ADR 0115: the elements of a branch that is an array literal, after
+    /// parentheses and type wrappers, in order -- `None` for a spread or a
+    /// hole, and `Some([])` for `[]`. Absent for every other branch. What the
+    /// generator's `returns` walk reads to propose a fresh array of arguments;
+    /// the census decides it from the producer's own arms.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consequent_array: Option<Box<[Option<Span>]>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alternate_array: Option<Box<[Option<Span>]>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -2752,6 +2761,8 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 test: span(expression.test.span()),
                 consequent: span(expression.consequent.span()),
                 alternate: span(expression.alternate.span()),
+                consequent_array: array_literal_elements(&expression.consequent),
+                alternate_array: array_literal_elements(&expression.alternate),
             });
         self.visit_expression(&expression.test);
         self.conditional_flow_depth += 1;
@@ -3214,6 +3225,28 @@ fn export_declaration_surface_names(declaration: &Declaration<'_>) -> Vec<Export
         exported: name.name.as_str().into(),
         type_only: false,
     }]
+}
+
+/// The elements of an array literal, after parentheses and type wrappers, in
+/// order: `None` for a spread or a hole. `None` when the expression is not an
+/// array literal at all (ADR 0115).
+fn array_literal_elements(expression: &Expression<'_>) -> Option<Box<[Option<Span>]>> {
+    let Expression::ArrayExpression(array) = expression.get_inner_expression() else {
+        return None;
+    };
+    Some(
+        array
+            .elements
+            .iter()
+            .map(|element| {
+                (!matches!(
+                    element,
+                    ArrayExpressionElement::Elision(_) | ArrayExpressionElement::SpreadElement(_)
+                ))
+                .then(|| span(element.span()))
+            })
+            .collect(),
+    )
 }
 
 #[cfg(test)]

@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:6973e5e0d903ba7702709f6d22f976cded28dc91637acceba3118f17f6367932";
+    "sha256:940b875bb116afb1fd286078a8a9b7ebf1fdeae06350596cc004cc98e718ce5b";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -329,7 +329,15 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // consumer must require every named member to be one it has reviewed. A
 // protocol-59 consumer decodes with `deny_unknown_fields` and would reject the
 // transcript outright, so the number moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 60;
+// Protocol 61 states the arms of a returned conditional or array literal
+// (ADR 0115). `ReturnSite::arms` lists the leaves of a returned conditional
+// tree, after identity-preserving wrappers and with a branch a literal
+// condition excludes left out, each with its own value fact and
+// unwritten-parameter identity; an array-literal arm lists its elements the same
+// way. Present means exhaustive, and a tree past the producer's bounds states
+// none. A protocol-60 consumer decodes with `deny_unknown_fields` and would
+// reject the transcript outright, so the number moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 61;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

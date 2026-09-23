@@ -42,6 +42,7 @@
     "exported-class",
     "external-reexport",
     "function-supertype-kind",
+    "implementation-census-argument-returns",
     "implementation-census-creates",
     "implementation-census-reads",
     "implementation-census-returns",

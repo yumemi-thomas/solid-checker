@@ -4,7 +4,19 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 60 (ADR 0112): **a default-library alias whose
+// TypeFactsHandshakeProtocol is 61 (ADR 0115): **a returned conditional or array
+// literal states the values it can evaluate to.** ReturnSite.Arms lists the
+// leaves of a returned conditional tree -- after identity-preserving wrappers,
+// a branch a literal condition excludes left out -- each with its own value
+// fact and unwritten-parameter identity, and an array-literal arm lists its
+// elements the same way. The list is exhaustive when present, because a
+// conditional evaluates to one of its branches, and absent for a tree past the
+// bounds, so a consumer can never read a partial list as a complete one. It is
+// what lets a `returns` census decide `asArray`'s `value`, `[value]` and `[]`
+// without re-parsing the body. A protocol-60 consumer decodes with
+// `deny_unknown_fields` and would reject the transcript, so the number moves.
+//
+// Protocol 60 (ADR 0112): **a default-library alias whose
 // file hands the container to `Container.member.bind(Container)`** states the
 // alias anyway, and names the escape.
 //
@@ -379,8 +391,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 60
-	TypeFactsSchemaSHA256             = "sha256:6973e5e0d903ba7702709f6d22f976cded28dc91637acceba3118f17f6367932"
+	TypeFactsHandshakeProtocol uint64 = 61
+	TypeFactsSchemaSHA256             = "sha256:940b875bb116afb1fd286078a8a9b7ebf1fdeae06350596cc004cc98e718ce5b"
 )
 
 type ServiceHandshake struct {

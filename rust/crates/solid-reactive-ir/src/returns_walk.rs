@@ -158,6 +158,225 @@ fn own_returns<'a>(
     })
 }
 
+/// One value an export's return hands back that is its caller's own argument,
+/// or a fresh array of its caller's arguments (ADR 0115).
+///
+/// The certifier reads the same two answers off the producer's arms of each
+/// return; this is the vocabulary both sides and the contract share.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum ArgumentContainer {
+    /// The caller's argument at this index, itself.
+    Parameter(u16),
+    /// A fresh array whose elements, in order, are the caller's arguments at
+    /// these indices; empty for `[]`.
+    Array(Vec<u16>),
+}
+
+impl ArgumentContainer {
+    /// The container a return's output names, if it names one.
+    #[must_use]
+    pub fn of(output: &crate::contract_semantics::ValueShape) -> Option<Self> {
+        match output {
+            crate::contract_semantics::ValueShape::Parameter { index, path } if path.is_empty() => {
+                Some(Self::Parameter(*index))
+            }
+            crate::contract_semantics::ValueShape::ArgumentArray { items } => {
+                Some(Self::Array(items.clone()))
+            }
+            _ => None,
+        }
+    }
+
+    /// The output shape a return handing back this container states.
+    #[must_use]
+    pub fn value_shape(&self) -> crate::contract_semantics::ValueShape {
+        match self {
+            Self::Parameter(index) => crate::contract_semantics::ValueShape::Parameter {
+                index: *index,
+                path: Vec::new(),
+            },
+            Self::Array(items) => crate::contract_semantics::ValueShape::ArgumentArray {
+                items: items.clone(),
+            },
+        }
+    }
+
+    /// A stable spelling, for census sites and refusal text.
+    #[must_use]
+    pub fn spelling(&self) -> String {
+        match self {
+            Self::Parameter(index) => format!("parameter-{index}"),
+            Self::Array(items) => format!(
+                "array[{}]",
+                items
+                    .iter()
+                    .map(u16::to_string)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+        }
+    }
+}
+
+/// The generator's **argument container** walk (ADR 0115): which of the
+/// caller's own arguments, and fresh arrays of them, this function's
+/// completions hand back.
+///
+/// A proposal input, never a proof, exactly as [`valueless_completion`] is:
+/// the certifier re-asks it against the producer's own arms of each return,
+/// which also decide reachability and whether a parameter is ever written.
+/// What this decides is the earlier question -- is the function's own syntax
+/// nothing but conditionals whose branches are its whole parameters and array
+/// literals of them?
+///
+/// Silence is "do not propose", and every path out is `None`: an `async`
+/// function or a generator; a completion, or a branch, that is anything else,
+/// including a spread or a hole in an array; a conditional deeper than the
+/// producer decomposes; and fewer than two distinct containers, since one
+/// whole parameter is ADR 0075's claim. A bare `return;` hands back
+/// `undefined`, which is no `return` operation, and contributes nothing.
+#[must_use]
+pub(crate) fn argument_container_return(
+    file: &FileFacts,
+    function: &FunctionFact,
+    entities: &crate::EntitySymbols,
+) -> Option<Vec<ArgumentContainer>> {
+    if function.r#async || function.generator {
+        return None;
+    }
+    let parameters = function
+        .parameters
+        .iter()
+        .enumerate()
+        .filter(|(_, parameter)| parameter.shape == solid_facts::ast::BindingShape::Identifier)
+        .filter_map(|(index, parameter)| {
+            let name = parameter.names.first()?;
+            let symbol = entities.get(&crate::location(file.path.shared(), name.span))?;
+            Some((symbol.clone(), u16::try_from(index).ok()?))
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+    if parameters.is_empty() {
+        return None;
+    }
+    let parameter_at = |span: solid_facts::core::Span| {
+        entities
+            .get(&crate::location(file.path.shared(), span))
+            .and_then(|symbol| parameters.get(symbol))
+            .copied()
+    };
+    let mut containers = std::collections::BTreeSet::new();
+    let mut pending = Vec::new();
+    // A returned array literal is read off its own return fact, whose elements
+    // the facts record when there is at least one; `return []` records none,
+    // and is not proposed.
+    let mut completion = |returned: &ReturnFact, span: solid_facts::core::Span| {
+        if !returned.elements().is_empty() && returned.properties().is_empty() {
+            let items = returned
+                .elements()
+                .iter()
+                .map(|element| element.and_then(parameter_at))
+                .collect::<Option<Vec<_>>>()?;
+            containers.insert(ArgumentContainer::Array(items));
+        } else {
+            pending.push((span, 0usize));
+        }
+        Some(())
+    };
+    let mut any = false;
+    if let Some(expression) = function.expression_return.as_ref() {
+        completion(expression, expression.span)?;
+        any = true;
+    }
+    for returned in own_returns(&file.ast, function) {
+        if let Some(argument) = returned.argument {
+            completion(returned, argument)?;
+            any = true;
+        }
+    }
+    if !any {
+        return None;
+    }
+    while let Some((span, depth)) = pending.pop() {
+        // The producer's own bound: past it the producer states no arms, and
+        // the census could only refuse.
+        if depth > 8 || containers.len() > 16 {
+            return None;
+        }
+        if let Some(conditional) = file
+            .ast
+            .conditional_expressions
+            .iter()
+            .find(|conditional| conditional.span == span)
+        {
+            for (branch, array) in [
+                (
+                    conditional.consequent,
+                    conditional.consequent_array.as_deref(),
+                ),
+                (
+                    conditional.alternate,
+                    conditional.alternate_array.as_deref(),
+                ),
+            ] {
+                match array {
+                    Some(elements) => {
+                        let items = elements
+                            .iter()
+                            .map(|element| element.and_then(parameter_at))
+                            .collect::<Option<Vec<_>>>()?;
+                        containers.insert(ArgumentContainer::Array(items));
+                    }
+                    None => pending.push((branch, depth + 1)),
+                }
+            }
+            continue;
+        }
+        containers.insert(ArgumentContainer::Parameter(parameter_at(span)?));
+    }
+    (containers.len() >= 2).then(|| containers.into_iter().collect())
+}
+
+/// Every function in the project whose completions [`argument_container_return`]
+/// cleared, by file and span (ADR 0115). Built with the analysis in hand, as
+/// [`MergedPropsReturns`] is, because the walk resolves parameters by symbol.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ArgumentContainerReturns {
+    by_file: std::collections::BTreeMap<String, Vec<ArgumentContainerReturnRow>>,
+}
+
+type ArgumentContainerReturnRow = ((u32, u32), Vec<ArgumentContainer>);
+
+impl ArgumentContainerReturns {
+    /// The containers the function at `span` hands back, when the walk cleared
+    /// it.
+    #[must_use]
+    pub fn containers_for(&self, path: &str, span: (u64, u64)) -> Option<&[ArgumentContainer]> {
+        let span = (u32::try_from(span.0).ok()?, u32::try_from(span.1).ok()?);
+        self.by_file
+            .get(path)?
+            .iter()
+            .find(|(function, _)| *function == span)
+            .map(|(_, containers)| containers.as_slice())
+    }
+}
+
+pub(crate) fn collect_argument_container_returns(
+    ctx: &crate::pipeline::AnalysisContext<'_>,
+) -> ArgumentContainerReturns {
+    let mut by_file = std::collections::BTreeMap::<String, Vec<_>>::new();
+    for file in &ctx.facts.files {
+        for function in &file.ast.functions {
+            if let Some(containers) = argument_container_return(file, function, ctx.entities) {
+                by_file
+                    .entry(file.path.to_string())
+                    .or_default()
+                    .push(((function.span.start, function.span.end), containers));
+            }
+        }
+    }
+    ArgumentContainerReturns { by_file }
+}
+
 /// The generator's **merged props return** walk (ADR 0109): which of this
 /// export's own parameters a props merge it returns carries the reactivity of.
 ///

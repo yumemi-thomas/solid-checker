@@ -15745,6 +15745,247 @@ export const value = phantom;
         );
     }
 
+    /// ADR 0115's tracer, `implementation-census-argument-returns`, planned
+    /// through the generator's normalization with each export's containers set
+    /// by hand: the walk's own answers for the three that certify and for
+    /// `reassigned`, and a claim the walk would not make for the three refused
+    /// on their merits. The generated side is pinned by the fixture's own corpus
+    /// document. Every other domain stays open.
+    fn argument_returns_fixture_certify(
+        label: &str,
+    ) -> Option<(
+        CertificationPlan,
+        Result<super::FinalizedPolicy2Contract, super::Policy2FinalizationError>,
+    )> {
+        use solid_reactive_ir::{
+            ArgumentContainer, ContractClaim, ContractEntrypoint, ContractExport, ContractPackage,
+            PackageContract,
+        };
+        let exports: [(&str, Vec<ArgumentContainer>); 7] = [
+            (
+                "asArray",
+                vec![
+                    ArgumentContainer::Parameter(0),
+                    ArgumentContainer::Array(Vec::new()),
+                    ArgumentContainer::Array(vec![0]),
+                ],
+            ),
+            (
+                "pick",
+                vec![
+                    ArgumentContainer::Parameter(1),
+                    ArgumentContainer::Parameter(2),
+                ],
+            ),
+            (
+                "pairOrValue",
+                vec![
+                    ArgumentContainer::Parameter(0),
+                    ArgumentContainer::Array(vec![0, 1]),
+                ],
+            ),
+            (
+                "reassigned",
+                vec![
+                    ArgumentContainer::Parameter(0),
+                    ArgumentContainer::Array(vec![0]),
+                ],
+            ),
+            (
+                "withLiteral",
+                vec![
+                    ArgumentContainer::Parameter(0),
+                    ArgumentContainer::Array(vec![0]),
+                ],
+            ),
+            (
+                "overclaimed",
+                vec![
+                    ArgumentContainer::Parameter(0),
+                    ArgumentContainer::Array(vec![0]),
+                    ArgumentContainer::Array(Vec::new()),
+                ],
+            ),
+            (
+                "viaCall",
+                vec![
+                    ArgumentContainer::Parameter(0),
+                    ArgumentContainer::Array(vec![0]),
+                ],
+            ),
+        ];
+        let pin = pinned_producer_for_test()?;
+        let name = "implementation-census-argument-returns";
+        let root = "/project/node_modules/implementation-census-argument-returns";
+        let fixture = repository_root()
+            .join("fixtures/package-contracts")
+            .join(name);
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let bindings = exports.clone().map(|(export, _)| {
+            (
+                export,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        let (_, resolved) = test_package_resolution(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[],
+            "/project/src/app.ts",
+        );
+        let inferred = PackageContract {
+            package: ContractPackage {
+                name: name.into(),
+                version: "1.0.0".into(),
+                integrity: String::new(),
+            },
+            entrypoints: BTreeMap::from([(
+                ".".into(),
+                ContractEntrypoint {
+                    exports: exports
+                        .into_iter()
+                        .map(|(export, containers)| {
+                            (
+                                export.into(),
+                                ContractExport {
+                                    kind: "function".into(),
+                                    reactive_reads: ContractClaim::Open,
+                                    callbacks: ContractClaim::Open,
+                                    owner_requirements: ContractClaim::Open,
+                                    returns: ContractClaim::Known(None),
+                                    async_behavior: ContractClaim::Known(String::new()),
+                                    returns_argument_containers: containers,
+                                    ..ContractExport::default()
+                                },
+                            )
+                        })
+                        .collect(),
+                },
+            )]),
+            source_path: String::new(),
+        };
+        let candidate =
+            crate::inferred_contract::normalize_inferred_contract(&inferred, &resolved).unwrap();
+        let plan = try_plan_supplied_candidate_for_test_package(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            candidate,
+        )
+        .expect("the generator's proposal plans against its own artifact");
+        let scratch = TracerScratch::new(label);
+        // No hand recipe: every candidate is served by ADR 0115's synthesized
+        // argument-container veto.
+        let probes = tracer_configuration_from(&fixture, scratch.path(), label, &[])?;
+        let outcome = tracer_certify(&plan, &pin, &probes);
+        Some((plan, outcome))
+    }
+
+    /// The argument containers `export`'s `returns` is closed over, when it is.
+    fn closed_containers_in(main: &[u8], export: &str) -> Option<Vec<ValueShape>> {
+        let decoded = crate::contract_document::decode(main)
+            .expect("canonical main decodes")
+            .normalize()
+            .expect("canonical main normalizes");
+        decoded.artifact_cases().iter().find_map(|case| {
+            let semantics = case.exports.get(export)?;
+            let claim = semantics.operation_claim(ClaimDomain::Returns)?;
+            claim.is_closed().then(|| {
+                claim
+                    .items()
+                    .iter()
+                    .filter_map(|id| semantics.operation(&id.0)?.output.clone())
+                    .collect()
+            })
+        })
+    }
+
+    /// ADR 0115 end to end: returns that each hand back the caller's own
+    /// argument or a fresh array of them certify through the census, each
+    /// return's positive fact and the synthesized veto, and the three wrong
+    /// claims withhold by name while the row certifies: an arm that is no
+    /// argument (a written parameter, a literal element, a call), and a
+    /// container no completion hands back.
+    #[test]
+    fn the_argument_container_census_certifies_exactly_the_enumerated_containers() {
+        let Some((plan, outcome)) = argument_returns_fixture_certify("argument-returns") else {
+            return;
+        };
+        let finalized = outcome.unwrap_or_else(|error| {
+            panic!("every refusal here withholds by name and the row certifies: {error}")
+        });
+        let main = finalized.canonical_main();
+        let parameter = |index| ValueShape::Parameter {
+            index,
+            path: Vec::new(),
+        };
+        let array = |items: &[u16]| ValueShape::ArgumentArray {
+            items: items.to_vec(),
+        };
+        for (export, expected) in [
+            ("asArray", vec![parameter(0), array(&[]), array(&[0])]),
+            ("pick", vec![parameter(1), parameter(2)]),
+            ("pairOrValue", vec![parameter(0), array(&[0, 1])]),
+        ] {
+            assert_eq!(
+                closed_containers_in(main, export),
+                Some(expected),
+                "{export}: {:?} {:?}",
+                finalized.withheld_closures(),
+                finalized.withheld_operations()
+            );
+        }
+        for (export, needle) in [
+            ("reassigned", "neither the caller's unchanged argument"),
+            ("withLiteral", "neither the caller's unchanged argument"),
+            ("viaCall", "neither the caller's unchanged argument"),
+            (
+                "overclaimed",
+                "that no completion the producer did not prove unreachable",
+            ),
+        ] {
+            assert!(
+                finalized.withheld_operations().iter().any(|record| {
+                    record.export == export
+                        && record
+                            .reason
+                            .starts_with(super::WITHHELD_OPERATION_CENSUS_REFUSED_PREFIX)
+                        && record.reason.contains(needle)
+                }),
+                "{export}: {:?}",
+                finalized.withheld_operations()
+            );
+            assert_eq!(closed_containers_in(main, export), None, "{export}");
+        }
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan),
+            "the synthesized veto must run before an argument container closure closes"
+        );
+    }
+
     /// The sibling package `primitive-consumer/`, whose one export calls a real
     /// Solid 2.0 primitive, planned with its `solid-js` stub as an *accepted*
     /// dependency edge. Without that edge the bare import is an
@@ -16807,8 +17048,13 @@ export const value = phantom;
                 )
             };
             // ADR 0113's plain returns are tallied apart from the valueless
-            // exports' `returns: []`, which is what the lists below pin.
+            // exports' `returns: []`, which is what the lists below pin, and
+            // ADR 0115's argument containers apart from both.
             let domain = if record.domain == "returns"
+                && CENSUS_FIXTURE_CONTAINER_RETURNS.contains(&record.export.as_str())
+            {
+                "returns-containers"
+            } else if record.domain == "returns"
                 && !CENSUS_FIXTURE_VALUELESS_EXPORTS.contains(&record.export.as_str())
             {
                 "returns-plain"
@@ -16880,6 +17126,7 @@ export const value = phantom;
             .filter(|export| {
                 !CENSUS_FIXTURE_VALUELESS_EXPORTS.contains(export)
                     && !CENSUS_FIXTURE_UNPROPOSED_PLAIN_RETURNS.contains(export)
+                    && !CENSUS_FIXTURE_CONTAINER_RETURNS.contains(export)
             })
         {
             let is_closed = plain_return_is_closed_in(main, export);
@@ -16905,7 +17152,35 @@ export const value = phantom;
             plain_withdrawn.len(),
             CENSUS_FIXTURE_GENERATED_PLAIN_RETURNS_WITHDRAWN
         );
+        // ADR 0115: `typedCoercion` is a clamp, and every one of its
+        // completions is one of its own three parameters, so it proposes
+        // those three returns instead of a plain one, and certifies them.
+        for export in CENSUS_FIXTURE_CONTAINER_RETURNS {
+            assert_eq!(
+                closed_containers_in(main, export),
+                Some(
+                    (0..3)
+                        .map(|index| ValueShape::Parameter {
+                            index,
+                            path: Vec::new(),
+                        })
+                        .collect()
+                ),
+                "{export}: {:?} {:?}",
+                withheld.get("returns-containers"),
+                finalized
+                    .withheld_operations()
+                    .iter()
+                    .filter(|record| record.export == export)
+                    .collect::<Vec<_>>()
+            );
+        }
     }
+
+    /// ADR 0115: the census fixture's exports whose completions are only their
+    /// own parameters, which propose argument containers instead of ADR 0113's
+    /// plain return.
+    const CENSUS_FIXTURE_CONTAINER_RETURNS: [&str; 1] = ["typedCoercion"];
 
     /// ADR 0113: the census fixture's plain returns that certify -- the
     /// exports whose every live completion the producer types a primitive.
@@ -16932,7 +17207,7 @@ export const value = phantom;
     /// or results the producer types `any`. Counted rather than listed, because
     /// the fixture exists to pin the `creates` census and what these return is
     /// incidental to it.
-    const CENSUS_FIXTURE_GENERATED_PLAIN_RETURNS_WITHDRAWN: usize = 91;
+    const CENSUS_FIXTURE_GENERATED_PLAIN_RETURNS_WITHDRAWN: usize = 90;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
