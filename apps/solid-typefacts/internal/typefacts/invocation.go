@@ -394,6 +394,22 @@ type NotCallableValue struct {
 type DefaultLibraryAlias struct {
 	Container string `cbor:"container" json:"container"`
 	Member    string `cbor:"member" json:"member"`
+	// ADR 0112, handshake protocol 60: every place this file hands the
+	// *container* to `Container.member.bind(Container)`, as the qualified
+	// member whose `bind` received it.
+	//
+	// The fact is stated for a file that contains these, where protocol 59
+	// refused one outright. `Function.prototype.bind` neither mutates its
+	// `thisArg` nor invokes the target, so the container the alias was read
+	// from is the library's own — but the *bound target* runs later with the
+	// container as its `this`, and whether that can rewrite it is the same
+	// reviewed question as which members a domain may close on. So the
+	// producer names them and decides nothing.
+	//
+	// **A consumer must require every entry to be a member it has reviewed**,
+	// and treat the whole fact as not stated otherwise. Empty (and absent) is
+	// protocol 59's meaning: no escape at all.
+	ContainerEscapes []string `cbor:"containerEscapes,omitempty" json:"containerEscapes,omitempty"`
 }
 
 type ExportImplementationTranscript struct {

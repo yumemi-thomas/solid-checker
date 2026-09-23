@@ -4260,7 +4260,17 @@ pub(super) fn reviewed_default_library_alias_index(qualified: &str) -> Option<u1
 /// an overloaded member, `implementationUnavailable` for a body-less one. Any
 /// other shape — a complete transcript, a second open reason, a missing
 /// declaration — is a producer disagreement and reads as "not stated".
-fn stated_default_library_alias(
+///
+/// **ADR 0112: every named container escape has to be a reviewed member too.**
+/// The producer states the alias for a file that hands the container to
+/// `Container.member.bind(Container)` and names each such member rather than
+/// deciding for us. `Function.prototype.bind` cannot rewrite the container
+/// itself, but the bound target runs later with the container as its `this`,
+/// so the identity claim is only as good as that target being a member this
+/// table has reviewed as leaving its receiver alone. One unreviewed entry and
+/// the whole fact reads as not stated — the same fail-closed direction the
+/// member check itself takes.
+pub(super) fn stated_default_library_alias(
     transcript: &ExportValueTranscript,
 ) -> Option<&typefacts::DefaultLibraryAlias> {
     let implementation = transcript.implementation.as_ref()?;
@@ -4270,8 +4280,15 @@ fn stated_default_library_alias(
             implementation.open_reasons[0].as_ref(),
             "callSignatureNotUnique" | "implementationUnavailable"
         );
-    (!implementation.complete && only_reason && implementation.declaration.is_some())
-        .then_some(fact)
+    let escapes_reviewed = fact
+        .container_escapes
+        .iter()
+        .all(|escape| reviewed_default_library_alias_index(escape).is_some());
+    (!implementation.complete
+        && only_reason
+        && escapes_reviewed
+        && implementation.declaration.is_some())
+    .then_some(fact)
 }
 
 /// ADR 0103: close `reads`, `creates` or `callbacks` for an export that *is* a
@@ -14967,6 +14984,65 @@ mod tests {
 
     fn digest(bytes: &[u8]) -> String {
         format!("sha256:{:x}", Sha256::digest(bytes))
+    }
+
+    /// ADR 0112's consumer half: the producer names each place the aliasing
+    /// file handed the container to `Container.member.bind(Container)`, and the
+    /// identity claim is only as good as every one of those members being one
+    /// this table has reviewed as leaving its receiver alone.
+    ///
+    /// The producer cannot decide this — `Function.prototype.bind` does not
+    /// mutate its argument, but the bound target runs later with the container
+    /// as its `this`, and whether *that* rewrites it is exactly the reviewed
+    /// question the member table answers. So one unreviewed entry withdraws the
+    /// whole fact, which is the same fail-closed direction the member check
+    /// itself takes, and `@solid-primitives/utils`' real escape (`Object.is`)
+    /// is admitted.
+    #[test]
+    fn a_container_escape_the_table_has_not_reviewed_withdraws_the_alias() {
+        // Decoded from the wire rather than constructed, so the test also
+        // pins that `containerEscapes` survives the round trip a producer's
+        // payload takes.
+        let transcript = |escapes: &[&str]| -> ExportValueTranscript {
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.d.ts", "startByte": 0, "endByte": 7},
+                "value": {
+                    "callability": "callable",
+                    "constructability": "nonConstructable",
+                    "primitive": {"mayBeObject": true}
+                },
+                "implementation": {
+                    "location": {"path": "/project/index.js", "startByte": 0, "endByte": 7},
+                    "queryName": "entries",
+                    "openReasons": ["callSignatureNotUnique"],
+                    "declaration": {
+                        "kind": "VariableDeclaration",
+                        "sourceFile": "/project/index.js",
+                        "location": {"path": "/project/index.js", "startByte": 0, "endByte": 7}
+                    },
+                    "defaultLibraryAlias": {
+                        "container": "Object",
+                        "member": "entries",
+                        "containerEscapes": escapes
+                    }
+                }
+            }))
+            .expect("the transcript fixture decodes")
+        };
+
+        // No escape is protocol 59's shape and still states the fact.
+        assert!(stated_default_library_alias(&transcript(&[])).is_some());
+        // The escape `@solid-primitives/utils@7.0.0-next.4` actually contains.
+        assert!(stated_default_library_alias(&transcript(&["Object.is"])).is_some());
+        // Several, all reviewed.
+        assert!(stated_default_library_alias(&transcript(&["Object.is", "Object.keys"])).is_some());
+        // `Object.defineProperty` rewrites its receiver, and the table refuses
+        // it, so a file that bound the container to it states nothing.
+        assert!(stated_default_library_alias(&transcript(&["Object.defineProperty"])).is_none());
+        // One unreviewed entry among reviewed ones is still one too many.
+        assert!(
+            stated_default_library_alias(&transcript(&["Object.is", "Object.assign"])).is_none()
+        );
     }
 
     fn source_snapshot(

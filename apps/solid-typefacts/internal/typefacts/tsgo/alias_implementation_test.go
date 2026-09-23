@@ -28,51 +28,82 @@ func TestExportImplementationFollowsAnExactAliasToTheRuntimeBody(t *testing.T) {
 	const timeoutDTS = "export declare function systemSetTimeoutZero(callback: () => void): number;\n"
 	const notifyDTS = "export declare const defaultScheduler: (callback: () => void) => void;\n"
 	cases := []struct {
-		name     string
-		notify   string
-		timeout  string
-		wantBody bool
+		name    string
+		notify  string
+		timeout string
+		// notifyTypes overrides the published declaration for `defaultScheduler`
+		// when a case needs the `.d.ts` to state something the `.js` does not.
+		notifyTypes string
+		wantBody    bool
 	}{
 		{
 			"importedAlias",
 			"import { systemSetTimeoutZero } from \"./timeout.js\";\nconst defaultScheduler = systemSetTimeoutZero;\nexport { defaultScheduler };\n",
 			timeoutJS,
+			"",
 			true,
 		},
 		{
 			"importedAliasThroughWrapper",
 			"import { systemSetTimeoutZero } from \"./timeout.js\";\nconst defaultScheduler = (systemSetTimeoutZero);\nexport { defaultScheduler };\n",
 			timeoutJS,
+			"",
 			true,
 		},
 		{
 			"localAlias",
 			"function local(callback) { return setTimeout(callback, 0); }\nconst defaultScheduler = local;\nexport { defaultScheduler };\n",
 			timeoutJS,
+			"",
 			true,
 		},
 		{
 			"reassignedBinding",
 			"import { systemSetTimeoutZero } from \"./timeout.js\";\nlet defaultScheduler = systemSetTimeoutZero;\ndefaultScheduler = systemSetTimeoutZero;\nexport { defaultScheduler };\n",
 			timeoutJS,
+			"",
 			false,
 		},
 		{
 			"reassignedTarget",
 			"import { systemSetTimeoutZero } from \"./timeout.js\";\nconst defaultScheduler = systemSetTimeoutZero;\nexport { defaultScheduler };\n",
 			timeoutJS + "systemSetTimeoutZero = function (callback) { return 0; };\n",
+			"",
 			false,
 		},
 		{
 			"callInitializer",
 			"import { systemSetTimeoutZero } from \"./timeout.js\";\nconst defaultScheduler = systemSetTimeoutZero.bind(null);\nexport { defaultScheduler };\n",
 			timeoutJS,
+			"",
 			false,
 		},
 		{
 			"bodylessTarget",
 			"import { systemSetTimeoutZero } from \"./timeout.js\";\nconst defaultScheduler = systemSetTimeoutZero;\nexport { defaultScheduler };\n",
 			"export const systemSetTimeoutZero = globalThis.setTimeout;\n",
+			"",
+			false,
+		},
+		// `@solid-primitives/utils`' `tryOnCleanup`, reduced: the published
+		// declaration collapses the export to one signature — so the call side
+		// is unique and `callSignatureNotUnique` never fires — while the runtime
+		// bundle initializes it from a conditional whose arms are a local
+		// callable and an imported one. Neither arm is an exact alias, so the
+		// protocol-20 hop does not apply, the selected signature's declaration
+		// is the body-less `.d.ts`, and the transcript is open with
+		// `implementationUnavailable`. Closing it needs a premise that censuses
+		// both arms, and the imported arm's body lives in a dependency — which
+		// is why this is dependency-lane work and not one more spelling here
+		// (docs/precision-backlog.md, wall 1b).
+		{
+			"conditionalInitializer",
+			"import { systemSetTimeoutZero } from \"./timeout.js\";\n" +
+				"const flag = Boolean(globalThis.DEV);\n" +
+				"const defaultScheduler = flag ? (callback) => systemSetTimeoutZero(callback) : systemSetTimeoutZero;\n" +
+				"export { defaultScheduler };\n",
+			timeoutJS,
+			"export declare const defaultScheduler: typeof import(\"./timeout.js\").systemSetTimeoutZero;\n",
 			false,
 		},
 	}
@@ -88,7 +119,11 @@ func TestExportImplementationFollowsAnExactAliasToTheRuntimeBody(t *testing.T) {
 			write("timeout.js", tc.timeout)
 			write("timeout.d.ts", timeoutDTS)
 			write("notify.js", tc.notify)
-			write("notify.d.ts", notifyDTS)
+			declared := notifyDTS
+			if tc.notifyTypes != "" {
+				declared = tc.notifyTypes
+			}
+			write("notify.d.ts", declared)
 			harness := "import { defaultScheduler as subject } from \"./notify.js\";\nvoid subject;\n"
 			write("harness.ts", harness)
 			opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)

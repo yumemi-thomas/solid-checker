@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:797e0d75efeee42d36c8214f960f06d8b1702f936087db7a5a48d09044a604d3";
+    "sha256:6973e5e0d903ba7702709f6d22f976cded28dc91637acceba3118f17f6367932";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -316,7 +316,20 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // refuse on `callSignatureNotUnique` or `implementationUnavailable` exactly as
 // before — but it would drop the new field, and a `deny_unknown_fields`
 // consumer would reject the transcript outright, so the number moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 59;
+// Protocol 60 admits one escape of a default-library container instead of
+// refusing the file's aliases for it (ADR 0112). `Container.member.bind(
+// Container)` hands the container over as a `thisArg`, and protocol 59 read
+// that as "this file may have rewritten the library value" and withdrew the
+// identity of every alias in the file — which is what
+// `const defaultEquals = Object.is.bind(Object)` did to
+// `@solid-primitives/utils@7.0.0-next.4`'s `Object.entries` and `Object.keys`,
+// and why ADR 0103 closed zero corpus rows. `Function.prototype.bind` neither
+// mutates its argument nor invokes the target, so the producer now states the
+// alias and names the escape on `DefaultLibraryAlias::container_escapes`; a
+// consumer must require every named member to be one it has reviewed. A
+// protocol-59 consumer decodes with `deny_unknown_fields` and would reject the
+// transcript outright, so the number moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 60;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

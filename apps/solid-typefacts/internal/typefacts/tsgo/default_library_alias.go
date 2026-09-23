@@ -34,8 +34,10 @@ import (
 //     nothing;
 //   - neither the container nor the member is written to, deleted, or used
 //     as anything but a read or a call anywhere in the file
-//     (`immutableAliasLibrarySourceIsStable`), so this file did not rewrite
-//     the value it is aliasing before the alias was taken.
+//     (`immutableAliasLibrarySourceStability`), so this file did not rewrite
+//     the value it is aliasing before the alias was taken — except for the one
+//     escape shape ADR 0112 reports instead of refusing, which travels on
+//     `ContainerEscapes` for the consumer to review.
 //
 // What is deliberately *not* decided here is whether the named member is safe
 // for a consumer to close a call domain on. `Object.keys` allocates an array
@@ -79,12 +81,14 @@ func (p *project) defaultLibraryAliasFactLocked(target *ast.Symbol) *typefacts.D
 	if !p.isDefaultLibraryMemberLocked(member, initializer.Name().Text(), containers) {
 		return nil
 	}
-	if !p.immutableAliasLibrarySourceIsStable(file, member, container) {
+	stable, escapes := p.immutableAliasLibrarySourceStability(file, member, container)
+	if !stable {
 		return nil
 	}
 	return &typefacts.DefaultLibraryAlias{
-		Container: container.Name,
-		Member:    initializer.Name().Text(),
+		Container:        container.Name,
+		Member:           initializer.Name().Text(),
+		ContainerEscapes: escapes,
 	}
 }
 

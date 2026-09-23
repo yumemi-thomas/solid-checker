@@ -4,7 +4,31 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 57 (ADR 0103): **an export that is a
+// TypeFactsHandshakeProtocol is 60 (ADR 0112): **a default-library alias whose
+// file hands the container to `Container.member.bind(Container)`** states the
+// alias anyway, and names the escape.
+//
+// Protocol 59 refused the whole file's aliases on any escape of the container,
+// which is what `const defaultEquals = Object.is.bind(Object)` is. Measured on
+// `@solid-primitives/utils@7.0.0-next.4`, that one line withdrew the identity
+// of `Object.entries`, `Object.keys`, `Object.values` and `Object.is` from a
+// bundle that re-exports all four, and ADR 0103 closed zero rows of the corpus
+// as a result. `Function.prototype.bind` neither mutates its `thisArg` nor
+// invokes the target, so the container the alias was read from *is* the
+// library's own; whether the bound target can rewrite it when it later runs is
+// the same reviewed question as which members a domain may close on. So this
+// states the qualified member on DefaultLibraryAlias.ContainerEscapes and
+// decides nothing. A consumer must require every entry to be a member it has
+// reviewed and read the fact as not stated otherwise. Four premises gate the
+// shape: the container is argument 0, the callee is a default-library `bind`,
+// its object is a member access on the *same* container, and that member is a
+// default-library member of it. Every other escape still refuses outright.
+//
+// A protocol-59 consumer would drop the new field, and its
+// `deny_unknown_fields` decode would reject the transcript outright, so the
+// number moves.
+//
+// Protocol 57 (ADR 0103): **an export that is a
 // default-library member by identity** states so. A `const` binding whose
 // initializer is a property access on a default-library container, where
 // container and member are both default-library symbols, the member is
@@ -355,8 +379,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 59
-	TypeFactsSchemaSHA256             = "sha256:797e0d75efeee42d36c8214f960f06d8b1702f936087db7a5a48d09044a604d3"
+	TypeFactsHandshakeProtocol uint64 = 60
+	TypeFactsSchemaSHA256             = "sha256:6973e5e0d903ba7702709f6d22f976cded28dc91637acceba3118f17f6367932"
 )
 
 type ServiceHandshake struct {

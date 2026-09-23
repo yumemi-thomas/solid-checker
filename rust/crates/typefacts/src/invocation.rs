@@ -659,6 +659,25 @@ pub struct DefaultLibraryAlias {
     pub container: Arc<str>,
     /// The member name: `keys`, `entries`, `floor`, …
     pub member: Arc<str>,
+    /// ADR 0112, handshake protocol 60: every place the aliasing file hands the
+    /// *container* to `Container.member.bind(Container)`, as the qualified
+    /// member whose `bind` received it.
+    ///
+    /// Protocol 59 refused the file's aliases outright on any escape of the
+    /// container, and `const defaultEquals = Object.is.bind(Object)` is one —
+    /// which is why `@solid-primitives/utils@7.0.0-next.4` stated no identity
+    /// for `Object.entries` or `Object.keys` although it re-exports both.
+    /// `Function.prototype.bind` neither mutates its `thisArg` nor invokes the
+    /// target, so the aliased value is the library's own. What the producer
+    /// cannot decide is whether the *bound target* rewrites the container when
+    /// it later runs, which is the same reviewed question as which members a
+    /// domain may close on.
+    ///
+    /// **Every entry must be a member this consumer has reviewed**, and the
+    /// whole fact reads as not stated otherwise. Empty is protocol 59's
+    /// meaning: no escape at all.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub container_escapes: Vec<Arc<str>>,
 }
 
 impl DefaultLibraryAlias {

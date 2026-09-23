@@ -97,8 +97,37 @@ func (p *project) immutableCalleeAliasLocked(call *ast.Node) *typefacts.Immutabl
 // the receiver object (including passing it to defineProperty/assign or making
 // another alias). A direct member may only be read or called, never used as a
 // write target. This is deliberately conservative across the whole file.
+//
+// **One escape shape is reported rather than refused** (ADR 0112). A container
+// handed to `Container.member.bind(Container)` is the `thisArg` of a bound
+// function whose target is a member of that same container, and
+// `Function.prototype.bind` neither mutates its argument nor invokes anything.
+// Whether the *bound target* can mutate it is the consumer's reviewed question,
+// exactly as which members a domain may close on already is, so the qualified
+// member is returned for the consumer to decide on and this walk states no
+// opinion about it. Every other escape still refuses here.
+//
+// `stable` false means "an escape this walk cannot describe". `stable` true
+// with a non-empty `escapes` means "no escape but the reviewable ones, and here
+// they are"; a caller that has not reviewed them must treat that as unstable.
 func (p *project) immutableAliasLibrarySourceIsStable(file *ast.SourceFile, target, receiver *ast.Symbol) bool {
+	stable, escapes := p.immutableAliasLibrarySourceStability(file, target, receiver)
+	return stable && len(escapes) == 0
+}
+
+// immutableAliasLibrarySourceStability is
+// [project.immutableAliasLibrarySourceIsStable] with ADR 0112's reviewable
+// escapes reported instead of folded into the verdict.
+//
+// The escapes are qualified member names (`Object.is`), deduplicated, in source
+// order of first occurrence, so a receipt records the same list a reader sees.
+func (p *project) immutableAliasLibrarySourceStability(
+	file *ast.SourceFile,
+	target, receiver *ast.Symbol,
+) (bool, []string) {
 	stable := true
+	var escapes []string
+	seen := map[string]struct{}{}
 	var visit func(*ast.Node)
 	visit = func(node *ast.Node) {
 		if node == nil || !stable || ast.IsPartOfTypeNode(node) {
@@ -117,6 +146,13 @@ func (p *project) immutableAliasLibrarySourceIsStable(file *ast.SourceFile, targ
 					if parent == nil || !ast.IsPropertyAccessExpression(parent) || parent.Expression() != node ||
 						ast.GetAssignmentTarget(parent) != nil ||
 						(parent.Parent != nil && parent.Parent.KindString() == "KindDeleteExpression") {
+						if qualified := p.reviewableContainerEscapeLocked(node, receiver); qualified != "" {
+							if _, held := seen[qualified]; !held {
+								seen[qualified] = struct{}{}
+								escapes = append(escapes, qualified)
+							}
+							return
+						}
 						stable = false
 						return
 					}
@@ -126,5 +162,65 @@ func (p *project) immutableAliasLibrarySourceIsStable(file *ast.SourceFile, targ
 		node.ForEachChild(func(child *ast.Node) bool { visit(child); return false })
 	}
 	visit(file.AsNode())
-	return stable
+	if !stable {
+		return false, nil
+	}
+	return true, escapes
+}
+
+// reviewableContainerEscapeLocked answers `Container.member` when `node` is the
+// container in exactly `Container.member.bind(Container)`, and "" for every
+// other position (ADR 0112).
+//
+// Four premises, all required, because each is a way the shape could fail to be
+// the one reviewed:
+//
+//   - `node` is argument **0** of a call — the `thisArg` slot. A later argument
+//     is a value the bound target receives, which is a different claim;
+//   - the callee is a property access named `bind`, resolving to a
+//     default-library member, so it is `Function.prototype.bind` and not a
+//     `bind` this file or its dependencies installed;
+//   - the object that `bind` is read from is itself a property access whose
+//     object resolves to the **same** container symbol, so the bound target is
+//     a member of the thing being handed over rather than of anything else;
+//   - the member resolves to a default-library member of that container, which
+//     is what makes the returned name meaningful to the consumer's table.
+func (p *project) reviewableContainerEscapeLocked(node *ast.Node, receiver *ast.Symbol) string {
+	call := node.Parent
+	if call == nil || !ast.IsCallExpression(call) || call.QuestionDotToken() != nil {
+		return ""
+	}
+	arguments := call.Arguments()
+	if len(arguments) == 0 || arguments[0] != node {
+		return ""
+	}
+	bindAccess := identityPreservingUnwrap(call.Expression())
+	if bindAccess == nil || !ast.IsPropertyAccessExpression(bindAccess) ||
+		bindAccess.Name() == nil || bindAccess.Name().Text() != "bind" {
+		return ""
+	}
+	bindSymbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(bindAccess))
+	if bindSymbol == nil || !p.isDefaultLibraryMemberLocked(bindSymbol, "bind", nil) {
+		return ""
+	}
+	memberAccess := identityPreservingUnwrap(bindAccess.Expression())
+	if memberAccess == nil || !ast.IsPropertyAccessExpression(memberAccess) || memberAccess.Name() == nil {
+		return ""
+	}
+	container := identityPreservingUnwrap(memberAccess.Expression())
+	if container == nil || !ast.IsIdentifier(container) {
+		return ""
+	}
+	if p.canonicalSymbol(p.checker.GetSymbolAtLocation(container)) != receiver {
+		return ""
+	}
+	member := p.canonicalSymbol(p.checker.GetSymbolAtLocation(memberAccess))
+	if member == nil {
+		return ""
+	}
+	containers := map[string]struct{}{containerInterfaceName(receiver.Name): {}}
+	if !p.isDefaultLibraryMemberLocked(member, memberAccess.Name().Text(), containers) {
+		return ""
+	}
+	return receiver.Name + "." + memberAccess.Name().Text()
 }
