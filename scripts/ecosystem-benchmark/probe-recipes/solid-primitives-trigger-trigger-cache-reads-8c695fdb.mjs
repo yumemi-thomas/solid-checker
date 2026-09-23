@@ -1,8 +1,8 @@
 // Hand-authored `reads: []` veto for `@solid-primitives/trigger@3.0.0-next.2`,
 // on the published `.` runtime case
-// `artifact-case:1a9bf95ab59ef488893fe527406cc43b315458daef5b338aa20243eb6b971b54`.
+// `artifact-case:8c695fdb30fd2222bb83c63763f8e1d3a4391aa5fa73b6e075efbe8d6dbcc75a`.
 //
-// Demand-scoped: 3 call sites across the pinned consumer corpus name this
+// Demand-scoped: 6 call sites across the pinned consumer corpus name this
 // export.
 //
 // Why this recipe is allowed to be this short: the artifact case carries no
@@ -16,12 +16,11 @@
 //
 // It hands the package no `session` and no `harness`.
 //
-// `createTriggerCache(mapConstructor = Map)` builds a `TriggerCache` and
-// answers three of its methods bound to it. The construction reads the caller's
-// constructor argument; the bindings read the instance the call just made.
-// Neither is a read of a reactive source this package owns -- those are created
-// in `track`, at a later event.
-import { createTriggerCache } from "@solid-primitives/trigger";
+// `new TriggerCache(mapConstructor = Map)` runs one statement:
+// `this.#map = new mapConstructor()`. Constructing reads the caller's
+// constructor argument and nothing else -- the signals live in `track`, which
+// is a method call at a later event and not this domain's business.
+import { TriggerCache } from "@solid-primitives/trigger";
 
 const expect = (label, ok) => {
   if (!ok) throw new Error(`${label} answered unexpectedly`);
@@ -29,10 +28,12 @@ const expect = (label, ok) => {
 
 export async function runProbeSession(_session, harness) {
   harness.emit({ marker: "call", kind: "call", phase: "enter" });
-  const answered = createTriggerCache();
-  expect("it answers a triple", Array.isArray(answered) && answered.length === 3);
-  expect("all three are callable", answered.every(entry => typeof entry === "function"));
-  expect("a WeakMap cache answers a triple too", createTriggerCache(WeakMap).length === 3);
+  const cache = new TriggerCache();
+  expect("it answers an instance", cache instanceof TriggerCache);
+  expect("it exposes track", typeof cache.track === "function");
+  expect("it exposes dirty", typeof cache.dirty === "function");
+  expect("it exposes dirtyAll", typeof cache.dirtyAll === "function");
+  expect("a WeakMap cache constructs too", new TriggerCache(WeakMap) instanceof TriggerCache);
 
   let constructorReads = 0;
   const ownedByTheRecipe = {
@@ -41,7 +42,10 @@ export async function runProbeSession(_session, harness) {
       return Map;
     }
   };
-  expect("createTriggerCache over a caller getter", createTriggerCache(ownedByTheRecipe.current).length === 3);
+  expect(
+    "TriggerCache over a caller getter",
+    new TriggerCache(ownedByTheRecipe.current) instanceof TriggerCache
+  );
   // The apparatus is live -- the getter fired once, on the recipe's own access
   // in the line above -- and that read is the caller's under ADR 0034.
   expect("the caller's getter fired exactly once", constructorReads === 1);

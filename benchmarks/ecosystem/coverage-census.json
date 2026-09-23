@@ -1,6 +1,6 @@
 {
   "format": "solid-checker-contract-coverage-census",
-  "censusVersion": 1,
+  "censusVersion": 2,
   "solidTarget": "solid2",
   "demand": {
     "source": "docs/package-contract-v2/phase21/2026-09-14-consumer-demand-recensus.json",
@@ -9,34 +9,52 @@
   },
   "totals": {
     "sites": 1958,
-    "ownerRequirement": 34,
+    "ownerRequirement": 37,
     "measuredPackages": 16,
-    "operations": 440,
-    "closed-empty": 585,
-    "degenerate": 127,
+    "operations": 607,
+    "closed-empty": 433,
+    "degenerate": 112,
     "absent": 722,
-    "unmeasured": 84
+    "unmeasured": 84,
+    "consumer": {
+      "value": 158,
+      "clean": 161,
+      "some-uses": 359,
+      "every-import": 474
+    }
   },
   "packages": [
     {
       "package": "@kobalte/utils",
       "sites": 942,
       "measured": true,
-      "operations": 114,
-      "closed-empty": 100,
+      "operations": 130,
+      "closed-empty": 84,
       "degenerate": 6,
       "absent": 722,
-      "ownerRequirement": 0
+      "ownerRequirement": 0,
+      "consumer": {
+        "value": 28,
+        "clean": 16,
+        "some-uses": 6,
+        "every-import": 170
+      }
     },
     {
       "package": "@solid-primitives/utils",
       "sites": 820,
       "measured": true,
-      "operations": 293,
-      "closed-empty": 449,
-      "degenerate": 78,
+      "operations": 441,
+      "closed-empty": 313,
+      "degenerate": 66,
       "absent": 0,
-      "ownerRequirement": 20
+      "ownerRequirement": 20,
+      "consumer": {
+        "value": 112,
+        "clean": 145,
+        "some-uses": 353,
+        "every-import": 210
+      }
     },
     {
       "package": "@kobalte/solidbase",
@@ -47,11 +65,17 @@
       "package": "@solid-primitives/rootless",
       "sites": 39,
       "measured": true,
-      "operations": 9,
+      "operations": 12,
       "closed-empty": 27,
-      "degenerate": 3,
+      "degenerate": 0,
       "absent": 0,
-      "ownerRequirement": 0
+      "ownerRequirement": 0,
+      "consumer": {
+        "value": 0,
+        "clean": 0,
+        "some-uses": 0,
+        "every-import": 39
+      }
     },
     {
       "package": "@solidjs/start",
@@ -66,7 +90,13 @@
       "closed-empty": 0,
       "degenerate": 18,
       "absent": 0,
-      "ownerRequirement": 0
+      "ownerRequirement": 0,
+      "consumer": {
+        "value": 18,
+        "clean": 0,
+        "some-uses": 0,
+        "every-import": 0
+      }
     },
     {
       "package": "@kobalte/core",
@@ -76,7 +106,13 @@
       "closed-empty": 0,
       "degenerate": 16,
       "absent": 0,
-      "ownerRequirement": 0
+      "ownerRequirement": 0,
+      "consumer": {
+        "value": 0,
+        "clean": 0,
+        "some-uses": 0,
+        "every-import": 16
+      }
     },
     {
       "package": "@solid-primitives/trigger",
@@ -86,7 +122,13 @@
       "closed-empty": 9,
       "degenerate": 0,
       "absent": 0,
-      "ownerRequirement": 0
+      "ownerRequirement": 0,
+      "consumer": {
+        "value": 0,
+        "clean": 0,
+        "some-uses": 0,
+        "every-import": 9
+      }
     },
     {
       "package": "@solid-primitives/marker",
@@ -96,7 +138,13 @@
       "closed-empty": 0,
       "degenerate": 0,
       "absent": 0,
-      "ownerRequirement": 4
+      "ownerRequirement": 4,
+      "consumer": {
+        "value": 0,
+        "clean": 0,
+        "some-uses": 0,
+        "every-import": 8
+      }
     },
     {
       "package": "@solid-primitives/scheduled",
@@ -106,7 +154,13 @@
       "closed-empty": 0,
       "degenerate": 0,
       "absent": 0,
-      "ownerRequirement": 5
+      "ownerRequirement": 5,
+      "consumer": {
+        "value": 0,
+        "clean": 0,
+        "some-uses": 0,
+        "every-import": 5
+      }
     },
     {
       "package": "@solid-primitives/memo",
@@ -116,7 +170,13 @@
       "closed-empty": 0,
       "degenerate": 1,
       "absent": 0,
-      "ownerRequirement": 0
+      "ownerRequirement": 0,
+      "consumer": {
+        "value": 0,
+        "clean": 0,
+        "some-uses": 0,
+        "every-import": 4
+      }
     },
     {
       "package": "@solid-primitives/permission",
@@ -126,7 +186,13 @@
       "closed-empty": 0,
       "degenerate": 0,
       "absent": 0,
-      "ownerRequirement": 3
+      "ownerRequirement": 3,
+      "consumer": {
+        "value": 0,
+        "clean": 0,
+        "some-uses": 0,
+        "every-import": 3
+      }
     },
     {
       "package": "@solid-primitives/context",
@@ -136,7 +202,13 @@
       "closed-empty": 0,
       "degenerate": 2,
       "absent": 0,
-      "ownerRequirement": 0
+      "ownerRequirement": 0,
+      "consumer": {
+        "value": 0,
+        "clean": 0,
+        "some-uses": 0,
+        "every-import": 2
+      }
     },
     {
       "package": "@solid-primitives/keyed",
@@ -146,7 +218,13 @@
       "closed-empty": 0,
       "degenerate": 0,
       "absent": 0,
-      "ownerRequirement": 2
+      "ownerRequirement": 2,
+      "consumer": {
+        "value": 0,
+        "clean": 0,
+        "some-uses": 0,
+        "every-import": 2
+      }
     },
     {
       "package": "@solid-primitives/tween",
@@ -156,7 +234,13 @@
       "closed-empty": 0,
       "degenerate": 0,
       "absent": 0,
-      "ownerRequirement": 0
+      "ownerRequirement": 2,
+      "consumer": {
+        "value": 0,
+        "clean": 0,
+        "some-uses": 0,
+        "every-import": 2
+      }
     },
     {
       "package": "@solidjs/meta",
@@ -166,7 +250,13 @@
       "closed-empty": 0,
       "degenerate": 2,
       "absent": 0,
-      "ownerRequirement": 0
+      "ownerRequirement": 0,
+      "consumer": {
+        "value": 0,
+        "clean": 0,
+        "some-uses": 0,
+        "every-import": 2
+      }
     },
     {
       "package": "@solid-primitives/storage",
@@ -176,7 +266,13 @@
       "closed-empty": 0,
       "degenerate": 1,
       "absent": 0,
-      "ownerRequirement": 0
+      "ownerRequirement": 0,
+      "consumer": {
+        "value": 0,
+        "clean": 0,
+        "some-uses": 0,
+        "every-import": 1
+      }
     },
     {
       "package": "@solid-primitives/timer",
@@ -186,7 +282,13 @@
       "closed-empty": 0,
       "degenerate": 0,
       "absent": 0,
-      "ownerRequirement": 0
+      "ownerRequirement": 1,
+      "consumer": {
+        "value": 0,
+        "clean": 0,
+        "some-uses": 0,
+        "every-import": 1
+      }
     }
   ]
 }

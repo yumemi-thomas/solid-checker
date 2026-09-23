@@ -207,7 +207,62 @@ consumer site moves. The census gate fails on the bucket (151 against the pin's
 not an id edit (`scripts/ecosystem-benchmark/probe-recipes/README.md`), and it
 recurs whenever a dependency's certified contract changes.
 
+## After the re-pin
+
+Measured the same day on the `make contract-coverage-census` run that finished
+10:38:55Z, over the tree with ADR 0114 and the three commits before it; the
+per-export evidence is
+[`2026-09-23-what-holds-an-import-open-after-repin.json`](2026-09-23-what-holds-an-import-open-after-repin.json),
+from the same script. The census gate passes and is re-pinned
+(`benchmarks/ecosystem/coverage-census.json`, which now carries the consumer
+view as well), and recipe addressing did not regress.
+
+| what an import finds open (1,152 sites) | after ADR 0113 | now |
+| --- | ---: | ---: |
+| nothing, a non-callable value | 158 | 158 |
+| nothing, a callable | 161 | 161 |
+| `returns` or `callbacks`: some uses | 300 | 359 |
+| `reads` or `creates`: every import | 533 | 474 |
+
+| census bucket (1,874 measured sites) | pin | after ADR 0113 | now |
+| --- | ---: | ---: | ---: |
+| an operation is stated | 440 | 604 | 607 |
+| determined: states nothing | 585 | 397 | 433 |
+| degenerate | 127 | 151 | 112 |
+| carries an owner requirement | 34 | 34 | 37 |
+
+What moved each row:
+
+1. **The ten `rootless` and `trigger` recipes**, 36 degenerate sites back as
+   predicted. Their packages' bytes did not change, only the artifact cases
+   their accepted `@solid-primitives/utils` node puts them in (`rootless`
+   `012acf4c…` and `2e381992…`, `trigger` `a7f52e4c…` and `8c695fdb…`), so the
+   modules were carried over verbatim with those cases' claim ids, as the
+   `1bea9ecd` set was; this run certifies every closure they serve.
+2. **`entries` and `keys`**, 59 sites from every import to some uses: the
+   member-alias proposals (ADR 0103, amended) closed `creates` and `callbacks`,
+   and `returns` is now the only domain open at their imports.
+3. **The dialect-silent row**, 74 sites down to 33: the audited rows for
+   `runWithOwner`, `createContext` and `useContext`, and the argumentless
+   `getOwner()`, lifted 41. None of them left every import, because each of
+   those exports has another domain open; `createSignal`, `createMemo` and
+   `createEffect` through `solid-js` hold the 33, and those rows stay withheld.
+4. **Owner requirements**, 34 to 37 sites: `@solid-primitives/tween`'s and
+   `timer`'s exports now state the computation they register (ADR 0114).
+
+## What is left for a `returns` shape
+
+Five exports have `returns` as their only open consumer domain: `asArray` (51,
+the plain return ADR 0113 proposed is refused: it returns an array),
+`entries` (37) and `keys` (22, never proposed), `accessWith` (27, refused) and
+`createIdGenerator` (3). `access` (157) is not one of them: its `callbacks`
+closure is refused by the census as well, so a return shape alone would move it
+from some uses to some uses.
+
 ## Order, revised
+
+Items 1 to 3 are done (§ After the re-pin); item 4 is § What is left for a
+`returns` shape.
 
 1. Re-address the ten `rootless` and `trigger` recipes, then re-pin: 36
    degenerate sites back, nothing else to decide.

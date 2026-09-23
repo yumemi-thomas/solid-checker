@@ -660,3 +660,21 @@ from 343 to 24.
    execution profile. ADR 0033's `chromium-headless-shell-cdp-pipe-esm-v1`
    profile exists but is reachable only through a controlled execution.
    `@solid-primitives/platform` is entirely degenerate for this reason.
+
+## The rootless and trigger recipes, re-keyed (2026-09-23)
+
+ADR 0113 and the three contract changes after it moved what
+`@solid-primitives/utils` certifies, so its accepted node digest moved, and with
+it the artifact cases `@solid-primitives/rootless` and `trigger` are certified
+under: a case's identity binds each accepted dependency's contract digest. The
+ten modules above stopped addressing anything and the census's degenerate
+bucket went 127 -> 151 against the pin while no consumer site moved.
+
+The packages' own bytes did not change, so this is the `1bea9ecd` situation
+rather than a new case: each module was carried over verbatim to the new cases
+(`rootless` `012acf4c…` and `2e381992…`, `trigger` `a7f52e4c…` and
+`8c695fdb…`), with its header's case id and its entry's claim id read off that
+run's `withheldClosureDetails`. The re-run certifies every closure they serve:
+degenerate 148 -> 112, `rootless` and `trigger` back to 0. It will happen again
+whenever the utils node's certified contract changes, and
+`probe-recipe-addressing.mjs` will not flag it: the census bucket does.
