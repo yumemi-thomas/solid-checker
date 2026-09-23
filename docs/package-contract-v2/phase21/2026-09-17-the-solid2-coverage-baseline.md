@@ -115,3 +115,15 @@ only `"./*"` and no root, and 16 sites that import `Select`, `Tabs`, `Dialog`,
 against summaries published at `./select` and its siblings, which those
 consumers cannot reach. That is churn filed as a gap, and unlike the `absent`
 relabel it cannot be corrected from the artifact alone.
+
+## Qualified, 2026-09-23
+
+*Determined* here means a summary states one operation or closes one claim
+domain. It does not mean a consumer can use the export. Measured against the
+shipped tier, which is this baseline's 76.6% column, no callable closes all four
+domains a consumer reads, and 555 of the 1,152 in-surface sites raise `SC9005`
+wherever the name is imported.
+[The contract story, assessed](../phase22/2026-09-23-the-contract-story-assessed.md)
+has the consumer's view and the script that first computed it. The census now
+reports that view beside its own buckets, and gates it from the first pin that
+carries it (`censusVersion: 2`).
