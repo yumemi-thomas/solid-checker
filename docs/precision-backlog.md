@@ -1,5 +1,62 @@
 # Precision backlog
 
+## A `returns` closure over a primitive completion (2026-09-23)
+
+Status: **implemented** (ADR 0113). `returns` now closes over one `return` whose
+output is `plain` when every completion the body can reach is typed a primitive
+and every declared overload agrees. The generator proposes it for a plain
+function whose valueless-completion walk declined on a value and whose returned
+values are not function, array or object literals; the census, the positive
+fact and a synthesized `typeof` veto decide it. On the Solid 2 census this is
+the first time a callable reaches a consumer with nothing open: **161 sites**
+(`noop`, `trueFn`, both `clamp`s, `isObject`, `falseFn`), from 0.
+`phase22/2026-09-23-what-holds-an-import-open.md` § After ADR 0113 has the
+measurement.
+
+**The first cut rested on an annotation.** It closed on the producer's
+`primitiveCompletion` alone. The new fixture's `annotatedBox`, `/** @returns
+{number} */` over `return {}`, showed the producer stating it: the fact is the
+checker's return type for the signature, and in a JavaScript file the checker
+takes a JSDoc `@returns` at its word. The veto would have caught that body,
+which returns an object on every call, and nothing would have caught one that
+returns an object only on an input the veto does not sample. The census now
+also requires every live return site's own type to be a primitive, and those
+types are computed on the original program, where an unannotated parameter is
+`any`. The same finding
+removed a blanket refusal of premised transcripts: a premise never touches the
+site types, and `sign` (a comparison makes it premised) certifies on them.
+
+Remaining approximations, each refusing:
+
+- `a + b` over untyped operands is typed `any` although it always yields a
+  primitive, and so are a member of an untyped parameter and anything
+  combined with one (`arrayEquals`, `ofClass`): refused, not guessed.
+- A JSDoc `@returns` on a local helper, or a JSDoc `@type` cast, is trusted as
+  ADR 0045 trusts a callee's completion; only the veto's samples back it.
+- A TypeScript source case rests on its written parameter types, and cannot
+  certify today in any event: the probe harness will not load TypeScript under
+  `node_modules`, so the veto does not complete (`@kobalte/utils` `callHandler`).
+- Structured outputs (`access`, `asArray`, `accessWith`) are refused; each
+  needs a described shape of its own.
+
+**The consumer had been reopening it.** `project_return` has no return kind for
+`plain`, so a closed claim over one plain return projected to "no shape" and the
+Rust consumer marked `returns` open again, raising `SC9005` for exactly the
+exports the census counted clean. A closed claim whose every return is plain now
+projects to the consumer's own `Known(None)`, "no reactive return described".
+`fixtures/reactive-ir/package-plain-return-consumer` pins it on an authorized
+contract: the plain export is clean, its open-`returns` twin raises `SC9005`,
+and a binary without the projection reports both.
+
+**Two costs, measured.** The contract corpus moves in 43 of 97 fixtures, each
+only by the new proposal (possible operations 174 → 432, proof candidates
+1,259 → 1,512); no consumer finding moves. And the coverage census gate fails:
+degenerate 127 → 151 against the pin, because ten hand `reads` recipes for
+`@solid-primitives/rootless` and `trigger` are addressed through their artifact
+case, which carries `@solid-primitives/utils`' accepted contract digest, and this
+change moves it. Re-addressing them is the scaffold's two-pass review; the pin
+is not moved until then.
+
 ## SC9013 refuses an unsupported Solid runtime, and the seam was one branch off (2026-09-16)
 
 Step 4 of the Solid 1.x retirement: dialect detection now emits

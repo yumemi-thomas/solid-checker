@@ -119,3 +119,102 @@ findings on consumer code.
 3. The dialect's `creates` rows for the owner-requiring primitives: 74 sites,
    audit readings rather than premises, and the one step here that turns
    contracts into misuse findings.
+
+## After ADR 0113
+
+[ADR 0113](../../adr/0113-a-returns-closure-over-a-primitive-completion.md)
+built step 1. Measured the same day on a second `make contract-coverage-census`
+run (finished 03:00:07Z), over the same tree plus ADR 0113, with the same
+script; the per-export evidence is
+[`2026-09-23-what-holds-an-import-open-after-0113.json`](2026-09-23-what-holds-an-import-open-after-0113.json).
+The script now also reads the audit's `withheldOperations`: an operation the
+certifier withdrew opens the domain that listed it, and it used to read as
+"proposed, not certified". The first run's evidence reproduces byte for byte
+under the new script, because that run withdrew no operation.
+
+| what an import finds open (1,152 sites) | before | after |
+| --- | ---: | ---: |
+| nothing, a non-callable value | 158 | 158 |
+| **nothing, a callable** | **0** | **161** |
+| `returns` or `callbacks`: some uses | 461 | 300 |
+| `reads` or `creates`: every import | 533 | 533 |
+
+The 161 are exactly the six exports the lever named: `noop` (98), `trueFn`
+(27), `@kobalte/utils` `clamp` (16), `isObject` (10), `@solid-primitives/utils`
+`clamp` (7) and `falseFn` (3). `compare` (3 sites) closes `returns` too and stays
+on some uses for its `callbacks`.
+
+The census reads the wire's `closed` list, and that is what it counted. The Rust
+consumer did not agree until the same change fixed its projection: it had no
+return kind for `plain` and reopened the domain, so it went on raising `SC9005`
+for these six. `fixtures/reactive-ir/package-plain-return-consumer` pins the
+corrected reading.
+
+`returns`, over the sites still open:
+
+| status | before | after |
+| --- | ---: | ---: |
+| never proposed | 887 | 309 |
+| withheld operation: census refused | — | 302 |
+| withheld: veto did not complete | 0 | 112 |
+| declined at generation | 71 | 71 |
+| proposed, not certified | 26 | 26 |
+
+- **302 withheld operations** reached the census and were refused on its
+  evidence: `access` (157), `asArray` (51), `accessWith` (27) hand back the
+  caller's value or an object, and `arrayEquals` or `ofClass` return a boolean
+  the producer types `any`, because a member of an untyped parameter is `any`.
+  `@solidjs/meta` `Title` declares a JSX result, and `isPointInPolygon` has no
+  return the producer calls reachable.
+- **112 is one export**, `@kobalte/utils` `callHandler`: its answering case
+  ships TypeScript sources, and the probe harness refuses them ("Stripping types
+  is currently unsupported for files under node_modules"), so the veto cannot
+  run and the closure is withheld. It was open at every import already.
+- **309 never proposed** is what the walk does not answer, in three groups, read
+  off the published bytes: a returned function or object literal, which the walk
+  rules out (`composeEventHandlers` (48), `createCallbackStack`,
+  `createMicrotask`, `chain`); an alias with no body of its own (`entries`,
+  `keys`, `tryOnCleanup`); and the `./immutable` family (`pick`, `push`,
+  `update`, …), whose walk verdicts no export reaches, the same reason its
+  `creates` is never proposed. All but 13 of the 309 are open at every import
+  for `creates` or `callbacks` anyway; the 13 are `chain` (7),
+  `createIdGenerator` (3) and `wrapSetter` (3).
+
+The census's own buckets moved too, one of them the wrong way:
+
+| bucket | before | after |
+| --- | ---: | ---: |
+| an operation is stated | 440 | 604 |
+| determined: states nothing | 597 | 397 |
+| degenerate: nothing determined | 115 | **151** |
+| absent | 722 | 722 |
+
+Operations rise because a certified plain return *is* a stated operation, so
+an export whose closed domains were all empty now states one: 164 sites move
+over, and closed-empty falls by those plus the 36 below.
+
+**The 36 degenerate sites are recipes, not claims.** Five
+`@solid-primitives/rootless` and `@solid-primitives/trigger` exports lost the
+`reads` closure the 2026-09-18 recipes gave them: `withheld: no recipe in
+corpus`. A recipe is addressed by a digest over its exact claim, and a claim's
+artifact case carries the accepted contract digest of every dependency it is
+certified against. ADR 0113 changes what `@solid-primitives/utils` certifies,
+so its node digest moves (`f26d0c21…` to `c0ecbb92…`), `rootless`' case moves
+with it (`dc706032…` to `ed839675…`), and all ten of those packages' recipes stop
+addressing. The five exports were open at every import before and after, so no
+consumer site moves. The census gate fails on the bucket (151 against the pin's
+127) until they are re-addressed. That is the scaffold's two-pass procedure,
+not an id edit (`scripts/ecosystem-benchmark/probe-recipes/README.md`), and it
+recurs whenever a dependency's certified contract changes.
+
+## Order, revised
+
+1. Re-address the ten `rootless` and `trigger` recipes, then re-pin: 36
+   degenerate sites back, nothing else to decide.
+2. `creates` for `entries` and `keys`, unchanged from above: 59 sites from every
+   import to some uses.
+3. The dialect's `creates` rows for the owner-requiring primitives, unchanged:
+   74 sites.
+4. The structured `returns` shapes: `access` (157), `asArray` (51) and
+   `accessWith` (27) are the whole remaining some-uses `returns` cost that a
+   shape could decide, and each needs one of its own.

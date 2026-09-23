@@ -56,9 +56,12 @@ struct ObservationResult {
 
 impl ObservationResult {
     fn contradicted(&self) -> bool {
-        self.markers
-            .iter()
-            .any(|marker| matches!(marker.as_str(), "return-value" | "return-outside-identity"))
+        self.markers.iter().any(|marker| {
+            matches!(
+                marker.as_str(),
+                "return-value" | "return-outside-identity" | "return-not-primitive"
+            )
+        })
     }
 }
 
@@ -494,8 +497,20 @@ fn claim_filter_selects_only_one_whole_parameter_return() {
         index: 1,
         path: vec!["value".into()],
     });
+    // ADR 0113: a `plain` output is its own observation, never the identity
+    // one -- `Object.is` against an argument would contradict every primitive
+    // the claim permits.
     let mut plain = operation.clone();
     plain.output = Some(ValueShape::Plain);
+    assert_eq!(
+        candidate_observation(
+            "returns",
+            &export_with_returns(claim.clone(), vec![plain.clone()])
+        ),
+        Some(Observation::PrimitiveReturn),
+    );
+    let mut plain_read = plain;
+    plain_read.kind = OperationKind::Read;
     let mut missing_output = operation.clone();
     missing_output.output = None;
     let mut guarded = operation;
@@ -508,7 +523,7 @@ fn claim_filter_selects_only_one_whole_parameter_return() {
         Some(Observation::ParameterReturn(1)),
         "the independent census still requires this identity at every possible return",
     );
-    for unsupported in [wrong_kind, member, plain, missing_output] {
+    for unsupported in [wrong_kind, member, plain_read, missing_output] {
         assert!(
             candidate_observation(
                 "returns",
@@ -517,6 +532,84 @@ fn claim_filter_selects_only_one_whole_parameter_return() {
             .is_none()
         );
     }
+}
+
+/// ADR 0113: the primitive-return module stays quiet on every primitive, `null`
+/// included, and fires on anything a primitive completion rules out: an
+/// object, an array, a function, a proxy, and the promise or iterator an
+/// `async` function or a generator hands back whatever its body returns.
+#[test]
+fn the_primitive_return_module_emits_only_for_an_object_or_a_function() {
+    let signatures = [signature(&[value_fact(json!({"mayBeNumber": true}))])];
+    for implementation in [
+        "export function subject(value) { return Math.min(Math.max(value, 0), 1); }",
+        "export function subject() { return 'text'; }",
+        "export function subject() { return true; }",
+        "export function subject() { return null; }",
+        "export function subject() { return void 0; }",
+        "export function subject() {}",
+        "export function subject() { return 1n; }",
+        "export function subject() { return Symbol('s'); }",
+        "export function subject(value) { return value !== null && typeof value === 'object'; }",
+    ] {
+        let observed = execute(implementation, Observation::PrimitiveReturn, &signatures);
+        assert!(!observed.contradicted(), "{implementation}: {observed:?}");
+        assert!(observed.error.is_none(), "{implementation}: {observed:?}");
+    }
+    for implementation in [
+        "export function subject() { return {}; }",
+        "export function subject() { return []; }",
+        "export function subject() { return () => 1; }",
+        "export function subject() { return new Proxy({}, {}); }",
+        "export function subject() { return new Number(1); }",
+        "export function subject(value) { return value === 1 ? {} : value; }",
+        "export async function subject() { return 1; }",
+        "export function* subject() { return 1; }",
+    ] {
+        let observed = execute(implementation, Observation::PrimitiveReturn, &signatures);
+        assert!(observed.contradicted(), "{implementation}: {observed:?}");
+        assert!(observed.error.is_none(), "{implementation}: {observed:?}");
+    }
+}
+
+/// A throwing sample observes nothing, and a run in which no sample completes
+/// normally is incomplete rather than satisfied by silence.
+#[test]
+fn the_primitive_return_module_requires_a_normal_completion() {
+    let signatures = [signature(&[value_fact(json!({"mayBeNumber": true}))])];
+    let nothing = execute(
+        "export function subject() { throw new Error('sample rejected'); }",
+        Observation::PrimitiveReturn,
+        &signatures,
+    );
+    assert!(!nothing.contradicted(), "{nothing:?}");
+    assert!(nothing.error.is_some(), "{nothing:?}");
+    assert!(
+        nothing
+            .markers
+            .iter()
+            .any(|marker| marker == "sample-threw")
+    );
+
+    // Two samples, `1` and `"x"`: the first throws, the second completes.
+    let partial = execute(
+        "export function subject(value) { if (typeof value === 'number') throw new Error('sample rejected'); return {}; }",
+        Observation::PrimitiveReturn,
+        &[signature(&[value_fact(
+            json!({"mayBeNumber": true, "mayBeString": true}),
+        )])],
+    );
+    assert!(
+        partial.contradicted(),
+        "a contradiction survives other throws: {partial:?}"
+    );
+    assert!(
+        partial
+            .markers
+            .iter()
+            .any(|marker| marker == "sample-threw")
+    );
+    assert!(partial.error.is_none(), "{partial:?}");
 }
 
 /// ADR 0099: the not-callable module samples nothing and emits only when the

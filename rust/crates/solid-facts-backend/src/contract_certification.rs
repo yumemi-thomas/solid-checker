@@ -13886,6 +13886,15 @@ export const value = phantom;
         "whileBreak",
     ];
 
+    /// The census fixture's exports the valueless walk declines and that still
+    /// propose no `plain` return (ADR 0113): the `async` one, and the two whose
+    /// returned value is a function literal.
+    const CENSUS_FIXTURE_UNPROPOSED_PLAIN_RETURNS: [&str; 3] = [
+        "awaitIterateParameter",
+        "chainCallbacks",
+        "returnedCallbackCoercion",
+    ];
+
     const VALUE_EXPORTS_FIXTURE_EXPORTS: [&str; 10] = [
         "Box", "FLAG", "LIMIT", "NAME", "NULLABLE", "OPTIONS", "SIDES", "entries", "helper",
         "parsed",
@@ -15407,8 +15416,9 @@ export const value = phantom;
 
     /// ADR 0035, generator side: the fixture's own `expected.json` proposes
     /// `returns: []` for exactly the exports the valueless-completion walk
-    /// clears, beside `creates: []` for every function export, and each
-    /// candidate schedules one mandatory veto.
+    /// clears -- and, since ADR 0113, one `plain` return for the plain
+    /// functions it declined on a value -- beside `creates: []` for every
+    /// function export, and each candidate schedules one mandatory veto.
     #[test]
     fn the_generated_returns_fixture_carries_its_valueless_candidates_into_planning() {
         let fixture = returns_fixture();
@@ -15469,15 +15479,22 @@ export const value = phantom;
                 .map(|candidate| candidate.export.as_str())
                 .collect::<Vec<_>>()
         };
+        // The walk's two positive answers: `returns: []` for the four
+        // valueless completions, and since ADR 0113 one `plain` return for the
+        // three plain functions that hand back a value. `async` and generator
+        // bodies propose neither: they hand back a promise or an iterator.
         assert_eq!(
             candidates_for(ClaimDomain::Returns),
             [
                 "bareCompletion",
                 "bareReturnInLoop",
                 "earlyBareReturn",
-                "nestedReturnsValue"
+                "expressionArrow",
+                "nestedReturnsValue",
+                "returnsValue",
+                "valueReturnInLoop"
             ],
-            "the valueless-completion walk's proposals, and only those"
+            "the returns walk's proposals, and only those"
         );
         // Every export — the `const` arrow included, since the generator binds
         // an anonymous callable's walk verdicts through its declarator — has a
@@ -15491,7 +15508,7 @@ export const value = phantom;
         // withdraws the domain. The pair that shows the withdrawal working is
         // `implementation-census-reads`' two entrypoints.
         assert_eq!(candidates_for(ClaimDomain::Reads), RETURNS_FIXTURE_EXPORTS);
-        // 4 returns + 9 creates + 9 reads, plus the `callbacks` candidates the
+        // 7 returns + 9 creates + 9 reads, plus the `callbacks` candidates the
         // shared walk proposes for the exports that reach a 1.x primitive
         // (eight of the nine since the 2026-09-12 audit). Each proposed
         // closure schedules its own mandatory contradiction veto.
@@ -15499,7 +15516,218 @@ export const value = phantom;
         assert_eq!(callbacks_candidates, 8);
         assert_eq!(
             plan.probe_gate_schedule().unwrap().gates().len(),
-            4 + 9 + 9 + callbacks_candidates
+            7 + 9 + 9 + callbacks_candidates
+        );
+    }
+
+    // ADR 0113: the primitive-return census fixture. Native rather than
+    // generated, like `returned-parameter-identity`: the summaries below are
+    // the generator's own for these exports -- `returns` described as nothing,
+    // the walk's value-completion answer set -- and they go through the
+    // generator's normalization, so the proposal is the one the emit boundary
+    // publishes (the generated side is pinned by `implementation-census-returns`'
+    // own document). Every other domain stays open, so the only closure
+    // candidates are the ones under test.
+    const PRIMITIVE_RETURNS_FIXTURE_EXPORTS: [&str; 11] = [
+        "add",
+        "annotatedBox",
+        "box",
+        "clamp",
+        "isObject",
+        "label",
+        "passThrough",
+        "sign",
+        "trueFn",
+        "voidFn",
+        "widened",
+    ];
+
+    fn primitive_returns_fixture_certify(
+        label: &str,
+    ) -> Option<(
+        CertificationPlan,
+        Result<super::FinalizedPolicy2Contract, super::Policy2FinalizationError>,
+    )> {
+        use solid_reactive_ir::{
+            ContractClaim, ContractEntrypoint, ContractExport, ContractPackage, PackageContract,
+        };
+        let pin = pinned_producer_for_test()?;
+        let name = "implementation-census-primitive-returns";
+        let root = "/project/node_modules/implementation-census-primitive-returns";
+        let fixture = repository_root()
+            .join("fixtures/package-contracts")
+            .join(name);
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let bindings = PRIMITIVE_RETURNS_FIXTURE_EXPORTS.map(|export| {
+            (
+                export,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        let (_, resolved) = test_package_resolution(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[],
+            "/project/src/app.ts",
+        );
+        let inferred = PackageContract {
+            package: ContractPackage {
+                name: name.into(),
+                version: "1.0.0".into(),
+                integrity: String::new(),
+            },
+            entrypoints: BTreeMap::from([(
+                ".".into(),
+                ContractEntrypoint {
+                    exports: PRIMITIVE_RETURNS_FIXTURE_EXPORTS
+                        .into_iter()
+                        .map(|export| {
+                            (
+                                export.into(),
+                                ContractExport {
+                                    kind: "function".into(),
+                                    reactive_reads: ContractClaim::Open,
+                                    callbacks: ContractClaim::Open,
+                                    owner_requirements: ContractClaim::Open,
+                                    returns: ContractClaim::Known(None),
+                                    async_behavior: ContractClaim::Known(String::new()),
+                                    returns_value_completion: true,
+                                    ..ContractExport::default()
+                                },
+                            )
+                        })
+                        .collect(),
+                },
+            )]),
+            source_path: String::new(),
+        };
+        let candidate =
+            crate::inferred_contract::normalize_inferred_contract(&inferred, &resolved).unwrap();
+        let plan = try_plan_supplied_candidate_for_test_package(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            candidate,
+        )
+        .expect("the generator's proposal plans against its own artifact");
+        let scratch = TracerScratch::new(label);
+        // No hand recipe: every candidate is served by ADR 0113's synthesized
+        // primitive-return veto.
+        let probes = tracer_configuration_from(&fixture, scratch.path(), label, &[])?;
+        let outcome = tracer_certify(&plan, &pin, &probes);
+        Some((plan, outcome))
+    }
+
+    /// Whether `export`'s `returns` is closed over exactly one `plain` return.
+    fn plain_return_is_closed_in(main: &[u8], export: &str) -> bool {
+        let decoded = crate::contract_document::decode(main)
+            .expect("canonical main decodes")
+            .normalize()
+            .expect("canonical main normalizes");
+        decoded.artifact_cases().iter().any(|case| {
+            case.exports.get(export).is_some_and(|semantics| {
+                semantics
+                    .operation_claim(ClaimDomain::Returns)
+                    .is_some_and(|claim| {
+                        claim.is_closed()
+                            && matches!(claim.items(), [id] if semantics.operation(&id.0).is_some_and(|operation| {
+                                operation.kind == OperationKind::Return
+                                    && operation.output == Some(ValueShape::Plain)
+                            }))
+                    })
+            })
+        })
+    }
+
+    /// ADR 0113 end to end: every export whose completion the producer proved
+    /// primitive -- and whose every live return and every declared result agree
+    /// -- certifies one `plain` return through the census, the positive fact
+    /// and the synthesized veto. The refusals withhold by name and the row
+    /// certifies: an object, an untyped argument, and a JSDoc `@returns` that
+    /// its body contradicts refuse the closure at the census; a declaration
+    /// that promises more than a primitive refuses the operation itself.
+    #[test]
+    fn the_primitive_returns_census_certifies_exactly_the_primitive_completions() {
+        let Some((plan, outcome)) = primitive_returns_fixture_certify("primitive-returns") else {
+            return;
+        };
+        let finalized = outcome.unwrap_or_else(|error| {
+            panic!("every refusal here withholds by name and the row certifies: {error}")
+        });
+        let main = finalized.canonical_main();
+        for export in ["clamp", "isObject", "label", "sign", "trueFn", "voidFn"] {
+            assert!(
+                plain_return_is_closed_in(main, export),
+                "{export}: a primitive completion certifies one plain return: {:?} {:?}",
+                finalized.withheld_closures(),
+                finalized.withheld_operations()
+            );
+            assert!(
+                !finalized
+                    .withheld_closures()
+                    .iter()
+                    .any(|record| record.export == export),
+                "{export}: {:?}",
+                finalized.withheld_closures()
+            );
+        }
+        // Each refusal withdraws the `return` operation itself: its positive
+        // fact reads the census's own evidence, so the document stops stating a
+        // plain return at all, and the domain it listed opens with it. Only
+        // `widened`'s body clears; its declaration is what refuses.
+        for (export, needle) in [
+            ("box", "did not prove primitive"),
+            ("passThrough", "did not prove primitive"),
+            (
+                "annotatedBox",
+                "whose own value the producer did not type as a primitive alone",
+            ),
+            (
+                "add",
+                "whose own value the producer did not type as a primitive alone",
+            ),
+            ("widened", "every declared signature's result"),
+        ] {
+            assert!(
+                finalized.withheld_operations().iter().any(|record| {
+                    record.export == export
+                        && record.operation.ends_with(":operation:return")
+                        && record
+                            .reason
+                            .starts_with(super::WITHHELD_OPERATION_CENSUS_REFUSED_PREFIX)
+                        && record.reason.contains(needle)
+                }),
+                "{export}: {:?}",
+                finalized.withheld_operations()
+            );
+            assert!(!plain_return_is_closed_in(main, export), "{export}");
+        }
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan),
+            "the synthesized veto must run before a plain return closes"
         );
     }
 
@@ -16378,7 +16606,10 @@ export const value = phantom;
             "the generated document's own proposals, and only those"
         );
         // ADR 0035: the exports whose valueless-completion walk is clean also
-        // propose `returns: []`, and only those.
+        // propose `returns: []`. Since ADR 0113 every other export proposes one
+        // `plain` return for the census to decide, except the `async` one and
+        // the two whose returned value is a function literal, which the walk's
+        // own syntax already rules out as a primitive.
         let returns = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Returns));
         let returns_candidates = plan
             .candidates
@@ -16386,8 +16617,24 @@ export const value = phantom;
             .iter()
             .filter(|candidate| candidate.path == returns)
             .map(|candidate| candidate.export.as_str())
-            .collect::<Vec<_>>();
-        assert_eq!(returns_candidates, CENSUS_FIXTURE_VALUELESS_EXPORTS);
+            .collect::<BTreeSet<_>>();
+        let proposing_plain = plan.candidates.proposal().artifact_cases()[0]
+            .exports
+            .keys()
+            .map(String::as_str)
+            .filter(|export| {
+                !CENSUS_FIXTURE_VALUELESS_EXPORTS.contains(export)
+                    && !CENSUS_FIXTURE_UNPROPOSED_PLAIN_RETURNS.contains(export)
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(proposing_plain.len(), 102);
+        assert_eq!(
+            returns_candidates,
+            CENSUS_FIXTURE_VALUELESS_EXPORTS
+                .into_iter()
+                .chain(proposing_plain)
+                .collect::<BTreeSet<_>>()
+        );
         // One mandatory contradiction veto per candidate, and one
         // `DomainExhaustiveness` demand: the census is now reachable. The
         // `callbacks` candidates share the `creates` walk, so an export whose
@@ -16545,8 +16792,17 @@ export const value = phantom;
                     record.export, record.reason
                 )
             };
+            // ADR 0113's plain returns are tallied apart from the valueless
+            // exports' `returns: []`, which is what the lists below pin.
+            let domain = if record.domain == "returns"
+                && !CENSUS_FIXTURE_VALUELESS_EXPORTS.contains(&record.export.as_str())
+            {
+                "returns-plain"
+            } else {
+                record.domain.as_str()
+            };
             withheld
-                .entry(record.domain.as_str())
+                .entry(domain)
                 .or_default()
                 .push((record.export.as_str(), kind));
         }
@@ -16586,7 +16842,83 @@ export const value = phantom;
             withheld.get("returns").cloned().unwrap_or_default(),
             CENSUS_FIXTURE_GENERATED_RETURNS_WITHHELD
         );
+        // ADR 0113: every plain-return candidate ends one way -- closed, its
+        // closure withheld, or its `return` operation withdrawn because the
+        // census evidence refused it -- and the closed ones are this fixture's
+        // primitive completions.
+        let withdrawn = finalized
+            .withheld_operations()
+            .iter()
+            .filter(|record| {
+                record.operation.ends_with(":operation:return")
+                    && record
+                        .reason
+                        .starts_with(super::WITHHELD_OPERATION_CENSUS_REFUSED_PREFIX)
+            })
+            .map(|record| record.export.as_str())
+            .collect::<BTreeSet<_>>();
+        let mut plain_closed = Vec::new();
+        let mut plain_withdrawn = Vec::new();
+        for export in plan.candidates.proposal().artifact_cases()[0]
+            .exports
+            .keys()
+            .map(String::as_str)
+            .filter(|export| {
+                !CENSUS_FIXTURE_VALUELESS_EXPORTS.contains(export)
+                    && !CENSUS_FIXTURE_UNPROPOSED_PLAIN_RETURNS.contains(export)
+            })
+        {
+            let is_closed = plain_return_is_closed_in(main, export);
+            let closure_withheld = withheld
+                .get("returns-plain")
+                .is_some_and(|records| records.iter().any(|(name, _)| *name == export));
+            assert!(
+                is_closed != (closure_withheld || withdrawn.contains(export)),
+                "{export}: a plain return is exactly one of closed and withheld"
+            );
+            if is_closed {
+                plain_closed.push(export);
+            } else if withdrawn.contains(export) {
+                plain_withdrawn.push(export);
+            }
+        }
+        assert_eq!(plain_closed, CENSUS_FIXTURE_GENERATED_PLAIN_RETURNS_CLOSED);
+        assert_eq!(
+            withheld.get("returns-plain").cloned().unwrap_or_default(),
+            CENSUS_FIXTURE_GENERATED_PLAIN_RETURNS_WITHHELD
+        );
+        assert_eq!(
+            plain_withdrawn.len(),
+            CENSUS_FIXTURE_GENERATED_PLAIN_RETURNS_WITHDRAWN
+        );
     }
+
+    /// ADR 0113: the census fixture's plain returns that certify -- the
+    /// exports whose every live completion the producer types a primitive.
+    const CENSUS_FIXTURE_GENERATED_PLAIN_RETURNS_CLOSED: [&str; 9] = [
+        "declaredMemberCoercion",
+        "helperCoercion",
+        "helperSpreadCoercion",
+        "helperUntypedArgument",
+        "instanceOfComputedClass",
+        "instanceOfDerivedClass",
+        "instanceOfLibrary",
+        "instanceOfOwnClass",
+        "toStringTagViaCall",
+    ];
+
+    /// ADR 0113: plain-return closures withheld after the census cleared them.
+    const CENSUS_FIXTURE_GENERATED_PLAIN_RETURNS_WITHHELD: [(&str, &str); 2] = [
+        ("instanceOfModuleValue", "veto"),
+        ("instanceOfParameter", "veto"),
+    ];
+
+    /// ADR 0113: how many plain-return operations the census evidence refused:
+    /// the rest of the 102, whose completions are the caller's values, objects,
+    /// or results the producer types `any`. Counted rather than listed, because
+    /// the fixture exists to pin the `creates` census and what these return is
+    /// incidental to it.
+    const CENSUS_FIXTURE_GENERATED_PLAIN_RETURNS_WITHDRAWN: usize = 91;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).

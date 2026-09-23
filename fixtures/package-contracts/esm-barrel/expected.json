@@ -17,7 +17,7 @@
             "createAlias": "summary-a162b302d7b2864351895844e279125d9b1e34888e08c9940fc52af266d2ee61",
             "createConditional": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "createFromMemberFactory": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "createLocal": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "createLocal": "summary-549d29acde9708aa95168ba8944622520eb54549a9125ee62824c573a584670e",
             "createValue": "summary-a162b302d7b2864351895844e279125d9b1e34888e08c9940fc52af266d2ee61",
             "factoryComponent": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
           },
@@ -43,17 +43,42 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d": {
+    "summary-549d29acde9708aa95168ba8944622520eb54549a9125ee62824c573a584670e": {
       "call": {
         "callbacks": [],
         "closed": [
           "callbacks",
-          "creates"
+          "creates",
+          "returns"
         ],
         "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "plain",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
         "proposedClosures": [
           "callbacks",
-          "creates"
+          "creates",
+          "returns"
+        ],
+        "returns": [
+          "return"
         ]
       },
       "shape": "callable"

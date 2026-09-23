@@ -188,7 +188,13 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // `fixtures/reactive-ir/retired-1x-spellings`, which is a **Solid 2.0**
       // fixture -- it pins that 1.x-only names written in a 2.0 project are
       // caught.
-      stableMainDocuments: 136,
+      //
+      // 137 on 2026-09-23 adds package-plain-return-consumer's main document,
+      // the third fixture contract the corpus authorizes: ADR 0113's consumer
+      // arm, where a `returns` closed over one plain return leaves nothing open
+      // at the import and the same export with `returns` open still raises
+      // SC9005.
+      stableMainDocuments: 137,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

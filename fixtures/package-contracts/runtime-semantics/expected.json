@@ -13,40 +13,40 @@
             "sha256": "fe70a108fae5bed974d498ee075b0328c747edfcccde5afd8d94bf828da8e8b9"
           },
           "exports": {
-            "arrayFrom": "summary-aa6ce171f58ac32674f96f056b05a91e2a8083e782d1395f32f9c4ad62d8dd40",
-            "bigInt64ArrayFrom": "summary-aa6ce171f58ac32674f96f056b05a91e2a8083e782d1395f32f9c4ad62d8dd40",
-            "bigUint64ArrayFrom": "summary-aa6ce171f58ac32674f96f056b05a91e2a8083e782d1395f32f9c4ad62d8dd40",
-            "constructArray": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
-            "constructMap": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
-            "constructSet": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
-            "constructWeakMap": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
-            "constructWeakSet": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
-            "convertBigInt": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
-            "convertBoolean": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
-            "convertNumber": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
-            "convertObject": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
-            "convertSymbol": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
-            "float32ArrayFrom": "summary-aa6ce171f58ac32674f96f056b05a91e2a8083e782d1395f32f9c4ad62d8dd40",
-            "float64ArrayFrom": "summary-aa6ce171f58ac32674f96f056b05a91e2a8083e782d1395f32f9c4ad62d8dd40",
-            "getPosition": "summary-cf21752daa1d1ff8529313c3dc8d53e3af300195e6d4faa294066955c29d7c23",
-            "int16ArrayFrom": "summary-aa6ce171f58ac32674f96f056b05a91e2a8083e782d1395f32f9c4ad62d8dd40",
-            "int32ArrayFrom": "summary-aa6ce171f58ac32674f96f056b05a91e2a8083e782d1395f32f9c4ad62d8dd40",
-            "int8ArrayFrom": "summary-aa6ce171f58ac32674f96f056b05a91e2a8083e782d1395f32f9c4ad62d8dd40",
-            "observeIntersection": "summary-6a4cc75250cc3d86bcc07c4e91cdd7a97233945d50b1099b04aa57ecfbfbdd23",
-            "observeReporting": "summary-6a4cc75250cc3d86bcc07c4e91cdd7a97233945d50b1099b04aa57ecfbfbdd23",
-            "postTask": "summary-6a4cc75250cc3d86bcc07c4e91cdd7a97233945d50b1099b04aa57ecfbfbdd23",
-            "replace": "summary-cafa2025923e268b3c72695c787b4797830420247288a917d74a4dced024b98f",
-            "replaceAll": "summary-cafa2025923e268b3c72695c787b4797830420247288a917d74a4dced024b98f",
-            "retainArray": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "retainMap": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "retainSet": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "shadowedQueueMicrotask": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
-            "shadowedString": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
-            "typedArrayFrom": "summary-aa6ce171f58ac32674f96f056b05a91e2a8083e782d1395f32f9c4ad62d8dd40",
-            "uint16ArrayFrom": "summary-aa6ce171f58ac32674f96f056b05a91e2a8083e782d1395f32f9c4ad62d8dd40",
-            "uint32ArrayFrom": "summary-aa6ce171f58ac32674f96f056b05a91e2a8083e782d1395f32f9c4ad62d8dd40",
-            "uint8ClampedArrayFrom": "summary-aa6ce171f58ac32674f96f056b05a91e2a8083e782d1395f32f9c4ad62d8dd40",
-            "watchPosition": "summary-cf21752daa1d1ff8529313c3dc8d53e3af300195e6d4faa294066955c29d7c23"
+            "arrayFrom": "summary-cdc0eb01ff0411b70e5601e278cb0f47c5ec0449e2c94e24f07122d1294fcfc1",
+            "bigInt64ArrayFrom": "summary-cdc0eb01ff0411b70e5601e278cb0f47c5ec0449e2c94e24f07122d1294fcfc1",
+            "bigUint64ArrayFrom": "summary-cdc0eb01ff0411b70e5601e278cb0f47c5ec0449e2c94e24f07122d1294fcfc1",
+            "constructArray": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+            "constructMap": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+            "constructSet": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+            "constructWeakMap": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+            "constructWeakSet": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+            "convertBigInt": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+            "convertBoolean": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+            "convertNumber": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+            "convertObject": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+            "convertSymbol": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+            "float32ArrayFrom": "summary-cdc0eb01ff0411b70e5601e278cb0f47c5ec0449e2c94e24f07122d1294fcfc1",
+            "float64ArrayFrom": "summary-cdc0eb01ff0411b70e5601e278cb0f47c5ec0449e2c94e24f07122d1294fcfc1",
+            "getPosition": "summary-905d08dd82be39db6ef42e15f5631b112db2ace9ccd62c6255832fa0aac76056",
+            "int16ArrayFrom": "summary-cdc0eb01ff0411b70e5601e278cb0f47c5ec0449e2c94e24f07122d1294fcfc1",
+            "int32ArrayFrom": "summary-cdc0eb01ff0411b70e5601e278cb0f47c5ec0449e2c94e24f07122d1294fcfc1",
+            "int8ArrayFrom": "summary-cdc0eb01ff0411b70e5601e278cb0f47c5ec0449e2c94e24f07122d1294fcfc1",
+            "observeIntersection": "summary-6298b0d77b2a4513dab7a2f434bee5615052ceb355daa9671e21fcadc1dc086f",
+            "observeReporting": "summary-6298b0d77b2a4513dab7a2f434bee5615052ceb355daa9671e21fcadc1dc086f",
+            "postTask": "summary-6298b0d77b2a4513dab7a2f434bee5615052ceb355daa9671e21fcadc1dc086f",
+            "replace": "summary-9123e446246c7e1aa2e1f7e8efc1f2d2fe6687e3d5212b9e8019434f33288cd1",
+            "replaceAll": "summary-9123e446246c7e1aa2e1f7e8efc1f2d2fe6687e3d5212b9e8019434f33288cd1",
+            "retainArray": "summary-02471e768a026bc855692aa20e7485ead8a2241ff320853ac46667a2d5bcefbb",
+            "retainMap": "summary-02471e768a026bc855692aa20e7485ead8a2241ff320853ac46667a2d5bcefbb",
+            "retainSet": "summary-02471e768a026bc855692aa20e7485ead8a2241ff320853ac46667a2d5bcefbb",
+            "shadowedQueueMicrotask": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+            "shadowedString": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+            "typedArrayFrom": "summary-cdc0eb01ff0411b70e5601e278cb0f47c5ec0449e2c94e24f07122d1294fcfc1",
+            "uint16ArrayFrom": "summary-cdc0eb01ff0411b70e5601e278cb0f47c5ec0449e2c94e24f07122d1294fcfc1",
+            "uint32ArrayFrom": "summary-cdc0eb01ff0411b70e5601e278cb0f47c5ec0449e2c94e24f07122d1294fcfc1",
+            "uint8ClampedArrayFrom": "summary-cdc0eb01ff0411b70e5601e278cb0f47c5ec0449e2c94e24f07122d1294fcfc1",
+            "watchPosition": "summary-905d08dd82be39db6ef42e15f5631b112db2ace9ccd62c6255832fa0aac76056"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -70,7 +70,47 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-6a4cc75250cc3d86bcc07c4e91cdd7a97233945d50b1099b04aa57ecfbfbdd23": {
+    "summary-02471e768a026bc855692aa20e7485ead8a2241ff320853ac46667a2d5bcefbb": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "plain",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-6298b0d77b2a4513dab7a2f434bee5615052ceb355daa9671e21fcadc1dc086f": {
       "call": {
         "callbacks": [
           {
@@ -83,7 +123,8 @@
         ],
         "closed": [
           "reads",
-          "creates"
+          "creates",
+          "returns"
         ],
         "creates": [],
         "operations": [
@@ -103,51 +144,7 @@
             "trigger": {
               "event": "call"
             }
-          }
-        ],
-        "proposedClosures": [
-          "reads",
-          "creates"
-        ],
-        "reads": []
-      },
-      "shape": "callable"
-    },
-    "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
-      "call": {
-        "callbacks": [],
-        "closed": [
-          "callbacks",
-          "reads",
-          "creates"
-        ],
-        "creates": [],
-        "proposedClosures": [
-          "callbacks",
-          "reads",
-          "creates"
-        ],
-        "reads": []
-      },
-      "shape": "callable"
-    },
-    "summary-aa6ce171f58ac32674f96f056b05a91e2a8083e782d1395f32f9c4ad62d8dd40": {
-      "call": {
-        "callbacks": [
-          {
-            "from": {
-              "arg": 1,
-              "path": []
-            },
-            "operation": "callback-0"
-          }
-        ],
-        "closed": [
-          "reads",
-          "creates"
-        ],
-        "creates": [],
-        "operations": [
+          },
           {
             "at": {
               "event": "call",
@@ -158,9 +155,10 @@
               "min": 0,
               "scope": "call"
             },
-            "id": "callback-0",
-            "kind": "invoke",
-            "tracking": "ambient-at-execution",
+            "id": "return",
+            "kind": "return",
+            "output": "plain",
+            "tracking": "untracked",
             "trigger": {
               "event": "call"
             }
@@ -168,56 +166,17 @@
         ],
         "proposedClosures": [
           "reads",
-          "creates"
+          "creates",
+          "returns"
         ],
-        "reads": []
+        "reads": [],
+        "returns": [
+          "return"
+        ]
       },
       "shape": "callable"
     },
-    "summary-cafa2025923e268b3c72695c787b4797830420247288a917d74a4dced024b98f": {
-      "call": {
-        "callbacks": [
-          {
-            "from": {
-              "arg": 0,
-              "path": []
-            },
-            "operation": "callback-0"
-          }
-        ],
-        "closed": [
-          "reads",
-          "creates"
-        ],
-        "creates": [],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "callback-0",
-            "kind": "invoke",
-            "tracking": "ambient-at-execution",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "reads",
-          "creates"
-        ],
-        "reads": []
-      },
-      "shape": "callable"
-    },
-    "summary-cf21752daa1d1ff8529313c3dc8d53e3af300195e6d4faa294066955c29d7c23": {
+    "summary-905d08dd82be39db6ef42e15f5631b112db2ace9ccd62c6255832fa0aac76056": {
       "call": {
         "callbacks": [
           {
@@ -237,7 +196,8 @@
         ],
         "closed": [
           "reads",
-          "creates"
+          "creates",
+          "returns"
         ],
         "creates": [],
         "operations": [
@@ -274,28 +234,210 @@
             "trigger": {
               "event": "call"
             }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "plain",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
           }
         ],
         "proposedClosures": [
           "reads",
-          "creates"
+          "creates",
+          "returns"
         ],
-        "reads": []
+        "reads": [],
+        "returns": [
+          "return"
+        ]
       },
       "shape": "callable"
     },
-    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
+    "summary-9123e446246c7e1aa2e1f7e8efc1f2d2fe6687e3d5212b9e8019434f33288cd1": {
       "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
         "closed": [
           "reads",
-          "creates"
+          "creates",
+          "returns"
         ],
         "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "plain",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
         "proposedClosures": [
           "reads",
-          "creates"
+          "creates",
+          "returns"
         ],
-        "reads": []
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "plain",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-cdc0eb01ff0411b70e5601e278cb0f47c5ec0449e2c94e24f07122d1294fcfc1": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "plain",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
       },
       "shape": "callable"
     }

@@ -7643,6 +7643,25 @@ fn require_operation_recursive_subject(
             let (_, implementation) = require_export_implementation(plan, proof, transcript, open)?;
             return require_returned_parameter_identity(implementation, *index, open, sites);
         }
+        // ADR 0113: a `plain` return output is exactly the claim a primitive
+        // completion makes, so that fact proves it, with every declared
+        // signature agreeing. The declaration's non-callability alone -- what
+        // the signature arm below would accept -- is not enough: an array is
+        // not callable, and the array an export returns may be its caller's
+        // store.
+        if matches!(operation.output, Some(ValueShape::Plain)) {
+            if operation.kind != OperationKind::Return
+                || !path.0.is_empty()
+                || callable.asserts_callable()
+            {
+                return Err(open(
+                    "a plain output is proved only as the whole, non-callable value an export's \
+                     return hands back",
+                ));
+            }
+            let (_, implementation) = require_export_implementation(plan, proof, transcript, open)?;
+            return require_primitive_return_output(proof, transcript, implementation, open, sites);
+        }
     }
     // An overloaded export is proved by proving every overload. Nothing here
     // may short-circuit on the first: the demand is about the export, and a
@@ -7653,6 +7672,71 @@ fn require_operation_recursive_subject(
         )?;
     }
     Ok(())
+}
+
+/// ADR 0113: the positive half of a `plain` return, proved from the same
+/// evidence the closure census reads ([`primitive_return_sites`]) and from
+/// every declared overload stating a primitive result alone.
+///
+/// The facts are independent -- the checker's types for the body, and the
+/// `.d.ts` a consumer compiles against -- and the claim is admitted only where
+/// they agree. A declared result that may be an object, or whose primitive
+/// domain the producer did not observe exhaustively, refuses even over a
+/// primitive body: the consumer's own types would then say more than the
+/// contract, and the contract never outruns the evidence. The operation stands
+/// on its own here, not on the closure: a refused census leaves it a partial
+/// claim, and a partial `plain` return is still a claim about every value the
+/// export hands back.
+fn require_primitive_return_output(
+    proof: &ScheduledProofDemand,
+    transcript: &ExportValueTranscript,
+    implementation: &typefacts::ExportImplementationTranscript,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    let at = format!(
+        "{}:{}..{}",
+        implementation.location.path,
+        implementation.location.start_byte,
+        implementation.location.end_byte
+    );
+    let returned = primitive_return_sites(implementation, &at).map_err(|reason| open(&reason))?;
+    for signature in require_export_call_signatures(proof, transcript, open)? {
+        if !value_is_primitive_alone(&signature.result) {
+            return Err(open(
+                "a plain return output requires every declared signature's result to be a \
+                 primitive alone",
+            ));
+        }
+    }
+    sites.extend(returned);
+    sites.push("recursive-operation-value:primitive-completion".into());
+    Ok(())
+}
+
+/// ADR 0113: whether one value fact states a primitive and nothing else --
+/// closed, never an object, callable or constructible, and naming at least one
+/// primitive type. A value naming none (`never`) is refused: it states that
+/// there is no value, which is not the claim being proved.
+fn value_is_primitive_alone(value: &InvocationValueFact) -> bool {
+    let primitive = &value.primitive;
+    value.open_reasons.is_empty()
+        && value
+            .alternatives
+            .iter()
+            .all(|alternative| alternative.open_reasons.is_empty())
+        && value.partitions.iter().all(|partition| partition.complete)
+        && !primitive.unknown
+        && !primitive.may_be_object
+        && (primitive.may_be_string
+            || primitive.may_be_number
+            || primitive.may_be_boolean
+            || primitive.may_be_big_int
+            || primitive.may_be_symbol
+            || primitive.may_be_null
+            || primitive.may_be_undefined)
+        && value.callability == Callability::NonCallable
+        && value.constructability == InvocationConstructability::NonConstructable
 }
 
 fn require_returned_parameter_identity(
@@ -10359,8 +10443,10 @@ fn census_creates_domain(
 ///
 /// Decides empty completion and one whole-parameter return identity. The latter
 /// requires the positive original-parameter premise at every possible return.
-/// Other nonempty enumerations remain unsupported: the census does not derive
-/// their shapes, so admitting them would certify the proposal's own word.
+/// ADR 0109 adds one merged props root and ADR 0113 one `plain` return over a
+/// primitive completion; each derives its shape from a producer fact. Other
+/// nonempty enumerations remain unsupported: the census does not derive their
+/// shapes, so admitting them would certify the proposal's own word.
 ///
 /// No callee is dispositioned. A helper's return value reaches this export's
 /// caller only through a return site of this export's own, and a return site
@@ -11159,9 +11245,20 @@ fn census_returns_domain(
     {
         return census_merged_props_returns_transcript(implementation, *from).map_err(refuse);
     }
+    // ADR 0113's fourth shape: one return whose output is plain, over a
+    // completion the producer proved primitive. Placed last of the nonempty
+    // arms because it is the least specific: a whole parameter or a props
+    // merge is a value this arm would also call plain if it were a primitive.
+    if let [operation] = proposed.items()
+        && let Some(operation) = export.operation(&operation.0)
+        && operation.kind == OperationKind::Return
+        && matches!(operation.output, Some(ValueShape::Plain))
+    {
+        return census_primitive_returns_transcript(implementation).map_err(refuse);
+    }
     if !proposed.items().is_empty() {
         return Err(refuse(format!(
-            "a returns closure candidate must enumerate no operation, one whole-parameter return, or one merged props root, but the proposal names {} unsupported operation(s)",
+            "a returns closure candidate must enumerate no operation, one whole-parameter return, one merged props root, or one plain return, but the proposal names {} unsupported operation(s)",
             proposed.items().len()
         )));
     }
@@ -11362,6 +11459,108 @@ fn census_merged_props_returns_transcript(
     sites.push(format!(
         "census-returns-merged-props-total:{from}:{reachable}"
     ));
+    Ok(sites)
+}
+
+/// ADR 0113: one `return` whose output is `plain`, decided from the producer's
+/// primitive completion (ADR 0045) and from every return site's own value.
+fn census_primitive_returns_transcript(
+    implementation: &typefacts::ExportImplementationTranscript,
+) -> Result<Vec<String>, String> {
+    let at = format!(
+        "{}:{}..{}",
+        implementation.location.path,
+        implementation.location.start_byte,
+        implementation.location.end_byte
+    );
+    primitive_return_sites(implementation, &at)
+}
+
+/// The evidence one `plain` return rests on, shared by the closure census and
+/// the operation's positive fact so the two cannot drift (ADR 0113).
+///
+/// The body evidence is the type of every value-carrying return the producer
+/// did not prove unreachable, each read off its own expression. The producer
+/// computes the control-flow census on the original program, before and
+/// independently of any declared-signature premise, so an unannotated
+/// parameter is the implicit `any` there and an expression typed a primitive
+/// is one whatever the caller passes. No annotation on the function replaces
+/// it. A bare `return;` hands back `undefined`, a primitive, and needs no
+/// disposition of its own; neither does falling off the end.
+///
+/// `primitiveCompletion` -- the checker's return type for the implementation's
+/// own signature -- is required beside it and is the weaker of the two. In a
+/// JavaScript file that type is whatever a JSDoc `@returns` says when one is
+/// written, since the checker does not hold an annotation to the body; on a
+/// premised transcript it is read off a twin that splices the *declared*
+/// `@returns`, so there it restates the `.d.ts`. Either way it can only refuse
+/// more, and the positive fact checks the declarations themselves.
+///
+/// Beside them, a plain completion form and a present, classified control-flow
+/// census, exactly as the other `returns` arms require, and at least one
+/// value-carrying completion the producer did not prove unreachable, so the
+/// one operation the closure enumerates can occur. A body that yields nothing
+/// closes `returns: []` instead (ADR 0035).
+fn primitive_return_sites(
+    implementation: &typefacts::ExportImplementationTranscript,
+    at: &str,
+) -> Result<Vec<String>, String> {
+    let control_flow = require_plain_classified_completion(implementation, at)?;
+    // ADR 0105: a construction's census walked a constructor body, and `new`
+    // hands the caller the instance whatever that body returns -- a primitive
+    // `return` in a constructor is discarded. The sites below would describe a
+    // completion the caller never receives.
+    if implementation.invocation.is_some() {
+        return Err(format!(
+            "primitive returns census refuses a construction at {at}: `new` hands the caller \
+             the instance, not the constructor body's completion"
+        ));
+    }
+    if !implementation.primitive_completion {
+        return Err(format!(
+            "primitive returns census refuses an implementation at {at} whose completion the \
+             producer did not prove primitive"
+        ));
+    }
+    let mut sites = Vec::new();
+    for site in control_flow
+        .returns
+        .iter()
+        .filter(|site| site.reach != Reachability::Unreachable)
+    {
+        let Some(value) = &site.value else {
+            continue;
+        };
+        if !value_is_primitive_alone(value) {
+            return Err(format!(
+                "primitive returns census refuses a return at {}:{}..{}, reach {}, whose own \
+                 value the producer did not type as a primitive alone, for {at}",
+                site.location.path,
+                site.location.start_byte,
+                site.location.end_byte,
+                reachability_name(site.reach)
+            ));
+        }
+        sites.push(format!(
+            "census-return:{}:{}:{}:{}:primitive",
+            site.location.path,
+            site.location.start_byte,
+            site.location.end_byte,
+            reachability_name(site.reach)
+        ));
+    }
+    if sites.is_empty() {
+        return Err(format!(
+            "primitive returns census refuses an implementation at {at} with no value-carrying \
+             completion the producer did not prove unreachable"
+        ));
+    }
+    sites.push(format!(
+        "census-returns-primitive-total:{}",
+        control_flow.returns.len()
+    ));
+    sites.sort();
+    sites.dedup();
     Ok(sites)
 }
 
@@ -11624,12 +11823,6 @@ fn census_root_premises(
             ));
         }
     };
-    if signature.has_rest {
-        return Err(format!(
-            "creates census refuses a declared-signature premise at {at}: the declared signature \
-             has a rest parameter"
-        ));
-    }
     if implementation.parameter_premises.len() != signature.parameters.len() {
         return Err(format!(
             "creates census refuses a declared-signature premise at {at}: {} premise(s) for a \
@@ -24912,6 +25105,332 @@ mod tests {
         )
         .expect_err("a bare completion is not a merged props object");
         assert!(bare.contains("refuses a valueless completion"), "{bare}");
+    }
+
+    /// One return site over `/p/index.js`, carrying `value` when it is given.
+    fn primitive_census_site(
+        start: u64,
+        end: u64,
+        reach: &str,
+        value: Option<serde_json::Value>,
+    ) -> serde_json::Value {
+        let mut row = json!({
+            "location": {"path": "/p/index.js", "startByte": start, "endByte": end},
+            "reach": reach
+        });
+        if let Some(value) = value {
+            row["value"] = value;
+        }
+        row
+    }
+
+    /// A value fact with the given primitive domain and callability.
+    fn primitive_census_value(domain: serde_json::Value, callability: &str) -> serde_json::Value {
+        json!({
+            "callability": callability,
+            "constructability": "nonConstructable",
+            "primitive": domain
+        })
+    }
+
+    /// A plain implementation over the given return sites, stating
+    /// `primitiveCompletion` when asked to.
+    fn primitive_census_implementation(
+        returns: serde_json::Value,
+        completion: bool,
+    ) -> typefacts::ExportImplementationTranscript {
+        let mut value = json!({
+            "location": {"path": "/p/index.js", "startByte": 0, "endByte": 60},
+            "completionForm": "plain",
+            "controlFlow": {"returns": returns}
+        });
+        if completion {
+            value["primitiveCompletion"] = json!(true);
+        }
+        serde_json::from_value(value).unwrap()
+    }
+
+    /// ADR 0113. One `plain` return closes over two independent answers: the
+    /// producer's `primitiveCompletion` for the signature, and each reachable
+    /// return's own value. A JSDoc `@returns` rewrites the first and never the
+    /// second, so the census reads both. Everything else refuses by name.
+    #[test]
+    fn primitive_returns_census_requires_the_completion_and_every_site_primitive() {
+        let number = || primitive_census_value(json!({"mayBeNumber": true}), "nonCallable");
+        let object = || primitive_census_value(json!({"mayBeObject": true}), "nonCallable");
+
+        // `clamp`: one reachable value-carrying return.
+        assert_eq!(
+            census_primitive_returns_transcript(&primitive_census_implementation(
+                json!([primitive_census_site(10, 40, "reachable", Some(number()))]),
+                true,
+            ))
+            .unwrap(),
+            vec![
+                "census-return:/p/index.js:10:40:reachable:primitive".to_owned(),
+                "census-returns-primitive-total:1".to_owned(),
+            ]
+        );
+        // A bare return and a return inside a walked loop (`unknown`) beside
+        // it; and an object-typed return the producer proved unreachable, which
+        // is dead code rather than a completion. Every live value is named.
+        let sites = census_primitive_returns_transcript(&primitive_census_implementation(
+            json!([
+                primitive_census_site(5, 12, "reachable", None),
+                primitive_census_site(14, 22, "unknown", Some(number())),
+                primitive_census_site(30, 40, "reachable", Some(number())),
+                primitive_census_site(44, 52, "unreachable", Some(object())),
+            ]),
+            true,
+        ))
+        .unwrap();
+        assert_eq!(
+            sites,
+            vec![
+                "census-return:/p/index.js:14:22:unknown:primitive".to_owned(),
+                "census-return:/p/index.js:30:40:reachable:primitive".to_owned(),
+                "census-returns-primitive-total:4".to_owned(),
+            ]
+        );
+
+        let refuses = |implementation: typefacts::ExportImplementationTranscript, needle: &str| {
+            let refusal = census_primitive_returns_transcript(&implementation)
+                .expect_err("the primitive returns census must refuse this transcript");
+            assert!(refusal.contains(needle), "{needle}: {refusal}");
+        };
+        let one = |value: serde_json::Value| {
+            json!([primitive_census_site(10, 40, "reachable", Some(value))])
+        };
+
+        // The producer did not prove the completion primitive.
+        refuses(
+            primitive_census_implementation(one(number()), false),
+            "did not prove primitive",
+        );
+        // `/** @returns {number} */ function f() { return {}; }`: the
+        // signature's type is the annotation, and the site's is the body's.
+        refuses(
+            primitive_census_implementation(one(object()), true),
+            "whose own value the producer did not type as a primitive alone",
+        );
+        // An untyped value (`any`, `unknown`) is not a primitive.
+        refuses(
+            primitive_census_implementation(
+                one(json!({
+                    "callability": "unknown",
+                    "constructability": "unknown",
+                    "primitive": {"unknown": true},
+                    "openReasons": ["openType"]
+                })),
+                true,
+            ),
+            "reach reachable, whose own value",
+        );
+        // A callable value is never a primitive, whatever its flags say.
+        refuses(
+            primitive_census_implementation(
+                one(primitive_census_value(
+                    json!({"mayBeNumber": true}),
+                    "callable",
+                )),
+                true,
+            ),
+            "whose own value",
+        );
+        // `never` names no primitive: it states there is no value at all.
+        refuses(
+            primitive_census_implementation(
+                one(primitive_census_value(json!({}), "nonCallable")),
+                true,
+            ),
+            "whose own value",
+        );
+        // An object inside a walked loop is still a completion.
+        refuses(
+            primitive_census_implementation(
+                json!([
+                    primitive_census_site(10, 20, "unknown", Some(object())),
+                    primitive_census_site(30, 40, "reachable", Some(number())),
+                ]),
+                true,
+            ),
+            "at /p/index.js:10..20, reach unknown",
+        );
+        // Only bare returns, or only a dead value: ADR 0035's `returns: []`.
+        refuses(
+            primitive_census_implementation(
+                json!([primitive_census_site(10, 17, "reachable", None)]),
+                true,
+            ),
+            "no value-carrying completion",
+        );
+        refuses(
+            primitive_census_implementation(
+                json!([primitive_census_site(10, 40, "unreachable", Some(number()))]),
+                true,
+            ),
+            "no value-carrying completion",
+        );
+        // A premise changes nothing here: the sites are the original program's,
+        // so a premised transcript is decided by the same evidence, and refused
+        // by it too.
+        let premised = |returns: serde_json::Value| {
+            let mut premised = primitive_census_implementation(returns, true);
+            premised.parameter_premises = vec![typefacts::ParameterPremise {
+                index: 0,
+                r#type: "number".into(),
+                identity: "".into(),
+                spelling: String::new(),
+            }];
+            premised
+        };
+        assert_eq!(
+            census_primitive_returns_transcript(&premised(one(number()))).unwrap(),
+            vec![
+                "census-return:/p/index.js:10:40:reachable:primitive".to_owned(),
+                "census-returns-primitive-total:1".to_owned(),
+            ]
+        );
+        refuses(premised(one(object())), "whose own value");
+        // A construction hands back the instance, whatever the constructor
+        // body returns (ADR 0105).
+        let mut construction = primitive_census_implementation(one(number()), true);
+        construction.invocation = Some("construct".into());
+        refuses(construction, "refuses a construction");
+        // The shared premises: a plain form and a classified, present census.
+        let mut asynchronous = primitive_census_implementation(one(number()), true);
+        asynchronous.completion_form = Some(typefacts::ImplementationCompletionForm::Async);
+        refuses(asynchronous, "async implementation");
+        let mut absent = primitive_census_implementation(one(number()), true);
+        absent.control_flow = None;
+        refuses(absent, "no control-flow census");
+        let mut unaccounted = primitive_census_implementation(one(number()), true);
+        unaccounted.control_flow = Some(
+            serde_json::from_value(json!({
+                "returns": one(number()),
+                "unsupported": ["iterationReachability"],
+                "incompleteness": [{
+                    "marker": "iterationReachability",
+                    "class": "flow-unaccounted",
+                    "location": {"path": "/p/index.js", "startByte": 5, "endByte": 50}
+                }]
+            }))
+            .unwrap(),
+        );
+        refuses(unaccounted, "cannot account for a construct");
+    }
+
+    /// ADR 0113's positive half: the operation stands on its own, so it reads
+    /// the same body evidence as the closure *and* every declared overload's
+    /// result, and admits the claim only where the two agree.
+    #[test]
+    fn a_plain_return_output_requires_the_body_and_every_declared_result_primitive() {
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "test".into(),
+            reason: reason.into(),
+        };
+        let demand = proof(ProofFamily::CallablePath, selected_subject());
+        let body = || {
+            primitive_census_implementation(
+                json!([primitive_census_site(
+                    10,
+                    40,
+                    "reachable",
+                    Some(primitive_census_value(
+                        json!({"mayBeNumber": true}),
+                        "nonCallable"
+                    ))
+                )]),
+                true,
+            )
+        };
+        let declared = |results: &[serde_json::Value]| {
+            let signature = |ordinal: usize, result: &serde_json::Value| {
+                let mut signature = export_signature(ordinal, results.len(), "nonCallable");
+                signature["result"] = result.clone();
+                signature
+            };
+            if let [result] = results {
+                export_value_transcript(json!({"callSignature": signature(0, result)}))
+            } else {
+                export_value_transcript(json!({
+                    "callSignatures": results
+                        .iter()
+                        .enumerate()
+                        .map(|(ordinal, result)| signature(ordinal, result))
+                        .collect::<Vec<_>>()
+                }))
+            }
+        };
+        let number = primitive_census_value(json!({"mayBeNumber": true}), "nonCallable");
+        let nullable = primitive_census_value(
+            json!({"mayBeString": true, "mayBeNull": true}),
+            "nonCallable",
+        );
+        let object = primitive_census_value(json!({"mayBeObject": true}), "nonCallable");
+
+        let mut sites = Vec::new();
+        require_primitive_return_output(
+            &demand,
+            &declared(std::slice::from_ref(&number)),
+            &body(),
+            &open,
+            &mut sites,
+        )
+        .expect("a primitive body declared primitive proves the output");
+        assert_eq!(
+            sites,
+            vec![
+                "census-return:/p/index.js:10:40:reachable:primitive".to_owned(),
+                "census-returns-primitive-total:1".to_owned(),
+                "recursive-operation-value:primitive-completion".to_owned(),
+            ]
+        );
+        // Every overload, not the first: `string | null` and `number` agree.
+        let mut sites = Vec::new();
+        require_primitive_return_output(
+            &demand,
+            &declared(&[number.clone(), nullable]),
+            &body(),
+            &open,
+            &mut sites,
+        )
+        .expect("every overload states a primitive result");
+
+        // One overload that may return an object is one too many, over the
+        // very same primitive body.
+        for results in [vec![object.clone()], vec![number.clone(), object]] {
+            let mut sites = Vec::new();
+            let refusal = require_primitive_return_output(
+                &demand,
+                &declared(&results),
+                &body(),
+                &open,
+                &mut sites,
+            )
+            .expect_err("a declared object result refuses");
+            assert!(
+                format!("{refusal:?}").contains("every declared signature's result"),
+                "{refusal:?}"
+            );
+            assert!(sites.is_empty(), "a refusal records no witness: {sites:?}");
+        }
+        // And the body evidence is the census's, refused the same way.
+        let mut sites = Vec::new();
+        let mut unproved = body();
+        unproved.primitive_completion = false;
+        let refusal = require_primitive_return_output(
+            &demand,
+            &declared(&[number]),
+            &unproved,
+            &open,
+            &mut sites,
+        )
+        .expect_err("no primitive completion, no plain output");
+        assert!(
+            format!("{refusal:?}").contains("did not prove primitive"),
+            "{refusal:?}"
+        );
     }
 
     #[test]

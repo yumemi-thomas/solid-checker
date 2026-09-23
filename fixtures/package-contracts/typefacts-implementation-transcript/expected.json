@@ -15,7 +15,7 @@
           "exports": {
             "direct": "summary-091b1d9c2b5cda13367902440e8f50e3789630c614638926e6136ca3e4c0861c",
             "retained": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "returned": "summary-6a4cc75250cc3d86bcc07c4e91cdd7a97233945d50b1099b04aa57ecfbfbdd23"
+            "returned": "summary-6298b0d77b2a4513dab7a2f434bee5615052ceb355daa9671e21fcadc1dc086f"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -87,7 +87,7 @@
       },
       "shape": "callable"
     },
-    "summary-6a4cc75250cc3d86bcc07c4e91cdd7a97233945d50b1099b04aa57ecfbfbdd23": {
+    "summary-6298b0d77b2a4513dab7a2f434bee5615052ceb355daa9671e21fcadc1dc086f": {
       "call": {
         "callbacks": [
           {
@@ -100,7 +100,8 @@
         ],
         "closed": [
           "reads",
-          "creates"
+          "creates",
+          "returns"
         ],
         "creates": [],
         "operations": [
@@ -120,13 +121,35 @@
             "trigger": {
               "event": "call"
             }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "plain",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
           }
         ],
         "proposedClosures": [
           "reads",
-          "creates"
+          "creates",
+          "returns"
         ],
-        "reads": []
+        "reads": [],
+        "returns": [
+          "return"
+        ]
       },
       "shape": "callable"
     },

@@ -962,3 +962,91 @@ fn a_local_summary_with_the_same_silent_walks_proposes_nothing() {
     assert!(export.call.proposed_closures().is_empty());
     assert!(normalized.inherited.is_empty());
 }
+
+/// ADR 0113: the walk's value-completion answer proposes exactly one `plain`
+/// return and labels the closure proposed, so the certifier's census, not this
+/// generator, decides whether the value is a primitive.
+#[test]
+fn a_value_completion_proposes_one_plain_return_for_the_census_to_decide() {
+    let summary = ContractExport {
+        kind: "function".into(),
+        returns: ContractClaim::Known(None),
+        async_behavior: ContractClaim::Known(String::new()),
+        returns_value_completion: true,
+        ..ContractExport::default()
+    };
+    let proposes_plain = |summary: ContractExport, package_name: &str| {
+        let normalized = normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution_for_package(package_name, ["read".into()]),
+        )
+        .unwrap();
+        let export = &normalized.contract.artifact_cases()[0].exports["read"];
+        let proposed = export
+            .call
+            .proposed_closures()
+            .contains(&ClaimDomain::Returns);
+        let plain = export
+            .operation_claim(ClaimDomain::Returns)
+            .is_some_and(|claim| {
+                matches!(claim.items(), [id] if export.operation(&id.0).is_some_and(|operation| {
+                    operation.kind == OperationKind::Return
+                        && operation.output == Some(ValueShape::Plain)
+                }))
+            });
+        (proposed, plain, export.claim_state(ClaimDomain::Returns))
+    };
+
+    assert_eq!(
+        proposes_plain(summary.clone(), "package"),
+        (true, true, KnowledgeState::CompletePositive),
+        "a value completion proposes one plain return, closed and labelled"
+    );
+
+    // The walk's other answer wins: a body that yields nothing is ADR 0035's
+    // empty closure, never a plain return.
+    let (proposed, plain, state) = proposes_plain(
+        ContractExport {
+            returns_walk_clean: true,
+            ..summary.clone()
+        },
+        "package",
+    );
+    assert!(proposed && !plain);
+    assert_eq!(state, KnowledgeState::CompleteNegative);
+
+    // Every falsifier leaves `returns` open and unproposed: the walk did not
+    // answer, an `async` body hands back a promise, a component hands back
+    // what it renders, and a dialect's own archive publishes no bootstrapped
+    // domain.
+    for (summary, package_name) in [
+        (
+            ContractExport {
+                returns_value_completion: false,
+                ..summary.clone()
+            },
+            "package",
+        ),
+        (
+            ContractExport {
+                async_behavior: ContractClaim::Known("promise".into()),
+                ..summary.clone()
+            },
+            "package",
+        ),
+        (
+            ContractExport {
+                kind: "component".into(),
+                ..summary.clone()
+            },
+            "package",
+        ),
+        (summary.clone(), "solid-js"),
+    ] {
+        assert_eq!(
+            proposes_plain(summary, package_name),
+            (false, false, KnowledgeState::Unknown),
+            "{package_name}"
+        );
+    }
+}

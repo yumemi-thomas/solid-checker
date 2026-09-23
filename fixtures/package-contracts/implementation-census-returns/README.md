@@ -12,14 +12,20 @@ valueless-completion walk is clean — `bareCompletion`, `earlyBareReturn`,
 `bareReturnInLoop`, `nestedReturnsValue` — propose `returns: []` beside
 `creates: []` (`closed: ["creates", "returns"]`, `proposedClosures: ["creates",
 "returns"]`), and the plan carries one `{kind: "call", domain: "returns"}`
-closure candidate for each. The five others propose `creates: []` only: the
-walk saw a value-carrying return, an expression body, an `async` modifier or a
-generator asterisk, and silence is "do not propose". (`expressionArrow` is a
-`const` arrow; the generator binds an anonymous callable's walk verdicts
-through its declarator, so it proposes `creates: []` like its siblings.) No
-export's `returns` knowledge is a sidecar candidate unless the walk cleared it,
-because the generator's `Known(None)` means "no reactive return described",
-not "yields nothing".
+closure candidate for each. Of the five others, `asyncVoid` and
+`generatorVoid` propose `creates: []` only: an `async` modifier or a generator
+asterisk hands the caller a promise or an iterator, and silence is "do not
+propose". The three whose walk saw a value-carrying return or an expression
+body — `returnsValue`, `expressionArrow`, `valueReturnInLoop` — propose, since
+ADR 0113, `returns` closed over one `return` whose output is `plain`, beside
+`creates: []`. That is the walk's other positive answer, and it claims nothing
+the walk can see: whether each value is a primitive is the census's to decide
+from the producer's types, and `../implementation-census-primitive-returns` is
+where it does. (`expressionArrow` is a `const` arrow; the generator binds an
+anonymous callable's walk verdicts through its declarator, so it proposes like
+its siblings.) No export's `returns` knowledge is a sidecar candidate unless one
+of the two walks answered, because the generator's `Known(None)` means "no
+reactive return described", not "yields nothing".
 
 What the certifier does with each candidate is pinned by
 `the_probe_gate_tracer_returns_census_*` in

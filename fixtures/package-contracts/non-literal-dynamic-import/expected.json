@@ -13,7 +13,7 @@
             "sha256": "4e3467d677df73a1e0c34b706c8b9fe35c13e44f74268e61acbf2ef82ff20149"
           },
           "exports": {
-            "load": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "load": "summary-b9058521c93fe84af7a3e9a920c45be3b76aea5117c23c7851b56c65849e8a1f",
             "thing": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
           },
           "resolution": {
@@ -42,8 +42,32 @@
       "call": {},
       "shape": "plain"
     },
-    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
-      "call": {},
+    "summary-b9058521c93fe84af7a3e9a920c45be3b76aea5117c23c7851b56c65849e8a1f": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "plain",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
       "shape": "callable"
     }
   }

@@ -91,6 +91,7 @@ fn inferred_entrypoint_workflow_refuses_a_same_named_export_from_the_wrong_subpa
             creates_walk_clean: false,
             creates_walk_declines: Vec::new(),
             returns_walk_clean: false,
+            returns_value_completion: false,
             direct_callback_parameters: Default::default(),
             inherited_from: None,
             merged_props_return: None,
@@ -149,6 +150,7 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
             // proposal, which only a consuming package's walk-clean function
             // export publishes — so the package below is not a dialect one.
             returns_walk_clean: true,
+            returns_value_completion: false,
             direct_callback_parameters: Default::default(),
             inherited_from: None,
             merged_props_return: None,

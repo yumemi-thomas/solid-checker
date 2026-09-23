@@ -7285,6 +7285,14 @@ struct GeneratedOwnerRequirements {
     /// answer a `returns: []` proposal needs.
     clean_returns_walk_by_symbol: HashSet<String>,
     clean_returns_walk_by_function: HashSet<FunctionKey>,
+    /// Functions that same walk declined only because their own body hands the
+    /// caller a value its syntax does not already rule out as a primitive
+    /// (ADR 0113, `solid_reactive_ir::value_completion`), by the same two
+    /// identities. Membership is the positive answer a `returns` proposal over
+    /// a primitive completion needs; whether the value *is* a primitive is the
+    /// census's to decide.
+    value_returns_walk_by_symbol: HashSet<String>,
+    value_returns_walk_by_function: HashSet<FunctionKey>,
     /// ADR 0109: the parameter a props merge the function returns carries the
     /// reactivity of, by the same two identities. Absence is "do not propose".
     merged_props_return_by_symbol: HashMap<String, usize>,
@@ -7443,6 +7451,14 @@ fn generated_owner_requirements_by_symbol(
                     indexed.clean_returns_walk_by_symbol.insert(symbol.clone());
                 }
                 indexed.clean_returns_walk_by_function.insert(key.clone());
+            } else if solid_reactive_ir::value_completion(file, function) {
+                // ADR 0113: the same walk's other positive answer, a plain
+                // function whose completion carries a value its syntax does
+                // not already rule out as a primitive.
+                if let Some(Some(symbol)) = function_symbols.get(&key) {
+                    indexed.value_returns_walk_by_symbol.insert(symbol.clone());
+                }
+                indexed.value_returns_walk_by_function.insert(key.clone());
             }
             // ADR 0109's walk, indexed the same way. It resolves a callee to a
             // dialect primitive, so unlike the one above it is computed inside
@@ -7617,6 +7633,13 @@ fn attach_generated_owner_requirements(
         || default_function
             .as_ref()
             .is_some_and(|key| generated.clean_returns_walk_by_function.contains(key));
+    // ADR 0113: the walk's other positive answer, read the same way.
+    summary.returns_value_completion = symbol
+        .as_ref()
+        .is_some_and(|symbol| generated.value_returns_walk_by_symbol.contains(symbol))
+        || default_function
+            .as_ref()
+            .is_some_and(|key| generated.value_returns_walk_by_function.contains(key));
     // The negative half, carried for measurement only: which blockers the walk
     // named for this export. Attached whichever identity resolved it, in the
     // same order the two `clean` sets are consulted.

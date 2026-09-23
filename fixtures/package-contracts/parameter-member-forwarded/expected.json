@@ -36,7 +36,7 @@
             "sha256": "e9a25ba3bc2a95e5ca23c06bad054060a6ab0a9643ff9f39ee46416dc5efb240"
           },
           "exports": {
-            "channelFor": "summary-c76d3e0fbf22a2978742054c03c948560b34df4f4e7d1375cb69f82906078b96"
+            "channelFor": "summary-1a7afdb2275405a230cd9c0ad48bfbd207c6c1e1ea7c7586831b9597985d318d"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1direct",
@@ -60,6 +60,77 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
+    "summary-1a7afdb2275405a230cd9c0ad48bfbd207c6c1e1ea7c7586831b9597985d318d": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "getThing"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "plain",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [
+          "read-0"
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
     "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d": {
       "call": {
         "callbacks": [],
@@ -90,54 +161,6 @@
           "creates"
         ],
         "reads": []
-      },
-      "shape": "callable"
-    },
-    "summary-c76d3e0fbf22a2978742054c03c948560b34df4f4e7d1375cb69f82906078b96": {
-      "call": {
-        "callbacks": [],
-        "closed": [
-          "callbacks",
-          "reads",
-          "creates"
-        ],
-        "creates": [],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "read-0",
-            "inputs": [
-              {
-                "index": 0,
-                "kind": "parameter",
-                "path": [
-                  "getThing"
-                ]
-              }
-            ],
-            "kind": "read",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "callbacks",
-          "reads",
-          "creates"
-        ],
-        "reads": [
-          "read-0"
-        ]
       },
       "shape": "callable"
     }

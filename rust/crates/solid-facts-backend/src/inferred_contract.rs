@@ -112,9 +112,11 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
             // measurement only — publishing a closure no census can decide
             // would refuse the row instead of proving anything.
             //
-            // The returns census decides empty completion (ADR 0035) and a
-            // single whole-parameter identity. Other described return shapes
-            // remain partial; their enumeration has no complete census.
+            // The returns census decides empty completion (ADR 0035), a single
+            // whole-parameter identity, one merged props root (ADR 0109) and
+            // one plain return over a primitive completion (ADR 0113). Other
+            // described return shapes remain partial; their enumeration has no
+            // complete census.
             let proposable = paths
                 .iter()
                 .filter_map(|path| match path {
@@ -169,14 +171,19 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                 // ADR 0109: a single merged-props return is proposable — the
                 // census decides it against the producer's control-flow and
                 // call censuses, exactly as it decides the whole-parameter
-                // identity beside it.
+                // identity beside it. ADR 0113 adds a single `plain` return,
+                // which the census decides from the producer's types for the
+                // completion and for every return site.
                 .filter(|domain| {
                     *domain != ClaimDomain::Returns
                         || inherited
                         || export.operation_claim(ClaimDomain::Returns).is_some_and(|claim| {
                             matches!(claim.items(), [id] if export.operation(&id.0).is_some_and(|operation| {
                                 operation.kind == OperationKind::Return
-                                    && matches!(&operation.output, Some(ValueShape::MergedProps { .. }))
+                                    && matches!(
+                                        &operation.output,
+                                        Some(ValueShape::MergedProps { .. } | ValueShape::Plain)
+                                    )
                             }))
                         })
                         || export
@@ -626,6 +633,28 @@ fn normalize_export(
                     || (summary.kind == "function" && summary.returns_walk_clean))
             {
                 KnowledgeSet::Complete(Vec::new())
+            } else if scope.publishes_bootstrapped_reactive_domains()
+                && summary.kind == "function"
+                && summary.returns_value_completion
+                && summary.inherited_from.is_none()
+                && matches!(&summary.async_behavior, ContractClaim::Known(protocol) if protocol.is_empty())
+            {
+                // ADR 0113. The body hands its caller a value and the reactive
+                // analysis described none of it as reactive, which is what a
+                // primitive completion looks like from here -- and also what a
+                // plain object does, which syntax cannot always tell apart.
+                // So this proposes the one shape the census can decide from
+                // the producer's types, a single `return` whose output is
+                // `plain`, and the certifier either proves it or withdraws the
+                // operation, and the closure with it, by name.
+                let id = OperationId(format!("{prefix}return"));
+                operations.push(operation(
+                    id.clone(),
+                    OperationKind::Return,
+                    Vec::new(),
+                    Some(ValueShape::Plain),
+                ));
+                KnowledgeSet::Complete(vec![id])
             } else {
                 KnowledgeSet::Unknown
             }

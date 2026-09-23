@@ -13,23 +13,23 @@
             "sha256": "87a0ea207971f76b5048ebada6faceaa578a226f39e849d29410db9431a9b4ca"
           },
           "exports": {
-            "arraySlot": "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7",
-            "arraySlotSetter": "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7",
-            "atZero": "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7",
-            "computedIndex": "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7",
-            "computedProperty": "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7",
-            "defaultedSlot": "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7",
+            "arraySlot": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
+            "arraySlotSetter": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
+            "atZero": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
+            "computedIndex": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
+            "computedProperty": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
+            "defaultedSlot": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
             "literalIndex": "summary-e0a85f36421ff614ee6b9ba3ff7797c403042528759656dc3bfc3bdda47b0a2a",
-            "nestedSlot": "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7",
-            "objectSlot": "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7",
-            "restSlot": "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7",
+            "nestedSlot": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
+            "objectSlot": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
+            "restSlot": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
             "splitVarDeclaration": "summary-8e0be4d304b67d80240227161bc6a7252b29f072d4ade95e867254c8076f10e7",
             "staticProperty": "summary-e0a85f36421ff614ee6b9ba3ff7797c403042528759656dc3bfc3bdda47b0a2a",
             "wholeBinding": "summary-8e0be4d304b67d80240227161bc6a7252b29f072d4ade95e867254c8076f10e7",
-            "wrappedComputedIndex": "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7",
+            "wrappedComputedIndex": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
             "wrappedLiteralIndex": "summary-e0a85f36421ff614ee6b9ba3ff7797c403042528759656dc3bfc3bdda47b0a2a",
-            "wrappedQuotedMember": "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7",
-            "wrappedUnknownProperty": "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7"
+            "wrappedQuotedMember": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
+            "wrappedUnknownProperty": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -100,18 +100,43 @@
       },
       "shape": "callable"
     },
-    "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7": {
+    "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217": {
       "call": {
         "callbacks": [],
         "closed": [
           "callbacks",
-          "reads"
+          "reads",
+          "returns"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "plain",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
         ],
         "proposedClosures": [
           "callbacks",
-          "reads"
+          "reads",
+          "returns"
         ],
-        "reads": []
+        "reads": [],
+        "returns": [
+          "return"
+        ]
       },
       "shape": "callable"
     },

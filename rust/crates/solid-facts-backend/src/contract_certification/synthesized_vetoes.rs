@@ -202,6 +202,7 @@ pub(crate) fn synthesize(
                             Observation::DescribedReads(_) => {
                                 "ADR 0101, described reads enumeration"
                             }
+                            Observation::PrimitiveReturn => "ADR 0113, primitive return",
                             _ => "ADR 0036",
                         },
                         record.domain,
@@ -436,6 +437,12 @@ enum Observation {
     Creates,
     EmptyReturns,
     ParameterReturn(u16),
+    /// ADR 0113: one `return` whose output is `plain`, closed over a primitive
+    /// completion. The contradiction is a normal completion handing back an
+    /// object other than `null`, or a function -- the one thing a primitive
+    /// completion rules out. An empty-return observation would contradict
+    /// every value this claim permits, so it is never substituted.
+    PrimitiveReturn,
     /// The `callbacks: []` claim. Observed from inside the sampled callback
     /// rather than at a checkpoint after the sample loop: a synthesized entry
     /// drains microtasks *after* `runProbeSession` returns, so a queued
@@ -569,6 +576,9 @@ fn candidate_observation(domain: &str, export: &ExportSemantics) -> Option<Obser
                 {
                     Some(Observation::ParameterReturn(*index))
                 }
+                Some(ValueShape::Plain) if operation.kind == OperationKind::Return => {
+                    Some(Observation::PrimitiveReturn)
+                }
                 _ => None,
             }
         }
@@ -625,6 +635,11 @@ impl Observation {
                 observation: "exact on a normal completion: Object.is(result, original argument at the claimed index) is false; object contents and throwing calls are not observed",
                 emit: "",
             },
+            Self::PrimitiveReturn => ReviewedObservation {
+                marker: "return-not-primitive",
+                observation: "exact on a normal completion: typeof result is \"function\", or \"object\" and result is not null; throwing calls and unsampled inputs are not observed",
+                emit: "",
+            },
         }
     }
 
@@ -654,6 +669,9 @@ impl Observation {
             }
             Self::ParameterReturn(_) => {
                 "identity samples use distinct object/callable identities and vary the returned slot separately; at most twelve tuples per overload, no variadic tail or structural object construction; throwing-only runs are incomplete and cannot satisfy the veto"
+            }
+            Self::PrimitiveReturn => {
+                "at most six tuples per overload, no variadic tail or structural object construction; an input outside the sample that makes the export return an object is not observed; throwing-only runs are incomplete and cannot satisfy the veto"
             }
             _ => {
                 "at most six tuples per overload; no variadic tail or structural object construction"
@@ -813,6 +831,9 @@ fn module_source(
     if let Observation::ParameterReturn(index) = observation {
         return identity_module_source(specifier, export, index, signatures);
     }
+    if observation == Observation::PrimitiveReturn {
+        return primitive_return_module_source(specifier, export, signatures);
+    }
     if observation == Observation::NotCallable {
         return not_callable_module_source(specifier, export);
     }
@@ -830,6 +851,7 @@ fn module_source(
         Observation::EmptyReturns => "returns",
         Observation::EmptyCallbacks => "callbacks",
         Observation::ParameterReturn(_)
+        | Observation::PrimitiveReturn
         | Observation::NotCallable
         | Observation::DefaultLibraryAlias(_)
         | Observation::DescribedCallbacks(_)
@@ -1206,6 +1228,56 @@ export async function runProbeSession(_session, harness) {{
   }}
   if (threw > 0) harness.emit({{ marker: "sample-threw", kind: "call", phase: "enter" }});
   if (completed === 0) throw new Error("synthesized identity veto: no sample completed normally");
+  harness.emit({{ marker: "call", kind: "call", phase: "exit" }});
+}}
+"#,
+        specifier = serde_json::to_string(specifier).unwrap(),
+        export = serde_json::to_string(export).unwrap(),
+    )
+}
+
+/// ADR 0113: the module for one `plain` return over a primitive completion.
+///
+/// Every sample the signature admits is called, and the marker fires when a
+/// normal completion hands back anything a primitive cannot be. `typeof` is an
+/// operator, so a package that replaces a global during its import cannot bend
+/// the check, and a `Proxy` still reports `"object"` or `"function"`. A throwing
+/// sample observes nothing, and a run with no normal completion throws so the
+/// gate is incomplete rather than satisfied by silence.
+fn primitive_return_module_source(
+    specifier: &str,
+    export: &str,
+    signatures: &[typefacts::SelectedSignature],
+) -> String {
+    let tuples = sample_tuples(signatures)
+        .into_iter()
+        .map(|arguments| format!("  [{}],", arguments.join(", ")))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        r#"// Synthesized primitive-return veto (ADR 0113).
+// Finite observations only falsify; the authenticated census proves closure.
+import * as subjectModule from {specifier};
+const subject = subjectModule[{export}];
+const samples = [
+{tuples}
+];
+export async function runProbeSession(_session, harness) {{
+  harness.emit({{ marker: "call", kind: "call", phase: "enter" }});
+  if (typeof subject !== "function") throw new Error("synthesized veto: export is not callable");
+  let completed = 0;
+  let threw = 0;
+  for (const args of samples) {{
+    let result;
+    try {{ result = subject(...args); }} catch {{ threw += 1; continue; }}
+    completed += 1;
+    const kind = typeof result;
+    if (kind === "function" || (kind === "object" && result !== null)) {{
+      harness.emit({{ marker: "return-not-primitive", kind: "call", phase: "enter" }});
+    }}
+  }}
+  if (threw > 0) harness.emit({{ marker: "sample-threw", kind: "call", phase: "enter" }});
+  if (completed === 0) throw new Error("synthesized primitive-return veto: no sample completed normally");
   harness.emit({{ marker: "call", kind: "call", phase: "exit" }});
 }}
 "#,

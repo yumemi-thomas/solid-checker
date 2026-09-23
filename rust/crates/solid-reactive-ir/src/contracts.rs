@@ -163,6 +163,7 @@ pub fn project_export_semantics(
         creates_walk_clean: false,
         creates_walk_declines: Vec::new(),
         returns_walk_clean: false,
+        returns_value_completion: false,
         direct_callback_parameters: BTreeSet::new(),
         // A projected dependency export has no body here to walk.
         merged_props_return: None,
@@ -330,8 +331,21 @@ fn project_return(
         .collect::<Vec<_>>();
     returns.sort_by(|left, right| format!("{left:?}").cmp(&format!("{right:?}")));
     returns.dedup();
+    // ADR 0113: a `plain` output carries no reactive capability, which is
+    // exactly what `Known(None)` says of a function whose reactive analysis
+    // described no return. A closed claim whose every return is plain is that
+    // answer, not a shape this projection cannot represent -- reading it as the
+    // latter reopened the domain the contract had closed.
+    let plain_only = !knowledge.items().is_empty()
+        && knowledge.items().iter().all(|id| {
+            export
+                .operation(&id.0)
+                .is_some_and(|operation| matches!(operation.output, Some(ValueShape::Plain)))
+        });
     match (knowledge, returns.as_slice()) {
-        (KnowledgeSet::Complete(items), []) if items.is_empty() => ContractClaim::Known(None),
+        (KnowledgeSet::Complete(items), []) if items.is_empty() || plain_only => {
+            ContractClaim::Known(None)
+        }
         (KnowledgeSet::Unknown, []) => ContractClaim::Open,
         (_, [returned]) => ContractClaim::Known(Some(returned.clone())),
         _ => {
@@ -487,14 +501,14 @@ fn project_owner_requirements(
 mod owner_requirement_projection_tests {
     use std::collections::BTreeSet;
 
-    use super::project_owner_requirements;
+    use super::{project_owner_requirements, project_return};
     use crate::contract_semantics::{
-        ArtifactIdentity, CallClaims, CallSemantics, Cardinality, CardinalityScope, Digest, Event,
-        ExportIdentity, ExportSemantics, ExportTargetIdentity, GuardPartition, KnowledgeSet,
-        Lifetime, Operation, OperationId, OperationKind, OwnerCapabilities, OwnerProduction,
-        OwnerRelation, OwnerRequirements, OwnerSource, Requirement, Resource, ResourceId,
-        ResourceKind, ResourceState, Schedule, StabilityKnowledge, Tracking, Trigger, UpperBound,
-        ValueShape,
+        ArtifactIdentity, CallClaims, CallSemantics, Cardinality, CardinalityScope, ClaimDomain,
+        Digest, Event, ExportIdentity, ExportSemantics, ExportTargetIdentity, GuardPartition,
+        KnowledgeSet, Lifetime, Operation, OperationId, OperationKind, OwnerCapabilities,
+        OwnerProduction, OwnerRelation, OwnerRequirements, OwnerSource, Requirement, Resource,
+        ResourceId, ResourceKind, ResourceState, Schedule, StabilityKnowledge, Tracking, Trigger,
+        UpperBound, ValueShape,
     };
     use crate::{ContractClaim, ContractOwnerRequirement, OwnerRequirementOperation};
 
@@ -584,6 +598,46 @@ mod owner_requirement_projection_tests {
             cleanups: KnowledgeSet::Unknown,
             disposals: KnowledgeSet::Unknown,
         }
+    }
+
+    /// ADR 0113: a closed `returns` whose every operation hands back a `plain`
+    /// value is the consumer's own "no reactive return described", and leaves
+    /// nothing open. The claim has to be closed, and the output plain: an open
+    /// claim, or a closed one over an output this projection cannot represent,
+    /// still opens the domain.
+    #[test]
+    fn a_closed_plain_return_projects_as_no_reactive_return() {
+        let mut returned = operation("return", OperationKind::Return, &[]);
+        returned.output = Some(ValueShape::Plain);
+        let with_returns = |returns: KnowledgeSet<OperationId>, operation: &Operation| {
+            let mut claims = claims();
+            claims.returns = returns;
+            export(claims, vec![operation.clone()], Vec::new())
+        };
+
+        let mut open = BTreeSet::new();
+        let closed = with_returns(KnowledgeSet::Complete(vec![returned.id.clone()]), &returned);
+        assert_eq!(
+            project_return(&closed, &mut open),
+            ContractClaim::Known(None)
+        );
+        assert!(open.is_empty(), "{open:?}");
+
+        let mut open = BTreeSet::new();
+        let partial = with_returns(KnowledgeSet::Partial(vec![returned.id.clone()]), &returned);
+        assert_eq!(project_return(&partial, &mut open), ContractClaim::Open);
+        assert!(open.contains(&ClaimDomain::Returns));
+
+        let mut unknown = returned.clone();
+        unknown.output = Some(ValueShape::Unknown);
+        let mut open = BTreeSet::new();
+        let unrepresented =
+            with_returns(KnowledgeSet::Complete(vec![unknown.id.clone()]), &unknown);
+        assert_eq!(
+            project_return(&unrepresented, &mut open),
+            ContractClaim::Open
+        );
+        assert!(open.contains(&ClaimDomain::Returns));
     }
 
     /// The shape the two frozen Solid 1.x authority documents still carry, and
@@ -1711,6 +1765,7 @@ fn contract_export_function(
         merged_props_return: None,
         creates_walk_declines: Vec::new(),
         returns_walk_clean: false,
+        returns_value_completion: false,
         // ADR 0100: a proposal input read beside the rows. Kept whether or not
         // the callbacks domain above stayed known -- the generator's filter
         // reads both, and an open domain proposes nothing either way.

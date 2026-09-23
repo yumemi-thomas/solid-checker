@@ -30,7 +30,7 @@
 //! this walk has no reachability and does not guess at one.
 
 use solid_facts::FileFacts;
-use solid_facts::ast::FunctionFact;
+use solid_facts::ast::{AstFacts, FunctionFact, ReturnFact, ReturnValueKind};
 
 /// Why the valueless-completion walk declined to propose `returns: []`.
 ///
@@ -68,6 +68,10 @@ pub fn valueless_completion(
     file: &FileFacts,
     function: &FunctionFact,
 ) -> Result<(), ReturnsDecline> {
+    valueless_completion_in(&file.ast, function)
+}
+
+fn valueless_completion_in(ast: &AstFacts, function: &FunctionFact) -> Result<(), ReturnsDecline> {
     if function.r#async {
         return Err(ReturnsDecline::Async);
     }
@@ -77,35 +81,81 @@ pub fn valueless_completion(
     if function.expression_body {
         return Err(ReturnsDecline::ExpressionBody);
     }
+    if let Some(returned) = own_returns(ast, function).find(|returned| returned.argument.is_some())
+    {
+        return Err(ReturnsDecline::ValueReturn {
+            start: returned.span.start,
+            end: returned.span.end,
+        });
+    }
+    Ok(())
+}
+
+/// The generator's **value completion** walk (ADR 0113): whether a plain
+/// function may propose `returns` closed over one `plain` return.
+///
+/// A proposal input, never a proof, exactly as [`valueless_completion`] is. The
+/// certifier's census decides whether every completion *is* a primitive, from
+/// the producer's types; what this decides is the earlier question, whether
+/// there is anything for that census to decide. The positive answer needs the
+/// valueless walk to have declined on a value -- a `return` carrying an
+/// expression, or an expression body -- and no completion of the function's own
+/// whose syntax already rules a primitive out: a function or arrow literal, or
+/// an array or object literal the facts record an element or property of. Each
+/// of those is an object on every run, so proposing over it would only spend a
+/// census refusal. Everything else -- a call, an identifier, a member, an
+/// operator, a literal the facts do not break down (`{}`, `[]`, a class
+/// expression, `new`) -- is left to the census.
+///
+/// Silence is "do not propose": an `async` function or a generator hands its
+/// caller a promise or an iterator whatever the body returns, and a body the
+/// valueless walk cleared is ADR 0035's `returns: []`, never a plain return.
+pub fn value_completion(file: &FileFacts, function: &FunctionFact) -> bool {
+    value_completion_in(&file.ast, function)
+}
+
+fn value_completion_in(ast: &AstFacts, function: &FunctionFact) -> bool {
+    match valueless_completion_in(ast, function) {
+        Ok(()) | Err(ReturnsDecline::Async | ReturnsDecline::Generator) => false,
+        Err(ReturnsDecline::ExpressionBody) => function
+            .expression_return
+            .as_ref()
+            .is_some_and(|returned| !never_primitive(returned)),
+        Err(ReturnsDecline::ValueReturn { .. }) => {
+            own_returns(ast, function).all(|returned| !never_primitive(returned))
+        }
+    }
+}
+
+/// Whether a return's own syntax hands back an object on every run.
+fn never_primitive(returned: &ReturnFact) -> bool {
+    returned.value == ReturnValueKind::Function || returned.structure.is_some()
+}
+
+/// The return facts `function`'s *own* body writes, in source order.
+fn own_returns<'a>(
+    ast: &'a AstFacts,
+    function: &'a FunctionFact,
+) -> impl Iterator<Item = &'a ReturnFact> + 'a {
     let body = function.body;
-    for returned in &file.ast.returns {
+    ast.returns.iter().filter(move |returned| {
         if returned.span.start < body.start || returned.span.end > body.end {
-            continue;
+            return false;
         }
         // Owned by a nested callable: some *other* function whose span lies
         // inside this body and *strictly* contains the return fact. Strict,
         // because a return fact's span is its argument's span when it has one:
         // `return () => …` yields a fact whose span *is* the arrow's, and that
         // arrow does not own the return — it is the value returned.
-        let nested = file.ast.functions.iter().any(|other| {
+        !ast.functions.iter().any(|other| {
             other.span != function.span
                 && other.span.start >= body.start
                 && other.span.end <= body.end
                 && (other.span.start < returned.span.start || returned.span.end < other.span.end)
                 && other.span.start <= returned.span.start
                 && returned.span.end <= other.span.end
-        });
-        if nested {
-            continue;
-        }
-        if returned.argument.is_some() {
-            return Err(ReturnsDecline::ValueReturn {
-                start: returned.span.start,
-                end: returned.span.end,
-            });
-        }
-    }
-    Ok(())
+        })
+    })
 }
 
 /// The generator's **merged props return** walk (ADR 0109): which of this
@@ -281,4 +331,79 @@ pub(crate) fn collect_merged_props_returns(
         }
     }
     MergedPropsReturns { by_file }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ReturnsDecline, value_completion_in, valueless_completion_in};
+    use solid_facts::ast;
+
+    /// Both walks' answers for the outermost function `source` declares.
+    fn answers(source: &str) -> (Result<(), ReturnsDecline>, bool) {
+        let facts = ast::extract("test.js", source).unwrap();
+        let function = facts
+            .functions
+            .iter()
+            .min_by_key(|function| (function.span.start, std::cmp::Reverse(function.span.end)))
+            .expect("the source declares a function");
+        (
+            valueless_completion_in(&facts, function),
+            value_completion_in(&facts, function),
+        )
+    }
+
+    /// ADR 0113: the value completion walk proposes exactly where the
+    /// valueless walk declined on a value and no own completion is a literal
+    /// that is an object on every run. Everything it cannot rule out syntactically
+    /// is the census's to decide.
+    #[test]
+    fn a_value_completion_is_proposed_unless_its_syntax_rules_a_primitive_out() {
+        for source in [
+            "function f() { return 1; }",
+            "const f = () => true;",
+            "const f = () => void 0;",
+            "function f(value, min, max) { return Math.min(Math.max(value, min), max); }",
+            "function f(value) { return value !== null && typeof value === 'object'; }",
+            "function f(flag) { if (flag) { return; } return flag ? 1 : -1; }",
+            // A nested callable's completion is not this function's.
+            "function f() { function inner() { return {}; } return inner.length; }",
+            // Not ruled out by syntax, so the census decides -- and refuses.
+            "function f(value) { return value; }",
+            "function f() { return {}; }",
+            "function f() { return new Map(); }",
+        ] {
+            let (valueless, value) = answers(source);
+            assert!(valueless.is_err(), "{source}");
+            assert!(value, "{source}: the census decides");
+        }
+        for source in [
+            "function f() { return () => 1; }",
+            "function f() { return function () {}; }",
+            "const f = () => () => 1;",
+            "function f(value) { return { value }; }",
+            "function f(value) { return [value]; }",
+            "const f = (value) => ({ value });",
+            // One completion that is certainly an object is one too many.
+            "function f(flag) { if (flag) { return 1; } return () => 1; }",
+        ] {
+            let (valueless, value) = answers(source);
+            assert!(valueless.is_err(), "{source}");
+            assert!(!value, "{source}: syntax already rules a primitive out");
+        }
+        // A valueless body is ADR 0035's `returns: []`, and an `async` function
+        // or a generator hands back a promise or an iterator: none proposes.
+        assert_eq!(answers("function f() {}"), (Ok(()), false));
+        assert_eq!(
+            answers("function f(flag) { if (flag) { return; } }"),
+            (Ok(()), false)
+        );
+        assert_eq!(
+            answers("async function f() { return 1; }"),
+            (Err(ReturnsDecline::Async), false)
+        );
+        assert_eq!(
+            answers("function* f() { return 1; }"),
+            (Err(ReturnsDecline::Generator), false)
+        );
+    }
 }

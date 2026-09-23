@@ -31,7 +31,7 @@ pub use attribution::ObligationReach;
 pub use creates_walk::{CreatesDecline, CreatesDeclineKind, CreatesProposalWalk};
 pub use owners::function_binding_name;
 pub use pipeline::{build, build_with_accepted_contracts_measured};
-pub use returns_walk::{ReturnsDecline, valueless_completion};
+pub use returns_walk::{ReturnsDecline, value_completion, valueless_completion};
 
 pub use upstream_compat::rule_options::{RuleOptions, RuleOverride};
 
@@ -1108,6 +1108,16 @@ pub struct ContractExport {
     /// proposal input for `returns: []` and never a proof; `false` is
     /// "do not propose", including for a summary no walk reached.
     pub returns_walk_clean: bool,
+    /// Whether that same walk declined *only* because this export's own body
+    /// hands its caller a value, and no such completion is a literal that is an
+    /// object on every run (ADR 0113, `returns_walk::value_completion`): a
+    /// non-`async`, non-generator function with a value-carrying `return` or an
+    /// expression body. It is the shape a `returns` closure over a primitive
+    /// completion can describe, and a proposal input only: syntax cannot tell a
+    /// primitive from an object in general, so the certifier's implementation
+    /// census decides that from the producer's types. `false` is "do not
+    /// propose", including for a summary no walk reached.
+    pub returns_value_completion: bool,
     /// The parameters this export's own body calls directly -- the callee is
     /// the parameter itself, and the call is written in the body of the
     /// function that declares it, outside any nested callable (ADR 0100). The
