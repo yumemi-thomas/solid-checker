@@ -15,13 +15,19 @@
 // corpus keeps a module nobody runs, and a later regeneration adds a second
 // family beside it rather than replacing it.
 //
-// Measured 2026-09-16 against the pinned census run: **1 of 325 recipes
+// First measured 2026-09-16 against the pinned census run: **1 of 325 recipes
 // addressed a claim the run proposed.** All 159 `solid-primitives-utils-*`
 // modules addressed none -- including the twenty the corpus README describes as
 // closing `@solid-primitives/utils@6.4.1`'s `.` reads domains, against a run
 // that certified exactly that package at exactly that version. The corpus holds
 // five separate `noop`-reads recipes, one per historical artifact case, and all
 // five are dead.
+//
+// Re-measured 2026-09-18 after forty-one Solid 2 recipes were written from this
+// report's own worklist: **80 of 366**, and the cost below fell from 343
+// consumer call sites to 24. The number this gate exists to hold down is that
+// cost, not the ratio -- a corpus carrying recipes for packages a run does not
+// certify keeps the ratio low for no reason.
 //
 // # What counts as stale, and what does not
 //

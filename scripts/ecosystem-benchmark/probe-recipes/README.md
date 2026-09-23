@@ -44,6 +44,9 @@ does. Re-read the ids from a run's `…certification-audit.json`
 
 ### It is not a hypothetical weakness: measured 2026-09-16, 1 of 325 addressed
 
+*(Historical. The 2026-09-18 section at the foot of this file re-measures it at
+80 of 366, with the cost down from 526 sites to 24.)*
+
 `scripts/probe-recipe-addressing.mjs` measures it against a census run and pins
 the answer at `benchmarks/ecosystem/probe-recipe-addressing.json`. The first
 run found **one** recipe still addressing a claim the run proposed. All 159
@@ -558,3 +561,102 @@ unmeasured behind the `motion-utils` snapshot-replay blocker.
 `scripts/ecosystem-probe-recipes.test.mjs` pins the manifest's shape, that every
 declared module exists and exports `runProbeSession`, and that no module names
 `session` or `harness` in a position that hands either to a package.
+
+## Forty-one Solid 2 `reads` recipes, written from the coverage census (2026-09-18)
+
+The first batch chosen by **consumer demand** rather than by what a certification
+run happened to leave open. `contract-coverage-census.mjs`'s Solid 2 pin says 270
+of 1,874 measured call sites are degenerate — nothing determined — and joining
+those sites to the run's `withheldClosures` said 238 of them were blocked by
+`no recipe in corpus` on `reads`. That made this corpus look like the wall.
+
+**It was half of the wall, and finding out which half is most of what this batch
+bought.** The fifteen `@solid-primitives/utils@7.0.0-next.4` recipes here —
+`entries`, `keys`,
+`tryOnCleanup`, `defaultEquals`, `defer` on `1bea9ecd`, and `pick`, `omit`,
+`update`, `split`, `concat`, `add`, `substract`, `multiply`, `divide`, `power`
+on `./immutable`'s `b70ad6d1` — all address, all run, and none closes a domain.
+Every one of them turned a `no recipe in corpus` withholding into the census
+refusal underneath it, in three classes:
+
+| refusal | exports |
+| --- | --- |
+| `domain-exhaustiveness`, `callSignatureNotUnique` | `entries`, `keys`, `tryOnCleanup`, `defaultEquals` |
+| `property-access-unknown-accessor`, no reviewed subject root | `pick`, `omit`, `split`, `update`, `concat`, `defer` |
+| `coercion` (BinaryExpression), no reviewed subject root | `add`, `substract`, `multiply`, `divide`, `power` |
+
+That is § 6 of the reads-veto design measured again from the other side: a
+candidate withheld for want of a recipe is weakened out of the plan *before* its
+census runs, so the census's own refusal stays masked and the ranked worklist
+reads it as a corpus gap. These recipes keep it unmasked permanently, which a
+throwing scaffold only does for one run.
+
+### The pass the ranking should have started from
+
+The scaffold's own two-pass procedure, run properly: 165 throwing scaffolds into
+a scratch corpus over every withheld candidate in all 30 census rows, one
+certification, then read that audit. It splits 914 withheld closures into
+
+| blocker | closures |
+| --- | --- |
+| census refused (all classes) | 508 |
+| **serviceable — the scaffold held the plan and the census did not refuse** | **70** |
+| harness realm (`window` absent, TypeScript stripping, no jsx-free premise) | 115 |
+| veto incomplete, other | 217 |
+| no recipe left in the corpus | 4 |
+
+**236 consumer call sites** sit behind those 70 — a number that lands near the
+238 above without being it, which is the whole point: the two sets barely
+overlap. The other twenty-six recipes here take 225 of those 236, leaving
+`getScrollParent` (2 sites; it reaches `document`, which the Node probe realm
+has not got), `@solid-primitives/memo`'s `createLazyMemo` and
+`createWritableMemo` (4), `@solidjs/meta`'s `Title` (2) and
+`@solid-primitives/scheduled`'s `throttle` (1), plus the zero-demand tail:
+
+- `@kobalte/utils@2.0.0-alpha.0` on four `.` cases — `callHandler` (112 sites,
+  the most expensive single export the corpus leaves open), `composeEventHandlers`
+  (48), `clamp` (16), `isPointInPolygon` (6);
+- `@solid-primitives/rootless@2.0.0-next.2` on two cases —
+  `createHydratableSingletonRoot` (27), `createSingletonRoot` (7),
+  `createSharedRoot` (its deprecated alias, asserted as the same binding);
+- `@solid-primitives/trigger@3.0.0-next.2` on two cases — `TriggerCache` (6),
+  `createTriggerCache` (3).
+
+Every one is the same shape: either it reads only values the caller passed
+(`callHandler` reads `handler[0]`, `handler[1]` and `event.defaultPrevented`;
+`isPointInPolygon` destructures the caller's vertex list), or it reads nothing
+in its own frame and returns a closure (`composeEventHandlers`,
+`createSingletonRoot` and its siblings, `createTriggerCache`). The reads that
+matter happen at a later event, in a frame this domain does not cover, and the
+samples assert that absence rather than merely failing to observe it — several
+count a recipe-owned getter and require it to have fired **zero** times.
+
+Each was run against the published artifact in a scratch realm before check-in.
+
+**Measured outcome: 84 of the 270 degenerate sites close.** Coverage census,
+same binary, same pinned demand: degenerate 270 -> 186, determined-negative
+442 -> 526, `operations` unchanged at 440 (a `reads: []` closure is a negative,
+not an operation). Per package: `@kobalte/utils` 54 -> 6 degenerate,
+`@solid-primitives/rootless` 30 -> 3, `@solid-primitives/trigger` 9 -> 0,
+`@solid-primitives/utils` 137 -> 137. Addressing: 53 of 325 recipes addressing a
+live claim -> 80 of 366, and the consumer sites costed to a missing recipe fall
+from 343 to 24.
+
+### What this leaves, in the order a reader should take it
+
+1. The reads census's **subject rooting** (ADR 0043's next leg): a property or
+   element access whose subject is a parameter of the *enclosing* export,
+   captured by a nested callable, is the caller's value by exactly ADR 0034's
+   argument and is not rooted today. `pick`, `omit`, `split`, `update` and
+   `concat` all refuse on it.
+2. **ADR 0103's default-library alias**, not stated for an export bound through
+   a local `const` (`const entries = Object.entries`). `Object.keys`,
+   `Object.entries` and `Object.is` are already in the reviewed table; the
+   producer does not name them through that binding, so `entries` and `keys`
+   refuse on `callSignatureNotUnique` with the premise sitting right there.
+3. The **browser realm**: 84 withheld closures fail with `window is not defined`
+   because ADR 0037 makes a launch carry `--conditions=browser` so it runs the
+   certified bytes, while the ordinary certification path has only the Node
+   execution profile. ADR 0033's `chromium-headless-shell-cdp-pipe-esm-v1`
+   profile exists but is reachable only through a controlled execution.
+   `@solid-primitives/platform` is entirely degenerate for this reason.

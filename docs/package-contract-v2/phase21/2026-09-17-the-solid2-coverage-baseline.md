@@ -81,3 +81,37 @@ Two ways out, both deliberate and neither taken here:
 
 Until one of those lands, the Solid 2 coverage signal is the three buckets over
 1,152 sites that are in-surface, not the headline share over 1,874.
+
+## Superseded in part, 2026-09-18
+
+The `degenerate` column of this baseline no longer holds. Forty-one hand-written
+`reads` recipes closed 84 of its 270 degenerate sites, moving them to
+`closed-empty`:
+
+| | this baseline | recipes | + ADR 0112 |
+| --- | --- | --- | --- |
+| an operation is stated | 440 | 440 | 440 |
+| determined: states nothing | 442 | 526 | **585** |
+| degenerate: nothing determined | 270 | 186 | **127** |
+| absent / owner requirement | 722 / 34 | 722 / 34 | 722 / 34 |
+
+Two changes, same corpus and same frozen demand throughout. Forty-one
+hand-written `reads` recipes closed 84 sites; ADR 0112 then narrowed one clause
+of ADR 0103's stability guard and closed 59 more — `entries` and `keys`, whose
+vetoes the recipe pass had already written. No `operations` claim was gained by
+either: a `reads: []` closure is a determined negative. The in-surface signal
+this document defines, over the 1,152 sites the corpus can be asked about, goes
+from 76.6% determined to **89.0%**.
+
+The two open decisions above are untouched: demand is still the frozen 1.x-era
+sweep, and `absent` is still undivided. `docs/precision-backlog.md`'s 2026-09-18
+entry records what still holds the remaining 186.
+
+A third reason for option 1 surfaced on 2026-09-18: a demand row carries
+`package` and `export` and no entrypoint, so the census resolves it by export
+name across every nameable entrypoint. `@kobalte/core@2.0.0-alpha.0` declares
+only `"./*"` and no root, and 16 sites that import `Select`, `Tabs`, `Dialog`,
+`Popover` and `Collapsible` from the package root are counted as `degenerate`
+against summaries published at `./select` and its siblings, which those
+consumers cannot reach. That is churn filed as a gap, and unlike the `absent`
+relabel it cannot be corrected from the artifact alone.

@@ -461,12 +461,19 @@ export function runScope({
   solidTargets = [],
   probeIds = [],
   packages = [],
+  conditions = [],
   includeSupplemental = false
 } = {}) {
   const filters = [];
   if (sentinel) filters.push("sentinel");
   for (const family of [...families].sort()) filters.push(`family-${family}`);
   for (const target of [...solidTargets].sort()) filters.push(`solid${target}`);
+  // A condition set decides which *bytes* every row is certified about, so a
+  // conditioned run is a different artifact from the default one rather than a
+  // subset of it. It earns a slug component for the same reason a package
+  // filter does, and the scope carries the set so a pin cannot silently claim
+  // a denominator the run did not use.
+  for (const condition of [...conditions].sort()) filters.push(`cond-${condition}`);
   if (packages.length) {
     const digest = createHash("sha256").update([...packages].sort().join("\0")).digest("hex").slice(0, 12);
     filters.push(`packages-${digest}`);
@@ -484,6 +491,7 @@ export function runScope({
     families: [...families].sort(),
     solidTargets: [...solidTargets].sort(),
     probeIds: [...probeIds].sort(),
+    conditions: [...conditions].sort(),
     ...(packages.length ? { packages: [...packages].sort() } : {}),
     includeSupplemental,
     // A stable, order-independent name for this scope. `full` owns the
@@ -1658,6 +1666,18 @@ function usage() {
                          refuses rather than certifying an unvetoed closure --
                          which is what every row in the current corpus does,
                          since none of them has a recipe yet
+  --conditions <LIST>    extra export conditions, comma-separated, applied to
+                         both proposal generation and certification. Empty by
+                         default, which resolves every artifact case under
+                         "import" alone -- a set with no "node" in it, so a
+                         package whose exports map orders worker, browser,
+                         deno, node, import is certified about its *client*
+                         build, and ADR 0037 then adds --conditions=browser to
+                         make the probe launch agree. Passing "node" selects
+                         the server build on both sides instead. This decides
+                         which bytes every row is certified about, so the run's
+                         scope records it, it earns its own report path, and
+                         the coverage census refuses to pin a run that used one
   --keep-temp            keep the temporary install directories
   --include-supplemental run the unofficial fork rows too (off by default:
                          forks are listed for review, not part of the corpus)
@@ -1699,6 +1719,7 @@ function parseArgs(argv) {
     recoverEntrypoints: false,
     recoverProbeIds: [],
     probeRecipeCorpus: null,
+    conditions: [],
     keepTemp: false,
     includeSupplemental: false,
     help: false
@@ -1790,6 +1811,15 @@ function parseArgs(argv) {
       case "--probe-recipe-corpus":
         options.probeRecipeCorpus = takeValue(argv, index++, arg);
         break;
+      case "--conditions": {
+        const value = takeValue(argv, index++, arg);
+        if (value !== undefined) {
+          options.conditions.push(
+            ...value.split(",").map(item => item.trim()).filter(Boolean)
+          );
+        }
+        break;
+      }
       case "--keep-temp":
         options.keepTemp = true;
         break;
@@ -1933,7 +1963,8 @@ function buildRealHooks({
   durableWrites = false,
   installLockfileCache = null,
   materializedStore = null,
-  probeRecipeCorpus = null
+  probeRecipeCorpus = null,
+  conditions = []
 }) {
   // Generation and certification run inside a pool of long-lived CLI workers
   // (lib/cli-worker.mjs) instead of one CLI process per probe and phase. The
@@ -2028,6 +2059,11 @@ function buildRealHooks({
           outputPath,
           "--certification-importer",
           certificationImporter,
+          // ADR 0037's reproduction search reconciles the *launch* with the
+          // artifact case; this decides which case is selected in the first
+          // place, and generation and certification must be handed the same
+          // set or the proposal describes bytes the certification did not read.
+          ...(conditions.length ? ["--conditions", conditions.join(",")] : []),
           ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])
         ],
         env: generationEnvironment,
@@ -2084,6 +2120,7 @@ function buildRealHooks({
           // proposes a closed claim domain refuses its mandatory veto instead
           // of certifying it unvetoed.
           ...(probeRecipeCorpus ? ["--probe-recipe-corpus", probeRecipeCorpus] : []),
+          ...(conditions.length ? ["--conditions", conditions.join(",")] : []),
           ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])
         ],
         env: certificationEnvironment,
@@ -2172,6 +2209,7 @@ async function main(argv = process.argv.slice(2)) {
     families: options.families,
     solidTargets: options.solidTargets,
     probeIds: options.probeIds,
+    conditions: options.conditions,
     includeSupplemental: options.includeSupplemental
   });
   const defaults = defaultReportPaths(scope);
@@ -2262,7 +2300,8 @@ async function main(argv = process.argv.slice(2)) {
     materializedStore: options.materializedStore ? DEFAULT_MATERIALIZED_STORE : null,
     probeRecipeCorpus: options.probeRecipeCorpus
       ? resolve(options.probeRecipeCorpus)
-      : null
+      : null,
+    conditions: options.conditions
   });
   const scheduleCosts = historicalScheduleCosts();
 

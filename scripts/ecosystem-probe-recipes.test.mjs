@@ -364,6 +364,24 @@ describe("the checked-in fixture recipe corpora", () => {
   // `useKeyedContext`, whose read goes through Solid's own `useContext` and so
   // belongs to `solid-js` rather than to this package.
   //
+  // The forty-one vetoes added on 2026-09-18 are the same shape once more, and
+  // were written for the demand the coverage census measures rather than for
+  // the corpus's own sake. Twenty-six of them cover `@kobalte/utils@2.0.0-alpha.0`,
+  // `@solid-primitives/rootless@2.0.0-next.2` and
+  // `@solid-primitives/trigger@3.0.0-next.2`, whose exports either read only
+  // values the caller passed (`callHandler`, `isPointInPolygon`, `clamp`) or
+  // read nothing in their own frame at all and return a closure
+  // (`composeEventHandlers`, `createSingletonRoot` and its hydratable and
+  // deprecated siblings, `createTriggerCache`). The other fifteen cover
+  // `@solid-primitives/utils@7.0.0-next.4`:
+  // `entries`/`keys` are `Object.entries`/`Object.keys` under another name,
+  // `defaultEquals` is `Object.is`, `tryOnCleanup` delegates to Solid's
+  // `onCleanup`, `defer` reads nothing in its own frame, and the `./immutable`
+  // helpers read the caller's structure and write only the copy they made.
+  // Several of them do assert a *negative* observation -- that the recipe's
+  // own getter was never invoked -- which is a real falsifier even though the
+  // expected event can never fire.
+  //
   // Pinning the list is what makes a sixth one a decision. A `creates` or
   // `returns` recipe going silent would land here as a diff, where today the
   // only trace is a gate that quietly stops being able to fail.
@@ -483,6 +501,22 @@ describe("the checked-in fixture recipe corpora", () => {
       "floating-ui-utils-get-padding-object-reads-9bc68a12.mjs",
       "floating-ui-utils-get-side-axis-reads-9bc68a12.mjs",
       "floating-ui-utils-rect-to-client-rect-reads-9bc68a12.mjs",
+      "kobalte-utils-call-handler-reads-6d69dd5a.mjs",
+      "kobalte-utils-call-handler-reads-951681e2.mjs",
+      "kobalte-utils-call-handler-reads-9dd8dc77.mjs",
+      "kobalte-utils-call-handler-reads-ba7a1b6e.mjs",
+      "kobalte-utils-clamp-reads-0d98b125.mjs",
+      "kobalte-utils-clamp-reads-6d69dd5a.mjs",
+      "kobalte-utils-clamp-reads-9dd8dc77.mjs",
+      "kobalte-utils-clamp-reads-ba7a1b6e.mjs",
+      "kobalte-utils-compose-event-handlers-reads-6d69dd5a.mjs",
+      "kobalte-utils-compose-event-handlers-reads-951681e2.mjs",
+      "kobalte-utils-compose-event-handlers-reads-9dd8dc77.mjs",
+      "kobalte-utils-compose-event-handlers-reads-ba7a1b6e.mjs",
+      "kobalte-utils-is-point-in-polygon-reads-6d69dd5a.mjs",
+      "kobalte-utils-is-point-in-polygon-reads-9dd8dc77.mjs",
+      "kobalte-utils-is-point-in-polygon-reads-a442b2ae.mjs",
+      "kobalte-utils-is-point-in-polygon-reads-ba7a1b6e.mjs",
       "motion-utils-anticipate-reads-9a3a41a5.mjs",
       "motion-utils-circ-in-reads-9a3a41a5.mjs",
       "motion-utils-clamp-reads-9a3a41a5.mjs",
@@ -514,12 +548,22 @@ describe("the checked-in fixture recipe corpora", () => {
       "solid-primitives-refs-get-first-child-reads-b97f9095.mjs",
       "solid-primitives-refs-get-resolved-elements-reads-b97f9095.mjs",
       "solid-primitives-refs-resolve-first-reads-b97f9095.mjs",
+      "solid-primitives-rootless-create-hydratable-singleton-root-reads-dc706032.mjs",
+      "solid-primitives-rootless-create-hydratable-singleton-root-reads-e5ee9a27.mjs",
+      "solid-primitives-rootless-create-shared-root-reads-dc706032.mjs",
+      "solid-primitives-rootless-create-shared-root-reads-e5ee9a27.mjs",
+      "solid-primitives-rootless-create-singleton-root-reads-dc706032.mjs",
+      "solid-primitives-rootless-create-singleton-root-reads-e5ee9a27.mjs",
       "solid-primitives-scheduled-create-scheduled-reads-6f867f0c.mjs",
       "solid-primitives-scheduled-create-scheduled-reads-e1a524fa.mjs",
       "solid-primitives-scheduled-debounce-reads-6f867f0c.mjs",
       "solid-primitives-scheduled-debounce-reads-e1a524fa.mjs",
       "solid-primitives-scheduled-leading-reads-6f867f0c.mjs",
       "solid-primitives-scheduled-leading-reads-e1a524fa.mjs",
+      "solid-primitives-trigger-create-trigger-cache-reads-1a9bf95a.mjs",
+      "solid-primitives-trigger-create-trigger-cache-reads-6a74e270.mjs",
+      "solid-primitives-trigger-trigger-cache-reads-1a9bf95a.mjs",
+      "solid-primitives-trigger-trigger-cache-reads-6a74e270.mjs",
       "solid-primitives-utils-access-reads-1bea9ecd.mjs",
       "solid-primitives-utils-access-reads-2bf41ff6.mjs",
       "solid-primitives-utils-access-reads-6cd714eb.mjs",
@@ -530,6 +574,7 @@ describe("the checked-in fixture recipe corpora", () => {
       "solid-primitives-utils-access-with-reads-6cd714eb.mjs",
       "solid-primitives-utils-access-with-reads-9887e137.mjs",
       "solid-primitives-utils-access-with-reads-f81b5488.mjs",
+      "solid-primitives-utils-add-reads-b70ad6d1.mjs",
       "solid-primitives-utils-after-paint-reads-1bea9ecd.mjs",
       "solid-primitives-utils-after-paint-reads-2bf41ff6.mjs",
       "solid-primitives-utils-after-paint-reads-6cd714eb.mjs",
@@ -583,6 +628,7 @@ describe("the checked-in fixture recipe corpora", () => {
       "solid-primitives-utils-compare-reads-6cd714eb.mjs",
       "solid-primitives-utils-compare-reads-9887e137.mjs",
       "solid-primitives-utils-compare-reads-f81b5488.mjs",
+      "solid-primitives-utils-concat-reads-b70ad6d1.mjs",
       "solid-primitives-utils-create-callback-stack-reads-1bea9ecd.mjs",
       "solid-primitives-utils-create-callback-stack-reads-2bf41ff6.mjs",
       "solid-primitives-utils-create-callback-stack-reads-6cd714eb.mjs",
@@ -607,6 +653,10 @@ describe("the checked-in fixture recipe corpora", () => {
       "solid-primitives-utils-create-microtask-reads-6cd714eb.mjs",
       "solid-primitives-utils-create-microtask-reads-9887e137.mjs",
       "solid-primitives-utils-create-microtask-reads-f81b5488.mjs",
+      "solid-primitives-utils-default-equals-reads-1bea9ecd.mjs",
+      "solid-primitives-utils-defer-reads-1bea9ecd.mjs",
+      "solid-primitives-utils-divide-reads-b70ad6d1.mjs",
+      "solid-primitives-utils-entries-reads-1bea9ecd.mjs",
       "solid-primitives-utils-false-fn-reads-1bea9ecd.mjs",
       "solid-primitives-utils-false-fn-reads-2bf41ff6.mjs",
       "solid-primitives-utils-false-fn-reads-6cd714eb.mjs",
@@ -639,6 +689,8 @@ describe("the checked-in fixture recipe corpora", () => {
       "solid-primitives-utils-json-reads-6cd714eb.mjs",
       "solid-primitives-utils-json-reads-9887e137.mjs",
       "solid-primitives-utils-json-reads-f81b5488.mjs",
+      "solid-primitives-utils-keys-reads-1bea9ecd.mjs",
+      "solid-primitives-utils-multiply-reads-b70ad6d1.mjs",
       "solid-primitives-utils-noop-reads-1bea9ecd.mjs",
       "solid-primitives-utils-noop-reads-2bf41ff6.mjs",
       "solid-primitives-utils-noop-reads-6cd714eb.mjs",
@@ -654,11 +706,14 @@ describe("the checked-in fixture recipe corpora", () => {
       "solid-primitives-utils-of-class-reads-6cd714eb.mjs",
       "solid-primitives-utils-of-class-reads-9887e137.mjs",
       "solid-primitives-utils-of-class-reads-f81b5488.mjs",
+      "solid-primitives-utils-omit-reads-b70ad6d1.mjs",
+      "solid-primitives-utils-pick-reads-b70ad6d1.mjs",
       "solid-primitives-utils-pipe-reads-1bea9ecd.mjs",
       "solid-primitives-utils-pipe-reads-2bf41ff6.mjs",
       "solid-primitives-utils-pipe-reads-6cd714eb.mjs",
       "solid-primitives-utils-pipe-reads-9887e137.mjs",
       "solid-primitives-utils-pipe-reads-f81b5488.mjs",
+      "solid-primitives-utils-power-reads-b70ad6d1.mjs",
       "solid-primitives-utils-reverse-chain-reads-1bea9ecd.mjs",
       "solid-primitives-utils-reverse-chain-reads-2bf41ff6.mjs",
       "solid-primitives-utils-reverse-chain-reads-6cd714eb.mjs",
@@ -669,11 +724,15 @@ describe("the checked-in fixture recipe corpora", () => {
       "solid-primitives-utils-safe-reads-6cd714eb.mjs",
       "solid-primitives-utils-safe-reads-9887e137.mjs",
       "solid-primitives-utils-safe-reads-f81b5488.mjs",
+      "solid-primitives-utils-split-reads-b70ad6d1.mjs",
+      "solid-primitives-utils-substract-reads-b70ad6d1.mjs",
       "solid-primitives-utils-true-fn-reads-1bea9ecd.mjs",
       "solid-primitives-utils-true-fn-reads-2bf41ff6.mjs",
       "solid-primitives-utils-true-fn-reads-6cd714eb.mjs",
       "solid-primitives-utils-true-fn-reads-9887e137.mjs",
       "solid-primitives-utils-true-fn-reads-f81b5488.mjs",
+      "solid-primitives-utils-try-on-cleanup-reads-1bea9ecd.mjs",
+      "solid-primitives-utils-update-reads-b70ad6d1.mjs",
       "solid-primitives-utils-with-access-reads-1bea9ecd.mjs",
       "solid-primitives-utils-with-access-reads-2bf41ff6.mjs",
       "solid-primitives-utils-with-access-reads-6cd714eb.mjs",

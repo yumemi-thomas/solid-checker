@@ -359,11 +359,20 @@ ecosystem-regression: build-checker-release
 # change silently orphans it -- the candidate is withheld as `no recipe in
 # corpus`, the row still certifies, and the export's summary goes degenerate.
 # It ran first on 2026-09-16 and found 1 of 325 recipes still addressing
-# anything. Both halves are pinned under `benchmarks/ecosystem/`.
+# anything; after the 2026-09-18 authoring pass it is 80 of 366, and the
+# consumer call sites it costs fell from 343 to 24. Both halves are pinned under
+# `benchmarks/ecosystem/`.
 #
 # Not in `make verify`, for `ecosystem-regression`'s reasons: it needs the
 # registry and minutes of compute. Run it when a change could move what a
 # contract *says*, as opposed to whether it certifies at all.
+#
+# **Never add `--conditions` here.** The census refuses to pin a run that used
+# one, because a requested export-condition set changes which bytes every row is
+# certified about rather than which rows ran -- `--conditions node` makes
+# `@solid-primitives/platform`'s gates complete, about its server build, where
+# the default set cannot run them at all. The flag exists on the runner for
+# measuring that trade-off; this target measures the baseline.
 #
 # `--solid 2` since 2026-09-16. It was `--solid 1`, and after the Solid 1.x
 # retirement (ADR 0110) that run would refuse every package with SC9013 and

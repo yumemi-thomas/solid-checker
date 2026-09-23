@@ -818,7 +818,9 @@ same tree with the nine-recipe corpus: `no recipe in corpus` 11,176 → 10,714
 (exactly 11 × 42), certified closure entries 6,636 → 6,678, uncapped `reads`
 closures 52 → 96, no row below baseline, Solid 2 unchanged to the entry. The three most-demanded remaining exports
 (`tryOnCleanup`, `entries`, `keys`) are aliases the census cannot make
-exhaustive; no recipe can move them. Also measured and left alone: the 139
+exhaustive; no recipe can move them. (`entries` and `keys` were later moved, by
+ADR 0112 rather than by a recipe; `tryOnCleanup` is wall 1b and is not an
+exhaustiveness refusal at all.) Also measured and left alone: the 139
 entries refused by `plain_condition_name` for `@tanstack/custom-condition`
 select `src/index.ts` cases, so accepting the name would only re-refuse them
 under ADR 0009 (§ 9 of
@@ -23375,3 +23377,487 @@ So the order is: teach the producer to emit `ambient-at-execution` for a
 callback whose tracking context it cannot establish, keep `untracked` for one it
 proves cleared, re-certify, and only then let a rule read the field. Doing the
 rule first inverts the dependency and ships false positives.
+
+## The probe-recipe corpus was half the coverage wall (2026-09-18)
+
+Status: **measured, and the first wall has since fallen.** Forty-one recipes
+landed: degenerate sites fell 270 -> 186 and determined-negative rose 442 -> 526,
+so in-surface coverage went 76.6% -> 83.9% of the 1,152 sites the Solid 2 corpus
+can be asked about. **None of that came from the fifteen recipes the ranking put
+first**; all 84 sites came from the twenty-six the scaffold's second pass
+identified. The ranking, and the reason it was wrong, is the point of this entry.
+
+ADR 0112 then took wall 2 below and closed its 59 sites exactly: degenerate
+186 -> **127**, determined-negative 526 -> **585**, in-surface coverage
+83.9% -> **89.0%**. Those fifteen recipes are why: `entries` and `keys` had a
+finished veto waiting, so the moment the premise arrived the domain closed with
+no further work. That is the payoff the entry below predicted for keeping them.
+
+### What the ranking said, and why it was wrong
+
+`benchmarks/ecosystem/coverage-census.json` records 270 degenerate sites of
+1,874 measured on the Solid 2 pin — a summary that states nothing and closes
+nothing. Joining those sites to the census run's `withheldClosures` attributed
+**238 of the 270** to `no recipe in corpus` on the `reads` domain, and only 83
+to the implementation census. On that reading the hand-authored probe-recipe
+corpus was the single biggest lever in the project, and the pinned
+`probe-recipe-addressing.json` seemed to agree at "1 of 325 recipes addresses a
+claim" — though that pin was measured against the *Solid 1.x* run it was written
+for, and re-running it against the Solid 2 census gave 53 of 325 and a cost of
+343 consumer sites rather than 526. Both numbers are the same mistake in
+different sizes: they count recipes, and the question is what a recipe could
+close.
+
+It was an artefact of the order the two gates run in.
+`probe-recipe-scaffold.mjs`'s own header states the mechanic and I read past it:
+a candidate withheld as `no recipe in corpus` is **weakened out of the plan
+before its demands are discharged**, so its implementation census never runs and
+a refusal underneath stays masked. `no recipe in corpus` is therefore not a
+statement that a recipe would help. It is a statement that nothing has asked.
+
+### What asking produced
+
+Fifteen recipes for `@solid-primitives/utils@7.0.0-next.4` — the demand-ranked
+head of that 238 — were written, dry-run against the published artifact, and
+certified. Every one addresses its claim and completes. **Certified closures for
+that package: 4 before, 4 after.** All fifteen `no recipe in corpus`
+withholdings became census refusals in three classes:
+
+- `domain-exhaustiveness` — `entries`, `keys`, `tryOnCleanup`, `defaultEquals`.
+  **Corrected 2026-09-18:** the class is one class but the reason is not. Only
+  `entries` and `keys` carry `reasons=["callSignatureNotUnique"]`, and ADR 0112
+  closed both. `tryOnCleanup` and `defaultEquals` carry
+  `reasons=["implementationUnavailable"]` — read off a single-probe re-run of
+  `@solid-primitives/utils@7.0.0-next.4|solid2|head`, where neither export
+  refuses for the reason this line originally attributed to all four. Both are
+  non-exact initializers on an export the `.d.ts` declares with one signature:
+  a conditional for `tryOnCleanup`, `Object.is.bind(Object)` for
+  `defaultEquals`. See wall 1b;
+- `reads-census premise required: the property-access-unknown-accessor form …
+  states no reviewed subject root` — `pick`, `omit`, `split`, `update`,
+  `concat`, `defer`;
+- `reads-census premise required: the coercion form (BinaryExpression) … states
+  no reviewed subject root` — `add`, `substract`, `multiply`, `divide`, `power`.
+
+The scaffold's documented two-pass procedure then gave the honest worklist: 165
+throwing scaffolds over every withheld candidate in all 30 census rows, one
+certification, and read that audit. Of 914 withheld closures, 508 are census
+refusals, 115 are harness-realm failures, 217 are other incomplete vetoes, 4
+have no recipe left — and **70 are serviceable**, carrying 236 consumer call
+sites. Twenty-six recipes now cover those, minus `getScrollParent` (it reaches
+`document`, which the Node probe realm has not got) and the zero-demand tail.
+
+### The walls, in the order they are worth taking
+
+Three when this entry was written; four once the first one was measured properly
+and turned out to be three premises rather than one, and the platform one turned
+out to be two. The count is not the point — each heading below is one reviewed
+decision, and each names what it is worth.
+
+**1. Three premises about values the package itself built — and *not*, as the
+first two versions of this entry claimed, a captured parameter.**
+
+The refusal a consumer sees is "states no reviewed subject root, so whose value
+it reads is undecided", and I read that twice as "a parameter of the censused
+export, read from inside a nested callable, is not rooted". It is rooted.
+Measured against the producer directly: in
+`pick = (object, ...keys) => keys.reduce((n, k) => { … n[k] = object[k] … }, {})`
+the caller's `object[k]` states `subjectRoot: parameter, captured: true`, and
+the form that refuses is `n[k]` — the reduce **accumulator**. So this is not
+ADR 0043's next leg, and erasing the nested callable would not help.
+
+What refuses is every subject *this package built*, reached through one of three
+shapes. Per export, every unrooted form of the real
+`@solid-primitives/utils@7.0.0-next.4` `./immutable` bundle:
+
+| export | forms | unrooted | leg |
+| --- | --- | --- | --- |
+| `pick` | 2 | 1 | `nested-parameter` (the `reduce` seed `{}`) |
+| `update` | 5 | 5 | `nested-parameter` (the copy `withCopy` made) |
+| `omit` | 1 | 1 | a `withObjectCopy` callback parameter shadowing `object` |
+| `split` | 6 | 5 | `local-binding`, `local-binding-from-call`, an `iteration-protocol` |
+| `concat` | 3 | 3 | `written-parameter` (the rest array's elements) |
+
+Three distinct premises, none of them in ADR 0043's parameter family:
+
+1. **A callback's own parameter, bound to a value this package made and handed
+   to a higher-order callee.** `pick`, `update`, `omit`. For `omit` and `update`
+   the callee is local (`withObjectCopy`, `withCopy`), so a walk could follow
+   it; for `pick` it is `Array.prototype.reduce` and the binding is the
+   engine's.
+2. **A local bound to a local call's result** — `split`'s
+   `shallowObjectCopy(object)`. ADR 0043 lists `localBindingFromCall` as
+   refusing by name; ADR 0093 admitted a narrow case of it as
+   `parameter-or-own-result`.
+3. **A rest parameter's element** — `concat`'s `a[i]`. ADR 0043 excludes rest
+   deliberately, because the array is the engine's rather than the caller's;
+   ADR 0044 roots an *object* rest element as a value this program built, and
+   the array case is the unwritten half.
+
+**Refusing all three is correct today, not merely conservative.** An accessor
+reached on an object the package built is exactly this domain's business, and
+closing `reads: []` over it would be the negative-from-missing-knowledge the
+precision contract forbids. What each needs is a premise that the built value
+carries no accessor — ADR 0044's family rather than ADR 0043's — and that is a
+larger design question than "root one more spelling".
+
+Pinned by `TestSubjectRootLegsOfTheImmutableFamily`
+(`apps/solid-typefacts/internal/typefacts/tsgo/uncensused_invoking_forms_test.go`),
+whose first row is the pin that refutes the reading this entry used to carry.
+
+The arithmetic five (`add`, `substract`, `multiply`, `divide`, `power`, 15 sites)
+are a fourth and separate class, and **two premises deep, not one** (measured
+2026-09-18 against the real `./immutable/number.js`).
+
+`r += n` is a `coercion` form because `n` is `any` — and it is `any` for a named,
+already-decided reason. ADR 0038's declared-signature premise would type it: the
+published `.d.ts` says `(a: number, ...b: number[]) => number`, and classifying
+the body under that signature is the premise every consumer of the transcript
+already accepts. `premiseAnnotationLocked` refuses it on one guard,
+`"declared signature has a rest parameter"`, which ADR 0038 excluded
+deliberately along with mismatched arity.
+
+**The guard is the whole of it, for the form.** The same body carrying by hand
+the exact JSDoc tag the twin would insert —
+`/** @type {typeof import("./index.d.ts").rest} */` — records **no uncensused
+form at all**, coercion or iteration. Pinned with its control by
+`TestDeclaredSignaturePremiseRefusesARestParameterAndWhatThatCosts`
+(`apps/solid-typefacts/internal/typefacts/tsgo/declared_signature_premise_test.go`).
+
+**Sized: 46 refusals in the pinned corpus report name this guard**, over six
+exports in three packages — `@solid-primitives/utils`' `substract`, `multiply`,
+`divide` and `power`; `@solid-primitives/event-props`' `createEventProps`;
+`@solidjs/h`'s default — in the `callbacks` and `creates` domains, not only
+`reads`. (`add` is absent from that list: it publishes two overloads,
+`...a: number[]` and `...a: string[]`, and takes a different path with an empty
+refusal.)
+
+**But relaxing the guard alone closes nothing**, which is why it is recorded
+rather than built. Probed against the real artifact, `add`, `substract` and
+`multiply` are *also* open on `controlFlowUnsupported`, marker
+`iterationReachability` — the `for…of` every one of them is written with. That
+is a second, independent premise about whether a loop body runs, and both have
+to land before a single one of these 15 sites moves. Building the rest-parameter
+half first would produce a correct premise with no row behind it, which is the
+outcome the 2026-09-14 tier-B census already named once.
+
+**Not measured, and deliberately not:** whether `createEventProps` and
+`@solidjs/h`'s default carry the second gate too. Neither package is in the
+materialized store, and installing one to answer a local semantic question is
+what AGENTS.md forbids. If either turns out to be blocked by the rest guard
+alone, the guard becomes worth relaxing on its own and this entry's conclusion
+changes.
+
+**1b. `tryOnCleanup`'s 37 sites are gated on `@solidjs/signals.onCleanup`, and
+this entry re-derived a result the repository already held.** Settled
+2026-09-18. Two readings this entry carried before are wrong; both are corrected
+here, and the correct one was written down on 2026-09-14 in
+`docs/package-contract-v2/phase21/2026-09-14-tier-b-remaining-census.md` (group
+B-2) and `…/2026-09-14-implementation-unavailable-census.md`, which I did not
+read before writing the versions above.
+
+**It does not refuse with `callSignatureNotUnique`.** Read off a single-probe
+re-run of `@solid-primitives/utils@7.0.0-next.4|solid2|head`:
+
+    census refused: domain-exhaustiveness (artifact-case:1bea9ecd…:tryOnCleanup):
+    runtime implementation transcript is incomplete or open
+    (reasons=["implementationUnavailable"])
+
+`defaultEquals` carries the same reason at the same case. After ADR 0112,
+`entries` and `keys` — the two that *did* carry `callSignatureNotUnique` — no
+longer refuse at all, so nothing in this package refuses for that reason now.
+
+**It is not a resolution or condition-set consequence.** The private Type Facts
+project was observed directly while the run held it, by polling
+`$TMPDIR/solid-checker-typefacts-project-*`: it materializes
+`@solid-primitives/utils`, `solid-js` **and** `@solidjs/signals`, which is what
+`solid-js@2`'s typings re-export `onCleanup` from. With that closure the declared
+type resolves to exactly one signature, `(fn: Disposable) => Disposable`.
+Nothing degrades to `any`. A project one package shallower — `solid-js` present,
+`@solidjs/signals` absent — does collapse to `any` and does refuse with
+`callSignatureNotUnique`; that is the shape the earlier `complete: true` probe
+was measuring against, and it is not the shape the certification builds. So the
+condition-set decision is worth 18 sites (wall 3), not 55.
+
+**What is actually open is the body.** `dist/index.js` initializes the export
+from a conditional,
+
+    const tryOnCleanup = isDev ? fn => getOwner() ? onCleanup(fn) : fn : onCleanup;
+
+while `dist/index.d.ts` publishes `declare const tryOnCleanup: typeof onCleanup`.
+The call side is therefore unique, and the signature the producer selects is
+declared in a `.d.ts` with no body. The protocol-20 alias hop — what rescues
+`const defaultScheduler = systemSetTimeoutZero` — requires an *exact* alias, an
+identifier initializer. A conditional is not one, `.bind(…)` is not one either,
+so no hop is taken and `implementation.Body() == nil` is the whole refusal.
+Pinned by the `conditionalInitializer` case of
+`TestExportImplementationFollowsAnExactAliasToTheRuntimeBody`
+(`apps/solid-typefacts/internal/typefacts/tsgo/alias_implementation_test.go`).
+
+**And a premise here would still close nothing.** Deciding `tryOnCleanup`'s
+`reads` means deciding both arms; one arm *is* `onCleanup`, so the question
+lands on `@solidjs/signals`. Three measurements, each correcting something this
+entry said a round earlier:
+
+- **The dependency lane is not the instrument.** Re-run with
+  `--dependency-graph-lane`, the row reports `lane: "reused-proposal"`,
+  `externalEdges: []`, and the identical refusal. The lane only routes a
+  *partial* proposal whose refusal census names a dependency-composition case;
+  this row certifies all three entrypoints, so `tryOnCleanup` is a withheld
+  export inside a complete catalog and there is nothing to route.
+- **Certifying `@solidjs/signals` yields nothing to compose, and the reason is
+  one hazard.** `@solidjs/signals@2.0.0-rc.3|solid2|only` certifies: 183
+  exports, **0 proven**, every one of the nine domains unknown for all 183, and
+  **3,477 declined closures, all of kind `runtime-accessor-installation`** —
+  a `Proxy`, a getter descriptor or a swapped prototype installed at run time
+  somewhere in the closure, which opens `reads` for *every export of the case*
+  (`ClosureHazardKind::RuntimeAccessorInstallation`). For a package that *is* a
+  Proxy-based reactive store that is correct rather than a defect, and it means
+  certification can never be the route for this dependency.
+- **The operative authority is the dialect negative table, and it is one row
+  short.** `NEGATIVE_CLAIM_ROWS` in `rust/crates/solid-dialect/src/solid_2.rs`
+  carries 47 rows over 30 exports: 28 `Creates` and 19 `Reads`. `onCleanup` has
+  a `Creates` row and **no `Reads` row**. (An earlier version of this entry
+  cited `pkg/contracts/bundled/solid-v2/solidjs-signals.json` as if it were the
+  operative authority. Its `bundle-index.json` is empty, so it is not an
+  accepted contract — but it is *not* dead either: `AuditedCitation::Summary`
+  rows cite byte ranges inside it. That is exactly why `onSettled` has a `Reads`
+  row and `onCleanup` does not — the file audits twelve exports, and
+  `onCleanup` is not among them.)
+
+So the closure path is two steps and neither is optional:
+
+1. a producer premise that censuses both arms of a conditional initializer —
+   without it there is no claim for anything to attach to; and
+2. a `Reads` row for `@solidjs/signals.onCleanup`, which cannot be derived from
+   a contract summary and needs an `AuditedCitation::Implementation` over the
+   three archive slices the existing `Creates` row already pins
+   (`dist/prod/signals.js`, `dist/dev.js`, `dist/node.cjs`). That is a **new
+   human audit reading**: `RC3_CORE_PRIMITIVES_AUDIT` is
+   `…/audits/2026-09-04-solid-2-rc3-core-primitives-creates.md` and establishes
+   `creates` only. ADR 0007 is explicit that for these five rows the digests pin
+   the *subject* of a reading, not its conclusion, so this is an audit to be
+   performed and reviewed, not a table entry to be added.
+
+The 2026-09-14 tier-B census called B-2 "zero gainable — do not build" and was
+right; what is new here is *why*, named down to the hazard kind and the missing
+row.
+
+The probe corpus cannot reach them either: a recipe vetoes a *closed* claim
+domain, and this one is refused at census before any closure is proposed.
+
+**2. ADR 0103's alias fact is withdrawn by one line of the published bundle.**
+`REVIEWED_DEFAULT_LIBRARY_ALIASES` already holds `Object.keys`, `Object.entries`
+and `Object.is`; `stated_default_library_alias` already accepts a transcript
+open with exactly `callSignatureNotUnique`; and the producer states the fact
+correctly for `const entries = Object.entries; export { entries }`, which is
+exactly the shape `@solid-primitives/utils@7.0.0-next.4` publishes. It states
+nothing for that package anyway, and the cause is line 18 of the same bundle:
+
+    const defaultEquals = Object.is.bind(Object);
+
+`immutableAliasLibrarySourceIsStable` requires every occurrence of the
+*receiver* to be the expression of a property access, because a receiver handed
+to an arbitrary callee may be mutated before the alias is taken —
+`Object.defineProperty(arg, …)` is what it exists to refuse. The check is
+whole-file, so that one bare `Object` argument withdraws the fact from every
+export of the bundle, `entries` (37 sites) and `keys` (22) included.
+
+Bisected and pinned by
+`TestDefaultLibraryAliasIsSuppressedByAReceiverEscapeInTheSameFile`: the alias
+alone states the fact, and so do a sibling member alias, a member call and
+`.bind(undefined)`; only the container-as-argument form suppresses it. The
+paired control is `@floating-ui/utils`, whose `Math.floor`/`min`/`max`/`round`
+aliases sit in a file where `Math` never escapes — same producer, same reviewed
+members, fact stated. So the detection works and the guard is what differs.
+
+**The refusal was not obviously wrong**, which is why this became an ADR rather
+than a patch. **Resolved by ADR 0112 (2026-09-18).**
+`Container.member.bind(Container)` is now reported as a named escape instead of
+refusing the file's aliases: `Function.prototype.bind` neither mutates its
+`thisArg` nor invokes the target, so the aliased value is the library's own, and
+whether the *bound target* can rewrite the container later is the same reviewed
+question the consumer's member table already answers. The producer names each
+escaped member on `DefaultLibraryAlias.containerEscapes` and decides nothing;
+the certifier requires every entry to be a member it has reviewed and reads the
+whole fact as not stated otherwise. Handshake protocol 59 -> 60.
+
+**Measured: 59 of 59.** `@solid-primitives/utils`' degenerate sites fell 137 ->
+78, which is `entries` (37) and `keys` (22) and nothing else; `tryOnCleanup`
+stayed at 37, as the entry below predicted, because it is not a default-library
+member. Four premises gate the escape shape and every other escape still
+withdraws the fact from the whole file — the negatives are pinned in
+`TestDefaultLibraryAliasNamesAReviewableContainerEscape` and the consumer's
+review in `a_container_escape_the_table_has_not_reviewed_withdraws_the_alias`.
+
+**There is no second blocker, and that was measured rather than assumed.**
+`contract_certification::tests::a_reviewed_default_library_alias_closes_by_identity`
+certifies a fixture export `entries` that *is* `Object.entries` and asserts the
+`reads` domain closes on the stated identity, nothing withheld. Run armed
+(`CERTIFICATION_ENV` + `SOLID_CHECKER_EXPECT_PROBE_PINS=1`) it takes 10.8s, so
+it is not the silent early return those tests take when the pins are absent. The
+arm fires whenever the fact is stated.
+
+So the 59 sites are held by the guard and by nothing else, and ADR 0103 closing
+zero corpus rows has a complete explanation: the one corpus package whose
+exports the reviewed table covers is the one with the escape.
+`@floating-ui/utils` states the fact and closes nothing for a different and
+uninteresting reason — it is a dependency node of corvu and kobalte rows rather
+than a census row, so its `reads` domains are not what the census counts.
+
+**3. The witness and the probe realm disagree about which Solid build exists,
+and ADR 0037 resolves it towards the one Node cannot run.** 84 withheld closures
+in the census run report `the worker threw: ReferenceError: window is not defined`.
+
+The chain is in `REPRODUCTION_CONDITIONS`' own doc comment, and the consequence
+is not. An artifact case is selected under *the consumer's conditions plus
+`default`*, a set with no `node` in it, so for a package whose `exports` lists
+`worker, browser, deno, node, development, import` — which every `solid-js` and
+`@solidjs/web` in the audited corpus does — the witness reads the **client**
+build. A plain Node launch applies `node` and would read the **server** build
+instead, so the reproduction search adds `--conditions=browser` to make the
+interpreter land on the certified file. It does, and then the certified file
+touches the DOM.
+
+`@solid-primitives/platform@1.0.0-next.2` is the clean case: its own `exports`
+declares exactly one runtime target, so no condition of its own is in play, and
+its source is written to survive either realm —
+
+    const w = isServer ? { document: {}, navigator: { userAgent: "" } } : window;
+
+`isServer` comes from `@solidjs/web`, which the added `browser` condition flips
+to the client build, so `w` is `window` and the module throws on import. Under
+plain Node it resolves to `dist/server.js`, `isServer` is `true`, and the module
+evaluates fine — verified by importing it directly. All 18 of that package's
+demanded sites are degenerate for this and nothing else.
+
+So there are two ways out and they are different decisions:
+
+- **Select the artifact case under a set that includes `node`**, so the witness
+  and the launch agree on the *server* build. It changes which bytes every
+  Solid-dependent row is certified about, and a consumer bundling for the
+  browser gets the other ones.
+- **Make the browser execution profile reachable.** ADR 0033's
+  `chromium-headless-shell-cdp-pipe-esm-v1` exists, is pinned, and is exercised
+  by the Rust tracers, but `execution_profile` is an input to a *controlled
+  execution* request only. Nothing on the certification path can ask for it, so
+  the benchmark cannot run a gate in the realm its own artifact case was
+  selected under. A headless shell is otherwise available (`PROBE_BROWSER`).
+
+### The first option is now measurable, and it hits a second wall
+
+`scripts/ecosystem-benchmark/run.mjs` gained `--conditions <LIST>`, threaded to
+both proposal generation and certification so the two halves cannot disagree
+about which case a proposal describes. The set is recorded in the run's scope,
+earns its own report path, and `contract-coverage-census.mjs` **refuses to pin a
+run that used one** — a conditioned run reports coverage the default one cannot
+reach, about bytes the default one does not certify, and the buckets are named
+the same either way.
+
+Measured on `@solid-primitives/platform@1.0.0-next.2`, both probes:
+
+| | default | `--conditions node` |
+| --- | --- | --- |
+| withheld closures | 46 | 46 |
+| `window is not defined` | **46** | **0** |
+| `could not resolve "seroval"` | 0 | **42** |
+| `no recipe in corpus` | 0 | 4 |
+
+So requesting `node` does exactly what the reasoning said: the DOM failure
+disappears completely, because `@solidjs/web` now resolves to `dist/server.js`
+on both sides. What it uncovers is a second, unrelated harness limit — that
+server build imports `seroval`, and the probe worker refuses it:
+
+> the private workspace carries only this transaction's authenticated
+> dependency closure, and "seroval" is reached transitively rather than
+> declared by the analyzed package
+
+That refusal is the authentication boundary doing its job, not a bug: only
+authenticated bytes enter the private workspace, and `seroval` is the
+*dependency's* dependency. Closing it means materialising the transitive closure
+under the same authentication the declared one gets, which is a third decision
+and a larger one than either option above.
+
+**Net for these 18 sites: the browser profile is not required, and the condition
+set alone is not sufficient.** Both walls have to fall, and the second is about
+what the probe workspace is allowed to contain.
+
+### What was deliberately not written
+
+The scaffold's second pass left a tail of serviceable candidates worth 11
+demanded sites that this batch does not cover, and the reason is the precision
+contract rather than effort. `@solidjs/meta`'s `Title` is
+`props => headTag("title", props, true)`, which allocates a memo, installs a
+getter on an object it built, and reads a context this package created;
+`@solid-primitives/memo`'s `createLazyMemo` and `createWritableMemo` build
+memos and signals eagerly on one of their two branches. A `reads: []` veto for
+any of them is a negative claim about a reactive primitive's own sources, and I
+could not establish it to the standard the rest of this corpus is held to for
+one to three sites each. `@kobalte/utils`' `getScrollParent` reaches `document`
+and cannot run in the Node probe realm at all.
+
+That leaves the addressing gate costing 24 consumer sites, down from 343, and
+those 24 are where they are on purpose.
+
+### A fourth thing, found while measuring the third (2026-09-18)
+
+Sixteen of the remaining 186 degenerate sites are `@kobalte/core`'s `Select`,
+`Tabs`, `Dialog`, `Popover` and `Collapsible`, imported from the package root.
+`@kobalte/core@2.0.0-alpha.0` declares exactly one entrypoint — `"./*"` — and no
+root at all, and its certified catalog has 118 documents, none of them for `.`.
+So the import the frozen demand records does not resolve in this major, and
+those sites are the same ecosystem churn as `@kobalte/utils`' 722 `absent` ones.
+
+The census files them as `degenerate` because it resolves a demand row by
+*export name across every nameable entrypoint*, and `./select` does publish a
+`Select`. The comment on `RANK` states that intent — "a name published at two
+nameable entrypoints keeps the strongest statement, because that is the one its
+consumer gets" — and it holds only where the consumer can reach one of those
+entrypoints, which here they cannot.
+
+**It cannot be fixed without re-sweeping demand.** The rows in
+`2026-09-14-consumer-demand-recensus.json` carry `package` and `export` and no
+entrypoint, so the census has nothing to match against. This is a third reason
+for the re-sweep that ADR 0110 § 5 froze and the Solid 2 coverage baseline
+already lists as open decision 1, and it is the first one that makes a *current*
+pinned number wrong rather than merely coarse.
+
+### What moved and what did not
+
+| | before | after |
+| --- | --- | --- |
+| degenerate sites | 270 | **186** |
+| determined: states nothing | 442 | **526** |
+| an operation is stated | 440 | 440 |
+| `@kobalte/utils` degenerate | 54 | **6** |
+| `@solid-primitives/rootless` degenerate | 30 | **3** |
+| `@solid-primitives/trigger` degenerate | 9 | **0** |
+| `@solid-primitives/utils` degenerate | 137 | 137 |
+| recipes addressing a live claim | 53 of 325 | **80 of 366** |
+| consumer sites costed to a missing recipe | 343 | **24** |
+
+`@solid-primitives/utils` is the row that did not move, and it is the row the
+demand ranking put first. Its fifteen recipes are kept anyway: they convert a
+masked blocker into a stated one permanently, where a throwing scaffold does it
+for one run, and each of the three walls above closes its domain the moment it
+lands with the veto already in place.
+
+No `operations` bucket moved, and none was expected to. A `reads: []` closure is
+a determined negative; stating an operation is a different act.
+
+### Where the remaining 127 degenerate sites sit (2026-09-18, after ADR 0112)
+
+Wall 1b settled, so the ranking it implied is wrong and this replaces it. The
+condition-set decision is worth **18 sites**, not 55: `tryOnCleanup`'s 37 are
+`implementationUnavailable` behind a conditional initializer and have nothing to
+do with conditions or resolution.
+
+| holding | sites | what it needs |
+| --- | --- | --- |
+| conditional / bound initializer on a `.d.ts`-declared export | 37 + `defaultEquals` | two steps, both required: a producer premise for a conditional initializer, **and** a new audit reading giving `@solidjs/signals.onCleanup` a `Reads` row (wall 1b). Certification cannot supply the second — that package declines every closure on `runtime-accessor-installation` |
+| values the package itself built | ~41 | three premises of ADR 0044's family (wall 1). The arithmetic five inside it are two premises deep: ADR 0038's rest-parameter guard (46 refusals, 6 exports, 3 packages) **and** `iterationReachability` — neither alone moves a site |
+| `@solid-primitives/platform` | 18 | the condition set **and** what the probe workspace may contain — both, not either (wall 3) |
+| `@kobalte/core` root | 16 | the demand re-sweep ADR 0110 § 5 froze; churn the census cannot reclassify without entrypoints |
+
+None of the four is a defect. Each is a reviewed decision with a measured price,
+and the two cheapest by sites are the two that are not premise work at all.

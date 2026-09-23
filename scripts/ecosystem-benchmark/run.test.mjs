@@ -1267,6 +1267,28 @@ test("runScope records which filters produced a run", () => {
   assert.equal(runScope({}).kind, "full");
 });
 
+// A requested export-condition set is not a filter over rows; it decides which
+// *bytes* every row is certified about. So it has to leave the same trace a row
+// filter does -- a recorded set, a filtered kind and its own report path --
+// because a conditioned run and the default one are different artifacts with
+// identical bucket names. `scripts/contract-coverage-census.mjs` refuses to pin
+// one, and that refusal reads `scope.conditions`.
+test("a requested export-condition set is part of the scope, not a filter over rows", () => {
+  const conditioned = runScope({ solidTargets: ["2"], conditions: ["node"] });
+  assert.equal(conditioned.kind, "filtered");
+  assert.deepEqual(conditioned.conditions, ["node"]);
+  assert.deepEqual(runScope({}).conditions, []);
+  assert.notEqual(
+    defaultReportPaths(conditioned, "/reports").json,
+    defaultReportPaths(runScope({ solidTargets: ["2"] }), "/reports").json
+  );
+  // Order-independent, exactly as every other component is.
+  assert.equal(
+    runScope({ conditions: ["node", "development"] }).slug,
+    runScope({ conditions: ["development", "node"] }).slug
+  );
+});
+
 // ---------------------------------------------------------------------------
 // Lane routing: which proposal lane a probe asks certification for, and which
 // one the audit says produced the proposal.

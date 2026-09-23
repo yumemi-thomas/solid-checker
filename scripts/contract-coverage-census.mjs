@@ -116,12 +116,27 @@ function fail(message) {
 /// The benchmark records `scope.solidTargets` as the bare majors it was
 /// restricted to (`["1"]`, `["2"]`); an unrestricted run measures both and has
 /// no single denominator to pin.
-function censusTarget(run) {
+export function censusTarget(run) {
   const targets = run?.scope?.solidTargets ?? [];
   if (targets.length !== 1) {
     fail(
       `this run measured ${targets.length === 0 ? "every" : targets.length} Solid target(s); ` +
         "the census pin records one denominator, so restrict the run with a single --solid"
+    );
+  }
+  // A requested export-condition set decides which *bytes* each row is
+  // certified about, not merely which rows ran, so a conditioned run answers a
+  // different question with the same buckets. `--conditions node` makes
+  // `@solid-primitives/platform`'s gates complete where the default set cannot
+  // run them at all, and a pin that took those numbers as this baseline's
+  // would read a change of artifact as a change of coverage -- the same
+  // mistake the cross-major refusal above exists to prevent. Measure with it
+  // freely; pin without it.
+  const conditions = run?.scope?.conditions ?? [];
+  if (conditions.length) {
+    fail(
+      `this run requested export conditions [${conditions.join(", ")}], so it is certified ` +
+        "about different bytes than the pinned baseline; re-run without --conditions to pin"
     );
   }
   return `solid${targets[0]}`;

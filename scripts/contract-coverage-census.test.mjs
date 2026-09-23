@@ -3,6 +3,7 @@ import { test } from "vitest";
 
 import {
   census,
+  censusTarget,
   compare,
   consumerState,
   nameableEntrypoint,
@@ -163,6 +164,54 @@ test("the pin fails on a regression in either direction", () => {
     compare(pinned, { totals: { ...pinned.totals, operations: 700, degenerate: 900 } }),
     []
   );
+});
+
+// Which denominator a pin is allowed to claim. Two things disqualify a run, and
+// both are about the run answering a different question with the same buckets:
+// more than one Solid target has no single denominator, and a requested
+// export-condition set changes which *bytes* every row was certified about.
+//
+// The second is not hypothetical. `--conditions node` makes
+// `@solid-primitives/platform`'s probe gates complete -- the default set
+// resolves `@solidjs/web` to its client build, whose `window` the Node probe
+// realm has not got -- so a conditioned run reports coverage the default one
+// cannot reach, for an artifact the default one does not certify. A pin that
+// took those numbers would read a change of artifact as a change of coverage.
+test("a pin is refused for a run with no single denominator", () => {
+  const exits = [];
+  const original = process.exit;
+  const errors = [];
+  const originalError = console.error;
+  process.exit = code => {
+    exits.push(code);
+    throw new Error("exited");
+  };
+  console.error = message => errors.push(message);
+  const attempt = run => {
+    try {
+      return censusTarget(run);
+    } catch (error) {
+      if (error.message !== "exited") throw error;
+      return null;
+    }
+  };
+  try {
+    assert.equal(attempt({ scope: { solidTargets: ["2"], conditions: [] } }), "solid2");
+    assert.deepEqual(exits, []);
+
+    assert.equal(attempt({ scope: { solidTargets: [], conditions: [] } }), null);
+    assert.match(errors.at(-1), /restrict the run with a single --solid/);
+
+    assert.equal(attempt({ scope: { solidTargets: ["2"], conditions: ["node"] } }), null);
+    assert.match(errors.at(-1), /requested export conditions \[node\]/);
+    assert.match(errors.at(-1), /re-run without --conditions to pin/);
+
+    // A run that predates the field is not a conditioned run.
+    assert.equal(attempt({ scope: { solidTargets: ["2"] } }), "solid2");
+  } finally {
+    process.exit = original;
+    console.error = originalError;
+  }
 });
 
 // The consumer view. The census buckets say what a summary *states*; these say

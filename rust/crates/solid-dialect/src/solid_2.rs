@@ -3138,7 +3138,33 @@ mod tests {
                 !authority.denies("solid-js", export, CallClaimDomain::Creates),
                 "solid-js:{export} answered from @solidjs/signals' row; the row is archive-keyed"
             );
+            // And they deny nothing in `reads`, deliberately. The other
+            // nineteen `Reads` rows are derived from a summary's own closure by
+            // the citation test, and these five have no summary to derive from:
+            // `solidjs-signals.json` audits twelve exports and none of these is
+            // among them. `RC3_CORE_PRIMITIVES_AUDIT` is the *creates* audit and
+            // establishes nothing about reads, so a `Reads` row here would be a
+            // conclusion no reading reached -- the exact thing ADR 0007 refuses
+            // to smooth over. Adding one needs a new audit of the same three
+            // archive slices, reviewed as a reading.
+            //
+            // The gap has a measured price: `@solid-primitives/utils`'
+            // `tryOnCleanup` is `isDev ? … : onCleanup`, and deciding its reads
+            // means deciding `onCleanup`'s, which is 37 consumer call sites left
+            // degenerate (docs/precision-backlog.md, wall 1b). Certification
+            // cannot supply the row either -- `@solidjs/signals` declines every
+            // one of its 3,477 closure candidates on
+            // `runtime-accessor-installation`, being a Proxy-based store.
+            assert!(
+                !authority.denies("@solidjs/signals", export, CallClaimDomain::Reads),
+                "@solidjs/signals:{export} gained a reads row; \
+                 it must cite a reading that establishes reads, not the creates audit"
+            );
         }
+        // The control for the five negatives above: a `Reads` question is
+        // answerable, so their silence is this table's answer and not a domain
+        // the authority never says yes to.
+        assert!(authority.denies("@solidjs/signals", "onSettled", CallClaimDomain::Reads));
 
         // `render`'s summary really does publish the operation, so the silence
         // above is the audit's answer and not a missing row.

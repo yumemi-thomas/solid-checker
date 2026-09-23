@@ -108,3 +108,19 @@ like and is not a gap.
 - The probe-recipe corpus, which is what `noRecipe` above is counting: 1 of 325
   recipes still addresses a claim.
 - The tracking-vocabulary gap that caps what any of this can report.
+
+### Update, 2026-09-18: the `noRecipe` half is done, and it was half a wall
+
+Forty-one recipes were written against the worklist above and the coverage
+census's own degenerate sites. `createHydratableSingletonRoot`,
+`createSingletonRoot`, `TriggerCache` and `createTriggerCache` all close;
+`access` does not, because its blocker was `census: call-time invocation` and
+never a recipe. Corpus addressing went 53 of 325 to 80 of 366 and the consumer
+sites it costs fell from 343 to 24; the census's degenerate bucket went 270 to
+186.
+
+The `noRecipe` reason turned out not to be a worklist at all — a candidate
+withheld for one is weakened out of the plan before its census runs, so the
+refusal underneath stays masked. `docs/precision-backlog.md`'s 2026-09-18 entry
+has the measurement and names the three things that actually hold the remaining
+186 sites.
