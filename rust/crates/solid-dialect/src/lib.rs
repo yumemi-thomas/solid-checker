@@ -3449,6 +3449,42 @@ mod tests {
         ));
     }
 
+    /// The 2026-09-23 owner-and-context audit's three rows, each on the package
+    /// that declares the callee a `solid-js` import resolves to.
+    ///
+    /// `runWithOwner` is `@solidjs/signals`' and `solid-js` re-exports it.
+    /// `createContext` and `useContext` are `solid-js`' own: `@solidjs/signals`
+    /// declares a `createContext` of its own too, which `solid-js` does not
+    /// re-export and which nobody has read, so the row must not answer for it.
+    /// Each row is `creates` alone.
+    #[test]
+    fn the_owner_and_context_rows_deny_creates_for_their_declaring_package_only() {
+        for (package, export, other) in [
+            ("@solidjs/signals", "runWithOwner", "solid-js"),
+            ("solid-js", "createContext", "@solidjs/signals"),
+            ("solid-js", "useContext", "@solidjs/signals"),
+        ] {
+            assert!(
+                some_audit_denies_primitive(package, export, CallClaimDomain::Creates),
+                "{package} {export}"
+            );
+            assert!(
+                !some_audit_denies_primitive(other, export, CallClaimDomain::Creates),
+                "{other} {export}: the denial does not travel by name"
+            );
+            for domain in [
+                CallClaimDomain::Callbacks,
+                CallClaimDomain::Reads,
+                CallClaimDomain::Writes,
+            ] {
+                assert!(
+                    !some_audit_denies_primitive(package, export, domain),
+                    "{package} {export} {domain:?}: the audit decided creates only"
+                );
+            }
+        }
+    }
+
     /// The negative authority is a *negative* authority: it can refuse and it
     /// can deny, and there is no shape of input that makes it assert an
     /// operation exists.

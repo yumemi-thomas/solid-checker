@@ -139,6 +139,12 @@ const AUDITED_ARCHIVES: &[AuditedArchive] = &[
 const RC3_CORE_PRIMITIVES_AUDIT: &str =
     "docs/package-contract-v2/audits/2026-09-04-solid-2-rc3-core-primitives-creates.md";
 
+/// The hand implementation census of `runWithOwner`, `createContext` and
+/// `useContext` over the same rc.3 bytes, in that audit's method (2026-09-23).
+/// For the repository owner's review, as the first one was.
+const RC3_OWNER_CONTEXT_AUDIT: &str =
+    "docs/package-contract-v2/audits/2026-09-23-solid-2-rc3-owner-and-context-creates.md";
+
 /// What the audited 2.0 documents **deny**, per archive, per canonical export,
 /// per call claim domain.
 ///
@@ -670,6 +676,44 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             end_byte: 29775,
         }],
     },
+    // Implementation-audited, RC3_OWNER_CONTEXT_AUDIT § 1. The owner and
+    // tracking swap around the caller's `fn`, in all three bundles; dev adds a
+    // diagnostic for a disposed owner. `solid-js/dist/server.js:82-90` is read
+    // there too and reaches the same verdict.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "runWithOwner",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC3_OWNER_CONTEXT_AUDIT,
+                section: "## 1. `runWithOwner` — archive `@solidjs/signals@2.0.0-rc.3`",
+                archive_path: "dist/prod/core/core.js",
+                file_sha256: "1726b40ebf79cf15b8d09ce2078a78a6a8ca71bf48e4b3ba12880736ae281a46",
+                start_byte: 37382,
+                end_byte: 37594,
+                slice_sha256: "5c40363ecc6eaf66378b57e0c387103fe67f51706d30dab3cb041fd10f8af3e5",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_OWNER_CONTEXT_AUDIT,
+                section: "## 1. `runWithOwner` — archive `@solidjs/signals@2.0.0-rc.3`",
+                archive_path: "dist/dev.js",
+                file_sha256: "cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79",
+                start_byte: 172400,
+                end_byte: 173046,
+                slice_sha256: "87f9a23193e8b2d00afedb19b7176d741338b3c996268408c46427cf4df0035f",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_OWNER_CONTEXT_AUDIT,
+                section: "## 1. `runWithOwner` — archive `@solidjs/signals@2.0.0-rc.3`",
+                archive_path: "dist/node.cjs",
+                file_sha256: "bc0e35d32add395dc1c4dc3d6cd0fb4ea4a19bd582d68de3b44c708bb4b75c1c",
+                start_byte: 125175,
+                end_byte: 125387,
+                slice_sha256: "5c40363ecc6eaf66378b57e0c387103fe67f51706d30dab3cb041fd10f8af3e5",
+            },
+        ],
+    },
     NegativeClaimRow {
         package: "@solidjs/signals",
         export: "snapshot",
@@ -1008,6 +1052,69 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             end_byte: 24478,
         }],
     },
+    // Implementation-audited, RC3_OWNER_CONTEXT_AUDIT § 2: a fresh symbol and a
+    // provider function it defines but does not call, in all six bundles.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "createContext",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC3_OWNER_CONTEXT_AUDIT,
+                section: "## 2. `createContext` — archive `solid-js@2.0.0-rc.3`",
+                archive_path: "dist/solid.js",
+                file_sha256: "14af2d696eb0669c64973874601f691737aa1df359fced6dec55a523f34cfa1b",
+                start_byte: 1241,
+                end_byte: 1578,
+                slice_sha256: "87cfe46a740a3e2a7e4a35a9df518de40c49d5156a36c310f20a29f120722829",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_OWNER_CONTEXT_AUDIT,
+                section: "## 2. `createContext` — archive `solid-js@2.0.0-rc.3`",
+                archive_path: "dist/dev.js",
+                file_sha256: "dfc362391cbc0b069cef8b8d0d72c99d34310231a76fd66ef615533424d3ac18",
+                start_byte: 1248,
+                end_byte: 1585,
+                slice_sha256: "87cfe46a740a3e2a7e4a35a9df518de40c49d5156a36c310f20a29f120722829",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_OWNER_CONTEXT_AUDIT,
+                section: "## 2. `createContext` — archive `solid-js@2.0.0-rc.3`",
+                archive_path: "dist/server.js",
+                file_sha256: "63269da73b61b71fd775ef811f8ab88417c6ea6dda2de1e6f3c10d86b66fc8a8",
+                start_byte: 44900,
+                end_byte: 45237,
+                slice_sha256: "87cfe46a740a3e2a7e4a35a9df518de40c49d5156a36c310f20a29f120722829",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_OWNER_CONTEXT_AUDIT,
+                section: "## 2. `createContext` — archive `solid-js@2.0.0-rc.3`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "d155966bc29d2bf46e3cb32c8839d885933a50b60c28c6d8abd70a7ac1147333",
+                start_byte: 109,
+                end_byte: 462,
+                slice_sha256: "2d55c9abfe575798ed84748788bf721c824dabaab85da442beb709bf0a4aa22b",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_OWNER_CONTEXT_AUDIT,
+                section: "## 2. `createContext` — archive `solid-js@2.0.0-rc.3`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "4ca1b958df30ef4b0fa9cfd17206293073846d33147ad164208805dafde22e51",
+                start_byte: 102,
+                end_byte: 455,
+                slice_sha256: "2d55c9abfe575798ed84748788bf721c824dabaab85da442beb709bf0a4aa22b",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_OWNER_CONTEXT_AUDIT,
+                section: "## 2. `createContext` — archive `solid-js@2.0.0-rc.3`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "2e2ed5833323d48a43454b89f03de9f31346a3549a9934d8e67b3b9fe4f231a7",
+                start_byte: 44856,
+                end_byte: 45193,
+                slice_sha256: "87cfe46a740a3e2a7e4a35a9df518de40c49d5156a36c310f20a29f120722829",
+            },
+        ],
+    },
     NegativeClaimRow {
         package: "solid-js",
         export: "isPending",
@@ -1055,6 +1162,69 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             start_byte: 4306,
             end_byte: 6516,
         }],
+    },
+    // Implementation-audited, RC3_OWNER_CONTEXT_AUDIT § 3: a context-map read
+    // that may construct and throw an error, in all six bundles.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "useContext",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC3_OWNER_CONTEXT_AUDIT,
+                section: "## 3. `useContext` — archive `solid-js@2.0.0-rc.3`",
+                archive_path: "dist/solid.js",
+                file_sha256: "14af2d696eb0669c64973874601f691737aa1df359fced6dec55a523f34cfa1b",
+                start_byte: 1579,
+                end_byte: 1641,
+                slice_sha256: "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_OWNER_CONTEXT_AUDIT,
+                section: "## 3. `useContext` — archive `solid-js@2.0.0-rc.3`",
+                archive_path: "dist/dev.js",
+                file_sha256: "dfc362391cbc0b069cef8b8d0d72c99d34310231a76fd66ef615533424d3ac18",
+                start_byte: 1586,
+                end_byte: 1648,
+                slice_sha256: "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_OWNER_CONTEXT_AUDIT,
+                section: "## 3. `useContext` — archive `solid-js@2.0.0-rc.3`",
+                archive_path: "dist/server.js",
+                file_sha256: "63269da73b61b71fd775ef811f8ab88417c6ea6dda2de1e6f3c10d86b66fc8a8",
+                start_byte: 45238,
+                end_byte: 45494,
+                slice_sha256: "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_OWNER_CONTEXT_AUDIT,
+                section: "## 3. `useContext` — archive `solid-js@2.0.0-rc.3`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "d155966bc29d2bf46e3cb32c8839d885933a50b60c28c6d8abd70a7ac1147333",
+                start_byte: 463,
+                end_byte: 533,
+                slice_sha256: "03c1ef4583a6dcb0e5658b2966a14b3fc665de4d2036521d7aab45e12ac87d54",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_OWNER_CONTEXT_AUDIT,
+                section: "## 3. `useContext` — archive `solid-js@2.0.0-rc.3`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "4ca1b958df30ef4b0fa9cfd17206293073846d33147ad164208805dafde22e51",
+                start_byte: 456,
+                end_byte: 526,
+                slice_sha256: "03c1ef4583a6dcb0e5658b2966a14b3fc665de4d2036521d7aab45e12ac87d54",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_OWNER_CONTEXT_AUDIT,
+                section: "## 3. `useContext` — archive `solid-js@2.0.0-rc.3`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "2e2ed5833323d48a43454b89f03de9f31346a3549a9934d8e67b3b9fe4f231a7",
+                start_byte: 45194,
+                end_byte: 45458,
+                slice_sha256: "6df1017268a90bca0b6774692a30267d70cbab07bfd698afa25928116cbd71fb",
+            },
+        ],
     },
 ];
 
@@ -2563,6 +2733,35 @@ mod tests {
             "## 6. `untrack` — archive `@solidjs/signals@2.0.0-rc.3`",
             ImplementationVerdict::Closed,
         ),
+        // RC3_OWNER_CONTEXT_AUDIT, 2026-09-23. `runWithOwner` is declared in
+        // `@solidjs/signals` and runs `solid-js/dist/server.js:82-90` under the
+        // `node` condition, which the audit reads too (§ 1.3); `createContext`
+        // and `useContext` are `solid-js`' own and were read in all six of its
+        // bundles.
+        (
+            "@solidjs/signals",
+            "runWithOwner",
+            CallClaimDomain::Creates,
+            RC3_OWNER_CONTEXT_AUDIT,
+            "## 1. `runWithOwner` — archive `@solidjs/signals@2.0.0-rc.3`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "solid-js",
+            "createContext",
+            CallClaimDomain::Creates,
+            RC3_OWNER_CONTEXT_AUDIT,
+            "## 2. `createContext` — archive `solid-js@2.0.0-rc.3`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "solid-js",
+            "useContext",
+            CallClaimDomain::Creates,
+            RC3_OWNER_CONTEXT_AUDIT,
+            "## 3. `useContext` — archive `solid-js@2.0.0-rc.3`",
+            ImplementationVerdict::Closed,
+        ),
         // R6 of § 0, and the C1 consistency flag it forced. Both are the same
         // finding: `semantic-model.md` § creates' [Decision 2026-09-04] makes
         // `ctx.serialize(id, deferred.promise, deferStream)` a `create`, and a
@@ -2891,9 +3090,11 @@ mod tests {
 
         // The Implementation arm is new and easy to lose: a refactor that
         // stopped reaching it would leave every check above passing over the
-        // 23 summary citations alone. Five rows, three bundles each.
+        // 23 summary citations alone. Five rows, three bundles each, then
+        // (2026-09-23) `runWithOwner`'s three and the six `solid-js` bundles
+        // each for `createContext` and `useContext`.
         assert_eq!(
-            implementation_citations, 15,
+            implementation_citations, 30,
             "the Implementation citation arm did not run over the rows that need it"
         );
     }
@@ -3057,12 +3258,12 @@ mod tests {
         // `reads`. Shipped is that, minus the 3 withholdings that are
         // derivable from a document (`hydrate` and `createEffect` for
         // `creates`, `createEffect` for `reads`), plus the 5 the hand
-        // implementation census closed. `createSignal`'s `creates`
-        // withholding is derivable only from IMPLEMENTATION_AUDITED, so it is
-        // not subtracted here.
+        // implementation census closed, plus the 3 the 2026-09-23 one did.
+        // `createSignal`'s `creates` withholding is derivable only from
+        // IMPLEMENTATION_AUDITED, so it is not subtracted here.
         assert_eq!(from_json.len(), 45);
-        assert_eq!(implementation_closed.len(), 5);
-        assert_eq!(shipped.len(), 47);
+        assert_eq!(implementation_closed.len(), 8);
+        assert_eq!(shipped.len(), 50);
 
         // The two authorities must not be confusable from the row alone: a row
         // the hand census closed cites runtime bytes, and every other row cites

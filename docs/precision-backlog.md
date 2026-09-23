@@ -1,5 +1,28 @@
 # Precision backlog
 
+## `runWithOwner`, `createContext` and `useContext` get audited `creates` rows (2026-09-23)
+
+Status: **implemented**, as a hand implementation census for the repository
+owner's review
+(`docs/package-contract-v2/audits/2026-09-23-solid-2-rc3-owner-and-context-creates.md`,
+in the 2026-09-04 audit's method). `phase22/2026-09-23-what-holds-an-import-open.md`
+found the generator's `creates` walk declining `@solid-primitives/rootless` and
+context helpers as `dialect-silent` on these three calls. Each now has a
+`creates` row citing its body in every bundle the archive ships:
+`(@solidjs/signals, runWithOwner)` from three bundles, with `solid-js`' own
+`node`-condition body read as well because the row binds the declaration's
+archive (that audit's § 1.4), and `(solid-js, createContext)` and
+`(solid-js, useContext)` from all six `solid-js` bundles. The cited bytes are
+checked in under `rust/crates/solid-dialect/audited-slices/`. A call to one of
+them no longer declines a caller's proposal; the caller's census still has to
+clear everything else it calls. No corpus snapshot and no coverage finding
+moves: no fixture carries a `@solidjs/signals` stub, as for the 2026-09-04
+rows, so the dialect's tests pin the rows (including that `@solidjs/signals`'
+own, unaudited `createContext` is not denied) and the Solid 2 census measures
+their reach. Remaining: `callbacks`, `reads` and every other domain stay
+undecided for all three, and `createSignal`, `createMemo` and `createEffect`
+through `solid-js` stay withheld until the table can state a guarded row.
+
 ## A default-library alias is proposed for every domain its census decides (2026-09-23)
 
 Status: **implemented** (ADR 0103, amended). The alias census had closed
