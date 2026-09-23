@@ -250,19 +250,58 @@ What moved each row:
 4. **Owner requirements**, 34 to 37 sites: `@solid-primitives/tween`'s and
    `timer`'s exports now state the computation they register (ADR 0114).
 
+## After ADR 0115
+
+Measured on the census run that finished 14:45:30Z, over 83037b2a with the ten
+`rootless` and `trigger` recipes re-keyed a second time (item 2 below); the
+per-export evidence is
+[`2026-09-23-what-holds-an-import-open-after-0115.json`](2026-09-23-what-holds-an-import-open-after-0115.json),
+from the same script. The census gate passes and is re-pinned, and recipe
+addressing is unchanged.
+
+| what an import finds open (1,152 sites) | after the re-pin | now |
+| --- | ---: | ---: |
+| nothing, a non-callable value | 158 | 158 |
+| nothing, a callable | 161 | 212 |
+| `returns` or `callbacks`: some uses | 359 | 308 |
+| `reads` or `creates`: every import | 474 | 474 |
+
+| census bucket (1,874 measured sites) | after the re-pin | now |
+| --- | ---: | ---: |
+| an operation is stated | 607 | 658 |
+| determined: states nothing | 433 | 382 |
+| degenerate | 112 | 112 |
+| carries an owner requirement | 37 | 37 |
+
+What moved each row:
+
+1. **`asArray`**, 51 sites from some uses to clean: `returns` now closes over
+   three returns, `parameter 0`, `argument-array []` and `argument-array [0]`
+   (ADR 0115), beside the three domains it already closed, so its sites state
+   operations where they stated nothing.
+2. **The ten `rootless` and `trigger` recipes, again.** `asArray`'s closure
+   moved the utils node's digest, so the first run after ADR 0115 put
+   degenerate back at 148. The modules were carried over verbatim as before, to
+   `rootless` `e747417a…` and `dcf64d37…` and `trigger` `e334f317…` and
+   `1c6b40cd…`, and the second run is the one measured. This will recur with
+   every change to what utils certifies.
+
 ## What is left for a `returns` shape
 
-Five exports have `returns` as their only open consumer domain: `asArray` (51,
-the plain return ADR 0113 proposed is refused: it returns an array),
-`entries` (37) and `keys` (22, never proposed), `accessWith` (27, refused) and
-`createIdGenerator` (3). `access` (157) is not one of them: its `callbacks`
-closure is refused by the census as well, so a return shape alone would move it
-from some uses to some uses.
+Four exports have `returns` as their only open consumer domain, 89 sites:
+`entries` (37) and `keys` (22), the aliases of `Object.entries` and
+`Object.keys`, never proposed: they return a fresh array built from the
+argument's own properties, which is no argument container; `accessWith` (27),
+whose other branch returns the result of calling the caller's value, which no
+shape describes (ADR 0115 § What still refuses); and `createIdGenerator` (3),
+never proposed, which returns a fresh function of its own. `access` (157)
+needs the same invocation-result shape as `accessWith` and a `callbacks`
+closure the census refuses today.
 
 ## Order, revised
 
-Items 1 to 3 are done (§ After the re-pin); item 4 is § What is left for a
-`returns` shape.
+Items 1 to 3 are done (§ After the re-pin). Item 4 is done for `asArray`
+(§ After ADR 0115); the rest of it is § What is left for a `returns` shape.
 
 1. Re-address the ten `rootless` and `trigger` recipes, then re-pin: 36
    degenerate sites back, nothing else to decide.
@@ -270,6 +309,6 @@ Items 1 to 3 are done (§ After the re-pin); item 4 is § What is left for a
    import to some uses.
 3. The dialect's `creates` rows for the owner-requiring primitives, unchanged:
    74 sites.
-4. The structured `returns` shapes: `access` (157), `asArray` (51) and
-   `accessWith` (27) are the whole remaining some-uses `returns` cost that a
-   shape could decide, and each needs one of its own.
+4. The structured `returns` shapes: `asArray` (51) by ADR 0115; `access` (157)
+   and `accessWith` (27) need a shape for the result of invoking an argument,
+   and `access` its `callbacks` closure as well.

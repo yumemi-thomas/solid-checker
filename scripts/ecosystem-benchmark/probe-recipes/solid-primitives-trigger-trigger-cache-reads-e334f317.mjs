@@ -1,6 +1,6 @@
 // Hand-authored `reads: []` veto for `@solid-primitives/trigger@3.0.0-next.2`,
 // on the published `.` runtime case
-// `artifact-case:8c695fdb30fd2222bb83c63763f8e1d3a4391aa5fa73b6e075efbe8d6dbcc75a`.
+// `artifact-case:e334f317c71d0b9007a337441ca2cc29c98c3bc87de152501c0275fef65fa11a`.
 //
 // Demand-scoped: 6 call sites across the pinned consumer corpus name this
 // export.

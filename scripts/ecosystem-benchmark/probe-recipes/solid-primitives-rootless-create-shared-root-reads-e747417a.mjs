@@ -1,6 +1,6 @@
 // Hand-authored `reads: []` veto for `@solid-primitives/rootless@2.0.0-next.2`,
 // on the published `.` runtime case
-// `artifact-case:2e381992e343d0ff0e43378d8207c02b4a5dd9b02261bc96498998781fa592ad`.
+// `artifact-case:e747417a3d01d011491b56bfa3503cfde0e0521f9841af452a2903a471a128e1`.
 //
 // Not named by the pinned consumer demand; written because it is the
 // deprecated alias of `createSingletonRoot` -- the same binding, so the same

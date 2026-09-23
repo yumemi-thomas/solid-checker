@@ -678,3 +678,9 @@ run's `withheldClosureDetails`. The re-run certifies every closure they serve:
 degenerate 148 -> 112, `rootless` and `trigger` back to 0. It will happen again
 whenever the utils node's certified contract changes, and
 `probe-recipe-addressing.mjs` will not flag it: the census bucket does.
+
+It did, the same day: ADR 0115 closed `asArray`'s `returns`, which moved the
+utils node's digest again, and degenerate went 112 -> 148 with nothing else
+changed. The modules were carried over the same way, to `rootless`
+`e747417a…` (floor) and `dcf64d37…` (head) and `trigger` `e334f317…` (floor)
+and `1c6b40cd…` (head).
