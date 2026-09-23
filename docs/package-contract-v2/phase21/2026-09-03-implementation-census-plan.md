@@ -262,6 +262,13 @@ repair for it. What it needs is unchanged from the rejection: a new
 `ClaimDomain` variant, a canonical-stream position, and a semantic-digest move
 for every contract — which is why it is a separate slice and not this one.
 
+**[Correction 2026-09-23] Repaired by ADR 0114, and without the digest move.**
+The domain is `computations`, its one kind `compute`. Version 1 states it by
+item only, so it is never an unresolved claim and nothing else about an
+existing document changes, and its canonical position is written only in a
+digest family of its own: a contract stating no `computations` item hashes
+exactly as before, and keeps its receipts.
+
 **(b) is also the only one an implementation census can decide.** Under (a) the
 census question is "does this export require an ambient owner", which is a
 question about the *callers* this archive cannot see — it is exactly the

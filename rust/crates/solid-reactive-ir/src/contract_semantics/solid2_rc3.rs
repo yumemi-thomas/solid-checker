@@ -488,6 +488,7 @@ fn semantic_export(
             ids(&operations, OperationKind::Dispose),
             open(ClaimDomain::Disposals),
         ),
+        computations: KnowledgeSet::Unknown,
     };
     ExportSemantics {
         identity: ExportIdentity {
@@ -1953,10 +1954,16 @@ mod tests {
         assert_eq!(artifact.exports.keys().collect::<Vec<_>>(), vec!["isEqual"]);
         let export = &artifact.exports["isEqual"];
         assert_eq!(export.shape, ValueShape::Plain);
+        // Every domain a document can close is closed empty; `computations`
+        // (ADR 0114) has no closure, and states nothing here.
         assert!(
-            ClaimDomain::ALL
+            ClaimDomain::CLOSABLE
                 .into_iter()
                 .all(|domain| { export.claim_state(domain) == KnowledgeState::CompleteNegative })
+        );
+        assert_eq!(
+            export.claim_state(ClaimDomain::Computations),
+            KnowledgeState::Unknown
         );
         assert!(export.unresolved_claims().is_empty());
     }

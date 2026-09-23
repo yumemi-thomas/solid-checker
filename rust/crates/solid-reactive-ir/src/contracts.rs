@@ -444,26 +444,30 @@ fn project_owner_requirements(
     let cleanups = export
         .operation_claim(ClaimDomain::Cleanups)
         .expect("cleanups is an operation domain");
+    // `computations` (ADR 0114) is read the same way and for the same reason:
+    // for its items only. Version 1 never closes it, so it could only ever
+    // open; the completeness of the list is `creates`' closure above.
+    let computations = export
+        .operation_claim(ClaimDomain::Computations)
+        .expect("computations is an operation domain");
     let mut requirements = Vec::new();
     for operation in knowledge
         .items()
         .iter()
         .chain(cleanups.items())
+        .chain(computations.items())
         .filter_map(|id| export.operation(&id.0))
     {
         // A requirement projects when the operation requires an owner it does
-        // not itself supply. An operation whose owner is `created` made the
-        // owner it runs under -- audited `render`'s `register-delegation` is
-        // exactly that, `requires: required` *and* `source: created` -- and
-        // imposes no obligation on its caller, so reading `requires` alone
-        // would report an owner-less effect for a top-level `render(...)`.
-        if operation.owner.requirements.owner == Requirement::Required
-            && !matches!(operation.owner.source, OwnerSource::Created(_))
-        {
+        // not itself supply (`Operation::imposes_owner_requirement`, which the
+        // withdrawal of an operation asks too).
+        if operation.imposes_owner_requirement() {
             let operation = match operation.kind {
                 OperationKind::Cleanup | OperationKind::Dispose => {
                     OwnerRequirementOperation::Cleanup
                 }
+                // A `compute`, and the frozen 1.x authority documents'
+                // `ambient-at-call` `create`.
                 _ => OwnerRequirementOperation::Effect,
             };
             requirements.push(ContractOwnerRequirement { operation });
@@ -479,25 +483,24 @@ fn project_owner_requirements(
 
 /// Which published operation imposes an owner obligation on the *caller*.
 ///
-/// The three shapes here are the ones a consumer can actually meet today: the
+/// The four shapes here are the ones a consumer can actually meet today: the
 /// `ambient-at-call` `create` the two frozen Solid 1.x authority documents
 /// still carry (`debounce-root-default.json` and `rootless-root-default.json`,
 /// each one `owner-requirement-0`), audited `render`'s `source: created`
-/// `create`, and the `kind: cleanup` requirement the generator publishes. The
-/// distinction between the first two is the whole content of the filter: both
-/// say `requires: required`, and only one of them is the caller's problem. The
-/// third one proves the filter reads the `Requirement` triple rather than the
-/// operation's kind.
+/// `create`, and the `kind: cleanup` and `kind: compute` (ADR 0114)
+/// requirements the generator publishes. The distinction between the first
+/// two is the whole content of the filter: both say `requires: required`, and
+/// only one of them is the caller's problem. The last two prove the filter
+/// reads the `Requirement` triple rather than the operation's kind.
 ///
-/// A findings fixture cannot pin this today. Every contract-consumer fixture
-/// under `fixtures/reactive-ir/` has its catalog entry cut to
-/// `"status": "obsolete-policy1"` by the proof-policy-2 cut, so each one
-/// produces `SC9005 package-contract-incomplete` instead of consuming a
-/// contract at all, and `@solidjs/web`'s audited `render` reaches no analyzer
-/// either — `EMBEDDED_SOLID1_BUNDLES` is `&[]` and both first-party bundle
-/// producers validate their inputs and return an empty vector. Recorded in
-/// `docs/precision-backlog.md`; the fixture pair the census plan asks for
-/// becomes constructible when a fixture can hold an accepted contract again.
+/// A findings fixture can pin this since a fixture can hold an accepted
+/// contract (`fixture_authorization.rs`):
+/// `fixtures/reactive-ir/package-computation-consumer` reports `SC4001` for an
+/// unowned call to an export stating a `compute`, and nothing for the same call
+/// inside a component or for the same export stating none. `@solidjs/web`'s
+/// audited `render` still reaches no analyzer — `EMBEDDED_SOLID1_BUNDLES` is
+/// `&[]` and both first-party bundle producers validate their inputs and return
+/// an empty vector.
 #[cfg(test)]
 mod owner_requirement_projection_tests {
     use std::collections::BTreeSet;
@@ -598,6 +601,7 @@ mod owner_requirement_projection_tests {
             returns: KnowledgeSet::Complete(Vec::new()),
             cleanups: KnowledgeSet::Unknown,
             disposals: KnowledgeSet::Unknown,
+            computations: KnowledgeSet::Unknown,
         }
     }
 
@@ -649,9 +653,10 @@ mod owner_requirement_projection_tests {
     /// The generator no longer produces it. A `create` naming a child owner
     /// resource would contradict `semantic-model.md` § creates -- a `create`
     /// registers a resource into a runtime *outside* the invocation -- so an
-    /// `Effect` owner requirement is now withheld by name instead. This test
-    /// pins how a consumer reads the frozen documents until their re-capture
-    /// lands.
+    /// `Effect` owner requirement was withheld by name instead, and since
+    /// ADR 0114 is a `compute` in `computations` (the test after the cleanup
+    /// one). This test pins how a consumer reads the frozen documents until
+    /// their re-capture lands.
     #[test]
     fn an_ambient_at_call_requirement_projects_as_a_consumer_obligation() {
         let mut created = operation("register-effect", OperationKind::Create, &["child-owner"]);
@@ -760,6 +765,44 @@ mod owner_requirement_projection_tests {
         // `creates` is closed and empty here, and the *cleanups* read must not
         // add a domain of its own.
         assert!(open.is_empty());
+    }
+
+    /// ADR 0114's shape for an `Effect` requirement: `kind: compute` in the
+    /// `computations` domain, requiring the ambient owner and child owners of
+    /// it. It projects as the obligation the 1.x `ambient-at-call` `create`
+    /// did, read for its items only, and with `creates` open instead the list
+    /// it states is partial, so the domain that says "complete" is the one
+    /// that opens.
+    #[test]
+    fn a_compute_requirement_projects_as_an_effect_from_the_computations_domain() {
+        let mut compute = operation("owner-requirement-0", OperationKind::Compute, &[]);
+        compute.owner = OwnerRelation {
+            source: OwnerSource::AmbientAtCall,
+            requirements: OwnerRequirements {
+                owner: Requirement::Required,
+                child_owners: Requirement::Required,
+                cleanup: Requirement::Unconstrained,
+            },
+            capabilities: OwnerCapabilities::default(),
+            lifetime: None,
+            productions: KnowledgeSet::Unknown,
+        };
+        let mut claims = claims();
+        claims.computations = KnowledgeSet::Partial(vec![compute.id.clone()]);
+        let effect = ContractClaim::Known(vec![ContractOwnerRequirement {
+            operation: OwnerRequirementOperation::Effect,
+        }]);
+
+        let closed = export(claims.clone(), vec![compute.clone()], Vec::new());
+        let mut open = BTreeSet::new();
+        assert_eq!(project_owner_requirements(&closed, &mut open), effect);
+        assert!(open.is_empty(), "computations adds no domain of its own");
+
+        claims.creates = KnowledgeSet::Unknown;
+        let partial = export(claims, vec![compute], Vec::new());
+        let mut open = BTreeSet::new();
+        assert_eq!(project_owner_requirements(&partial, &mut open), effect);
+        assert_eq!(open, BTreeSet::from([ClaimDomain::Creates]));
     }
 }
 

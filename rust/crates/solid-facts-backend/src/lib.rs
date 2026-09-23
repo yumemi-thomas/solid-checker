@@ -252,6 +252,9 @@ pub fn document_closed_call_domains(
                     solid_reactive_ir::contract_semantics::ClaimDomain::Returns => "returns",
                     solid_reactive_ir::contract_semantics::ClaimDomain::Cleanups => "cleanups",
                     solid_reactive_ir::contract_semantics::ClaimDomain::Disposals => "disposals",
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Computations => {
+                        "computations"
+                    }
                 })
                 .collect::<Vec<_>>();
             if !closed.is_empty() {

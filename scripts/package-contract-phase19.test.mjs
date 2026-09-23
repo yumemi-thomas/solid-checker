@@ -204,7 +204,12 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // one corpus fixture that reaches `@solidjs/signals`' rows through
       // `solid-js`' re-export, pinning that a withheld `Effect` requirement
       // keeps `creates` open where the walk is clean.
-      stableMainDocuments: 139,
+      //
+      // 140 the same day adds package-computation-consumer's main document,
+      // the fourth fixture contract the corpus authorizes: ADR 0114's consumer
+      // arm, where a `compute` in `computations` makes an unowned call
+      // SC4001 and the same export stating none reports nothing.
+      stableMainDocuments: 140,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

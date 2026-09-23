@@ -72,7 +72,9 @@ The version-1 operation kinds are deliberately consumer-driven:
   § creates for what it does and does not cover; declaring a resource in
   `call.resources` is not this operation);
 - cleanup production or registration;
-- disposal.
+- disposal;
+- registration of a computation on an owner the operation does not create
+  (`compute`, ADR 0114 — see § computations).
 
 An operation contains:
 
@@ -183,11 +185,13 @@ must alpha-rename IDs before composition when necessary.
 
 ## What a closed call domain denies
 
-`call` carries nine set-valued claim domains: `callbacks`, `reads`, `writes`,
-`creates`, `invalidates`, `throws`, `returns`, `cleanups`, `disposals`. Naming
-one in `closed` beside an empty collection is a *complete negative* claim about
-one invocation of one export, in one artifact case, under one guard. This
-section states what each such claim denies.
+`call` carries nine set-valued claim domains a document may close: `callbacks`,
+`reads`, `writes`, `creates`, `invalidates`, `throws`, `returns`, `cleanups`,
+`disposals`. Naming one in `closed` beside an empty collection is a *complete
+negative* claim about one invocation of one export, in one artifact case, under
+one guard. This section states what each such claim denies. A tenth,
+`computations` (ADR 0114), is stated by item only: no document may close it, so
+it denies nothing, and § computations says what its items state.
 
 The scope is *one invocation*, so a resource established while a dependency's
 module initializes — the module-level `createSignal` a package runs on first
@@ -202,8 +206,9 @@ or a digest: `semanticModelVersion` stays 1.
 
 Four rules hold for every domain and are stated once.
 
-**Kind.** Eight of the nine domains admit exactly one operation kind, and the
-mapping is enforced in both directions by `validate_call_claims`
+**Kind.** Eight of the nine domains admit exactly one operation kind, and so
+does `computations` (`compute`); the mapping is enforced in both directions by
+`validate_call_claims`
 (`rust/crates/solid-reactive-ir/src/contract_semantics/validate.rs:1030-1128`):
 a domain accepts only its kind, and every published operation must appear in
 its kind's own domain or the document is a contradiction. `throws` is the
@@ -559,6 +564,17 @@ the hand-audited path is untouched: the two frozen Solid 1.x authority
 documents still carry their `ambient-at-call` `create`, and
 `project_owner_requirements` still reads it.
 
+**[Decision 2026-09-23] The repair is § computations (ADR 0114).** The
+requirement is a `kind: compute` operation in a tenth domain that version 1
+states by item only, so no existing document, digest or receipt moves, and the
+generator withholds only the `Boundary` role now. The withholding had one more
+cost the paragraph above missed: a withheld requirement left `creates` open only
+because the walk declined a call it had no row for, and a `createTrackedEffect`
+call has one, so a caller could close `creates` beside a withheld requirement
+and read to a consumer as needing no owner. The generator now closes `creates`
+only when every requirement is stated (`docs/precision-backlog.md`,
+2026-09-23).
+
 A **cleanup**-role requirement does have a home, and it is the `cleanups`
 domain: the export installs a cleanup on the caller's owner, so it publishes
 `kind: cleanup` with `source: ambient-at-call`, `requires: required`,
@@ -705,6 +721,27 @@ declaration going out of scope, which invokes `Symbol.dispose` or
 `Symbol.asyncDispose` on the declared value, and a compiler-inserted boundary
 teardown. Every other audited disposal is effected by a call or by the runtime
 draining an owner.
+
+### computations
+
+**[Decision 2026-09-23, ADR 0114]** `computations` lists the `compute`
+operations of one invocation: each registers a reactive computation on an owner
+it does not create — the caller's ambient owner — so the call must be made
+under one. Its owner relation is the whole of what it states: `source:
+ambient-at-call`, `requires: required`, `requiresChildren: required`, and what
+it produces left unknown (the computation is itself an owner node, and no
+witness exists for a resource axis). `validate_call_claims` refuses a `compute`
+without that triple.
+
+The domain has **no closure** in version 1. Its negative would be "registers no
+computation on an owner it does not create", which no census decides, and which
+no consumer reads: the completeness of an export's owner requirements is its
+`creates` closure (§ creates, and the consumer's `project_owner_requirements`),
+which the generator publishes only when every requirement it found is stated,
+and which the certifier's withdrawal of a requirement-imposing operation opens.
+So `closed` may not name it, a document that does not mention it says nothing,
+and an unknown `computations` is not an unresolved claim. It is the model gap §
+creates' 2026-09-03 decision recorded, repaired without widening `creates`.
 
 ## Recursive value shapes
 
@@ -856,6 +893,13 @@ its own frozen vector in `contract_semantics::tests`.
 A document that states provenance, or that labels a closure as proposed, is a
 new document making a new claim; it belongs in its own family rather than
 sharing an identity with the document that makes the plainer claim.
+
+The same holds for ADR 0114's `computations`. A contract in which some export
+states a `computations` item writes the length-delimited marker
+`solid-checker:semantic-computations:v1` before everything else, and the
+domain after `disposals` in each export's claims; every other contract hashes
+the stream it hashed before the domain existed, byte for byte. Its frozen
+vector is `computations_digest_family_is_separate_and_frozen`.
 
 ## Core invariants
 

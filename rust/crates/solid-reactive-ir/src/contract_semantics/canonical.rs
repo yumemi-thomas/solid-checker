@@ -49,7 +49,18 @@ pub(super) fn semantic_digest(
             .values()
             .any(|export| !export.call.proposed_closures().is_empty())
     });
+    // ADR 0114's domain is a family of its own for the same reason: a
+    // contract that states no `computations` item emits the stream it always
+    // did, byte for byte, and keeps its digest and its receipts.
+    let computations = artifact_cases.iter().any(|case| {
+        case.exports
+            .values()
+            .any(|export| !export.call.claims.computations.items().is_empty())
+    });
     let mut writer = CanonicalWriter::new();
+    if computations {
+        writer.text("solid-checker:semantic-computations:v1");
+    }
     let initialization = artifact_cases
         .iter()
         .any(|case| case.initialization.is_some());
@@ -65,6 +76,7 @@ pub(super) fn semantic_digest(
     writer.composed_provenance = composed;
     writer.proposed_closure = proposed_closure;
     writer.initialization = initialization;
+    writer.computations = computations;
     writer.u16(SEMANTIC_MODEL_VERSION);
     writer.package(package);
     writer.sequence(artifact_cases, CanonicalWriter::artifact_case);
@@ -102,6 +114,9 @@ struct CanonicalWriter {
     proposed_closure: bool,
     /// Separate digest family: legacy cases retain their exact old stream.
     initialization: bool,
+    /// Whether this stream belongs to the `computations` family (ADR 0114).
+    /// Set from the contract by [`semantic_digest`], false everywhere else.
+    computations: bool,
 }
 
 impl CanonicalWriter {
@@ -111,6 +126,7 @@ impl CanonicalWriter {
             composed_provenance: false,
             proposed_closure: false,
             initialization: false,
+            computations: false,
         }
     }
 
@@ -293,6 +309,7 @@ impl CanonicalWriter {
             ClaimDomain::Returns => 6,
             ClaimDomain::Cleanups => 7,
             ClaimDomain::Disposals => 8,
+            ClaimDomain::Computations => 9,
         });
     }
 
@@ -408,6 +425,9 @@ impl CanonicalWriter {
         self.knowledge(&claims.returns, Self::operation_id);
         self.knowledge(&claims.cleanups, Self::operation_id);
         self.knowledge(&claims.disposals, Self::operation_id);
+        if self.computations {
+            self.knowledge(&claims.computations, Self::operation_id);
+        }
     }
 
     fn callback(&mut self, callback: &CallbackInvocation) {
@@ -493,6 +513,7 @@ impl CanonicalWriter {
             OperationKind::Create => 5,
             OperationKind::Cleanup => 6,
             OperationKind::Dispose => 7,
+            OperationKind::Compute => 8,
         });
     }
 

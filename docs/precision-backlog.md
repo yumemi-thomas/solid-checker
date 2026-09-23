@@ -1,5 +1,26 @@
 # Precision backlog
 
+## A registered computation gets a domain, and SC4001 can come from a generated contract (2026-09-23)
+
+Status: **implemented** (ADR 0114). An export that must be called under an
+owner because it registers a computation on it was withheld by name, because
+version 1 had no domain for the fact, so no generated dependency contract could
+give a consumer `SC4001`. It is now a `kind: compute` operation in
+`computations`, a tenth domain stated by item only: no document may close it, an
+unknown one is not an unresolved claim, and it hashes in a digest family of its
+own, so no document that states none moves at all. The certifier witnesses a
+`compute` as it witnessed the resourceless `create` it replaces (an
+`Effect`-role primitive's reachable call), the consumer projects it as `Effect`,
+and withdrawing any operation that imposes an owner requirement now opens
+`creates`, the consumer's completeness signal; a refused `cleanup` requirement
+had the same hole before. Corpus: the 14 withheld requirements in 6 fixtures
+are published, and `signals-reexport-creates`' `trackEach` proposes `creates`.
+`fixtures/reactive-ir/package-computation-consumer` pins `SC4001` on an
+authorized contract at an unowned call only. Remaining: `Boundary` is still
+withheld; owner-requirement completeness is still `creates`' closure, sound
+because the generator closes it only when every requirement it found is stated;
+the benchmark's row-kind table does not count `compute`.
+
 ## An argumentless primitive call is demanded its resolved call (2026-09-23)
 
 Status: **fixed**. The generator's `creates` walk asks the audits about the
@@ -37,8 +58,8 @@ owner requirement the export has was decided and published
 `a_creates_closure_waits_for_every_owner_requirement_to_be_published` and by
 the new `signals-reexport-creates` corpus fixture, whose `trackEach` proposes
 `creates` closed when built without the gate. No other corpus snapshot and no
-coverage finding moves. The requirement itself still has no home: that is the
-new domain `semantic-model.md` § creates names as the repair.
+coverage finding moves. The requirement itself had no home until ADR 0114 (the
+entry above) gave it `computations`.
 
 ## `runWithOwner`, `createContext` and `useContext` get audited `creates` rows (2026-09-23)
 

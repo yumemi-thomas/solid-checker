@@ -266,6 +266,7 @@ const fn claim_domain_name(domain: ClaimDomain) -> &'static str {
         ClaimDomain::Returns => "returns",
         ClaimDomain::Cleanups => "cleanups",
         ClaimDomain::Disposals => "disposals",
+        ClaimDomain::Computations => "computations",
     }
 }
 
@@ -1151,6 +1152,23 @@ fn validate_call_claims(
         &operation_kinds,
         &format!("{path}.disposals"),
     )?;
+    // ADR 0114: version 1 states `computations` by item only. Its closure
+    // would be "registers no computation on an owner it does not create",
+    // which no census decides and which a consumer never reads -- owner
+    // requirements are complete where `creates` is closed -- so a document
+    // asserting it is claiming what nothing here can check.
+    if claims.computations.is_closed() {
+        return contradiction(
+            format!("{path}.computations"),
+            "computations is stated by item only in schema version 1 and cannot be closed",
+        );
+    }
+    validate_operation_claim(
+        &claims.computations,
+        Some(OperationKind::Compute),
+        &operation_kinds,
+        &format!("{path}.computations"),
+    )?;
     for operation in operations {
         let represented = match operation.kind {
             OperationKind::Invoke => claims
@@ -1165,11 +1183,24 @@ fn validate_call_claims(
             OperationKind::Create => claims.creates.items().contains(&operation.id),
             OperationKind::Cleanup => claims.cleanups.items().contains(&operation.id),
             OperationKind::Dispose => claims.disposals.items().contains(&operation.id),
+            OperationKind::Compute => claims.computations.items().contains(&operation.id),
         };
         if !represented {
             return contradiction(
                 format!("{path}.operation.{}", operation.id.0),
                 "operation node lacks its corresponding positive call claim",
+            );
+        }
+        // A `compute` is the registration of a computation on an owner the
+        // operation does not create, which is the whole of what it states: it
+        // requires that owner, and requires it to admit a child (ADR 0114).
+        if operation.kind == OperationKind::Compute
+            && !(operation.imposes_owner_requirement()
+                && operation.owner.requirements.child_owners == Requirement::Required)
+        {
+            return contradiction(
+                format!("{path}.operation.{}", operation.id.0),
+                "a compute operation requires an owner it does not create, and child owners of it",
             );
         }
         // NOT YET: "a `create` operation naming no resource is a
@@ -1796,6 +1827,7 @@ pub(super) fn open_proposed_closure(export: &mut ExportSemantics) -> Vec<ClaimPa
             ClaimDomain::Returns => &mut export.call.claims.returns,
             ClaimDomain::Cleanups => &mut export.call.claims.cleanups,
             ClaimDomain::Disposals => &mut export.call.claims.disposals,
+            ClaimDomain::Computations => &mut export.call.claims.computations,
         };
         if knowledge.open_proposed_closure() {
             candidates.push(ClaimPath::Call(domain));
@@ -1886,6 +1918,13 @@ pub(super) fn close_verified_claim(
             ClaimDomain::Returns => export.call.claims.returns.close_verified(),
             ClaimDomain::Cleanups => export.call.claims.cleanups.close_verified(),
             ClaimDomain::Disposals => export.call.claims.disposals.close_verified(),
+            // ADR 0114: no proof closes it, because no document may state it.
+            ClaimDomain::Computations => {
+                return contradiction(
+                    "call.computations",
+                    "computations cannot be closed in schema version 1",
+                );
+            }
         },
         ClaimPath::Value { root, path, domain } => {
             let value =

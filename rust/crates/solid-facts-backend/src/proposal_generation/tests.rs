@@ -86,6 +86,7 @@ fn claims(
         returns: KnowledgeSet::Complete(vec![]),
         cleanups: KnowledgeSet::Complete(vec![]),
         disposals: KnowledgeSet::Complete(vec![]),
+        computations: KnowledgeSet::Unknown,
     }
 }
 

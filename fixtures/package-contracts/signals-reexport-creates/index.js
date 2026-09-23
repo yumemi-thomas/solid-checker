@@ -12,9 +12,10 @@ import {
 } from "solid-js";
 
 // `createTrackedEffect`'s `creates` is audited closed, so the walk clears this
-// export; its call registers a computation on the caller's owner, which is the
-// `Effect` requirement this generation withholds. `creates` must stay open: a
-// consumer reads a closed `creates` as "no owner requirement".
+// export; its call registers a computation on the caller's owner, the `Effect`
+// requirement. A consumer reads a closed `creates` as "no owner requirement
+// beyond the published items", so `creates` closes only because that
+// requirement is published, as a `compute` in `computations` (ADR 0114).
 export function trackEach(handle) {
   createTrackedEffect(() => handle());
 }

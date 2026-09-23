@@ -69,6 +69,10 @@ _Avoid_: Complete contract, tested absence, empty result
 The local knowledge state of one claim domain: unknown, partial positive, complete positive, or complete negative. A state says nothing about a parent, child, sibling, alternative, or referenced resource unless that subject has its own claim knowledge.
 _Avoid_: Status wrapper, inherited completeness, contract completeness
 
+**Item-only claim domain**:
+A claim domain no document may close in schema version 1, so its claim knowledge is only ever unknown or partial positive; today exactly `computations` (ADR 0114), whose items are the `compute` operations that register a computation on an owner the call does not create. An unknown one is not an unresolved claim, since nothing could resolve it, and the completeness a consumer reads for owner requirements is `creates`' closure, not this domain's.
+_Avoid_: optional domain, open domain (closure could never fix it), treating its absence as "registers nothing"
+
 **Operation cardinality**:
 A proved lower and upper bound on how often one semantic operation occurs within an explicit scope such as one trigger occurrence, one package call, or one resource lifetime. Possibility, guarantee, repetition, and bound scope are separate facts.
 _Avoid_: Call count, observed frequency, phase repetition

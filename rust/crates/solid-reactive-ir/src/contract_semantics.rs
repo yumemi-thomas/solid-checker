@@ -829,6 +829,19 @@ impl ExportSemantics {
             }
             opened.insert(domain);
         }
+        // A consumer reads a closed `creates` as "no owner requirement beyond
+        // the published items" (`contracts.rs`' `project_owner_requirements`),
+        // so withdrawing an operation that imposes one on the caller withdraws
+        // that reading with it: `creates` opens too, and the import stays
+        // uncertifiable rather than reading as needing no owner (ADR 0114).
+        if self
+            .call
+            .operations
+            .iter()
+            .any(|operation| gone.contains(&operation.id) && operation.imposes_owner_requirement())
+        {
+            opened.insert(ClaimDomain::Creates);
+        }
         let sourced_from_gone = |source: &ValueSource| match source {
             ValueSource::OperationOutput { operation, .. } => gone.contains(operation),
             _ => false,
@@ -868,7 +881,7 @@ impl ExportSemantics {
 
     #[must_use]
     pub fn unresolved_call_claims(&self) -> Vec<ClaimPath> {
-        ClaimDomain::ALL
+        ClaimDomain::CLOSABLE
             .into_iter()
             .filter(|domain| self.call.claims.state(*domain).is_open())
             .map(ClaimPath::Call)
@@ -887,10 +900,32 @@ pub enum ClaimDomain {
     Returns,
     Cleanups,
     Disposals,
+    /// The computations one invocation registers on an owner it does not
+    /// create (ADR 0114). Version 1 states it by item only: no document may
+    /// close it, so it is never one of [`Self::CLOSABLE`].
+    Computations,
 }
 
 impl ClaimDomain {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
+        Self::Callbacks,
+        Self::Reads,
+        Self::Writes,
+        Self::Creates,
+        Self::Invalidates,
+        Self::Throws,
+        Self::Returns,
+        Self::Cleanups,
+        Self::Disposals,
+        Self::Computations,
+    ];
+
+    /// The domains a document may name in `closed`, which are therefore the
+    /// ones an open domain is an *unresolved claim* in: every domain but
+    /// `computations`. That one has no closure in version 1 -- no census
+    /// decides it and `closed` may not name it -- so a document that does not
+    /// mention it says nothing, and nothing can resolve the silence (ADR 0114).
+    pub const CLOSABLE: [Self; 9] = [
         Self::Callbacks,
         Self::Reads,
         Self::Writes,
@@ -901,6 +936,12 @@ impl ClaimDomain {
         Self::Cleanups,
         Self::Disposals,
     ];
+
+    /// Whether a document may name this domain in `closed`.
+    #[must_use]
+    pub fn is_closable(self) -> bool {
+        Self::CLOSABLE.contains(&self)
+    }
 
     /// The call domains a document may *propose* closed
     /// (`CallSemantics::proposed_closures`).
@@ -955,6 +996,7 @@ impl ClaimDomain {
             Self::Returns => "returns",
             Self::Cleanups => "cleanups",
             Self::Disposals => "disposals",
+            Self::Computations => "computations",
         }
     }
 }
@@ -1118,6 +1160,8 @@ pub struct CallClaims {
     pub returns: KnowledgeSet<OperationId>,
     pub cleanups: KnowledgeSet<OperationId>,
     pub disposals: KnowledgeSet<OperationId>,
+    /// ADR 0114: never `Complete` in version 1.
+    pub computations: KnowledgeSet<OperationId>,
 }
 
 impl CallClaims {
@@ -1146,6 +1190,7 @@ impl CallClaims {
             ClaimDomain::Returns => Some(&mut self.returns),
             ClaimDomain::Cleanups => Some(&mut self.cleanups),
             ClaimDomain::Disposals => Some(&mut self.disposals),
+            ClaimDomain::Computations => Some(&mut self.computations),
         }
     }
 
@@ -1161,6 +1206,7 @@ impl CallClaims {
             ClaimDomain::Returns => Some(&self.returns),
             ClaimDomain::Cleanups => Some(&self.cleanups),
             ClaimDomain::Disposals => Some(&self.disposals),
+            ClaimDomain::Computations => Some(&self.computations),
         }
     }
 
@@ -1180,6 +1226,9 @@ impl CallClaims {
             ClaimDomain::Cleanups => self.cleanups = std::mem::take(&mut self.cleanups).weaken(),
             ClaimDomain::Disposals => {
                 self.disposals = std::mem::take(&mut self.disposals).weaken();
+            }
+            ClaimDomain::Computations => {
+                self.computations = std::mem::take(&mut self.computations).weaken();
             }
         }
     }
@@ -1223,6 +1272,9 @@ pub enum OperationKind {
     Create,
     Cleanup,
     Dispose,
+    /// Registering a computation on an owner this operation does not create
+    /// (ADR 0114); the `computations` domain's one kind.
+    Compute,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -1434,6 +1486,23 @@ pub struct Operation {
     /// only route to discharging it. Provenance may only *add* a discharge
     /// route, never remove one.
     pub composed_from: Option<ComposedFrom>,
+}
+
+impl Operation {
+    /// Whether this operation imposes an owner obligation on the export's
+    /// *caller*: it requires an owner it does not itself create.
+    ///
+    /// `requires: required` alone is not the test. Audited `render`'s
+    /// `register-delegation` requires an owner *and* made it (`source:
+    /// created`), and reading `requires` alone would report an owner-less
+    /// effect for a top-level `render(...)`. The consumer's owner-requirement
+    /// projection and [`ExportSemantics::withhold_operations`] both ask this,
+    /// so the two cannot disagree about which operations a withdrawal loses.
+    #[must_use]
+    pub fn imposes_owner_requirement(&self) -> bool {
+        self.owner.requirements.owner == Requirement::Required
+            && !matches!(self.owner.source, OwnerSource::Created(_))
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]

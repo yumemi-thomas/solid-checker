@@ -700,6 +700,7 @@ fn normalize_export(
         ContractClaim::Known(requirements) => Some(requirements.as_slice()),
     };
     let mut requirement_cleanups = Vec::new();
+    let mut requirement_computations = Vec::new();
     // Whether the document states every owner requirement this export has: the
     // owner census decided, and each requirement it found was published. A
     // consumer reads a closed `creates` as "no owner requirement beyond the
@@ -710,7 +711,11 @@ fn normalize_export(
         let id = OperationId(format!("{prefix}owner-requirement-{index}"));
         match owner_requirement_operation(&id, requirement) {
             Ok(operation) => {
-                requirement_cleanups.push(id);
+                if operation.kind == OperationKind::Compute {
+                    requirement_computations.push(id);
+                } else {
+                    requirement_cleanups.push(id);
+                }
                 operations.push(operation);
             }
             Err(role) => {
@@ -763,15 +768,16 @@ fn normalize_export(
     //   of a census of bytes that are not here.
     //
     // And under all of them, `requirements_published`. The documented rule
-    // for a withheld `Effect` or `Boundary` requirement is that `creates`
-    // stays open, and before 2026-09-23 only the walk kept it: the walk
-    // declines a call it has no row for, and `createEffect` has none. But
-    // `createTrackedEffect` does -- its `creates` is audited closed -- and its
-    // call carries an `Effect` requirement, so an export calling it walked
-    // clean, proposed `creates: []` and withheld the requirement. A consumer
-    // accepting that contract read "no owner requirement" and stayed silent
-    // on an unowned call. The same holds for an owner census that did not
-    // decide (`Open`, from an unresolved defect).
+    // for a withheld requirement is that `creates` stays open, and before
+    // 2026-09-23 only the walk kept it: the walk declines a call it has no
+    // row for, and `createEffect` has none. But `createTrackedEffect` does --
+    // its `creates` is audited closed -- and its call carries an `Effect`
+    // requirement, which was withheld then, so an export calling it walked
+    // clean and proposed `creates: []`. A consumer accepting that contract
+    // read "no owner requirement" and stayed silent on an unowned call. Since
+    // ADR 0114 an `Effect` requirement is published and only `Boundary` is
+    // withheld; an owner census that did not decide (`Open`, from an
+    // unresolved defect) is the same hole.
     let creates = if scope.publishes_bootstrapped_reactive_domains()
         && requirements_published
         && (summary.inherited_closure(ClaimDomain::Creates)
@@ -809,6 +815,10 @@ fn normalize_export(
     // for a consumer. See the scoping note in
     // `phase21/2026-09-03-implementation-census-plan.md` § 2.2 item 5.
     let cleanups = KnowledgeSet::partial(requirement_cleanups).unwrap_or(KnowledgeSet::Unknown);
+    // ADR 0114: `computations` is stated by item only, and its items are what
+    // a consumer reads, exactly as for the cleanup requirements above.
+    let computations =
+        KnowledgeSet::partial(requirement_computations).unwrap_or(KnowledgeSet::Unknown);
 
     let claims = CallClaims {
         callbacks,
@@ -820,6 +830,7 @@ fn normalize_export(
         returns,
         cleanups,
         disposals: KnowledgeSet::Unknown,
+        computations,
     };
     let root = ExportTargetIdentity {
         module: artifact_case.runtime.clone(),
@@ -1204,11 +1215,9 @@ impl ClosureDecline {
 /// withholding can be recorded rather than inferred from an absence.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum WithheldOwnerRequirement {
-    /// An export that must be called under an ambient owner because it
-    /// registers a computation on that owner.
-    Effect,
     /// An async-boundary JSX element the archive ships, which needs an owner
-    /// at the consumer's call site.
+    /// at the consumer's call site. The `Effect` role was withheld too until
+    /// ADR 0114 gave it the `computations` domain.
     Boundary,
 }
 
@@ -1216,7 +1225,6 @@ impl WithheldOwnerRequirement {
     /// The stable role name a withholding record carries.
     pub const fn role(self) -> &'static str {
         match self {
-            Self::Effect => "effect",
             Self::Boundary => "boundary",
         }
     }
@@ -1224,9 +1232,6 @@ impl WithheldOwnerRequirement {
     /// Why this generation cannot publish the role, in one line.
     pub const fn reason(self) -> &'static str {
         match self {
-            Self::Effect => {
-                "a free-standing owner requirement -- an export that must be called under an owner because it registers a computation on it -- has no operation kind that can carry it in schema version 1"
-            }
             Self::Boundary => {
                 "an async-boundary JSX element's owner requirement is a compiler-lowering fact the implementation census does not record"
             }
@@ -1242,7 +1247,7 @@ impl WithheldOwnerRequirement {
 /// domain of published `create` operations, and a `create` registers a
 /// version-1 resource into a runtime outside the invocation, naming what it
 /// registered (`docs/package-contract-v2/semantic-model.md` § creates, decision
-/// 2026-09-03). Exactly one of the three roles has a home in the model:
+/// 2026-09-03). Two of the three roles have a home in the model:
 ///
 /// - A `Cleanup`/`SettledCleanup` requirement registers a cleanup on the
 ///   caller's owner: `kind: cleanup` in the `cleanups` domain, carrying
@@ -1263,16 +1268,17 @@ impl WithheldOwnerRequirement {
 ///   `ProofFamily::RecursiveValueShape` -- and no witness exists for a
 ///   resource axis today, so declaring one would assert what this generation
 ///   cannot prove.
-/// - An `Effect` requirement is **withheld**. It registers a computation on
-///   the caller's owner, which is what the audits publish beside
-///   `creates: []` *closed*, so it is not a `create`; naming a child owner
-///   resource on a `create` would additionally contradict § creates' rule that
-///   a `create` names what it registered into an outside runtime. Version 1
-///   has no domain that carries a free-standing owner requirement, and the
-///   audits record no consumer-level owner requirement anywhere, so the
-///   requirement is withheld by name and `creates` stays open. See
-///   `docs/package-contract-v2/phase21/2026-09-03-implementation-census-plan.md`
-///   § 2.2 item 1.
+/// - An `Effect` requirement registers a computation on the caller's owner:
+///   `kind: compute` in the `computations` domain (ADR 0114), carrying
+///   `source: ambient-at-call`, `requires: required` and
+///   `requiresChildren: required`. It is not a `create` -- registering on the
+///   caller's owner is what the audits publish beside `creates: []` *closed*
+///   -- and until ADR 0114 version 1 had no domain for it, so it was withheld
+///   by name. `require_owner_operation_call` witnesses it from the archive's
+///   own call of an `Effect`-role primitive, keyed on `requiresChildren`, as it
+///   witnessed the resourceless `create` this shape replaces. What it produces
+///   stays **unknown**, not empty: the registered computation is itself an
+///   owner, and no witness exists for a resource axis.
 /// - A `Boundary` requirement is withheld for a second, independent reason: it
 ///   is a *compiler lowering* fact (the JSX loop at
 ///   `rust/crates/solid-reactive-ir/src/owners.rs:1213-1231`), and the
@@ -1298,7 +1304,21 @@ fn owner_requirement_operation(
             };
             Ok(cleanup)
         }
-        OwnerRequirementOperation::Effect => Err(WithheldOwnerRequirement::Effect),
+        OwnerRequirementOperation::Effect => {
+            let mut compute = operation(id.clone(), OperationKind::Compute, Vec::new(), None);
+            compute.owner = OwnerRelation {
+                source: OwnerSource::AmbientAtCall,
+                requirements: OwnerRequirements {
+                    owner: Requirement::Required,
+                    child_owners: Requirement::Required,
+                    cleanup: Requirement::Unconstrained,
+                },
+                capabilities: OwnerCapabilities::default(),
+                lifetime: None,
+                productions: KnowledgeSet::Unknown,
+            };
+            Ok(compute)
+        }
         OwnerRequirementOperation::Boundary => Err(WithheldOwnerRequirement::Boundary),
     }
 }

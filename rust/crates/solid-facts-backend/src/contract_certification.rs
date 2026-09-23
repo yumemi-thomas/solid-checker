@@ -7674,6 +7674,9 @@ mod tests {
                 ClaimDomain::Callbacks => {
                     claims.callbacks = KnowledgeSet::Complete(Vec::new());
                 }
+                ClaimDomain::Computations => {
+                    panic!("computations cannot be closed in schema version 1")
+                }
             }
         }
         claims

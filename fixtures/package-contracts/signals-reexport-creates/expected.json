@@ -4,9 +4,9 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "a3fcc2a9afeb1c3cd800fe45a8f14eabf635fa422430a4cd7c52859a8cae5e31",
+            "closureSha256": "2f2e6ce2d753ebdc2d07fc9572164a066fa910148a9003381b58d511b4326c72",
             "path": "./index.js",
-            "sha256": "405aed36295496e4923155dcdf781d8c162abfe5fe9aa1c91af03c17bd9e9ce7"
+            "sha256": "62e05c998bb5c93b9c4091b07d46a957a77930d279c4bfb9fff8847ab105faa4"
           },
           "declarations": {
             "path": "./index.d.ts",
@@ -19,7 +19,7 @@
             "makeContext": "summary-02471e768a026bc855692aa20e7485ead8a2241ff320853ac46667a2d5bcefbb",
             "readContext": "summary-02471e768a026bc855692aa20e7485ead8a2241ff320853ac46667a2d5bcefbb",
             "runUnder": "summary-c00e3940d30690c000428fc491d536ae258c80336fc62205f35eafc19a0cfaf7",
-            "trackEach": "summary-c2117bd7fadc5baa39bbfd0dd386299c5c08f9f18e62974738d33bf592642d62"
+            "trackEach": "summary-e11f5e0f19ded6084c1d42c4c39a030b6db9957eb7622b2e4de44616a2bb54a0"
           },
           "resolution": {
             "runtimeBranch": "/exports/./import",
@@ -263,7 +263,7 @@
       },
       "shape": "callable"
     },
-    "summary-c2117bd7fadc5baa39bbfd0dd386299c5c08f9f18e62974738d33bf592642d62": {
+    "summary-e11f5e0f19ded6084c1d42c4c39a030b6db9957eb7622b2e4de44616a2bb54a0": {
       "call": {
         "callbacks": [
           {
@@ -276,8 +276,13 @@
         ],
         "closed": [
           "reads",
+          "creates",
           "returns"
         ],
+        "computations": [
+          "owner-requirement-0"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -295,10 +300,33 @@
             "trigger": {
               "event": "call"
             }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "compute",
+            "owner": {
+              "requires": "required",
+              "requiresChildren": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
           }
         ],
         "proposedClosures": [
           "reads",
+          "creates",
           "returns"
         ],
         "reads": [],

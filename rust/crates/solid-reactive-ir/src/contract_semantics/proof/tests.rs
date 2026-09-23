@@ -25,6 +25,7 @@ fn closed_claims() -> CallClaims {
         returns: KnowledgeSet::complete(vec![]),
         cleanups: KnowledgeSet::complete(vec![]),
         disposals: KnowledgeSet::complete(vec![]),
+        computations: KnowledgeSet::Unknown,
     }
 }
 

@@ -624,6 +624,10 @@ fn merge_checked_export(
             left_claims.disposals.clone(),
             right_claims.disposals.clone(),
         ]),
+        computations: KnowledgeSet::join([
+            left_claims.computations.clone(),
+            right_claims.computations.clone(),
+        ]),
     };
     let mut operations = left.call.operations;
     merge_named_rows(

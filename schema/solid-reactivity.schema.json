@@ -203,6 +203,10 @@
         "returns": { "$ref": "#/$defs/operationIds" },
         "cleanups": { "$ref": "#/$defs/operationIds" },
         "disposals": { "$ref": "#/$defs/operationIds" },
+        "computations": {
+          "$comment": "ADR 0114: stated by item only in schema version 1, so it is not a callDomain and neither closed nor proposedClosures may name it.",
+          "$ref": "#/$defs/operationIds"
+        },
         "operations": {
           "type": "array",
           "maxItems": 4096,
@@ -278,7 +282,7 @@
       "required": ["id", "kind"],
       "properties": {
         "id": { "$ref": "#/$defs/nonemptyString" },
-        "kind": { "enum": ["invoke", "return", "read", "write", "invalidate", "create", "cleanup", "dispose"] },
+        "kind": { "enum": ["invoke", "return", "read", "write", "invalidate", "create", "cleanup", "dispose", "compute"] },
         "guard": { "$ref": "#/$defs/guard" },
         "trigger": { "$ref": "#/$defs/trigger" },
         "at": { "$ref": "#/$defs/executionPoint" },

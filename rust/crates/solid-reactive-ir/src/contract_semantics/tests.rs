@@ -31,6 +31,7 @@ fn closed_claims() -> CallClaims {
         returns: KnowledgeSet::complete(vec![]),
         cleanups: KnowledgeSet::complete(vec![]),
         disposals: KnowledgeSet::complete(vec![]),
+        computations: KnowledgeSet::Unknown,
     }
 }
 
@@ -100,6 +101,7 @@ fn call(operations: Vec<Operation>, resources: Vec<Resource>) -> CallSemantics {
             OperationKind::Create => claims.creates = KnowledgeSet::Complete(vec![id]),
             OperationKind::Cleanup => claims.cleanups = KnowledgeSet::Complete(vec![id]),
             OperationKind::Dispose => claims.disposals = KnowledgeSet::Complete(vec![id]),
+            OperationKind::Compute => claims.computations = KnowledgeSet::Partial(vec![id]),
         }
     }
     CallSemantics::new(
@@ -229,6 +231,131 @@ fn withholding_an_operation_opens_its_domain_and_takes_its_dependents() {
     assert!(none.is_empty());
     assert_eq!(untouched_export.call.operations.len(), 1);
     assert!(untouched_export.call.claims.creates.is_closed());
+}
+
+/// A `compute` operation in the shape the generator publishes an `Effect`
+/// owner requirement (ADR 0114): it requires the caller's ambient owner and
+/// child owners of it, and what it produces is left unknown.
+fn compute(id: &str) -> Operation {
+    let mut compute = operation(id, OperationKind::Compute);
+    compute.owner = OwnerRelation {
+        source: OwnerSource::AmbientAtCall,
+        requirements: OwnerRequirements {
+            owner: Requirement::Required,
+            child_owners: Requirement::Required,
+            cleanup: Requirement::Unconstrained,
+        },
+        capabilities: OwnerCapabilities::default(),
+        lifetime: None,
+        productions: KnowledgeSet::Unknown,
+    };
+    compute
+}
+
+/// ADR 0114's domain: stated by item only, by `compute` operations only, and
+/// never an unresolved claim, since nothing in version 1 could resolve it.
+#[test]
+fn computations_are_stated_by_item_only_and_by_compute_operations() {
+    let id = || OperationId("compute-0".into());
+    let semantics = call(vec![compute("compute-0")], vec![]);
+    assert_eq!(
+        semantics.claims.computations,
+        KnowledgeSet::Partial(vec![id()])
+    );
+    let export = normalized_export(proposal_with(ValueShape::Callable, semantics.clone()));
+    assert_eq!(
+        export.claim_state(ClaimDomain::Computations),
+        KnowledgeState::PartialPositive
+    );
+    assert!(
+        !export
+            .unresolved_claims()
+            .contains(&ClaimPath::Call(ClaimDomain::Computations)),
+        "a domain no document may close is not a claim anything could resolve"
+    );
+    let silent = normalized_export(proposal_with(ValueShape::Callable, call(vec![], vec![])));
+    assert_eq!(
+        silent.claim_state(ClaimDomain::Computations),
+        KnowledgeState::Unknown
+    );
+    assert!(
+        !silent
+            .unresolved_claims()
+            .contains(&ClaimPath::Call(ClaimDomain::Computations)),
+        "and silence about it is not one either"
+    );
+
+    let refused = |semantics: CallSemantics, why: &str| {
+        assert!(
+            matches!(
+                proposal_with(ValueShape::Callable, semantics).normalize(),
+                Err(ModelError::Contradiction { .. })
+            ),
+            "{why}"
+        );
+    };
+    let mut closed = semantics.clone();
+    closed.claims.computations = KnowledgeSet::Complete(vec![id()]);
+    refused(
+        closed,
+        "no census decides computations, so no document closes it",
+    );
+    let mut unlisted = semantics.clone();
+    unlisted.claims.computations = KnowledgeSet::Unknown;
+    refused(unlisted, "a compute operation outside computations");
+    let mut misfiled = call(vec![operation("cleanup-0", OperationKind::Cleanup)], vec![]);
+    misfiled.claims.computations = KnowledgeSet::Partial(vec![OperationId("cleanup-0".into())]);
+    refused(
+        misfiled,
+        "a computations item that is not a compute operation",
+    );
+    let mut childless = compute("compute-0");
+    childless.owner.requirements.child_owners = Requirement::Unconstrained;
+    refused(
+        call(vec![childless], vec![]),
+        "a compute that does not require child owners states no registration",
+    );
+    let mut ownerless = compute("compute-0");
+    ownerless.owner.source = OwnerSource::Unknown;
+    ownerless.owner.requirements.owner = Requirement::Unconstrained;
+    refused(
+        call(vec![ownerless], vec![]),
+        "a compute that does not require an owner states no registration",
+    );
+}
+
+/// A consumer reads a closed `creates` as "no owner requirement beyond the
+/// published items", so withdrawing an operation that imposes one opens
+/// `creates` too; an operation that imposes none leaves it closed, which is
+/// what `withholding_an_operation_opens_its_domain_and_takes_its_dependents`
+/// already pins.
+#[test]
+fn withdrawing_an_owner_requirement_opens_creates_with_it() {
+    let case = artifact_case("server-import");
+    let mut cleanup = operation("cleanup-0", OperationKind::Cleanup);
+    cleanup.owner = compute("unused").owner;
+    cleanup.owner.requirements.child_owners = Requirement::Unconstrained;
+    cleanup.owner.requirements.cleanup = Requirement::Required;
+    for (seed, requirement) in [("compute-0", compute("compute-0")), ("cleanup-0", cleanup)] {
+        let mut export = export(
+            &case,
+            "track",
+            ValueShape::Callable,
+            call(vec![requirement], vec![]),
+        );
+        assert!(export.call.claims.creates.is_closed());
+        let withdrawn = export.withhold_operations(&BTreeSet::from([OperationId(seed.into())]));
+        assert_eq!(withdrawn.len(), 1, "{seed}");
+        assert!(
+            export.call.claims.computations.items().is_empty()
+                && export.call.claims.cleanups.items().is_empty(),
+            "{seed} is no longer listed"
+        );
+        assert!(
+            !export.call.claims.creates.is_closed(),
+            "{seed}: creates is the consumer's completeness signal, so it opens with the requirement"
+        );
+    }
 }
 
 fn proposal_with(shape: ValueShape, call: CallSemantics) -> ContractProposal {
@@ -1209,6 +1336,41 @@ fn proposed_closure_digest_family_is_separate_and_frozen() {
     assert_eq!(
         contract(true, true).semantic_digest().as_str(),
         "sha256:c2906640684350d1053c1b3409c2b69db35822fb3d7ffd4055a394cdd7395249"
+    );
+}
+
+/// ADR 0114's family: a contract stating a `computations` item hashes under a
+/// marker of its own, written before anything else, so every contract stating
+/// none keeps the stream it had -- the golden vector, again, is that half.
+#[test]
+fn computations_digest_family_is_separate_and_frozen() {
+    let read = operation("read", OperationKind::Read);
+    let write = operation("write", OperationKind::Write);
+    let owner = resource("owner", ResourceKind::Owner);
+    let cleanup = resource("cleanup", ResourceKind::Cleanup);
+    let contract = |computes: bool| {
+        let mut operations = vec![read.clone(), write.clone()];
+        if computes {
+            operations.push(compute("compute"));
+        }
+        let mut behavior = call(operations, vec![owner.clone(), cleanup.clone()]);
+        behavior.edges = vec![OperationEdge {
+            kind: EdgeKind::Data,
+            from: read.id.clone(),
+            to: write.id.clone(),
+        }];
+        proposal_with(ValueShape::Plain, behavior)
+            .normalize()
+            .unwrap()
+    };
+    assert_eq!(
+        contract(false).semantic_digest().as_str(),
+        "sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9",
+        "a contract stating no computation keeps the legacy vector byte for byte"
+    );
+    assert_eq!(
+        contract(true).semantic_digest().as_str(),
+        "sha256:9ae7a327fbb8ab15d31649a1e0c34acbee00f35698cb2d53627c4ceab014be67"
     );
 }
 

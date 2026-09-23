@@ -435,6 +435,9 @@ fn compact_call(
         ("returns", &claims.returns),
         ("cleanups", &claims.cleanups),
         ("disposals", &claims.disposals),
+        // ADR 0114: items only, so it never reaches `closed`; validation
+        // refuses a closed one before the encoder sees it.
+        ("computations", &claims.computations),
     ] {
         compact_knowledge(&mut object, &mut closed, name, knowledge, |id| {
             Ok(json!(ids.operation(id)?))
@@ -1136,6 +1139,7 @@ const fn operation_kind(value: OperationKind) -> &'static str {
         OperationKind::Create => "create",
         OperationKind::Cleanup => "cleanup",
         OperationKind::Dispose => "dispose",
+        OperationKind::Compute => "compute",
     }
 }
 
@@ -1182,6 +1186,7 @@ const fn call_domain_name(value: ClaimDomain) -> &'static str {
         ClaimDomain::Returns => "returns",
         ClaimDomain::Cleanups => "cleanups",
         ClaimDomain::Disposals => "disposals",
+        ClaimDomain::Computations => "computations",
     }
 }
 
@@ -1458,6 +1463,10 @@ struct WireCall {
     cleanups: Option<Vec<String>>,
     #[serde(default)]
     disposals: Option<Vec<String>>,
+    /// ADR 0114. Never named in `closed`: `WireCallDomain` has no variant for
+    /// it, so a document that tries is refused as it decodes.
+    #[serde(default)]
+    computations: Option<Vec<String>>,
     #[serde(default)]
     operations: Vec<WireOperation>,
     #[serde(default)]
@@ -1554,6 +1563,7 @@ enum WireOperationKind {
     Create,
     Cleanup,
     Dispose,
+    Compute,
 }
 
 impl From<WireOperationKind> for OperationKind {
@@ -1567,6 +1577,7 @@ impl From<WireOperationKind> for OperationKind {
             WireOperationKind::Create => Self::Create,
             WireOperationKind::Cleanup => Self::Cleanup,
             WireOperationKind::Dispose => Self::Dispose,
+            WireOperationKind::Compute => Self::Compute,
         }
     }
 }
@@ -2662,6 +2673,12 @@ fn expand_call(
         returns: operation_knowledge(call.returns, WireCallDomain::Returns, &closed, ids)?,
         cleanups: operation_knowledge(call.cleanups, WireCallDomain::Cleanups, &closed, ids)?,
         disposals: operation_knowledge(call.disposals, WireCallDomain::Disposals, &closed, ids)?,
+        computations: knowledge(
+            call.computations
+                .map(|items| items.into_iter().map(|id| ids.operation(&id)).collect()),
+            false,
+            "call operation claim",
+        )?,
     };
 
     let operations = call
@@ -3758,6 +3775,63 @@ mod tests {
             decode(&document(r#"{"proposedClosures":["nonsense"]}"#)).is_err(),
             "an unknown domain spelling must be refused, not ignored"
         );
+    }
+
+    /// ADR 0114: `computations` round-trips by item only, puts the document in
+    /// a digest family of its own, and is refused wherever it would be closed,
+    /// empty, or missing its `compute` operation.
+    #[test]
+    fn computations_round_trip_by_item_only_in_their_own_digest_family() {
+        use solid_reactive_ir::contract_semantics::KnowledgeState;
+
+        let document = |call: &str| {
+            format!(
+                r#"{{"format":"solid-reactivity-contract","schemaVersion":1,"semanticModelVersion":1,"package":{{"name":"consumer","version":"1.0.0","integrity":"sha512:test","manifest":{{"path":"package.json","sha256":"{a}"}}}},"summaries":{{"fn":{{"shape":"callable","call":{call}}}}},"entrypoints":{{".":{{"artifact":{{"path":"dist/index.js","sha256":"{b}","closureSha256":"{c}"}},"declarations":{{"path":"dist/index.d.ts","sha256":"{d}"}},"exports":{{"run":"fn"}}}}}},"sidecars":{{}}}}"#,
+                a = "a".repeat(64),
+                b = "b".repeat(64),
+                c = "c".repeat(64),
+                d = "d".repeat(64),
+            )
+            .into_bytes()
+        };
+        // The generator's shape, copied from `signals-reexport-creates`.
+        const COMPUTE: &str = r#"{"at":{"event":"call","schedule":"same-stack"},"count":{"max":"many","min":0,"scope":"call"},"id":"owner-requirement-0","kind":"compute","owner":{"requires":"required","requiresChildren":"required","source":"ambient-at-call"},"tracking":"untracked","trigger":{"event":"call"}}"#;
+
+        let stated = normalized(&document(&format!(
+            r#"{{"closed":["creates"],"creates":[],"computations":["owner-requirement-0"],"operations":[{COMPUTE}]}}"#
+        )));
+        let export = &stated.artifact_cases()[0].exports["run"];
+        assert_eq!(
+            export.claim_state(ClaimDomain::Computations),
+            KnowledgeState::PartialPositive
+        );
+        let encoded = encode(&stated, &SidecarDigests::default(), false).unwrap();
+        assert!(
+            String::from_utf8_lossy(&encoded).contains(r#""computations":["owner-requirement-0"]"#),
+            "{}",
+            String::from_utf8_lossy(&encoded)
+        );
+        assert_eq!(normalized(&encoded), stated);
+        let silent = normalized(&document(r#"{"closed":["creates"],"creates":[]}"#));
+        assert_ne!(stated.semantic_digest(), silent.semantic_digest());
+
+        for (call, why) in [
+            (
+                format!(
+                    r#"{{"closed":["computations"],"computations":["owner-requirement-0"],"operations":[{COMPUTE}]}}"#
+                ),
+                "closed",
+            ),
+            (r#"{"computations":[]}"#.to_owned(), "empty"),
+            (format!(r#"{{"operations":[{COMPUTE}]}}"#), "unlisted"),
+        ] {
+            assert!(
+                decode(&document(&call))
+                    .and_then(|proposal| proposal.normalize())
+                    .is_err(),
+                "a {why} computations domain must be refused: {call}"
+            );
+        }
     }
 
     #[test]

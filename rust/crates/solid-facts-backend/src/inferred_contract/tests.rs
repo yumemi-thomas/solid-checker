@@ -563,22 +563,59 @@ fn a_cleanup_owner_requirement_publishes_a_resourceless_cleanup_operation() {
     }
 }
 
-/// The two roles this generation refuses. Each leaves no operation, no
+/// ADR 0114: an `Effect` requirement is a `kind: compute` operation in the
+/// `computations` domain, requiring the caller's ambient owner and child owners
+/// of it, naming no resource, and leaving what it produces unknown -- the
+/// registered computation is itself an owner, and no witness exists for a
+/// resource axis. Nothing is withheld for it any more.
+#[test]
+fn an_effect_owner_requirement_publishes_a_compute_operation() {
+    let normalized =
+        normalized_owner_requirement(solid_reactive_ir::OwnerRequirementOperation::Effect);
+    assert!(normalized.withheld.is_empty(), "{:?}", normalized.withheld);
+    let export = normalized.contract.artifact_cases()[0]
+        .exports
+        .get("read")
+        .unwrap();
+    let computations = export.call.claims().computations.items().to_vec();
+    assert_eq!(computations.len(), 1);
+    assert!(matches!(
+        export.call.claims().cleanups,
+        KnowledgeSet::Unknown
+    ));
+    let operation = export.operation(&computations[0].0).unwrap();
+    assert_eq!(operation.kind, OperationKind::Compute);
+    assert_eq!(
+        operation.owner.source,
+        solid_reactive_ir::contract_semantics::OwnerSource::AmbientAtCall
+    );
+    assert_eq!(
+        (
+            operation.owner.requirements.owner,
+            operation.owner.requirements.child_owners,
+        ),
+        (
+            solid_reactive_ir::contract_semantics::Requirement::Required,
+            solid_reactive_ir::contract_semantics::Requirement::Required,
+        )
+    );
+    assert!(matches!(operation.owner.productions, KnowledgeSet::Unknown));
+    assert!(operation.resources.is_empty());
+    assert!(operation.imposes_owner_requirement());
+}
+
+/// The one role this generation refuses. It leaves no operation, no
 /// `Creates` closure candidate, and a *named* withholding record carrying the
 /// export, the role, and the reason -- which is what makes the refusal
-/// distinguishable from a census that found nothing.
+/// distinguishable from a census that found nothing. The `Effect` role was
+/// the other until ADR 0114.
 #[test]
 fn a_withheld_owner_requirement_publishes_nothing_and_is_named() {
-    for (role, name) in [
-        (
-            solid_reactive_ir::OwnerRequirementOperation::Effect,
-            "effect",
-        ),
-        (
-            solid_reactive_ir::OwnerRequirementOperation::Boundary,
-            "boundary",
-        ),
-    ] {
+    let (role, name) = (
+        solid_reactive_ir::OwnerRequirementOperation::Boundary,
+        "boundary",
+    );
+    {
         let normalized = normalized_owner_requirement(role);
         let export = normalized.contract.artifact_cases()[0]
             .exports
@@ -629,9 +666,10 @@ fn a_withheld_owner_requirement_publishes_nothing_and_is_named() {
 /// every requirement the export has must be stated. `createTrackedEffect` is the
 /// case that reached this: its `creates` row is audited, so a caller walks
 /// clean, and its call carries the `Effect` requirement this generation
-/// withholds. An owner census that did not decide is the same hole. A
-/// published `cleanup` requirement is the control: it is an item, so the
-/// closure still states everything.
+/// withheld until ADR 0114. `Boundary` is the role still withheld, and an owner
+/// census that did not decide is the same hole. A published requirement --
+/// `cleanup` in `cleanups`, `effect` in `computations` -- is the control: it is
+/// an item, so the closure still states everything.
 #[test]
 fn a_creates_closure_waits_for_every_owner_requirement_to_be_published() {
     let proposes_creates = |owner_requirements| {
@@ -666,16 +704,13 @@ fn a_creates_closure_waits_for_every_owner_requirement_to_be_published() {
         }])
     };
 
-    for role in [
-        solid_reactive_ir::OwnerRequirementOperation::Effect,
-        solid_reactive_ir::OwnerRequirementOperation::Boundary,
-    ] {
-        assert_eq!(
-            proposes_creates(requirement(role)),
-            (false, 1),
-            "{role:?} is withheld, so creates must stay open"
-        );
-    }
+    assert_eq!(
+        proposes_creates(requirement(
+            solid_reactive_ir::OwnerRequirementOperation::Boundary
+        )),
+        (false, 1),
+        "a withheld requirement keeps creates open"
+    );
     assert_eq!(
         proposes_creates(ContractClaim::Open),
         (false, 0),
@@ -684,6 +719,7 @@ fn a_creates_closure_waits_for_every_owner_requirement_to_be_published() {
     for role in [
         solid_reactive_ir::OwnerRequirementOperation::Cleanup,
         solid_reactive_ir::OwnerRequirementOperation::SettledCleanup,
+        solid_reactive_ir::OwnerRequirementOperation::Effect,
     ] {
         assert_eq!(
             proposes_creates(requirement(role)),

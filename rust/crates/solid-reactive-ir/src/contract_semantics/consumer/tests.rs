@@ -71,6 +71,7 @@ fn accepted() -> AcceptedContract {
                 returns: KnowledgeSet::complete(vec![]),
                 cleanups: KnowledgeSet::complete(vec![]),
                 disposals: KnowledgeSet::complete(vec![]),
+                computations: KnowledgeSet::Unknown,
             },
             vec![operation("read-a", 1), operation("read-b", 0)],
             vec![],
