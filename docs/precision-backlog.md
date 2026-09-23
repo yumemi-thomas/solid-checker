@@ -1,5 +1,26 @@
 # Precision backlog
 
+## A withheld owner requirement keeps `creates` open (2026-09-23)
+
+Status: **fixed**. A consumer reads a closed `creates` as "no owner requirement
+beyond the published items" (`project_owner_requirements`), and the generator
+withholds an `Effect` or `Boundary` requirement because version 1 has no
+domain for it. The documented rule was that `creates` then stays open, but only
+the `creates` walk enforced it, by declining a call it had no row for.
+`createTrackedEffect` has a row (its `creates` is audited closed) and its call
+carries an `Effect` requirement, so an export calling it through `solid-js`'
+re-export walked clean, proposed `creates: []` and withheld the requirement. A
+consumer accepting that contract would have read "no owner requirement" and
+stayed silent on an unowned call. An owner census left `Open` by an unresolved
+defect was the same hole. The generator now proposes `creates` only when every
+owner requirement the export has was decided and published
+(`requirements_published` in `inferred_contract.rs`). Pinned by
+`a_creates_closure_waits_for_every_owner_requirement_to_be_published` and by
+the new `signals-reexport-creates` corpus fixture, whose `trackEach` proposes
+`creates` closed when built without the gate. No other corpus snapshot and no
+coverage finding moves. The requirement itself still has no home: that is the
+new domain `semantic-model.md` § creates names as the repair.
+
 ## `runWithOwner`, `createContext` and `useContext` get audited `creates` rows (2026-09-23)
 
 Status: **implemented**, as a hand implementation census for the repository
@@ -16,10 +37,11 @@ archive (that audit's § 1.4), and `(solid-js, createContext)` and
 checked in under `rust/crates/solid-dialect/audited-slices/`. A call to one of
 them no longer declines a caller's proposal; the caller's census still has to
 clear everything else it calls. No corpus snapshot and no coverage finding
-moves: no fixture carries a `@solidjs/signals` stub, as for the 2026-09-04
+moved: no fixture carried a `@solidjs/signals` stub, as for the 2026-09-04
 rows, so the dialect's tests pin the rows (including that `@solidjs/signals`'
 own, unaudited `createContext` is not denied) and the Solid 2 census measures
-their reach. Remaining: `callbacks`, `reads` and every other domain stay
+their reach. The `signals-reexport-creates` corpus fixture (the entry above)
+has since reached all three through `solid-js`' re-export. Remaining: `callbacks`, `reads` and every other domain stay
 undecided for all three, and `createSignal`, `createMemo` and `createEffect`
 through `solid-js` stay withheld until the table can state a guarded row.
 

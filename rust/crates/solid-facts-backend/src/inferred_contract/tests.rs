@@ -624,6 +624,79 @@ fn a_withheld_owner_requirement_publishes_nothing_and_is_named() {
     }
 }
 
+/// A `creates` closure is also what a consumer reads as "no owner requirement
+/// beyond the published items", so the walk clearing an export is not enough:
+/// every requirement the export has must be stated. `createTrackedEffect` is the
+/// case that reached this: its `creates` row is audited, so a caller walks
+/// clean, and its call carries the `Effect` requirement this generation
+/// withholds. An owner census that did not decide is the same hole. A
+/// published `cleanup` requirement is the control: it is an item, so the
+/// closure still states everything.
+#[test]
+fn a_creates_closure_waits_for_every_owner_requirement_to_be_published() {
+    let proposes_creates = |owner_requirements| {
+        let summary = ContractExport {
+            kind: "function".into(),
+            creates_walk_clean: true,
+            owner_requirements,
+            ..ContractExport::default()
+        };
+        let normalized = normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution(["read".into()]),
+        )
+        .unwrap();
+        let export = &normalized.contract.artifact_cases()[0].exports["read"];
+        let candidate = normalized.closure_candidates.iter().any(|candidate| {
+            candidate.path
+                == SemanticClaimPath::Domain(
+                    solid_reactive_ir::contract_semantics::ClaimPath::Call(ClaimDomain::Creates),
+                )
+        });
+        assert_eq!(
+            candidate,
+            !export.claim_state(ClaimDomain::Creates).is_open(),
+            "the candidate and the document must agree"
+        );
+        (candidate, normalized.withheld.len())
+    };
+    let requirement = |operation| {
+        ContractClaim::Known(vec![solid_reactive_ir::ContractOwnerRequirement {
+            operation,
+        }])
+    };
+
+    for role in [
+        solid_reactive_ir::OwnerRequirementOperation::Effect,
+        solid_reactive_ir::OwnerRequirementOperation::Boundary,
+    ] {
+        assert_eq!(
+            proposes_creates(requirement(role)),
+            (false, 1),
+            "{role:?} is withheld, so creates must stay open"
+        );
+    }
+    assert_eq!(
+        proposes_creates(ContractClaim::Open),
+        (false, 0),
+        "an undecided owner census must keep creates open"
+    );
+    for role in [
+        solid_reactive_ir::OwnerRequirementOperation::Cleanup,
+        solid_reactive_ir::OwnerRequirementOperation::SettledCleanup,
+    ] {
+        assert_eq!(
+            proposes_creates(requirement(role)),
+            (true, 0),
+            "{role:?} is published, so the closure may be proposed"
+        );
+    }
+    assert_eq!(
+        proposes_creates(ContractClaim::Known(Vec::new())),
+        (true, 0)
+    );
+}
+
 /// `semantic-model.md` § creates' mechanical separator, asserted over the
 /// generator's own output rather than trusted: a `create` operation names what
 /// it registered. The generator now emits no `create` at all, which is the

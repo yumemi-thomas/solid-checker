@@ -80,6 +80,7 @@
     "runtime-semantics-shadowed",
     "seed-attestation-discrepancy",
     "shorthand-block-scope",
+    "signals-reexport-creates",
     "solid-reexport",
     "torture-conditional-semantics",
     "torture-deep-barrel",

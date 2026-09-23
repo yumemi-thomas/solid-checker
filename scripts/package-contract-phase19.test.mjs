@@ -199,7 +199,12 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // generator's side of ADR 0103's amendment, which proposes `creates` and
       // `callbacks` for a `const` member alias beside the `reads` it already
       // proposed, and nothing new for the three shapes that are not one.
-      stableMainDocuments: 138,
+      //
+      // 139 the same day adds signals-reexport-creates' main document: the
+      // one corpus fixture that reaches `@solidjs/signals`' rows through
+      // `solid-js`' re-export, pinning that a withheld `Effect` requirement
+      // keeps `creates` open where the walk is clean.
+      stableMainDocuments: 139,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

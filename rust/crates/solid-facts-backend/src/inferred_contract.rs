@@ -700,6 +700,12 @@ fn normalize_export(
         ContractClaim::Known(requirements) => Some(requirements.as_slice()),
     };
     let mut requirement_cleanups = Vec::new();
+    // Whether the document states every owner requirement this export has: the
+    // owner census decided, and each requirement it found was published. A
+    // consumer reads a closed `creates` as "no owner requirement beyond the
+    // published items" (`project_owner_requirements`), so `creates` may close
+    // only where that reading is true; see the `creates` gate below.
+    let mut requirements_published = owner_requirements.is_some();
     for (index, requirement) in owner_requirements.unwrap_or_default().iter().enumerate() {
         let id = OperationId(format!("{prefix}owner-requirement-{index}"));
         match owner_requirement_operation(&id, requirement) {
@@ -707,10 +713,13 @@ fn normalize_export(
                 requirement_cleanups.push(id);
                 operations.push(operation);
             }
-            Err(role) => withheld.push(WithheldOwnerRequirementRecord {
-                export: name.to_owned(),
-                role,
-            }),
+            Err(role) => {
+                requirements_published = false;
+                withheld.push(WithheldOwnerRequirementRecord {
+                    export: name.to_owned(),
+                    role,
+                });
+            }
         }
     }
     // `creates` carries no owner requirement any more: registering a
@@ -752,7 +761,19 @@ fn normalize_export(
     //   the accepted dependency contract this summary was projected from, and
     //   the certifier discharges it against that dependency's receipt instead
     //   of a census of bytes that are not here.
+    //
+    // And under all of them, `requirements_published`. The documented rule
+    // for a withheld `Effect` or `Boundary` requirement is that `creates`
+    // stays open, and before 2026-09-23 only the walk kept it: the walk
+    // declines a call it has no row for, and `createEffect` has none. But
+    // `createTrackedEffect` does -- its `creates` is audited closed -- and its
+    // call carries an `Effect` requirement, so an export calling it walked
+    // clean, proposed `creates: []` and withheld the requirement. A consumer
+    // accepting that contract read "no owner requirement" and stayed silent
+    // on an unowned call. The same holds for an owner census that did not
+    // decide (`Open`, from an unresolved defect).
     let creates = if scope.publishes_bootstrapped_reactive_domains()
+        && requirements_published
         && (summary.inherited_closure(ClaimDomain::Creates)
             || (summary.kind == "function"
                 && (summary.creates_walk_clean || summary.member_alias_initializer)))
