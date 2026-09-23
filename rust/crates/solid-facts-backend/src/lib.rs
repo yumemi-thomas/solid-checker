@@ -1832,40 +1832,81 @@ fn semantic_demands(
     demand_plan::plan(dialect, files, options)
 }
 
-fn structural_accessor_spans(dialect: &'static Dialect, file: &FileFacts) -> HashSet<Span> {
-    let vocabulary = dialect.vocabulary;
-    let mut named_imports = HashMap::<&str, solid_dialect::Primitive>::new();
-    let mut namespace_imports = HashMap::<&str, &str>::new();
-    for import in &file.ast.imports {
-        if !vocabulary.owns_module(&import.module) {
-            continue;
-        }
-        for binding in &import.bindings {
-            match binding.kind {
-                solid_facts::ast::ImportKind::Named => {
-                    let Some(local) = file.source_text(binding.local.span) else {
-                        continue;
-                    };
-                    let imported = binding.imported.as_deref().unwrap_or(local);
-                    let Some(primitive) = vocabulary.primitive(imported) else {
-                        continue;
-                    };
-                    if vocabulary
-                        .export_modules(imported, solid_dialect::ExportPosition::Value)
-                        .contains(&import.module.as_str())
-                    {
-                        named_imports.insert(local, primitive);
+/// The dialect primitives a file imports, by the spelling a static callee names
+/// them with: a named import from a module the vocabulary owns and exports the
+/// primitive from, or a member of a namespace import of one.
+///
+/// Syntax only, so it decides *demands* and never what a callee is: a local that
+/// shadows the import answers too, which costs the producer one more question
+/// and proves nothing. What a call's callee actually is stays the semantic
+/// lookup's.
+pub(crate) struct PrimitiveImports<'a> {
+    vocabulary: &'static dyn solid_dialect::Dialect,
+    named: HashMap<&'a str, solid_dialect::Primitive>,
+    namespaces: HashMap<&'a str, &'a str>,
+}
+
+impl<'a> PrimitiveImports<'a> {
+    pub(crate) fn new(dialect: &'static Dialect, file: &'a FileFacts) -> Self {
+        let vocabulary = dialect.vocabulary;
+        let mut named = HashMap::new();
+        let mut namespaces = HashMap::new();
+        for import in &file.ast.imports {
+            if !vocabulary.owns_module(&import.module) {
+                continue;
+            }
+            for binding in &import.bindings {
+                match binding.kind {
+                    solid_facts::ast::ImportKind::Named => {
+                        let Some(local) = file.source_text(binding.local.span) else {
+                            continue;
+                        };
+                        let imported = binding.imported.as_deref().unwrap_or(local);
+                        let Some(primitive) = vocabulary.primitive(imported) else {
+                            continue;
+                        };
+                        if vocabulary
+                            .export_modules(imported, solid_dialect::ExportPosition::Value)
+                            .contains(&import.module.as_str())
+                        {
+                            named.insert(local, primitive);
+                        }
                     }
-                }
-                solid_facts::ast::ImportKind::Namespace => {
-                    if let Some(local) = file.source_text(binding.local.span) {
-                        namespace_imports.insert(local, &import.module);
+                    solid_facts::ast::ImportKind::Namespace => {
+                        if let Some(local) = file.source_text(binding.local.span) {
+                            namespaces.insert(local, import.module.as_str());
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
             }
         }
+        Self {
+            vocabulary,
+            named,
+            namespaces,
+        }
     }
+
+    /// The primitive a static callee's spelling denotes, if it names one.
+    pub(crate) fn primitive(&self, static_callee: &str) -> Option<solid_dialect::Primitive> {
+        if let Some(primitive) = self.named.get(static_callee) {
+            return Some(*primitive);
+        }
+        let (namespace, property) = static_callee.split_once('.')?;
+        let module = self.namespaces.get(namespace)?;
+        let name = property.rsplit('.').next().unwrap_or(property);
+        self.vocabulary
+            .namespace_import_primitives(module)
+            .contains(&name)
+            .then(|| self.vocabulary.primitive(name))
+            .flatten()
+    }
+}
+
+fn structural_accessor_spans(dialect: &'static Dialect, file: &FileFacts) -> HashSet<Span> {
+    let vocabulary = dialect.vocabulary;
+    let imports = PrimitiveImports::new(dialect, file);
     let mut result = HashSet::new();
     for binding in &file.ast.bindings {
         let Some(initializer) = binding.call_initializer else {
@@ -1877,20 +1918,7 @@ fn structural_accessor_spans(dialect: &'static Dialect, file: &FileFacts) -> Has
         let Some(static_callee) = call.static_callee(&file.source) else {
             continue;
         };
-        let primitive = if let Some(primitive) = named_imports.get(static_callee) {
-            Some(*primitive)
-        } else if let Some((namespace, property)) = static_callee.split_once('.')
-            && let Some(module) = namespace_imports.get(namespace)
-        {
-            let name = property.rsplit('.').next().unwrap_or(property);
-            vocabulary
-                .namespace_import_primitives(module)
-                .contains(&name)
-                .then(|| vocabulary.primitive(name))
-                .flatten()
-        } else {
-            None
-        };
+        let primitive = imports.primitive(static_callee);
         if !primitive.is_some_and(|primitive| vocabulary.creates_reactive_source(primitive)) {
             continue;
         }
@@ -2581,6 +2609,59 @@ mod tests {
         assert!(matching[0].symbol);
         assert!(matching[0].resolved_call);
         assert!(matching[0].query_location.is_some());
+    }
+
+    /// A dialect primitive's call is demanded its resolved call with no
+    /// argument too, because the declaration is what names the package the
+    /// `creates` audits are keyed on. An argumentless local call is the
+    /// control, and so is a primitive's name imported from a module the
+    /// vocabulary does not own.
+    #[test]
+    fn an_argumentless_primitive_call_is_demanded_its_resolved_call() {
+        let file = test_file_facts(
+            "src/owner.ts",
+            "import { getOwner, flush as settle } from \"solid-js\";\n\
+             import * as Solid from \"solid-js\";\n\
+             import { getOwner as foreign } from \"./local\";\n\
+             function local() {}\n\
+             export function probe() {\n\
+               const owner = getOwner();\n\
+               settle();\n\
+               const again = Solid.getOwner();\n\
+               foreign();\n\
+               local();\n\
+               return owner === again;\n\
+             }",
+        );
+        let demands = semantic_demands(
+            dialect::default_dialect(),
+            std::slice::from_ref(&file),
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
+        let resolved = |spelling: &str| {
+            let call = file
+                .ast
+                .calls
+                .iter()
+                .find(|call| file.source_text(call.callee) == Some(spelling))
+                .expect(spelling);
+            let location = typefacts_location(file.path.as_str(), call.callee);
+            demands
+                .iter()
+                .any(|demand| demand.location == location && demand.resolved_call)
+        };
+        assert!(resolved("getOwner"));
+        assert!(resolved("settle"), "an aliased named import");
+        assert!(resolved("Solid.getOwner"), "a namespace member");
+        assert!(
+            !resolved("foreign"),
+            "a module the vocabulary does not own names no primitive"
+        );
+        assert!(
+            !resolved("local"),
+            "an argumentless local call stays as it was"
+        );
     }
 
     #[test]

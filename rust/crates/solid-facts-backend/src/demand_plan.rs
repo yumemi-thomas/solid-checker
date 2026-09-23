@@ -9,8 +9,8 @@ use typefacts::v3::EntityDemand;
 
 use crate::dialect::Dialect;
 use crate::{
-    BackendError, SemanticDemandOptions, callee_property_location, structural_accessor_spans,
-    typefacts_location,
+    BackendError, PrimitiveImports, SemanticDemandOptions, callee_property_location,
+    structural_accessor_spans, typefacts_location,
 };
 
 pub(crate) fn plan(
@@ -608,6 +608,7 @@ fn plan_file(
     for span in async_value_spans {
         demands.push(demand(typefacts_location(&path, span)).async_context());
     }
+    let primitive_imports = PrimitiveImports::new(dialect, file);
     for call in &file.ast.calls {
         let callee = typefacts_location(&path, call.callee);
         let property = callee_property_location(&file.source, &callee);
@@ -621,9 +622,20 @@ fn plan_file(
             .computed_members
             .binary_search(&file.ast.peel_ts_sugar_span(call.callee))
             .is_ok();
+        // And a dialect primitive's call needs its declaration even with no
+        // argument: the generator's `creates` walk asks the audits about the
+        // package that *declares* a primitive callee, and only the resolved
+        // call carries the declaration. Without it `getOwner() ? a : b` and a
+        // bare `flush()` declined as the dialect's silence although both have
+        // rows (`@solidjs/signals`, reached through `solid-js`' re-export).
+        let argumentless_primitive = call.arguments.is_empty()
+            && call
+                .static_callee(&file.source)
+                .is_some_and(|callee| primitive_imports.primitive(callee).is_some());
         planned.resolved_call = !call.arguments.is_empty()
             || returned_callees.contains(&call.callee)
-            || computed_dispatch;
+            || computed_dispatch
+            || argumentless_primitive;
         planned.query_location = Some(property.clone());
         planned.type_descriptor = call.arguments.is_empty();
         demands.push(planned);

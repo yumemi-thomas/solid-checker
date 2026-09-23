@@ -1,5 +1,24 @@
 # Precision backlog
 
+## An argumentless primitive call is demanded its resolved call (2026-09-23)
+
+Status: **fixed**. The generator's `creates` walk asks the audits about the
+package that *declares* a primitive callee, and only the resolved call carries
+the declaration. The demand plan asked for a resolved call only when a call had
+an argument, was returned, or dispatched through a computed member, so
+`getOwner() ? onCleanup(fn) : fn` (`@solid-primitives/utils`' `tryOnCleanup`)
+and a bare `flush()` declined as `dialect-silent` although both primitives have
+`@solidjs/signals` rows. A call with no argument whose static callee is a
+dialect primitive, named or through a namespace import of a module the
+vocabulary owns (`PrimitiveImports`, the scan `structural_accessor_spans`
+already made), is now demanded its resolved call. Pinned by
+`an_argumentless_primitive_call_is_demanded_its_resolved_call` and by
+`signals-reexport-creates`' `hasOwner`, which moves from `dialect-silent` to
+proposing `creates`; no other corpus snapshot and no coverage finding moves.
+The four `onCleanup` declines in the Solid 2 census are a different case: they
+name no package at all, so neither the callee's declaration nor its import
+binding answered, and they are not settled here.
+
 ## A withheld owner requirement keeps `creates` open (2026-09-23)
 
 Status: **fixed**. A consumer reads a closed `creates` as "no owner requirement

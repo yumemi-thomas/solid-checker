@@ -44,9 +44,10 @@ export function currentOwner() {
   return getOwner();
 }
 
-// Anywhere else, a call with no argument had no resolved call: the walk could
-// not tell which package declares `getOwner`, and declined as the dialect's
-// silence. `@solid-primitives/utils`' `tryOnCleanup` is this shape.
+// Anywhere else, a call with no argument had no resolved call until a dialect
+// primitive's call was demanded one: the walk could not tell which package
+// declares `getOwner`, and declined as the dialect's silence.
+// `@solid-primitives/utils`' `tryOnCleanup` is this shape.
 export function hasOwner() {
   return getOwner() !== null;
 }

@@ -17,20 +17,5 @@
       "reason": "a free-standing owner requirement -- an export that must be called under an owner because it registers a computation on it -- has no operation kind that can carry it in schema version 1"
     }
   ],
-  "declinedClosures": [
-    {
-      "entrypoint": ".",
-      "conditions": [],
-      "stage": "closure-proposal",
-      "export": "hasOwner",
-      "domain": "creates",
-      "kind": "dialect-silent",
-      "package": "solid-js",
-      "callee": "getOwner",
-      "location": "<package-root>/index.js:1746:1756",
-      "declaration": "",
-      "shape": "",
-      "spelling": ""
-    }
-  ]
+  "declinedClosures": []
 }

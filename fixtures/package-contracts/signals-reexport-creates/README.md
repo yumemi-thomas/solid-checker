@@ -19,7 +19,7 @@ in `expected-refusals.json`.
 | `makeContext` | `createContext` | proposed | same audit § 2, `solid-js`' own |
 | `readContext` | `useContext` | proposed | same audit § 3, `solid-js`' own |
 | `currentOwner` | `getOwner` | proposed | a returned call is demanded a resolved call |
-| `hasOwner` | `getOwner` | declined, `dialect-silent` | a call with no argument, not returned, has no resolved call to name its package |
+| `hasOwner` | `getOwner` | proposed | an argumentless primitive call is demanded its resolved call (`demand_plan.rs`); before that it declined as `dialect-silent`, with no declaration to name its package |
 
 ## `trackEach`: why `creates` stays open
 
