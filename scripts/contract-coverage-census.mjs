@@ -55,6 +55,25 @@
 // Crediting those inflated the 2026-09-15 census, and it is the difference
 // between "this package states something" and "this package states something
 // *to its consumers*".
+//
+// # Two views of one summary
+//
+// The census buckets ask what a summary *states*: an operation, a closed claim
+// domain, or nothing. That measures certification, and it is the wrong question
+// for a consumer, because one closed domain files a summary as determined while
+// the import still finds the others open. The **consumer view** asks what the
+// import finds open, by the analyzer's own rule rather than a new one:
+// `push_unknown_contract_claims` (rust/crates/solid-reactive-ir/src/contracts.rs)
+// raises SC9005 at the import binding for an open `reads` or `creates`, and for
+// an open `returns` unless every reference discards the call's result, while
+// interproc.rs raises it for an open `callbacks` only at a call that passes a
+// callable argument. Measured over the shipped tier on 2026-09-23, not one
+// callable closed all four: the census called 882 of 1,152 in-surface sites
+// determined, and the only ones an import reached with nothing open were 158
+// non-callable values, 18 of which the census had called degenerate
+// (docs/package-contract-v2/phase22/2026-09-23-the-contract-story-assessed.md).
+// Both views go into the pin, and a pin written before the consumer view
+// existed is compared on the census buckets alone.
 
 import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -75,6 +94,16 @@ const WILDCARD_REACHED = /\.(?:ts|tsx|js|jsx|mjs|cjs|d\.ts)$/;
 /// strongest statement, because that is the one its consumer gets.
 const RANK = { operations: 3, "closed-empty": 2, degenerate: 1 };
 const STATES = ["operations", "closed-empty", "degenerate", "absent"];
+
+/// The claim domains a consumer's import reads, and the two of them whose
+/// openness raises SC9005 wherever the name is imported. See "Two views of one
+/// summary" above for where the analyzer decides this.
+const CONSUMER_DOMAINS = ["callbacks", "reads", "returns", "creates"];
+const OPEN_AT_EVERY_IMPORT = ["reads", "creates"];
+
+/// Best-answer ordering for the consumer view, on `RANK`'s argument.
+const CONSUMER_RANK = { value: 4, clean: 3, "some-uses": 2, "every-import": 1 };
+const CONSUMER_STATES = ["value", "clean", "some-uses", "every-import"];
 
 function fail(message) {
   console.error(`contract-coverage-census: ${message}`);
@@ -166,17 +195,56 @@ export function summaryState(document, reference) {
   return { state: "degenerate", owner };
 }
 
+/// Whether a wire shape may be invoked, exactly as `shape_may_be_callable`
+/// (rust/crates/solid-reactive-ir/src/contracts.rs) decides it for the
+/// normalized one: `callable`, `component` and `unknown` may be, a choice may be
+/// unless its alternatives are closed and none of them may, and every other
+/// shape is proven not to be. A summary with no shape fails closed.
+function shapeMayBeCallable(shape) {
+  if (shape === undefined || shape === null) return true;
+  if (typeof shape === "string") return shape !== "plain";
+  if (shape.kind !== "choice") return false;
+  const closed = (shape.closed ?? []).includes("alternatives");
+  return !closed || (shape.alternatives ?? []).some(shapeMayBeCallable);
+}
+
+/// What one summary leaves open to the consumer who imports it.
+///
+/// `value` is an export whose shape is proven not callable:
+/// `project_export_semantics` closes every call-path domain of one, since it is
+/// never invoked. `clean` is a callable with all four consumer domains closed.
+/// `some-uses` leaves only `returns` or `callbacks` open, so whether SC9005
+/// fires depends on how the import is used; `every-import` leaves `reads` or
+/// `creates` open, so it fires wherever the name is imported. A reference the
+/// document does not carry is `every-import`: nothing unstated closes a domain.
+export function consumerState(document, reference) {
+  const id = typeof reference === "string" ? reference : reference?.summary;
+  const summary = document.summaries?.[id];
+  if (!summary) return "every-import";
+  if (!shapeMayBeCallable(summary.shape)) return "value";
+  const closed = new Set(summary.call?.closed ?? []);
+  const open = CONSUMER_DOMAINS.filter(domain => !closed.has(domain));
+  if (open.length === 0) return "clean";
+  return open.some(domain => OPEN_AT_EVERY_IMPORT.includes(domain)) ? "every-import" : "some-uses";
+}
+
 export function nameableEntrypoint(entrypoint) {
   return !WILDCARD_REACHED.test(entrypoint);
 }
 
-/// package name -> { exportName -> state }, plus the owner-requirement names.
+/// package name -> { exportName -> state }, plus the owner-requirement names and
+/// each export's consumer view. The two views keep their best answers
+/// independently, because each is the one a consumer gets for its own question.
 export function surfacesFromDocuments(documents) {
   const surfaces = new Map();
   for (const document of documents) {
     const name = document.package?.name;
     if (!name) continue;
-    const surface = surfaces.get(name) ?? { states: new Map(), owners: new Set() };
+    const surface = surfaces.get(name) ?? {
+      states: new Map(),
+      owners: new Set(),
+      consumer: new Map()
+    };
     surfaces.set(name, surface);
     for (const [entrypoint, value] of Object.entries(document.entrypoints ?? {})) {
       if (!nameableEntrypoint(entrypoint)) continue;
@@ -186,6 +254,11 @@ export function surfacesFromDocuments(documents) {
           if (owner) surface.owners.add(exportName);
           const held = surface.states.get(exportName);
           if (!held || RANK[state] > RANK[held]) surface.states.set(exportName, state);
+          const view = consumerState(document, reference);
+          const heldView = surface.consumer.get(exportName);
+          if (!heldView || CONSUMER_RANK[view] > CONSUMER_RANK[heldView]) {
+            surface.consumer.set(exportName, view);
+          }
         }
       }
     }
@@ -204,6 +277,9 @@ export function census(demandRows, surfaces) {
   const totals = { sites: 0, ownerRequirement: 0, measuredPackages: 0 };
   for (const state of STATES) totals[state] = 0;
   totals.unmeasured = 0;
+  // Over in-surface sites only: an `absent` or unmeasured site has no summary
+  // for an import to find anything open in, and is already its own bucket.
+  totals.consumer = Object.fromEntries(CONSUMER_STATES.map(state => [state, 0]));
 
   for (const [name, rows] of [...byPackage].sort(
     (left, right) =>
@@ -222,12 +298,20 @@ export function census(demandRows, surfaces) {
     }
     totals.measuredPackages += 1;
     const perState = Object.fromEntries(STATES.map(state => [state, 0]));
+    const consumer = Object.fromEntries(CONSUMER_STATES.map(state => [state, 0]));
     let ownerRequirement = 0;
     for (const row of rows) {
       const state = surface.states.get(row.export) ?? "absent";
       perState[state] += row.sites;
       totals[state] += row.sites;
       if (surface.owners.has(row.export)) ownerRequirement += row.sites;
+      if (state !== "absent") {
+        // Both maps are filled from the same exports, so a miss here is a
+        // defect in this script; failing closed keeps it from reading as a gain.
+        const view = surface.consumer?.get(row.export) ?? "every-import";
+        consumer[view] += row.sites;
+        totals.consumer[view] += row.sites;
+      }
     }
     // `totals[state]` was already accumulated per row above; adding
     // `perState` here counted every operation site twice.
@@ -237,7 +321,8 @@ export function census(demandRows, surfaces) {
       sites,
       measured: true,
       ...perState,
-      ownerRequirement
+      ownerRequirement,
+      consumer
     });
   }
   return { totals, packages };
@@ -279,6 +364,30 @@ function render({ totals, packages }) {
   lines.push(
     `carries an owner requirement:      ${totals.ownerRequirement} (${share(totals.ownerRequirement, measured)})`
   );
+
+  const inSurface = totals.operations + totals["closed-empty"] + totals.degenerate;
+  const view = totals.consumer;
+  lines.push("");
+  lines.push(`what an import finds open, over the ${inSurface} in-surface sites:`);
+  lines.push(`  nothing, a non-callable value:     ${view.value} (${share(view.value, inSurface)})`);
+  lines.push(`  nothing, a callable:               ${view.clean} (${share(view.clean, inSurface)})`);
+  lines.push(
+    `  returns or callbacks: some uses:   ${view["some-uses"]} (${share(view["some-uses"], inSurface)})`
+  );
+  lines.push(
+    `  reads or creates: every import:    ${view["every-import"]} (${share(view["every-import"], inSurface)})`
+  );
+  lines.push("");
+  lines.push(
+    `${"package".padEnd(34)} ${"value".padStart(6)} ${"clean".padStart(6)} ${"some".padStart(6)} ${"every".padStart(6)}`
+  );
+  for (const row of packages) {
+    if (!row.measured) continue;
+    const { consumer } = row;
+    lines.push(
+      `${row.package.padEnd(34)} ${String(consumer.value).padStart(6)} ${String(consumer.clean).padStart(6)} ${String(consumer["some-uses"]).padStart(6)} ${String(consumer["every-import"]).padStart(6)}`
+    );
+  }
   return lines.join("\n");
 }
 
@@ -293,6 +402,21 @@ const DIRECTIONS = [
   ["unmeasured", "down", "sites whose package published no catalog"]
 ];
 
+/// The consumer view's directions, over its buckets rather than one per bucket.
+/// `value` and `clean` are gated as their sum because a site trading one for the
+/// other still finds nothing open. `some-uses` has no direction: it rises when an
+/// `every-import` site improves and falls when one of its own becomes clean, so
+/// either movement can be progress, and every regression into or out of it
+/// already moves one of these two.
+const CONSUMER_DIRECTIONS = [
+  [view => (view.value ?? 0) + (view.clean ?? 0), "up", "sites whose import finds nothing open"],
+  [
+    view => view["every-import"] ?? 0,
+    "down",
+    "sites whose import raises SC9005 wherever the name is imported"
+  ]
+];
+
 export function compare(pinned, actual) {
   const regressions = [];
   for (const [metric, direction, label] of DIRECTIONS) {
@@ -303,6 +427,20 @@ export function compare(pinned, actual) {
     }
     if (direction === "down" && now > before) {
       regressions.push(`${label}: ${before} -> ${now}`);
+    }
+  }
+  // A pin written before the consumer view existed states nothing about it, and
+  // reading that silence as zero would fail every run on `every-import`. The
+  // view is compared from the first pin that carries it.
+  const pinnedView = pinned.totals.consumer;
+  const actualView = actual.totals.consumer;
+  if (pinnedView && actualView) {
+    for (const [read, direction, label] of CONSUMER_DIRECTIONS) {
+      const before = read(pinnedView);
+      const now = read(actualView);
+      if ((direction === "up" && now < before) || (direction === "down" && now > before)) {
+        regressions.push(`${label}: ${before} -> ${now}`);
+      }
     }
   }
   return regressions;
@@ -361,7 +499,8 @@ function main() {
 
   const record = {
     format: "solid-checker-contract-coverage-census",
-    censusVersion: 1,
+    // 2 adds the consumer view to `totals` and to every measured package.
+    censusVersion: 2,
     solidTarget: censusTarget(report),
     demand: {
       source: "docs/package-contract-v2/phase21/2026-09-14-consumer-demand-recensus.json",
@@ -402,6 +541,12 @@ function main() {
     for (const regression of regressions) console.error(`  - ${regression}`);
     console.error("\nInspect, then re-pin with --update only if the movement is intended.");
     process.exit(1);
+  }
+  if (!pinned.totals?.consumer) {
+    console.log(
+      "\nthe pin predates the consumer view, so only the census buckets were compared; " +
+        "re-pin with --update to gate it"
+    );
   }
   console.log("\ncoverage did not regress against the pin");
 }

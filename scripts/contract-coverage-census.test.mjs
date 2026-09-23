@@ -4,6 +4,7 @@ import { test } from "vitest";
 import {
   census,
   compare,
+  consumerState,
   nameableEntrypoint,
   summaryState,
   surfacesFromDocuments
@@ -162,4 +163,151 @@ test("the pin fails on a regression in either direction", () => {
     compare(pinned, { totals: { ...pinned.totals, operations: 700, degenerate: 900 } }),
     []
   );
+});
+
+// The consumer view. The census buckets say what a summary *states*; these say
+// what an import of it still finds open, by the analyzer's rule
+// (`push_unknown_contract_claims`): an open `reads` or `creates` raises SC9005
+// wherever the name is imported, an open `returns` or `callbacks` only on some
+// uses, and a proven non-callable value has no call-path domain left open.
+function consumerDocument(entrypoints = {}) {
+  return {
+    package: { name: "@example/utils" },
+    summaries: {
+      constant: { shape: "plain" },
+      store: { shape: { kind: "store" } },
+      "closed-plain-choice": {
+        shape: { kind: "choice", closed: ["alternatives"], alternatives: ["plain"] }
+      },
+      "open-choice": { shape: { kind: "choice", alternatives: ["plain"] } },
+      "callable-choice": {
+        shape: { kind: "choice", closed: ["alternatives"], alternatives: ["plain", "callable"] }
+      },
+      "all-closed": {
+        shape: "callable",
+        call: { closed: ["callbacks", "reads", "returns", "creates"], callbacks: [], reads: [] }
+      },
+      "returns-open": {
+        shape: "callable",
+        call: { closed: ["callbacks", "reads", "creates"], callbacks: [], reads: [] }
+      },
+      "reads-only": { shape: "callable", call: { closed: ["reads"], reads: [] } },
+      degenerate: { shape: "callable", call: {} },
+      shapeless: { call: { closed: ["callbacks", "reads", "returns", "creates"] } }
+    },
+    entrypoints
+  };
+}
+
+test("a consumer's view is what an import still finds open", () => {
+  const source = consumerDocument();
+  // `shape_may_be_callable`: every shape but `callable`, `component`,
+  // `unknown` and a choice that may hold one is proven never invoked, so
+  // `project_export_semantics` closes all its call-path domains.
+  assert.equal(consumerState(source, "constant"), "value");
+  assert.equal(consumerState(source, "store"), "value");
+  assert.equal(consumerState(source, "closed-plain-choice"), "value");
+  assert.equal(consumerState(source, "open-choice"), "every-import");
+  assert.equal(consumerState(source, "callable-choice"), "every-import");
+  assert.equal(consumerState(source, "all-closed"), "clean");
+  assert.equal(consumerState(source, "returns-open"), "some-uses");
+  // The disagreement this view exists for: one closed domain is a determined
+  // negative to the census and an import with `creates` still open here.
+  assert.equal(summaryState(source, "reads-only").state, "closed-empty");
+  assert.equal(consumerState(source, "reads-only"), "every-import");
+  assert.equal(consumerState(source, "degenerate"), "every-import");
+  // Nothing unstated clears an import. A summary with no shape is taken as
+  // callable, so only its own closed domains can clear it, and a reference the
+  // document does not carry clears nothing.
+  assert.equal(consumerState(source, "shapeless"), "clean");
+  const shapelessAndOpen = { ...source, summaries: { shapeless: { call: {} } } };
+  assert.equal(consumerState(shapelessAndOpen, "shapeless"), "every-import");
+  assert.equal(consumerState(source, "missing"), "every-import");
+});
+
+test("the consumer view counts every in-surface site once, and nothing else", () => {
+  const surfaces = surfacesFromDocuments([
+    consumerDocument({
+      ".": {
+        cases: [
+          {
+            exports: {
+              isServer: "constant",
+              pick: "reads-only",
+              map: "returns-open",
+              mystery: "degenerate"
+            }
+          }
+        ]
+      },
+      "./src/hidden.ts": { cases: [{ exports: { hidden: "all-closed" } }] }
+    })
+  ]);
+  const rows = [
+    { package: "@example/utils", export: "isServer", sites: 4 },
+    { package: "@example/utils", export: "pick", sites: 3 },
+    { package: "@example/utils", export: "map", sites: 2 },
+    { package: "@example/utils", export: "mystery", sites: 1 },
+    { package: "@example/utils", export: "hidden", sites: 5 },
+    { package: "@nobody/here", export: "thing", sites: 7 }
+  ];
+  const { totals, packages } = census(rows, surfaces);
+  const inSurface = totals.operations + totals["closed-empty"] + totals.degenerate;
+  assert.equal(
+    Object.values(totals.consumer).reduce((sum, sites) => sum + sites, 0),
+    inSurface
+  );
+  // Both directions of disagreement at once: `isServer` is degenerate to the
+  // census and finds nothing open, `pick` is determined and finds `creates` open.
+  assert.equal(totals.degenerate, 5);
+  assert.equal(totals["closed-empty"], 5);
+  assert.deepEqual(totals.consumer, { value: 4, clean: 0, "some-uses": 2, "every-import": 4 });
+  // A wildcard-only export and an unmeasured package stay in their own buckets.
+  assert.equal(totals.absent, 5);
+  assert.equal(totals.unmeasured, 7);
+  assert.deepEqual(
+    packages.find(row => row.package === "@example/utils").consumer,
+    totals.consumer
+  );
+});
+
+test("the consumer view keeps the best answer at an entrypoint a consumer can name", () => {
+  const surfaces = surfacesFromDocuments([
+    consumerDocument({
+      ".": { cases: [{ exports: { access: "degenerate" } }] },
+      "./immutable": { cases: [{ exports: { access: "returns-open" } }] },
+      "./src/access.ts": { cases: [{ exports: { access: "all-closed" } }] }
+    })
+  ]);
+  const { totals } = census([{ package: "@example/utils", export: "access", sites: 6 }], surfaces);
+  // The wildcard-reached `all-closed` answers no import anybody writes.
+  assert.deepEqual(totals.consumer, { value: 0, clean: 0, "some-uses": 6, "every-import": 0 });
+});
+
+test("the consumer view is gated from the first pin that carries it", () => {
+  const buckets = {
+    operations: 440,
+    ownerRequirement: 34,
+    degenerate: 127,
+    absent: 722,
+    unmeasured: 84
+  };
+  const view = { value: 158, clean: 0, "some-uses": 439, "every-import": 555 };
+  const pinned = { totals: { ...buckets, consumer: view } };
+  const withView = change => ({ totals: { ...buckets, consumer: { ...view, ...change } } });
+  assert.deepEqual(compare(pinned, withView({})), []);
+  // More sites raising SC9005 wherever imported is a regression, and so is a
+  // site losing its nothing-open answer, whichever bucket it lands in.
+  assert.equal(compare(pinned, withView({ "every-import": 556, "some-uses": 438 })).length, 1);
+  assert.equal(compare(pinned, withView({ value: 157, "some-uses": 440 })).length, 1);
+  assert.equal(compare(pinned, withView({ clean: 0, value: 150, "every-import": 563 })).length, 2);
+  // `some-uses` has no direction, and trading `value` for `clean` finds nothing
+  // more open.
+  assert.deepEqual(compare(pinned, withView({ "every-import": 500, "some-uses": 494 })), []);
+  assert.deepEqual(compare(pinned, withView({ value: 150, clean: 8 })), []);
+  // A pin written before the view existed is compared on the census buckets
+  // alone: reading its silence as zero would fail every run on `every-import`.
+  assert.deepEqual(compare({ totals: buckets }, withView({})), []);
+  const worseBuckets = { totals: { ...buckets, degenerate: 128, consumer: view } };
+  assert.equal(compare({ totals: buckets }, worseBuckets).length, 1);
 });
