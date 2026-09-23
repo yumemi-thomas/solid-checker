@@ -194,7 +194,12 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // arm, where a `returns` closed over one plain return leaves nothing open
       // at the import and the same export with `returns` open still raises
       // SC9005.
-      stableMainDocuments: 137,
+      //
+      // 138 the same day adds member-alias-proposals' main document: the
+      // generator's side of ADR 0103's amendment, which proposes `creates` and
+      // `callbacks` for a `const` member alias beside the `reads` it already
+      // proposed, and nothing new for the three shapes that are not one.
+      stableMainDocuments: 138,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

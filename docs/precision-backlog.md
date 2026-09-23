@@ -1,5 +1,19 @@
 # Precision backlog
 
+## A default-library alias is proposed for every domain its census decides (2026-09-23)
+
+Status: **implemented** (ADR 0103, amended). The alias census had closed
+`reads`, `creates` and `callbacks` since ADR 0103, but the generator proposed
+only `reads`, so `entries` and `keys` kept the other two open at every import.
+A `const` member alias (`ContractExport::member_alias_initializer`, syntax only)
+now proposes all three; the census still decides each from the producer's
+identity fact and its reviewed member table, and refuses a member the table does
+not name. Corpus: `value-exports`' `entries` gains the two proposals and the new
+`member-alias-proposals` fixture pins the marked and unmarked shapes; nothing
+else moves. Remaining: a destructured export (`export const { is } = Object`)
+never reaches the generator, because resolution finds no exact runtime binding
+for it and refuses the case.
+
 ## A constructor body's completions are not an export's `returns` (2026-09-23)
 
 Status: **fixed**. Since ADR 0105 a class export's implementation transcript

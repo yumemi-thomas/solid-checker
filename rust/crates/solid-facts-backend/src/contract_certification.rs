@@ -14312,22 +14312,33 @@ export const value = phantom;
     /// boundary test below.
     #[test]
     fn a_reviewed_default_library_alias_closes_by_identity() {
-        let Some((_plan, outcome)) = value_exports_certify("entries", ClaimDomain::Reads) else {
-            return;
-        };
-        let finalized = outcome.expect("entries: the alias premise must certify the row");
-        assert!(
-            finalized
-                .withheld_closures()
-                .iter()
-                .all(|record| record.export != "entries"),
-            "entries must not be withheld: {:?}",
-            finalized.withheld_closures()
-        );
-        assert!(
-            call_domain_is_closed_in(finalized.canonical_main(), "entries", ClaimDomain::Reads),
-            "entries reads must close on the stated identity"
-        );
+        // All three, one plan each: since 2026-09-23 the generator proposes
+        // `creates` and `callbacks` for a member alias beside `reads`, so each
+        // is a candidate a real proposal carries and not only a hand-closed one.
+        for domain in [
+            ClaimDomain::Reads,
+            ClaimDomain::Creates,
+            ClaimDomain::Callbacks,
+        ] {
+            let Some((_plan, outcome)) = value_exports_certify("entries", domain) else {
+                return;
+            };
+            let finalized = outcome.unwrap_or_else(|error| {
+                panic!("entries {domain:?}: the alias premise must certify the row: {error}")
+            });
+            assert!(
+                finalized
+                    .withheld_closures()
+                    .iter()
+                    .all(|record| record.export != "entries"),
+                "entries {domain:?} must not be withheld: {:?}",
+                finalized.withheld_closures()
+            );
+            assert!(
+                call_domain_is_closed_in(finalized.canonical_main(), "entries", domain),
+                "entries {domain:?} must close on the stated identity"
+            );
+        }
 
         // `returns` is deliberately outside the premise: these members do
         // return values, and whether the returned value is one the `returns`

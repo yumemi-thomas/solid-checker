@@ -1050,3 +1050,60 @@ fn a_value_completion_proposes_one_plain_return_for_the_census_to_decide() {
         );
     }
 }
+
+/// ADR 0103, amended 2026-09-23: an export that is a `const` alias of a member
+/// access has no body, so its raised summary leaves `callbacks` open and no walk
+/// cleared its `creates`. The member-alias flag proposes both empty closures
+/// beside the `reads` every such summary already proposes, for the certifier's
+/// default-library alias census to decide, and leaves `returns` open: these
+/// members return values.
+#[test]
+fn a_member_alias_proposes_its_empty_call_domains_for_the_alias_census() {
+    let raised = |member_alias_initializer: bool| ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Open,
+        member_alias_initializer,
+        ..ContractExport::default()
+    };
+    let proposed = |summary: ContractExport, package_name: &str| {
+        let normalized = normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution_for_package(package_name, ["read".into()]),
+        )
+        .unwrap();
+        let export = &normalized.contract.artifact_cases()[0].exports["read"];
+        (
+            export.call.proposed_closures().clone(),
+            export.claim_state(ClaimDomain::Returns),
+        )
+    };
+
+    assert_eq!(
+        proposed(raised(true), "package"),
+        (
+            BTreeSet::from([
+                ClaimDomain::Callbacks,
+                ClaimDomain::Reads,
+                ClaimDomain::Creates
+            ]),
+            KnowledgeState::Unknown
+        ),
+        "the alias census decides all three; returns stays open"
+    );
+    // The falsifier: the same raised summary without the flag proposes `reads`
+    // alone, which is what every value export raised to a function has always
+    // proposed.
+    assert_eq!(
+        proposed(raised(false), "package"),
+        (
+            BTreeSet::from([ClaimDomain::Reads]),
+            KnowledgeState::Unknown
+        )
+    );
+    // A dialect's own archive publishes neither bootstrapped domain.
+    let (dialect, _) = proposed(raised(true), "solid-js");
+    assert!(
+        !dialect.contains(&ClaimDomain::Callbacks) && !dialect.contains(&ClaimDomain::Creates),
+        "{dialect:?}"
+    );
+}

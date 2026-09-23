@@ -1118,6 +1118,16 @@ pub struct ContractExport {
     /// census decides that from the producer's types. `false` is "do not
     /// propose", including for a summary no walk reached.
     pub returns_value_completion: bool,
+    /// Whether this export is a `const` binding of one identifier whose
+    /// initializer is exactly a non-computed member access --
+    /// `const entries = Object.entries` -- and whose summary no body produced.
+    /// A proposal input only (ADR 0103, amended 2026-09-23): syntax cannot say
+    /// which object the member belongs to, so the generator proposes the call
+    /// domains ADR 0103's default-library alias census decides, `creates` and
+    /// `callbacks` beside the `reads` it already proposes, and that census
+    /// decides them from the producer's identity fact and its reviewed member
+    /// table. `false` is "do not propose".
+    pub member_alias_initializer: bool,
     /// The parameters this export's own body calls directly -- the callee is
     /// the parameter itself, and the call is written in the body of the
     /// function that declares it, outside any nested callable (ADR 0100). The

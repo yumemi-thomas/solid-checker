@@ -209,3 +209,28 @@ states an identity the certifier's table refuses, proving the census arm
 returns "not reached" rather than closing. Closing that gap needs the
 `recursive-value-shape` interaction understood first, and it is a real
 weakness in the safety half of this ADR.
+
+## Amendment, 2026-09-23: the generator proposes all three domains
+
+"Which domains close" above was true of the certifier and not of the generator.
+The alias census closes `reads`, `creates` and `callbacks`, but the generator
+only ever *proposed* `reads`: an alias has no body, so no walk clears its
+`creates`, and the summary raised for a callable value leaves `callbacks` open.
+`@solid-primitives/utils`' `entries` and `keys` therefore kept `creates` and
+`callbacks` open at every import, 59 consumer sites
+(`phase22/2026-09-23-what-holds-an-import-open.md`), with a census arm ready to
+close both.
+
+The generator now marks the shape, from syntax only, as
+`ContractExport::member_alias_initializer`: a `const` binding of one
+identifier, found by symbol so `export { entries }` reaches its declaration,
+whose initializer is exactly a non-computed member access. For such a summary
+it proposes `creates: []` and `callbacks: []` beside `reads: []`. The mark
+decides nothing: syntax cannot say whose member it is, so a package's own
+`helpers.run` is proposed too, and this census refuses it for want of a stated
+identity. The raised summary's own open `callbacks` is not changed, only what
+the proposal offers. `returns` stays unproposed, as above.
+
+`fixtures/package-contracts/member-alias-proposals` pins which shapes are
+marked, and `a_reviewed_default_library_alias_closes_by_identity` now certifies
+all three domains for `value-exports`' `entries`.

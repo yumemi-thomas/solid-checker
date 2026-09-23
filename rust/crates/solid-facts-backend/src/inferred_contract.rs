@@ -499,6 +499,15 @@ fn normalize_export(
         // local helper composition. ADR 0017 withholds this domain wholesale
         // inside primitive-defining archives rather than granting self-trust.
         _ if !scope.publishes_bootstrapped_reactive_domains() => KnowledgeSet::Unknown,
+        // ADR 0103, amended 2026-09-23: a member alias has no body to summarize,
+        // so its raised summary leaves `callbacks` open -- a claim of this
+        // summary that stays as it is. What changes is the proposal: an empty
+        // enumeration the certifier's default-library alias census decides from
+        // the producer's identity fact and its reviewed member table, and refuses
+        // for every member the table does not name.
+        ContractClaim::Open if summary.kind == "function" && summary.member_alias_initializer => {
+            KnowledgeSet::Complete(Vec::new())
+        }
         ContractClaim::Open => KnowledgeSet::Unknown,
         ContractClaim::Known(callbacks) => KnowledgeSet::Complete(
             callbacks
@@ -731,7 +740,10 @@ fn normalize_export(
     // * `creates_walk_clean`, which is `false` unless
     //   [`solid_reactive_ir::CreatesProposalWalk`] actually walked this export's
     //   implementation and found no call that a `creates: []` claim would
-    //   contradict. Silence is "do not propose".
+    //   contradict. Silence is "do not propose". A member alias
+    //   (`member_alias_initializer`, ADR 0103 amended 2026-09-23) stands in for
+    //   the walk: there is no body to walk, and the certifier's default-library
+    //   alias census, not an implementation census, is what decides it.
     //
     // * an **inherited** closure, which is none of the three. A cross-package
     //   re-export has no local symbol, so `creates_walk_clean` is `false` for
@@ -742,7 +754,8 @@ fn normalize_export(
     //   of a census of bytes that are not here.
     let creates = if scope.publishes_bootstrapped_reactive_domains()
         && (summary.inherited_closure(ClaimDomain::Creates)
-            || (summary.kind == "function" && summary.creates_walk_clean))
+            || (summary.kind == "function"
+                && (summary.creates_walk_clean || summary.member_alias_initializer)))
     {
         KnowledgeSet::Complete(Vec::new())
     } else {

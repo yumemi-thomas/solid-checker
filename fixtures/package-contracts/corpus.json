@@ -54,6 +54,7 @@
     "legacy-module-absent",
     "legacy-module-entry",
     "legacy-module-entrypoint",
+    "member-alias-proposals",
     "multi-entrypoint",
     "multi-role-callback-parameter",
     "mutated-parameter-return",

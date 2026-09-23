@@ -164,6 +164,7 @@ pub fn project_export_semantics(
         creates_walk_declines: Vec::new(),
         returns_walk_clean: false,
         returns_value_completion: false,
+        member_alias_initializer: false,
         direct_callback_parameters: BTreeSet::new(),
         // A projected dependency export has no body here to walk.
         merged_props_return: None,
@@ -1766,6 +1767,7 @@ fn contract_export_function(
         creates_walk_declines: Vec::new(),
         returns_walk_clean: false,
         returns_value_completion: false,
+        member_alias_initializer: false,
         // ADR 0100: a proposal input read beside the rows. Kept whether or not
         // the callbacks domain above stayed known -- the generator's filter
         // reads both, and an open domain proposes nothing either way.
@@ -2109,7 +2111,7 @@ fn contract_export_fragment(
                         node_contracts.get(&node_keys[index]).cloned()
                     })
                 })
-                .unwrap_or_else(value_contract_export);
+                .unwrap_or_else(|| fallback_value_export(file, graph, specifier.local.span));
             let summary = promote_callable_export(facts, file, specifier.local.span, summary);
             if let Some(symbol) = graph
                 .entities
@@ -2143,7 +2145,7 @@ fn contract_export_fragment(
                                 summary
                             })
                     })
-                    .unwrap_or_else(value_contract_export);
+                    .unwrap_or_else(|| fallback_value_export(file, graph, name.span));
                 let summary = promote_callable_export(facts, file, name.span, summary);
                 let exported = file.source_text(name.span).unwrap_or_default().to_owned();
                 if let Some(symbol) = graph
@@ -2503,6 +2505,45 @@ fn value_contract_export() -> ContractExport {
         kind: "value".into(),
         ..ContractExport::default()
     }
+}
+
+/// [`value_contract_export`] for the export at `local`, which no body and no
+/// resolved binding summarized, marking it a member alias when its binding is
+/// one (see [`ContractExport::member_alias_initializer`]): a `const` of one
+/// identifier -- matched by the same symbol identity
+/// `resolve_local_binding_initializer` uses, so `export { entries }` finds the
+/// declaration it names -- initialized by exactly a non-computed member access.
+/// A destructuring pattern names a property *of* the member's value, not the
+/// value, and is never one.
+fn fallback_value_export(
+    file: &solid_facts::FileFacts,
+    graph: &ContractGraph<'_>,
+    local: solid_facts::core::Span,
+) -> ContractExport {
+    let mut summary = value_contract_export();
+    let local_symbol = graph.entities.get(&location(file.path.shared(), local));
+    summary.member_alias_initializer = file.ast.bindings.iter().any(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.iter().any(|name| {
+                name.span == local
+                    || local_symbol.is_some_and(|symbol| {
+                        graph.entities.get(&location(file.path.shared(), name.span)) == Some(symbol)
+                    })
+            })
+            && binding.initializer.is_some_and(|initializer| {
+                file.ast
+                    .members
+                    .iter()
+                    .any(|member| member.span == initializer)
+                    && file
+                        .ast
+                        .computed_members
+                        .binary_search(&initializer)
+                        .is_err()
+            })
+    });
+    summary
 }
 
 fn entity_at<'a>(facts: &'a ProjectFacts, target: &Location) -> Option<&'a typefacts::EntityFact> {
