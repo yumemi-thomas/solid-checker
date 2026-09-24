@@ -192,7 +192,9 @@ use std::{
 
 use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
-use solid_reactive_ir::contract_semantics::{Digest, SemanticClaimPath, SemanticClaimSubject};
+use solid_reactive_ir::contract_semantics::{
+    Digest, RecipeAddress, SemanticClaimPath, SemanticClaimSubject,
+};
 use thiserror::Error;
 
 use super::{CertificationPlan, TypeFactsProducerPin, probe_gates::ProbeGateSchedule};
@@ -2430,6 +2432,13 @@ struct WireRecipePolicy {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct WireRecipeEntry {
     claim_id: String,
+    /// Ways-to-improve § 3.2: the claim's byte-only second address
+    /// (`recipe-address:v1:sha256:…`). Optional and defaulted, so every corpus
+    /// that states none loads, binds, and hashes exactly as before. When the
+    /// entry's `claimId` names no claim of the plan, the loader may bind it by
+    /// this address instead; see [`RecipeCorpus::load`].
+    #[serde(default)]
+    recipe_address: Option<String>,
     module: String,
     /// How this recipe reaches the package. Required, and not defaulted: the
     /// two kinds resolve under different condition sets, so a corpus that does
@@ -2494,7 +2503,13 @@ enum WireRecipeDrainStep {
 /// for it. `construction` is always Rust's own digest of those bytes.
 #[derive(Debug)]
 pub(crate) struct CorpusRecipe {
+    /// The plan claim this recipe is launched for: the manifest's `claimId`,
+    /// or, when `bound_by_address`, the plan claim its address named.
     claim_id: String,
+    recipe_address: Option<RecipeAddress>,
+    /// Whether the loader rebound `claim_id` through `recipe_address`. Only
+    /// then does the corpus root carry the address.
+    bound_by_address: bool,
     file_name: String,
     bytes: Vec<u8>,
     construction: Digest,
@@ -2608,8 +2623,22 @@ impl RecipeCorpus {
                     ))
                 })?;
             }
+            let recipe_address = entry
+                .recipe_address
+                .map(|address| {
+                    RecipeAddress::parse(address.clone()).map_err(|_| {
+                        ProbeHarnessError::CorpusInvalid(format!(
+                            "probe recipe for claim {} declares recipe address {address:?}, \
+                             which is not a canonical recipe-address:v1:sha256 address",
+                            entry.claim_id
+                        ))
+                    })
+                })
+                .transpose()?;
             recipes.push(CorpusRecipe {
                 claim_id: entry.claim_id,
+                recipe_address,
+                bound_by_address: false,
                 file_name,
                 bytes: module_bytes,
                 construction,
@@ -2628,6 +2657,8 @@ impl RecipeCorpus {
             });
         }
         recipes.sort_by(|left, right| left.claim_id.cmp(&right.claim_id));
+        bind_by_address(&mut recipes, &plan_recipe_subjects(plan));
+        recipes.sort_by(|left, right| left.claim_id.cmp(&right.claim_id));
         let root = corpus_root(&policy, &recipes);
         Ok(Self {
             policy,
@@ -2640,6 +2671,12 @@ impl RecipeCorpus {
         self.policy
     }
 
+    /// The canonical root this corpus contributes to a probe-harness identity.
+    #[cfg(test)]
+    pub(crate) const fn root(&self) -> &Digest {
+        &self.root
+    }
+
     pub(crate) fn recipe_for(&self, claim_id: &str) -> Option<&CorpusRecipe> {
         self.recipes
             .iter()
@@ -2647,7 +2684,72 @@ impl RecipeCorpus {
     }
 }
 
+/// Every plan claim a corpus entry can be launched for, as `(semantic claim
+/// id, recipe address)`: the plan's closure candidates, which are exactly the
+/// subjects [`ProbeGateSchedule::from_plan`] gates and [`runtime_probe_plan`]
+/// looks recipes up for. The runtime-probe plan schedules no operation-witness
+/// subject, so none is listed.
+fn plan_recipe_subjects(plan: &CertificationPlan) -> Vec<(String, Option<RecipeAddress>)> {
+    let proposal = plan.candidates.proposal();
+    plan.candidates
+        .closure_candidates()
+        .iter()
+        .filter_map(|subject| {
+            let claim = proposal.claim_id(subject).ok()?;
+            Some((claim.as_str().to_owned(), plan.recipe_address_for(subject)))
+        })
+        .collect()
+}
+
+/// Ways-to-improve § 3.2: binds a corpus entry whose `claimId` names no plan
+/// claim to the one plan claim its `recipeAddress` names.
+///
+/// The address decides only which claim a hand module is copied and launched
+/// for; it confers nothing else, and an exact `claimId` always wins. An entry
+/// binds when its address equals exactly one plan subject's address and no
+/// entry already holds that subject's claim id — exactly, or through an
+/// earlier binding. Unbound entries are visited in claim-id order (the caller
+/// sorts), so the first one binds and a second entry with the same address
+/// stays unbound and addresses nothing, as a stale entry always has.
+fn bind_by_address(recipes: &mut [CorpusRecipe], subjects: &[(String, Option<RecipeAddress>)]) {
+    let mut held = recipes
+        .iter()
+        .filter(|recipe| subjects.iter().any(|(claim, _)| *claim == recipe.claim_id))
+        .map(|recipe| recipe.claim_id.clone())
+        .collect::<BTreeSet<_>>();
+    for recipe in recipes.iter_mut() {
+        if held.contains(&recipe.claim_id) {
+            continue;
+        }
+        let Some(address) = recipe.recipe_address.as_ref() else {
+            continue;
+        };
+        let mut matching = subjects
+            .iter()
+            .filter(|(_, candidate)| candidate.as_ref() == Some(address));
+        let (Some((claim, _)), None) = (matching.next(), matching.next()) else {
+            continue;
+        };
+        if !held.insert(claim.clone()) {
+            continue;
+        }
+        recipe.claim_id = claim.clone();
+        recipe.bound_by_address = true;
+    }
+}
+
 impl CorpusRecipe {
+    /// The published module name, for tests that tell two entries apart.
+    #[cfg(test)]
+    pub(crate) fn file_name(&self) -> &str {
+        &self.file_name
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn bound_by_address(&self) -> bool {
+        self.bound_by_address
+    }
+
     pub(crate) const fn construction(&self) -> &Digest {
         &self.construction
     }
@@ -2733,6 +2835,19 @@ fn corpus_root(policy: &ProbePolicy, recipes: &[CorpusRecipe]) -> Digest {
         // existed is unchanged.
         for specifier in &recipe.dependency_specifiers {
             values.push(format!("recipe-dependency:{}:{specifier}", recipe.claim_id));
+        }
+        // Appended only for an entry the loader bound by its address, so a
+        // corpus that binds nothing that way -- every corpus written before
+        // the field existed, and every entry whose `claimId` matched exactly
+        // -- keeps a byte-identical root and every receipt binding it.
+        if recipe.bound_by_address
+            && let Some(address) = &recipe.recipe_address
+        {
+            values.push(format!(
+                "recipe-address:{}:{}",
+                recipe.claim_id,
+                address.as_str()
+            ));
         }
     }
     root("probe-recipe-corpus", values.iter().map(String::as_str))

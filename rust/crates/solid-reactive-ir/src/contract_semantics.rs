@@ -59,6 +59,10 @@ pub const SEMANTIC_DIGEST_DOMAIN_PROPOSED_CLOSURE: &str =
 pub const SEMANTIC_DIGEST_DOMAIN_COMPOSED_PROPOSED_CLOSURE: &str =
     "solid-checker:normalized-package-contract:composed-provenance:proposed-closure";
 pub const SEMANTIC_CLAIM_ID_VERSION: u16 = 1;
+/// Version of the byte-only artifact-case identity a [`RecipeAddress`] binds.
+pub const ARTIFACT_CASE_BYTES_VERSION: u16 = 1;
+/// Version of the [`RecipeAddress`] stream.
+pub const RECIPE_ADDRESS_VERSION: u16 = 1;
 
 /// Local knowledge for one immediate collection-valued claim domain.
 ///
@@ -265,6 +269,12 @@ pub enum ModelError {
     DuplicateArtifactSelection { first: String, second: String },
     #[error("selected artifact case index {selected} does not exist")]
     MissingArtifactCase { selected: usize },
+    #[error("no recipe address: {reason}")]
+    Unaddressable { reason: String },
+    #[error(
+        "recipe address must be canonical recipe-address:v1:sha256 followed by 64 lowercase hexadecimal digits"
+    )]
+    RecipeAddressFormat,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -435,6 +445,73 @@ impl NormalizedContract {
         ))
     }
 
+    /// The byte-only identity of one artifact case (ways-to-improve § 3.2):
+    /// package bytes, entrypoint, resolution trace, runtime, declarations and
+    /// transform artifacts, and `closure_bytes`, the caller's byte-only
+    /// identity of the case's dependency closure. It deliberately omits the
+    /// case id and `dependency_closure`, both of which hash every accepted
+    /// dependency edge's contract digest.
+    ///
+    /// It is an input to [`Self::recipe_address`] and nothing else: it is not
+    /// a claim identity and authenticates nothing.
+    pub fn artifact_case_byte_identity(
+        &self,
+        artifact_case: &str,
+        closure_bytes: &str,
+    ) -> Result<Digest, ModelError> {
+        let case = self
+            .artifact_case(artifact_case)
+            .ok_or_else(|| ModelError::Unaddressable {
+                reason: format!("the contract has no artifact case {artifact_case}"),
+            })?;
+        Ok(canonical::artifact_case_byte_identity(
+            &self.package,
+            case,
+            closure_bytes,
+        ))
+    }
+
+    /// The second address of a probe recipe: `case_bytes` (from
+    /// [`Self::artifact_case_byte_identity`]), the export identity, the claim
+    /// path, and the claim's normalized value, with every artifact-case prefix
+    /// removed from the ids it writes.
+    ///
+    /// A recipe corpus may bind an entry by this address when its claim id no
+    /// longer names a plan claim. The address decides only which claim a
+    /// recipe module is launched for; it is never authority. Only call-domain
+    /// and operation subjects have one.
+    pub fn recipe_address(
+        &self,
+        subject: &SemanticClaimSubject,
+        case_bytes: &Digest,
+    ) -> Result<RecipeAddress, ModelError> {
+        let artifact_case = self.artifact_case(&subject.artifact_case).ok_or_else(|| {
+            ModelError::Unaddressable {
+                reason: format!(
+                    "the contract has no artifact case {}",
+                    subject.artifact_case
+                ),
+            }
+        })?;
+        let export = artifact_case.exports.get(&subject.export).ok_or_else(|| {
+            ModelError::Unaddressable {
+                reason: format!(
+                    "artifact case {} has no export {}",
+                    subject.artifact_case, subject.export
+                ),
+            }
+        })?;
+        if !validate::claim_subject_exists(export, &subject.path) {
+            return Err(ModelError::Unaddressable {
+                reason: format!(
+                    "the subject does not exist for export {} in artifact case {}",
+                    subject.export, subject.artifact_case
+                ),
+            });
+        }
+        canonical::recipe_address(artifact_case, export, &subject.path, case_bytes)
+    }
+
     /// Answers whether one exact semantic claim is closed in this contract.
     ///
     /// Claim identity binds the package, artifact case, export, and semantic
@@ -500,6 +577,38 @@ impl SemanticClaimId {
     fn from_sha256(bytes: [u8; 32]) -> Self {
         Self(format!(
             "claim:v{SEMANTIC_CLAIM_ID_VERSION}:{}",
+            Digest::from_sha256(bytes).as_str()
+        ))
+    }
+}
+
+/// A recipe's byte-only second address; see
+/// [`NormalizedContract::recipe_address`]. Formatted
+/// `recipe-address:v1:sha256:<64 lowercase hex>`.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct RecipeAddress(String);
+
+impl RecipeAddress {
+    pub fn parse(value: impl Into<String>) -> Result<Self, ModelError> {
+        let value = value.into();
+        let digest = value
+            .strip_prefix("recipe-address:v1:")
+            .ok_or(ModelError::RecipeAddressFormat)?;
+        let parsed = Digest::parse(digest).map_err(|_| ModelError::RecipeAddressFormat)?;
+        if parsed.as_str() != digest {
+            return Err(ModelError::RecipeAddressFormat);
+        }
+        Ok(Self(value))
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    fn from_sha256(bytes: [u8; 32]) -> Self {
+        Self(format!(
+            "recipe-address:v{RECIPE_ADDRESS_VERSION}:{}",
             Digest::from_sha256(bytes).as_str()
         ))
     }

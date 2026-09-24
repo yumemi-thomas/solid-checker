@@ -100,6 +100,7 @@ import {
   preparedGraphForPartialProposal,
   certifiedClosuresFromNativeOutput,
   closureCandidatesFromNativeOutput,
+  recipeAddressesFromNativeOutput,
   declinedDependencyGraphCases,
   RetainedCasePreparationRefusal,
   recoveryGraphCases,
@@ -3979,6 +3980,43 @@ test("a graph lane's closure records keep the node that carries them", () => {
   ]);
   assert.equal(certifiedClosuresFromNativeOutput(""), null);
   assert.equal(closureCandidatesFromNativeOutput(""), null);
+});
+
+test("recipe addresses are collected whole, per node, and malformed lines are not records", () => {
+  const address = digit => `recipe-address:v1:sha256:${digit.repeat(64)}`;
+  const claim = digit => `claim:v1:sha256:${digit.repeat(64)}`;
+  const stdout = [
+    "unrelated line",
+    `solid-checker:recipe-addresses=${JSON.stringify({
+      artifactCase: "artifact-case:a",
+      node: { package: "@solid-primitives/utils", version: "7.0.0-next.4", digest: "sha256:aa" },
+      addresses: [
+        { semanticClaimId: claim("1"), recipeAddress: address("a") },
+        { semanticClaimId: claim("2") }
+      ]
+    })}`,
+    `solid-checker:recipe-addresses=${JSON.stringify({
+      artifactCase: "artifact-case:b",
+      addresses: Array.from({ length: 70 }, (_, index) => ({
+        semanticClaimId: `claim:${index}`,
+        recipeAddress: `address:${index}`
+      }))
+    })}`,
+    "solid-checker:recipe-addresses={not json"
+  ].join("\n");
+  const records = recipeAddressesFromNativeOutput(stdout);
+  // Unlike the candidate sample, never truncated: a missing pair is a recipe
+  // nobody can re-key.
+  assert.equal(records.length, 71);
+  assert.deepEqual(records[0], {
+    artifactCase: "artifact-case:a",
+    node: { package: "@solid-primitives/utils", version: "7.0.0-next.4", digest: "sha256:aa" },
+    semanticClaimId: claim("1"),
+    recipeAddress: address("a")
+  });
+  // The value-only lane names no node, and a row must not grow one.
+  assert.equal("node" in records[1], false);
+  assert.deepEqual(recipeAddressesFromNativeOutput(""), []);
 });
 
 test("the contract sweep refuses a document that is not a contract report", async () => {

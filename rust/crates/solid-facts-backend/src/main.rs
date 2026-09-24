@@ -1140,6 +1140,7 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
         )
         .map_err(|error| format!("policy-2 proof finalization failed: {error}"))?;
     report_closure_candidates(None, &plan);
+    report_recipe_addresses(None, &plan);
     report_certified_closures(None, &finalized);
     report_withheld_closures(None, &finalized)?;
     let trust_bytes =
@@ -1210,6 +1211,13 @@ const WITHHELD_OPERATION_MARKER: &str = "solid-checker:withheld-operation=";
 /// side and the third by `withheldClosures`; this answers the second, which
 /// was the one boundary nothing could see through. Diagnostic only.
 const CLOSURE_CANDIDATE_MARKER: &str = "solid-checker:closure-candidates=";
+
+/// One stdout line per certified plan (and per graph node) pairing every
+/// closure candidate that has one with its byte-only second recipe address
+/// (ways-to-improve § 3.2), so a recipe corpus can be migrated to, or
+/// scaffolded with, `recipeAddress`. Diagnostic only: the corpus loader
+/// derives the addresses itself.
+const RECIPE_ADDRESS_MARKER: &str = "solid-checker:recipe-addresses=";
 
 /// One stdout line naming what the canonical main a receipt binds actually
 /// closes, per export.
@@ -1294,6 +1302,27 @@ fn report_closure_candidates(
         object.insert("node".into(), node);
     }
     println!("{CLOSURE_CANDIDATE_MARKER}{record}");
+}
+
+fn report_recipe_addresses(
+    node: Option<&solid_facts_backend::CanonicalDependencyNodeIdentity>,
+    plan: &solid_facts_backend::CertificationPlan,
+) {
+    let addresses = plan
+        .recipe_addresses()
+        .into_iter()
+        .map(|(claim, address)| {
+            serde_json::json!({ "semanticClaimId": claim, "recipeAddress": address })
+        })
+        .collect::<Vec<_>>();
+    let mut record = serde_json::json!({
+        "artifactCase": plan.selected_artifact_case_id(),
+        "addresses": addresses,
+    });
+    if let (Some(object), Some(node)) = (record.as_object_mut(), closure_record_node(node)) {
+        object.insert("node".into(), node);
+    }
+    println!("{RECIPE_ADDRESS_MARKER}{record}");
 }
 
 fn report_withheld_closures(
@@ -1487,6 +1516,7 @@ fn execute_contract_case_set_certification(
         plans.into_iter().zip(finalized)
     {
         report_closure_candidates(None, &plan);
+        report_recipe_addresses(None, &plan);
         report_certified_closures(None, &finalized);
         report_withheld_closures(None, &finalized)?;
         let current_trust = solid_facts_backend::encode_policy2_trust_configuration(
@@ -1637,6 +1667,7 @@ fn execute_contract_graph_certification(
         // corpus-scale closure yield cannot be read off a run at all.
         if let Some(node_plan) = graph.plan(node.identity()) {
             report_closure_candidates(Some(node.identity()), node_plan);
+            report_recipe_addresses(Some(node.identity()), node_plan);
         }
         report_certified_closures(Some(node.identity()), node.finalized());
         let current = solid_facts_backend::encode_policy2_trust_configuration(
@@ -1873,6 +1904,7 @@ fn execute_contract_graph_case_set_certification(
                 .plan(node.identity())
                 .ok_or("finalized graph case node has no retained opaque plan")?;
             report_closure_candidates(Some(node.identity()), node_plan);
+            report_recipe_addresses(Some(node.identity()), node_plan);
             report_certified_closures(Some(node.identity()), node.finalized());
             let node_root = if node.identity() == graph.root_identity() {
                 case_root.clone()

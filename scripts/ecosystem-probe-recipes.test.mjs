@@ -64,8 +64,15 @@ const EVENT_CLASSES = new Set([
 /// that only the author can make.
 const NEVER_EMITS = "NEVER EMITS:";
 
+/// `RecipeAddress`'s wire form (rust/crates/solid-reactive-ir): the loader
+/// refuses a corpus carrying any other spelling.
+const RECIPE_ADDRESS = /^recipe-address:v1:sha256:[0-9a-f]{64}$/;
+
 const RECIPE_KEYS = new Set([
   "claimId",
+  // ADR 0117: the optional second address, byte-only plus the claim's value.
+  // `WireRecipeEntry` reads it as `#[serde(default)]`.
+  "recipeAddress",
   "module",
   "importKind",
   "dependencySpecifiers",
@@ -145,6 +152,9 @@ describe("the ecosystem probe-recipe corpus", () => {
       assert.match(recipe.claimId, /^claim:v1:sha256:[0-9a-f]{64}$/);
       assert.equal(seen.has(recipe.claimId), false, `${recipe.claimId} repeats`);
       seen.add(recipe.claimId);
+      if ("recipeAddress" in recipe) {
+        assert.match(recipe.recipeAddress, RECIPE_ADDRESS, recipe.module);
+      }
       // `importKind` is required and not defaulted: the two kinds resolve
       // under different export-condition sets, so a corpus that does not say
       // which one it uses is not saying what the gate observed.
@@ -272,6 +282,9 @@ describe("the checked-in fixture recipe corpora", () => {
           `${path} ${recipe.module} carries a field Rust would refuse`
         );
         assert.match(recipe.claimId, /^claim:v1:sha256:[0-9a-f]{64}$/);
+        if ("recipeAddress" in recipe) {
+          assert.match(recipe.recipeAddress, RECIPE_ADDRESS, `${path} ${recipe.module}`);
+        }
         assert.equal(IMPORT_KINDS.has(recipe.importKind), true, recipe.module);
         assert.equal(SCENARIOS.has(recipe.scenario), true, recipe.module);
         assert.equal(EVENT_CLASSES.has(recipe.expectedEvent.class), true, recipe.module);

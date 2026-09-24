@@ -1867,3 +1867,158 @@ fn solid_two_conformance_matrix_rows_have_normalized_representations() {
             .unwrap_or_else(|error| panic!("{row} was not representable: {error}"));
     }
 }
+
+/// One export whose `reads` lists `reads` operations, each id carrying the
+/// artifact-case prefix a generated document gives it.
+fn addressed_contract(
+    case_id: &str,
+    closure: char,
+    tracking: Tracking,
+    reads: usize,
+) -> NormalizedContract {
+    let mut case = artifact_case(case_id);
+    case.dependency_closure = digest(closure);
+    let operations = (0..reads)
+        .map(|index| {
+            let mut read = operation(
+                &format!("{case_id}:createResource:operation:read-{index}"),
+                OperationKind::Read,
+            );
+            read.tracking = tracking;
+            read
+        })
+        .collect::<Vec<_>>();
+    let mut call = call(vec![], vec![]);
+    call.claims.reads = KnowledgeSet::complete(operations.iter().map(|op| op.id.clone()).collect());
+    call.operations = operations;
+    let export = export(&case, "createResource", ValueShape::Callable, call);
+    case.exports.insert("createResource".into(), export);
+    ContractProposal::new(package(), vec![case])
+        .normalize()
+        .unwrap()
+}
+
+fn addressed_subject(case_id: &str, path: SemanticClaimPath) -> SemanticClaimSubject {
+    SemanticClaimSubject {
+        artifact_case: case_id.into(),
+        export: "createResource".into(),
+        path,
+    }
+}
+
+fn address_of(
+    contract: &NormalizedContract,
+    case_id: &str,
+    path: SemanticClaimPath,
+    closure_bytes: &str,
+) -> RecipeAddress {
+    let bytes = contract
+        .artifact_case_byte_identity(case_id, closure_bytes)
+        .unwrap();
+    contract
+        .recipe_address(&addressed_subject(case_id, path), &bytes)
+        .unwrap()
+}
+
+const READS: SemanticClaimPath = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Reads));
+
+/// Ways-to-improve § 3.2: a dependency whose accepted contract moved changes
+/// the dependent's artifact case id and dependency-closure digest, and with
+/// them every claim id. The recipe address is the same claim stated over bytes
+/// and value alone, so it does not move.
+#[test]
+fn a_recipe_address_ignores_the_case_id_and_the_dependency_closure_digest() {
+    let before = addressed_contract("case-a", 'd', Tracking::Untracked, 1);
+    let after = addressed_contract("case-b", 'e', Tracking::Untracked, 1);
+    assert_eq!(
+        before
+            .artifact_case_byte_identity("case-a", "closure")
+            .unwrap(),
+        after
+            .artifact_case_byte_identity("case-b", "closure")
+            .unwrap(),
+    );
+    assert_ne!(
+        before
+            .claim_id(&addressed_subject("case-a", READS))
+            .unwrap(),
+        after.claim_id(&addressed_subject("case-b", READS)).unwrap(),
+    );
+    let address = address_of(&before, "case-a", READS, "closure");
+    assert_eq!(address, address_of(&after, "case-b", READS, "closure"));
+    assert_eq!(RecipeAddress::parse(address.as_str()).unwrap(), address);
+    assert!(address.as_str().starts_with("recipe-address:v1:sha256:"));
+
+    let operation = |case: &str| {
+        SemanticClaimPath::Operation(OperationId(format!(
+            "{case}:createResource:operation:read-0"
+        )))
+    };
+    let operation_address = address_of(&before, "case-a", operation("case-a"), "closure");
+    assert_eq!(
+        operation_address,
+        address_of(&after, "case-b", operation("case-b"), "closure")
+    );
+    assert_ne!(operation_address, address);
+}
+
+#[test]
+fn a_recipe_address_binds_the_claim_value() {
+    let one_read = addressed_contract("case-a", 'd', Tracking::Untracked, 1);
+    let address = address_of(&one_read, "case-a", READS, "closure");
+    // `reads` closed over nothing versus closed over `read-0`.
+    let no_read = addressed_contract("case-a", 'd', Tracking::Untracked, 0);
+    assert_ne!(address, address_of(&no_read, "case-a", READS, "closure"));
+    // The same list, but the operation it names is tracked.
+    let tracked = addressed_contract("case-a", 'd', Tracking::Tracked, 1);
+    assert_ne!(address, address_of(&tracked, "case-a", READS, "closure"));
+    // A different call domain of the same export is a different subject.
+    let writes = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Writes));
+    assert_ne!(address, address_of(&one_read, "case-a", writes, "closure"));
+}
+
+#[test]
+fn a_recipe_address_binds_the_closure_bytes_and_refuses_unaddressable_subjects() {
+    let contract = addressed_contract("case-a", 'd', Tracking::Untracked, 1);
+    assert_ne!(
+        address_of(&contract, "case-a", READS, "closure-one"),
+        address_of(&contract, "case-a", READS, "closure-two"),
+    );
+    let bytes = contract
+        .artifact_case_byte_identity("case-a", "closure")
+        .unwrap();
+    assert!(matches!(
+        contract.recipe_address(
+            &addressed_subject(
+                "case-a",
+                SemanticClaimPath::Domain(ClaimPath::GuardPartition)
+            ),
+            &bytes
+        ),
+        Err(ModelError::Unaddressable { .. })
+    ));
+    assert!(matches!(
+        contract.recipe_address(
+            &addressed_subject(
+                "case-a",
+                SemanticClaimPath::Operation(OperationId(
+                    "case-a:createResource:operation:gone".into()
+                ))
+            ),
+            &bytes
+        ),
+        Err(ModelError::Unaddressable { .. })
+    ));
+    assert!(
+        contract
+            .artifact_case_byte_identity("missing", "closure")
+            .is_err()
+    );
+    let claim = contract
+        .claim_id(&addressed_subject("case-a", READS))
+        .unwrap();
+    assert_eq!(
+        RecipeAddress::parse(claim.as_str()),
+        Err(ModelError::RecipeAddressFormat)
+    );
+}

@@ -1478,6 +1478,7 @@ fn composed_from_withheld_dependency(
             super::WITHHELD_CLOSURE_DEPENDENCY_WITHHELD_PREFIX,
             dependency.package
         ),
+        recipe_address: node.plan.recipe_address_string(parent),
     })
 }
 

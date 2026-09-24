@@ -100,12 +100,129 @@ pub(super) fn semantic_claim_id(
     SemanticClaimId::from_sha256(writer.finish())
 }
 
+/// The byte-only identity of one artifact case: everything
+/// [`CanonicalWriter::artifact_case_subject_identity`] writes *except* the case
+/// id and the dependency closure digest, both of which hash every accepted
+/// dependency edge's contract digest, plus the caller's byte-only identity of
+/// that closure.
+///
+/// Nothing here is claim identity. It feeds [`recipe_address`] only.
+pub(super) fn artifact_case_byte_identity(
+    package: &PackageIdentity,
+    artifact_case: &ArtifactCase,
+    closure_bytes: &str,
+) -> Digest {
+    let mut writer = CanonicalWriter::new();
+    writer.text("solid-checker:artifact-case-bytes");
+    writer.u16(ARTIFACT_CASE_BYTES_VERSION);
+    writer.package(package);
+    writer.text(&artifact_case.entrypoint);
+    writer.sequence(&artifact_case.resolution_trace, |writer, step| {
+        writer.text(&step.condition);
+        writer.text(&step.target);
+    });
+    writer.artifact(&artifact_case.runtime);
+    writer.artifact(&artifact_case.declarations);
+    writer.option(artifact_case.transform.as_ref(), CanonicalWriter::artifact);
+    writer.text(closure_bytes);
+    Digest::from_sha256(writer.finish())
+}
+
+/// The second address of a probe recipe: artifact bytes plus the claim's value.
+///
+/// A [`semantic_claim_id`] binds the artifact case id, which hashes every
+/// accepted dependency edge's contract digest, so a dependency that certifies
+/// something different moves every dependent's claim id. This address is the
+/// same subject stated without that: `case_bytes` is the byte-only case
+/// identity, the claim path and every operation or resource id in the stream is
+/// written with its artifact-case prefix removed (`local:` + the part after the
+/// last `:operation:` or `:resource:`), and an `artifact-case` guard atom naming
+/// the addressed case is written as `local:artifact-case`.
+///
+/// The claim's *value* is part of the address, so a recipe written for one
+/// claim never addresses a broadened or narrowed one: a call domain writes its
+/// knowledge set and then the full encoding of each operation its items name,
+/// in item order; an operation subject writes that operation. Composed
+/// provenance is part of an operation's value here, so the address stream
+/// always writes it (the id it names is normalized the same way). Every other
+/// subject has no address.
+pub(super) fn recipe_address(
+    artifact_case: &ArtifactCase,
+    export: &ExportSemantics,
+    path: &SemanticClaimPath,
+    case_bytes: &Digest,
+) -> Result<RecipeAddress, ModelError> {
+    let mut writer = CanonicalWriter::new();
+    writer.local_ids = true;
+    writer.address_case = Some(artifact_case.id.clone());
+    writer.composed_provenance = true;
+    writer.text("solid-checker:recipe-address");
+    writer.u16(RECIPE_ADDRESS_VERSION);
+    writer.u16(SEMANTIC_MODEL_VERSION);
+    writer.digest(case_bytes);
+    writer.export_identity(&export.identity);
+    writer.semantic_claim_path(path);
+    let referenced = |operation: &OperationId| {
+        export
+            .operation(&operation.0)
+            .ok_or_else(|| ModelError::Unaddressable {
+                reason: format!("the claim references missing operation {}", operation.0),
+            })
+    };
+    match path {
+        SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Callbacks)) => {
+            let callbacks = &export.call.claims.callbacks;
+            writer.knowledge(callbacks, CanonicalWriter::callback);
+            for callback in callbacks.items() {
+                writer.operation(referenced(&callback.operation)?);
+            }
+        }
+        SemanticClaimPath::Domain(ClaimPath::Call(domain)) => {
+            let set = export
+                .call
+                .claims
+                .operation_claim(*domain)
+                .expect("every non-callback call domain is an operation set");
+            writer.knowledge(set, CanonicalWriter::operation_id);
+            for operation in set.items() {
+                writer.operation(referenced(operation)?);
+            }
+        }
+        SemanticClaimPath::Operation(operation) => {
+            writer.operation(referenced(operation)?);
+        }
+        SemanticClaimPath::Domain(_) => {
+            return Err(ModelError::Unaddressable {
+                reason: "only call-domain and operation subjects carry a recipe address".into(),
+            });
+        }
+    }
+    Ok(RecipeAddress::from_sha256(writer.finish()))
+}
+
+/// `local:` + the part after the last `marker`, or the id verbatim.
+fn local_id(value: &str, marker: &str) -> String {
+    match value.rfind(marker) {
+        Some(index) => format!("local:{}", &value[index + marker.len()..]),
+        None => value.to_owned(),
+    }
+}
+
 struct CanonicalWriter {
     hash: Sha256,
+    /// Whether operation and resource ids are written with their artifact-case
+    /// prefix removed. Set only by [`recipe_address`]; false everywhere else,
+    /// so every other digest writes every id verbatim, byte for byte.
+    local_ids: bool,
+    /// The artifact case a [`recipe_address`] stream addresses: an
+    /// `artifact-case` guard atom naming it is written as
+    /// `local:artifact-case`. `None` everywhere else.
+    address_case: Option<String>,
     /// Whether this stream belongs to the provenance digest family.
     ///
-    /// Set once, from the contract, by [`semantic_digest`]; false for every
-    /// other entry point, all of which encode identities rather than
+    /// Set once, from the contract, by [`semantic_digest`], and always by
+    /// [`recipe_address`] (a claim value includes its provenance); false for
+    /// every other entry point, all of which encode identities rather than
     /// operations and so cannot reach the field it gates. When false the
     /// operation encoding is the legacy one byte for byte.
     composed_provenance: bool,
@@ -123,6 +240,8 @@ impl CanonicalWriter {
     fn new() -> Self {
         Self {
             hash: Sha256::new(),
+            local_ids: false,
+            address_case: None,
             composed_provenance: false,
             proposed_closure: false,
             initialization: false,
@@ -456,11 +575,19 @@ impl CanonicalWriter {
     }
 
     fn operation_id(&mut self, id: &OperationId) {
-        self.text(&id.0);
+        if self.local_ids {
+            self.text(&local_id(&id.0, ":operation:"));
+        } else {
+            self.text(&id.0);
+        }
     }
 
     fn resource_id(&mut self, id: &ResourceId) {
-        self.text(&id.0);
+        if self.local_ids {
+            self.text(&local_id(&id.0, ":resource:"));
+        } else {
+            self.text(&id.0);
+        }
     }
 
     fn operation(&mut self, operation: &Operation) {
@@ -797,7 +924,11 @@ impl CanonicalWriter {
             }
             GuardAtom::ArtifactCase(case) => {
                 self.u8(7);
-                self.text(case);
+                if self.address_case.as_deref() == Some(case.as_str()) {
+                    self.text("local:artifact-case");
+                } else {
+                    self.text(case);
+                }
             }
         }
     }

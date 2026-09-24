@@ -284,6 +284,8 @@ fn load_recipes(directory: &Path) -> Result<Vec<CorpusRecipe>, ProbeHarnessError
         let construction = Digest::parse(digest_of(&module_bytes)).expect("canonical digest");
         recipes.push(CorpusRecipe {
             claim_id: entry.claim_id,
+            recipe_address: None,
+            bound_by_address: false,
             file_name,
             bytes: module_bytes,
             construction,

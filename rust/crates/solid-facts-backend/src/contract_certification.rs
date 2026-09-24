@@ -9,7 +9,8 @@ use serde::{
 use serde_json::Value;
 use sha2::{Digest as _, Sha256, Sha512};
 use solid_reactive_ir::contract_semantics::{
-    ClaimDomain, ClaimPath, ContractProposal, NormalizedContract, SemanticClaimPath, ValueRoot,
+    ClaimDomain, ClaimPath, ContractProposal, NormalizedContract, RecipeAddress, SemanticClaimPath,
+    SemanticClaimSubject, ValueRoot,
     certification::{
         CertificationCandidates, DemandPlanningError, DependencyDemandInput, PositiveFactSubject,
         ProofDemandGraph, ProofDemandSubject, ProofFamily, ProofWitnessVariant, WitnessBinding,
@@ -358,9 +359,56 @@ pub struct CertificationPlan {
     /// cross-package reference; they never contribute a semantic claim, a
     /// dependency receipt, or a runtime module to this plan.
     certification_sources: Vec<dependencies::VerifiedGraphSourcePackage>,
+    /// The byte-only identity of the selected artifact case (ways-to-improve
+    /// § 3.2), from which a probe recipe's second address is derived. `None`
+    /// when a dependency edge of the verified closure names no dependency plan
+    /// of this planning call whose own byte identity is known — the plain lane
+    /// with a nonempty closure. Never authority: it only chooses which plan
+    /// claim a corpus entry is copied and launched for.
+    case_byte_identity: Option<solid_reactive_ir::contract_semantics::Digest>,
 }
 
 impl CertificationPlan {
+    /// A probe recipe's second address for one subject of this plan: `None`
+    /// unless this plan knows its case byte identity and the subject is of
+    /// the selected artifact case, or when the subject carries no address.
+    pub(crate) fn recipe_address_for(
+        &self,
+        subject: &SemanticClaimSubject,
+    ) -> Option<RecipeAddress> {
+        let identity = self.case_byte_identity.as_ref()?;
+        if subject.artifact_case != self.selected_artifact_case_id() {
+            return None;
+        }
+        self.candidates
+            .proposal()
+            .recipe_address(subject, identity)
+            .ok()
+    }
+
+    pub(crate) fn recipe_address_string(&self, subject: &SemanticClaimSubject) -> Option<String> {
+        self.recipe_address_for(subject)
+            .map(|address| address.as_str().to_owned())
+    }
+
+    /// Every closure candidate of this plan that carries a recipe address, as
+    /// `(semantic claim id, recipe address)`, in candidate order.
+    ///
+    /// Diagnostic: the corpus loader derives the same pairs itself and never
+    /// reads this list.
+    #[must_use]
+    pub fn recipe_addresses(&self) -> Vec<(String, String)> {
+        self.candidates
+            .closure_candidates()
+            .iter()
+            .filter_map(|subject| {
+                let address = self.recipe_address_for(subject)?;
+                let claim = self.candidates.proposal().claim_id(subject).ok()?;
+                Some((claim.as_str().to_owned(), address.as_str().to_owned()))
+            })
+            .collect()
+    }
+
     #[must_use]
     pub const fn demand_graph(&self) -> &ProofDemandGraph {
         &self.demand_graph
@@ -813,6 +861,7 @@ pub(super) fn census_refusal_withholding(
                 domain: type_facts::call_claim_domain_name(domain).to_owned(),
                 semantic_claim_id: semantic_claim_id.to_string(),
                 reason: format!("{WITHHELD_CLOSURE_CENSUS_REFUSED_PREFIX}{reason}"),
+                recipe_address: plan.recipe_address_string(subject),
             })
         })
         .collect()
@@ -984,6 +1033,7 @@ pub(super) fn incomplete_gate_withholding(
             domain: type_facts::call_claim_domain_name(domain).to_owned(),
             semantic_claim_id: gate.semantic_claim_id().to_owned(),
             reason: format!("{WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX}{gate_id}{detail}"),
+            recipe_address: plan.recipe_address_string(subject),
         });
     }
     records
@@ -1036,6 +1086,7 @@ pub(super) fn workspace_refusal_withholding(
                     "{WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX}{} (the run was refused: {refusal})",
                     gate.id()
                 ),
+                recipe_address: plan.recipe_address_string(subject),
             })
         })
         .collect()
@@ -1313,6 +1364,7 @@ fn plan_certification_with_dependencies(
         &selected,
         dependencies,
     )?;
+    let case_byte_identity = plan_case_byte_identity(&selected, &verified_closure, dependencies);
     let policy = proof_policy_2();
     let candidates = policy
         .inspect_candidates(&selected)
@@ -1344,7 +1396,41 @@ fn plan_certification_with_dependencies(
         import_request: request.import_request,
         resolved_import: request.resolved_import,
         certification_sources: Vec::new(),
+        case_byte_identity,
     })
+}
+
+/// The selected case's byte-only identity, from its verified closure and the
+/// dependency plans this planning call was given.
+///
+/// Each accepted edge is answered by the dependency plan whose selected case
+/// and package it names; that plan's own identity is already known because
+/// graph planning is dependency first and hands every node all of its
+/// descendants. An edge no such plan answers, or two answers that disagree,
+/// leaves the whole identity `None` — the plain lane's case for any nonempty
+/// closure — and with it every recipe address of the plan.
+fn plan_case_byte_identity(
+    selected: &NormalizedContract,
+    closure: &SnapshotVerifiedClosure,
+    dependencies: &[&CertificationPlan],
+) -> Option<solid_reactive_ir::contract_semantics::Digest> {
+    let case = selected.artifact_cases().first()?;
+    let closure_bytes = closure.manifest().byte_identity(|edge| {
+        let mut answers = dependencies
+            .iter()
+            .filter(|plan| {
+                plan.selected_artifact_case_id() == edge.artifact_case
+                    && plan.resolved_import.package_name == edge.package_name
+            })
+            .map(|plan| plan.case_byte_identity.as_ref());
+        let first = answers.next()??;
+        answers
+            .all(|other| other == Some(first))
+            .then(|| first.as_str().to_owned())
+    })?;
+    selected
+        .artifact_case_byte_identity(&case.id, &closure_bytes)
+        .ok()
 }
 
 fn verify_inert_initialization(
@@ -1536,6 +1622,12 @@ pub struct WithheldClosure {
     /// The exact semantic claim id the recipe corpus would have had to carry.
     pub semantic_claim_id: String,
     pub reason: String,
+    /// The candidate's byte-only second recipe address (ways-to-improve
+    /// § 3.2), which a corpus entry may carry as `recipeAddress` to stay bound
+    /// when a dependency's accepted contract moves this claim id. Absent when
+    /// the plan does not know its case byte identity.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recipe_address: Option<String>,
 }
 
 /// One operation withdrawn from the published document because a positive fact
@@ -1823,7 +1915,11 @@ impl CertificationPlan {
                 .iter()
                 .find(|record| record.semantic_claim_id == claim_id.as_str())
             {
-                withheld.push(record.clone());
+                let mut record = record.clone();
+                if record.recipe_address.is_none() {
+                    record.recipe_address = self.recipe_address_string(closure);
+                }
+                withheld.push(record);
                 continue;
             }
             if corpus
@@ -1838,6 +1934,7 @@ impl CertificationPlan {
                 domain: type_facts::call_claim_domain_name(*domain).to_owned(),
                 semantic_claim_id: claim_id.as_str().to_owned(),
                 reason: WITHHELD_CLOSURE_NO_RECIPE.to_owned(),
+                recipe_address: self.recipe_address_string(closure),
             });
         }
         if withheld.is_empty() {
@@ -1915,6 +2012,7 @@ impl CertificationPlan {
             import_request: self.import_request.clone(),
             resolved_import: self.resolved_import.clone(),
             certification_sources: self.certification_sources.clone(),
+            case_byte_identity: self.case_byte_identity.clone(),
         })
     }
 }
@@ -9580,6 +9678,362 @@ export const value = phantom;
                 ),
             ),
         )
+    }
+
+    /// A two-node graph whose root closes `callbacks` over an export that
+    /// re-exports the leaf's. `close_leaf_callbacks` changes only what the
+    /// leaf *certifies* -- its accepted contract digest -- and so the root's
+    /// dependency edge, closure digest, artifact case id and every claim id.
+    fn recipe_address_graph(
+        close_leaf_callbacks: bool,
+        root_runtime: &[u8],
+    ) -> super::PublishedContractGraphPlan {
+        let (mut leaf_request, leaf_archive, leaf_integrity) =
+            synthetic_graph_certification_request(
+                "leaf-package",
+                "2.0.0",
+                "/project/node_modules/root-package/node_modules/leaf-package",
+                "/project/node_modules/root-package/dist/index.js",
+                b"export const value = 1;",
+                b"export declare const value: number;",
+                Vec::new(),
+            );
+        if close_leaf_callbacks {
+            close_candidate_callbacks(&mut leaf_request);
+        }
+        let leaf_plan = plan_certification(
+            leaf_request.clone(),
+            UntrustedArtifactEnvelope::Published(leaf_archive.clone()),
+        )
+        .unwrap();
+        let edge = AcceptedDependencyEdge {
+            specifier: "leaf-package".into(),
+            package_name: "leaf-package".into(),
+            artifact_case: leaf_plan.selected_artifact_case_id().into(),
+            accepted_contract_digest: leaf_plan
+                .demand_graph()
+                .candidate_semantic_digest()
+                .as_str()
+                .into(),
+        };
+        let (mut root_request, root_archive, root_integrity) =
+            synthetic_graph_certification_request(
+                "root-package",
+                "1.0.0",
+                "/project/node_modules/root-package",
+                "/project/src/app.ts",
+                root_runtime,
+                b"import { value as leafValue } from 'leaf-package'; export declare const value: typeof leafValue;",
+                vec![edge],
+            );
+        close_candidate_callbacks(&mut root_request);
+        plan_published_contract_graph(
+            PublishedGraphNodeRequest::new(
+                root_request,
+                root_archive,
+                graph_lock("root-package", "1.0.0", &root_integrity),
+            ),
+            [PublishedGraphNodeRequest::new(
+                leaf_request,
+                leaf_archive,
+                graph_lock("leaf-package", "2.0.0", &leaf_integrity),
+            )],
+        )
+        .unwrap()
+    }
+
+    const ADDRESSED_ROOT_RUNTIME: &[u8] =
+        b"import { value as leafValue } from 'leaf-package'; export const value = leafValue;";
+
+    /// The root plan, its `callbacks` closure candidate's claim id, and that
+    /// candidate's recipe address.
+    fn addressed_root_candidate(
+        graph: &super::PublishedContractGraphPlan,
+    ) -> (CertificationPlan, String, Option<String>) {
+        let plan = graph.plan(graph.root_identity()).unwrap().clone();
+        let subject = plan
+            .candidates()
+            .closure_candidates()
+            .iter()
+            .find(|subject| {
+                subject.export == "value"
+                    && subject.path
+                        == SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Callbacks))
+            })
+            .expect("the root proposes callbacks closed")
+            .clone();
+        let claim = plan
+            .candidates()
+            .proposal()
+            .claim_id(&subject)
+            .unwrap()
+            .as_str()
+            .to_owned();
+        let address = plan.recipe_address_string(&subject);
+        (plan, claim, address)
+    }
+
+    /// A corpus of `(claimId, recipeAddress, module)` entries; each module is
+    /// an empty ES module, which is all loading and gating read.
+    fn address_corpus(
+        scratch: &std::path::Path,
+        label: &str,
+        entries: &[(&str, Option<&str>, &str)],
+    ) -> std::path::PathBuf {
+        let corpus = scratch.join(format!("corpus-{label}"));
+        std::fs::create_dir_all(&corpus).unwrap();
+        let recipes = entries
+            .iter()
+            .map(|(claim_id, address, module)| {
+                std::fs::write(corpus.join(module), b"export {};\n").unwrap();
+                let mut entry = serde_json::json!({
+                    "claimId": claim_id,
+                    "module": module,
+                    "importKind": "esm",
+                    "scenario": "operation",
+                    "expectedEvent": { "marker": "undeclared-alternative", "class": "callback" },
+                    "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+                });
+                if let Some(address) = address {
+                    entry["recipeAddress"] = serde_json::Value::from(*address);
+                }
+                entry
+            })
+            .collect::<Vec<_>>();
+        let manifest = serde_json::json!({
+            "format": "solid-checker-probe-recipe-corpus",
+            "schemaVersion": 1,
+            "policy": {
+                "repeatRuns": 2,
+                "timeoutMillis": 10000,
+                "maxMicrotaskTurns": 4,
+                "maxMacrotaskTurns": 1,
+                "maxEvents": 64,
+            },
+            "recipes": recipes,
+        });
+        std::fs::write(corpus.join("recipes.json"), manifest.to_string()).unwrap();
+        corpus
+    }
+
+    /// Ways-to-improve § 3.2: a dependency contract change alone no longer
+    /// orphans a recipe. The same root bytes over the same leaf bytes, with
+    /// the leaf certifying something different, move the root's claim id and
+    /// leave its recipe address; a corpus entry written for the old claim id
+    /// and carrying the address binds to the new claim, and recipe gating
+    /// withholds nothing for it.
+    #[test]
+    fn a_dependency_contract_change_alone_does_not_orphan_a_recipe() {
+        let before = recipe_address_graph(false, ADDRESSED_ROOT_RUNTIME);
+        let after = recipe_address_graph(true, ADDRESSED_ROOT_RUNTIME);
+        let (_, old_claim, old_address) = addressed_root_candidate(&before);
+        let (plan, new_claim, new_address) = addressed_root_candidate(&after);
+        assert_ne!(
+            old_claim, new_claim,
+            "the dependency digest moves the claim id"
+        );
+        let address = new_address.expect("the graph lane fills the root's case byte identity");
+        assert_eq!(old_address.as_deref(), Some(address.as_str()));
+        // The leaf has no edges, so its own identity is byte-only as well.
+        let leaf = after
+            .dependency_first_identities()
+            .into_iter()
+            .find(|identity| identity.package_name == "leaf-package")
+            .unwrap()
+            .clone();
+        assert!(after.plan(&leaf).unwrap().case_byte_identity.is_some());
+        assert!(
+            plan.recipe_addresses()
+                .iter()
+                .any(|(claim, listed)| *claim == new_claim && *listed == address)
+        );
+
+        let scratch = TracerScratch::new("recipe-address-binding");
+        let stale = address_corpus(scratch.path(), "stale", &[(&old_claim, None, "root.mjs")]);
+        let gated = plan.recipe_gated(Some(&stale)).unwrap();
+        assert!(
+            gated
+                .withheld()
+                .iter()
+                .any(|record| record.semantic_claim_id == new_claim
+                    && record.recipe_address.as_deref() == Some(address.as_str())),
+            "without the address the old claim id addresses nothing, and the \
+             withheld record reports the address to migrate to"
+        );
+
+        let addressed = address_corpus(
+            scratch.path(),
+            "addressed",
+            &[(&old_claim, Some(&address), "root.mjs")],
+        );
+        let corpus = super::probe_harness::RecipeCorpus::load(&addressed, &plan).unwrap();
+        let recipe = corpus.recipe_for(&new_claim).expect("bound by address");
+        assert!(recipe.bound_by_address());
+        assert!(corpus.recipe_for(&old_claim).is_none());
+        let gated = plan.recipe_gated(Some(&addressed)).unwrap();
+        assert!(
+            gated
+                .withheld()
+                .iter()
+                .all(|record| record.semantic_claim_id != new_claim),
+            "the address-bound recipe serves the candidate"
+        );
+        // Binding is visible in the corpus root: the same entry spelled with
+        // the new claim id binds exactly and hashes without the address line.
+        let exact = address_corpus(scratch.path(), "exact", &[(&new_claim, None, "root.mjs")]);
+        let exact = super::probe_harness::RecipeCorpus::load(&exact, &plan).unwrap();
+        assert!(!exact.recipe_for(&new_claim).unwrap().bound_by_address());
+        assert_ne!(exact.root(), corpus.root());
+    }
+
+    /// The negative half: changed root bytes (a different case byte identity)
+    /// or a changed claim value do not bind; an exact `claimId` wins over an
+    /// address; and an address on an exactly-bound entry leaves the corpus root
+    /// byte-identical to the same corpus without it.
+    #[test]
+    fn a_recipe_address_binds_only_the_same_bytes_and_value_and_never_beats_an_exact_claim() {
+        let before = recipe_address_graph(false, ADDRESSED_ROOT_RUNTIME);
+        let (before_plan, old_claim, old_address) = addressed_root_candidate(&before);
+        let old_address = old_address.unwrap();
+        let scratch = TracerScratch::new("recipe-address-negatives");
+
+        // Changed root bytes, same claim value: a different address.
+        let rebuilt = recipe_address_graph(
+            true,
+            b"import { value as leafValue } from 'leaf-package'; export const value = leafValue; // moved",
+        );
+        let (rebuilt_plan, rebuilt_claim, rebuilt_address) = addressed_root_candidate(&rebuilt);
+        assert_ne!(rebuilt_address.as_deref(), Some(old_address.as_str()));
+        let stale = address_corpus(
+            scratch.path(),
+            "bytes",
+            &[(&old_claim, Some(&old_address), "root.mjs")],
+        );
+        let corpus = super::probe_harness::RecipeCorpus::load(&stale, &rebuilt_plan).unwrap();
+        assert!(corpus.recipe_for(&rebuilt_claim).is_none());
+        assert!(
+            rebuilt_plan
+                .recipe_gated(Some(&stale))
+                .unwrap()
+                .withheld()
+                .iter()
+                .any(|record| record.semantic_claim_id == rebuilt_claim)
+        );
+
+        // Same bytes, changed claim value: the root's callbacks closed over a
+        // callback instead of over nothing is a different address.
+        let mut widened = before_plan.selected_candidate.artifact_cases().to_vec();
+        let invoke = OperationId(format!("{}:value:operation:invoke-0", widened[0].id));
+        let export = widened[0].exports.get_mut("value").unwrap();
+        let operation = test_invoke_operation(invoke.clone());
+        export.call = CallSemantics::new(
+            CallClaims {
+                callbacks: KnowledgeSet::complete(vec![CallbackInvocation {
+                    from: ValueSource::Parameter {
+                        index: 0,
+                        path: vec![],
+                    },
+                    operation: invoke,
+                }]),
+                ..CallClaims::default()
+            },
+            vec![operation],
+            vec![],
+            vec![],
+            GuardPartition::default(),
+        );
+        let widened =
+            ContractProposal::new(before_plan.selected_candidate.package().clone(), widened)
+                .normalize()
+                .unwrap();
+        let identity = before_plan.case_byte_identity.as_ref().unwrap();
+        let subject = SemanticClaimSubject {
+            artifact_case: before_plan.selected_artifact_case_id().into(),
+            export: "value".into(),
+            path: SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Callbacks)),
+        };
+        assert_eq!(
+            widened.claim_id(&subject).unwrap().as_str(),
+            old_claim,
+            "the claim id ignores the value"
+        );
+        assert_ne!(
+            widened.recipe_address(&subject, identity).unwrap().as_str(),
+            old_address,
+            "the address binds it"
+        );
+
+        // An exact claim id wins; the address-carrying rival stays unbound.
+        let rival = address_corpus(
+            scratch.path(),
+            "rival",
+            &[
+                (&old_claim, None, "exact.mjs"),
+                (
+                    "claim:v1:sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                    Some(&old_address),
+                    "rival.mjs",
+                ),
+            ],
+        );
+        let corpus = super::probe_harness::RecipeCorpus::load(&rival, &before_plan).unwrap();
+        let bound = corpus.recipe_for(&old_claim).unwrap();
+        assert_eq!(bound.file_name(), "exact.mjs");
+        assert!(!bound.bound_by_address());
+
+        // An address beside an exact claim id binds nothing, so it leaves the
+        // corpus root exactly what it was without the field.
+        let plain = address_corpus(scratch.path(), "plain", &[(&old_claim, None, "root.mjs")]);
+        let annotated = address_corpus(
+            scratch.path(),
+            "annotated",
+            &[(&old_claim, Some(&old_address), "root.mjs")],
+        );
+        let plain = super::probe_harness::RecipeCorpus::load(&plain, &before_plan).unwrap();
+        let annotated = super::probe_harness::RecipeCorpus::load(&annotated, &before_plan).unwrap();
+        assert_eq!(plain.root(), annotated.root());
+
+        // A malformed address refuses the corpus.
+        let malformed = address_corpus(
+            scratch.path(),
+            "malformed",
+            &[(
+                &old_claim,
+                Some("recipe-address:v1:not-a-digest"),
+                "root.mjs",
+            )],
+        );
+        assert!(matches!(
+            super::probe_harness::RecipeCorpus::load(&malformed, &before_plan),
+            Err(super::ProbeHarnessError::CorpusInvalid(_))
+        ));
+    }
+
+    /// Outside the graph lane no dependency plan is in the transaction: a
+    /// closure with an edge then has no case byte identity, while a closure
+    /// with none has one on the plain lane too.
+    #[test]
+    fn a_case_byte_identity_needs_every_dependency_edge_answered() {
+        let graph = recipe_address_graph(false, ADDRESSED_ROOT_RUNTIME);
+        let root = graph.plan(graph.root_identity()).unwrap();
+        assert!(!root.verified_closure.manifest().dependencies.is_empty());
+        assert!(root.case_byte_identity.is_some());
+        assert_eq!(
+            super::plan_case_byte_identity(&root.selected_candidate, &root.verified_closure, &[]),
+            None
+        );
+        let leaf = graph
+            .dependency_first_identities()
+            .into_iter()
+            .find(|identity| identity.package_name == "leaf-package")
+            .unwrap()
+            .clone();
+        let leaf = graph.plan(&leaf).unwrap();
+        assert_eq!(
+            super::plan_case_byte_identity(&leaf.selected_candidate, &leaf.verified_closure, &[]),
+            leaf.case_byte_identity
+        );
+        assert!(leaf.case_byte_identity.is_some());
     }
 
     #[test]
@@ -17786,6 +18240,7 @@ export const value = phantom;
                 domain: "creates".into(),
                 semantic_claim_id: claim_id.clone(),
                 reason: super::WITHHELD_CLOSURE_NO_RECIPE.into(),
+                recipe_address: plan.recipe_address_string(schedule.gates()[0].subject()),
             }]
         );
         // The domain is opened in the plan's own selected candidate, so the

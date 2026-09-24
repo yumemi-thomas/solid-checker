@@ -223,6 +223,34 @@ pub enum ClosureInput {
 }
 
 impl ClosureManifest {
+    /// The byte-only identity of this closure (ways-to-improve § 3.2): the
+    /// entries and hazards exactly as [`Self::digest`] hashes them, and each
+    /// accepted dependency edge as its specifier, package name, and the
+    /// dependency's *own* byte identity, which `dependency` supplies.
+    ///
+    /// It never reads an edge's `artifact_case` or `accepted_contract_digest`,
+    /// so a dependency that certifies something different leaves it
+    /// unchanged. `None` from `dependency` for any edge makes the whole
+    /// identity `None`: a closure whose dependency bytes are not known has no
+    /// byte identity. It feeds a probe recipe's second address and nothing
+    /// else; it is not a receipt input.
+    pub fn byte_identity(
+        &self,
+        dependency: impl Fn(&AcceptedDependencyEdge) -> Option<String>,
+    ) -> Option<String> {
+        let mut hash = Sha256::new();
+        hash.update(b"solid-checker:artifact-closure-bytes:v1");
+        hash_closure_entries(&mut hash, &self.entries);
+        hash_u64(&mut hash, self.dependencies.len());
+        for edge in &self.dependencies {
+            hash_text(&mut hash, &edge.specifier);
+            hash_text(&mut hash, &edge.package_name);
+            hash_text(&mut hash, &dependency(edge)?);
+        }
+        hash_closure_hazards(&mut hash, &self.hazards);
+        Some(format!("sha256:{:x}", hash.finalize()))
+    }
+
     pub fn materialize(
         package_root: &Path,
         inputs: impl IntoIterator<Item = ClosureInput>,
@@ -1297,13 +1325,7 @@ fn closure_digest(
 ) -> String {
     let mut hash = Sha256::new();
     hash.update(b"solid-checker:artifact-closure:v1");
-    hash_u64(&mut hash, entries.len());
-    for entry in entries {
-        hash_text(&mut hash, &format!("{:?}", entry.role));
-        hash_text(&mut hash, &entry.path);
-        hash_text(&mut hash, &entry.digest);
-        hash_optional(&mut hash, entry.transform_digest.as_deref());
-    }
+    hash_closure_entries(&mut hash, entries);
     hash_u64(&mut hash, dependencies.len());
     for dependency in dependencies {
         hash_text(&mut hash, &dependency.specifier);
@@ -1311,20 +1333,34 @@ fn closure_digest(
         hash_text(&mut hash, &dependency.artifact_case);
         hash_text(&mut hash, &dependency.accepted_contract_digest);
     }
-    hash_u64(&mut hash, hazards.len());
+    hash_closure_hazards(&mut hash, hazards);
+    format!("sha256:{:x}", hash.finalize())
+}
+
+fn hash_closure_entries(hash: &mut Sha256, entries: &[ClosureEntry]) {
+    hash_u64(hash, entries.len());
+    for entry in entries {
+        hash_text(hash, &format!("{:?}", entry.role));
+        hash_text(hash, &entry.path);
+        hash_text(hash, &entry.digest);
+        hash_optional(hash, entry.transform_digest.as_deref());
+    }
+}
+
+fn hash_closure_hazards(hash: &mut Sha256, hazards: &[ClosureHazard]) {
+    hash_u64(hash, hazards.len());
     for hazard in hazards {
-        hash_text(&mut hash, &format!("{:?}", hazard.kind));
-        hash_text(&mut hash, &hazard.source);
-        hash_u64(&mut hash, hazard.affected_exports.len());
+        hash_text(hash, &format!("{:?}", hazard.kind));
+        hash_text(hash, &hazard.source);
+        hash_u64(hash, hazard.affected_exports.len());
         for export in &hazard.affected_exports {
-            hash_text(&mut hash, export);
+            hash_text(hash, export);
         }
-        hash_u64(&mut hash, hazard.affected_domains.len());
+        hash_u64(hash, hazard.affected_domains.len());
         for domain in &hazard.affected_domains {
-            hash_text(&mut hash, &format!("{domain:?}"));
+            hash_text(hash, &format!("{domain:?}"));
         }
     }
-    format!("sha256:{:x}", hash.finalize())
 }
 
 fn hash_optional(hash: &mut Sha256, value: Option<&str>) {
@@ -1400,6 +1436,51 @@ mod tests {
 
     fn repeated_digest(byte: char) -> String {
         format!("sha256:{}", byte.to_string().repeat(64))
+    }
+
+    /// A dependency that certifies something different moves the closure
+    /// digest (it hashes the edge's artifact case and accepted contract
+    /// digest) and leaves the byte identity alone; moving an entry's bytes
+    /// moves both.
+    #[test]
+    fn closure_byte_identity_ignores_what_a_dependency_certifies() {
+        let manifest = |entry_digest: char, artifact_case: &str, accepted: char| {
+            ClosureManifest::new(
+                vec![ClosureEntry {
+                    role: ClosureFileRole::Runtime,
+                    path: "./dist/index.js".into(),
+                    digest: repeated_digest(entry_digest),
+                    transform_digest: None,
+                }],
+                vec![AcceptedDependencyEdge {
+                    specifier: "leaf".into(),
+                    package_name: "leaf".into(),
+                    artifact_case: artifact_case.into(),
+                    accepted_contract_digest: repeated_digest(accepted),
+                }],
+                Vec::new(),
+            )
+            .unwrap()
+        };
+        let dependency = |_: &AcceptedDependencyEdge| Some("leaf-bytes".to_owned());
+        let before = manifest('a', "artifact-case:one", 'b');
+        let after = manifest('a', "artifact-case:two", 'c');
+        assert_ne!(before.digest, after.digest);
+        assert_eq!(
+            before.byte_identity(dependency),
+            after.byte_identity(dependency)
+        );
+        assert!(before.byte_identity(dependency).is_some());
+        let moved = manifest('e', "artifact-case:one", 'b');
+        assert_ne!(
+            before.byte_identity(dependency),
+            moved.byte_identity(dependency)
+        );
+        assert_ne!(
+            before.byte_identity(dependency),
+            before.byte_identity(|_| Some("other-leaf-bytes".to_owned()))
+        );
+        assert_eq!(before.byte_identity(|_| None), None);
     }
 
     /// Every hazard kind's `name` is the spelling `serde` gives it.

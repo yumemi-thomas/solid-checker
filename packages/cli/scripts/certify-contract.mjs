@@ -704,6 +704,43 @@ export const WITHHELD_OPERATION_MARKER = "solid-checker:withheld-operation=";
 
 const CLOSURE_CANDIDATE_MARKER = "solid-checker:closure-candidates=";
 const CERTIFIED_CLOSURE_MARKER = "solid-checker:certified-closures=";
+/// One line per certified plan (and per graph node): the recipe address of
+/// every claim a recipe could serve, beside its semantic claim id.
+export const RECIPE_ADDRESS_MARKER = "solid-checker:recipe-addresses=";
+
+/// Every (claim id, recipe address) pair the run stated, unbounded.
+///
+/// A recipe address (ADR 0117) hashes the claim's bytes and value but no
+/// dependency's accepted contract digest, so a recipe keyed by it survives a
+/// dependency's certified contract changing. This is the table the corpus is
+/// migrated and scaffolded from, so unlike the candidate sample above it is
+/// never truncated: a pair missing here is a recipe nobody can re-key.
+/// Diagnostic only; the native loader recomputes every address itself.
+export function recipeAddressesFromNativeOutput(stdout) {
+  const records = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(RECIPE_ADDRESS_MARKER)) continue;
+    try {
+      const record = JSON.parse(trimmed.slice(RECIPE_ADDRESS_MARKER.length));
+      if (!record || typeof record !== "object" || !Array.isArray(record.addresses)) continue;
+      for (const entry of record.addresses) {
+        if (typeof entry?.semanticClaimId !== "string" || typeof entry?.recipeAddress !== "string") {
+          continue;
+        }
+        records.push({
+          artifactCase: typeof record.artifactCase === "string" ? record.artifactCase : null,
+          ...(record.node ? { node: record.node } : {}),
+          semanticClaimId: entry.semanticClaimId,
+          recipeAddress: entry.recipeAddress
+        });
+      }
+    } catch {
+      // Malformed is not a record.
+    }
+  }
+  return records;
+}
 
 /// What the canonical main a receipt binds actually closes.
 ///
@@ -1804,7 +1841,8 @@ async function executePreparedPublishedGraphs({
     withheldClosures: withheldClosuresFromNativeOutput(child.stdout),
     withheldOperations: withheldOperationsFromNativeOutput(child.stdout),
     closureCandidates: closureCandidatesFromNativeOutput(child.stdout),
-    certifiedClosures: certifiedClosuresFromNativeOutput(child.stdout)
+    certifiedClosures: certifiedClosuresFromNativeOutput(child.stdout),
+    recipeAddresses: recipeAddressesFromNativeOutput(child.stdout)
   };
 }
 
@@ -3115,7 +3153,8 @@ async function executeNativeCertification({
     withheldClosures: withheldClosuresFromNativeOutput(child.stdout),
     withheldOperations: withheldOperationsFromNativeOutput(child.stdout),
     closureCandidates: closureCandidatesFromNativeOutput(child.stdout),
-    certifiedClosures: certifiedClosuresFromNativeOutput(child.stdout)
+    certifiedClosures: certifiedClosuresFromNativeOutput(child.stdout),
+    recipeAddresses: recipeAddressesFromNativeOutput(child.stdout)
   };
 }
 
@@ -3547,7 +3586,8 @@ function writeSuccessAudit(
   plannedProposal = null,
   closureCandidates = null,
   certifiedClosures = null,
-  probeCorpus = null
+  probeCorpus = null,
+  recipeAddresses = []
 ) {
   if (!path) return;
   const output = resolve(path);
@@ -3593,6 +3633,9 @@ function writeSuccessAudit(
     // absent here, with nothing in `withheldClosures`, is a closure lost
     // outside every mechanism meant to account for it.
     certifiedClosures,
+    // Every claim's recipe address (ADR 0117), unbounded: what re-keys and
+    // scaffolds the recipe corpus.
+    recipeAddresses,
     demandPlans: demandPlans.map(plan => ({
       policyDigest: plan.policyDigest,
       candidateSemanticDigest: plan.candidateSemanticDigest,
@@ -3710,6 +3753,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
   let withheldOperations = [];
   let closureCandidates = null;
   let certifiedClosures = null;
+  let recipeAddresses = [];
   const stageDurationsMs = {};
   let certified = false;
   const measure = async (stage, operation) => {
@@ -3876,6 +3920,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
             : [];
           closureCandidates = witnesses?.closureCandidates ?? null;
           certifiedClosures = witnesses?.certifiedClosures ?? null;
+          recipeAddresses = Array.isArray(witnesses?.recipeAddresses) ? witnesses.recipeAddresses : [];
           return { authority: "rust", witnesses };
         })
       },
@@ -3942,7 +3987,8 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       plannedProposalPath ? plannedClosureSummary(plannedProposalPath) : null,
       closureCandidates,
       certifiedClosures,
-      options.probeRecipeCorpus ? resolve(options.probeRecipeCorpus) : null
+      options.probeRecipeCorpus ? resolve(options.probeRecipeCorpus) : null,
+      recipeAddresses
     );
     certified = true;
   } catch (error) {
