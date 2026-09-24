@@ -1413,9 +1413,10 @@ type ReturnSite struct {
 	CarryReach *Reachability               `cbor:"carryReach,omitempty" json:"carryReach,omitempty"`
 	Sources    []ImplementationValueSource `cbor:"sources,omitempty" json:"sources,omitempty"`
 	// Arms are the values this site can hand back when its expression is a
-	// conditional or an array literal (ADR 0115): the leaves of the
-	// conditional tree after identity-preserving wrappers, in source order, a
-	// branch a literal condition excludes left out. When present the list is
+	// conditional or an array literal (ADR 0115), or a call of an unchanged
+	// whole input binding (ADR 0116, one arm): the leaves of the conditional
+	// tree after identity-preserving wrappers, in source order, a branch a
+	// literal condition excludes left out. When present the list is
 	// exhaustive, because a conditional expression evaluates to one of its two
 	// branches; a tree too deep or too wide states no arms rather than some.
 	// Absent for every other expression, which the site's own fields describe.
@@ -1433,6 +1434,12 @@ type ReturnArm struct {
 	// every element in order, and is empty for `[]`.
 	ArrayLiteral bool               `cbor:"arrayLiteral,omitempty" json:"arrayLiteral,omitempty"`
 	Elements     []ReturnArmElement `cbor:"elements,omitempty" json:"elements,omitempty"`
+	// Invoked identifies the unchanged whole input binding this arm calls, when
+	// the arm is a call of one (ADR 0116): not optional, not `new`, not a
+	// tagged template, and the callee after identity-preserving wrappers is the
+	// binding itself. The arm's value is then what that invocation returned.
+	// Absence carries no premise.
+	Invoked *ParameterValueSource `cbor:"invoked,omitempty" json:"invoked,omitempty"`
 }
 
 // ReturnArmElement is one element of an array-literal ReturnArm.

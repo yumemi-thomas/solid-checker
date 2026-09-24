@@ -1755,7 +1755,8 @@ func (p *project) returnArmsLocked(implementation, expression *ast.Node) []typef
 		return nil
 	}
 	root := identityPreservingUnwrap(expression)
-	if root == nil || !(ast.IsConditionalExpression(root) || ast.IsArrayLiteralExpression(root)) {
+	if root == nil || !(ast.IsConditionalExpression(root) || ast.IsArrayLiteralExpression(root) ||
+		p.invokedParameterLocked(implementation, root) != nil) {
 		return nil
 	}
 	var arms []typefacts.ReturnArm
@@ -1789,6 +1790,7 @@ func (p *project) returnArmsLocked(implementation, expression *ast.Node) []typef
 			Location:  nodeLocation(node),
 			Value:     &value,
 			Parameter: p.unwrittenParameterIdentityLocked(implementation, node),
+			Invoked:   p.invokedParameterLocked(implementation, node),
 		}
 		if ast.IsArrayLiteralExpression(node) {
 			arm.ArrayLiteral = true
@@ -1813,6 +1815,23 @@ func (p *project) returnArmsLocked(implementation, expression *ast.Node) []typef
 		return nil
 	}
 	return arms
+}
+
+// invokedParameterLocked names the unchanged whole input binding a call
+// expression invokes (ADR 0116): a call -- not optional, since `f?.()` hands
+// back `undefined` for a nullish `f`, and never a `new` or a tagged template,
+// which are not call expressions -- whose callee after identity-preserving
+// wrappers is a binding unwrittenParameterIdentityLocked names. Nil otherwise.
+func (p *project) invokedParameterLocked(implementation, node *ast.Node) *typefacts.ParameterValueSource {
+	node = identityPreservingUnwrap(node)
+	if node == nil || !ast.IsCallExpression(node) || node.QuestionDotToken() != nil {
+		return nil
+	}
+	source := p.unwrittenParameterIdentityLocked(implementation, node.Expression())
+	if source == nil || len(source.Path) != 0 {
+		return nil
+	}
+	return source
 }
 
 func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.ControlFlowCensus {

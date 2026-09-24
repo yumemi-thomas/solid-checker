@@ -20,6 +20,38 @@
       "path": "node_modules/reactive-package/package.json"
     },
     "exports": {
+      "accessWith": {
+        "declarations": {
+          "exportName": "accessWith",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        },
+        "runtime": {
+          "exportName": "accessWith",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        }
+      },
+      "accessWithOpen": {
+        "declarations": {
+          "exportName": "accessWithOpen",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        },
+        "runtime": {
+          "exportName": "accessWithOpen",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        }
+      },
       "asArray": {
         "declarations": {
           "exportName": "asArray",

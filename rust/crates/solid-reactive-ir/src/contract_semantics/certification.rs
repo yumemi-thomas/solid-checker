@@ -727,6 +727,7 @@ fn inventory_value_shape(
         | ValueShape::Plain
         | ValueShape::Parameter { .. }
         | ValueShape::ArgumentArray { .. }
+        | ValueShape::InvocationResult { .. }
         | ValueShape::Callable
         | ValueShape::Reactive { .. }
         | ValueShape::Store { .. }
@@ -772,6 +773,7 @@ const fn recursive_value_callability(shape: &ValueShape) -> DemandedCallability 
         | ValueShape::Store { .. }
         | ValueShape::MergedProps { .. }
         | ValueShape::ArgumentArray { .. }
+        | ValueShape::InvocationResult { .. }
         | ValueShape::Action { .. }
         | ValueShape::Cleanup { .. }
         | ValueShape::RefApplication

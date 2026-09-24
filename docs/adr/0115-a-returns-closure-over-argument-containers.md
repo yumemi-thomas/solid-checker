@@ -133,8 +133,11 @@ invent one; that is the approximation, and it is the consumer's own.
   (`v()`, `valueOrFn(...args)`) is the result of invoking the caller's value,
   and no value shape says so yet. Both keep their plain proposal, refused.
   `access` would stay at some uses anyway: its `callbacks` closure is refused.
+  (ADR 0116 is that shape.)
 - A parenthesized returned conditional, a logical `||`/`&&`/`??`, and a
   returned `[]` on its own: the walk does not read them, so nothing is proposed.
+  (Corrected by ADR 0116: the parenthesized conditional was read all along --
+  Oxc parses without parentheses -- and the other two still are not.)
 - A written parameter, an element that is not an argument, a spread or a hole,
   and a claim naming a container no live completion hands back.
 

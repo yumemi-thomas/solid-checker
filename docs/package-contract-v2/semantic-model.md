@@ -697,6 +697,13 @@ choice's alternatives would be a value closure of their own, which no census
 decides for an operation's output, while the enumeration of `return`
 operations is exactly what the `returns` census decides.
 
+**[Decision 2026-09-24, ADR 0116]** a `return` may hand back the value an
+invocation of the caller's argument returned: output `invocation-result i`.
+`accessWith` -- `valueOrFn(...args)` or `valueOrFn` -- publishes two `return`
+operations, `invocation-result 0` and `parameter 0`, and closes `returns` over
+them. The shape names no argument of the invocation: which arguments produced
+the value is the `callbacks` domain's claim, not the return's.
+
 ### cleanups
 
 `cleanups: [] closed` denies that one invocation of this export gives rise to
@@ -779,6 +786,9 @@ Required shapes:
   caller's own arguments at given indices. It is the one composite that carries
   no local collection and no closure: it is exact by construction, which is
   what lets a `return` state it as its whole output.
+- invocation result (ADR 0116): the value an invocation of the caller's own
+  argument at a given index returned, handed back unchanged. Exact for the same
+  reason, and it says nothing of the value but where it came from.
 
 Projection and snapshot are represented by observable capability and
 resource relationships unless RC.3 exposes a runtime-observable protocol that

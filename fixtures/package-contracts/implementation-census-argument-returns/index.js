@@ -1,7 +1,7 @@
-// The tracer for ADR 0115: returns that each hand back the caller's own
-// argument, or a fresh array of the caller's arguments. No export calls Solid
-// or reads a parameter's members; what differs is only which values the
-// completions hand back.
+// The tracer for ADR 0115 and ADR 0116: returns that each hand back the
+// caller's own argument, a fresh array of the caller's arguments, or what an
+// invocation of one returned. No export calls Solid; what differs is only which
+// values the completions hand back.
 
 // --- Every export in this block certifies its returns. ---
 
@@ -22,6 +22,20 @@ export function pairOrValue(value, other) {
   }
   return [value, other];
 }
+
+// ADR 0116. `@solid-primitives/utils`' own `accessWith` and `access`: the
+// caller's value, or what calling it returned.
+export function accessWith(valueOrFn, ...args) {
+  return typeof valueOrFn === "function" ? valueOrFn(...args) : valueOrFn;
+}
+export const access = (v) => typeof v === "function" && !v.length ? v() : v;
+
+// One invocation result alone, and one fresh array alone.
+export const run = (fn, value) => fn(value);
+export const wrap = (value) => [value];
+
+// A parenthesized conditional is the conditional itself.
+export const parenthesized = (value) => (Array.isArray(value) ? value : [value]);
 
 // --- Every export below is refused. ---
 
@@ -45,4 +59,10 @@ export function overclaimed(value) {
 // An arm that is a call's result.
 export function viaCall(value) {
   return value ? value : Array.from(value);
+}
+
+// An optional call hands back `undefined` for a nullish callee, which no
+// invocation returned.
+export function optionalCall(fn, value) {
+  return value ? fn?.() : value;
 }

@@ -115,8 +115,9 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
             // The returns census decides empty completion (ADR 0035), a single
             // whole-parameter identity, one merged props root (ADR 0109), one
             // plain return over a primitive completion (ADR 0113) and returns
-            // of argument containers (ADR 0115). Other described return shapes
-            // remain partial; their enumeration has no complete census.
+            // of argument containers (ADR 0115) and invocation results
+            // (ADR 0116). Other described return shapes remain partial; their
+            // enumeration has no complete census.
             let proposable = paths
                 .iter()
                 .filter_map(|path| match path {
@@ -199,11 +200,12 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                             })
                         // ADR 0115: returns that each hand back an argument
                         // container, which the census decides from the
-                        // producer's arms of every return.
+                        // producer's arms of every return -- since ADR 0116
+                        // also one array or one invocation result alone.
                         || export
                             .operation_claim(ClaimDomain::Returns)
                             .is_some_and(|claim| {
-                                claim.items().len() > 1
+                                !claim.items().is_empty()
                                     && claim.items().iter().all(|id| {
                                         export.operation(&id.0).is_some_and(|operation| {
                                             operation.kind == OperationKind::Return
@@ -616,8 +618,33 @@ fn normalize_export(
     // (`solid_reactive_ir::valueless_completion`); the census then proves it.
     // A described return keeps publishing its positive operation, which the
     // weakening below turns into a partial claim rather than a closure.
+    // ADR 0115 and ADR 0116: one `return` per value the argument-container walk
+    // saw, each with its exact output. Read wherever the reactive analysis left
+    // the return undescribed -- `Open` for a lone `[value]`, `Known(None)` for a
+    // union whose branches disagree -- and never over a described return.
+    let container_returns = |operations: &mut Vec<Operation>| {
+        (scope.publishes_bootstrapped_reactive_domains()
+            && summary.kind == "function"
+            && !summary.returns_argument_containers.is_empty()
+            && summary.inherited_from.is_none()
+            && matches!(&summary.async_behavior, ContractClaim::Known(protocol) if protocol.is_empty()))
+        .then(|| {
+            let mut ids = Vec::new();
+            for (index, container) in summary.returns_argument_containers.iter().enumerate() {
+                let id = OperationId(format!("{prefix}return-{index}"));
+                operations.push(operation(
+                    id.clone(),
+                    OperationKind::Return,
+                    Vec::new(),
+                    Some(container.value_shape()),
+                ));
+                ids.push(id);
+            }
+            KnowledgeSet::Complete(ids)
+        })
+    };
     let returns = match &summary.returns {
-        ContractClaim::Open => KnowledgeSet::Unknown,
+        ContractClaim::Open => container_returns(&mut operations).unwrap_or(KnowledgeSet::Unknown),
         // ADR 0109, before the empty closure and deliberately: a body that
         // returns a props merge *does* yield a value, so the two are mutually
         // exclusive by construction — the valueless-completion walk declines on
@@ -660,30 +687,14 @@ fn normalize_export(
                     || (summary.kind == "function" && summary.returns_walk_clean))
             {
                 KnowledgeSet::Complete(Vec::new())
-            } else if scope.publishes_bootstrapped_reactive_domains()
-                && summary.kind == "function"
-                && !summary.returns_argument_containers.is_empty()
-                && summary.inherited_from.is_none()
-                && matches!(&summary.async_behavior, ContractClaim::Known(protocol) if protocol.is_empty())
-            {
+            } else if let Some(containers) = container_returns(&mut operations) {
                 // ADR 0115, before ADR 0113's plain return because it is the
                 // narrower claim: the syntax walk saw nothing but the caller's
-                // own arguments and fresh arrays of them, so this proposes one
-                // `return` per container, each with its exact output, and the
-                // census decides the enumeration from the producer's arms of
-                // every return.
-                let mut ids = Vec::new();
-                for (index, container) in summary.returns_argument_containers.iter().enumerate() {
-                    let id = OperationId(format!("{prefix}return-{index}"));
-                    operations.push(operation(
-                        id.clone(),
-                        OperationKind::Return,
-                        Vec::new(),
-                        Some(container.value_shape()),
-                    ));
-                    ids.push(id);
-                }
-                KnowledgeSet::Complete(ids)
+                // own arguments, fresh arrays of them, and (ADR 0116) calls of
+                // them, so this proposes one `return` per container, each with
+                // its exact output, and the census decides the enumeration from
+                // the producer's arms of every return.
+                containers
             } else if scope.publishes_bootstrapped_reactive_domains()
                 && summary.kind == "function"
                 && summary.returns_value_completion

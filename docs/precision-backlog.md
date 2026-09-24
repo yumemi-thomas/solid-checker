@@ -1,5 +1,22 @@
 # Precision backlog
 
+## A return of what the caller's argument returned (2026-09-24)
+
+Status: **implemented** (ADR 0116). `@solid-primitives/utils`' `accessWith`
+(27 consumer sites) returns `valueOrFn(...args)` or `valueOrFn`, and `access`
+(157) `v()` or `v`; both were proposed ADR 0113's plain return and refused.
+`invocation-result i` is now an exact return output beside ADR 0115's two,
+stated by the producer on the call arm (`ReturnArm::invoked`, handshake
+protocol 62) and observed by the veto through recording functions whose tokens
+are the only values the result admits. An optional call, a member call, `new`
+and a written callee refuse by name. The consumer reads it as it reads a local
+`return f()`: no leaf it can name, so a store a callback returns can be hidden,
+never invented. `access` keeps `callbacks` open (its `!v.length` may run a
+getter, ADR 0100 rule 2), so only its `returns` closes. The walk also proposes
+a lone array (`(value) => [value]`, which needed the arrow's elements demanded)
+and a lone invocation, and ADR 0115's note that a parenthesized conditional was
+unread was wrong. Still unread: `||`/`&&`/`??` and a lone `return []`.
+
 ## A default-library call's reach into its caller's argument (2026-09-24)
 
 Status: **fixed for aliases; open for calls.** `semantic-model.md` § callbacks

@@ -645,6 +645,77 @@ fn the_argument_container_module_emits_only_outside_the_claimed_containers() {
     }
 }
 
+/// ADR 0116 on the same module: what an invocation of the argument returned is
+/// a token the slot's recording function handed back during that call, and
+/// nothing else is -- not a value the caller's callable would have returned,
+/// and not a token of another call.
+#[test]
+fn the_invocation_result_module_admits_only_what_the_invocation_returned() {
+    let returned = |id: &str, output: ValueShape| Operation {
+        id: OperationId(id.into()),
+        output: Some(output),
+        ..return_operation()
+    };
+    let operations = vec![
+        returned("return-0", ValueShape::InvocationResult { parameter: 0 }),
+        returned(
+            "return-1",
+            ValueShape::Parameter {
+                index: 0,
+                path: vec![],
+            },
+        ),
+    ];
+    let claim = KnowledgeSet::complete(
+        operations
+            .iter()
+            .map(|operation| operation.id.clone())
+            .collect(),
+    );
+    let Some(observation @ Observation::ArgumentContainers(_)) =
+        candidate_observation("returns", &export_with_returns(claim, operations.clone()))
+    else {
+        panic!("an invocation result selects the container observation");
+    };
+    assert!(
+        matches!(
+            candidate_observation(
+                "returns",
+                &export_with_returns(
+                    KnowledgeSet::complete(vec![operations[0].id.clone()]),
+                    vec![operations[0].clone()]
+                )
+            ),
+            Some(Observation::ArgumentContainers(_))
+        ),
+        "a lone invocation result is this observation's, not the identity veto's"
+    );
+    let mut maybe_callable = value_fact(json!({"mayBeObject": true, "mayBeUndefined": true}));
+    maybe_callable["callability"] = json!("callable");
+    let signatures = [signature(&[maybe_callable])];
+    for implementation in [
+        // `accessWith` and `access`.
+        "export function subject(value) { return typeof value === 'function' ? value() : value; }",
+        "export function subject(value) { return typeof value === 'function' && !value.length ? value() : value; }",
+        "export function subject(value) { return value; }",
+    ] {
+        let observed = execute(implementation, observation, &signatures);
+        assert!(!observed.contradicted(), "{implementation}: {observed:?}");
+        assert!(observed.error.is_none(), "{implementation}: {observed:?}");
+    }
+    for implementation in [
+        // Calling the argument and handing back something else.
+        "export function subject(value) { if (typeof value === 'function') { value(); return {}; } return value; }",
+        // A token of an earlier call is not this call's invocation result.
+        "let last; export function subject(value) { if (typeof value === 'function') { const previous = last; last = value(); return previous ?? last; } return value; }",
+        "export function subject(value) { return typeof value === 'function' ? [value()] : value; }",
+    ] {
+        let observed = execute(implementation, observation, &signatures);
+        assert!(observed.contradicted(), "{implementation}: {observed:?}");
+        assert!(observed.error.is_none(), "{implementation}: {observed:?}");
+    }
+}
+
 /// A throwing sample observes nothing, and a run in which no sample completes
 /// normally is incomplete rather than satisfied by silence.
 #[test]

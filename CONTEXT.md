@@ -74,8 +74,8 @@ A claim domain no document may close in schema version 1, so its claim knowledge
 _Avoid_: optional domain, open domain (closure could never fix it), treating its absence as "registers nothing"
 
 **Argument container**:
-One value a `return` operation hands back that is the caller's own argument at an index (`parameter`) or a fresh array whose elements are the caller's arguments at given indices (`argument-array`), ADR 0115. A union of them is one `return` per container, closed by the `returns` census from the producer's arms of every return, never one `return` over a `choice`. The consumer reads a union with no one shared reactive leaf as describing no reactive return.
-_Avoid_: tuple of parameters (a tuple carries a closure of its own), passthrough, choice return
+One value a `return` operation hands back that is the caller's own argument at an index (`parameter`), a fresh array whose elements are the caller's arguments at given indices (`argument-array`, ADR 0115), or what an invocation of the caller's argument returned (`invocation-result`, ADR 0116). A union of them is one `return` per container, closed by the `returns` census from the producer's arms of every return, never one `return` over a `choice`. The consumer reads a union with no one shared reactive leaf as describing no reactive return.
+_Avoid_: tuple of parameters (a tuple carries a closure of its own), passthrough, choice return, callback result (the invoked value need not be a callback)
 
 **Operation cardinality**:
 A proved lower and upper bound on how often one semantic operation occurs within an explicit scope such as one trigger occurrence, one package call, or one resource lifetime. Possibility, guarantee, repetition, and bound scope are separate facts.

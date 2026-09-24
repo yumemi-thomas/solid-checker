@@ -4,7 +4,15 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 61 (ADR 0115): **a returned conditional or array
+// TypeFactsHandshakeProtocol is 62 (ADR 0116): **a return arm that calls an
+// unchanged whole input binding says so.** ReturnArm.Invoked names the
+// binding a non-optional call arm invokes, and a returned call of one is
+// decomposed as a one-arm root, so a `returns` census can enumerate "what the
+// caller's argument returned" beside the argument itself -- `accessWith`'s
+// `valueOrFn(...args)` and `valueOrFn`. A protocol-61 consumer decodes with
+// `deny_unknown_fields` and would reject the transcript, so the number moves.
+//
+// Protocol 61 (ADR 0115): **a returned conditional or array
 // literal states the values it can evaluate to.** ReturnSite.Arms lists the
 // leaves of a returned conditional tree -- after identity-preserving wrappers,
 // a branch a literal condition excludes left out -- each with its own value
@@ -391,8 +399,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 61
-	TypeFactsSchemaSHA256             = "sha256:940b875bb116afb1fd286078a8a9b7ebf1fdeae06350596cc004cc98e718ce5b"
+	TypeFactsHandshakeProtocol uint64 = 62
+	TypeFactsSchemaSHA256             = "sha256:52db523547c4cdd50723488d3c1236d20daa202cd9f8a837af30128b91679024"
 )
 
 type ServiceHandshake struct {

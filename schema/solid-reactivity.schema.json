@@ -561,6 +561,7 @@
         { "$ref": "#/$defs/storeValue" },
         { "$ref": "#/$defs/mergedPropsValue" },
         { "$ref": "#/$defs/argumentArrayValue" },
+        { "$ref": "#/$defs/invocationResultValue" },
         { "$ref": "#/$defs/actionValue" },
         { "$ref": "#/$defs/componentValue" },
         { "$ref": "#/$defs/cleanupValue" },
@@ -711,6 +712,16 @@
       "properties": {
         "kind": { "const": "argument-array" },
         "items": { "type": "array", "items": { "type": "integer", "minimum": 0 } }
+      }
+    },
+    "invocationResultValue": {
+      "description": "ADR 0116. The value an invocation of the caller's own argument at `parameter` returned, handed back unchanged: `valueOrFn(...args)` is `0`. Names no argument of the invocation and carries no closure of its own.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "parameter"],
+      "properties": {
+        "kind": { "const": "invocation-result" },
+        "parameter": { "type": "integer", "minimum": 0 }
       }
     },
     "capabilityClaims": {

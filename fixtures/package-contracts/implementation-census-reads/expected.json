@@ -13,7 +13,7 @@
             "sha256": "19f6dfe65a8013568ea0d041bea18b76ec700f1e92dce463765fb9072302c494"
           },
           "exports": {
-            "invokesCallerAccessor": "summary-a92036a905be73d15099362eafaa5fec79503e721807be33524d979de89f07d7",
+            "invokesCallerAccessor": "summary-685a2a674347ce88bb5645a490be2537b9283c8214861e67d0190093f2f9d7e9",
             "invokesCallerMember": "summary-2f04175344d08001bcdb075fc6a5c58abbf455da6e5f2fb062130e0462e80a69",
             "invokesCallerMemberLater": "summary-cd719acaeb7892d543fd8085c736eafff7bd10635b9a9cab7fec9f739afcc2bb",
             "plainArithmetic": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
@@ -179,7 +179,7 @@
       },
       "shape": "callable"
     },
-    "summary-a92036a905be73d15099362eafaa5fec79503e721807be33524d979de89f07d7": {
+    "summary-685a2a674347ce88bb5645a490be2537b9283c8214861e67d0190093f2f9d7e9": {
       "call": {
         "callbacks": [
           {
@@ -225,9 +225,12 @@
               "min": 0,
               "scope": "call"
             },
-            "id": "return",
+            "id": "return-0",
             "kind": "return",
-            "output": "plain",
+            "output": {
+              "kind": "invocation-result",
+              "parameter": 0
+            },
             "tracking": "untracked",
             "trigger": {
               "event": "call"
@@ -242,7 +245,7 @@
         ],
         "reads": [],
         "returns": [
-          "return"
+          "return-0"
         ]
       },
       "shape": "callable"

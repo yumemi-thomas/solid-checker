@@ -1713,6 +1713,11 @@ pub struct ReturnArm {
     pub array_literal: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub elements: Vec<ReturnArmElement>,
+    /// The unchanged whole input binding this arm calls, when the arm is a
+    /// non-optional call whose callee is that binding itself (ADR 0116): the
+    /// arm's value is what the invocation returned. Absence is open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invoked: Option<ParameterValueSource>,
 }
 
 /// One element of an array-literal [`ReturnArm`].

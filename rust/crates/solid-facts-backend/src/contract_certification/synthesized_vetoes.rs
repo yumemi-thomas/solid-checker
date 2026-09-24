@@ -458,7 +458,10 @@ enum Observation {
     /// fresh array of the caller's arguments. The contradiction is a normal
     /// completion whose result is none of them: not the argument at a claimed
     /// index by SameValue, and not an object whose `length` and elements are
-    /// the claimed arguments by SameValue in order.
+    /// the claimed arguments by SameValue in order. ADR 0116 adds what an
+    /// invocation of the argument at a claimed index returned: a token one of
+    /// the recording functions sampled into that slot handed back during the
+    /// same sample call.
     ArgumentContainers(ContainerSet),
     /// The `callbacks: []` claim. Observed from inside the sampled callback
     /// rather than at a checkpoint after the sample loop: a synthesized entry
@@ -621,6 +624,8 @@ struct ContainerSet {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct ContainerSlot {
     array: bool,
+    /// ADR 0116: what an invocation of the argument at `items[0]` returned.
+    invocation: bool,
     len: u8,
     items: [u8; 4],
 }
@@ -645,12 +650,20 @@ impl ContainerSet {
             let slot = match operation.output.as_ref()? {
                 ValueShape::Parameter { index, path } if path.is_empty() => ContainerSlot {
                     array: false,
+                    invocation: false,
                     len: 1,
                     items: [u8::try_from(*index).ok()?, 0, 0, 0],
+                },
+                ValueShape::InvocationResult { parameter } => ContainerSlot {
+                    array: false,
+                    invocation: true,
+                    len: 1,
+                    items: [u8::try_from(*parameter).ok()?, 0, 0, 0],
                 },
                 ValueShape::ArgumentArray { items } if items.len() <= 4 => {
                     let mut slot = ContainerSlot {
                         array: true,
+                        invocation: false,
                         len: u8::try_from(items.len()).ok()?,
                         items: [0; 4],
                     };
@@ -670,10 +683,24 @@ impl ContainerSet {
             set.len += 1;
         }
         // A lone whole parameter is ADR 0096's identity veto, never this one.
-        if set.len == 1 && !set.slots[0].array {
+        if set.len == 1 && !set.slots[0].array && !set.slots[0].invocation {
             return None;
         }
         Some(set)
+    }
+
+    /// The argument indices a claimed invocation result is read from, once
+    /// each, ascending (ADR 0116).
+    fn invocation_indices(&self) -> Vec<u16> {
+        let mut indices = self
+            .slots()
+            .iter()
+            .filter(|slot| slot.invocation)
+            .map(|slot| u16::from(slot.items[0]))
+            .collect::<Vec<_>>();
+        indices.sort_unstable();
+        indices.dedup();
+        indices
     }
 
     fn slots(&self) -> &[ContainerSlot] {
@@ -698,8 +725,9 @@ impl ContainerSet {
             .iter()
             .map(|slot| {
                 format!(
-                    "{{ array: {}, items: [{}] }}",
+                    "{{ array: {}, invocation: {}, items: [{}] }}",
                     slot.array,
+                    slot.invocation,
                     slot.items[..usize::from(slot.len)]
                         .iter()
                         .map(u8::to_string)
@@ -786,6 +814,32 @@ impl Observation {
                         }
                     }
                 }
+                // ADR 0116: every callable the slot of a claimed invocation
+                // receives is replaced by a recording function of its arity,
+                // and the identity samples are all of arity zero; one sample of
+                // arity one reaches the branch an arity test excludes
+                // (`access`'s `!v.length`).
+                for index in set.invocation_indices() {
+                    let slot = usize::from(index);
+                    let variants = tuples
+                        .iter()
+                        .filter(|tuple| {
+                            tuple
+                                .get(slot)
+                                .is_some_and(|value| value == "(() => undefined)")
+                        })
+                        .map(|tuple| {
+                            let mut variant = tuple.clone();
+                            variant[slot] = "(function (_) { return undefined; })".into();
+                            variant
+                        })
+                        .collect::<Vec<_>>();
+                    for variant in variants {
+                        if !tuples.contains(&variant) {
+                            tuples.push(variant);
+                        }
+                    }
+                }
                 tuples
             }
             Self::NotCallable | Self::DefaultLibraryAlias(_) => Vec::new(),
@@ -816,7 +870,7 @@ impl Observation {
                 "at most six tuples per overload, no variadic tail or structural object construction; an input outside the sample that makes the export return an object is not observed; throwing-only runs are incomplete and cannot satisfy the veto"
             }
             Self::ArgumentContainers(_) => {
-                "identity samples for each claimed index, distinct object/callable identities per slot; at most twelve tuples per index and overload, no variadic tail or structural object construction; an input outside the sample that selects another completion is not observed; throwing-only runs are incomplete and cannot satisfy the veto"
+                "identity samples for each claimed index, distinct object/callable identities per slot; a claimed invocation slot's callables replaced by recording functions of the same arity (zero, and one sample of one) whose returned tokens are the only values the invocation result admits; at most twelve tuples per index and overload, no variadic tail or structural object construction; an input outside the sample that selects another completion is not observed; throwing-only runs are incomplete and cannot satisfy the veto"
             }
             _ => {
                 "at most six tuples per overload; no variadic tail or structural object construction"
@@ -1407,7 +1461,7 @@ fn argument_container_module_source(
         .collect::<Vec<_>>()
         .join("\n");
     format!(
-        r#"// Synthesized argument-container return veto (ADR 0115).
+        r#"// Synthesized argument-container return veto (ADR 0115, ADR 0116).
 // Finite observations only falsify; the authenticated census proves closure.
 import * as subjectModule from {specifier};
 const subject = subjectModule[{export}];
@@ -1416,8 +1470,23 @@ const sameValue = (left, right) => left === right
   ? left !== 0 || 1 / left === 1 / right
   : left !== left && right !== right;
 const containers = [{containers}];
+// ADR 0116: a claimed invocation slot's callable is replaced by a recording
+// function of the same arity, and only the tokens it returned during this
+// sample call are what that invocation returned.
+const invocationSlots = [{invocation_slots}];
+const tokens = {{}};
+const recorder = (slot, arity) => arity === 0
+  ? function () {{ const token = {{}}; tokens[slot][tokens[slot].length] = token; return token; }}
+  : function (_) {{ const token = {{}}; tokens[slot][tokens[slot].length] = token; return token; }};
 const holds = (result, args) => {{
   for (const container of containers) {{
+    if (container.invocation) {{
+      const returned = tokens[container.items[0]];
+      for (let position = 0; position < returned.length; position += 1) {{
+        if (sameValue(result, returned[position])) return true;
+      }}
+      continue;
+    }}
     if (!container.array) {{
       if (sameValue(result, args[container.items[0]])) return true;
       continue;
@@ -1444,7 +1513,13 @@ export async function runProbeSession(_session, harness) {{
   if (typeof subject !== "function") throw new Error("synthesized veto: export is not callable");
   let completed = 0;
   let threw = 0;
-  for (const args of samples) {{
+  for (const sample of samples) {{
+    const args = [];
+    for (let position = 0; position < sample.length; position += 1) args[position] = sample[position];
+    for (const slot of invocationSlots) {{
+      tokens[slot] = [];
+      if (typeof args[slot] === "function") args[slot] = recorder(slot, args[slot].length === 0 ? 0 : 1);
+    }}
     let result;
     try {{ result = subject(...args); }} catch {{ threw += 1; continue; }}
     completed += 1;
@@ -1460,6 +1535,12 @@ export async function runProbeSession(_session, harness) {{
         specifier = serde_json::to_string(specifier).unwrap(),
         export = serde_json::to_string(export).unwrap(),
         containers = set.javascript(),
+        invocation_slots = set
+            .invocation_indices()
+            .iter()
+            .map(u16::to_string)
+            .collect::<Vec<_>>()
+            .join(", "),
     )
 }
 

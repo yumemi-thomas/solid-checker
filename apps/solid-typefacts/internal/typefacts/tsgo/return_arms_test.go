@@ -9,7 +9,9 @@ import (
 )
 
 // ADR 0115: a returned conditional or array literal states the values it can
-// evaluate to, exhaustively or not at all.
+// evaluate to, exhaustively or not at all. ADR 0116: an arm that calls an
+// unwritten whole parameter names it, and a returned call of one is a one-arm
+// root.
 func TestReturnArmsDecomposeConditionalsAndArrayLiterals(t *testing.T) {
 	type element struct {
 		parameter int // -1: no identity
@@ -20,6 +22,7 @@ func TestReturnArmsDecomposeConditionalsAndArrayLiterals(t *testing.T) {
 		parameter int // -1: no identity
 		array     bool
 		elements  []element
+		invoked   int // the invoked parameter's index + 1; 0: none
 	}
 	cases := []struct {
 		name, code string
@@ -38,9 +41,44 @@ func TestReturnArmsDecomposeConditionalsAndArrayLiterals(t *testing.T) {
 			name: "accessWith",
 			code: `export function check(valueOrFn: any, ...args: any[]) { return typeof valueOrFn === "function" ? valueOrFn(...args) : valueOrFn; }`,
 			want: []arm{
-				{text: "valueOrFn(...args)", parameter: -1},
+				{text: "valueOrFn(...args)", parameter: -1, invoked: 1},
 				{text: "valueOrFn", parameter: 0},
 			},
+		},
+		{
+			name: "access",
+			code: `export const check = (v: any) => typeof v === "function" && !v.length ? v() : v;`,
+			want: []arm{
+				{text: "v()", parameter: -1, invoked: 1},
+				{text: "v", parameter: 0},
+			},
+		},
+		{
+			name: "callRoot",
+			code: `export const check = (value: any, fn: any) => (fn as any)(value);`,
+			want: []arm{{text: "(fn as any)(value)", parameter: -1, invoked: 2}},
+		},
+		{
+			name: "optionalMemberAndNewCalls",
+			code: `export const check = (f: any, o: any, v: any) => v ? f?.() : o ? o.run() : v === 1 ? new f() : v;`,
+			want: []arm{
+				{text: "f?.()", parameter: -1},
+				{text: "o.run()", parameter: -1},
+				{text: "new f()", parameter: -1},
+				{text: "v", parameter: 2},
+			},
+		},
+		{
+			name: "writtenCallee",
+			code: `export function check(f: any) { f = f || (() => 1); return f ? f() : f; }`,
+			want: []arm{
+				{text: "f()", parameter: -1},
+				{text: "f", parameter: -1},
+			},
+		},
+		{
+			name: "callOfAnythingElse",
+			code: `export const check = (value: any) => Array.from(value);`,
 		},
 		{
 			name: "literalCondition",
@@ -121,7 +159,8 @@ func TestReturnArmsDecomposeConditionalsAndArrayLiterals(t *testing.T) {
 				if text := source[got.Location.StartByte:got.Location.EndByte]; text != want.text {
 					t.Fatalf("arm %d spells %q, want %q", index, text, want.text)
 				}
-				if identity(got.Parameter) != want.parameter || got.ArrayLiteral != want.array || got.Value == nil {
+				if identity(got.Parameter) != want.parameter || got.ArrayLiteral != want.array || got.Value == nil ||
+					identity(got.Invoked)+1 != want.invoked {
 					t.Fatalf("arm %d = %+v, want %+v", index, got, want)
 				}
 				if len(got.Elements) != len(want.elements) {

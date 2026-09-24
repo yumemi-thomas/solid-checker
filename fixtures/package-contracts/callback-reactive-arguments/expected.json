@@ -13,7 +13,7 @@
             "sha256": "9cac85e64e6a7649af44ab1afe3d06867c22dd22a3f671b34f852deb75b401d6"
           },
           "exports": {
-            "mapValue": "summary-d01bad36d58bd6bc295eac23d420223263361765dd0a63a179b69cbd6a21c5a1"
+            "mapValue": "summary-e2f2203433c14ff2d27513c91c45a7a65729d6712357599857635acc44f36d79"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -37,7 +37,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-d01bad36d58bd6bc295eac23d420223263361765dd0a63a179b69cbd6a21c5a1": {
+    "summary-e2f2203433c14ff2d27513c91c45a7a65729d6712357599857635acc44f36d79": {
       "call": {
         "callbacks": [
           {
@@ -88,9 +88,12 @@
               "min": 0,
               "scope": "call"
             },
-            "id": "return",
+            "id": "return-0",
             "kind": "return",
-            "output": "plain",
+            "output": {
+              "kind": "invocation-result",
+              "parameter": 0
+            },
             "tracking": "untracked",
             "trigger": {
               "event": "call"
@@ -104,7 +107,7 @@
         ],
         "reads": [],
         "returns": [
-          "return"
+          "return-0"
         ]
       },
       "shape": "callable"

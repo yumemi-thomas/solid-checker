@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:940b875bb116afb1fd286078a8a9b7ebf1fdeae06350596cc004cc98e718ce5b";
+    "sha256:52db523547c4cdd50723488d3c1236d20daa202cd9f8a837af30128b91679024";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -337,7 +337,12 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // way. Present means exhaustive, and a tree past the producer's bounds states
 // none. A protocol-60 consumer decodes with `deny_unknown_fields` and would
 // reject the transcript outright, so the number moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 61;
+// Protocol 62 names the parameter a call arm invokes (ADR 0116):
+// `ReturnArm::invoked` is the unchanged whole input binding a non-optional call
+// arm calls, and a returned call of one is decomposed as a one-arm root. A
+// protocol-61 consumer decodes with `deny_unknown_fields` and would reject the
+// transcript outright, so the number moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 62;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

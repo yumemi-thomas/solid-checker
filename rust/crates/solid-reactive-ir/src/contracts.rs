@@ -354,6 +354,10 @@ fn project_return(
     // can hide a finding and never invent one. A return whose output the
     // projection drops (`[]`) is part of the union too: reading the claim as
     // its one surviving leaf would say the export always returns that.
+    // ADR 0116: what an invocation of the caller's argument returned is exact
+    // and names no leaf this projection can reach -- the local summary of
+    // `return f()` names none either -- so it is one more dropped return, alone
+    // or in a union.
     let exact_only = !knowledge.items().is_empty()
         && knowledge.items().iter().all(|id| {
             export.operation(&id.0).is_some_and(|operation| {
@@ -363,6 +367,7 @@ fn project_return(
                         ValueShape::Plain
                             | ValueShape::Parameter { .. }
                             | ValueShape::ArgumentArray { .. }
+                            | ValueShape::InvocationResult { .. }
                     )
                 )
             })
@@ -458,6 +463,7 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
         ValueShape::Unknown
         | ValueShape::Plain
         | ValueShape::ArgumentArray { .. }
+        | ValueShape::InvocationResult { .. }
         | ValueShape::Tuple(_)
         | ValueShape::Array { .. }
         | ValueShape::Object(_)
@@ -779,6 +785,28 @@ mod owner_requirement_projection_tests {
             )
         );
         assert_eq!(project(false, as_array()), (ContractClaim::Open, true));
+
+        // ADR 0116: `accessWith`'s two returns, and a lone invocation result.
+        let invoked = |parameter| ValueShape::InvocationResult { parameter };
+        assert_eq!(
+            project(
+                true,
+                vec![
+                    returned("return-0", invoked(0)),
+                    returned("return-1", parameter(0))
+                ]
+            ),
+            (ContractClaim::Known(None), false),
+            "the argument, or what calling it returned, names no one leaf"
+        );
+        assert_eq!(
+            project(true, vec![returned("return-0", invoked(1))]),
+            (ContractClaim::Known(None), false)
+        );
+        assert_eq!(
+            project(false, vec![returned("return-0", invoked(0))]),
+            (ContractClaim::Open, true)
+        );
     }
 
     /// The shape the two frozen Solid 1.x authority documents still carry, and

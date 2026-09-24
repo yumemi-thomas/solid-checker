@@ -1,4 +1,4 @@
-import { asArray, asArrayOpen } from "reactive-package";
+import { accessWith, accessWithOpen, asArray, asArrayOpen } from "reactive-package";
 
 // The claim under test. `asArray`'s accepted contract closes `returns` over
 // three returns (ADR 0115): the caller's argument, a fresh empty array, and a
@@ -13,4 +13,16 @@ export function count(labels: string | string[]): number {
 // the open claim. The closure above has to remove exactly this finding.
 export function countOpen(labels: string | string[]): number {
   return asArrayOpen(labels).length;
+}
+
+// ADR 0116. `accessWith`'s accepted contract closes `returns` over two returns:
+// what calling the caller's argument returned, and the argument itself. The
+// import finds nothing open.
+export function greeting(name: string): string {
+  return accessWith(() => `hello ${name}`);
+}
+
+// The control: `returns` left open, so the import reports it.
+export function greetingOpen(name: string): string {
+  return accessWithOpen(() => `hello ${name}`);
 }

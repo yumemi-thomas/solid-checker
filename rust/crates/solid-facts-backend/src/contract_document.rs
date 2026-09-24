@@ -1034,6 +1034,9 @@ fn compact_value(value: &ValueShape, ids: &CompactIds) -> Result<JsonValue, Cont
         // arguments this object's property reads reach through to.
         ValueShape::MergedProps { from } => json!({"kind": "merged-props", "from": from}),
         ValueShape::ArgumentArray { items } => json!({"kind": "argument-array", "items": items}),
+        ValueShape::InvocationResult { parameter } => {
+            json!({"kind": "invocation-result", "parameter": parameter})
+        }
         ValueShape::Action { transition } => {
             let mut node = json!({"kind": "action"});
             if let Some(transition) = transition {
@@ -2129,6 +2132,11 @@ enum WireValueNode {
     /// list would read as `[]`, a claim the producer never made.
     ArgumentArray {
         items: Vec<u16>,
+    },
+    /// ADR 0116. `parameter` is required: an invocation result that names no
+    /// argument states nothing, and defaulting it would name one.
+    InvocationResult {
+        parameter: u16,
     },
     Action {
         #[serde(default)]
@@ -3399,6 +3407,9 @@ fn expand_value_node(
         WireValueNode::ArgumentArray { items } => Ok(ValueShape::ArgumentArray {
             items: items.clone(),
         }),
+        WireValueNode::InvocationResult { parameter } => Ok(ValueShape::InvocationResult {
+            parameter: *parameter,
+        }),
         WireValueNode::Action { transition } => Ok(ValueShape::Action {
             transition: transition.as_ref().map(|resource| ids.resource(resource)),
         }),
@@ -4309,6 +4320,7 @@ mod tests {
             serde_json::json!({"kind": "server-function-reference", "resource": "server"}),
             serde_json::json!({"kind": "argument-array", "items": [0, 1]}),
             serde_json::json!({"kind": "argument-array", "items": []}),
+            serde_json::json!({"kind": "invocation-result", "parameter": 0}),
         ];
         for value in values {
             let value: WireValue = serde_json::from_value(value).unwrap();
@@ -4318,6 +4330,11 @@ mod tests {
         // refused rather than read as `[]`.
         assert!(
             serde_json::from_value::<WireValue>(serde_json::json!({"kind": "argument-array"}))
+                .is_err()
+        );
+        // ADR 0116: an invocation result that names no argument likewise.
+        assert!(
+            serde_json::from_value::<WireValue>(serde_json::json!({"kind": "invocation-result"}))
                 .is_err()
         );
 

@@ -170,6 +170,9 @@ pub enum ArgumentContainer {
     /// A fresh array whose elements, in order, are the caller's arguments at
     /// these indices; empty for `[]`.
     Array(Vec<u16>),
+    /// What an invocation of the caller's argument at this index returned
+    /// (ADR 0116).
+    Invocation(u16),
 }
 
 impl ArgumentContainer {
@@ -182,6 +185,9 @@ impl ArgumentContainer {
             }
             crate::contract_semantics::ValueShape::ArgumentArray { items } => {
                 Some(Self::Array(items.clone()))
+            }
+            crate::contract_semantics::ValueShape::InvocationResult { parameter } => {
+                Some(Self::Invocation(*parameter))
             }
             _ => None,
         }
@@ -198,6 +204,11 @@ impl ArgumentContainer {
             Self::Array(items) => crate::contract_semantics::ValueShape::ArgumentArray {
                 items: items.clone(),
             },
+            Self::Invocation(parameter) => {
+                crate::contract_semantics::ValueShape::InvocationResult {
+                    parameter: *parameter,
+                }
+            }
         }
     }
 
@@ -214,6 +225,7 @@ impl ArgumentContainer {
                     .collect::<Vec<_>>()
                     .join(",")
             ),
+            Self::Invocation(index) => format!("invocation-{index}"),
         }
     }
 }
@@ -229,12 +241,15 @@ impl ArgumentContainer {
 /// nothing but conditionals whose branches are its whole parameters and array
 /// literals of them?
 ///
+/// A completion, or a branch, may also be a call of one of those parameters,
+/// whose value is what the invocation returned (ADR 0116).
+///
 /// Silence is "do not propose", and every path out is `None`: an `async`
 /// function or a generator; a completion, or a branch, that is anything else,
-/// including a spread or a hole in an array; a conditional deeper than the
-/// producer decomposes; and fewer than two distinct containers, since one
-/// whole parameter is ADR 0075's claim. A bare `return;` hands back
-/// `undefined`, which is no `return` operation, and contributes nothing.
+/// including a spread or a hole in an array and a `new`; a conditional deeper
+/// than the producer decomposes; and one whole parameter alone, which is
+/// ADR 0075's claim. A bare `return;` hands back `undefined`, which is no
+/// `return` operation, and contributes nothing.
 #[must_use]
 pub(crate) fn argument_container_return(
     file: &FileFacts,
@@ -331,9 +346,25 @@ pub(crate) fn argument_container_return(
             }
             continue;
         }
+        // ADR 0116: a call of the caller's own argument hands back whatever
+        // that invocation returned. `new` starts before its callee, and an
+        // optional call reaches the census, which refuses it by name.
+        if let Some(call) = file.ast.calls.iter().find(|call| call.span == span) {
+            if !call.direct_callee || call.callee.start != call.span.start {
+                return None;
+            }
+            containers.insert(ArgumentContainer::Invocation(parameter_at(call.callee)?));
+            continue;
+        }
         containers.insert(ArgumentContainer::Parameter(parameter_at(span)?));
     }
-    (containers.len() >= 2).then(|| containers.into_iter().collect())
+    // One whole parameter alone is ADR 0075's claim; one array, or one
+    // invocation, is this one's.
+    match containers.len() {
+        0 => None,
+        1 if matches!(containers.first(), Some(ArgumentContainer::Parameter(_))) => None,
+        _ => Some(containers.into_iter().collect()),
+    }
 }
 
 /// Every function in the project whose completions [`argument_container_return`]

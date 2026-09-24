@@ -1756,6 +1756,18 @@ pub enum ValueShape {
     ArgumentArray {
         items: Vec<u16>,
     },
+    /// The value **an invocation of the caller's own argument at `parameter`**
+    /// returned, handed back unchanged (ADR 0116): `valueOrFn(...args)` is
+    /// `parameter: 0`.
+    ///
+    /// Exact for the same reason [`ValueShape::ArgumentArray`] is: no
+    /// knowledge set and no closure of its own. It names no argument of the
+    /// invocation -- which arguments produced the value is the `callbacks`
+    /// domain's question -- and says nothing of the value but where it came
+    /// from.
+    InvocationResult {
+        parameter: u16,
+    },
     Action {
         transition: Option<ResourceId>,
     },

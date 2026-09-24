@@ -923,6 +923,11 @@ impl CanonicalWriter {
                 self.u8(18);
                 self.sequence(items, |writer, index| writer.u16(*index));
             }
+            // ADR 0116. Appended, and no document before it carries the tag.
+            ValueShape::InvocationResult { parameter } => {
+                self.u8(19);
+                self.u16(*parameter);
+            }
         }
     }
 

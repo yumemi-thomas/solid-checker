@@ -15808,7 +15808,7 @@ export const value = phantom;
             ArgumentContainer, ContractClaim, ContractEntrypoint, ContractExport, ContractPackage,
             PackageContract,
         };
-        let exports: [(&str, Vec<ArgumentContainer>); 7] = [
+        let exports: [(&str, Vec<ArgumentContainer>); 13] = [
             (
                 "asArray",
                 vec![
@@ -15858,6 +15858,37 @@ export const value = phantom;
                 vec![
                     ArgumentContainer::Parameter(0),
                     ArgumentContainer::Array(vec![0]),
+                ],
+            ),
+            // ADR 0116.
+            (
+                "accessWith",
+                vec![
+                    ArgumentContainer::Invocation(0),
+                    ArgumentContainer::Parameter(0),
+                ],
+            ),
+            (
+                "access",
+                vec![
+                    ArgumentContainer::Invocation(0),
+                    ArgumentContainer::Parameter(0),
+                ],
+            ),
+            ("run", vec![ArgumentContainer::Invocation(0)]),
+            ("wrap", vec![ArgumentContainer::Array(vec![0])]),
+            (
+                "parenthesized",
+                vec![
+                    ArgumentContainer::Parameter(0),
+                    ArgumentContainer::Array(vec![0]),
+                ],
+            ),
+            (
+                "optionalCall",
+                vec![
+                    ArgumentContainer::Invocation(0),
+                    ArgumentContainer::Parameter(1),
                 ],
             ),
         ];
@@ -15971,10 +16002,12 @@ export const value = phantom;
 
     /// ADR 0115 end to end: returns that each hand back the caller's own
     /// argument or a fresh array of them certify through the census, each
-    /// return's positive fact and the synthesized veto, and the three wrong
-    /// claims withhold by name while the row certifies: an arm that is no
-    /// argument (a written parameter, a literal element, a call), and a
-    /// container no completion hands back.
+    /// return's positive fact and the synthesized veto, and the wrong claims
+    /// withhold by name while the row certifies: an arm that is no argument (a
+    /// written parameter, a literal element, a call of something else, an
+    /// optional call), and a container no completion hands back. ADR 0116:
+    /// what an invocation of the argument returned certifies beside it, and
+    /// alone.
     #[test]
     fn the_argument_container_census_certifies_exactly_the_enumerated_containers() {
         let Some((plan, outcome)) = argument_returns_fixture_certify("argument-returns") else {
@@ -15991,10 +16024,18 @@ export const value = phantom;
         let array = |items: &[u16]| ValueShape::ArgumentArray {
             items: items.to_vec(),
         };
+        let invoked = |parameter| ValueShape::InvocationResult { parameter };
         for (export, expected) in [
             ("asArray", vec![parameter(0), array(&[]), array(&[0])]),
             ("pick", vec![parameter(1), parameter(2)]),
             ("pairOrValue", vec![parameter(0), array(&[0, 1])]),
+            // ADR 0116: `access`'s `callbacks` is refused on its `!v.length`
+            // read, which this plan does not propose; its `returns` closes.
+            ("accessWith", vec![invoked(0), parameter(0)]),
+            ("access", vec![invoked(0), parameter(0)]),
+            ("run", vec![invoked(0)]),
+            ("wrap", vec![array(&[0])]),
+            ("parenthesized", vec![parameter(0), array(&[0])]),
         ] {
             assert_eq!(
                 closed_containers_in(main, export),
@@ -16008,6 +16049,7 @@ export const value = phantom;
             ("reassigned", "neither the caller's unchanged argument"),
             ("withLiteral", "neither the caller's unchanged argument"),
             ("viaCall", "neither the caller's unchanged argument"),
+            ("optionalCall", "neither the caller's unchanged argument"),
             (
                 "overclaimed",
                 "that no completion the producer did not prove unreachable",

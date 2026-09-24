@@ -5149,6 +5149,7 @@ fn value_shape_constructor(value: &ValueShape) -> &'static str {
         ValueShape::Store { .. } => "store",
         ValueShape::MergedProps { .. } => "merged-props",
         ValueShape::ArgumentArray { .. } => "argument-array",
+        ValueShape::InvocationResult { .. } => "invocation-result",
         ValueShape::Action { .. } => "action",
         ValueShape::Component => "component",
         ValueShape::Cleanup { .. } => "cleanup",
@@ -11415,8 +11416,9 @@ fn argument_container_claim(
 }
 
 /// The argument container one return arm hands back, when the producer's own
-/// facts name one: an unchanged whole input binding, or an array literal every
-/// element of which is one. A spread, a hole, and any other element are not.
+/// facts name one: an unchanged whole input binding, an array literal every
+/// element of which is one, or a call of one (ADR 0116). A spread, a hole, and
+/// any other element are not.
 fn arm_container(arm: &typefacts::ReturnArm) -> Option<solid_reactive_ir::ArgumentContainer> {
     let whole = |source: &typefacts::ParameterValueSource| {
         source
@@ -11425,6 +11427,15 @@ fn arm_container(arm: &typefacts::ReturnArm) -> Option<solid_reactive_ir::Argume
             .then(|| u16::try_from(source.parameter_index).ok())
             .flatten()
     };
+    if let Some(invoked) = arm.invoked.as_ref() {
+        // The producer states `invoked` only for a call arm, which is neither
+        // an array literal nor a parameter; a transcript saying otherwise is a
+        // producer disagreement and names no container.
+        if arm.array_literal || arm.parameter.is_some() {
+            return None;
+        }
+        return whole(invoked).map(solid_reactive_ir::ArgumentContainer::Invocation);
+    }
     if arm.array_literal {
         return arm
             .elements
@@ -11488,8 +11499,8 @@ fn argument_container_return_sites(
             let Some(container) = container else {
                 return Err(format!(
                     "argument container returns census refuses a value at {}:{}..{}, reach {}, \
-                     that is neither the caller's unchanged argument nor an array literal of \
-                     them, for {at}",
+                     that is neither the caller's unchanged argument, an array literal of them, \
+                     nor a call of one, for {at}",
                     location.path,
                     location.start_byte,
                     location.end_byte,
@@ -14856,6 +14867,7 @@ const fn value_shape_kind_name(shape: &ValueShape) -> &'static str {
         ValueShape::Store { .. } => "store",
         ValueShape::MergedProps { .. } => "merged-props",
         ValueShape::ArgumentArray { .. } => "argument-array",
+        ValueShape::InvocationResult { .. } => "invocation-result",
         ValueShape::Action { .. } => "action",
         ValueShape::Component => "component",
         ValueShape::Cleanup { .. } => "cleanup",
@@ -25577,6 +25589,43 @@ mod tests {
                 "value": value(),
                 "parameter": {"parameterIndex": 0, "path": [{"kind": "property", "property": "value"}]}
             }]),
+            "neither the caller's unchanged argument",
+        );
+
+        // ADR 0116: `accessWith`, a call of the argument beside the argument.
+        let invoked = [
+            ArgumentContainer::Invocation(0),
+            ArgumentContainer::Parameter(0),
+        ]
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+        let access_with = json!([conditional(json!([
+            {"location": at(12, 30), "invoked": identity(0)},
+            {"location": at(33, 42), "parameter": identity(0)}
+        ]))]);
+        assert_eq!(
+            argument_container_return_sites(
+                &primitive_census_implementation(access_with.clone(), false),
+                &invoked,
+                "/p/index.js:0..60",
+            )
+            .unwrap(),
+            vec![
+                "census-return-arm:/p/index.js:12:30:reachable:invocation-0".to_owned(),
+                "census-return-arm:/p/index.js:33:42:reachable:parameter-0".to_owned(),
+                // Sites, not arms: one return with two.
+                "census-returns-argument-container-total:1".to_owned(),
+            ]
+        );
+        // The ADR 0115 claim does not enumerate the invocation.
+        refuses(access_with, "which the claim does not enumerate");
+        // An `invoked` arm that also claims to be an array literal is a
+        // producer disagreement, and names no container.
+        refuses(
+            json!([conditional(json!([
+                {"location": at(12, 17), "parameter": identity(0)},
+                {"location": at(20, 27), "arrayLiteral": true, "invoked": identity(0)}
+            ]))]),
             "neither the caller's unchanged argument",
         );
     }

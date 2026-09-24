@@ -368,14 +368,30 @@ fn plan_file(
     }
     // ADR 0115: a returned conditional's branches, and the elements of a
     // branch that is an array literal, are named by the symbol the generator's
-    // argument-container walk resolves them by. Only returned conditionals,
-    // and only as deep as the producer decomposes its arms.
+    // argument-container walk resolves them by. Only returned conditionals and
+    // calls, and only as deep as the producer decomposes its arms.
     let reference = |span: solid_facts::core::Span| {
         file.ast.identifiers.iter().any(|identifier| {
             identifier.span == span
                 && identifier.role == solid_facts::ast::IdentifierRole::Reference
         })
     };
+    // ADR 0116: a lone array literal an expression-bodied arrow returns names
+    // its elements the same way; a block's `return [value]` already demands
+    // them above, and the arrow spelling of the same return must answer alike.
+    for returned in file
+        .ast
+        .functions
+        .iter()
+        .filter_map(|function| function.expression_return.as_ref())
+        .filter(|returned| returned.properties().is_empty())
+    {
+        for element in returned.elements().iter().flatten().copied() {
+            if reference(element) {
+                add_symbol(element, false);
+            }
+        }
+    }
     let mut returned_conditionals = file
         .ast
         .returns
@@ -392,6 +408,15 @@ fn plan_file(
         .collect::<Vec<_>>();
     while let Some((span, depth)) = returned_conditionals.pop() {
         if depth > 8 {
+            continue;
+        }
+        // ADR 0116: a returned call -- the whole expression or a branch -- of
+        // an identifier is named by its callee's symbol, which is how the walk
+        // tells a call of the caller's own argument.
+        if let Some(call) = file.ast.calls.iter().find(|call| call.span == span) {
+            if call.direct_callee && reference(call.callee) {
+                add_symbol(call.callee, false);
+            }
             continue;
         }
         let Some(conditional) = file

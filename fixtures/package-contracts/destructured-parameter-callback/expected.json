@@ -16,7 +16,7 @@
             "ArrayPattern": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
             "MemberAlias": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
             "ObjectPattern": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
-            "Parameter": "summary-a92036a905be73d15099362eafaa5fec79503e721807be33524d979de89f07d7"
+            "Parameter": "summary-685a2a674347ce88bb5645a490be2537b9283c8214861e67d0190093f2f9d7e9"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -40,7 +40,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-a92036a905be73d15099362eafaa5fec79503e721807be33524d979de89f07d7": {
+    "summary-685a2a674347ce88bb5645a490be2537b9283c8214861e67d0190093f2f9d7e9": {
       "call": {
         "callbacks": [
           {
@@ -86,9 +86,12 @@
               "min": 0,
               "scope": "call"
             },
-            "id": "return",
+            "id": "return-0",
             "kind": "return",
-            "output": "plain",
+            "output": {
+              "kind": "invocation-result",
+              "parameter": 0
+            },
             "tracking": "untracked",
             "trigger": {
               "event": "call"
@@ -103,7 +106,7 @@
         ],
         "reads": [],
         "returns": [
-          "return"
+          "return-0"
         ]
       },
       "shape": "callable"
