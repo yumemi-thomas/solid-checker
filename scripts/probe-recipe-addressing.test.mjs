@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "vitest";
 
-import { addressing, compare, recipeSubjects } from "./probe-recipe-addressing.mjs";
+import { addressing, annotate, compare, recipeSubjects } from "./probe-recipe-addressing.mjs";
 
 const CORPUS = join(import.meta.dirname, "ecosystem-benchmark/probe-recipes");
 
@@ -34,6 +34,61 @@ test("a recipe whose claim the run no longer proposes is stale, not merely unuse
   assert.equal(result.totals.recipes, 3);
   assert.equal(result.totals.addressed, 1);
   assert.equal(result.totals.stale, 1);
+});
+
+test("a recipe whose id moved is still addressed when the run states its recipe address", () => {
+  // ADR 0117: a dependency's certified contract changed, so the claim id did,
+  // and the loader binds the entry by its byte address instead.
+  const result = addressing(
+    inputs({
+      recipes: [
+        { module: "a.mjs", claimId: "claim:live", subjects: new Set(["@scope/utils"]) },
+        {
+          module: "b.mjs",
+          claimId: "claim:dead",
+          recipeAddress: "address:b",
+          subjects: new Set(["@scope/utils"])
+        },
+        {
+          module: "d.mjs",
+          claimId: "claim:gone",
+          recipeAddress: "address:nobody",
+          subjects: new Set(["@scope/utils"])
+        }
+      ],
+      addresses: new Map([["address:b", "claim:rekeyed"]])
+    })
+  );
+  assert.equal(result.totals.addressed, 2);
+  assert.equal(result.totals.addressedByAddress, 1);
+  // An address the run never stated addresses nothing, exactly like an id.
+  assert.equal(result.totals.stale, 1);
+});
+
+test("annotating writes each address after its claim id and refuses a contradiction", () => {
+  const manifest = {
+    format: "f",
+    recipes: [
+      { claimId: "claim:a", module: "a.mjs", importKind: "esm" },
+      { claimId: "claim:b", module: "b.mjs", importKind: "esm" },
+      { claimId: "claim:c", recipeAddress: "address:c", module: "c.mjs", importKind: "esm" }
+    ]
+  };
+  const { manifest: written, written: count, missing, conflicts } = annotate(
+    manifest,
+    new Map([
+      ["claim:a", "address:a"],
+      ["claim:c", "address:c"]
+    ])
+  );
+  assert.equal(count, 1);
+  assert.deepEqual(Object.keys(written.recipes[0]), ["claimId", "recipeAddress", "module", "importKind"]);
+  assert.deepEqual(missing, ["b.mjs"]);
+  assert.deepEqual(conflicts, []);
+  assert.deepEqual(
+    annotate(manifest, new Map([["claim:c", "address:other"]])).conflicts,
+    [{ module: "c.mjs", corpus: "address:c", run: "address:other" }]
+  );
 });
 
 test("a recipe for a package the run never certified is out of scope, never stale", () => {

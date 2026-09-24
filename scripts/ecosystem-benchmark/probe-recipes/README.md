@@ -689,3 +689,28 @@ And again on 2026-09-24, after ADR 0116, the alias `callbacks` fix and the
 alias returns moved what utils certifies: carried over to `rootless`
 `8376d63a…` (floor) and `fc4a55ae…` (head) and `trigger` `354ee754…` (floor)
 and `ec630d30…` (head).
+
+## A second address that survives a dependency's contract (ADR 0117, 2026-09-24)
+
+The carry-overs above were the same mechanical step four times: the package's
+bytes did not change, only a digest of what `@solid-primitives/utils`
+certified did, and that digest is inside every dependent claim id. An entry
+may now carry `recipeAddress` beside `claimId`. It hashes the claim's package,
+case and closure *bytes* (each dependency by its own bytes, recursively), its
+export, path and normalized value, and never a dependency's accepted contract
+digest. When an entry's `claimId` names no claim the plan proposes, the loader
+binds it to the one claim with the same address; an exact `claimId` still
+wins. Addresses exist wherever every dependency is planned in the same
+transaction (every graph-lane node, and every dependency-free case).
+
+To migrate or refresh addresses from a census run:
+
+~~~sh
+bun scripts/probe-recipe-addressing.mjs --run rust/target/coverage-census/run.json --annotate
+~~~
+
+It writes an address only for an entry whose claim the run stated one for,
+and refuses outright if the corpus and the run disagree about an address. The
+scaffold writes the address of every gap it emits. A changed byte or a changed
+claim value still orphans a recipe, deliberately: then the recipe may no
+longer observe what it was written to observe.

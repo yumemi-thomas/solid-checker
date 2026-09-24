@@ -302,10 +302,16 @@ export async function runProbeSession(_session, harness) {
 }
 
 /// The manifest entry, carrying the same marker the module was emitted with.
-export function manifestEntry({ claimId, module, domain, importKind }) {
+///
+/// `recipeAddress` (ADR 0117) is written when the material states one: it is
+/// the address that keeps the entry bound after a dependency's certified
+/// contract moves the claim id, and an entry without it orphans again on the
+/// next such change.
+export function manifestEntry({ claimId, recipeAddress, module, domain, importKind }) {
   const scaffold = DOMAIN_SCAFFOLD[domain];
   return {
     claimId,
+    ...(typeof recipeAddress === "string" ? { recipeAddress } : {}),
     module,
     importKind,
     dependencySpecifiers: [],
@@ -486,6 +492,12 @@ function readManifest(path) {
 /// recipe worth having is one somebody finished.
 export function planEmission({ gaps, manifest, existingModules, specifier, importKind }) {
   const addressed = new Set(manifest.recipes.map(recipe => recipe.claimId));
+  // A claim the manifest reaches by its byte address is addressed as surely as
+  // one it names by id: the loader binds it (ADR 0117), so a second module
+  // would be a duplicate the loader leaves unbound.
+  const addressedBytes = new Set(
+    manifest.recipes.map(recipe => recipe.recipeAddress).filter(address => typeof address === "string")
+  );
   const present = new Set(existingModules);
   const emit = [];
   const skipped = [];
@@ -500,6 +512,10 @@ export function planEmission({ gaps, manifest, existingModules, specifier, impor
     }
     if (addressed.has(gap.semanticClaimId)) {
       skipped.push({ gap, why: "the manifest already addresses this claim" });
+      continue;
+    }
+    if (typeof gap.recipeAddress === "string" && addressedBytes.has(gap.recipeAddress)) {
+      skipped.push({ gap, why: "the manifest already addresses this claim by its recipe address" });
       continue;
     }
     const module = moduleName({
@@ -525,6 +541,7 @@ export function planEmission({ gaps, manifest, existingModules, specifier, impor
       }),
       entry: manifestEntry({
         claimId: gap.semanticClaimId,
+        recipeAddress: gap.recipeAddress,
         module,
         domain: gap.domain,
         importKind

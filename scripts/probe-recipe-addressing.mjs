@@ -5,6 +5,16 @@
 //   bun scripts/probe-recipe-addressing.mjs --run <run.json>
 //   bun scripts/probe-recipe-addressing.mjs --run <run.json> --json
 //   bun scripts/probe-recipe-addressing.mjs --run <run.json> --update
+//   bun scripts/probe-recipe-addressing.mjs --run <run.json> --annotate
+//
+// `--annotate` writes each entry's `recipeAddress` (ADR 0117) into the
+// corpus manifest from the run's audits, for every entry whose `claimId` the
+// run stated an address for, and changes nothing else. It is the migration
+// path: an entry carrying an address stays bound when a dependency's certified
+// contract moves its claim id. An entry the run states no address for is left
+// as it is and reported, and an entry already carrying a *different* address
+// refuses the write -- the run and the corpus would then disagree about the
+// bytes, which is a finding, not a merge.
 //
 // A recipe is addressed by `claimId`, a content digest over the exact
 // normalized claim -- package, version, artifact case, export, domain. The
@@ -70,13 +80,14 @@ function fail(message) {
 }
 
 function parseArguments(argv) {
-  const options = { run: null, catalogs: null, json: false, update: false };
+  const options = { run: null, catalogs: null, json: false, update: false, annotate: false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--run") options.run = argv[++index];
     else if (argument === "--catalogs") options.catalogs = argv[++index];
     else if (argument === "--json") options.json = true;
     else if (argument === "--update") options.update = true;
+    else if (argument === "--annotate") options.annotate = true;
     else if (argument === "-h" || argument === "--help") {
       console.log(readFileSync(new URL(import.meta.url), "utf8").split("\n\n")[0]);
       process.exit(0);
@@ -134,6 +145,9 @@ export function recipeSubjects(source) {
 export function runClaims(roots) {
   const proposed = new Map();
   const withheld = [];
+  // recipe address -> the claim id it was stated beside, and the reverse.
+  const addresses = new Map();
+  const addressOf = new Map();
   for (const directory of roots) {
     for (const path of walk(directory, ".proposal.json")) {
       let document;
@@ -159,6 +173,13 @@ export function runClaims(roots) {
         continue;
       }
       const name = document.package?.name ?? "";
+      for (const record of document.recipeAddresses ?? []) {
+        if (typeof record?.recipeAddress !== "string" || typeof record?.semanticClaimId !== "string") {
+          continue;
+        }
+        addresses.set(record.recipeAddress, record.semanticClaimId);
+        addressOf.set(record.semanticClaimId, record.recipeAddress);
+      }
       for (const record of document.withheldClosures ?? []) {
         if (record.reason !== "no recipe in corpus") continue;
         withheld.push({
@@ -170,14 +191,23 @@ export function runClaims(roots) {
       }
     }
   }
-  return { proposed, withheld };
+  return { proposed, withheld, addresses, addressOf };
 }
 
-export function addressing({ recipes, proposed, withheld, certified, sites }) {
+export function addressing({ recipes, proposed, withheld, certified, sites, addresses = new Map() }) {
   const families = new Map();
+  let addressedByAddress = 0;
   for (const recipe of recipes) {
     const inScope = [...recipe.subjects].some(name => certified.has(name));
-    const addressed = proposed.has(recipe.claimId);
+    // A recipe whose id no longer names a claim is still live when the run
+    // stated its byte address: the loader binds it there (ADR 0117). Counted
+    // apart as well, because it is the number that says the re-keying works.
+    const byAddress =
+      !proposed.has(recipe.claimId) &&
+      typeof recipe.recipeAddress === "string" &&
+      addresses.has(recipe.recipeAddress);
+    if (byAddress) addressedByAddress += 1;
+    const addressed = proposed.has(recipe.claimId) || byAddress;
     const key = [...recipe.subjects].sort().join(",") || "(no bare import)";
     const family = families.get(key) ?? {
       subject: key,
@@ -226,6 +256,7 @@ export function addressing({ recipes, proposed, withheld, certified, sites }) {
   const totals = {
     recipes: recipes.length,
     addressed: ordered.reduce((sum, family) => sum + family.addressed, 0),
+    addressedByAddress,
     stale: ordered.reduce((sum, family) => sum + family.stale, 0),
     outOfScope: ordered
       .filter(family => !family.inScope)
@@ -269,6 +300,7 @@ function render({ totals, families, unserved }) {
   lines.push("");
   lines.push(`recipes in the corpus:                   ${totals.recipes}`);
   lines.push(`addressing a claim this run proposed:    ${totals.addressed}`);
+  lines.push(`  of those, only by recipe address:      ${totals.addressedByAddress ?? 0}`);
   lines.push(`stale (this run certified the package):  ${totals.stale}`);
   lines.push(`out of scope (package not in this run):  ${totals.outOfScope}`);
   lines.push("");
@@ -288,6 +320,32 @@ function render({ totals, families, unserved }) {
     }
   }
   return lines.join("\n");
+}
+
+/// The manifest with `recipeAddress` written for every entry whose claim id
+/// `addressOf` (claim id -> address, from a run's audits) names, inserted right
+/// after `claimId` so the entry reads id-then-address. Nothing else moves.
+export function annotate(manifest, addressOf) {
+  let written = 0;
+  const missing = [];
+  const conflicts = [];
+  const recipes = (manifest.recipes ?? []).map(entry => {
+    const address = addressOf.get(entry.claimId);
+    if (address === undefined) {
+      if (typeof entry.recipeAddress !== "string") missing.push(entry.module);
+      return entry;
+    }
+    if (typeof entry.recipeAddress === "string") {
+      if (entry.recipeAddress !== address) {
+        conflicts.push({ module: entry.module, corpus: entry.recipeAddress, run: address });
+      }
+      return entry;
+    }
+    written += 1;
+    const { claimId, ...rest } = entry;
+    return { claimId, recipeAddress: address, ...rest };
+  });
+  return { manifest: { ...manifest, recipes }, written, missing, conflicts };
 }
 
 /// Movement that must not happen silently. A corpus that addresses fewer claims
@@ -334,10 +392,13 @@ function main() {
     }
   }
 
-  const manifest = JSON.parse(readFileSync(join(CORPUS, "recipes.json"), "utf8"));
+  const manifestPath = join(CORPUS, "recipes.json");
+  const manifestText = readFileSync(manifestPath, "utf8");
+  const manifest = JSON.parse(manifestText);
   const recipes = (manifest.recipes ?? []).map(entry => ({
     module: entry.module,
     claimId: entry.claimId,
+    recipeAddress: entry.recipeAddress,
     subjects: recipeSubjects(readFileSync(join(CORPUS, entry.module), "utf8"))
   }));
   if (recipes.length === 0) fail(`${join(CORPUS, "recipes.json")} declares no recipes`);
@@ -349,16 +410,34 @@ function main() {
     sites.set(key, (sites.get(key) ?? 0) + row.sites);
   }
 
-  const { proposed, withheld } = runClaims(roots);
+  const { proposed, withheld, addresses, addressOf } = runClaims(roots);
   if (proposed.size === 0) fail(`no certification proposals under ${roots.join(", ")}`);
-  const result = addressing({ recipes, proposed, withheld, certified, sites });
+
+  if (options.annotate) {
+    const { manifest: annotated, written, missing, conflicts } = annotate(manifest, addressOf);
+    if (conflicts.length > 0) {
+      for (const conflict of conflicts) {
+        console.error(`  ${conflict.module}: corpus says ${conflict.corpus}, run says ${conflict.run}`);
+      }
+      fail(`${conflicts.length} entries carry a recipe address the run contradicts; nothing written`);
+    }
+    writeFileSync(manifestPath, `${JSON.stringify(annotated, null, 2)}\n`);
+    console.log(
+      `annotated ${written} entries with a recipe address; ${missing.length} have no address in this run`
+    );
+    return;
+  }
+
+  const result = addressing({ recipes, proposed, withheld, certified, sites, addresses });
 
   if (options.json) console.log(JSON.stringify(result, null, 2));
   else console.log(render(result));
 
   const record = {
     format: "solid-checker-probe-recipe-addressing",
-    addressingVersion: 1,
+    // 2 adds `addressedByAddress` and counts an entry bound by its recipe
+    // address (ADR 0117) as addressed.
+    addressingVersion: 2,
     corpus: "scripts/ecosystem-benchmark/probe-recipes",
     demand: "docs/package-contract-v2/phase21/2026-09-14-consumer-demand-recensus.json",
     totals: result.totals,

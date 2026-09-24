@@ -230,6 +230,28 @@ describe("probe-recipe-scaffold cannot certify by omission", () => {
     );
   });
 
+  test("writes the recipe address it is given, and treats a claim reached by one as addressed", () => {
+    const address = `recipe-address:v1:sha256:${"a".repeat(64)}`;
+    const { plan, corpus } = scratch({ withheldClosures: [gap({ recipeAddress: address })] });
+    main(["--plan", plan, "--corpus", corpus, "--specifier", "seroval"], silent);
+    const manifest = JSON.parse(readFileSync(join(corpus, MANIFEST_NAME), "utf8"));
+    assert.equal(manifest.recipes[0].recipeAddress, address);
+
+    // The same bytes and value under a new claim id -- a dependency's
+    // certified contract moved it (ADR 0117). The loader binds the existing
+    // entry by its address, so a second scaffold would be a duplicate.
+    const moved = scratch({
+      withheldClosures: [gap({ semanticClaimId: OTHER_CLAIM, recipeAddress: address })]
+    });
+    mkdirSync(moved.corpus, { recursive: true });
+    writeFileSync(join(moved.corpus, MANIFEST_NAME), JSON.stringify(manifest));
+    main(["--plan", moved.plan, "--corpus", moved.corpus, "--specifier", "seroval"], silent);
+    assert.equal(
+      JSON.parse(readFileSync(join(moved.corpus, MANIFEST_NAME), "utf8")).recipes.length,
+      1
+    );
+  });
+
   test("emits nothing for a domain whose contradiction is not settled here", () => {
     const { plan, corpus } = scratch({
       withheldClosures: [gap({ domain: "cleanups", export: "onTeardown" })]
