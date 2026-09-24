@@ -6,6 +6,7 @@ import {
   censusTarget,
   compare,
   consumerState,
+  misuseClasses,
   nameableEntrypoint,
   summaryState,
   surfacesFromDocuments
@@ -359,4 +360,67 @@ test("the consumer view is gated from the first pin that carries it", () => {
   assert.deepEqual(compare({ totals: buckets }, withView({})), []);
   const worseBuckets = { totals: { ...buckets, degenerate: 128, consumer: view } };
   assert.equal(compare({ totals: buckets }, worseBuckets).length, 1);
+});
+
+test("misuse classes read only positive claims a rule could consume", () => {
+  const source = {
+    package: { name: "@example/utils" },
+    summaries: {
+      owner: {
+        call: {
+          operations: [
+            { id: "c", kind: "create", owner: { requires: "required", requiresCleanup: "required" } }
+          ]
+        }
+      },
+      argumentRead: {
+        call: { operations: [{ id: "r", kind: "read", inputs: [{ kind: "parameter", index: 0, path: [] }] }] }
+      },
+      // A read of a value the package built is not a read of the caller's argument.
+      ownRead: { call: { operations: [{ id: "r", kind: "read", inputs: [{ kind: "reactive" }] }] } },
+      nestedAccessor: {
+        call: {
+          operations: [
+            {
+              id: "return",
+              kind: "return",
+              output: { kind: "object", properties: [{ name: "x", value: { kind: "reactive", role: "accessor" } }] }
+            }
+          ]
+        }
+      },
+      plainReturn: { call: { operations: [{ id: "return", kind: "return", output: "plain" }] } },
+      invoke: { call: { operations: [{ id: "callback-0", kind: "invoke", tracking: "untracked" }] } },
+      closedEmpty: { call: { closed: ["reads", "creates"] } }
+    }
+  };
+  assert.deepEqual(misuseClasses(source, "owner"), ["owner"]);
+  assert.deepEqual(misuseClasses(source, "argumentRead"), ["argumentRead"]);
+  assert.deepEqual(misuseClasses(source, "ownRead"), []);
+  assert.deepEqual(misuseClasses(source, "nestedAccessor"), ["returnedAccessor"]);
+  assert.deepEqual(misuseClasses(source, "plainReturn"), []);
+  assert.deepEqual(misuseClasses(source, { summary: "invoke" }), ["invoke"]);
+  assert.deepEqual(misuseClasses(source, "closedEmpty"), []);
+  assert.deepEqual(misuseClasses(source, "missing"), []);
+});
+
+test("the reported numbers sit beside the gate and never enter it", () => {
+  const surfaces = surfacesFromDocuments([
+    consumerDocument({
+      ".": {
+        cases: [
+          { exports: { isServer: "constant", pick: "reads-only", map: "returns-open", mystery: "degenerate" } }
+        ]
+      },
+      "./src/hidden.ts": { cases: [{ exports: { hidden: "all-closed" } }] }
+    })
+  ]);
+  const result = census([{ package: "@example/utils", export: "pick", sites: 3 }], surfaces);
+  // Four nameable exports, one a value; the wildcard-only `hidden` is not surface.
+  assert.deepEqual(result.reported.surface, [
+    { package: "@example/utils", exports: 4, value: 1, clean: 0, share: 0.25 }
+  ]);
+  assert.equal(result.reported.misuseCapable.demandedSites, 0);
+  const pinned = { totals: { ...result.totals } };
+  assert.deepEqual(compare(pinned, { ...result, reported: { surface: [], misuseCapable: {} } }), []);
 });

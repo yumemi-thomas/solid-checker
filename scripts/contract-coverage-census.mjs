@@ -210,6 +210,49 @@ export function summaryState(document, reference) {
   return { state: "degenerate", owner };
 }
 
+/// Whether a return output carries a reactive accessor anywhere inside it: the
+/// output itself, an object property's value, or a tuple item.
+function outputCarriesAccessor(output) {
+  if (!output || typeof output !== "object") return false;
+  if (output.kind === "reactive" && output.role === "accessor") return true;
+  return [
+    ...(output.properties ?? []).map(property => property?.value),
+    ...(output.items ?? [])
+  ].some(outputCarriesAccessor);
+}
+
+/// Which positive claims in one summary a misuse rule could consume, by class.
+/// Reported, never gated (ways-to-improve § 3.1): the count says how much of
+/// the certified surface can feed a violation at all, which the coverage
+/// buckets cannot, since a closed domain with nothing in it feeds nothing.
+///
+/// - `owner`: an owner requirement (the missing-owner paths).
+/// - `argumentRead`: a `read` whose input is a parameter of the call.
+/// - `returnedAccessor`: a `return` whose output carries a reactive accessor.
+/// - `invoke`: an `invoke` stating its tracking. Every shipped row states one,
+///   and most say `untracked` for a call that merely inherits tracking
+///   (docs/precision-backlog.md, 2026-09-17), so this is an upper bound on what
+///   a rule could read, not a count of claims one may read today.
+export function misuseClasses(document, reference) {
+  const id = typeof reference === "string" ? reference : reference?.summary;
+  const operations = document.summaries?.[id]?.call?.operations ?? [];
+  const classes = new Set();
+  for (const operation of operations) {
+    const relation = operation.owner ?? {};
+    if (relation.requires === "required" || relation.requiresCleanup === "required") {
+      classes.add("owner");
+    }
+    if (operation.kind === "read" && (operation.inputs ?? []).some(input => input?.kind === "parameter")) {
+      classes.add("argumentRead");
+    }
+    if (operation.kind === "return" && outputCarriesAccessor(operation.output)) {
+      classes.add("returnedAccessor");
+    }
+    if (operation.kind === "invoke" && typeof operation.tracking === "string") classes.add("invoke");
+  }
+  return [...classes].sort();
+}
+
 /// Whether a wire shape may be invoked, exactly as `shape_may_be_callable`
 /// (rust/crates/solid-reactive-ir/src/contracts.rs) decides it for the
 /// normalized one: `callable`, `component` and `unknown` may be, a choice may be
@@ -258,7 +301,8 @@ export function surfacesFromDocuments(documents) {
     const surface = surfaces.get(name) ?? {
       states: new Map(),
       owners: new Set(),
-      consumer: new Map()
+      consumer: new Map(),
+      misuse: new Map()
     };
     surfaces.set(name, surface);
     for (const [entrypoint, value] of Object.entries(document.entrypoints ?? {})) {
@@ -269,6 +313,9 @@ export function surfacesFromDocuments(documents) {
           if (owner) surface.owners.add(exportName);
           const held = surface.states.get(exportName);
           if (!held || RANK[state] > RANK[held]) surface.states.set(exportName, state);
+          const classes = surface.misuse.get(exportName) ?? new Set();
+          for (const kind of misuseClasses(document, reference)) classes.add(kind);
+          surface.misuse.set(exportName, classes);
           const view = consumerState(document, reference);
           const heldView = surface.consumer.get(exportName);
           if (!heldView || CONSUMER_RANK[view] > CONSUMER_RANK[heldView]) {
@@ -340,14 +387,64 @@ export function census(demandRows, surfaces) {
       consumer
     });
   }
-  return { totals, packages };
+  return { totals, packages, reported: reported(demandRows, surfaces) };
+}
+
+/// Numbers reported beside the gate and never compared (ways-to-improve
+/// § 3.1). Neither depends on demand, so neither moves with the demand sweep:
+///
+/// - `surface`: per package, the share of its whole nameable export surface
+///   whose import finds nothing open (a non-callable value, or a callable with
+///   all four consumer domains closed), over every export its catalogs publish
+///   at a nameable entrypoint -- demanded or not.
+/// - `misuseCapable`: exports carrying a positive claim a misuse rule could
+///   consume (`misuseClasses`), by class and in union, with the demanded sites
+///   they cover under the frozen denominator.
+export function reported(demandRows, surfaces) {
+  const surface = [];
+  const byClass = {};
+  const capable = new Set();
+  for (const [name, entry] of [...surfaces].sort((left, right) => left[0].localeCompare(right[0]))) {
+    const views = [...(entry.consumer ?? new Map()).values()];
+    const clean = views.filter(view => view === "clean").length;
+    const value = views.filter(view => view === "value").length;
+    surface.push({
+      package: name,
+      exports: views.length,
+      value,
+      clean,
+      share: views.length === 0 ? 0 : Number(((clean + value) / views.length).toFixed(4))
+    });
+    for (const [exportName, classes] of entry.misuse ?? new Map()) {
+      if (classes.size === 0) continue;
+      capable.add(`${name}|${exportName}`);
+      for (const kind of classes) byClass[kind] = (byClass[kind] ?? 0) + 1;
+    }
+  }
+  let demandedSites = 0;
+  const demandedExports = new Set();
+  for (const row of demandRows) {
+    const key = `${row.package}|${row.export}`;
+    if (!capable.has(key)) continue;
+    demandedSites += row.sites;
+    demandedExports.add(key);
+  }
+  return {
+    surface,
+    misuseCapable: {
+      exports: capable.size,
+      byClass: Object.fromEntries(Object.entries(byClass).sort()),
+      demandedExports: demandedExports.size,
+      demandedSites
+    }
+  };
 }
 
 function share(part, whole) {
   return whole === 0 ? "0.0%" : `${((100 * part) / whole).toFixed(1)}%`;
 }
 
-function render({ totals, packages }) {
+function render({ totals, packages, reported: extra }) {
   const lines = [];
   lines.push(
     `${"package".padEnd(34)} ${"sites".padStart(6)} ${"ops".padStart(6)} ${"closed".padStart(7)} ${"degen".padStart(6)} ${"absent".padStart(7)} ${"owner".padStart(6)}`
@@ -401,6 +498,21 @@ function render({ totals, packages }) {
     const { consumer } = row;
     lines.push(
       `${row.package.padEnd(34)} ${String(consumer.value).padStart(6)} ${String(consumer.clean).padStart(6)} ${String(consumer["some-uses"]).padStart(6)} ${String(consumer["every-import"]).padStart(6)}`
+    );
+  }
+  if (extra) {
+    lines.push("");
+    lines.push("reported, not gated -- whole nameable surface per package (value + clean over exports):");
+    for (const row of extra.surface) {
+      lines.push(
+        `${row.package.padEnd(34)} ${String(row.value + row.clean).padStart(6)} of ${String(row.exports).padStart(4)}  ${share(row.value + row.clean, row.exports)}`
+      );
+    }
+    const misuse = extra.misuseCapable;
+    lines.push("");
+    lines.push(
+      `reported, not gated -- misuse-capable exports: ${misuse.exports} ${JSON.stringify(misuse.byClass)}; ` +
+        `${misuse.demandedExports} demanded, ${misuse.demandedSites} demanded sites`
     );
   }
   return lines.join("\n");
@@ -523,7 +635,9 @@ function main() {
       inCorpusSites: demand.totals?.inCorpusSites ?? null
     },
     totals: result.totals,
-    packages: result.packages
+    packages: result.packages,
+    // Reported beside the gate; `compare` never reads it.
+    reported: result.reported
   };
   if (options.update) {
     writeFileSync(PIN, `${JSON.stringify(record, null, 2)}\n`);

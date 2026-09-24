@@ -1,5 +1,63 @@
 # Precision backlog
 
+## Three measurement defects fixed, two reported metrics added (2026-09-24)
+
+Status: **measured** (ways-to-improve § 3.1, step 1 of § 4). No analyzer,
+generator or certifier code changed; no census ran.
+
+- **The open-import script is strict.**
+  `phase22/2026-09-23-what-holds-an-import-open.mjs` read a withheld reason from
+  any artifact case (`?? withheld[0]`, and the same for withheld operations) and
+  read the plain lane's refusals for rows that ran `lane: published-graph`. Now
+  a status comes only from the answering cases: the nameable entrypoint's cases
+  on the plain lane, the answering node's audit records on the graph lane.
+  Re-run over a copy of the 0ec743c4 run's retained outputs
+  (`phase22/2026-09-24-what-holds-an-import-open-after-0116-strict.{json,md}`,
+  measured): the consumer view is unchanged (73 exports, 733 sites), and
+  `@kobalte/utils` `callHandler` (112) is a withheld `returns` operation
+  ("completion … not proved primitive") and a `creates` generation decline on
+  `handler[0](handler[1], event)` (`unresolved-callee`, `computed-member`).
+  The 112-site "veto did not complete" row came entirely from the `./src/*.ts`
+  cases no consumer names. The 113 `unaccepted-external-dependency`
+  domain-sites on `rootless`/`trigger`/`memo`/`storage` are 50 `callbacks` and
+  50 `returns` never proposed on the graph lane, 3 `returns` withheld
+  operations, 9 `creates` and 1 `reads` never proposed on the graph lane. The
+  prediction held for `callbacks`/`returns` and failed for `creates`: the
+  dialect-callee refusal (`getOwner`/`onCleanup`, 59 domain-sites as sized) was
+  on other exports and was already labelled correctly. The graph lane showed no
+  candidate the plain lane lacked, so § 4's ranking stands. "Never proposed on
+  the graph lane" is inferred: the lane keeps no declines or unresolved claims,
+  and the row's candidate count reconciles exactly on `memo`, `rootless` and
+  `trigger` and over-counts by one on `storage`.
+- **The Solid 2 demand collector counts every import site.**
+  `phase21/2026-09-12-consumer-demand-measurement.py` kept only the no-summary
+  sentence. That missed open-claims findings and, since the per-package
+  collapse of repeated import obligations (ac507c05, c566bab3, 2026-09-15/16,
+  two days before the 2026-09-17 sweeps), every package imported at more than
+  one site. It now counts the primary and related locations of each SC9005
+  import finding, reads a collapsed site's export from the source bytes, counts
+  a declaration it cannot match one-to-one under `?`, and keeps argument-site
+  findings out of demand (`--self-test`, and an end-to-end probe: 4 sites where
+  the old collector counted 0). **Not re-swept and not re-pinned**: the
+  2026-09-17 demand files still understate Solid 2 demand, and a re-sweep needs
+  network.
+- **Two reported numbers in the census.**
+  `scripts/contract-coverage-census.mjs` now prints and pins, under `reported`
+  and outside `compare`, each package's whole nameable surface share (value or
+  clean over every published export) and the misuse-capable exports (an owner
+  requirement, a `read` of a parameter, a `return` carrying an accessor, an
+  `invoke` stating tracking). Over the 0ec743c4 catalogs (measured):
+  `@solid-primitives/utils` 17 of 98, `@kobalte/utils` 2 of 10,
+  `@kobalte/core` 4 of 181, `@solid-primitives/platform` 23 of 23; 86
+  misuse-capable exports (owner 17, argument read 32, returned accessor 27,
+  invoke 27), 32 of them demanded, 443 demanded sites. Over the shipped tier
+  47566ff8 the same definition gives 12 / 32 / 20 / 26, union 77; the assessed
+  document's 13 / 34 / 19 / 26 (74) came from an unrecorded join and does not
+  reproduce. The `invoke` class is an upper bound: most rows say `untracked`
+  for a call that only inherits tracking (the 2026-09-17 entry "`tracking:
+  "untracked"` does not mean the package cleared tracking"). The frozen 1.x
+  denominator and the gate are unchanged.
+
 ## A default-library alias's return (2026-09-24)
 
 Status: **implemented** (ADR 0103, amendment 2026-09-24 (2)). An alias of a
