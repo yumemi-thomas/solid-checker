@@ -1,12 +1,13 @@
 {
   "format": "solid-checker-probe-recipe-addressing",
-  "addressingVersion": 1,
+  "addressingVersion": 2,
   "corpus": "scripts/ecosystem-benchmark/probe-recipes",
   "demand": "docs/package-contract-v2/phase21/2026-09-14-consumer-demand-recensus.json",
   "totals": {
     "recipes": 366,
-    "addressed": 80,
-    "stale": 134,
+    "addressed": 95,
+    "addressedByAddress": 15,
+    "stale": 119,
     "outOfScope": 152,
     "unservedClaims": 341,
     "unplaceableClaims": 255,
@@ -45,8 +46,8 @@
     {
       "subject": "@kobalte/utils",
       "recipes": 24,
-      "addressed": 13,
-      "stale": 11,
+      "addressed": 18,
+      "stale": 6,
       "inScope": true
     },
     {
@@ -66,8 +67,8 @@
     {
       "subject": "@solid-primitives/rootless",
       "recipes": 6,
-      "addressed": 0,
-      "stale": 6,
+      "addressed": 6,
+      "stale": 0,
       "inScope": true
     },
     {
@@ -94,8 +95,8 @@
     {
       "subject": "@solid-primitives/trigger",
       "recipes": 4,
-      "addressed": 0,
-      "stale": 4,
+      "addressed": 4,
+      "stale": 0,
       "inScope": true
     },
     {

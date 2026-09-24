@@ -1,5 +1,50 @@
 # Precision backlog
 
+## A recipe survives a dependency's contract changing (ADR 0117, 2026-09-24)
+
+Status: **implemented; the census-level prediction is not yet measurable**
+(ways-to-improve § 3.2, step 2 of § 4).
+
+A corpus entry may carry `recipeAddress`: a digest of the claim's package,
+case and closure bytes (each dependency by its own bytes, recursively, never
+by its accepted contract digest), export, path and normalized value. The
+loader binds an entry whose `claimId` names no plan claim to the one plan
+claim with that address; an exact `claimId` still wins, and a corpus binding
+nothing that way keeps a byte-identical root. Addresses exist on every
+graph-lane node and every dependency-free case, and nowhere else.
+
+Measured (census runs of 2026-09-24, release binary, pinned corpus):
+
+- Run 1 against the unmigrated corpus: the census totals are identical to the
+  pin (clean 261, degenerate 112), so the address changes no certification.
+  `--annotate` wrote addresses into **95 of 366** entries; the other 271 name
+  cases no current run produces and stay stale without one.
+- The addressing gate now counts an entry the run states an address for.
+  Against run 1 with the migrated corpus: addressed 80 -> 95, stale 134 -> 119,
+  unserved sites unchanged at 24. **The 15 are not new**: they are the
+  `rootless` (6), `trigger` (4) and `@kobalte/utils` (5) recipes that serve
+  graph-lane claims, which the old measurement could not see because graph
+  nodes retain no proposal. Re-pinned as `addressingVersion: 2`.
+- **The prediction ("the next utils change does not move the degenerate
+  bucket") could not be tested yet**, and the experiment that was meant to
+  test it showed why. Run 2 added a hand recipe that closes one more
+  `@solid-primitives/utils` graph-node domain (`clamp` `reads`); the node's
+  certified contract changed, and the `rootless` and `trigger` case ids did
+  not move (`8376d63a`, `fc4a55ae`, `354ee754`, `ec630d30` in both runs). A
+  dependency edge binds the dependency's *proposal* digest, not its gated
+  certified contract (`dependencies.rs`, "identities are kept rather than
+  rebound"), so only a change to what utils *proposes* -- a generator change,
+  as ADRs 0113, 0115 and 0116 were -- orphans a dependent. That is what the
+  2026-09-23/24 carry-overs were. The mechanism is pinned by
+  `a_dependency_contract_change_alone_does_not_orphan_a_recipe` (a leaf
+  proposal closing `callbacks` or not: root claim ids differ, addresses are
+  equal, the stale entry binds, nothing is withheld). The census-level check
+  moves to step 3, whose item A changes what utils proposes for `access`.
+
+Remaining: an entry without an address still orphans on the next such change;
+an address is `None` on the plain lane wherever a case has a dependency edge;
+a changed byte or claim value still orphans a recipe, on purpose.
+
 ## Three measurement defects fixed, two reported metrics added (2026-09-24)
 
 Status: **measured** (ways-to-improve § 3.1, step 1 of § 4). No analyzer,
