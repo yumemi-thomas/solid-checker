@@ -198,6 +198,18 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                                             && matches!(&operation.output, Some(ValueShape::Parameter { path, .. }) if path.is_empty())
                                     }))
                             })
+                        // The second 2026-09-24 amendment to ADR 0103: the
+                        // one array of primitives `Object.keys` hands back,
+                        // which the alias census decides from the member's
+                        // reviewed row.
+                        || export
+                            .operation_claim(ClaimDomain::Returns)
+                            .is_some_and(|claim| {
+                                matches!(claim.items(), [id] if export.operation(&id.0).is_some_and(|operation| {
+                                    operation.kind == OperationKind::Return
+                                        && matches!(&operation.output, Some(ValueShape::Array { element, .. }) if **element == ValueShape::Plain)
+                                }))
+                            })
                         // ADR 0115: returns that each hand back an argument
                         // container, which the census decides from the
                         // producer's arms of every return -- since ADR 0116
@@ -643,8 +655,31 @@ fn normalize_export(
             KnowledgeSet::Complete(ids)
         })
     };
+    // The second 2026-09-24 amendment to ADR 0103: a member alias whose
+    // spelling names a reviewed row that states the member's return proposes
+    // that one `return`. The spelling decides nothing; the certifier's census
+    // reads the member from the producer's identity fact.
+    let alias_return = |operations: &mut Vec<Operation>| {
+        (scope.publishes_bootstrapped_reactive_domains()
+            && summary.kind == "function"
+            && summary.member_alias_initializer)
+            .then_some(())?;
+        let output = crate::contract_certification::reviewed_default_library_alias_return(
+            summary.member_alias_spelling.as_deref()?,
+        )?;
+        let id = OperationId(format!("{prefix}return"));
+        operations.push(operation(
+            id.clone(),
+            OperationKind::Return,
+            Vec::new(),
+            Some(output),
+        ));
+        Some(KnowledgeSet::Complete(vec![id]))
+    };
     let returns = match &summary.returns {
-        ContractClaim::Open => container_returns(&mut operations).unwrap_or(KnowledgeSet::Unknown),
+        ContractClaim::Open => container_returns(&mut operations)
+            .or_else(|| alias_return(&mut operations))
+            .unwrap_or(KnowledgeSet::Unknown),
         // ADR 0109, before the empty closure and deliberately: a body that
         // returns a props merge *does* yield a value, so the two are mutually
         // exclusive by construction — the valueless-completion walk declines on
@@ -695,6 +730,10 @@ fn normalize_export(
                 // its exact output, and the census decides the enumeration from
                 // the producer's arms of every return.
                 containers
+            } else if let Some(reviewed) = alias_return(&mut operations) {
+                // An alias's summary describes no return because it has no
+                // body, which is where this arm reads it.
+                reviewed
             } else if scope.publishes_bootstrapped_reactive_domains()
                 && summary.kind == "function"
                 && summary.returns_value_completion

@@ -87,6 +87,7 @@ pub use policy2_receipt::{
 };
 pub use probe_gates::{ProbeGate, ProbeGateError, ProbeGateSchedule, VerifiedProbeGateBatch};
 pub use probe_harness::{ProbeHarnessConfiguration, ProbeHarnessError};
+pub(crate) use type_facts::reviewed_default_library_alias_return;
 pub use type_facts::{
     TypeFactsCertificationError, TypeFactsCertificationSchedule, TypeFactsProducerPin,
     VerifiedTypeFactsEvidence,
@@ -15979,6 +15980,185 @@ export const value = phantom;
         let probes = tracer_configuration_from(&fixture, scratch.path(), label, &[])?;
         let outcome = tracer_certify(&plan, &pin, &probes);
         Some((plan, outcome))
+    }
+
+    /// `member-alias-proposals` planned from the generator's own summaries of
+    /// its reviewed member aliases -- raised to functions, marked as aliases,
+    /// with their spelling -- and certified against the real producer with the
+    /// identity witness as the only veto.
+    fn member_alias_fixture_certify(
+        label: &str,
+    ) -> Option<(
+        CertificationPlan,
+        Result<super::FinalizedPolicy2Contract, super::Policy2FinalizationError>,
+    )> {
+        use solid_reactive_ir::{
+            ContractClaim, ContractEntrypoint, ContractExport, ContractPackage, PackageContract,
+        };
+        // Every export the package has, because the plan binds them all; the
+        // four that are not reviewed aliases leave every domain open and
+        // contribute no candidate.
+        let exports = [
+            ("direct", Some("Object.keys")),
+            ("viaSpecifier", Some("Object.values")),
+            ("floor", Some("Math.floor")),
+            ("ownMember", None),
+            ("reassignable", None),
+            ("computed", None),
+            ("bound", None),
+        ];
+        let pin = pinned_producer_for_test()?;
+        let name = "member-alias-proposals-package";
+        let root = "/project/node_modules/member-alias-proposals-package";
+        let fixture = repository_root()
+            .join("fixtures/package-contracts")
+            .join("member-alias-proposals");
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let bindings = exports.map(|(export, _)| {
+            (
+                export,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        let (_, resolved) = test_package_resolution(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[],
+            "/project/src/app.ts",
+        );
+        let inferred = PackageContract {
+            package: ContractPackage {
+                name: name.into(),
+                version: "1.0.0".into(),
+                integrity: String::new(),
+            },
+            entrypoints: BTreeMap::from([(
+                ".".into(),
+                ContractEntrypoint {
+                    exports: exports
+                        .into_iter()
+                        .map(|(export, spelling)| {
+                            let summary = match spelling {
+                                // What `raised_function_export` makes of the
+                                // fallback value summary of an alias.
+                                Some(spelling) => ContractExport {
+                                    kind: "function".into(),
+                                    callbacks: ContractClaim::Open,
+                                    member_alias_initializer: true,
+                                    member_alias_spelling: Some(spelling.into()),
+                                    ..ContractExport::default()
+                                },
+                                None => ContractExport {
+                                    kind: "function".into(),
+                                    reactive_reads: ContractClaim::Open,
+                                    callbacks: ContractClaim::Open,
+                                    owner_requirements: ContractClaim::Open,
+                                    returns: ContractClaim::Open,
+                                    ..ContractExport::default()
+                                },
+                            };
+                            (export.into(), summary)
+                        })
+                        .collect(),
+                },
+            )]),
+            source_path: String::new(),
+        };
+        let candidate =
+            crate::inferred_contract::normalize_inferred_contract(&inferred, &resolved).unwrap();
+        let plan = try_plan_supplied_candidate_for_test_package(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            candidate,
+        )
+        .expect("the generator's proposal plans against its own artifact");
+        let scratch = TracerScratch::new(label);
+        let probes = tracer_configuration_from(&fixture, scratch.path(), label, &[])?;
+        let outcome = tracer_certify(&plan, &pin, &probes);
+        Some((plan, outcome))
+    }
+
+    /// The second 2026-09-24 amendment to ADR 0103, end to end: an alias of a
+    /// reviewed member whose row states its return closes `returns` over that
+    /// one return by identity -- `Object.keys`' array of primitives and
+    /// `Math.floor`'s primitive -- beside the empty domains; `Object.values`
+    /// states no return, so none is proposed, and its `callbacks` refuses on
+    /// the getters it runs, as `Math.floor`'s does on the conversion.
+    #[test]
+    fn a_reviewed_default_library_alias_closes_returns_over_its_reviewed_row() {
+        let Some((_plan, outcome)) = member_alias_fixture_certify("member-alias-returns") else {
+            return;
+        };
+        let finalized = outcome.unwrap_or_else(|error| {
+            panic!("every refusal here withholds by name and the row certifies: {error}")
+        });
+        let main = finalized.canonical_main();
+        let strings = ValueShape::Array {
+            element: Box::new(ValueShape::Plain),
+            length: solid_reactive_ir::contract_semantics::ArrayLength::default(),
+        };
+        for (export, expected) in [("direct", strings), ("floor", ValueShape::Plain)] {
+            assert_eq!(
+                closed_containers_in(main, export),
+                Some(vec![expected]),
+                "{export}: {:?} {:?}",
+                finalized.withheld_closures(),
+                finalized.withheld_operations()
+            );
+            for domain in [ClaimDomain::Reads, ClaimDomain::Creates] {
+                assert!(
+                    call_domain_is_closed_in(main, export, domain),
+                    "{export} {domain:?}: {:?}",
+                    finalized.withheld_closures()
+                );
+            }
+        }
+        assert!(call_domain_is_closed_in(
+            main,
+            "direct",
+            ClaimDomain::Callbacks
+        ));
+        assert_eq!(closed_containers_in(main, "viaSpecifier"), None);
+        for (export, reach) in [
+            ("floor", "`Math.floor` converts its arguments"),
+            (
+                "viaSpecifier",
+                "`Object.values` reads the value of each own",
+            ),
+        ] {
+            assert!(
+                finalized.withheld_closures().iter().any(|record| {
+                    record.export == export
+                        && record.domain == "callbacks"
+                        && record.reason.contains(reach)
+                }),
+                "{export}: {:?}",
+                finalized.withheld_closures()
+            );
+        }
     }
 
     /// The argument containers `export`'s `returns` is closed over, when it is.

@@ -3665,6 +3665,16 @@ fn verify_export_value_family(
         transcript.location.path, transcript.location.start_byte, transcript.location.end_byte
     )];
     match proof.family {
+        // The second 2026-09-24 amendment to ADR 0103: an alias whose only
+        // positive item is its reviewed row's return is the member by
+        // identity, and the row states what *any* call of it hands back, so
+        // the call is covered whichever overload -- `Object.keys` has two in
+        // two lib files -- a caller selects, spread or not.
+        ProofFamily::SelectedSignature | ProofFamily::RestSpreadCoverage
+            if let Some(site) = default_library_alias_call_evidence(plan, proof, transcript) =>
+        {
+            sites.push(site);
+        }
         ProofFamily::SelectedSignature | ProofFamily::RestSpreadCoverage => {
             for signature in require_export_call_signatures(proof, transcript, &open)? {
                 sites.push(format!(
@@ -3747,6 +3757,46 @@ fn verify_export_value_family(
                 });
             }
         },
+        ProofFamily::OperationReachability
+            if let Some(site) = default_library_alias_return_evidence(plan, proof, transcript) =>
+        {
+            sites.push(site);
+        }
+        ProofFamily::OperationCardinality
+            if let Some(site) = default_library_alias_return_evidence(plan, proof, transcript) =>
+        {
+            // The row proves what the ordinary arm below proves and no more: a
+            // bound of zero to many per call.
+            let (artifact_case, export_name) = proof_artifact_export(&proof.subject);
+            let export = plan
+                .candidates
+                .proposal()
+                .artifact_case(artifact_case)
+                .and_then(|case| case.exports.get(export_name))
+                .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+                    demand: proof.id.clone(),
+                    reason: "demanded alias export is absent from the candidate".into(),
+                })?;
+            let operation = proof_operation(export, proof)?;
+            if operation.cardinality.scope != Some(CardinalityScope::Call)
+                || operation.cardinality.min != Some(0)
+                || operation.cardinality.max != Some(UpperBound::Many)
+            {
+                return Err(TypeFactsCertificationError::UnsupportedDemand {
+                    demand: proof.id.clone(),
+                    reason: "a default-library alias's reviewed return proves a per-call bound \
+                             of zero to many only"
+                        .into(),
+                });
+            }
+            sites.push(site);
+            sites.push("operation-cardinality:per-call:0..many".into());
+        }
+        ProofFamily::RecursiveValueShape
+            if let Some(site) = default_library_alias_return_evidence(plan, proof, transcript) =>
+        {
+            sites.push(site);
+        }
         ProofFamily::OperationReachability => {
             let (export, implementation) =
                 require_export_implementation(plan, proof, transcript, &open)?;
@@ -4246,6 +4296,141 @@ const DEFAULT_LIBRARY_ALIAS_ARGUMENT_REACH: &[(&str, &str)] = &[
 
 const MATH_COERCION_REACH: &str = "converts its arguments with ToNumber, which runs an object argument's `Symbol.toPrimitive`, `valueOf` or `toString`";
 
+/// What a reviewed member hands back, when the table states it (the second
+/// 2026-09-24 amendment to ADR 0103): the one `return` an alias of it closes
+/// `returns` over.
+///
+/// Stated only where the specification fixes the value's kind whatever the
+/// arguments are. Every `Math` member returns a Number and every predicate a
+/// Boolean, which are `plain`. `Object.keys` returns a fresh Array of Strings,
+/// which is an array whose every element is `plain`. `Object.entries` and
+/// `Object.values` hand back the argument's own property values, which are the
+/// caller's and may be anything, and are absent: no exact shape states them.
+const DEFAULT_LIBRARY_ALIAS_RETURNS: &[(&str, DefaultLibraryAliasReturn)] = &[
+    ("Object.keys", DefaultLibraryAliasReturn::PlainArray),
+    ("Math.floor", DefaultLibraryAliasReturn::Plain),
+    ("Math.ceil", DefaultLibraryAliasReturn::Plain),
+    ("Math.round", DefaultLibraryAliasReturn::Plain),
+    ("Math.trunc", DefaultLibraryAliasReturn::Plain),
+    ("Math.abs", DefaultLibraryAliasReturn::Plain),
+    ("Math.sign", DefaultLibraryAliasReturn::Plain),
+    ("Math.max", DefaultLibraryAliasReturn::Plain),
+    ("Math.min", DefaultLibraryAliasReturn::Plain),
+    ("Math.pow", DefaultLibraryAliasReturn::Plain),
+    ("Math.sqrt", DefaultLibraryAliasReturn::Plain),
+    ("Array.isArray", DefaultLibraryAliasReturn::Plain),
+    ("Number.isFinite", DefaultLibraryAliasReturn::Plain),
+    ("Number.isInteger", DefaultLibraryAliasReturn::Plain),
+    ("Number.isNaN", DefaultLibraryAliasReturn::Plain),
+    ("Object.is", DefaultLibraryAliasReturn::Plain),
+];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DefaultLibraryAliasReturn {
+    /// A primitive: a Number or a Boolean.
+    Plain,
+    /// A fresh array whose every element is a primitive.
+    PlainArray,
+}
+
+/// The output of the one `return` a reviewed member's row states, when it
+/// states one.
+pub(crate) fn reviewed_default_library_alias_return(qualified: &str) -> Option<ValueShape> {
+    let (_, reviewed) = DEFAULT_LIBRARY_ALIAS_RETURNS
+        .iter()
+        .find(|(member, _)| *member == qualified)?;
+    reviewed_default_library_alias_index(qualified)?;
+    Some(match reviewed {
+        DefaultLibraryAliasReturn::Plain => ValueShape::Plain,
+        DefaultLibraryAliasReturn::PlainArray => ValueShape::Array {
+            element: Box::new(ValueShape::Plain),
+            length: solid_reactive_ir::contract_semantics::ArrayLength::default(),
+        },
+    })
+}
+
+/// The call half of [`default_library_alias_return_evidence`]: a selected-call
+/// demand on an export that *is* a reviewed member whose row states its return,
+/// and whose call summary states nothing else -- no callback item and exactly
+/// that one operation.
+fn default_library_alias_call_evidence(
+    plan: &CertificationPlan,
+    proof: &ScheduledProofDemand,
+    transcript: &ExportValueTranscript,
+) -> Option<String> {
+    let fact = stated_default_library_alias(transcript)?;
+    let qualified = fact.qualified_name();
+    let shape = reviewed_default_library_alias_return(&qualified)?;
+    let (artifact_case, export_name) = proof_artifact_export(&proof.subject);
+    let export = plan
+        .candidates
+        .proposal()
+        .artifact_case(artifact_case)?
+        .exports
+        .get(export_name)?;
+    let [operation] = export.call.operations.as_slice() else {
+        return None;
+    };
+    (export.callbacks().items().is_empty()
+        && operation.kind == OperationKind::Return
+        && operation.output.as_ref() == Some(&shape)
+        && matches!(
+            &proof.subject,
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::SelectedCall { .. })
+        ))
+    .then(|| format!("typefacts-value-export:default-library-alias-call:{qualified}"))
+}
+
+/// The second 2026-09-24 amendment to ADR 0103: a positive fact about the one
+/// `return` of an export that *is* a reviewed member whose return the table
+/// states. The row is the whole proof: the member hands its value back on
+/// every normal completion, at most once per call, and every path inside the
+/// reviewed shape is that shape's. `None` for every other demand, which the
+/// implementation arms then answer as before.
+fn default_library_alias_return_evidence(
+    plan: &CertificationPlan,
+    proof: &ScheduledProofDemand,
+    transcript: &ExportValueTranscript,
+) -> Option<String> {
+    let fact = stated_default_library_alias(transcript)?;
+    let qualified = fact.qualified_name();
+    let shape = reviewed_default_library_alias_return(&qualified)?;
+    let (artifact_case, export_name) = proof_artifact_export(&proof.subject);
+    let export = plan
+        .candidates
+        .proposal()
+        .artifact_case(artifact_case)?
+        .exports
+        .get(export_name)?;
+    let [id] = export.operation_claim(ClaimDomain::Returns)?.items() else {
+        return None;
+    };
+    let operation = export.operation(&id.0)?;
+    if operation.kind != OperationKind::Return || operation.output.as_ref() != Some(&shape) {
+        return None;
+    }
+    let subject_is_the_return = match &proof.subject {
+        ProofDemandSubject::PositiveFact(PositiveFactSubject::Operation {
+            operation: subject,
+            ..
+        }) => *subject == operation.id.0,
+        ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+            root: ValueRoot::OperationOutput { operation: subject },
+            path,
+            ..
+        }) => {
+            subject.0 == operation.id.0
+                && matches!(
+                    (&shape, path.0.as_slice()),
+                    (_, []) | (ValueShape::Array { .. }, [ValuePathSegment::ArrayElement])
+                )
+        }
+        _ => false,
+    };
+    subject_is_the_return
+        .then(|| format!("typefacts-value-export:default-library-alias-return:{qualified}"))
+}
+
 /// How a reviewed member reaches code its caller supplied, when it does.
 pub(super) fn default_library_alias_argument_reach(qualified: &str) -> Option<&'static str> {
     DEFAULT_LIBRARY_ALIAS_ARGUMENT_REACH
@@ -4378,7 +4563,7 @@ fn census_default_library_alias_export(
     };
     if !matches!(
         domain,
-        ClaimDomain::Reads | ClaimDomain::Creates | ClaimDomain::Callbacks
+        ClaimDomain::Reads | ClaimDomain::Creates | ClaimDomain::Callbacks | ClaimDomain::Returns
     ) {
         return Ok(None);
     }
@@ -4389,6 +4574,12 @@ fn census_default_library_alias_export(
     if reviewed_default_library_alias_index(&qualified).is_none() {
         // Not a refusal of its own: the transcript is still open on its own
         // reason, and this premise simply does not reach the member.
+        return Ok(None);
+    }
+    // `returns` closes only where the member's row states its return, and then
+    // only over exactly that one `return` (the second 2026-09-24 amendment).
+    let reviewed_return = reviewed_default_library_alias_return(&qualified);
+    if *domain == ClaimDomain::Returns && reviewed_return.is_none() {
         return Ok(None);
     }
     let implementation = transcript
@@ -4405,16 +4596,34 @@ fn census_default_library_alias_export(
             demand: proof.id.clone(),
             reason: "demanded implementation export is absent from the candidate".into(),
         })?;
-    let empty = match domain {
-        ClaimDomain::Callbacks => export.callbacks().items().is_empty(),
-        other => export
-            .operation_claim(*other)
-            .is_some_and(|claim| claim.items().is_empty()),
-    };
-    if !empty {
-        return Err(open(
-            "a default-library alias closes only an empty enumeration, and this proposal names an operation",
-        ));
+    if let Some(shape) = reviewed_return.filter(|_| *domain == ClaimDomain::Returns) {
+        let states_the_row = export
+            .operation_claim(ClaimDomain::Returns)
+            .and_then(|claim| match claim.items() {
+                [id] => export.operation(&id.0),
+                _ => None,
+            })
+            .is_some_and(|operation| {
+                operation.kind == OperationKind::Return && operation.output.as_ref() == Some(&shape)
+            });
+        if !states_the_row {
+            return Err(open(&format!(
+                "a default-library alias closes returns only over the one return `{qualified}`'s \
+                 reviewed row states, and this proposal names another enumeration"
+            )));
+        }
+    } else {
+        let empty = match domain {
+            ClaimDomain::Callbacks => export.callbacks().items().is_empty(),
+            other => export
+                .operation_claim(*other)
+                .is_some_and(|claim| claim.items().is_empty()),
+        };
+        if !empty {
+            return Err(open(
+                "a default-library alias closes only an empty enumeration, and this proposal names an operation",
+            ));
+        }
     }
     if *domain == ClaimDomain::Callbacks
         && let Some(reach) = default_library_alias_argument_reach(&qualified)
@@ -4448,9 +4657,11 @@ fn census_default_library_alias_export(
         });
     }
     require_census_decides_closure(proof, path, ClosureCensus::Implementation)?;
-    Ok(Some(vec![format!(
-        "typefacts-value-export:default-library-alias:{qualified}"
-    )]))
+    Ok(Some(vec![if *domain == ClaimDomain::Returns {
+        format!("typefacts-value-export:default-library-alias-return:{qualified}")
+    } else {
+        format!("typefacts-value-export:default-library-alias:{qualified}")
+    }]))
 }
 
 /// One inherited-closure obligation: the dependency claim a parent's closure on

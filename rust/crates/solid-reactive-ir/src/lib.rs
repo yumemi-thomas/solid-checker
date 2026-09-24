@@ -1128,6 +1128,12 @@ pub struct ContractExport {
     /// decides them from the producer's identity fact and its reviewed member
     /// table. `false` is "do not propose".
     pub member_alias_initializer: bool,
+    /// The member access that initializer spells, `Object.keys`, when
+    /// [`Self::member_alias_initializer`] holds: which reviewed row's return the
+    /// generator proposes (the second 2026-09-24 amendment to ADR 0103). A
+    /// spelling, never an identity -- the certifier's census decides the member
+    /// from the producer's fact.
+    pub member_alias_spelling: Option<String>,
     /// ADR 0115's proposal input: the argument containers this export's own
     /// completions hand back, when its syntax is nothing but conditionals over
     /// its whole parameters and array literals of them, with at least two

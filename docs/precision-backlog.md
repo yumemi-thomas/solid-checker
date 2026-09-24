@@ -1,5 +1,16 @@
 # Precision backlog
 
+## A default-library alias's return (2026-09-24)
+
+Status: **implemented** (ADR 0103, amendment 2026-09-24 (2)). An alias of a
+reviewed member whose specification fixes its return's kind closes `returns`
+over that one return by identity: `Object.keys` an array of `plain`, the `Math`
+members and the predicates `plain`. `@solid-primitives/utils`' `keys` (22
+consumer sites) had `returns` as its only open domain. `Object.entries` and
+`Object.values` state no return, since what they hand back is the caller's.
+The selected-call demand an operation brings is discharged by the same row, so
+an overloaded member (`Object.keys`) needs no complete overload set.
+
 ## A return of what the caller's argument returned (2026-09-24)
 
 Status: **implemented** (ADR 0116). `@solid-primitives/utils`' `accessWith`

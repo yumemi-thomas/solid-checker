@@ -165,6 +165,7 @@ pub fn project_export_semantics(
         returns_walk_clean: false,
         returns_value_completion: false,
         member_alias_initializer: false,
+        member_alias_spelling: None,
         returns_argument_containers: Vec::new(),
         direct_callback_parameters: BTreeSet::new(),
         // A projected dependency export has no body here to walk.
@@ -358,6 +359,10 @@ fn project_return(
     // and names no leaf this projection can reach -- the local summary of
     // `return f()` names none either -- so it is one more dropped return, alone
     // or in a union.
+    // An array whose every element is plain (`Object.keys`' fresh array of
+    // strings, the second 2026-09-24 amendment to ADR 0103) is exact the same
+    // way: it holds nothing reactive, which is what describing no reactive
+    // return says.
     let exact_only = !knowledge.items().is_empty()
         && knowledge.items().iter().all(|id| {
             export.operation(&id.0).is_some_and(|operation| {
@@ -369,6 +374,9 @@ fn project_return(
                             | ValueShape::ArgumentArray { .. }
                             | ValueShape::InvocationResult { .. }
                     )
+                ) || matches!(
+                    &operation.output,
+                    Some(ValueShape::Array { element, .. }) if **element == ValueShape::Plain
                 )
             })
         });
@@ -806,6 +814,16 @@ mod owner_requirement_projection_tests {
         assert_eq!(
             project(false, vec![returned("return-0", invoked(0))]),
             (ContractClaim::Open, true)
+        );
+
+        // `Object.keys`: a fresh array of primitives holds no reactive leaf.
+        let strings = || ValueShape::Array {
+            element: Box::new(ValueShape::Plain),
+            length: crate::contract_semantics::ArrayLength::default(),
+        };
+        assert_eq!(
+            project(true, vec![returned("return", strings())]),
+            (ContractClaim::Known(None), false)
         );
     }
 
@@ -1975,6 +1993,7 @@ fn contract_export_function(
         returns_walk_clean: false,
         returns_value_completion: false,
         member_alias_initializer: false,
+        member_alias_spelling: None,
         returns_argument_containers: Vec::new(),
         // ADR 0100: a proposal input read beside the rows. Kept whether or not
         // the callbacks domain above stayed known -- the generator's filter
@@ -2730,8 +2749,9 @@ fn fallback_value_export(
 ) -> ContractExport {
     let mut summary = value_contract_export();
     let local_symbol = graph.entities.get(&location(file.path.shared(), local));
-    summary.member_alias_initializer = file.ast.bindings.iter().any(|binding| {
-        binding.immutable
+    let alias = file.ast.bindings.iter().find_map(|binding| {
+        let initializer = binding.initializer?;
+        (binding.immutable
             && binding.shape == solid_facts::ast::BindingShape::Identifier
             && binding.names.iter().any(|name| {
                 name.span == local
@@ -2739,18 +2759,21 @@ fn fallback_value_export(
                         graph.entities.get(&location(file.path.shared(), name.span)) == Some(symbol)
                     })
             })
-            && binding.initializer.is_some_and(|initializer| {
-                file.ast
-                    .members
-                    .iter()
-                    .any(|member| member.span == initializer)
-                    && file
-                        .ast
-                        .computed_members
-                        .binary_search(&initializer)
-                        .is_err()
-            })
+            && file
+                .ast
+                .members
+                .iter()
+                .any(|member| member.span == initializer)
+            && file
+                .ast
+                .computed_members
+                .binary_search(&initializer)
+                .is_err())
+        .then_some(initializer)
     });
+    summary.member_alias_initializer = alias.is_some();
+    summary.member_alias_spelling =
+        alias.and_then(|initializer| file.source_text(initializer).map(str::to_owned));
     summary
 }
 

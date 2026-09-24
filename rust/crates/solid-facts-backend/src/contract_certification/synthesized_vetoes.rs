@@ -91,12 +91,31 @@ pub(crate) fn synthesize(
             // could select a signature -- `Object.keys` is overloaded and has
             // several, `Math.floor` has one and no body. The identity decides
             // the claim outright, so it is preferred over any sampled
-            // observation for the three domains it closes.
+            // observation for the domains it closes: the three empty ones, and
+            // (second 2026-09-24 amendment) `returns` over the one return the
+            // member's reviewed row states.
             if let Some(alias) = evidence.default_library_alias(&record.export)
-                && matches!(record.domain.as_str(), "reads" | "creates" | "callbacks")
-                && empty_enumeration(&record.domain, export)
                 && let Some(index) =
                     super::type_facts::reviewed_default_library_alias_index(&alias.qualified_name())
+                && match record.domain.as_str() {
+                    "reads" | "creates" | "callbacks" => empty_enumeration(&record.domain, export),
+                    "returns" => super::type_facts::reviewed_default_library_alias_return(
+                        &alias.qualified_name(),
+                    )
+                    .is_some_and(|shape| {
+                        export
+                            .operation_claim(ClaimDomain::Returns)
+                            .and_then(|claim| match claim.items() {
+                                [id] => export.operation(&id.0),
+                                _ => None,
+                            })
+                            .is_some_and(|operation| {
+                                operation.kind == OperationKind::Return
+                                    && operation.output.as_ref() == Some(&shape)
+                            })
+                    }),
+                    _ => false,
+                }
             {
                 return Some((record, &[][..], Observation::DefaultLibraryAlias(index)));
             }

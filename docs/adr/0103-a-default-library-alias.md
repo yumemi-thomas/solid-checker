@@ -277,3 +277,48 @@ rooted at a parameter (`census_standard_library_admits`), so `Math.max(n, …)` 
 `clamp` and `Object.entries(o)` in a function body run caller code the
 `callbacks` census does not count. That is recorded in
 `docs/precision-backlog.md` (2026-09-24) as its own question.
+
+## Amendment, 2026-09-24 (2): a reviewed return per member
+
+"`returns` is deliberately not closed" above held because nothing measured
+asked for it. `@solid-primitives/utils`' `keys` (22 consumer sites) then had
+`returns` as its only open consumer domain, and the answer is in the member's
+specification, not in its body: `Object.keys` returns a fresh Array of Strings
+whatever its argument is.
+
+`DEFAULT_LIBRARY_ALIAS_RETURNS` states the return of a reviewed member where the
+specification fixes the value's kind for every argument:
+
+- `Object.keys`: an array whose every element is `plain` (`{"kind": "array",
+  "element": "plain"}`, no length bound);
+- every `Math` member, `Array.isArray`, the `Number` predicates and
+  `Object.is`: `plain`, a Number or a Boolean.
+
+`Object.entries` and `Object.values` are absent: they hand back the argument's
+own property values, which are the caller's and may be anything, and no exact
+shape says so.
+
+- **Census.** An alias of a member with a stated return closes `returns` over
+  exactly that one `return`, bound the same way as the other domains
+  (`typefacts-value-export:default-library-alias-return:<member>`); any other
+  enumeration refuses by name.
+- **Positive facts.** The row is the proof for the return's reachability, its
+  per-call bound of zero to many, and every value path inside the reviewed
+  shape; and, when that return is the call summary's only positive item, for
+  the selected-call and rest-spread demands too. An alias has no body to walk,
+  and `Object.keys` has two overloads in two lib files, so neither the
+  implementation arms nor the complete-overload check could answer them; the
+  identity and the row cover any call of the member.
+- **Veto.** The same identity witness serves `returns`.
+- **Generator.** A member alias's summary carries the initializer's spelling
+  (`ContractExport::member_alias_spelling`), and the generator proposes the
+  reviewed return for a spelling the table states. The spelling decides
+  nothing: the census reads the member from the producer's identity fact.
+- **Consumer.** An array of `plain` is exact and holds no reactive leaf, so a
+  closed claim over it reads as describing no reactive return.
+
+`member-alias-proposals` pins the proposals (`direct` is `Object.keys`, and a
+new `floor` is `Math.floor`), and
+`a_reviewed_default_library_alias_closes_returns_over_its_reviewed_row`
+certifies both returns against the real producer while `Object.values`'
+`viaSpecifier` proposes none and both reaching members keep `callbacks` open.

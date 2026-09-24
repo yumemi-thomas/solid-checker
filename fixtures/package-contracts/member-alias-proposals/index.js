@@ -12,6 +12,11 @@ export const direct = Object.keys;
 const viaSpecifier = Object.values;
 export { viaSpecifier };
 
+// A body-less member with one signature. Its reviewed row states a Number
+// return, as `Object.keys`' states a fresh array of strings, so both propose
+// that one `return` beside the empty domains (the second 2026-09-24 amendment).
+export const floor = Math.floor;
+
 // A member of this package's own object. Proposed all the same, because syntax
 // cannot tell it from a default-library member; the certifier refuses it, having
 // no reviewed identity to close on.
