@@ -7,7 +7,11 @@
 // open consumer domain is open:
 //
 //   bun docs/package-contract-v2/phase22/2026-09-23-what-holds-an-import-open.mjs \
-//     [--run rust/target/coverage-census/run.json] [--json <out.json>]
+//     [--run rust/target/coverage-census/run.json] [--outputs <dir>] [--json <out.json>]
+//
+// `--outputs` reads each row's output directory from `<dir>/<basename>`
+// instead of the path `run.json` recorded, for a copy taken before the next
+// census run replaced the originals.
 //
 // The best answer per export follows the census exactly (`consumerState`,
 // strongest across nameable entrypoints), with two tie-breaks the census does
@@ -28,8 +32,27 @@
 //                             decline names it -- the status a ledger built
 //                             from withheld closures cannot see at all
 //   proposed, not certified   a candidate with neither outcome recorded
+//
+// Strict since 2026-09-24 (ways-to-improve § 3.1 a, b). A status is read only
+// from records about the artifact cases that gave the answer:
+//
+// - Plain lane: the cases the proposal lists for the answering entrypoint,
+//   which is nameable (the census skips wildcard-reached ones). A withheld
+//   closure or operation from any other case -- `@kobalte/utils`' `./src/*.ts`
+//   cases, which no consumer imports -- is not this export's status, and there
+//   is no fallback to one. An entrypoint with two cases whose statuses differ
+//   reports the stronger and names both in `cases`.
+// - Graph lane (`lane: published-graph`): the answering document is a graph
+//   node's, and the plain lane's proposal, refusals and generated document
+//   describe a different artifact case (the root before its dependency was
+//   accepted). The node's own records are the audit's withheld closures and
+//   withheld operations carrying that `node.digest`. The graph lane retains no
+//   decline and no unresolved claim, so a domain with neither record is
+//   `never proposed on the graph lane`, inferred from the row's candidate
+//   reconciliation (candidates = closed + withheld + withheld operations), and
+//   says so when that sum does not reconcile exactly.
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 import {
   consumerState,
@@ -48,6 +71,7 @@ function argument(name, fallback) {
 
 const runPath = resolve(argument("--run", join(root, "rust/target/coverage-census/run.json")));
 const jsonPath = argument("--json", null);
+const outputsPath = argument("--outputs", null);
 const run = JSON.parse(readFileSync(runPath, "utf8"));
 const demand = JSON.parse(readFileSync(DEMAND, "utf8")).rows;
 
@@ -66,10 +90,22 @@ function filesUnder(directory, found = []) {
   return found;
 }
 
+/// The generator's own operation-id scheme (`inferred_contract.rs`,
+/// `{case}:{export}:operation:{return|return-N|callback-N|read-N}`): the domain
+/// a withdrawn operation was listed in, where no generated document for its
+/// artifact case survives -- a graph node's is regenerated in private scratch.
+function domainOfOperationId(local) {
+  if (/^return(-\d+)?$/.test(local)) return "returns";
+  if (/^callback-\d+$/.test(local)) return "callbacks";
+  if (/^read-\d+$/.test(local)) return "reads";
+  return null;
+}
+
 const rows = [];
 for (const result of run.results ?? []) {
-  const directory = result.retainedArtifacts?.outputDir;
-  if (!directory) continue;
+  const recorded = result.retainedArtifacts?.outputDir;
+  if (!recorded) continue;
+  const directory = outputsPath ? join(resolve(outputsPath), basename(recorded)) : recorded;
   const files = filesUnder(directory);
   if (files.length === 0) {
     console.error(`${result.probeId}: ${directory} is gone; re-run make contract-coverage-census`);
@@ -79,12 +115,78 @@ for (const result of run.results ?? []) {
     const path = files.find(file => file.endsWith(suffix));
     return path ? JSON.parse(readFileSync(path, "utf8")) : null;
   };
+  const lane = result.certificationAttempt?.lane ?? null;
+  const auditRecord = read(".certification-audit.json");
+  const graphFile = files.find(file => file.endsWith("/graph.json") && file.includes("/graphs/"));
+  const graph = graphFile ? JSON.parse(readFileSync(graphFile, "utf8")) : null;
+  // A multi-case row publishes a case set instead of one graph: each case's
+  // root under `case-sets/<set>/cases/<import root>/`, its dependency nodes
+  // under `case-sets/<set>/graph-nodes/<import root>/<node>/`. The case-set
+  // index names the artifact case each import root is.
+  const caseByImportRoot = new Map();
+  for (const file of files.filter(file => /\/case-sets\/[0-9a-f]+\/accepted-contract-case-set\.json$/.test(file))) {
+    for (const entry of JSON.parse(readFileSync(file, "utf8")).cases ?? []) {
+      caseByImportRoot.set(String(entry.resolvedImportRoot).replace(/^sha256:/, ""), entry.artifactCaseId);
+    }
+  }
+  const graphRecords = [
+    ...(auditRecord?.withheldClosures ?? []),
+    ...(auditRecord?.withheldOperations ?? []),
+    ...(auditRecord?.certifiedClosures?.closed ?? [])
+  ].filter(record => record.node?.digest);
+  // Which graph node (or, for a case-set root, which artifact case) each
+  // accepted document is. The row's top-level catalog object is a byte copy of
+  // the root node's, so it is attributed by bytes, not by where it sits.
+  const attribution = file => {
+    const node =
+      /\/graphs\/[0-9a-f]+\/nodes\/([0-9a-f]+)\/objects\//.exec(file)?.[1] ??
+      /\/case-sets\/[0-9a-f]+\/graph-nodes\/[0-9a-f]+\/([0-9a-f]+)\/objects\//.exec(file)?.[1];
+    if (node) return { node: `sha256:${node}`, artifactCase: null };
+    if (/\/graphs\/[0-9a-f]+\/root\/objects\//.test(file) && graph?.rootNode) {
+      return { node: graph.rootNode, artifactCase: null };
+    }
+    const importRoot = /\/case-sets\/[0-9a-f]+\/cases\/([0-9a-f]+)\/objects\//.exec(file)?.[1];
+    const artifactCase = importRoot ? caseByImportRoot.get(importRoot) : null;
+    if (artifactCase) {
+      const record = graphRecords.find(entry => entry.artifactCase === artifactCase);
+      return { node: record?.node.digest ?? null, artifactCase };
+    }
+    return null;
+  };
+  const byBytes = new Map();
+  for (const file of files.filter(file => file.endsWith(".main.json"))) {
+    const where = attribution(file);
+    if (where) byBytes.set(readFileSync(file, "utf8"), where);
+  }
+  const documents = [];
+  const seen = new Set();
+  for (const file of files.filter(file => file.endsWith(".main.json"))) {
+    const bytes = readFileSync(file, "utf8");
+    const where = lane === "published-graph" ? (byBytes.get(bytes) ?? { node: null, artifactCase: null }) : null;
+    const key = `${JSON.stringify(where)}\u0000${bytes}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    documents.push({ document: JSON.parse(bytes), graph: where });
+  }
+  const candidates = auditRecord?.closureCandidates ?? null;
+  const reconciliation =
+    lane === "published-graph" && candidates
+      ? {
+          candidates: candidates.count,
+          closed: (auditRecord.certifiedClosures?.closed ?? []).reduce(
+            (sum, record) => sum + (record.closed?.length ?? 0),
+            0
+          ),
+          withheld: (auditRecord.withheldClosures ?? []).length,
+          withheldOperations: (auditRecord.withheldOperations ?? []).length
+        }
+      : null;
   rows.push({
     probe: result.probeId,
-    documents: files
-      .filter(file => file.endsWith(".main.json"))
-      .map(file => JSON.parse(readFileSync(file, "utf8"))),
-    audit: read(".certification-audit.json"),
+    lane,
+    reconciliation,
+    documents,
+    audit: auditRecord,
     proposal: read(".proposal.json"),
     refusals: read(".refusals.json"),
     // The generated document itself, the one file whose name ends at `.json`:
@@ -106,7 +208,7 @@ const byScore = (left, right) => {
 // (package, export) -> the document answer a consumer gets, and where it is from.
 const best = new Map();
 for (const row of rows) {
-  for (const document of row.documents) {
+  for (const { document, graph } of row.documents) {
     const name = document.package?.name;
     for (const [entrypoint, { cases }] of Object.entries(document.entrypoints ?? {})) {
       if (!nameableEntrypoint(entrypoint)) continue;
@@ -123,7 +225,7 @@ for (const row of rows) {
           const key = `${name}|${exportName}`;
           const held = best.get(key);
           if (!held || byScore(score, held.score) > 0) {
-            best.set(key, { view, closed, row, entrypoint, score });
+            best.set(key, { view, closed, row, entrypoint, graph, score });
           }
         }
       }
@@ -154,24 +256,30 @@ function operationDomain(generated, exportName, local) {
   return null;
 }
 
-function status(row, exportName, entrypoint, domain) {
-  const claims = [...(row.proposal?.unresolvedClaims ?? []), ...(row.proposal?.closureCandidates ?? [])];
-  const cases = new Set(
-    claims
-      .filter(claim => claim.artifact?.entrypoint === entrypoint && claim.subject?.export === exportName)
-      .map(claim => claim.subject.artifactCase)
-  );
-  const withheld = (row.audit?.withheldClosures ?? []).filter(
-    entry => entry.export === exportName && entry.domain === domain
-  );
-  const hit = withheld.find(entry => cases.has(entry.artifactCase)) ?? withheld[0];
-  if (hit) return { status: `withheld: ${hit.reason.split(":")[0]}`, detail: scrub(hit.reason) };
-  const withdrawn = (row.audit?.withheldOperations ?? []).filter(
+const STATUS_RANK = ["withheld", "withheld operation", "declined", "never proposed", "proposed, not certified"];
+const statusRank = value => {
+  const index = STATUS_RANK.findIndex(prefix => value.status.startsWith(prefix));
+  return index === -1 ? STATUS_RANK.length : index;
+};
+
+/// One plain-lane artifact case's status for (export, domain). Records from
+/// every other case are not consulted.
+function plainCaseStatus(row, exportName, entrypoint, artifactCase, domain) {
+  const hit = (row.audit?.withheldClosures ?? []).find(
     entry =>
+      !entry.node &&
       entry.export === exportName &&
+      entry.domain === domain &&
+      entry.artifactCase === artifactCase
+  );
+  if (hit) return { status: `withheld: ${hit.reason.split(":")[0]}`, detail: scrub(hit.reason) };
+  const operation = (row.audit?.withheldOperations ?? []).find(
+    entry =>
+      !entry.node &&
+      entry.export === exportName &&
+      entry.artifactCase === artifactCase &&
       operationDomain(row.generated, exportName, entry.operation.split(":operation:").pop()) === domain
   );
-  const operation = withdrawn.find(entry => cases.has(entry.artifactCase)) ?? withdrawn[0];
   if (operation) {
     return {
       status: `withheld operation: ${operation.reason.split(":")[0].replace(/^operation /, "")}`,
@@ -185,19 +293,99 @@ function status(row, exportName, entrypoint, domain) {
     return {
       status: `declined: ${declined[0].kind}`,
       detail: scrub(
-        [...new Set(declined.map(entry => `${entry.kind} ${entry.package} ${entry.callee}`.trim()))].join("; ")
+        [
+          ...new Set(
+            declined.map(entry =>
+              [entry.kind, entry.package, entry.callee, entry.shape, entry.spelling && `\`${entry.spelling}\``, entry.location]
+                .filter(Boolean)
+                .join(" ")
+            )
+          )
+        ].join("; ")
       )
     };
   }
   const about = claim =>
-    claim.artifact?.entrypoint === entrypoint &&
+    claim.subject?.artifactCase === artifactCase &&
     claim.subject?.export === exportName &&
     claim.subject?.path?.domain === domain;
   if ((row.proposal?.unresolvedClaims ?? []).some(about)) return { status: "never proposed", detail: "" };
   if ((row.proposal?.closureCandidates ?? []).some(about)) {
     return { status: "proposed, not certified", detail: "" };
   }
-  return { status: "no record in the answering row", detail: "" };
+  return { status: "no record in the answering case", detail: "" };
+}
+
+function plainStatus(row, exportName, entrypoint, domain) {
+  const claims = [...(row.proposal?.unresolvedClaims ?? []), ...(row.proposal?.closureCandidates ?? [])];
+  const cases = [
+    ...new Set(
+      claims
+        .filter(claim => claim.artifact?.entrypoint === entrypoint && claim.subject?.export === exportName)
+        .map(claim => claim.subject.artifactCase)
+    )
+  ].sort();
+  if (cases.length === 0) return { status: "no record in the answering case", detail: "", cases: [] };
+  const perCase = cases.map(artifactCase => ({
+    artifactCase,
+    ...plainCaseStatus(row, exportName, entrypoint, artifactCase, domain)
+  }));
+  const chosen = [...perCase].sort((left, right) => statusRank(left) - statusRank(right))[0];
+  return {
+    status: chosen.status,
+    detail: chosen.detail,
+    cases: perCase.map(({ artifactCase, status }) => ({ artifactCase, status }))
+  };
+}
+
+/// A graph node's status for (export, domain), from the audit records carrying
+/// that node's digest. The plain lane's files describe a different case.
+function graphStatus(row, { node, artifactCase }, exportName, domain) {
+  if (!node && !artifactCase) {
+    return { status: "no graph-lane attribution for the answering document", detail: "", cases: [] };
+  }
+  const mine = entry =>
+    entry.node?.digest &&
+    entry.export === exportName &&
+    ((node && entry.node.digest === node) || (artifactCase && entry.artifactCase === artifactCase));
+  const withheld = (row.audit?.withheldClosures ?? []).filter(entry => mine(entry) && entry.domain === domain);
+  const cases = [...new Set(withheld.map(entry => entry.artifactCase))];
+  if (withheld.length > 0) {
+    const hit = withheld[0];
+    return { status: `withheld: ${hit.reason.split(":")[0]}`, detail: scrub(hit.reason), cases };
+  }
+  const operation = (row.audit?.withheldOperations ?? []).find(
+    entry => mine(entry) && domainOfOperationId(entry.operation.split(":operation:").pop()) === domain
+  );
+  if (operation) {
+    return {
+      status: `withheld operation: ${operation.reason.split(":")[0].replace(/^operation /, "")}`,
+      detail: scrub(operation.reason),
+      cases: [operation.artifactCase]
+    };
+  }
+  const reconciliation = row.reconciliation;
+  const sum = reconciliation
+    ? reconciliation.closed + reconciliation.withheld + reconciliation.withheldOperations
+    : null;
+  const exact = reconciliation && sum === reconciliation.candidates;
+  return {
+    status: "never proposed on the graph lane",
+    detail: reconciliation
+      ? `no withheld record for ${node ? `node ${node.slice(7, 15)}` : artifactCase}; row candidates ${reconciliation.candidates} ` +
+        `${exact ? "=" : "vs"} closed ${reconciliation.closed} + withheld ${reconciliation.withheld} + ` +
+        `withheld operations ${reconciliation.withheldOperations}` +
+        (exact ? "" : ` (${sum}; not exact, so a lost candidate cannot be excluded)`) +
+        "; the graph lane retains no declines and no unresolved claims"
+      : `no withheld record for ${node ? `node ${node.slice(7, 15)}` : artifactCase} and no candidate count`,
+    cases: []
+  };
+}
+
+function status(answer, exportName, domain) {
+  return answer.graph
+    ? graphStatus(answer.row, answer.graph, exportName, domain)
+    : plainStatus(answer.row, exportName, answer.entrypoint, domain);
 }
 
 const exports = [];
@@ -207,7 +395,7 @@ for (const demandRow of demand) {
   if (!answer || answer.view === "value" || answer.view === "clean") continue;
   const open = CONSUMER_DOMAINS.filter(domain => !answer.closed.has(domain)).map(domain => ({
     domain,
-    ...status(answer.row, demandRow.export, answer.entrypoint, domain)
+    ...status(answer, demandRow.export, domain)
   }));
   for (const entry of open) {
     const key = `${answer.view} | ${entry.domain} | ${entry.status}`;
@@ -220,6 +408,8 @@ for (const demandRow of demand) {
     view: answer.view,
     entrypoint: answer.entrypoint,
     row: answer.row.probe,
+    lane: answer.graph ? "published-graph" : "plain",
+    ...(answer.graph ? { graph: answer.graph } : {}),
     open
   });
 }
@@ -250,6 +440,6 @@ console.log(lines.join("\n"));
 if (jsonPath) {
   writeFileSync(
     resolve(jsonPath),
-    `${JSON.stringify({ run: run.finishedAt ?? null, bySiteClass, onlyReturns: onlyReturns.map(entry => ({ package: entry.package, export: entry.export, sites: entry.sites })), exports }, null, 2)}\n`
+    `${JSON.stringify({ run: run.finishedAt ?? null, strict: true, reconciliation: Object.fromEntries(rows.filter(row => row.reconciliation).map(row => [row.probe, row.reconciliation])), bySiteClass, onlyReturns: onlyReturns.map(entry => ({ package: entry.package, export: entry.export, sites: entry.sites })), exports }, null, 2)}\n`
   );
 }
