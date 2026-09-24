@@ -684,3 +684,8 @@ utils node's digest again, and degenerate went 112 -> 148 with nothing else
 changed. The modules were carried over the same way, to `rootless`
 `e747417a…` (floor) and `dcf64d37…` (head) and `trigger` `e334f317…` (floor)
 and `1c6b40cd…` (head).
+
+And again on 2026-09-24, after ADR 0116, the alias `callbacks` fix and the
+alias returns moved what utils certifies: carried over to `rootless`
+`8376d63a…` (floor) and `fc4a55ae…` (head) and `trigger` `354ee754…` (floor)
+and `ec630d30…` (head).

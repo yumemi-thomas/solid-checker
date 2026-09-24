@@ -11,15 +11,15 @@
     "sites": 1958,
     "ownerRequirement": 37,
     "measuredPackages": 16,
-    "operations": 658,
-    "closed-empty": 382,
+    "operations": 680,
+    "closed-empty": 360,
     "degenerate": 112,
     "absent": 722,
     "unmeasured": 84,
     "consumer": {
       "value": 158,
-      "clean": 212,
-      "some-uses": 308,
+      "clean": 261,
+      "some-uses": 259,
       "every-import": 474
     }
   },
@@ -44,15 +44,15 @@
       "package": "@solid-primitives/utils",
       "sites": 820,
       "measured": true,
-      "operations": 492,
-      "closed-empty": 262,
+      "operations": 514,
+      "closed-empty": 240,
       "degenerate": 66,
       "absent": 0,
       "ownerRequirement": 20,
       "consumer": {
         "value": 112,
-        "clean": 196,
-        "some-uses": 302,
+        "clean": 245,
+        "some-uses": 253,
         "every-import": 210
       }
     },

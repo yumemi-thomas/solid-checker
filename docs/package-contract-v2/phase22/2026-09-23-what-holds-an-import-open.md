@@ -286,22 +286,62 @@ What moved each row:
    `1c6b40cd…`, and the second run is the one measured. This will recur with
    every change to what utils certifies.
 
+## After ADR 0116 and the alias amendments (2026-09-24)
+
+Measured on the census run that finished 2026-09-24 03:13:24Z, over 16f33ed4
+with the ten `rootless` and `trigger` recipes re-keyed a third time; the
+per-export evidence is
+[`2026-09-24-what-holds-an-import-open-after-0116.json`](2026-09-24-what-holds-an-import-open-after-0116.json).
+The census gate passes and is re-pinned, and recipe addressing is unchanged.
+
+| what an import finds open (1,152 sites) | after ADR 0115 | now |
+| --- | ---: | ---: |
+| nothing, a non-callable value | 158 | 158 |
+| nothing, a callable | 212 | 261 |
+| `returns` or `callbacks`: some uses | 308 | 259 |
+| `reads` or `creates`: every import | 474 | 474 |
+
+| census bucket (1,874 measured sites) | after ADR 0115 | now |
+| --- | ---: | ---: |
+| an operation is stated | 658 | 680 |
+| determined: states nothing | 382 | 360 |
+| degenerate | 112 | 112 |
+| carries an owner requirement | 37 | 37 |
+
+What moved each row:
+
+1. **`accessWith`**, 27 sites from some uses to clean: `returns` closes over
+   `invocation-result 0` and `parameter 0` (ADR 0116).
+2. **`keys`**, 22 sites from some uses to clean, and from stating nothing to
+   stating an operation: its alias of `Object.keys` closes `returns` over the
+   member's reviewed return, an array of `plain` (ADR 0103, amendment
+   2026-09-24 (2)).
+3. **`access`** stays at some uses with `returns` closed now; only its
+   `callbacks` is open, refused because `!v.length` may run a getter.
+4. **`entries`** stays at some uses for a different reason: its `callbacks`
+   no longer closes, because `Object.entries` runs the getters of its
+   argument (ADR 0103, amendment 2026-09-24), and its `returns` has no exact
+   shape.
+5. **The ten recipes**, re-keyed a third time for the same reason as before,
+   to `rootless` `8376d63a…`/`fc4a55ae…` and `trigger` `354ee754…`/`ec630d30…`.
+
 ## What is left for a `returns` shape
 
-Four exports have `returns` as their only open consumer domain, 89 sites:
-`entries` (37) and `keys` (22), the aliases of `Object.entries` and
-`Object.keys`, never proposed: they return a fresh array built from the
-argument's own properties, which is no argument container; `accessWith` (27),
-whose other branch returns the result of calling the caller's value, which no
-shape describes (ADR 0115 § What still refuses); and `createIdGenerator` (3),
-never proposed, which returns a fresh function of its own. `access` (157)
-needs the same invocation-result shape as `accessWith` and a `callbacks`
-closure the census refuses today.
+One export has `returns` as its only open consumer domain: `createIdGenerator`
+(3 sites), never proposed, which returns a fresh function of its own. `entries`
+(37) needs a shape for the argument's own property values and its `callbacks`
+too. The larger lever is no longer a `returns` shape: `access` (157),
+`accessArray` (12), `arrayEquals` (11) and `asAccessor` (11) all need
+`callbacks` decided, and for `access` and `arrayEquals` that means describing
+a getter on the caller's argument (ADR 0100 rule 2), which needs a guard such
+as "only when the argument is a function" so the consumer never reads a
+property the runtime never reads.
 
 ## Order, revised
 
-Items 1 to 3 are done (§ After the re-pin). Item 4 is done for `asArray`
-(§ After ADR 0115); the rest of it is § What is left for a `returns` shape.
+Items 1 to 3 are done (§ After the re-pin), and item 4 is done for `asArray`,
+`accessWith` and `keys` (§ After ADR 0115, § After ADR 0116 and the alias
+amendments).
 
 1. Re-address the ten `rootless` and `trigger` recipes, then re-pin: 36
    degenerate sites back, nothing else to decide.
@@ -309,6 +349,8 @@ Items 1 to 3 are done (§ After the re-pin). Item 4 is done for `asArray`
    import to some uses.
 3. The dialect's `creates` rows for the owner-requiring primitives, unchanged:
    74 sites.
-4. The structured `returns` shapes: `asArray` (51) by ADR 0115; `access` (157)
-   and `accessWith` (27) need a shape for the result of invoking an argument,
-   and `access` its `callbacks` closure as well.
+4. The structured `returns` shapes: `asArray` (51) by ADR 0115, `accessWith`
+   (27) by ADR 0116, `keys` (22) by the alias amendment; `access` (157) has its
+   `returns` and waits on `callbacks`.
+5. Next: a `callbacks` item for a getter on the caller's argument, guarded, for
+   `access`, `arrayEquals` and their kind.

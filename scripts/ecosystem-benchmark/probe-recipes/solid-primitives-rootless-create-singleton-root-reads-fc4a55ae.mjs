@@ -1,11 +1,9 @@
 // Hand-authored `reads: []` veto for `@solid-primitives/rootless@2.0.0-next.2`,
 // on the published `.` runtime case
-// `artifact-case:e747417a3d01d011491b56bfa3503cfde0e0521f9841af452a2903a471a128e1`.
+// `artifact-case:fc4a55ae4b0ad5aaf5c875ae650421aa5d52509d55da8cb1e2ce791af7c6688c`.
 //
-// Not named by the pinned consumer demand; written because it is the
-// deprecated alias of `createSingletonRoot` -- the same binding, so the same
-// facts -- and one recipe on this dependency node closes the entry in every
-// row that depends on it.
+// Demand-scoped: 7 call sites across the pinned consumer corpus name this
+// export.
 //
 // Why this recipe is allowed to be this short: the artifact case carries no
 // `runtime-accessor-installation` closure hazard, so the census states
@@ -18,11 +16,12 @@
 //
 // It hands the package no `session` and no `harness`.
 //
-// `createSharedRoot` *is* `createSingletonRoot`: the module binds one to the
-// other and exports both names. The samples assert that identity first, so a
-// release that made them diverge fails the recipe instead of inheriting a
-// claim written about the other function.
-import { createSharedRoot, createSingletonRoot } from "@solid-primitives/rootless";
+// `createSingletonRoot(factory, detachedOwner = getOwner())` reads Solid's
+// current owner for its default argument and returns a closure over three
+// locals it just declared. Nothing this package owns is read, and the root is
+// not created until the returned accessor runs -- a different frame at a
+// different event.
+import { createSingletonRoot } from "@solid-primitives/rootless";
 
 const expect = (label, ok) => {
   if (!ok) throw new Error(`${label} answered unexpectedly`);
@@ -30,14 +29,16 @@ const expect = (label, ok) => {
 
 export async function runProbeSession(_session, harness) {
   harness.emit({ marker: "call", kind: "call", phase: "enter" });
-  expect("createSharedRoot is createSingletonRoot", createSharedRoot === createSingletonRoot);
   let factoryCalls = 0;
   const factory = () => {
     factoryCalls += 1;
     return "value";
   };
-  expect("it answers an accessor", typeof createSharedRoot(factory, null) === "function");
+  const useValue = createSingletonRoot(factory);
+  expect("it answers an accessor", typeof useValue === "function");
   expect("construction ran no factory", factoryCalls === 0);
+  expect("an explicit owner is accepted", typeof createSingletonRoot(factory, null) === "function");
+  expect("and still ran no factory", factoryCalls === 0);
 
   let callerReads = 0;
   const ownedByTheRecipe = {
@@ -47,8 +48,8 @@ export async function runProbeSession(_session, harness) {
     }
   };
   expect(
-    "createSharedRoot over a caller getter",
-    typeof createSharedRoot(ownedByTheRecipe.current, null) === "function"
+    "createSingletonRoot over a caller getter",
+    typeof createSingletonRoot(ownedByTheRecipe.current, null) === "function"
   );
   // The apparatus is live -- the getter fired once, on the recipe's own access
   // in the line above -- and that read is the caller's under ADR 0034.
