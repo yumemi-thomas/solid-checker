@@ -11,15 +11,15 @@
     "sites": 1958,
     "ownerRequirement": 37,
     "measuredPackages": 16,
-    "operations": 680,
-    "closed-empty": 360,
+    "operations": 693,
+    "closed-empty": 347,
     "degenerate": 112,
     "absent": 722,
     "unmeasured": 84,
     "consumer": {
       "value": 158,
-      "clean": 261,
-      "some-uses": 259,
+      "clean": 421,
+      "some-uses": 99,
       "every-import": 474
     }
   },
@@ -28,8 +28,8 @@
       "package": "@kobalte/utils",
       "sites": 942,
       "measured": true,
-      "operations": 130,
-      "closed-empty": 84,
+      "operations": 136,
+      "closed-empty": 78,
       "degenerate": 6,
       "absent": 722,
       "ownerRequirement": 0,
@@ -44,15 +44,15 @@
       "package": "@solid-primitives/utils",
       "sites": 820,
       "measured": true,
-      "operations": 514,
-      "closed-empty": 240,
+      "operations": 521,
+      "closed-empty": 233,
       "degenerate": 66,
       "absent": 0,
       "ownerRequirement": 20,
       "consumer": {
         "value": 112,
-        "clean": 245,
-        "some-uses": 253,
+        "clean": 405,
+        "some-uses": 93,
         "every-import": 210
       }
     },
@@ -290,5 +290,153 @@
         "every-import": 1
       }
     }
-  ]
+  ],
+  "reported": {
+    "surface": [
+      {
+        "package": "@kobalte/core",
+        "exports": 181,
+        "value": 4,
+        "clean": 0,
+        "share": 0.0221
+      },
+      {
+        "package": "@kobalte/utils",
+        "exports": 10,
+        "value": 1,
+        "clean": 1,
+        "share": 0.2
+      },
+      {
+        "package": "@solid-primitives/context",
+        "exports": 4,
+        "value": 0,
+        "clean": 0,
+        "share": 0
+      },
+      {
+        "package": "@solid-primitives/keyed",
+        "exports": 6,
+        "value": 0,
+        "clean": 0,
+        "share": 0
+      },
+      {
+        "package": "@solid-primitives/marker",
+        "exports": 2,
+        "value": 0,
+        "clean": 0,
+        "share": 0
+      },
+      {
+        "package": "@solid-primitives/memo",
+        "exports": 7,
+        "value": 0,
+        "clean": 0,
+        "share": 0
+      },
+      {
+        "package": "@solid-primitives/permission",
+        "exports": 1,
+        "value": 0,
+        "clean": 0,
+        "share": 0
+      },
+      {
+        "package": "@solid-primitives/platform",
+        "exports": 23,
+        "value": 23,
+        "clean": 0,
+        "share": 1
+      },
+      {
+        "package": "@solid-primitives/rootless",
+        "exports": 8,
+        "value": 0,
+        "clean": 0,
+        "share": 0
+      },
+      {
+        "package": "@solid-primitives/scheduled",
+        "exports": 6,
+        "value": 0,
+        "clean": 0,
+        "share": 0
+      },
+      {
+        "package": "@solid-primitives/storage",
+        "exports": 11,
+        "value": 2,
+        "clean": 0,
+        "share": 0.1818
+      },
+      {
+        "package": "@solid-primitives/timer",
+        "exports": 5,
+        "value": 0,
+        "clean": 0,
+        "share": 0
+      },
+      {
+        "package": "@solid-primitives/trigger",
+        "exports": 3,
+        "value": 0,
+        "clean": 0,
+        "share": 0
+      },
+      {
+        "package": "@solid-primitives/tween",
+        "exports": 1,
+        "value": 0,
+        "clean": 0,
+        "share": 0
+      },
+      {
+        "package": "@solid-primitives/utils",
+        "exports": 98,
+        "value": 7,
+        "clean": 12,
+        "share": 0.1939
+      },
+      {
+        "package": "@solidjs/meta",
+        "exports": 8,
+        "value": 0,
+        "clean": 0,
+        "share": 0
+      },
+      {
+        "package": "@solidjs/signals",
+        "exports": 70,
+        "value": 6,
+        "clean": 0,
+        "share": 0.0857
+      },
+      {
+        "package": "@solidjs/web",
+        "exports": 100,
+        "value": 15,
+        "clean": 0,
+        "share": 0.15
+      },
+      {
+        "package": "solid-js",
+        "exports": 39,
+        "value": 4,
+        "clean": 0,
+        "share": 0.1026
+      }
+    ],
+    "misuseCapable": {
+      "exports": 91,
+      "byClass": {
+        "argumentRead": 32,
+        "invoke": 38,
+        "owner": 17,
+        "returnedAccessor": 27
+      },
+      "demandedExports": 36,
+      "demandedSites": 459
+    }
+  }
 }

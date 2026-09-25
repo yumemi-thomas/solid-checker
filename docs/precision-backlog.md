@@ -1,9 +1,52 @@
 # Precision backlog
 
+## A described invocation for a caller's accessor or coercion (ADR 0118, 2026-09-25)
+
+Status: **implemented** (ways-to-improve § 3.3, step 3 of § 4). An `invoke`
+operation may state a protocol (`get`, `iterate`, `coerce`, `has-instance`;
+`call` is the unwritten default) with tracking `ambient-at-execution`. The
+generator derives `get` and `coerce` items, the census confirms them per
+protocol under ADR 0100's rules 5-8, a Proxy veto guards them, and the
+consumer reads them as closed and never as calls.
+
+**Prediction confirmed** (measured, 2026-09-25 census, release binary, pinned
+corpus): `access` and `compare` clean; `totals.consumer.clean` 261 -> 421,
+`some-uses` 259 -> 99, `every-import` 474 unchanged, `operations` 680 -> 693;
+no export lost a closure. Re-pinned.
+
+What the first run showed, before two fixes:
+
+- `@kobalte/utils` `isPointInPolygon` was proposed `[get 1]` and the census
+  confirmed it, but it destructures its `Point` tuple and `Polygon` elements.
+  Under the declared-signature premise the producer records no iteration form
+  for an engine-owned container, so there was nothing to refuse. The mandatory
+  Proxy veto contradicted the claim and refused both `.` cases, so all 220
+  `@kobalte/utils` sites fell to `absent`: fail-closed, and the reason an
+  empty-looking census cannot be trusted under that premise. Fixed: an
+  enumeration with non-call items is refused when the premise covers an
+  object-admitting parameter, and the generator does not propose one over an
+  iterated parameter.
+- `isNonNullable` (`i != null`) and the number-typed `normalizeHue` lost their
+  certified `callbacks: []` to derived `coerce` items the producer never
+  confirms (0 demanded sites). Fixed: the generator skips `==`/`!=` against
+  `null`, and a primitive-typed non-call item narrows out of the closed
+  enumeration, which the census then re-confirms, instead of opening it.
+
+Remaining: `callbacks: []` keeps the object-typed premise gap it always had,
+and its veto has no Proxy; the generator's iteration detection is syntactic;
+member invocations (`handler[0](...)`, item B) and deferred invocations still
+refuse. The `callHandler` campaign (§ 3.3, item B) is next in the report's
+order after steps 4 and 5.
+
 ## A recipe survives a dependency's contract changing (ADR 0117, 2026-09-24)
 
-Status: **implemented; the census-level prediction is not yet measurable**
-(ways-to-improve § 3.2, step 2 of § 4).
+Status: **implemented; prediction confirmed in step 3's run** (ways-to-improve
+§ 3.2, step 2 of § 4). ADR 0118 changed what `@solid-primitives/utils`
+proposes, which moved the `rootless` and `trigger` case ids (`8376d63a` ->
+`fa93b1d8`, `354ee754` -> `61f98c51`, measured 2026-09-25); all ten of their
+recipes bound by address, none was withheld for want of a recipe, and both
+packages kept 0 degenerate sites. Before ADR 0117 that change orphaned all
+ten.
 
 A corpus entry may carry `recipeAddress`: a digest of the claim's package,
 case and closure bytes (each dependency by its own bytes, recursively, never
