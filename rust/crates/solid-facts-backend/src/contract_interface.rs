@@ -612,6 +612,12 @@ fn read_catalog_with_trust(
                     bindings,
                     provenance,
                 )?;
+                // The published entries must hash to the signed root, or the
+                // catalog states an environment nobody signed.
+                let environment = verified_dependency_environment(
+                    bindings,
+                    entry.dependency_environment.as_deref(),
+                )?;
                 accepted.push(AcceptedContractInput {
                     importer: entry.import.importer.clone(),
                     specifier: entry.import.specifier.clone(),
@@ -620,7 +626,14 @@ fn read_catalog_with_trust(
                         &entry.import,
                         bindings,
                         entry.export_conditions.as_deref(),
-                    ),
+                    )
+                    .zip(environment)
+                    .map(|(root, environment)| {
+                        crate::accepted_bundles::environment_acceptance_identity(
+                            &root,
+                            &environment,
+                        )
+                    }),
                 });
             }
         }
@@ -737,6 +750,11 @@ pub fn authenticated_catalog_entries(
 /// The receipt's importer-free artifact identity, but only when this
 /// acceptance was issued under the default single `import` condition.
 ///
+/// This is the artifact half of the key. The reader qualifies it with the
+/// verified dependency environment ([`crate::accepted_bundles::
+/// environment_acceptance_identity`]), and an entry whose receipt states no
+/// environment gets no artifact key at all: it stays importer-keyed.
+///
 /// Conditions select the artifact, and they are not written in the catalog's
 /// import record — only folded into the signed root. So the check is a
 /// recomputation: derive the identity assuming `["import"]` and keep it only if
@@ -776,18 +794,6 @@ fn default_condition_artifact_identity(
 /// installs that disagree.
 pub type InstalledArtifactIdentity<'a> = dyn Fn(&str) -> Option<(String, String, String)> + 'a;
 
-/// Derives, for every specifier this catalog accepts, whether *this* project's
-/// installed artifact is the one the acceptance was issued for.
-///
-/// The identity is recomputed from the installed tree — the package's registry
-/// integrity from its lockfile, the entrypoint the specifier names, and the
-/// host's declared export conditions — and admitted only when it reproduces the
-/// signed root. Anything the project cannot state exactly is skipped, so this
-/// adds acceptances and never removes one.
-///
-/// `conditions` is the host's declaration, not a guess: the analyzer has no
-/// condition facts of its own, and conditions select the artifact, so an empty
-/// set admits nothing rather than assuming `import`.
 /// The host's declared export conditions, plus the module format the analyzer
 /// actually resolved with.
 ///
@@ -811,6 +817,27 @@ pub(crate) fn declared_conditions(conditions: &std::collections::BTreeSet<String
     declared
 }
 
+/// Derives, for every specifier the project's catalogs accept, whether *this*
+/// project's installed artifact, in *this* project's installed environment, is
+/// the one the acceptance was issued for.
+///
+/// The same rule as the compiled-in tier, not a second one: the candidates go
+/// to [`crate::accepted_bundles::admit_by_artifact`], which recomputes the
+/// acceptance root from the installed tree, resolves the receipt's dependency
+/// environment from the imported package's own location, and lets the host's
+/// declaration select a case. A project catalog is usually certified in the
+/// very tree it is read in, so its environment matches by construction; what
+/// this refuses is the same catalog read anywhere else — a copied
+/// `.solid-checker/`, a lockfile that moved a dependency, a nested install.
+///
+/// An entry whose receipt states no `dependencyEnvironmentRoot` (issued before
+/// ADR 0123) is never admitted by artifact. It still authenticates, and its
+/// importer-keyed acceptance still applies to the exact file it was certified
+/// from; only the project-wide reach is refused, because which environment it
+/// was proven in is not a fact it states.
+///
+/// `conditions` is the host's declaration, not a guess: the analyzer has no
+/// condition facts of its own, and conditions select the artifact.
 pub fn admitted_project_artifacts(
     catalogs: &[PathBuf],
     trust: Option<&Policy2TrustConfiguration>,
@@ -818,15 +845,14 @@ pub fn admitted_project_artifacts(
     conditions: &std::collections::BTreeSet<String>,
     installed_integrity: &InstalledArtifactIdentity,
     resolved_target: &ResolvedTargetIdentity,
+    installed_environment: &crate::accepted_bundles::InstalledEnvironment,
 ) -> Result<Vec<(String, String)>, ContractFailure> {
     let _ = (project_directory, trust);
-    let declared = declared_conditions(conditions);
-    // Every authentic case, across every catalog. A case set publishes one
-    // catalog *per case*, so a per-catalog decision would never see two cases
-    // of the same package together and could not tell an unambiguous artifact
-    // from an ambiguous one -- it would admit both, which is the unsound
-    // direction.
-    let mut authentic: BTreeMap<String, Vec<AuthenticCase>> = BTreeMap::new();
+    // Every candidate, across every catalog. A case set publishes one catalog
+    // *per case*, so a per-catalog decision would never see two cases of the
+    // same package together and could not tell an unambiguous artifact from an
+    // ambiguous one -- it would admit both, which is the unsound direction.
+    let mut candidates = Vec::new();
     for path in catalogs {
         let (catalog, _) = decode_accepted_contract_catalog(path)?;
         for entry in catalog.contracts {
@@ -844,66 +870,96 @@ pub fn admitted_project_artifacts(
             else {
                 continue;
             };
-            let Some((name, version, integrity)) = installed_integrity(&entry.import.specifier)
+            let Some(environment) =
+                verified_dependency_environment(bindings, entry.dependency_environment.as_deref())?
             else {
                 continue;
             };
-            // Recompute against the *installed* identity rather than the
-            // catalog's record of it: the catalog states what certification
-            // resolved, and the question here is whether this project resolved
-            // the same thing.
-            let mut installed = entry.import.clone();
-            installed.package_name = name;
-            installed.package_version = version;
-            installed.package_integrity = integrity;
-            // The conditions the entry recorded, not the ones this host
-            // declared. Reproducing the signed root is a statement about the
-            // *case*; whether it applies to this project is decided below.
-            let fallback = ["import".to_owned()];
-            let case_conditions = entry
+            let Some((runtime_target, declaration_target)) =
+                package_relative_targets(&entry.import)
+            else {
+                continue;
+            };
+            // The conditions the entry recorded, and `["import"]` only for a
+            // catalog published before they were. Reproducing the signed root
+            // is a statement about the *case*; whether it applies to this
+            // project is decided by the admission rule.
+            let conditions = entry
                 .export_conditions
                 .clone()
-                .unwrap_or_else(|| fallback.to_vec());
-            let Ok(derived) = crate::contract_certification::policy2_artifact_acceptance_root(
-                &installed,
-                &case_conditions,
-            ) else {
-                continue;
-            };
-            if derived != bindings.artifact_acceptance_root {
-                continue;
-            }
-            let Some(case) = AuthenticCase::new(derived, &entry.import, case_conditions) else {
-                continue;
-            };
-            authentic
-                .entry(entry.import.specifier.clone())
-                .or_default()
-                .push(case);
+                .unwrap_or_else(|| vec!["import".to_owned()]);
+            candidates.push(ProjectCandidate {
+                identity: crate::accepted_bundles::environment_acceptance_identity(
+                    &bindings.artifact_acceptance_root,
+                    &environment,
+                ),
+                specifier: entry.import.specifier.clone(),
+                requested_entrypoint: entry.import.requested_entrypoint.clone(),
+                acceptance_root: bindings.artifact_acceptance_root.clone(),
+                conditions,
+                runtime_target,
+                declaration_target,
+                environment,
+            });
         }
     }
+    Ok(crate::accepted_bundles::admit_by_artifact(
+        candidates.iter().map(ProjectCandidate::acceptance),
+        conditions,
+        installed_integrity,
+        resolved_target,
+        installed_environment,
+    ))
+}
 
-    let mut admitted = Vec::new();
-    for (specifier, cases) in authentic {
-        // What this project resolved the specifier to. Without it nothing is
-        // admitted.
-        let Some(target) = resolved_target(&specifier) else {
-            continue;
-        };
-        // TypeScript resolves the *declaration* file, and one `.d.ts` is
-        // routinely shared by several export-condition branches. So the
-        // resolved file selects a set of candidate cases, not one case.
-        let reaching = cases
-            .iter()
-            .filter(|case| case.reaches(&target))
-            .collect::<Vec<_>>();
-        admitted.extend(
-            admissible_cases(&reaching, &declared)
-                .into_iter()
-                .map(|case| (specifier.clone(), case.identity.clone())),
-        );
+/// One project-catalog entry as an admission candidate, owned because the
+/// catalog it was read from is not kept.
+struct ProjectCandidate {
+    specifier: String,
+    requested_entrypoint: String,
+    conditions: Vec<String>,
+    runtime_target: String,
+    declaration_target: String,
+    acceptance_root: String,
+    environment: Vec<DependencyEnvironmentEntry>,
+    identity: String,
+}
+
+impl ProjectCandidate {
+    fn acceptance(&self) -> crate::accepted_bundles::ArtifactAcceptance<'_> {
+        crate::accepted_bundles::ArtifactAcceptance {
+            specifier: &self.specifier,
+            requested_entrypoint: &self.requested_entrypoint,
+            export_conditions: &self.conditions,
+            runtime_target: &self.runtime_target,
+            declaration_target: &self.declaration_target,
+            acceptance_root: &self.acceptance_root,
+            environment: Some(&self.environment),
+            identity: &self.identity,
+        }
     }
-    Ok(admitted)
+}
+
+/// The runtime and declaration files an import record names, package-relative.
+///
+/// Both sides of the comparison are absolute paths on different machines, so
+/// the package-relative spelling is the only comparable part. `None` when the
+/// runtime file is not under the package root; the declaration is empty when
+/// the record names none there.
+fn package_relative_targets(
+    import: &crate::artifact_resolution::ResolvedImport,
+) -> Option<(String, String)> {
+    let relative = |path: &str| -> Option<String> {
+        let root = import.package_root.replace('\\', "/");
+        path.replace('\\', "/")
+            .strip_prefix(root.trim_end_matches('/'))
+            .map(|rest| rest.trim_start_matches('/').to_owned())
+            .filter(|rest| !rest.is_empty())
+    };
+    Some((
+        relative(&import.runtime.path)?,
+        relative(&import.declarations.path).unwrap_or_default(),
+    ))
 }
 
 /// Which acceptances can apply to this project, among those certified about a
@@ -1002,9 +1058,10 @@ pub(crate) struct AuthenticCase {
 }
 
 impl AuthenticCase {
-    /// A case whose package-relative targets the caller already holds — the
-    /// compiled-in tier's shape, where there is no local package root to strip
-    /// and the generator recorded the relative spelling instead.
+    /// A case whose package-relative targets the caller already holds: both
+    /// tiers' shape, since `admit_by_artifact` receives relative spellings
+    /// from each (a bundle records them; a catalog entry's are stripped of
+    /// its package root first).
     pub(crate) fn from_relative(
         identity: String,
         runtime_target: String,
@@ -1017,28 +1074,6 @@ impl AuthenticCase {
             declaration_target,
             conditions,
         }
-    }
-
-    /// Both sides of the comparison are absolute paths on different machines,
-    /// so the package-relative spelling is the only comparable part.
-    fn new(
-        identity: String,
-        import: &crate::artifact_resolution::ResolvedImport,
-        conditions: Vec<String>,
-    ) -> Option<Self> {
-        let relative = |path: &str| -> Option<String> {
-            let root = import.package_root.replace('\\', "/");
-            path.replace('\\', "/")
-                .strip_prefix(root.trim_end_matches('/'))
-                .map(|rest| rest.trim_start_matches('/').to_owned())
-                .filter(|rest| !rest.is_empty())
-        };
-        Some(Self {
-            identity,
-            runtime_target: relative(&import.runtime.path)?,
-            declaration_target: relative(&import.declarations.path).unwrap_or_default(),
-            conditions,
-        })
     }
 
     /// Whether this project's resolved file is one this case was certified

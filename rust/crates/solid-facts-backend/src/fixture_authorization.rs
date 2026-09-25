@@ -274,8 +274,11 @@ pub fn authorize_fixture_contract(
         closed_claims_root: policy2_main_closed_claims_root(&canonical_main).map_err(refused)?,
         verifier_source_digest: stand_in(17),
         verifier_build_digest: stand_in(18),
-        // A fixture authorization supplies a project catalog, which is applied
-        // by importer and artifact, never by environment; it states none.
+        // States none, so the published catalog applies by importer only:
+        // project-wide admission by artifact requires a signed environment the
+        // consumer's tree reproduces, and a fixture's hand-written resolution
+        // names no environment to reproduce. Every authorizing fixture imports
+        // its package from the one file the receipt binds.
         dependency_environment_root: String::new(),
     };
 

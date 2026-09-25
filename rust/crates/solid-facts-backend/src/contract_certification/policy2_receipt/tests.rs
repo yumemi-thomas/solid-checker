@@ -546,6 +546,133 @@ fn a_stated_environment_is_signed_and_an_unstated_one_keeps_the_older_bytes() {
     );
 }
 
+/// The acceptance root decides which artifact an acceptance applies to, so it
+/// must be inside the signature: a project-signed receipt whose root can be
+/// rewritten can be re-pointed at an artifact it was never proven about.
+#[test]
+fn the_artifact_acceptance_root_is_inside_the_signature() {
+    let main = canonical_main(MAIN);
+    let stated = bindings(&main);
+    assert!(!stated.artifact_acceptance_root.is_empty());
+    for issuer in [local_issuer(5), portable_issuer(5)] {
+        let trust = trust_store(&issuer, &stated, None);
+        let verify = |receipt: &[u8], expected: &Policy2ReceiptBindings| {
+            let provenance = match issuer.kind {
+                ReceiptIssuerKind::PersistentLocal => Policy2ReceiptProvenance::PersistentLocal {
+                    trust_store: &trust,
+                    scope: &issuer.scope,
+                },
+                _ => Policy2ReceiptProvenance::Portable {
+                    trust_store: &trust,
+                },
+            };
+            authenticate_policy2_receipt(&main, receipt, expected, provenance)
+        };
+        let receipt = issue_policy2_receipt(&main, &stated, &issuer).unwrap();
+        assert!(verify(&receipt, &stated).is_ok());
+
+        // Re-pointed at another artifact: the receipt and the bindings a
+        // catalog states beside it are rewritten together, which is all an
+        // editor of the project tree has to do.
+        let mut repointed = stated.clone();
+        repointed.artifact_acceptance_root = root("another-artifact");
+        let rewritten = canonical_mutation(&receipt, |document| {
+            document
+                .payload
+                .artifact_acceptance_root
+                .clone_from(&repointed.artifact_acceptance_root);
+        });
+        assert_eq!(
+            verify(&rewritten, &repointed),
+            Err(Policy2ReceiptError::InvalidSignature)
+        );
+        // Stripped, to pass as a receipt that states no root.
+        let mut unstated = stated.clone();
+        unstated.artifact_acceptance_root.clear();
+        let stripped = canonical_mutation(&receipt, |document| {
+            document.payload.artifact_acceptance_root.clear();
+        });
+        assert_eq!(
+            verify(&stripped, &unstated),
+            Err(Policy2ReceiptError::InvalidSignature)
+        );
+
+        // A receipt signed the way every configured issuer signed before the
+        // root was framed: it states the root, its signature covers everything
+        // else. Refused, under a name that says to certify again.
+        let legacy = canonical_mutation(&receipt, |document| {
+            let signature =
+                issuer
+                    .signing_key
+                    .sign(&canonical_payload_without_artifact_acceptance_root(
+                        &document.payload,
+                    ));
+            document.authentication.value = STANDARD.encode(signature.to_bytes());
+        });
+        assert_eq!(
+            verify(&legacy, &stated),
+            Err(Policy2ReceiptError::UnsignedArtifactAcceptanceRoot)
+        );
+        // Rewriting such a receipt's root is no way around it: still refused.
+        let legacy_repointed = canonical_mutation(&legacy, |document| {
+            document
+                .payload
+                .artifact_acceptance_root
+                .clone_from(&repointed.artifact_acceptance_root);
+        });
+        assert_eq!(
+            verify(&legacy_repointed, &repointed),
+            Err(Policy2ReceiptError::UnsignedArtifactAcceptanceRoot)
+        );
+    }
+}
+
+/// A built-in receipt keeps the payload it always had: its authority is the
+/// compiled-in digest of its whole bytes, root included, and framing the root
+/// would have invalidated every receipt the compiled-in tier carries.
+#[test]
+fn a_built_in_receipt_does_not_frame_its_artifact_acceptance_root() {
+    let main = canonical_main(MAIN);
+    let stated = bindings(&main);
+    let receipt = issue_builtin_policy2_receipt(&main, &stated, "solid-checker:test").unwrap();
+    let document: ReceiptDocument = serde_json::from_slice(&receipt).unwrap();
+    assert_eq!(
+        canonical_payload(&document.payload),
+        canonical_payload_without_artifact_acceptance_root(&document.payload)
+    );
+    let entry = BuiltInReceiptEntry {
+        entry_digest: digest_bytes(&receipt),
+        verifier_build_digest: stated.verifier_build_digest.clone(),
+    };
+    assert!(
+        authenticate_policy2_receipt(
+            &main,
+            &receipt,
+            &stated,
+            Policy2ReceiptProvenance::BuiltIn(&entry)
+        )
+        .is_ok()
+    );
+    // And an edited root is refused by the entry digest, as before.
+    let mut repointed = stated.clone();
+    repointed.artifact_acceptance_root = root("another-artifact");
+    let rewritten = canonical_mutation(&receipt, |document| {
+        document
+            .payload
+            .artifact_acceptance_root
+            .clone_from(&repointed.artifact_acceptance_root);
+    });
+    assert_eq!(
+        authenticate_policy2_receipt(
+            &main,
+            &rewritten,
+            &repointed,
+            Policy2ReceiptProvenance::BuiltIn(&entry)
+        ),
+        Err(Policy2ReceiptError::ProvenanceMismatch)
+    );
+}
+
 #[test]
 fn published_environment_entries_must_reproduce_the_signed_root() {
     let main = canonical_main(MAIN);
@@ -1177,5 +1304,170 @@ fn normal_catalog_discovery_authenticates_the_published_policy2_entry() {
         ),
         Err(ContractFailure::ReceiptMismatch { field: "importer" })
     ));
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// ADR 0123's environment rule, applied to the project-catalog tier: a
+/// catalog's acceptance reaches every file of the project that resolves its
+/// artifact only where this tree reproduces the environment its proof read.
+#[test]
+fn a_project_catalog_is_admitted_by_artifact_only_in_its_certified_environment() {
+    let root = std::env::temp_dir().join(format!(
+        "solid-checker-policy2-environment-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let resolved = materialized_resolved_import(&root);
+    let main = canonical_main(MAIN);
+    let normalized = contract_document::decode(&main)
+        .unwrap()
+        .normalize()
+        .unwrap();
+    let conditions = vec!["import".to_owned()];
+    let certified = vec![environment_entry(
+        "@solidjs/signals",
+        "2.0.0-rc.6",
+        "sha512-signals-rc6",
+    )];
+    let mut bindings = bindings(&main);
+    bindings.importer = resolved.importer.clone();
+    bindings.specifier = resolved.specifier.clone();
+    bindings.resolved_import_root = policy2_resolved_import_root(&resolved).unwrap();
+    bindings.artifact_acceptance_root =
+        policy2_artifact_acceptance_root(&resolved, &conditions).unwrap();
+    bindings.closed_claims_root =
+        solid_reactive_ir::contract_semantics::proof::policy2_closed_claims_root(
+            &normalized,
+            &normalized.artifact_cases()[0].id,
+        )
+        .unwrap()
+        .as_str()
+        .into();
+    let issuer = local_issuer(43);
+    let trust = trust_store(&issuer, &bindings, None);
+    let configuration =
+        Policy2TrustConfiguration::new(trust.clone(), Some(issuer.scope().into())).unwrap();
+    let publish = |bindings: &Policy2ReceiptBindings,
+                   environment: Option<Vec<DependencyEnvironmentEntry>>| {
+        let receipt = issue_policy2_receipt(&main, bindings, &issuer).unwrap();
+        let mut authenticated = authenticate_policy2_receipt(
+            &main,
+            &receipt,
+            bindings,
+            Policy2ReceiptProvenance::PersistentLocal {
+                trust_store: &trust,
+                scope: issuer.scope(),
+            },
+        )
+        .unwrap();
+        if let Some(environment) = environment {
+            authenticated = authenticated
+                .with_dependency_environment(environment)
+                .unwrap();
+        }
+        let directory = root.join(".solid-checker");
+        let _ = fs::remove_file(directory.join("accepted-contracts.json"));
+        publish_policy2_catalog(
+            &directory,
+            &main,
+            &receipt,
+            &authenticated,
+            &resolved,
+            &conditions,
+        )
+        .unwrap()
+        .catalog_path
+    };
+    let other_importer = root.join("src/Other.tsx");
+    fs::write(&other_importer, b"fixture").unwrap();
+    let other_importer = other_importer.to_string_lossy().into_owned();
+    let declared = std::collections::BTreeSet::from(["import".to_owned()]);
+    let installed = |_: &str| {
+        Some((
+            resolved.package_name.clone(),
+            resolved.package_version.clone(),
+            resolved.package_integrity.clone(),
+        ))
+    };
+    let target = |_: &str| Some("dist/index.js".to_owned());
+    // What the other file of the project gets, given what this tree installs.
+    let reach = |catalog: &Path, tree: &[DependencyEnvironmentEntry]| {
+        let environment = |specifier: &str, environment: &[DependencyEnvironmentEntry]| {
+            assert_eq!(specifier, resolved.specifier, "resolved from the package");
+            environment == tree
+        };
+        let catalogs = [catalog.to_path_buf()];
+        let admitted = crate::contract_interface::admitted_project_artifacts(
+            &catalogs,
+            Some(&configuration),
+            &root,
+            &declared,
+            &installed,
+            &target,
+            &environment,
+        )
+        .unwrap();
+        let index = crate::contract_interface::read_external_contract_catalog_with_trust(
+            catalog,
+            Some(&configuration),
+        )
+        .unwrap();
+        // The certified importer is importer-keyed whatever the tree says.
+        assert!(
+            index
+                .contract(&resolved.importer, &resolved.specifier)
+                .is_ok()
+        );
+        let reached = index
+            .with_admitted_artifacts(admitted.clone())
+            .contract(&other_importer, &resolved.specifier)
+            .is_ok();
+        (admitted.len(), reached)
+    };
+
+    let mut stated = bindings.clone();
+    stated.dependency_environment_root = policy2_dependency_environment_root(&certified);
+    let catalog = publish(&stated, Some(certified.clone()));
+    assert_eq!(
+        reach(&catalog, &certified),
+        (1, true),
+        "certified in this tree: admitted project-wide"
+    );
+    let floor = [environment_entry(
+        "@solidjs/signals",
+        "2.0.0-rc.0",
+        "sha512-signals-rc0",
+    )];
+    assert_eq!(
+        reach(&catalog, &floor),
+        (0, false),
+        "the same catalog in a tree that installs another dependency: refused"
+    );
+
+    // Entries beside the receipt that are not the ones it signed: the catalog
+    // states an environment nobody proved anything in, and is refused whole.
+    let mut edited: serde_json::Value =
+        serde_json::from_slice(&fs::read(&catalog).unwrap()).unwrap();
+    edited["contracts"][0]["dependencyEnvironment"] = serde_json::to_value(floor.to_vec()).unwrap();
+    fs::write(&catalog, serde_json::to_vec(&edited).unwrap()).unwrap();
+    assert!(matches!(
+        crate::contract_interface::read_external_contract_catalog_with_trust(
+            &catalog,
+            Some(&configuration),
+        ),
+        Err(ContractFailure::ReceiptMismatch {
+            field: "dependencyEnvironment"
+        })
+    ));
+
+    // A receipt that states no environment -- every one issued before ADR
+    // 0123 -- still authenticates and still applies to the file it was
+    // certified from, and reaches no other file in any tree.
+    let catalog = publish(&bindings, None);
+    assert_eq!(reach(&catalog, &certified), (0, false));
+    assert_eq!(reach(&catalog, &[]), (0, false));
     fs::remove_dir_all(root).unwrap();
 }

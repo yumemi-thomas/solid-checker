@@ -206,9 +206,25 @@ fn bundle_identity(
     acceptance_root: &str,
     environment: Option<&[DependencyEnvironmentEntry]>,
 ) -> String {
-    let Some(environment) = environment else {
-        return acceptance_root.to_owned();
-    };
+    match environment {
+        Some(environment) => environment_acceptance_identity(acceptance_root, environment),
+        None => acceptance_root.to_owned(),
+    }
+}
+
+/// The key an acceptance is indexed and admitted under by artifact, in either
+/// tier: the acceptance root and the environment its proof read, together.
+///
+/// Two certifications of one artifact in different environments are two
+/// acceptances; keyed by the artifact alone, `AcceptedContractIndex` would drop
+/// both as a conflict, or -- across tiers -- hand one tier's environment to the
+/// other's consumer. A project catalog's entry and a compiled-in bundle about
+/// the same artifact in the same environment get the same key, which is right:
+/// they are the same statement.
+pub(crate) fn environment_acceptance_identity(
+    acceptance_root: &str,
+    environment: &[DependencyEnvironmentEntry],
+) -> String {
     let mut hash = Sha256::new();
     hash.update(b"solid-checker:accepted-bundle-identity:v1");
     for field in [
@@ -401,12 +417,11 @@ pub(crate) fn environment_is_installed<L: Clone + Ord>(
 
 /// Which specifiers this project may import under a compiled-in acceptance.
 ///
-/// The twin of `contract_interface::admitted_project_artifacts`, and
-/// deliberately the same rule: recompute the acceptance root from the installed
-/// tree, keep the cases that reproduce it, and let `select_case` decide which
-/// one this project's declaration reaches. The only difference is where the
-/// cases come from — a compiled-in index rather than catalogs on disk — because
-/// "does this acceptance apply here" must not have two answers.
+/// The twin of `contract_interface::admitted_project_artifacts`, and not a
+/// second rule: both hand their candidates to [`admit_by_artifact`]. The only
+/// difference is where the candidates come from — a compiled-in index rather
+/// than catalogs on disk — because "does this acceptance apply here" must not
+/// have two answers.
 pub fn admitted_bundle_artifacts(
     conditions: &BTreeSet<String>,
     installed_integrity: &InstalledArtifactIdentity,
@@ -429,45 +444,118 @@ fn admitted_from(
     resolved_target: &ResolvedTargetIdentity,
     installed_environment: &InstalledEnvironment,
 ) -> Vec<(String, String)> {
+    admit_by_artifact(
+        loaded.iter().map(|bundle| ArtifactAcceptance {
+            specifier: &bundle.specifier,
+            requested_entrypoint: &bundle.requested_entrypoint,
+            export_conditions: &bundle.export_conditions,
+            runtime_target: &bundle.runtime_target,
+            declaration_target: &bundle.declaration_target,
+            acceptance_root: &bundle.acceptance_root,
+            environment: bundle.environment.as_deref(),
+            identity: &bundle.identity,
+        }),
+        conditions,
+        installed_integrity,
+        resolved_target,
+        installed_environment,
+    )
+}
+
+/// One acceptance a consumer could reach by artifact rather than by importer,
+/// from whichever tier supplied it, described by exactly what the consumer's
+/// own installed tree can be compared against.
+pub(crate) struct ArtifactAcceptance<'a> {
+    /// The specifier a consumer writes; admission is keyed by it.
+    pub(crate) specifier: &'a str,
+    pub(crate) requested_entrypoint: &'a str,
+    /// The conditions the signed acceptance root was computed over.
+    pub(crate) export_conditions: &'a [String],
+    /// Package-relative; see [`AuthenticCase::reaches`].
+    pub(crate) runtime_target: &'a str,
+    pub(crate) declaration_target: &'a str,
+    /// The signed `artifactAcceptanceRoot`.
+    pub(crate) acceptance_root: &'a str,
+    /// The entries behind the signed `dependencyEnvironmentRoot`, already
+    /// reproduced against it. `None` when the receipt states no environment
+    /// or its entries were not published: such an acceptance is never admitted.
+    pub(crate) environment: Option<&'a [DependencyEnvironmentEntry]>,
+    /// The key the acceptance is indexed under
+    /// ([`environment_acceptance_identity`]).
+    pub(crate) identity: &'a str,
+}
+
+/// The one rule for admitting an acceptance by artifact (ADR 0123), whichever
+/// tier it came from.
+///
+/// An acceptance applies to this project only when all of these hold:
+///
+/// 1. the receipt states the environment its proof read;
+/// 2. the project's installed identity for the specifier -- name, manifest
+///    version, lockfile integrity -- reproduces the signed acceptance root under
+///    the conditions it was computed over;
+/// 3. the project's installed tree, resolved from that package's own location,
+///    reproduces the environment exactly ([`environment_is_installed`]);
+/// 4. the file this project resolved is one the acceptance was proven about,
+///    and [`admissible_cases`] selects it under the host's declaration.
+///
+/// Anything missing, different or unstatable skips the acceptance, so this
+/// adds acceptances on proof and never removes one.
+pub(crate) fn admit_by_artifact<'a>(
+    acceptances: impl IntoIterator<Item = ArtifactAcceptance<'a>>,
+    conditions: &BTreeSet<String>,
+    installed_integrity: &InstalledArtifactIdentity,
+    resolved_target: &ResolvedTargetIdentity,
+    installed_environment: &InstalledEnvironment,
+) -> Vec<(String, String)> {
     let declared = declared_conditions(conditions);
     let mut authentic: BTreeMap<String, Vec<AuthenticCase>> = BTreeMap::new();
-    for bundle in loaded {
-        let Some(environment) = bundle.environment.as_deref() else {
+    for acceptance in acceptances {
+        let Some(environment) = acceptance.environment else {
             continue;
         };
-        let Some((name, version, integrity)) = installed_integrity(&bundle.specifier) else {
+        let Some((name, version, integrity)) = installed_integrity(acceptance.specifier) else {
             continue;
         };
+        // Recomputed against the *installed* identity rather than the
+        // certifier's record of it: the record states what certification
+        // resolved, and the question here is whether this project resolved the
+        // same thing.
         let derived = policy2_artifact_acceptance_root_for_identity(
             &name,
             &version,
             &integrity,
-            &bundle.requested_entrypoint,
-            &bundle.export_conditions,
+            acceptance.requested_entrypoint,
+            acceptance.export_conditions,
         );
-        if derived != bundle.acceptance_root {
+        if derived != acceptance.acceptance_root {
             continue;
         }
         // The same artifact, and now the same environment, or it is a
         // different acceptance this project never reproduced.
-        if !installed_environment(&bundle.specifier, environment) {
+        if !installed_environment(acceptance.specifier, environment) {
             continue;
         }
         authentic
-            .entry(bundle.specifier.clone())
+            .entry(acceptance.specifier.to_owned())
             .or_default()
             .push(AuthenticCase::from_relative(
-                bundle.identity.clone(),
-                bundle.runtime_target.clone(),
-                bundle.declaration_target.clone(),
-                bundle.export_conditions.clone(),
+                acceptance.identity.to_owned(),
+                acceptance.runtime_target.to_owned(),
+                acceptance.declaration_target.to_owned(),
+                acceptance.export_conditions.to_vec(),
             ));
     }
     let mut admitted = Vec::new();
     for (specifier, cases) in authentic {
+        // What this project resolved the specifier to. Without it nothing is
+        // admitted.
         let Some(target) = resolved_target(&specifier) else {
             continue;
         };
+        // TypeScript resolves the *declaration* file, and one `.d.ts` is
+        // routinely shared by several export-condition branches. So the
+        // resolved file selects a set of candidate cases, not one case.
         let reaching = cases
             .iter()
             .filter(|case| case.reaches(&target))

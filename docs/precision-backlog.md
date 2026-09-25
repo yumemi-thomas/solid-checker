@@ -1,5 +1,77 @@
 # Precision backlog
 
+## A project catalog is admitted only in its certified environment (ADR 0125, 2026-09-26)
+
+Status: **implemented, with one open soundness gap**. Project catalogs and the
+compiled-in tier now share one admission rule, `admit_by_artifact`: the
+receipt's signed environment must be installed exactly. A pre-ADR 0123 receipt
+(no environment) is refused project-wide. Persistent-local and portable
+receipts now sign `artifactAcceptanceRoot`; before, it could be rewritten
+without breaking the signature, which a failing test confirmed first.
+
+Measured:
+
+- coverage 87 projects, 452 findings, nothing moved;
+- a process test and a real CLI run on
+  `@solid-primitives/context@2.0.0-next.2`: certified in its own tree, `missing`
+  in a signals rc.0 tree, refused when tampered.
+
+**Open, and it must fail closed next:** under an npm `package-lock.json`,
+`certify` records `dependencyEnvironment: []`, because acquisition reads only
+bun and pnpm lockfiles, and an empty environment is admitted everywhere. Also
+open:
+
+- a project catalog holds one package (each `certify` replaces it);
+- `missing` never says it was an environment mismatch.
+
+## Newer Solid 2 prereleases are analysed with rc.3 vocabulary (2026-09-26)
+
+Status: **open, owner decision: record and review later**. Dialect selection
+goes by major version only (`dialect.rs:497-515`). The 2026-09-26 sweep
+analysed solid-js 2.0.0-rc.9 (solid-primitives `next`) and
+2.0.0-experimental.1 (corvu) projects with the rc.3-audited vocabulary,
+without a review. That arguably contradicts AGENTS.md: "a newer prerelease
+must be reviewed rather than silently substituted".
+
+Certification is not refused either: an unaudited archive gets no negative-row
+answer, so it yields fewer closures. The harness does keep rc.9 out
+(`AUDITED_SOLID_2`, `lib/families.mjs`). Refusing unreviewed prereleases would
+refuse most current Solid 2 projects, so it was not done.
+
+Related, found by the harness pass and not fixed: `@solidjs/h` and
+`@solidjs/html` (web rc.3 only) get solid-js rc.6 through peer auto-install,
+which is above `AUDITED_SOLID_2`, and only signals is pinned.
+
+## Census signals versions are pinned explicitly; delivery-only environments (2026-09-26)
+
+Status: **implemented (harness)**, owner decisions of 2026-09-26.
+
+- Probe installs now carry an `overrides` pin for `@solidjs/signals`, keyed by
+  the probe's solid-js version: rc.0 -> signals rc.0, and everything else
+  -> rc.6 (the rc.2 tanstack floors cannot take rc.0).
+- Before, only the gitignored `rust/target/install-locks/` cache held these
+  versions, so `make clean` would have re-resolved the newest signals.
+- The lock cache key includes the overrides. `verifyInstall` checks that there
+  is exactly one signals copy and that solid-js resolves it.
+- `runtime-pins.test.mjs` fails when the pins and the cache disagree: 250 of
+  250 Solid 2 probes agree today.
+
+Delivery-only runs: `run.mjs --consumer-environment <id>` certifies the
+packages a real consumer installs, in that consumer's runtime, from the reviewed
+`scripts/ecosystem-benchmark/consumer-environments.json`. The first entry is
+`kobalte-solid2-e9d426d4`:
+
+- solid-js, web and signals at rc.3, which is the audited set;
+- 21 packages that match a manifest row;
+- `event-listener` and `form` listed as version mismatches.
+
+The census refuses such a run, and the bundler takes several `--run`s. The
+Makefile rule "delivery and measurement come from one certification" is amended:
+a delivery run is measured by re-sweeping its consumer.
+
+Also fixed: the persisted run scope dropped `conditions`, so the census's
+conditioned-run refusal could never fire on a real `run.json`.
+
 ## The compiled-in tier reaches no real Solid 2 consumer (2026-09-26)
 
 Status: **measured, open**. Report:

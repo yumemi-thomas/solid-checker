@@ -972,6 +972,12 @@ pub fn admitted_project_artifacts(
     let installed = |specifier: &str| installed_artifact_identity(project_directory, specifier);
     let resolved_target =
         |specifier: &str| resolved_target_identity(project_directory, facts, specifier);
+    // The same environment check as the compiled-in tier (ADR 0123): a project
+    // catalog certified in this tree reproduces it by construction, and one
+    // carried into a tree whose installs differ does not.
+    let environment = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
+        installed_environment_matches(project_directory, specifier, environment)
+    };
     crate::contract_interface::admitted_project_artifacts(
         catalogs,
         trust,
@@ -979,6 +985,7 @@ pub fn admitted_project_artifacts(
         conditions,
         &installed,
         &resolved_target,
+        &environment,
     )
     .map_err(|error| BackendError::Contract(error.to_string()))
 }
@@ -1170,8 +1177,8 @@ pub fn admitted_bundled_artifacts(
 }
 
 /// Whether this project's installed tree, resolved from the installed copy of
-/// the package `specifier` names, is the dependency environment a compiled-in
-/// bundle was proven in.
+/// the package `specifier` names, is the dependency environment an acceptance
+/// -- a compiled-in bundle or a project catalog entry -- was proven in.
 ///
 /// The root is the directory [`installed_artifact_identity`] reads the
 /// package's own identity from, so the environment is checked from exactly the
@@ -1179,7 +1186,8 @@ pub fn admitted_bundled_artifacts(
 /// paths: a pnpm store sibling is found where Node finds it, and a hoisted
 /// copy only where no nearer `node_modules` shadows it. Anything this cannot
 /// state exactly -- a missing package, an unreadable manifest, a lockfile that
-/// names no integrity or two -- answers `false`, so the bundle is not admitted.
+/// names no integrity or two -- answers `false`, so the acceptance is not
+/// admitted.
 pub(crate) fn installed_environment_matches(
     project_directory: &Path,
     specifier: &str,

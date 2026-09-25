@@ -4,6 +4,9 @@ mod support;
 #[path = "contract_closure_process.rs"]
 mod contract_closure_process;
 
+#[path = "project_catalog_environment_process.rs"]
+mod project_catalog_environment_process;
+
 use std::{env, fs, path::PathBuf, process::Command};
 
 use support::{decode_findings, temporary_directory};

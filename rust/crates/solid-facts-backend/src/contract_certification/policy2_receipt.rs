@@ -92,7 +92,9 @@ pub struct Policy2ReceiptBindings {
     /// acceptance. See `policy2_artifact_acceptance_root`.
     ///
     /// Empty means the receipt states none -- it was issued before this binding
-    /// existed -- and that acceptance stays importer-only.
+    /// existed -- and that acceptance stays importer-only. Stated, it is part
+    /// of a configured issuer's signed payload; a built-in receipt carries it
+    /// under its compiled-in whole-receipt digest instead.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub artifact_acceptance_root: String,
     pub semantic_digest: String,
@@ -726,7 +728,8 @@ struct ReceiptPayload {
     // Added after the first receipts were issued. Absent means "this receipt
     // states no artifact identity", which keeps it importer-only; it is skipped
     // when empty so an older receipt re-encodes to the exact bytes it was
-    // signed over.
+    // signed over. Stated, a configured issuer signs it (see
+    // `signs_artifact_acceptance_root`).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     artifact_acceptance_root: String,
     semantic_digest: String,
@@ -1119,10 +1122,26 @@ fn verify_configured(
     let signature_bytes = decode_canonical_base64(&document.authentication.value)?;
     let signature = Signature::from_slice(&signature_bytes)
         .map_err(|_| Policy2ReceiptError::NonCanonicalSignature)?;
-    VerifyingKey::from_bytes(&entry.public_key)
-        .map_err(|_| Policy2ReceiptError::KeyConfusion)?
-        .verify_strict(signed, &signature)
-        .map_err(|_| Policy2ReceiptError::InvalidSignature)
+    let key = VerifyingKey::from_bytes(&entry.public_key)
+        .map_err(|_| Policy2ReceiptError::KeyConfusion)?;
+    if key.verify_strict(signed, &signature).is_ok() {
+        return Ok(());
+    }
+    // Refused either way. Only the name differs: a receipt whose signature
+    // covers everything except its stated root was issued before the root was
+    // signed, and the remedy is to certify again rather than to suspect an
+    // edit. Nothing here accepts it.
+    if signs_artifact_acceptance_root(&document.payload)
+        && key
+            .verify_strict(
+                &canonical_payload_without_artifact_acceptance_root(&document.payload),
+                &signature,
+            )
+            .is_ok()
+    {
+        return Err(Policy2ReceiptError::UnsignedArtifactAcceptanceRoot);
+    }
+    Err(Policy2ReceiptError::InvalidSignature)
 }
 
 fn validate_payload(
@@ -1331,6 +1350,43 @@ fn payload(
     }
 }
 
+/// Tags the `artifactAcceptanceRoot` frame, as `dependency-environment-root:v1`
+/// tags the environment's, so the two optional frames cannot be read as each
+/// other.
+const ARTIFACT_ACCEPTANCE_ROOT_FRAME: &[u8] = b"artifact-acceptance-root:v1";
+
+/// Whether the signed payload carries `artifactAcceptanceRoot`.
+///
+/// The root decides *which artifact* an acceptance applies to: a consumer
+/// admits a catalog entry for every file that resolves the artifact the root
+/// names, and the conditions a catalog records beside it are authenticated
+/// only through it. Outside the signature, an editor of the project tree could
+/// rewrite it in the receipt and the catalog together and re-point a
+/// configured-issuer acceptance at a condition case it was never proven about,
+/// with the signature still verifying (ADR 0125).
+///
+/// Every configured issuer signs it whenever it is stated. A built-in receipt
+/// does not, and needs no frame: its authority is a compiled-in digest of the
+/// receipt's *whole* bytes (`BuiltInReceiptEntry::entry_digest`), root
+/// included, so no byte of it can change without refusing. Leaving that shape
+/// alone is what keeps every compiled-in receipt byte-identical.
+///
+/// A configured receipt issued before this frame existed and stating a root
+/// therefore no longer verifies; see
+/// [`Policy2ReceiptError::UnsignedArtifactAcceptanceRoot`].
+fn signs_artifact_acceptance_root(payload: &ReceiptPayload) -> bool {
+    !payload.artifact_acceptance_root.is_empty()
+        && payload.issuer_kind != ReceiptIssuerKind::BuiltIn
+}
+
+/// The payload a configured issuer signed before `artifactAcceptanceRoot` was
+/// framed. Used only to *name* a refusal, never to accept one.
+fn canonical_payload_without_artifact_acceptance_root(payload: &ReceiptPayload) -> Vec<u8> {
+    let mut legacy = payload.clone();
+    legacy.artifact_acceptance_root.clear();
+    canonical_payload(&legacy)
+}
+
 fn canonical_payload(payload: &ReceiptPayload) -> Vec<u8> {
     let mut bytes = Vec::new();
     frame(&mut bytes, PAYLOAD_DOMAIN);
@@ -1381,6 +1437,10 @@ fn canonical_payload(payload: &ReceiptPayload) -> Vec<u8> {
     if !payload.dependency_environment_root.is_empty() {
         frame(&mut bytes, b"dependency-environment-root:v1");
         frame(&mut bytes, payload.dependency_environment_root.as_bytes());
+    }
+    if signs_artifact_acceptance_root(payload) {
+        frame(&mut bytes, ARTIFACT_ACCEPTANCE_ROOT_FRAME);
+        frame(&mut bytes, payload.artifact_acceptance_root.as_bytes());
     }
     bytes.push(payload.issuer_kind.code());
     frame(&mut bytes, payload.issuer_scope.as_bytes());
@@ -1544,6 +1604,17 @@ pub enum Policy2ReceiptError {
     NonCanonicalSignature,
     #[error("receipt signature is invalid")]
     InvalidSignature,
+    /// A configured receipt that states `artifactAcceptanceRoot` but was
+    /// signed before that root was part of the signed payload. Its signature
+    /// covers every other binding, so it is not evidence of an edit -- and it
+    /// is not evidence against one either, because the root is exactly the
+    /// field it cannot vouch for. Refused; re-running `contract certify`
+    /// issues a receipt that signs it.
+    #[error(
+        "receipt was issued before artifactAcceptanceRoot was signed, so the artifact it applies \
+         to is not authenticated; re-run `solid-checker contract certify` to re-issue it"
+    )]
+    UnsignedArtifactAcceptanceRoot,
     #[error("receipt trust store is empty, duplicate, or invalid")]
     InvalidTrustStore,
 }

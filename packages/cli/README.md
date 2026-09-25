@@ -51,6 +51,17 @@ the exact demand-local refusal but is explicitly non-replayable authority.
 Until every demanded producer answers and an issuer is configured, the native
 checker reports the exact import as uncertifiable rather than accepting
 name-only, stale, unreceipted, or artifact-mismatched input.
+
+A catalog certified this way applies to every file of the project that
+resolves the certified artifact only while the installed tree reproduces the
+dependency environment its receipt signs (`dependencyEnvironmentRoot`): the
+same package bytes, and every other package the certification read, at the
+same version and lockfile integrity. Certify in the tree you analyze; a
+catalog copied into a tree whose installs differ, or one whose receipt states
+no environment, reaches no project file. The receipt's
+`artifactAcceptanceRoot` is signed, so a receipt issued before it was signed
+is refused with a message to certify again.
+
 `solid-checker contract probe` is a separate opt-in falsification workflow;
 ordinary generation and analysis never execute dependency code, and a passing
 probe never closes a claim.
