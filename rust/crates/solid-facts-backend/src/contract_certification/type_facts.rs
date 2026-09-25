@@ -6283,6 +6283,18 @@ fn sri_prefix(integrity: &str) -> &str {
 /// 9. The dialects' negative table denies the domain for `(archive, export)`,
 ///    with cross-dialect agreement, and silence is never "no".
 ///
+/// # A scoped row, and the conditions it needs
+///
+/// Where gate 9 is silent, a [`solid_dialect::RowScope::HostTarget`] row for
+/// the same `(archive, export, domain)` may still answer, and only through
+/// [`census_host_target_terminator`], which replays every premise the row
+/// states against `requested_conditions` — the plan's own
+/// `import_request.export_conditions`, the set the whole closure was resolved
+/// under — and against the authenticated roots. Its declines are **named**
+/// (`Err(Some(reason))`), because a scoped row that exists and does not bind is
+/// the one refusal here a reader can act on; every other decline stays
+/// `Err(None)`, silence, exactly as before.
+///
 /// # Where it is consumed
 ///
 /// [`census_call_disposition`] consults it as the `DialectAxiom` disposition of
@@ -6291,28 +6303,29 @@ fn sri_prefix(integrity: &str) -> &str {
 /// (`docs/adr/0008-implementation-census-for-creates.md`). Every other
 /// behavioral call domain still refuses by name in
 /// `require_census_decides_closure`.
-fn census_dialect_axiom_for_callee(
+fn census_dialect_axiom(
     call: &typefacts::ImplementationCall,
     domain: solid_dialect::CallClaimDomain,
     floor: ReachabilityFloor,
     certified: &super::ArtifactSnapshot,
     roots_longest_first: &[SnapshotSourceRoot<'_>],
-) -> Option<CensusTerminator> {
+    requested_conditions: &[String],
+) -> Result<CensusTerminator, Option<String>> {
     if floor != ReachabilityFloor::MayExecute || !floor.admits(call.reach) {
-        return None;
+        return Err(None);
     }
     if !matches!(call.kind, CallKind::Call | CallKind::Construct) {
-        return None;
+        return Err(None);
     }
     if call.target.is_empty() || call.target_name.is_empty() {
-        return None;
+        return Err(None);
     }
-    let declaration = call.declaration.as_ref()?;
+    let declaration = call.declaration.as_ref().ok_or(None)?;
     if declaration.source_file.is_empty()
         || declaration.name.as_ref() != call.target_name.as_ref()
         || !solid_dialect::canonical_primitive_name(&call.target_name)
     {
-        return None;
+        return Err(None);
     }
 
     let source_file = declaration.source_file.replace('\\', "/");
@@ -6325,21 +6338,22 @@ fn census_dialect_axiom_for_callee(
         .iter()
         .map(|root| root.path.clone())
         .collect::<Vec<_>>();
-    let (root_index, relative) = strip_materialized_source_root(&source_file, &root_paths)?;
-    let root = roots_longest_first.get(root_index)?;
+    let (root_index, relative) =
+        strip_materialized_source_root(&source_file, &root_paths).ok_or(None)?;
+    let root = roots_longest_first.get(root_index).ok_or(None)?;
     if !root.dependency {
-        return None;
+        return Err(None);
     }
     let snapshot = root.snapshot;
     // The declaration has to be a member of the authenticated archive, not
     // merely a path under its root. The source census already refuses a
     // producer-consulted file that is not in the snapshot; re-asking here keeps
     // this tier's own premise complete rather than inherited.
-    snapshot.read(relative)?;
+    snapshot.read(relative).ok_or(None)?;
     if snapshot.root() == certified.root()
         || snapshot.provenance_root() == certified.provenance_root()
     {
-        return None;
+        return Err(None);
     }
     // The certified artifact itself may not be answered *about* by this axiom,
     // even from a different archive's rows. Certifying `solid-js@2.0.0-rc.3`
@@ -6350,21 +6364,223 @@ fn census_dialect_axiom_for_callee(
     // the dialect-defining archives the runtime IS the definition; only the
     // tracking-state proof mode may decide there, never this negative table.
     if audited_archive_for_snapshot(certified).is_ok() {
-        return None;
+        return Err(None);
     }
 
-    let archive = audited_archive_for_snapshot(snapshot).ok()?;
-    if !solid_dialect::primitive_performs_no_operation(archive, &call.target_name, domain) {
-        return None;
+    let archive = audited_archive_for_snapshot(snapshot).map_err(|_| None)?;
+    if solid_dialect::primitive_performs_no_operation(archive, &call.target_name, domain) {
+        return Ok(CensusTerminator {
+            witness_site: format!(
+                "census-dialect-axiom:{}@{}#{}:{}:{}",
+                archive.name,
+                archive.version,
+                sri_prefix(archive.integrity),
+                call.target_name,
+                domain.wire_name()
+            ),
+        });
     }
-    Some(CensusTerminator {
+    let scope = solid_dialect::host_target_row(archive, &call.target_name, domain).ok_or(None)?;
+    census_host_target_terminator(
+        HostTargetRow {
+            archive,
+            snapshot,
+            export: &call.target_name,
+            domain,
+            scope,
+        },
+        certified,
+        roots_longest_first,
+        requested_conditions,
+    )
+    .map_err(Some)
+}
+
+/// [`census_dialect_axiom`] with no requested conditions, which is what every
+/// gate test above the scoped row asks: an unconditional row answers exactly as
+/// it always did, and a scoped row never does.
+#[cfg(test)]
+fn census_dialect_axiom_for_callee(
+    call: &typefacts::ImplementationCall,
+    domain: solid_dialect::CallClaimDomain,
+    floor: ReachabilityFloor,
+    certified: &super::ArtifactSnapshot,
+    roots_longest_first: &[SnapshotSourceRoot<'_>],
+) -> Option<CensusTerminator> {
+    census_dialect_axiom(call, domain, floor, certified, roots_longest_first, &[]).ok()
+}
+
+/// One scoped dialect row, bound to the authenticated snapshot whose four-field
+/// identity matched its archive.
+struct HostTargetRow<'a> {
+    archive: &'static solid_dialect::AuditedArchive,
+    snapshot: &'a super::ArtifactSnapshot,
+    export: &'a str,
+    domain: solid_dialect::CallClaimDomain,
+    scope: &'static solid_dialect::HostTargetScope,
+}
+
+/// Replays a [`solid_dialect::RowScope::HostTarget`] row's premises, and
+/// answers only when every one holds:
+///
+/// 1. the row's host-target condition is in the requested set;
+/// 2. the archive's `.` entry, resolved from the authenticated snapshot's own
+///    `package.json` under **exactly** the requested set (Node's
+///    PACKAGE_TARGET_RESOLVE, the same replay the snapshot's own resolution is
+///    verified by), selects a file the row lists as read;
+/// 3. for every delegate `(package, export, domain)`, exactly one distinct
+///    authenticated dependency snapshot of `package` is in the closure, it is
+///    an audited archive in all four fields, and that archive's own
+///    [`solid_dialect::RowScope::EveryCondition`] row denies the delegate.
+///
+/// `.` rather than the importer's specifier because the specifier is never
+/// consulted by this tier (gate 5), and the declaration file a callee resolves
+/// into is a type file no runtime condition selects: the question is which
+/// runtime body a bare import of the package executes under this set, and `.`
+/// is the only entry of `solid-js@2.0.0-rc.3` whose runtime defines the
+/// export (`./refresh` does not, and `./types/*` maps declarations only).
+///
+/// The witness site carries the condition, the resolved file, and each
+/// delegate's archive tuple, so a claim discharged here is bound to exactly
+/// the reading and the bytes it rests on.
+fn census_host_target_terminator(
+    row: HostTargetRow<'_>,
+    certified: &super::ArtifactSnapshot,
+    roots: &[SnapshotSourceRoot<'_>],
+    requested_conditions: &[String],
+) -> Result<CensusTerminator, String> {
+    let HostTargetRow {
+        archive,
+        snapshot,
+        export,
+        domain,
+        scope,
+    } = row;
+    let name = format!(
+        "the dialect row {}@{}:{export}:{} is scoped to the `{}` host target",
+        archive.name,
+        archive.version,
+        domain.wire_name(),
+        scope.condition.as_str()
+    );
+    let requested = requested_conditions
+        .iter()
+        .map(String::as_str)
+        .collect::<std::collections::BTreeSet<_>>();
+    let spelled = requested.iter().copied().collect::<Vec<_>>().join(",");
+    if !requested.contains(scope.condition.as_str()) {
+        return Err(format!(
+            "{name}, and this certification requested [{spelled}], which does not name it: \
+             the archive's other hosts run bodies the audit did not clear"
+        ));
+    }
+    let manifest = snapshot
+        .read("package.json")
+        .ok_or_else(|| format!("{name}, and its authenticated snapshot has no package.json"))?;
+    let manifest: super::SnapshotPackageManifest =
+        serde_json::from_slice(manifest).map_err(|error| {
+            format!("{name}, and its package.json cannot drive resolution: {error}")
+        })?;
+    let resolved = super::resolve_snapshot_export(
+        snapshot,
+        &manifest,
+        ".",
+        &requested,
+        super::ResolutionAxis::Runtime,
+    )
+    .map_err(|error| format!("{name}, and `.` does not resolve under [{spelled}]: {error}"))?;
+    if !scope.runtime.contains(&resolved.path.as_str()) {
+        return Err(format!(
+            "{name}, and `.` resolves under [{spelled}] to {:?}, which is not a runtime file \
+             the audit read (it read {})",
+            resolved.path,
+            scope.runtime.join(", ")
+        ));
+    }
+
+    let mut delegated = Vec::with_capacity(scope.delegates.len());
+    for &(package, delegate, delegate_domain) in scope.delegates {
+        let mut candidates = roots
+            .iter()
+            .filter(|root| {
+                root.dependency
+                    && root.snapshot.package_name() == package
+                    && root.snapshot.root() != certified.root()
+            })
+            .map(|root| root.snapshot)
+            .collect::<Vec<_>>();
+        candidates.sort_by(|left, right| left.root().cmp(right.root()));
+        candidates.dedup_by(|left, right| left.root() == right.root());
+        let dependency = match candidates.as_slice() {
+            [dependency] => *dependency,
+            [] => {
+                return Err(format!(
+                    "{name}, and it delegates {delegate} {} to {package}, which this \
+                     certification's authenticated closure does not carry",
+                    delegate_domain.wire_name()
+                ));
+            }
+            several => {
+                return Err(format!(
+                    "{name}, and it delegates {delegate} {} to {package}, of which this \
+                     certification's closure carries {} distinct authenticated snapshots \
+                     ({}): which one the archive's own import binds is not decided here",
+                    delegate_domain.wire_name(),
+                    several.len(),
+                    several
+                        .iter()
+                        .map(|snapshot| format!(
+                            "{}@{}",
+                            snapshot.package_name(),
+                            snapshot.package_version()
+                        ))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+        };
+        let audited = audited_archive_for_snapshot(dependency).map_err(|field| {
+            format!(
+                "{name}, and it delegates {delegate} {} to {package}, whose authenticated \
+                 {}@{} is not an audited archive ({} disagrees)",
+                delegate_domain.wire_name(),
+                dependency.package_name(),
+                dependency.package_version(),
+                match field {
+                    AuditedArchiveDisagreement::Name => "name",
+                    AuditedArchiveDisagreement::Version => "version",
+                    AuditedArchiveDisagreement::Integrity => "integrity",
+                    AuditedArchiveDisagreement::Manifest => "manifest digest",
+                }
+            )
+        })?;
+        if !solid_dialect::primitive_performs_no_operation(audited, delegate, delegate_domain) {
+            return Err(format!(
+                "{name}, and it delegates {delegate} {} to {}@{}, whose audit carries no \
+                 every-condition row denying it",
+                delegate_domain.wire_name(),
+                audited.name,
+                audited.version
+            ));
+        }
+        delegated.push(format!(
+            "{}@{}#{}:{delegate}:{}",
+            audited.name,
+            audited.version,
+            sri_prefix(audited.integrity),
+            delegate_domain.wire_name()
+        ));
+    }
+    Ok(CensusTerminator {
         witness_site: format!(
-            "census-dialect-axiom:{}@{}#{}:{}:{}",
+            "census-dialect-axiom:{}@{}#{}:{export}:{}:{}:{}:delegates={}",
             archive.name,
             archive.version,
             sri_prefix(archive.integrity),
-            call.target_name,
-            domain.wire_name()
+            domain.wire_name(),
+            scope.condition.as_str(),
+            resolved.path,
+            delegated.join("+")
         ),
     })
 }
@@ -10599,6 +10815,11 @@ struct CensusRun<'a> {
     /// dispositions are testable against a synthesized archive.
     certified: &'a super::ArtifactSnapshot,
     plan: Option<&'a CertificationPlan>,
+    /// The export conditions the plan's import was requested under, which is
+    /// the set the whole authenticated closure was resolved under and the
+    /// only set a scoped dialect row may be replayed against. Empty without a
+    /// plan, which no scoped row accepts.
+    export_conditions: &'a [String],
     evidence: CensusEvidence<'a>,
     runtime_sources: std::collections::BTreeSet<String>,
     visited: Vec<CensusDeclarationIdentity>,
@@ -10870,6 +11091,7 @@ fn census_call_walk(
     let mut run = CensusRun {
         certified: &plan.snapshot,
         plan: Some(plan),
+        export_conditions: &plan.import_request.export_conditions,
         evidence,
         runtime_sources: certified_runtime_sources(plan),
         visited: Vec::new(),
@@ -11774,6 +11996,7 @@ fn census_reads_domain(
     let mut run = CensusRun {
         certified: &plan.snapshot,
         plan: Some(plan),
+        export_conditions: &plan.import_request.export_conditions,
         evidence,
         runtime_sources: certified_runtime_sources(plan),
         visited: Vec::new(),
@@ -14075,20 +14298,27 @@ fn census_call_disposition(
             .map_err(|reason| format!("{reason}, called at {}", at()))?;
         return Ok(Some((disposition, census_call_site(call, disposition))));
     }
-    if let Some(terminator) = census_dialect_axiom_for_callee(
+    // A scoped dialect row that exists and does not bind says why; the reason
+    // is carried into the refusal below rather than returned, because another
+    // disposition (an accepted dependency claim) may still decide the call.
+    let dialect_decline = match census_dialect_axiom(
         call,
         solid_dialect::CallClaimDomain::Creates,
         floor,
         run.certified,
         run.evidence.roots,
+        run.export_conditions,
     ) {
         // The tier's own site, not a generic one: it names the archive tuple,
         // the SRI prefix, the export and the domain, which is the whole premise.
-        return Ok(Some((
-            CensusDisposition::DialectAxiom,
-            terminator.witness_site,
-        )));
-    }
+        Ok(terminator) => {
+            return Ok(Some((
+                CensusDisposition::DialectAxiom,
+                terminator.witness_site,
+            )));
+        }
+        Err(decline) => decline,
+    };
     let Some(declaration) = call.declaration.as_ref() else {
         // The producer names nothing for an unbound identifier — `targetName`
         // is empty — so the call is named by its own authenticated bytes.
@@ -14115,12 +14345,15 @@ fn census_call_disposition(
         return Err(format!(
             "creates census refuses a resolved callee that is neither a default-library member, a \
              dialect primitive under the negative authority, nor a declaration in this artifact's \
-             own runtime source: {:?} declared at {}:{}..{}, called at {}",
+             own runtime source: {:?} declared at {}:{}..{}, called at {}{}",
             declaration.name,
             declaration.location.path,
             declaration.location.start_byte,
             declaration.location.end_byte,
-            at()
+            at(),
+            dialect_decline
+                .map(|reason| format!("; {reason}"))
+                .unwrap_or_default()
         ));
     };
     // The producer resolves a named function to its *identifier*, and answers
@@ -24887,6 +25120,7 @@ mod tests {
         CensusRun {
             certified,
             plan: None,
+            export_conditions: &[],
             evidence: CensusEvidence {
                 roots,
                 locals: &[],
@@ -25122,6 +25356,434 @@ mod tests {
                 "census-form:/project/node_modules/consumer/dist/index.js:260:270:property-access-unknown-accessor:reachable:parameter-rooted-accessor:parameter",
             ]
         );
+    }
+
+    /// The files a synthesized `solid-js@2.0.0-rc.3` snapshot carries: the
+    /// pinned `package.json`, every runtime file its `.` entry can select, and
+    /// the declaration file `createSignal` is re-declared in. Their contents do
+    /// not matter to the tier — only membership, and the manifest's digest,
+    /// which is the real archive's.
+    fn solid_js_rc3_snapshot(integrity: &str, root: &str) -> super::super::ArtifactSnapshot {
+        let manifest = audited_rc3_manifest("solid-js");
+        let mut files = [
+            "dist/solid.js",
+            "dist/dev.js",
+            "dist/solid.cjs",
+            "dist/dev.cjs",
+            "dist/server.js",
+            "dist/server.cjs",
+            "types/index.d.ts",
+            "types-cjs/index.d.cts",
+            "types/client/hydration.d.ts",
+        ]
+        .into_iter()
+        .map(|path| {
+            (
+                path.to_owned(),
+                std::sync::Arc::<[u8]>::from(&b"export {};"[..]),
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+        files.insert(
+            "package.json".to_owned(),
+            std::sync::Arc::<[u8]>::from(manifest.as_slice()),
+        );
+        super::super::ArtifactSnapshot {
+            package_name: "solid-js".into(),
+            package_version: "2.0.0-rc.3".into(),
+            package_integrity: integrity.into(),
+            files: std::sync::Arc::new(files),
+            directories: std::sync::Arc::new(std::collections::BTreeSet::new()),
+            root: root.into(),
+            provenance_root: format!("{root}-archive"),
+        }
+    }
+
+    fn solid_js_root<'a>(dependency: &'a super::super::ArtifactSnapshot) -> SnapshotSourceRoot<'a> {
+        SnapshotSourceRoot {
+            path: "/project/node_modules/solid-js/".to_owned(),
+            evidence_prefix: "/node_modules/solid-js/".to_owned(),
+            snapshot: dependency,
+            dependency: true,
+        }
+    }
+
+    /// A consumer call of `solid-js`' own `createSignal`, whose declaration the
+    /// compiler resolves into `types/client/hydration.d.ts` (a re-declaration,
+    /// so the `@solidjs/signals` row never reaches it).
+    fn solid_js_call(export: &str) -> typefacts::ImplementationCall {
+        let source_file = "/project/node_modules/solid-js/types/client/hydration.d.ts";
+        signals_call(
+            export,
+            json!({"declaration": {
+                "symbol": format!("symbol:{export}"),
+                "name": export,
+                "kind": "VariableDeclaration",
+                "sourceFile": source_file,
+                "location": {"path": source_file, "startByte": 10, "endByte": 20},
+            }}),
+        )
+    }
+
+    fn conditions(names: &[&str]) -> Vec<String> {
+        names.iter().map(|name| (*name).to_owned()).collect()
+    }
+
+    /// The scoped `(solid-js@2.0.0-rc.3, createSignal, creates)` row, replayed
+    /// against the pinned rc.3 `package.json` and the audited signals archives.
+    ///
+    /// It terminates for `["browser","import"]` — `.` selects `dist/solid.js`,
+    /// the one bundle § 7.3 walked — with the condition, the file, and each
+    /// delegated archive in the witness, on either audited signals prerelease.
+    /// Every other premise refuses by name: a set without `browser` (every
+    /// case the tier holds), a set whose `.` selects a bundle the audit did not
+    /// walk (`development`, `require`, `worker`), no signals in the closure,
+    /// two of them, or one that is not an audited archive.
+    #[test]
+    fn census_host_target_row_answers_only_under_its_condition_and_file() {
+        let certified = archive_snapshot(
+            "consumer",
+            "1.0.0",
+            "sha512-consumer",
+            b"{\"name\":\"consumer\"}",
+            "/snapshot/consumer",
+        );
+        let solid_js = solid_js_rc3_snapshot(SOLID_JS_INTEGRITY, "/snapshot/solid-js");
+        let rc6 = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.6",
+            SIGNALS_RC6_INTEGRITY,
+            &audited_phase0_manifest("rc6", "solidjs-signals"),
+            "/snapshot/signals-rc6",
+        );
+        let rc3 = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.3",
+            SIGNALS_INTEGRITY,
+            &audited_rc3_manifest("solidjs-signals"),
+            "/snapshot/signals-rc3",
+        );
+        let answer = |roots: &[SnapshotSourceRoot<'_>], requested: &[&str]| {
+            census_dialect_axiom(
+                &solid_js_call("createSignal"),
+                solid_dialect::CallClaimDomain::Creates,
+                ReachabilityFloor::MayExecute,
+                &certified,
+                roots,
+                &conditions(requested),
+            )
+        };
+        let browser = ["browser", "import"];
+
+        for (signals, version, sri) in [
+            (&rc6, "2.0.0-rc.6", "sha512-lPqwZNLPq1Z9CBvg"),
+            (&rc3, "2.0.0-rc.3", "sha512-/yPhTf3xS1FRR4MX"),
+        ] {
+            let roots = vec![solid_js_root(&solid_js), signals_root(signals)];
+            assert_eq!(
+                answer(&roots, &browser).map(|terminator| terminator.witness_site),
+                Ok(format!(
+                    "census-dialect-axiom:solid-js@2.0.0-rc.3#sha512-pmW6bRoTvfp/rN4j:createSignal:\
+                     creates:browser:dist/solid.js:delegates=@solidjs/signals@{version}#{sri}:\
+                     createSignal:creates+@solidjs/signals@{version}#{sri}:getOwner:creates"
+                ))
+            );
+        }
+
+        let roots = vec![solid_js_root(&solid_js), signals_root(&rc6)];
+        let refusal = |requested: &[&str]| match answer(&roots, requested) {
+            Err(Some(reason)) => reason,
+            other => panic!("{requested:?} must refuse by name, got {other:?}"),
+        };
+        for requested in [&["import"][..], &["import", "solid"], &[]] {
+            let reason = refusal(requested);
+            assert!(
+                reason.starts_with(
+                    "the dialect row solid-js@2.0.0-rc.3:createSignal:creates is scoped to the \
+                     `browser` host target, and this certification requested ["
+                ) && reason.contains("which does not name it"),
+                "{reason}"
+            );
+        }
+        for (requested, file) in [
+            (&["browser", "development", "import"][..], "dist/dev.js"),
+            (&["browser", "require"], "dist/solid.cjs"),
+            (&["browser", "development", "require"], "dist/dev.cjs"),
+            // `worker` precedes `browser` in the map, so this set runs the
+            // server body the audit withheld the flat row for.
+            (&["browser", "import", "worker"], "dist/server.js"),
+        ] {
+            let reason = refusal(requested);
+            assert!(
+                reason.contains(&format!(
+                    "resolves under [{}] to {file:?}, which is not a runtime file the audit \
+                     read (it read dist/solid.js)",
+                    {
+                        let mut sorted = requested.to_vec();
+                        sorted.sort_unstable();
+                        sorted.join(",")
+                    }
+                )),
+                "{requested:?}: {reason}"
+            );
+        }
+
+        // The delegated archive has to be one authenticated, audited snapshot.
+        let alone = vec![solid_js_root(&solid_js)];
+        assert!(matches!(
+            answer(&alone, &browser),
+            Err(Some(reason)) if reason.contains(
+                "it delegates createSignal creates to @solidjs/signals, which this \
+                 certification's authenticated closure does not carry"
+            )
+        ));
+        let mut hoisted = signals_root(&rc3);
+        hoisted.path = "/project/node_modules/solid-js/node_modules/@solidjs/signals/".into();
+        let two = vec![solid_js_root(&solid_js), signals_root(&rc6), hoisted];
+        assert!(matches!(
+            answer(&two, &browser),
+            Err(Some(reason)) if reason.contains("carries 2 distinct authenticated snapshots")
+        ));
+        for (why, snapshot, field) in [
+            (
+                "an unaudited prerelease",
+                archive_snapshot(
+                    "@solidjs/signals",
+                    "2.0.0-rc.5",
+                    SIGNALS_RC6_INTEGRITY,
+                    &audited_phase0_manifest("rc6", "solidjs-signals"),
+                    "/snapshot/signals-rc5",
+                ),
+                "version",
+            ),
+            (
+                "rc.6's coordinate over other bytes",
+                archive_snapshot(
+                    "@solidjs/signals",
+                    "2.0.0-rc.6",
+                    "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+                    &audited_phase0_manifest("rc6", "solidjs-signals"),
+                    "/snapshot/signals-mirror",
+                ),
+                "integrity",
+            ),
+        ] {
+            let roots = vec![solid_js_root(&solid_js), signals_root(&snapshot)];
+            assert!(
+                matches!(
+                    answer(&roots, &browser),
+                    Err(Some(reason)) if reason.contains(&format!(
+                        "is not an audited archive ({field} disagrees)"
+                    ))
+                ),
+                "{why}"
+            );
+        }
+
+        // Silence, not a named refusal, wherever no scoped row is reached: the
+        // flat row does not exist, a `solid-js` export without a scoped row,
+        // and a `solid-js` snapshot that is not the audited archive.
+        assert!(
+            census_dialect_axiom_for_callee(
+                &solid_js_call("createSignal"),
+                solid_dialect::CallClaimDomain::Creates,
+                ReachabilityFloor::MayExecute,
+                &certified,
+                &roots,
+            )
+            .is_none(),
+            "with no conditions the scoped row never answers"
+        );
+        assert_eq!(
+            census_dialect_axiom(
+                &solid_js_call("createMemo"),
+                solid_dialect::CallClaimDomain::Creates,
+                ReachabilityFloor::MayExecute,
+                &certified,
+                &roots,
+                &conditions(&browser),
+            )
+            .map(|terminator| terminator.witness_site),
+            Err(None)
+        );
+        let mirror = solid_js_rc3_snapshot(
+            "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+            "/snapshot/solid-js-mirror",
+        );
+        let mirrored = vec![solid_js_root(&mirror), signals_root(&rc6)];
+        assert_eq!(
+            answer(&mirrored, &browser).map(|terminator| terminator.witness_site),
+            Err(None)
+        );
+    }
+
+    /// The condition replay the scoped row rests on, against the checked-in
+    /// pinned manifests: `solid-js@2.0.0-rc.3` selects `dist/solid.js` for
+    /// `["import"]` *and* for `["browser","import"]` — the same file, which is
+    /// why the gate is the requested condition and not the file alone: an
+    /// `["import"]` certification says nothing about the host that will run it
+    /// (a Node server resolves `dist/server.js`). `@solidjs/signals` rc.3 and
+    /// rc.6 select a different bundle per condition, which is why a delegate
+    /// must be an every-condition row.
+    #[test]
+    fn pinned_manifests_replay_the_conditions_the_scoped_row_names() {
+        let solid_js = solid_js_rc3_snapshot(SOLID_JS_INTEGRITY, "/snapshot/solid-js");
+        let manifest: super::super::SnapshotPackageManifest =
+            serde_json::from_slice(solid_js.read("package.json").unwrap()).unwrap();
+        let resolve = |snapshot: &super::super::ArtifactSnapshot,
+                       manifest: &super::super::SnapshotPackageManifest,
+                       requested: &[&str]| {
+            super::super::resolve_snapshot_export(
+                snapshot,
+                manifest,
+                ".",
+                &requested.iter().copied().collect(),
+                super::super::ResolutionAxis::Runtime,
+            )
+            .map(|selected| selected.path)
+            .map_err(|error| error.to_string())
+        };
+        for (requested, file) in [
+            (&["import"][..], "dist/solid.js"),
+            (&["browser", "import"], "dist/solid.js"),
+            (&["browser", "development", "import"], "dist/dev.js"),
+            (&["development", "import"], "dist/dev.js"),
+            (&["import", "node"], "dist/server.js"),
+            (&["deno", "import"], "dist/server.js"),
+            (&["browser", "import", "worker"], "dist/server.js"),
+            (&["browser", "require"], "dist/solid.cjs"),
+        ] {
+            assert_eq!(
+                resolve(&solid_js, &manifest, requested).as_deref(),
+                Ok(file),
+                "solid-js {requested:?}"
+            );
+        }
+
+        for (release, directory) in [("rc3", "solidjs-signals"), ("rc6", "solidjs-signals")] {
+            let bytes = audited_phase0_manifest(release, directory);
+            let files = [
+                "package.json",
+                "dist/prod/index.js",
+                "dist/dev.js",
+                "dist/node.cjs",
+            ]
+            .into_iter()
+            .map(|path| {
+                (
+                    path.to_owned(),
+                    std::sync::Arc::<[u8]>::from(if path == "package.json" {
+                        bytes.as_slice()
+                    } else {
+                        &b"export {};"[..]
+                    }),
+                )
+            })
+            .collect();
+            let signals = super::super::ArtifactSnapshot {
+                package_name: "@solidjs/signals".into(),
+                package_version: format!("2.0.0-{}", release.replace("rc", "rc.")),
+                package_integrity: String::new(),
+                files: std::sync::Arc::new(files),
+                directories: std::sync::Arc::new(std::collections::BTreeSet::new()),
+                root: format!("/snapshot/signals-{release}"),
+                provenance_root: format!("/snapshot/signals-{release}"),
+            };
+            let manifest: super::super::SnapshotPackageManifest =
+                serde_json::from_slice(&bytes).unwrap();
+            for (requested, file) in [
+                (&["import"][..], "dist/prod/index.js"),
+                (&["browser", "import"], "dist/prod/index.js"),
+                (&["development", "import"], "dist/dev.js"),
+                (&["browser", "require"], "dist/node.cjs"),
+            ] {
+                assert_eq!(
+                    resolve(&signals, &manifest, requested).as_deref(),
+                    Ok(file),
+                    "@solidjs/signals {release} {requested:?}"
+                );
+            }
+        }
+    }
+
+    /// The tracer, one level up: a consumer export calling `solid-js`'
+    /// `createSignal`, walked by the `creates` census exactly as a
+    /// certification walks it. Under `["browser","import"]` the call
+    /// terminates at the scoped row and the export is decided; the same bytes
+    /// under `["import"]`, under `development`, or beside an unaudited signals
+    /// refuse, and the refusal carries the scoped row's own reason.
+    #[test]
+    fn creates_census_decides_a_solid_js_create_signal_call_only_under_browser() {
+        let certified = consumer_snapshot();
+        let solid_js = solid_js_rc3_snapshot(SOLID_JS_INTEGRITY, "/snapshot/solid-js");
+        let rc6 = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.6",
+            SIGNALS_RC6_INTEGRITY,
+            &audited_phase0_manifest("rc6", "solidjs-signals"),
+            "/snapshot/signals-rc6",
+        );
+        let unaudited = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.5",
+            SIGNALS_RC6_INTEGRITY,
+            &audited_phase0_manifest("rc6", "solidjs-signals"),
+            "/snapshot/signals-rc5",
+        );
+        let implementation = census_transcript_with(vec![solid_js_call("createSignal")], json!([]));
+        let walk = |signals: &super::super::ArtifactSnapshot, requested: &[&str]| {
+            let roots = vec![
+                consumer_root(&certified),
+                solid_js_root(&solid_js),
+                signals_root(signals),
+            ];
+            let requested = conditions(requested);
+            let mut run = census_run(&certified, &roots);
+            run.export_conditions = &requested;
+            census_transcript(&mut run, &implementation, 0, &[]).map(|step| (step, run.sites))
+        };
+
+        let (step, sites) = walk(&rc6, &["browser", "import"]).expect("decided under browser");
+        assert_eq!(step, CensusStep::Decided);
+        assert_eq!(
+            sites,
+            vec![
+                "census-dialect-axiom:solid-js@2.0.0-rc.3#sha512-pmW6bRoTvfp/rN4j:createSignal:\
+                 creates:browser:dist/solid.js:delegates=@solidjs/signals@2.0.0-rc.6#\
+                 sha512-lPqwZNLPq1Z9CBvg:createSignal:creates+@solidjs/signals@2.0.0-rc.6#\
+                 sha512-lPqwZNLPq1Z9CBvg:getOwner:creates"
+                    .to_owned()
+            ]
+        );
+
+        for (signals, requested, named) in [
+            (&rc6, &["import"][..], "which does not name it"),
+            (
+                &rc6,
+                &["browser", "development", "import"],
+                "to \"dist/dev.js\", which is not a runtime file the audit read",
+            ),
+            (
+                &unaudited,
+                &["browser", "import"],
+                "is not an audited archive (version disagrees)",
+            ),
+        ] {
+            let refusal = walk(signals, requested)
+                .map(|(step, _)| step)
+                .expect_err("refused");
+            assert!(
+                refusal.starts_with(
+                    "creates census refuses a resolved callee that is neither a default-library \
+                     member, a dialect primitive under the negative authority, nor a declaration \
+                     in this artifact's own runtime source: \"createSignal\""
+                ) && refusal.contains(
+                    "; the dialect row solid-js@2.0.0-rc.3:createSignal:creates is scoped to the \
+                     `browser` host target"
+                ) && refusal.contains(named),
+                "{requested:?}: {refusal}"
+            );
+        }
     }
 
     /// The regression for the `callbacks` census's first shipped form: a

@@ -1,5 +1,44 @@
 # Precision backlog
 
+## A negative row may be scoped to a host target (ADR 0124, 2026-09-25)
+
+Status: **implemented**, step 7 part 2 slices 2a and 2b. `NegativeClaimRow` has
+a scope, either `EveryCondition` (the 74 existing rows) or `HostTarget`. One
+scoped row is granted:
+
+- `(solid-js, 2.0.0-rc.3, createSignal, creates)`, browser only, on
+  `dist/solid.js` (rc.3 audit § 7.3);
+- delegating to the installed `@solidjs/signals` archive's own `createSignal`
+  and `getOwner` rows;
+- negative rows 74 -> 75.
+
+The census terminator replays `.` under the plan's requested conditions from
+the authenticated `package.json`, and refuses by name when `browser` is
+absent, when the resolved file was not read (`development`/`require`), or when
+the signals delegate is missing, duplicated, unaudited or not denied.
+Consumers: a host that declares no conditions (every ESLint and Oxlint run)
+never receives a browser-scoped case.
+
+Measured (2026-09-25):
+
+- coverage: 87 projects, 452 findings, no diff;
+- ownership gate: 37 cases;
+- `make contract-corpus`: green;
+- pinned census (release binary, non-updating): unchanged at clean 533,
+  since it certifies no `browser` case;
+- one unit expectation moved: an SSR package's client case is no longer
+  admissible beside its server case for an undeclared host.
+
+The row's yield needs a separate `--conditions browser` run, recorded in its
+own entry below when measured.
+
+Still open:
+
+- `createMemo`/`createEffect` (slice 2c, new hand readings);
+- `node`-scoped cases still reach undeclared hosts;
+- the guard-aware form (option (d)) needs per-slot argument facts from the
+  producer.
+
 ## A compiled-in contract is admitted only in its certified environment (ADR 0123, 2026-09-25)
 
 Status: **implemented**, closing the delivery gap the entry below found. A

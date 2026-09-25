@@ -398,6 +398,74 @@ fn admission_needs_this_project_to_have_resolved_the_file_the_contract_is_about(
     );
 }
 
+/// A case certified under `browser` may rest on a dialect row scoped to that
+/// host (`solid-js`' `createSignal`), so a host that declared nothing — every
+/// ESLint and Oxlint run — never receives it, even as the lone candidate and
+/// even beside an unscoped case it would otherwise be compared with. A host
+/// that declared `--runtime-target browser` does, by the ordinary subset rule.
+#[test]
+fn an_undeclared_host_never_receives_a_browser_scoped_case() {
+    let installed = |_: &str| {
+        Some((
+            "plain-package".to_owned(),
+            "1.0.0".to_owned(),
+            "sha512-published-integrity".to_owned(),
+        ))
+    };
+    let resolved = |_: &str| Some("dist/index.js".to_owned());
+    let case = |conditions: &[&str]| {
+        loaded(
+            "plain-package",
+            "1.0.0",
+            "sha512-published-integrity",
+            "plain-package",
+            conditions,
+        )
+    };
+    // `[browser case, unscoped case]`, fresh each time: a loaded bundle owns
+    // its decoded contract.
+    let both = || [case(&["browser", "import"]), case(&["import"])];
+    let identities = both().map(|bundle| bundle.identity);
+    let admitted = |bundles: &[LoadedBundle], conditions: &BTreeSet<String>| {
+        admitted_from(bundles, conditions, &installed, &resolved, &any_environment)
+            .into_iter()
+            .map(|(specifier, identity)| {
+                assert_eq!(specifier, "plain-package");
+                identity
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let undeclared = BTreeSet::new();
+    assert!(
+        admitted(&[case(&["browser", "import"])], &undeclared).is_empty(),
+        "a lone browser-scoped candidate is not admitted unchecked"
+    );
+    assert_eq!(
+        admitted(&both(), &undeclared),
+        vec![identities[1].clone()],
+        "the browser case is dropped before any comparison, the unscoped one stays"
+    );
+
+    let host = |target| {
+        solid_reactive_ir::RuntimeEnvironment {
+            target: Some(target),
+            ..Default::default()
+        }
+        .selected_conditions()
+    };
+    assert_eq!(
+        admitted(&both(), &host(solid_reactive_ir::RuntimeTarget::Browser)),
+        vec![identities[0].clone()],
+        "a `--runtime-target browser` host gets the most specific applicable case"
+    );
+    assert_eq!(
+        admitted(&both(), &host(solid_reactive_ir::RuntimeTarget::Node)),
+        vec![identities[1].clone()],
+        "a node host never gets the browser case"
+    );
+}
+
 #[test]
 fn a_require_project_does_not_get_a_contract_proven_under_import() {
     // Conditions select the artifact, which is why they are inside the

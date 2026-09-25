@@ -12,8 +12,9 @@
 
 use crate::{
     AuditedArchive, AuditedCitation, Boundary, CallClaimDomain, CallbackOwner, CleanupRule,
-    Dialect, DialectNegativeAuthority, Execution, NegativeClaimRow, Primitive, ReactiveRole,
-    ResultSlot, TrackedCallbackTiming, Version, lookup, reverse,
+    Dialect, DialectNegativeAuthority, Execution, HostTargetCondition, HostTargetScope,
+    NegativeClaimRow, Primitive, ReactiveRole, ResultSlot, RowScope, TrackedCallbackTiming,
+    Version, lookup, reverse,
 };
 
 /// Solid 2.0.
@@ -204,7 +205,7 @@ const RC6: &str = "2.0.0-rc.6";
 /// # Rows are archive-scoped, and two `@solidjs/signals` archives carry rows
 ///
 /// Every row names its archive's version ([`NegativeClaimRow::version`]) and
-/// answers for that archive alone. The 50 rc.3 rows answer for the three
+/// answers for that archive alone. The 51 rc.3 rows answer for the three
 /// `2.0.0-rc.3` archives; the 24 rc.6 rows answer for
 /// `@solidjs/signals@2.0.0-rc.6`, which the ecosystem installs in place of
 /// rc.3 (every `solid-js@2.0.0-rc.3` declares `@solidjs/signals: ^2.0.0-rc.3`).
@@ -224,7 +225,7 @@ const RC6: &str = "2.0.0-rc.6";
 ///
 /// # `creates` and `reads`, and only those
 ///
-/// Rows carry [`CallClaimDomain::Creates`] (48: 31 on rc.3, 17 on rc.6) and
+/// Rows carry [`CallClaimDomain::Creates`] (49: 32 on rc.3, one of them scoped, 17 on rc.6) and
 /// [`CallClaimDomain::Reads`] (26: 19 on rc.3, 7 on rc.6). The other six kinded domains are withheld
 /// wholesale, because the audited documents' closures in them are not yet
 /// admissible as negative authority and each counter-example below is a defect
@@ -328,7 +329,15 @@ const RC6: &str = "2.0.0-rc.6";
 ///   (`dist/server.js:558`, `:699`, `:760`, `:797`), which
 ///   `semantic-model.md` § creates' **[Decision 2026-09-04]** settles **is** a
 ///   `create`. A `(package, export, domain)` row carries no condition, so the
-///   row must be withheld until the table is condition-aware.
+///   *flat* row stays withheld. Since 2026-09-25 the table is condition-aware
+///   for exactly this export: one [`RowScope::HostTarget`] row states what
+///   § 7.3 did establish — `browser` requested, `.` resolving to
+///   `dist/solid.js` under exactly that set, and the installed
+///   `@solidjs/signals` archive's own audited rows denying `createSignal` and
+///   `getOwner` — and [`DialectNegativeAuthority::denies`] still answers
+///   nothing for it. The census terminator replays each premise; a consumer
+///   host that declared no conditions never receives a case certified under
+///   `browser`.
 /// - **`solid-js`'s `createEffect`** — **withdrawn** 2026-09-04, for the same
 ///   reason, and this is the one row the § creates decision cost.
 ///   `solid-js.json` closes `creates: []` for it, but that document captures
@@ -388,6 +397,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "action",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-c094d35ac3f70f84acaae0d933ed0c4c46071004615d4a1351a11a01bf987552",
@@ -400,6 +410,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "action",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-c094d35ac3f70f84acaae0d933ed0c4c46071004615d4a1351a11a01bf987552",
@@ -413,6 +424,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "createMemo",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-6970e6d02d81c014fd7c2ef7aee46716c95cb9aac16a28e9f8adb95ece54eab1",
@@ -425,6 +437,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "createMemo",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-6970e6d02d81c014fd7c2ef7aee46716c95cb9aac16a28e9f8adb95ece54eab1",
@@ -438,6 +451,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "createOptimistic",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-92071bb735b571320a76e500e8f0dc47db0f11df19201d2b3931d2da5d763e37",
@@ -450,6 +464,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "createOptimistic",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-92071bb735b571320a76e500e8f0dc47db0f11df19201d2b3931d2da5d763e37",
@@ -463,6 +478,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "createOptimisticStore",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-034586f31ead4bb594c03ada1202fb3b439455294d049727cb6f898c65cf5283",
@@ -475,6 +491,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "createOptimisticStore",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-034586f31ead4bb594c03ada1202fb3b439455294d049727cb6f898c65cf5283",
@@ -487,6 +504,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "createProjection",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-dc0413a1214db1eaf2875e7ee5b17addfef2043f8d01429f94081d9f41a673e5",
@@ -503,6 +521,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "createRoot",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC3_CORE_PRIMITIVES_AUDIT,
@@ -541,6 +560,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "createSignal",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC3_CORE_PRIMITIVES_AUDIT,
@@ -576,6 +596,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "createStore",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-7080e21f5c75fdb8ffd32ef595390c4164a07969282c6a843573230ed36de5f5",
@@ -589,6 +610,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "createTrackedEffect",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-aab0640db7c783a35e1c955cbf19c22197542f3eecb3f89b28433694eb07ff6a",
@@ -601,6 +623,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "createTrackedEffect",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-aab0640db7c783a35e1c955cbf19c22197542f3eecb3f89b28433694eb07ff6a",
@@ -616,6 +639,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "flush",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-00fc668bf5acaf07e617a9118eb0ef43a7dc1ba6359be1ea580793a91a76efbe",
@@ -628,6 +652,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "flush",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-00fc668bf5acaf07e617a9118eb0ef43a7dc1ba6359be1ea580793a91a76efbe",
@@ -642,6 +667,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "getOwner",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC3_CORE_PRIMITIVES_AUDIT,
@@ -680,6 +706,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "onCleanup",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC3_CORE_PRIMITIVES_AUDIT,
@@ -716,6 +743,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "onSettled",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-5a08fc896d6f18c5378c69bc27d5fc1ddaeb013364aff1421330341801111663",
@@ -728,6 +756,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "onSettled",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-5a08fc896d6f18c5378c69bc27d5fc1ddaeb013364aff1421330341801111663",
@@ -741,6 +770,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "reconcile",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-97b25908bde1ce8220884836f97f37a42f6719bcf3b723d9de5746955fcc12dd",
@@ -753,6 +783,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "reconcile",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-97b25908bde1ce8220884836f97f37a42f6719bcf3b723d9de5746955fcc12dd",
@@ -769,6 +800,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "runWithOwner",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC3_OWNER_CONTEXT_AUDIT,
@@ -804,6 +836,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "snapshot",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-8911cd9f25cc9dc4140432201dd677dbebfb3177847e315e1aa05b9c628dde30",
@@ -819,6 +852,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "untrack",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC3_CORE_PRIMITIVES_AUDIT,
@@ -864,6 +898,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "action",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -899,6 +934,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "action",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -934,6 +970,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "createMemo",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -969,6 +1006,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "createMemo",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1004,6 +1042,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "createOptimistic",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1039,6 +1078,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "createOptimistic",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1074,6 +1114,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "createOptimisticStore",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1109,6 +1150,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "createProjection",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1144,6 +1186,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "createRoot",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1179,6 +1222,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "createSignal",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1214,6 +1258,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "createStore",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1249,6 +1294,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "createTrackedEffect",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1284,6 +1330,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "createTrackedEffect",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1319,6 +1366,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "flush",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1354,6 +1402,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "flush",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1389,6 +1438,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "getOwner",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1424,6 +1474,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "onCleanup",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1459,6 +1510,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "onSettled",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1494,6 +1546,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "onSettled",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1529,6 +1582,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "reconcile",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1564,6 +1618,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "reconcile",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1599,6 +1654,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "runWithOwner",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1634,6 +1690,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "snapshot",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1669,6 +1726,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC6,
         export: "untrack",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC6_SIGNALS_AUDIT,
@@ -1708,6 +1766,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "clientOnly",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Summary {
                 document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
@@ -1728,6 +1787,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "clientOnly",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Summary {
                 document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
@@ -1749,6 +1809,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "httpHeader",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Summary {
                 document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
@@ -1769,6 +1830,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "httpHeader",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Summary {
                 document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
@@ -1790,6 +1852,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "httpStatus",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Summary {
                 document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
@@ -1810,6 +1873,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "httpStatus",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Summary {
                 document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
@@ -1837,6 +1901,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "hydrate",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
             summary: "summary-7dc57984919daf1dd41a313f41608c3f779ecf3be74645aaeedf55473bbb255c",
@@ -1853,6 +1918,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "render",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
             summary: "summary-d6e8921e93fd37f6028c1ad809693ef42764ab602a477ba683dd4afc3efa7530",
@@ -1865,6 +1931,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "For",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
@@ -1877,6 +1944,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "For",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
@@ -1889,6 +1957,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "Loading",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-7e8eaca8531ccab3121be0a039c44b383b80aa9d8c0fa51cca31884efc083149",
@@ -1905,6 +1974,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "Match",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
@@ -1917,6 +1987,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "Match",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
@@ -1933,6 +2004,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "Repeat",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
@@ -1945,6 +2017,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "Repeat",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
@@ -1961,6 +2034,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "Show",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
@@ -1973,6 +2047,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "Show",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
@@ -1989,6 +2064,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "affects",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-92efacc141c683cc0a3779fa9106ff29f624ed876f3f6d0e0635643dec1d46fd",
@@ -2001,6 +2077,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "affects",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-92efacc141c683cc0a3779fa9106ff29f624ed876f3f6d0e0635643dec1d46fd",
@@ -2015,6 +2092,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "createContext",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC3_OWNER_CONTEXT_AUDIT,
@@ -2072,11 +2150,56 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             },
         ],
     },
+    // Implementation-audited, RC3_CORE_PRIMITIVES_AUDIT § 7.3, and **scoped**:
+    // the flat row stays withheld (§ 7.4 — the `node`/`worker`/`deno` body's
+    // derived overload reaches `ctx.serialize`, a create), so this row answers
+    // only for a certification whose requested set carries `browser` and whose
+    // `.` resolves to `dist/solid.js` under exactly that set.
+    //
+    // `dist/solid.js` alone, because it is the one bundle the section walked
+    // end to end: every row of § 7.3's transitive table cites `solid.js` line
+    // numbers. `dist/dev.js`, `dist/solid.cjs` and `dist/dev.cjs` were read at
+    // the three-line wrapper only ("identical"), not through
+    // `hydratedCreateSignal`, `hydrateSignalLike`, `subFetch` and the other
+    // helpers the wrapper reaches, so a `development` or `require` resolution
+    // refuses rather than inherit a reading of another file.
+    //
+    // The delegates are the two calls that table follows into
+    // `@solidjs/signals` and dispositions there as "archive": `createSignal$1`
+    // (R5, § 7.2) and `getOwner` (the `peekNextChildId(getOwner())` row, § 4).
+    // The two non-primitive signals helpers it also reaches —
+    // `markSnapshotScope` and `peekNextChildId` — rest on the archive-wide
+    // host-boundary census (rc.3 § 1.5; rc.6 re-audit group A § 0.3), which
+    // no row can name.
+    NegativeClaimRow {
+        package: "solid-js",
+        version: RC3,
+        export: "createSignal",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::HostTarget(HostTargetScope {
+            condition: HostTargetCondition::Browser,
+            runtime: &["dist/solid.js"],
+            delegates: &[
+                ("@solidjs/signals", "createSignal", CallClaimDomain::Creates),
+                ("@solidjs/signals", "getOwner", CallClaimDomain::Creates),
+            ],
+        }),
+        citations: &[AuditedCitation::Implementation {
+            audit: RC3_CORE_PRIMITIVES_AUDIT,
+            section: "### 7.3 R6 — `solid-js`' own `createSignal`, browser conditions",
+            archive_path: "dist/solid.js",
+            file_sha256: "14af2d696eb0669c64973874601f691737aa1df359fced6dec55a523f34cfa1b",
+            start_byte: 23266,
+            end_byte: 23358,
+            slice_sha256: "3a46e2707a2ee2e2a7263af229d893a6a10fd041b8f0a08cbc29360eb65bda49",
+        }],
+    },
     NegativeClaimRow {
         package: "solid-js",
         version: RC3,
         export: "isPending",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-d41bc9d7ea19dd2a6dae7d51199a8448e627d5b6ac99a2eeb20cb02c7799c724",
@@ -2089,6 +2212,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "latest",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-13d78920672aa68cb9fb09d4b51dafaf4281d67628d73e4ba93f06de39512c40",
@@ -2105,6 +2229,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "refresh",
         domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-49a501fb15bcd7c7961085bd54009503618b3729e6e49e8d299f0eb90ad9d322",
@@ -2117,6 +2242,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "refresh",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-49a501fb15bcd7c7961085bd54009503618b3729e6e49e8d299f0eb90ad9d322",
@@ -2131,6 +2257,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         version: RC3,
         export: "useContext",
         domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
         citations: &[
             AuditedCitation::Implementation {
                 audit: RC3_OWNER_CONTEXT_AUDIT,
@@ -2247,11 +2374,12 @@ impl Dialect for Solid2 {
         "solid-v2/model-1"
     }
 
-    /// [`AUDITED_ARCHIVES`] and [`NEGATIVE_ROWS`] — 74 archive-scoped rows:
-    /// 50 on the three rc.3 archives (42 read out of the audited rc.3 contract
-    /// documents, eight out of runtime bytes by hand) and 24 on
-    /// `@solidjs/signals@2.0.0-rc.6` (all read out of its runtime bytes,
-    /// [`RC6_SIGNALS_AUDIT`]), with the withholdings named there.
+    /// [`AUDITED_ARCHIVES`] and [`NEGATIVE_ROWS`] — 75 archive-scoped rows:
+    /// 51 on the three rc.3 archives (42 read out of the audited rc.3 contract
+    /// documents, nine out of runtime bytes by hand, one of those scoped to the
+    /// `browser` host target) and 24 on `@solidjs/signals@2.0.0-rc.6` (all
+    /// read out of its runtime bytes, [`RC6_SIGNALS_AUDIT`]), with the
+    /// withholdings named there.
     fn negative_claim_authority(&self) -> &'static DialectNegativeAuthority {
         &NEGATIVE_AUTHORITY
     }
@@ -3642,6 +3770,29 @@ mod tests {
         ("solid-js", RC3, "createSignal", CallClaimDomain::Creates),
     ];
 
+    /// The reading each [`RowScope::HostTarget`] row rests on: the audit, the
+    /// section heading that walked the scoped condition, and that condition.
+    /// One entry per scoped row, and the row's citations must name the same
+    /// section, so a scoped row cannot borrow the section that withheld its
+    /// flat twin.
+    const HOST_TARGET_READINGS: &[(
+        &str,
+        &str,
+        &str,
+        CallClaimDomain,
+        &str,
+        &str,
+        HostTargetCondition,
+    )] = &[(
+        "solid-js",
+        RC3,
+        "createSignal",
+        CallClaimDomain::Creates,
+        RC3_CORE_PRIMITIVES_AUDIT,
+        "### 7.3 R6 — `solid-js`' own `createSignal`, browser conditions",
+        HostTargetCondition::Browser,
+    )];
+
     /// What a hand implementation census concluded, per row.
     ///
     /// A second **source** for the derivation below, beside the audited JSON
@@ -4425,11 +4576,13 @@ mod tests {
         // stopped reaching it would leave every check above passing over the
         // summary citations alone. On rc.3: five rows, three bundles each, then
         // (2026-09-23) `runWithOwner`'s three and the six `solid-js` bundles
-        // each for `createContext` and `useContext` -- 30. On rc.6
-        // (2026-09-25): 24 rows, three bundles each -- 72.
+        // each for `createContext` and `useContext` -- 30 -- plus
+        // (2026-09-25) the one `dist/solid.js` citation of the scoped
+        // `solid-js` `createSignal` row. On rc.6 (2026-09-25): 24 rows, three
+        // bundles each -- 72.
         assert_eq!(
             implementation_citations,
-            30 + 72,
+            30 + 1 + 72,
             "the Implementation citation arm did not run over the rows that need it"
         );
     }
@@ -4576,8 +4729,14 @@ mod tests {
         // have to be loosened instead.
         let derivable: BTreeSet<_> = from_json.union(&implementation_closed).cloned().collect();
         let supported: BTreeSet<_> = derivable.union(&implementation_withheld).cloned().collect();
+        // Only an `EveryCondition` row is a claim about the whole archive, so
+        // only those are compared with what the sources derive for the whole
+        // archive. A scoped row is compared separately below: it must stand on
+        // exactly the flat row the sources *withheld*, and on a reading that
+        // names its condition.
         let shipped: BTreeSet<(String, String, String, CallClaimDomain)> = NEGATIVE_ROWS
             .iter()
+            .filter(|row| row.scope == RowScope::EveryCondition)
             .map(|row| {
                 (
                     row.package.to_owned(),
@@ -4630,6 +4789,59 @@ mod tests {
         assert_eq!((on(RC3), on(RC6)), (50, 24));
         assert_eq!(shipped.len(), 74);
 
+        // The scoped rows: each is a flat row both sources withhold, read
+        // under one host-target condition in a section HOST_TARGET_READINGS
+        // names, and nothing else. 74 flat + 1 scoped = 75 rows.
+        let mut scoped = BTreeSet::new();
+        for row in NEGATIVE_ROWS {
+            let RowScope::HostTarget(scope) = row.scope else {
+                continue;
+            };
+            let key = (
+                row.package.to_owned(),
+                row.version.to_owned(),
+                row.export.to_owned(),
+                row.domain,
+            );
+            assert!(
+                withheld.contains(&key) && implementation_withheld.contains(&key),
+                "{key:?} is scoped, but the flat row it narrows is not withheld: a scoped row \
+                 exists only where a guarded reach made the flat row unsound"
+            );
+            let reading = HOST_TARGET_READINGS
+                .iter()
+                .filter(|(package, version, export, domain, ..)| {
+                    *package == row.package
+                        && *version == row.version
+                        && *export == row.export
+                        && *domain == row.domain
+                })
+                .collect::<Vec<_>>();
+            let [(_, _, _, _, audit, section, condition)] = reading.as_slice() else {
+                panic!("{key:?} is scoped with {} readings, not one", reading.len());
+            };
+            assert_eq!(*condition, scope.condition, "{key:?} scope condition");
+            let text = std::fs::read_to_string(root.join(audit)).unwrap();
+            assert!(
+                text.lines().any(|line| line == *section),
+                "{key:?} names section {section:?}, which {audit} does not contain verbatim"
+            );
+            for citation in row.citations {
+                let AuditedCitation::Implementation {
+                    audit: cited,
+                    section: cited_section,
+                    ..
+                } = citation
+                else {
+                    panic!("{key:?} is scoped, and a scoped row is a reading of runtime bytes");
+                };
+                assert_eq!((cited, cited_section), (audit, section), "{key:?} citation");
+            }
+            assert!(scoped.insert(key), "{:?} is scoped twice", row.export);
+        }
+        assert_eq!(scoped.len(), 1);
+        assert_eq!(NEGATIVE_ROWS.len(), 74 + 1);
+
         // The two authorities must not be confusable from the row alone: a row
         // the hand census closed cites runtime bytes, and every other row cites
         // a summary. Otherwise an Implementation citation could ship with no
@@ -4651,7 +4863,7 @@ mod tests {
                 .any(|citation| matches!(citation, AuditedCitation::Summary { .. }));
             assert_eq!(
                 cites_implementation,
-                implementation_closed.contains(&key),
+                implementation_closed.contains(&key) || scoped.contains(&key),
                 "{key:?}'s citation kind disagrees with IMPLEMENTATION_AUDITED"
             );
             assert!(
@@ -4692,6 +4904,19 @@ mod tests {
         let solid_js = archive("solid-js", RC3);
         assert!(!authority.denies(solid_js, "createEffect", CallClaimDomain::Creates));
         assert!(!authority.denies(solid_js, "createSignal", CallClaimDomain::Creates));
+        assert!(!crate::primitive_performs_no_operation(
+            solid_js,
+            "createSignal",
+            CallClaimDomain::Creates
+        ));
+        // `createSignal` carries a scoped row, which is not a denial: only the
+        // census, replaying its premises, may read it. `createEffect` has none.
+        assert!(
+            crate::host_target_row(solid_js, "createSignal", CallClaimDomain::Creates).is_some()
+        );
+        assert!(
+            crate::host_target_row(solid_js, "createEffect", CallClaimDomain::Creates).is_none()
+        );
 
         // And the five the hand implementation census closed, which are keyed
         // to `@solidjs/signals` — the archive the declaration resolves into —
@@ -5012,6 +5237,156 @@ mod tests {
                 "{path} audits {name}@{version}, which the archive list omits"
             );
         }
+    }
+
+    /// A scoped row's premises are well formed, and nothing but the census
+    /// entry reads it.
+    ///
+    /// - its runtime list is exactly the set of files its citations read, each
+    ///   pinned in the archive's `files.json` — so a file the audit did not
+    ///   walk can never be listed without a citation to it;
+    /// - every delegate is another archive's canonical primitive that every
+    ///   audited archive of that package denies with an `EveryCondition` row —
+    ///   a delegate no audited archive answers would make the row unbindable,
+    ///   which is a table defect rather than a refusal;
+    /// - the proposal side consults it only for a case whose conditions carry
+    ///   the scope's condition.
+    #[test]
+    fn host_target_rows_state_checkable_premises() {
+        use std::collections::BTreeSet;
+
+        let root = repository_root();
+        let mut seen = 0usize;
+        for row in NEGATIVE_ROWS {
+            let RowScope::HostTarget(scope) = row.scope else {
+                continue;
+            };
+            seen += 1;
+            assert!(!scope.runtime.is_empty(), "{} lists no runtime", row.export);
+            let listed = scope.runtime.iter().copied().collect::<BTreeSet<_>>();
+            assert_eq!(listed.len(), scope.runtime.len(), "duplicate runtime file");
+            let cited = row
+                .citations
+                .iter()
+                .map(|citation| match citation {
+                    AuditedCitation::Implementation { archive_path, .. } => *archive_path,
+                    AuditedCitation::Summary { .. } => {
+                        panic!("{} is scoped and cites a summary", row.export)
+                    }
+                })
+                .collect::<BTreeSet<_>>();
+            assert_eq!(
+                listed, cited,
+                "{}'s runtime list is not the set of files its citations read",
+                row.export
+            );
+            let manifest: serde_json::Value = serde_json::from_slice(
+                &std::fs::read(root.join(format!(
+                    "benchmarks/package-contract-v2/phase0/{}/files.json",
+                    phase0_archive_directory(row.package, row.version)
+                )))
+                .unwrap(),
+            )
+            .unwrap();
+            for file in scope.runtime {
+                assert!(
+                    manifest
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|entry| entry["path"].as_str() == Some(*file)),
+                    "{file} is not a file of {}@{}",
+                    row.package,
+                    row.version
+                );
+            }
+
+            assert!(!scope.delegates.is_empty());
+            for &(package, export, domain) in scope.delegates {
+                assert_ne!(package, row.package, "a row may not delegate to itself");
+                assert_eq!(
+                    Solid2
+                        .primitive(export)
+                        .and_then(|primitive| Solid2.name_of(primitive)),
+                    Some(export),
+                    "delegate {package}:{export} is not a canonical primitive"
+                );
+                let archives = AUDITED_ARCHIVES
+                    .iter()
+                    .filter(|archive| archive.name == package)
+                    .collect::<Vec<_>>();
+                assert!(!archives.is_empty(), "delegate {package} is not audited");
+                for archive in archives {
+                    assert!(
+                        crate::primitive_performs_no_operation(archive, export, domain),
+                        "{}@{} does not deny delegate {export} {domain:?}",
+                        archive.name,
+                        archive.version
+                    );
+                }
+            }
+
+            // Never a denial, and reachable through the scoped entry alone.
+            let audited = archive(row.package, row.version);
+            assert!(
+                !Solid2
+                    .negative_claim_authority()
+                    .denies(audited, row.export, row.domain)
+            );
+            assert_eq!(
+                crate::host_target_row(audited, row.export, row.domain),
+                Some(&scope)
+            );
+
+            // The proposal side reads the case's conditions.
+            let set = |conditions: &[&str]| {
+                conditions
+                    .iter()
+                    .map(|condition| (*condition).to_owned())
+                    .collect::<BTreeSet<_>>()
+            };
+            let condition = scope.condition.as_str();
+            for (conditions, expected) in [
+                (set(&["import"]), false),
+                (set(&["import", "solid"]), false),
+                (set(&["import", "node"]), false),
+                (set(&[]), false),
+                (set(&[condition, "import"]), true),
+                (set(&[condition, "development", "import"]), true),
+            ] {
+                assert_eq!(
+                    crate::some_audit_denies_primitive(
+                        row.package,
+                        row.export,
+                        row.domain,
+                        &conditions
+                    ),
+                    expected,
+                    "{}:{} proposed under {conditions:?}",
+                    row.package,
+                    row.export
+                );
+            }
+        }
+        assert_eq!(seen, 1);
+
+        // An `EveryCondition` row answers the proposal side under any set,
+        // the empty one included.
+        assert!(crate::some_audit_denies_primitive(
+            "@solidjs/signals",
+            "createSignal",
+            CallClaimDomain::Creates,
+            &BTreeSet::new()
+        ));
+        assert!(
+            crate::host_target_row(
+                archive("@solidjs/signals", RC6),
+                "createSignal",
+                CallClaimDomain::Creates
+            )
+            .is_none(),
+            "an EveryCondition row is not a scoped row"
+        );
     }
 
     /// Rows are sorted, unique, keyed to a listed archive, and spelled

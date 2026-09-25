@@ -941,6 +941,11 @@ fn unresolved_callee_shape<'a>(
 
 pub(crate) fn collect_project(ctx: &AnalysisContext<'_>) -> CreatesProposalWalk {
     let imported_modules = imported_modules_by_symbol(ctx);
+    // The artifact case's export conditions, as the generator handed them to
+    // this analysis. A dialect row scoped to a host-target condition is
+    // consulted only when the case carries that condition, so an `["import"]`
+    // case never proposes a closure only a browser certification could prove.
+    let conditions = ctx.rule_options.runtime.selected_conditions();
     let mut refusals = BTreeMap::<String, Vec<(u32, u32)>>::new();
     let mut declines = BTreeMap::<String, Vec<CreatesDecline>>::new();
     // Every call whose callee resolves to a project function, so the fixpoint
@@ -958,6 +963,7 @@ pub(crate) fn collect_project(ctx: &AnalysisContext<'_>) -> CreatesProposalWalk 
                 primitives.calls.get(index).and_then(Option::as_ref),
                 &imported_modules,
                 &shape_facts,
+                &conditions,
             ) {
                 refusals
                     .entry(file.path.to_string())
@@ -1067,6 +1073,7 @@ fn creates_proposal_decline<'a>(
     primitive: Option<&PrimitiveName>,
     imported_modules: &HashMap<&str, &str>,
     shape_facts: &FileShapeFacts<'a>,
+    conditions: &std::collections::BTreeSet<String>,
 ) -> Option<CreatesDeclineKind> {
     let callee = call.callee;
     // A canonical primitive is decided by the dialect tables and nothing else.
@@ -1085,7 +1092,9 @@ fn creates_proposal_decline<'a>(
         // § 7.4 -- the `node`/`worker`/`deno` bodies reach `ctx.serialize`,
         // which is a create). Asking by name answered them out of
         // `@solidjs/signals`' rows, proposing a closed `creates` the audit
-        // refuses to make and emitting no decline record to say so.
+        // refuses to make and emitting no decline record to say so. One of the
+        // six, `createSignal`, now carries a row scoped to `browser`, which
+        // answers here only for a case whose conditions carry it.
         //
         // The declaration's *source file* is the discriminator, and the only
         // one available: `origin_module` is the module the specifier resolved
@@ -1105,6 +1114,7 @@ fn creates_proposal_decline<'a>(
             &declaring_package,
             spelling,
             CallClaimDomain::Creates,
+            conditions,
         ) {
             return None;
         }

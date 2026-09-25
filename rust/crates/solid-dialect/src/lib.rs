@@ -678,7 +678,9 @@ pub enum AuditedCitation {
 /// operation of this domain's kind for this export.
 ///
 /// Every artifact case and condition of the audited archive that exports the
-/// name must close the domain empty, or the row is absent. Absence is
+/// name must close the domain empty, or the row is absent — unless the row is
+/// [`RowScope::HostTarget`], which states exactly which condition and which
+/// runtime files it was read on and answers nowhere else. Absence is
 /// "not modelled", never "no" — see [`primitive_performs_no_operation`].
 ///
 /// # A row is about one archive, not one package
@@ -702,10 +704,96 @@ pub struct NegativeClaimRow {
     /// primitive spelling of the owning dialect.
     pub export: &'static str,
     pub domain: CallClaimDomain,
+    /// Which resolutions of the archive the row answers for. Every row the
+    /// table carried before 2026-09-25 is [`RowScope::EveryCondition`], and
+    /// only those answer [`DialectNegativeAuthority::denies`] and
+    /// [`primitive_performs_no_operation`]; a [`RowScope::HostTarget`] row is
+    /// reachable only through [`host_target_row`], whose caller must replay
+    /// the scope's premises.
+    pub scope: RowScope,
     /// Every document, runtime file, and condition the row was read from.
     /// Never empty, and never a mix of the two [`AuditedCitation`] kinds: a row
     /// has one authority, and a test pins that.
     pub citations: &'static [AuditedCitation],
+}
+
+/// Which resolutions of its archive a [`NegativeClaimRow`] answers for.
+///
+/// # Why a row can be narrower than its archive
+///
+/// A row is `(package, version, export, domain)`, and the certification tier
+/// binds the archive the callee's *declaration* lives in. The runtime a
+/// consumer executes is chosen by the `exports` condition, and one archive can
+/// ship bodies that differ by condition: `solid-js@2.0.0-rc.3`'s `createSignal`
+/// performs no `create` in its browser build and reaches `ctx.serialize` in its
+/// `node`/`worker`/`deno` build, which `semantic-model.md` § creates'
+/// [Decision 2026-09-04] counts as one. "A guarded reach still counts, and a
+/// flat row must withhold" — so the flat row stays withheld, and what the audit
+/// *did* establish is stated as a scoped row the census may consult only when
+/// it can replay the scope.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RowScope {
+    /// The row holds for every runtime file the archive's `exports` map can
+    /// select. The only scope [`DialectNegativeAuthority::denies`] reads.
+    EveryCondition,
+    /// The row holds only where the archive resolves under a host-target
+    /// condition to one of the runtime files the audit read, and only when
+    /// every call the audit followed out of the archive is answered by an
+    /// audited [`RowScope::EveryCondition`] row of the archive it reaches.
+    HostTarget(HostTargetScope),
+}
+
+/// The premises a [`RowScope::HostTarget`] row rests on. Each is checked by
+/// the census terminator against authenticated bytes, never assumed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HostTargetScope {
+    /// The host-target export condition that must be in the certification's
+    /// requested set. A consumer that declared no host never receives a case
+    /// certified under it (`contract_interface::admissible_cases`).
+    pub condition: HostTargetCondition,
+    /// The archive-relative runtime files the audit read, exactly as spelled in
+    /// the pinned per-file manifest. The archive's `.` entry, resolved under
+    /// exactly the requested condition set, must select one of them; a file the
+    /// audit did not walk refuses even when the condition matches.
+    pub runtime: &'static [&'static str],
+    /// `(package, export, domain)` answers the reading delegated to: calls the
+    /// audit followed into another archive and read there. Each must be denied
+    /// by an [`RowScope::EveryCondition`] row of the one authenticated,
+    /// audited archive of that package in the certification's closure.
+    pub delegates: &'static [(&'static str, &'static str, CallClaimDomain)],
+}
+
+/// A host-target export condition a [`HostTargetScope`] may name.
+///
+/// An enum rather than a string so that adding a host is a compile error at
+/// every match, including the consumer's admission rule, which drops every
+/// case scoped by one of these for a host that declared none.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HostTargetCondition {
+    Browser,
+}
+
+impl HostTargetCondition {
+    /// Every host-target condition a row can be scoped by.
+    pub const ALL: [Self; 1] = [Self::Browser];
+
+    /// The export-condition spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Browser => "browser",
+        }
+    }
+
+    /// Whether `condition` is the spelling of some host-target condition a
+    /// row can be scoped by. A consumer host that declared no conditions never
+    /// receives an artifact case carrying one.
+    #[must_use]
+    pub fn names(condition: &str) -> bool {
+        Self::ALL
+            .into_iter()
+            .any(|scoped| scoped.as_str() == condition)
+    }
 }
 
 /// One dialect's negative authority: which archives it audited, and what those
@@ -744,6 +832,11 @@ impl DialectNegativeAuthority {
     /// An archive this authority does not list — including one that agrees on
     /// name and version but not on integrity or manifest digest — denies
     /// nothing.
+    ///
+    /// Only a [`RowScope::EveryCondition`] row answers here. A
+    /// [`RowScope::HostTarget`] row is a narrower claim whose premises the
+    /// caller must replay, so it is reachable only through
+    /// [`Self::host_target`].
     #[must_use]
     pub fn denies(&self, archive: &AuditedArchive, export: &str, domain: CallClaimDomain) -> bool {
         self.archives.contains(archive)
@@ -752,7 +845,35 @@ impl DialectNegativeAuthority {
                     && row.version == archive.version
                     && row.export == export
                     && row.domain == domain
+                    && row.scope == RowScope::EveryCondition
             })
+    }
+
+    /// The [`RowScope::HostTarget`] scope this authority states for exactly
+    /// `(archive, export, domain)`, when it lists `archive` and carries such a
+    /// row. `None` otherwise, including where the row is
+    /// [`RowScope::EveryCondition`] (ask [`Self::denies`]).
+    #[must_use]
+    pub fn host_target(
+        &self,
+        archive: &AuditedArchive,
+        export: &str,
+        domain: CallClaimDomain,
+    ) -> Option<&'static HostTargetScope> {
+        if !self.archives.contains(archive) {
+            return None;
+        }
+        self.rows.iter().find_map(|row| match &row.scope {
+            RowScope::HostTarget(scope)
+                if row.package == archive.name
+                    && row.version == archive.version
+                    && row.export == export
+                    && row.domain == domain =>
+            {
+                Some(scope)
+            }
+            _ => None,
+        })
     }
 }
 
@@ -843,18 +964,70 @@ pub fn canonical_primitive_name(name: &str) -> bool {
 /// archive of `package` answers here. That is the same proposal-only latitude,
 /// and it is why this function must never grow a proof-bearing caller — the
 /// archive-scoped answer is [`primitive_performs_no_operation`]'s.
+///
+/// # The case's conditions decide whether a scoped row is consulted
+///
+/// `conditions` is the export-condition set of the artifact case being
+/// proposed. A [`RowScope::HostTarget`] row answers only when its condition is
+/// in that set, so an `["import"]` case never proposes a closure that only a
+/// `["browser","import"]` certification could discharge — the census would
+/// withhold it, and the proposal would have cost a certification pass to learn
+/// nothing. Everything else the census checks about the scope (the resolved
+/// runtime file, the delegated archive) is left to the census: this function
+/// stays name-level.
 #[must_use]
-pub fn some_audit_denies_primitive(package: &str, export: &str, domain: CallClaimDomain) -> bool {
+pub fn some_audit_denies_primitive(
+    package: &str,
+    export: &str,
+    domain: CallClaimDomain,
+    conditions: &std::collections::BTreeSet<String>,
+) -> bool {
     if package.is_empty() || export.is_empty() || !canonical_primitive_name(export) {
         return false;
     }
     DIALECTS.iter().any(|dialect| {
         let authority = dialect.negative_claim_authority();
-        authority
-            .rows
-            .iter()
-            .any(|row| row.package == package && row.export == export && row.domain == domain)
+        authority.rows.iter().any(|row| {
+            row.package == package
+                && row.export == export
+                && row.domain == domain
+                && match &row.scope {
+                    RowScope::EveryCondition => true,
+                    RowScope::HostTarget(scope) => conditions.contains(scope.condition.as_str()),
+                }
+        })
     })
+}
+
+/// The [`RowScope::HostTarget`] scope every dialect listing `archive` states
+/// for `(archive, export, domain)`, or `None`.
+///
+/// The census terminator's entry to a scoped row, and only that. `Some` is
+/// **not** an answer: it hands the caller the premises it must replay against
+/// authenticated bytes — the requested condition set, the runtime file the
+/// archive resolves to under exactly that set, and each delegated archive's own
+/// [`primitive_performs_no_operation`] answer. Cross-dialect agreement is the
+/// same as [`primitive_performs_no_operation`]'s: every authority listing the
+/// exact tuple must state the identical scope, and one authority's silence is
+/// silence.
+#[must_use]
+pub fn host_target_row(
+    archive: &AuditedArchive,
+    export: &str,
+    domain: CallClaimDomain,
+) -> Option<&'static HostTargetScope> {
+    if export.is_empty() || !canonical_primitive_name(export) {
+        return None;
+    }
+    let mut answers = DIALECTS.iter().filter_map(|dialect| {
+        let authority = dialect.negative_claim_authority();
+        authority
+            .archives
+            .contains(archive)
+            .then(|| authority.host_target(archive, export, domain))
+    });
+    let first = answers.next()??;
+    answers.all(|other| other == Some(first)).then_some(first)
 }
 
 /// Whether the audited contract for `archive` publishes **no** operation of
@@ -3446,6 +3619,8 @@ mod tests {
     /// next.
     #[test]
     fn a_denial_belongs_to_one_package_and_does_not_travel_by_name() {
+        // An `["import"]` case, which is every case the tier holds.
+        let none = std::collections::BTreeSet::new();
         for export in [
             "createSignal",
             "createMemo",
@@ -3455,12 +3630,37 @@ mod tests {
             "createOptimisticStore",
         ] {
             assert!(
-                some_audit_denies_primitive("@solidjs/signals", export, CallClaimDomain::Creates),
+                some_audit_denies_primitive(
+                    "@solidjs/signals",
+                    export,
+                    CallClaimDomain::Creates,
+                    &none
+                ),
                 "{export} is denied for the package whose row it is"
             );
             assert!(
-                !some_audit_denies_primitive("solid-js", export, CallClaimDomain::Creates),
+                !some_audit_denies_primitive("solid-js", export, CallClaimDomain::Creates, &none),
                 "solid-js re-declares {export}, and that implementation has no row"
+            );
+        }
+        // A `["browser","import"]` case: `createSignal` alone carries a row
+        // scoped to `browser` (§ 7.3); the five others still have none.
+        let browser = ["browser", "import"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect::<std::collections::BTreeSet<_>>();
+        for (export, scoped) in [
+            ("createSignal", true),
+            ("createMemo", false),
+            ("createStore", false),
+            ("createProjection", false),
+            ("createOptimistic", false),
+            ("createOptimisticStore", false),
+        ] {
+            assert_eq!(
+                some_audit_denies_primitive("solid-js", export, CallClaimDomain::Creates, &browser),
+                scoped,
+                "solid-js {export} under a browser case"
             );
         }
 
@@ -3470,7 +3670,12 @@ mod tests {
         // look like a re-declaration.
         for export in ["untrack", "createRoot", "onCleanup", "flush"] {
             assert!(
-                some_audit_denies_primitive("@solidjs/signals", export, CallClaimDomain::Creates),
+                some_audit_denies_primitive(
+                    "@solidjs/signals",
+                    export,
+                    CallClaimDomain::Creates,
+                    &none
+                ),
                 "{export} keeps its row"
             );
         }
@@ -3480,12 +3685,14 @@ mod tests {
         assert!(!some_audit_denies_primitive(
             "",
             "createSignal",
-            CallClaimDomain::Creates
+            CallClaimDomain::Creates,
+            &none
         ));
         assert!(!some_audit_denies_primitive(
             "@solid-primitives/scheduled",
             "createSignal",
-            CallClaimDomain::Creates
+            CallClaimDomain::Creates,
+            &none
         ));
     }
 
@@ -3499,17 +3706,18 @@ mod tests {
     /// Each row is `creates` alone.
     #[test]
     fn the_owner_and_context_rows_deny_creates_for_their_declaring_package_only() {
+        let none = std::collections::BTreeSet::new();
         for (package, export, other) in [
             ("@solidjs/signals", "runWithOwner", "solid-js"),
             ("solid-js", "createContext", "@solidjs/signals"),
             ("solid-js", "useContext", "@solidjs/signals"),
         ] {
             assert!(
-                some_audit_denies_primitive(package, export, CallClaimDomain::Creates),
+                some_audit_denies_primitive(package, export, CallClaimDomain::Creates, &none),
                 "{package} {export}"
             );
             assert!(
-                !some_audit_denies_primitive(other, export, CallClaimDomain::Creates),
+                !some_audit_denies_primitive(other, export, CallClaimDomain::Creates, &none),
                 "{other} {export}: the denial does not travel by name"
             );
             for domain in [
@@ -3518,7 +3726,7 @@ mod tests {
                 CallClaimDomain::Writes,
             ] {
                 assert!(
-                    !some_audit_denies_primitive(package, export, domain),
+                    !some_audit_denies_primitive(package, export, domain, &none),
                     "{package} {export} {domain:?}: the audit decided creates only"
                 );
             }

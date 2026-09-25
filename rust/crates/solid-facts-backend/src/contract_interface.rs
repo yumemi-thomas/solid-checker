@@ -936,12 +936,33 @@ pub fn admitted_project_artifacts(
 /// module reads catalog metadata and never opens a document. The index holds
 /// the semantics, so the index is where the comparison belongs, and handing it
 /// the candidates is all this can soundly do.
+///
+/// **Except a host-scoped case, which an undeclared host never receives.** A
+/// case certified under a host-target condition a dialect row can be scoped by
+/// (`browser`, [`solid_dialect::HostTargetCondition`]) may have closed a domain
+/// on a reading that holds only for that host's runtime body — `solid-js`'
+/// `createSignal` performs no `create` in `dist/solid.js` and reaches
+/// `ctx.serialize` in `dist/server.js`. A linter host does not know whether the
+/// code it checks runs in a browser or renders on a server, so it is handed no
+/// such case at all, before `agreed_admissions` compares what is left: agreement
+/// with an unscoped case must not smuggle a scoped claim in. A host opts in by
+/// declaring the condition (`--runtime-target browser`, or the condition
+/// itself), and then the subset rule below applies unchanged.
 pub(crate) fn admissible_cases<'a>(
     reaching: &[&'a AuthenticCase],
     declared: &[String],
 ) -> Vec<&'a AuthenticCase> {
     if declared.is_empty() {
-        return reaching.to_vec();
+        return reaching
+            .iter()
+            .copied()
+            .filter(|case| {
+                !case
+                    .conditions
+                    .iter()
+                    .any(|condition| solid_dialect::HostTargetCondition::names(condition))
+            })
+            .collect();
     }
     select_declared_case(reaching, declared)
         .into_iter()
@@ -1786,11 +1807,55 @@ mod tests {
             "a host declaring more than the case needs still matches it"
         );
         // Two real artifacts and no declaration is not something *this* can
-        // decide, so both travel on. A server bundle and a browser bundle
-        // usually state different claims, and the index refuses them then; if
-        // they state identical claims, applying either is applying the same
-        // answer. Which of those it is cannot be read off a path.
-        assert_eq!(admissible(&cases, &[]), ["server", "client"]);
+        // decide, so what may travel on does, and the index compares it. The
+        // browser case may not: it can rest on a dialect row scoped to the
+        // browser host (2026-09-25), so an undeclared host never receives it,
+        // and the server case travels alone. It is still no *selection*: a
+        // lone candidate under no declaration is a candidate, not an answer
+        // about the host.
+        assert_eq!(admissible(&cases, &[]), ["server"]);
+    }
+
+    /// The owner's rule for a host-scoped case: an undeclared host never
+    /// receives one, whether it is the only candidate or one of several, and a
+    /// host that declares the condition receives it by the subset rule.
+    #[test]
+    fn a_browser_scoped_case_needs_a_declared_browser_host() {
+        let lone = [case("client", "dist/index.js", &["browser", "import"])];
+        assert!(admissible(&lone, &[]).is_empty());
+        assert_eq!(
+            selected(&lone, &["browser", "import"]).as_deref(),
+            Some("client")
+        );
+        assert_eq!(
+            selected(&lone, &["browser", "development", "import"]).as_deref(),
+            Some("client"),
+            "a host declaring more than the case needs still matches it"
+        );
+        assert!(selected(&lone, &["import"]).is_none());
+        assert!(selected(&lone, &["import", "node"]).is_none());
+
+        // Beside the unscoped case the tier's `["import"]` shape: dropped
+        // before any comparison, so agreement with it cannot smuggle a scoped
+        // claim in; the unscoped case is what an undeclared host still sees.
+        let pair = [
+            case("client", "dist/index.js", &["browser", "import"]),
+            case("plain", "dist/index.js", &["import"]),
+        ];
+        assert_eq!(admissible(&pair, &[]), ["plain"]);
+        assert_eq!(
+            selected(&pair, &["browser", "import"]).as_deref(),
+            Some("client"),
+            "the most specific applicable case wins for a browser host"
+        );
+        assert_eq!(selected(&pair, &["import"]).as_deref(), Some("plain"));
+        // Only the conditions a dialect row can be scoped by are dropped: a
+        // `solid` or `node` case still travels to the index as before.
+        let unscoped = [
+            case("solid", "dist/index.js", &["import", "solid"]),
+            case("server", "dist/index.js", &["import", "node"]),
+        ];
+        assert_eq!(admissible(&unscoped, &[]), ["solid", "server"]);
     }
 
     /// Nothing resolved, or nothing certified about what was resolved.
