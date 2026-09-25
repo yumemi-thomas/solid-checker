@@ -978,6 +978,10 @@ function describeScope(scope) {
   for (const target of scope.solidTargets ?? []) filters.push(`solid${target}`);
   if (scope.probeIds?.length) filters.push(`${scope.probeIds.length} exact probe id(s)`);
   if (scope.packages?.length) filters.push(`packages ${scope.packages.join(", ")}`);
+  if (scope.conditions?.length) filters.push(`conditions ${scope.conditions.join(", ")}`);
+  if (scope.consumerEnvironment) {
+    filters.push(`consumer environment ${scope.consumerEnvironment} (delivery only, not a census run)`);
+  }
   return (
     `PARTIAL -- ${filters.join(", ")} (${ran} probes run). ` +
     "Not comparable to a full-corpus run."
@@ -1078,6 +1082,14 @@ export function buildReport({
       solidTargets: scope?.solidTargets ?? [],
       probeIds: scope?.probeIds ?? [],
       ...(scope?.packages?.length ? { packages: scope.packages } : {}),
+      // Both decide what a downstream reader may do with the run, so both have
+      // to survive into the persisted report: the coverage census refuses a
+      // conditioned run and a consumer-environment (delivery) run by reading
+      // exactly these fields, and a scope rebuilt without them passed both
+      // refusals silently. Written only when set, so an unconditioned corpus
+      // run's report is unchanged byte for byte.
+      ...(scope?.conditions?.length ? { conditions: scope.conditions } : {}),
+      ...(scope?.consumerEnvironment ? { consumerEnvironment: scope.consumerEnvironment } : {}),
       includeSupplemental: scope?.includeSupplemental ?? false,
       probesRun: everyResult.length
     },

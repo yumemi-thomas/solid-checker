@@ -48,6 +48,64 @@ test("package selection is exact, intersects other filters, and owns a separate 
   assert.notEqual(defaultReportPaths(scope).json, defaultReportPaths(runScope()).json);
 });
 
+test("a consumer-environment scope names itself, and every other scope is unchanged", () => {
+  const delivery = runScope({ solidTargets: ["2"], consumerEnvironment: "kobalte-solid2-e9d426d4" });
+  assert.equal(delivery.kind, "filtered");
+  assert.equal(delivery.consumerEnvironment, "kobalte-solid2-e9d426d4");
+  assert.equal(delivery.slug, "solid2-env-kobalte-solid2-e9d426d4");
+  assert.notEqual(defaultReportPaths(delivery).json, defaultReportPaths(runScope({ solidTargets: ["2"] })).json);
+  // The census run's scope, which its pinned report was written from.
+  assert.equal(Object.hasOwn(runScope({ solidTargets: ["2"], packages: ["@x/y"] }), "consumerEnvironment"), false);
+});
+
+test("a Solid 2 probe the signals table cannot pin is an install failure, never an unpinned install", async () => {
+  const manifest = {
+    schemaVersion: 1,
+    rows: [
+      {
+        ...makeRow({ pkg: "@solid-primitives/alpha", version: "1.0.0", solidTarget: "solid2", probes: [] }),
+        probes: [{ id: "alpha|solid2|only", kind: "only", channel: "rc", solid: { "@solidjs/signals": "2.0.0-rc.9" } }]
+      }
+    ],
+    exclusions: [],
+    supplemental: [],
+    limitations: []
+  };
+  const installCalls = [];
+  const [result] = await runBenchmark({ manifest, hooks: successHooks({ installCalls }) });
+  assert.equal(installCalls.length, 0, "nothing was installed");
+  assert.equal(result.outcome, "failure");
+  assert.match(result.stderr, /no pinned @solidjs\/signals release/);
+});
+
+test("a Solid 2 corpus probe hands its signals pin to the install as an override", async () => {
+  const manifest = {
+    schemaVersion: 1,
+    rows: [
+      {
+        ...makeRow({ pkg: "@solid-primitives/alpha", version: "1.0.0", solidTarget: "solid2", probes: [] }),
+        probes: [
+          { id: "alpha|solid2|floor", kind: "floor", channel: "rc", solid: { "solid-js": "2.0.0-rc.0", "@solidjs/web": "2.0.0-rc.0" } },
+          { id: "alpha|solid2|head", kind: "head", channel: "rc", solid: { "solid-js": "2.0.0-rc.3", "@solidjs/web": "2.0.0-rc.3" } }
+        ]
+      }
+    ],
+    exclusions: [],
+    supplemental: [],
+    limitations: []
+  };
+  const installCalls = [];
+  const results = await runBenchmark({ manifest, hooks: successHooks({ installCalls }) });
+  assert.deepEqual(installCalls.map(call => call.overrides), [
+    { "@solidjs/signals": "2.0.0-rc.0" },
+    { "@solidjs/signals": "2.0.0-rc.6" }
+  ]);
+  assert.deepEqual(installCalls[0].specs, ["@solid-primitives/alpha@1.0.0", "solid-js@2.0.0-rc.0", "@solidjs/web@2.0.0-rc.0"], "the specs, and so the cache key's spec half, are unchanged");
+  // The success hook reports no pin facts, and an unverified pin fails closed.
+  assert.deepEqual(results.map(result => result.class), ["install-failure", "install-failure"]);
+  assert.match(results[0].signature, /pin-unverified: @solidjs\/signals/);
+});
+
 test("graph retention preserves nodes and edges without changing the compact default", () => {
   const report = { results: [{ dependencyPlan: { complete: true, nodes: [1], edges: [2], graphDigest: "digest" } }] };
   assert.deepEqual(reportForPersistence(report).results[0].dependencyPlan, { complete: true, graphDigest: "digest" });

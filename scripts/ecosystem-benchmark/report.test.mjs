@@ -1293,6 +1293,39 @@ test("a package report preserves the selector through normalization and renderin
   assert.match(renderMarkdown(report), /Scope: PARTIAL -- packages @solid-primitives\/utils/);
 });
 
+// The coverage census refuses a conditioned run and a consumer-environment
+// run by reading these two scope fields out of the persisted report. The scope
+// used to be rebuilt without `conditions`, so that refusal could never fire on a
+// real run; an unconditioned corpus run must still persist no new key at all.
+test("a conditioned or consumer-environment scope survives into the report, and a plain one gains nothing", () => {
+  const base = {
+    manifest: { generatedAt: "2026-01-01T00:00:00.000Z", rows: [] },
+    results: [],
+    startedAt: "2026-01-01T00:00:00.000Z",
+    finishedAt: "2026-01-01T00:00:01.000Z"
+  };
+  const delivery = buildReport({
+    ...base,
+    scope: { kind: "filtered", solidTargets: ["2"], conditions: ["node"], consumerEnvironment: "kobalte-solid2-e9d426d4" }
+  });
+  assert.deepEqual(delivery.scope.conditions, ["node"]);
+  assert.equal(delivery.scope.consumerEnvironment, "kobalte-solid2-e9d426d4");
+  assert.match(renderMarkdown(delivery), /consumer environment kobalte-solid2-e9d426d4 \(delivery only, not a census run\)/);
+  assert.match(renderMarkdown(delivery), /conditions node/);
+
+  const census = buildReport({ ...base, scope: { kind: "filtered", solidTargets: ["2"], conditions: [], packages: ["x"] } });
+  assert.deepEqual(Object.keys(census.scope), [
+    "kind",
+    "sentinel",
+    "families",
+    "solidTargets",
+    "probeIds",
+    "packages",
+    "includeSupplemental",
+    "probesRun"
+  ]);
+});
+
 test("an exact-probe report retains its complete row identity set", () => {
   const results = [makeResult({ package: "@kobalte/core", version: "0.13.13", family: "kobalte" })];
   const probeIds = ["@kobalte/core@0.13.13|solid1|only"];

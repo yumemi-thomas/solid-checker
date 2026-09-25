@@ -399,10 +399,44 @@ contract-coverage-census: build-checker-release
 	$(BUN) scripts/probe-recipe-addressing.mjs \
 	  --run "$(CURDIR)/rust/target/coverage-census/run.json"
 
-# Regenerates the compiled-in accepted-contract tier from the same run the
-# census measured. Delivery and measurement come from one certification: a
-# bundle set built from a different run than the pinned numbers would ship
-# contracts nobody counted.
+# Delivery-only certification runs, one per reviewed consumer environment in
+# scripts/ecosystem-benchmark/consumer-environments.json: each certifies the
+# listed packages, cloned from their solid2 manifest rows, in the exact tree
+# that consumer installs (its runtime tuple and closure pins), with the census
+# run's own flags so the two differ only in environment. Writes
+# rust/target/consumer-environments/<id>/run.json. The census refuses these
+# runs; they are measured by re-sweeping the consumer each one names.
+CONSUMER_ENVIRONMENT_RUNS := $(CURDIR)/rust/target/consumer-environments
+
+consumer-environment-runs: build-checker-release
+	@set -e; \
+	for id in $$($(BUN) scripts/ecosystem-benchmark/run.mjs --print-consumer-environments); do \
+	  mkdir -p "$(CONSUMER_ENVIRONMENT_RUNS)/$$id"; \
+	  SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
+	    SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
+	    $(BUN) scripts/ecosystem-benchmark/run.mjs --consumer-environment "$$id" \
+	    --timeout 1800 --attempt-certification --recover-entrypoints \
+	    --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" --keep-temp \
+	    --json "$(CONSUMER_ENVIRONMENT_RUNS)/$$id/run.json" \
+	    --markdown "$(CONSUMER_ENVIRONMENT_RUNS)/$$id/run.md"; \
+	done
+
+# Regenerates the compiled-in accepted-contract tier from the census run and
+# every delivery run that exists for a reviewed consumer environment.
+#
+# The rule this target used to state -- delivery and measurement come from one
+# certification -- is amended by owner decision (2026-09-26). The census run is
+# still delivered, so everything the pinned census counts ships. A delivery-only
+# run from `consumer-environment-runs` may feed the tier too, *without* being
+# counted by the pinned census: it certifies the tree a real consumer installs,
+# which the corpus floor and head do not, and a bundle is admitted only where
+# its own dependency environment is installed. Those contracts are measured by
+# re-sweeping the consumer the environment was taken from, never by the census
+# pin, and the census refuses such a run outright. Bundles are keyed by
+# dependency environment, so floor, head and delivery certifications of one
+# artifact are separate bundles and never refine one another. A run for an
+# environment the reviewed file no longer lists is not picked up here, and the
+# bundler refuses one if it is passed by hand.
 #
 # Deliberately a separate target. The census is a measurement and is safe to
 # re-run; this writes `pkg/contracts/accepted/**` and the generated
@@ -411,8 +445,12 @@ contract-coverage-census: build-checker-release
 # (`every_bundle_this_build_carries_authenticates`) still passes.
 accepted-bundles: build-checker-debug
 	$(BUN) scripts/bundle-accepted-contracts.mjs \
-	  --run "$(CURDIR)/rust/target/coverage-census/run.json"
+	  --run "$(CURDIR)/rust/target/coverage-census/run.json" \
+	  $$(for id in $$($(BUN) scripts/ecosystem-benchmark/run.mjs --print-consumer-environments); do \
+	    run="$(CONSUMER_ENVIRONMENT_RUNS)/$$id/run.json"; \
+	    if [ -f "$$run" ]; then printf -- '--run %s ' "$$run"; fi; \
+	  done)
 
-.PHONY: contract-coverage-census accepted-bundles
+.PHONY: contract-coverage-census consumer-environment-runs accepted-bundles
 
 .PHONY: ecosystem-discover ecosystem-benchmark-test ecosystem-sentinel ecosystem-benchmark ecosystem-regression

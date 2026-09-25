@@ -194,6 +194,35 @@ against the registry; the report records the choice under
 `checker.installLockfileCache`. Before this, install slot time swung between
 74 s and 478 s across otherwise identical runs as Bun re-fetched manifests.
 
+Every Solid 2 probe pins `@solidjs/signals`, which no spec names on its own
+(`solid-js`'s caret range would otherwise resolve the registry's newest
+release): `solid-js@2.0.0-rc.0` installs signals rc.0, every other Solid 2
+environment rc.6, and a row that names signals itself installs exactly that
+version (`lib/runtime-pins.mjs`). The pin travels as a package.json `override`,
+the lockfile cache key covers the overrides, and a pinned probe whose own entry
+is missing inherits the spec-only entry when that lock already resolves the pin
+(installed frozen, so Bun confirms it). `verifyInstall` then requires exactly
+one installed copy, at the pinned version and integrity, and that `solid-js`
+resolves it. The pins are the versions every cached lock resolved on
+2026-09-26, so pinning moves no probe; `runtime-pins.test.mjs` fails if the
+cache and the pins disagree.
+
+## Consumer environments (delivery-only runs)
+
+`consumer-environments.json` lists, as reviewed data, the exact Solid 2 trees
+real consumers install: a runtime tuple, the closure pins from the consumer's
+lockfile, and the tier packages whose version and integrity equal a `solid2`
+manifest row. `run.mjs --consumer-environment <id>` certifies exactly those
+rows, cloned in memory with one `kind: "environment"` probe each, in that tree;
+the committed manifest is not changed. It refuses a package that disagrees with
+its row, a runtime that is not an audited archive, and a runtime above
+`AUDITED_SOLID_2`. The scope records the environment, the coverage census
+refuses the run, and `make accepted-bundles` bundles it beside the census run
+(`make consumer-environment-runs` writes
+`rust/target/consumer-environments/<id>/run.json`). Its yield is measured by
+re-sweeping the consumer, never by the census pin. Derive a new entry with
+`derive-consumer-environment.mjs` and review it before adding it.
+
 Certification children run with `SOLID_CHECKER_DURABLE_WRITES=none`: every
 catalog a probe publishes lives in a temporary directory removed seconds
 later, so the full-disk flushes (`F_FULLFSYNC` on Apple platforms, about ten

@@ -1,12 +1,18 @@
 #!/usr/bin/env bun
 // Regenerates the compiled-in accepted-contract tier from a certification run.
 //
-//   bun scripts/bundle-accepted-contracts.mjs --run <run.json>
+//   bun scripts/bundle-accepted-contracts.mjs --run <run.json> [--run <run.json> ...]
 //   bun scripts/bundle-accepted-contracts.mjs --catalogs <DIR> --dry-run
 //
-// The inputs are the published catalogs a `--keep-temp` ecosystem run left
-// behind -- the same artifacts `contract-coverage-census.mjs` reads, so the
-// measurement and the delivery come from one run rather than two. For each
+// The inputs are the published catalogs `--keep-temp` ecosystem runs left
+// behind. The census run is one of them -- the same artifacts
+// `contract-coverage-census.mjs` reads, so what the census measures is
+// delivered -- and each consumer-environment run is another: a delivery-only
+// certification in a tree a real consumer installs, which the census refuses
+// and which is measured by re-sweeping that consumer instead (owner decision,
+// 2026-09-26; see the Makefile's `accepted-bundles`). `--run` is repeatable
+// for that reason. Their bundles cannot collide with the census's: a bundle is
+// keyed by the dependency environment it was proven in (`bundleKey`). For each
 // catalog this shells out to `solid-contract-bundle`, which authenticates the
 // certification's own receipt and re-issues it as a built-in one. Nothing is
 // re-proven here and this script proves nothing; see `contract_bundling.rs`.
@@ -31,6 +37,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { nameableEntrypoint } from "./contract-coverage-census.mjs";
+import { loadConsumerEnvironments } from "./ecosystem-benchmark/lib/consumer-environments.mjs";
 
 const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BUNDLE_ROOT = join(REPOSITORY, "pkg/contracts/accepted");
@@ -49,26 +56,69 @@ function fail(message) {
   process.exit(1);
 }
 
-function parseArguments(argv) {
-  const options = { run: "", catalogs: "", dryRun: false, allEntrypoints: false };
+/** Throws on a malformed command line; `main` turns that into an exit. */
+export function parseArguments(argv) {
+  const options = { runs: [], catalogs: "", dryRun: false, allEntrypoints: false };
+  const value = (index, message) => {
+    const next = argv[index];
+    if (next === undefined || next.startsWith("--")) throw new Error(message);
+    return next;
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--run") {
-      options.run = argv[++index] ?? fail("--run needs a path");
+      options.runs.push(value(++index, "--run needs a path"));
     } else if (argument === "--catalogs") {
-      options.catalogs = argv[++index] ?? fail("--catalogs needs a directory");
+      options.catalogs = value(++index, "--catalogs needs a directory");
     } else if (argument === "--dry-run") {
       options.dryRun = true;
     } else if (argument === "--all-entrypoints") {
       options.allEntrypoints = true;
     } else {
-      fail(`unknown argument ${argument}`);
+      throw new Error(`unknown argument ${argument}`);
     }
   }
-  if (!options.run && !options.catalogs) {
-    fail("one of --run <run.json> or --catalogs <DIR> is required");
+  const resolved = options.runs.map(run => resolve(run));
+  const repeated = resolved.find((run, index) => resolved.indexOf(run) !== index);
+  if (repeated) throw new Error(`--run ${repeated} is given twice`);
+  if (options.runs.length === 0 && !options.catalogs) {
+    throw new Error("one of --run <run.json> or --catalogs <DIR> is required");
   }
   return options;
+}
+
+/**
+ * The retained output directory of every result of every run, in the order
+ * given. Throws for a run that retained nothing -- it was not a `--keep-temp`
+ * run, and bundling from it would silently deliver less than was certified --
+ * and for a consumer-environment run whose environment is not a reviewed one:
+ * a delivery run is admitted into the tier only for an environment
+ * scripts/ecosystem-benchmark/consumer-environments.json lists.
+ */
+export function retainedOutputDirectories(runPaths, { reviewedEnvironments = null } = {}) {
+  const roots = [];
+  for (const runPath of runPaths) {
+    const report = JSON.parse(readFileSync(resolve(runPath), "utf8"));
+    const environment = report?.scope?.consumerEnvironment;
+    if (environment) {
+      const reviewed = reviewedEnvironments ?? loadConsumerEnvironments().environments.map(entry => entry.id);
+      if (!reviewed.includes(environment)) {
+        throw new Error(
+          `${runPath} is a delivery run for consumer environment ${environment}, ` +
+            "which scripts/ecosystem-benchmark/consumer-environments.json does not list"
+        );
+      }
+    }
+    const before = roots.length;
+    for (const result of report.results ?? []) {
+      const directory = result.retainedArtifacts?.outputDir;
+      if (directory) roots.push(directory);
+    }
+    if (roots.length === before) {
+      throw new Error(`${runPath} retained no output directories; the run needs --keep-temp`);
+    }
+  }
+  return roots;
 }
 
 /** Every published `accepted-contracts.json` under a retained output tree. */
@@ -266,20 +316,16 @@ export function relate(left, right) {
 }
 
 function main() {
-  const options = parseArguments(process.argv.slice(2));
+  let options;
+  let roots;
+  try {
+    options = parseArguments(process.argv.slice(2));
+    roots = retainedOutputDirectories(options.runs);
+  } catch (error) {
+    fail(error.message);
+  }
   if (!existsSync(BUNDLER)) {
     fail(`${BUNDLER} does not exist; run \`make build-checker-debug\``);
-  }
-  const roots = [];
-  if (options.run) {
-    const report = JSON.parse(readFileSync(resolve(options.run), "utf8"));
-    for (const result of report.results ?? []) {
-      const directory = result.retainedArtifacts?.outputDir;
-      if (directory) roots.push(directory);
-    }
-    if (roots.length === 0) {
-      fail(`${options.run} retained no output directories; the run needs --keep-temp`);
-    }
   }
   if (options.catalogs) roots.push(resolve(options.catalogs));
   for (const directory of roots) {

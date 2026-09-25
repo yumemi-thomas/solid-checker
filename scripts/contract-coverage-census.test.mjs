@@ -209,6 +209,15 @@ test("a pin is refused for a run with no single denominator", () => {
 
     // A run that predates the field is not a conditioned run.
     assert.equal(attempt({ scope: { solidTargets: ["2"] } }), "solid2");
+
+    // A consumer-environment run is delivery only: its catalogs feed the
+    // compiled-in tier and are measured by re-sweeping that consumer, never
+    // counted here.
+    assert.equal(
+      attempt({ scope: { solidTargets: ["2"], conditions: [], consumerEnvironment: "kobalte-solid2-e9d426d4" } }),
+      null
+    );
+    assert.match(errors.at(-1), /delivery run for consumer environment kobalte-solid2-e9d426d4, not a census run/);
   } finally {
     process.exit = original;
     console.error = originalError;

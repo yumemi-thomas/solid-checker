@@ -117,6 +117,19 @@ function fail(message) {
 /// restricted to (`["1"]`, `["2"]`); an unrestricted run measures both and has
 /// no single denominator to pin.
 export function censusTarget(run) {
+  // A consumer-environment run certifies rows cloned into one consumer's
+  // installed tree so the compiled-in tier can be delivered there (owner
+  // decision, 2026-09-26). It is delivery only: its catalogs are not the
+  // corpus the pinned denominator describes, and its yield is measured by
+  // re-sweeping that consumer. Counting it here would move the pin with
+  // certifications the census never selected.
+  const environment = run?.scope?.consumerEnvironment;
+  if (environment) {
+    fail(
+      `this run is a delivery run for consumer environment ${environment}, not a census run; ` +
+        "measure it by re-sweeping that consumer, and pin the census from `make contract-coverage-census`"
+    );
+  }
   const targets = run?.scope?.solidTargets ?? [];
   if (targets.length !== 1) {
     fail(

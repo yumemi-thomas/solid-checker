@@ -5,9 +5,19 @@
 // the same artifact left open when it was reached as another package's
 // dependency node. Dropping those cost the largest primitives contract.
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, test } from "vitest";
 
-import { bundleKey, claimsOf, collectBundles, relate } from "./bundle-accepted-contracts.mjs";
+import {
+  bundleKey,
+  claimsOf,
+  collectBundles,
+  parseArguments,
+  relate,
+  retainedOutputDirectories
+} from "./bundle-accepted-contracts.mjs";
 
 const document = (summary) =>
   JSON.stringify({
@@ -149,5 +159,97 @@ describe("certifications of one artifact in different environments", () => {
   test("an entry that states no environment is refused rather than keyed", () => {
     const unstated = entry(undefined, open, "a");
     assert.throws(() => collectBundles([result(unstated)]), /states no dependency environment/);
+  });
+});
+
+// The census run and every delivery run for a reviewed consumer environment
+// feed one tier (Makefile `accepted-bundles`), so `--run` is repeatable. Their
+// bundles cannot collide: an environment run proves each artifact in another
+// dependency environment, and the environment is part of `bundleKey`.
+describe("bundling from several runs", () => {
+  const withRuns = (reports, body) => {
+    const directory = mkdtempSync(join(tmpdir(), "bundle-runs-"));
+    try {
+      const paths = reports.map((report, index) => {
+        const path = join(directory, `run-${index}.json`);
+        writeFileSync(path, JSON.stringify(report));
+        return path;
+      });
+      return body(paths);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  };
+  const run = (scope, ...outputDirs) => ({
+    scope,
+    results: outputDirs.map(outputDir => ({ retainedArtifacts: { outputDir } }))
+  });
+
+  test("--run is repeatable, a repeated run is refused, and one input is still required", () => {
+    assert.deepEqual(parseArguments(["--run", "a.json", "--run", "b.json", "--dry-run"]).runs, ["a.json", "b.json"]);
+    assert.throws(() => parseArguments(["--run", "a.json", "--run", "./a.json"]), /given twice/);
+    assert.throws(() => parseArguments(["--run"]), /--run needs a path/);
+    assert.throws(() => parseArguments(["--dry-run"]), /one of --run/);
+    assert.equal(parseArguments(["--catalogs", "dir"]).catalogs, "dir");
+  });
+
+  test("every run's retained directories are bundled, in the order given", () => {
+    withRuns(
+      [
+        run({ kind: "filtered", solidTargets: ["2"] }, "/census/a", "/census/b"),
+        run({ kind: "filtered", solidTargets: ["2"], consumerEnvironment: "kobalte-solid2-e9d426d4" }, "/delivery/a")
+      ],
+      paths => {
+        assert.deepEqual(
+          retainedOutputDirectories(paths, { reviewedEnvironments: ["kobalte-solid2-e9d426d4"] }),
+          ["/census/a", "/census/b", "/delivery/a"]
+        );
+      }
+    );
+  });
+
+  test("a run that kept nothing, or a delivery run for an unreviewed environment, is refused", () => {
+    withRuns([run({ kind: "filtered" }, "/census/a"), run({ kind: "filtered" })], paths => {
+      assert.throws(() => retainedOutputDirectories(paths), /run-1\.json retained no output directories/);
+    });
+    withRuns([run({ kind: "filtered", consumerEnvironment: "someone-else" }, "/delivery/a")], paths => {
+      assert.throws(
+        () => retainedOutputDirectories(paths, { reviewedEnvironments: ["kobalte-solid2-e9d426d4"] }),
+        /consumer environment someone-else, which .* does not list/
+      );
+    });
+    // The committed reviewed list is what the Makefile relies on.
+    withRuns([run({ kind: "filtered", consumerEnvironment: "kobalte-solid2-e9d426d4" }, "/delivery/a")], paths => {
+      assert.deepEqual(retainedOutputDirectories(paths), ["/delivery/a"]);
+    });
+  });
+
+  test("a delivery certification of a tier artifact is its own bundle beside the census's", () => {
+    const entry = (signals, digest) => ({
+      packageName: "@solid-primitives/keyed",
+      packageVersion: "3.0.0-next.2",
+      packageIntegrity: "sha512-keyed",
+      specifier: "@solid-primitives/keyed",
+      requestedEntrypoint: ".",
+      exportConditions: ["import"],
+      document: `objects/${digest}.main.json`,
+      documentDigest: `sha256:${digest}`,
+      receipt: `objects/${digest}.receipt.json`,
+      receiptDigest: `sha256:${digest}r`,
+      dependencyEnvironment: [{ name: "@solidjs/signals", version: signals, integrity: `sha512-${signals}` }]
+    });
+    const result = published => ({
+      bundles: [published],
+      objects: { [published.document]: open, [published.receipt]: "{}" }
+    });
+    const { ordered } = collectBundles([
+      result(entry("2.0.0-rc.0", "floor")),
+      result(entry("2.0.0-rc.6", "head")),
+      result(entry("2.0.0-rc.3", "kobalte"))
+    ]);
+    assert.deepEqual(
+      ordered.map(bundle => bundle.dependencyEnvironment[0].version).sort(),
+      ["2.0.0-rc.0", "2.0.0-rc.3", "2.0.0-rc.6"]
+    );
   });
 });

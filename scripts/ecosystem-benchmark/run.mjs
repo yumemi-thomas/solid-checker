@@ -57,9 +57,16 @@ import {
   installPackages as bunInstall,
   readInstalledVersions,
   readLockIntegrity,
+  readPinnedInstallation,
   verifyInstall
 } from "./lib/install.mjs";
 import { sortRows, validateManifest } from "./lib/manifest.mjs";
+import { corpusSignalsPin } from "./lib/runtime-pins.mjs";
+import {
+  consumerEnvironmentManifest,
+  loadConsumerEnvironments
+} from "./lib/consumer-environments.mjs";
+import { loadAuditedArchives } from "./lib/dialect-authority.mjs";
 import { buildReport, evaluateThresholds, renderMarkdown } from "./lib/report.mjs";
 import {
   certificationImporterPathFor,
@@ -412,13 +419,75 @@ function buildSpecs(row, probe, completion = {}) {
 // `expected` feeds `verifyInstall` from lib/install.mjs directly. Only the
 // probed package itself carries an integrity pin in the manifest row; the
 // Solid runtime packages are checked by version only (verifyInstall already
-// skips the integrity comparison whenever `want.integrity` is falsy).
+// skips the integrity comparison whenever `want.integrity` is falsy). The
+// pins below are what hold a runtime package to its bytes.
 function buildExpectedVersions(row, probe, completion = {}) {
   const expected = { [row.package]: { version: row.version, integrity: row.integrity ?? null } };
   for (const [name, version] of Object.entries({ ...(probe.solid ?? {}), ...completion })) {
     expected[name] = { version, integrity: null };
   }
   return expected;
+}
+
+/// The packages a probe's install is pinned to beyond its specs, as
+/// `{ [name]: { version, integrity, required, resolvedFrom? } }`. Every pin
+/// becomes a package.json override, so it holds transitively, and
+/// `verifyInstall` then requires each installed copy to be the pinned bytes.
+///
+/// - A Solid 2 corpus probe pins `@solidjs/signals` (lib/runtime-pins.mjs),
+///   which no spec otherwise names: `solid-js`'s caret range would resolve
+///   whatever the registry's newest release is. Exactly one copy, and the one
+///   `solid-js` resolves.
+/// - A consumer-environment probe pins its whole runtime tuple and every
+///   closure package the consumer's lockfile records
+///   (lib/consumer-environments.mjs); a closure pin a given row does not reach
+///   is simply not installed, which is not a problem.
+/// - A Solid 1 probe pins nothing.
+///
+/// Throws when a Solid 2 probe needs a signals release this build has no
+/// integrity for; the caller turns that into the probe's install failure.
+export function installPins(row, probe, completion = {}) {
+  if (row?.solidTarget !== "solid2") return {};
+  if (probe?.kind === "environment") {
+    const environment = probe.environment ?? {};
+    const pins = {};
+    for (const [name, pin] of Object.entries(environment.pins ?? {})) {
+      pins[name] = { version: pin.version, integrity: pin.integrity, required: false };
+    }
+    for (const [name, pin] of Object.entries(environment.runtime ?? {})) {
+      pins[name] = { version: pin.version, integrity: pin.integrity, required: true };
+    }
+    if (pins["@solidjs/signals"]) pins["@solidjs/signals"].resolvedFrom = "solid-js";
+    return pins;
+  }
+  const signals = corpusSignalsPin(probe, completion);
+  if (!signals) {
+    throw new Error(
+      `no pinned @solidjs/signals release for ${probe?.id ?? row.package}; ` +
+        "add its integrity to lib/runtime-pins.mjs before measuring it"
+    );
+  }
+  return {
+    "@solidjs/signals": { ...signals, required: true, resolvedFrom: "solid-js" }
+  };
+}
+
+/// Everything one probe's install is made of: the specs Bun is handed, the
+/// versions `verifyInstall` expects, the pins, and the overrides that carry
+/// the pins into package.json. The specs are unchanged by pinning, so a pinned
+/// probe's lockfile cache entry is found from the same spec set.
+export function probeInstallPlan(row, probe, solidReleases = null) {
+  const completion = solidRuntimeCompletion(row, probe, solidReleases);
+  const pins = installPins(row, probe, completion);
+  return {
+    completion,
+    specs: buildSpecs(row, probe, completion),
+    expected: buildExpectedVersions(row, probe, completion),
+    pins,
+    overrides: Object.fromEntries(
+      Object.keys(pins).sort().map(name => [name, pins[name].version])
+    )
+  };
 }
 
 // One file per probe, sibling-safe: probe ids contain "/" (scoped package
@@ -462,7 +531,8 @@ export function runScope({
   probeIds = [],
   packages = [],
   conditions = [],
-  includeSupplemental = false
+  includeSupplemental = false,
+  consumerEnvironment = null
 } = {}) {
   const filters = [];
   if (sentinel) filters.push("sentinel");
@@ -474,6 +544,11 @@ export function runScope({
   // filter does, and the scope carries the set so a pin cannot silently claim
   // a denominator the run did not use.
   for (const condition of [...conditions].sort()) filters.push(`cond-${condition}`);
+  // A consumer-environment run certifies rows cloned into one real consumer's
+  // installed tree (lib/consumer-environments.mjs), not manifest probes. It is a
+  // delivery run: the census refuses it as a measurement, so the scope has to
+  // say which it is rather than leave that to the probe ids.
+  if (consumerEnvironment) filters.push(`env-${consumerEnvironment}`);
   if (packages.length) {
     const digest = createHash("sha256").update([...packages].sort().join("\0")).digest("hex").slice(0, 12);
     filters.push(`packages-${digest}`);
@@ -493,12 +568,31 @@ export function runScope({
     probeIds: [...probeIds].sort(),
     conditions: [...conditions].sort(),
     ...(packages.length ? { packages: [...packages].sort() } : {}),
+    ...(consumerEnvironment ? { consumerEnvironment } : {}),
     includeSupplemental,
     // A stable, order-independent name for this scope. `full` owns the
     // canonical report path; every filter earns its own so it can never
     // overwrite the corpus-wide artifact by default.
     slug: filters.length ? filters.join("-") : "full"
   };
+}
+
+/// Why a `--consumer-environment` run cannot also take the given filters, if
+/// it cannot. The environment *is* the selection: a package, family, probe or
+/// sentinel filter would silently shrink a delivery the Makefile then bundles
+/// as the whole environment, and a Solid 1 target has no environment at all.
+export function consumerEnvironmentConflicts(options) {
+  if (!options?.consumerEnvironment) return [];
+  const conflicts = [];
+  if (options.sentinel) conflicts.push("--sentinel");
+  if (options.families?.length) conflicts.push("--family");
+  if (options.probeIds?.length) conflicts.push("--probe");
+  if (options.packages?.length) conflicts.push("--package");
+  if (options.includeSupplemental) conflicts.push("--include-supplemental");
+  if ((options.solidTargets ?? []).some(target => target !== "2" && target !== "solid2")) {
+    conflicts.push("--solid other than 2");
+  }
+  return conflicts;
 }
 
 // Default report paths derive from the scope. An explicit --json/--markdown
@@ -519,6 +613,7 @@ function describeScopeShort(scope) {
   for (const family of scope.families ?? []) filters.push(`family=${family}`);
   for (const target of scope.solidTargets ?? []) filters.push(`solid${target}`);
   if (scope.probeIds?.length) filters.push(`${scope.probeIds.length} explicit probe(s)`);
+  if (scope.consumerEnvironment) filters.push(`consumer-environment=${scope.consumerEnvironment}`);
   return filters.length ? filters.join(" ") : "filtered";
 }
 
@@ -936,9 +1031,13 @@ async function runProbe(
 ) {
   const now = hooks.now ?? Date.now;
   const overallStart = now();
-  const runtimeCompletion = solidRuntimeCompletion(row, probe, solidReleases);
-  const specs = buildSpecs(row, probe, runtimeCompletion);
-  const expected = buildExpectedVersions(row, probe, runtimeCompletion);
+  let plan;
+  try {
+    plan = probeInstallPlan(row, probe, solidReleases);
+  } catch (error) {
+    return buildInfraFailureResult({ row, probe, error, phase: "install", durationMs: now() - overallStart });
+  }
+  const { completion: runtimeCompletion, specs, expected, pins, overrides } = plan;
 
   let project;
   try {
@@ -954,7 +1053,7 @@ async function runProbe(
     const installStart = now();
     let installResult;
     try {
-      installResult = await hooks.installPackages({ projectDir, specs, expected, timeoutMs });
+      installResult = await hooks.installPackages({ projectDir, specs, expected, timeoutMs, overrides, pins });
     } catch (error) {
       installResult = { status: 1, stdout: "", stderr: error?.stack ?? String(error), timedOut: false };
     }
@@ -978,7 +1077,13 @@ async function runProbe(
     // verification only runs once install itself reported success.
     const verify =
       installClass.class === "success"
-        ? verifyInstall({ expected, versions: installedVersions, integrity: installResult.integrity ?? {} })
+        ? verifyInstall({
+            expected,
+            versions: installedVersions,
+            integrity: installResult.integrity ?? {},
+            pins,
+            pinned: installResult.pinned ?? null
+          })
         : { ok: true, problems: [] };
 
     if (installClass.class !== "success" || !verify.ok) {
@@ -1223,15 +1328,18 @@ async function certifyCompleteProbe(
         probe: item.task.probe,
         phase: "certification"
       });
-      const specs = buildSpecs(item.task.row, item.task.probe);
-      const expected = buildExpectedVersions(item.task.row, item.task.probe);
+      // No release catalog, so no runtime completion: the reinstall keeps the
+      // spec set it has always used. The pins do not depend on it.
+      const { specs, expected, pins, overrides } = probeInstallPlan(item.task.row, item.task.probe);
       let installResult;
       try {
         installResult = await hooks.installPackages({
           projectDir: project.projectDir,
           specs,
           expected,
-          timeoutMs
+          timeoutMs,
+          overrides,
+          pins
         });
       } catch (error) {
         installResult = {
@@ -1248,7 +1356,9 @@ async function certifyCompleteProbe(
           ? verifyInstall({
               expected,
               versions: installResult.installedVersions ?? {},
-              integrity: installResult.integrity ?? {}
+              integrity: installResult.integrity ?? {},
+              pins,
+              pinned: installResult.pinned ?? null
             })
           : { ok: false, problems: [] };
       installationVerified = installResult.status === 0 && verification.ok;
@@ -1678,6 +1788,21 @@ function usage() {
                          which bytes every row is certified about, so the run's
                          scope records it, it earns its own report path, and
                          the coverage census refuses to pin a run that used one
+  --consumer-environment <ID>
+                         a delivery run: certify, instead of the manifest's
+                         probes, one probe per package of the reviewed
+                         consumer environment <ID>
+                         (scripts/ecosystem-benchmark/consumer-environments.json),
+                         each cloned from its solid2 manifest row and installed
+                         with that consumer's runtime tuple and closure pins.
+                         Refuses on any version or integrity that disagrees with
+                         the manifest or the audited runtime archives, and on a
+                         runtime above the audited Solid 2 release. The scope
+                         records the environment, and the coverage census
+                         refuses the run: it feeds the compiled-in tier, it is
+                         never counted by the census pin
+  --print-consumer-environments
+                         print the reviewed consumer-environment ids and exit
   --keep-temp            keep the temporary install directories
   --include-supplemental run the unofficial fork rows too (off by default:
                          forks are listed for review, not part of the corpus)
@@ -1720,6 +1845,8 @@ function parseArgs(argv) {
     recoverProbeIds: [],
     probeRecipeCorpus: null,
     conditions: [],
+    consumerEnvironment: null,
+    printConsumerEnvironments: false,
     keepTemp: false,
     includeSupplemental: false,
     help: false
@@ -1820,6 +1947,12 @@ function parseArgs(argv) {
         }
         break;
       }
+      case "--consumer-environment":
+        options.consumerEnvironment = takeValue(argv, index++, arg);
+        break;
+      case "--print-consumer-environments":
+        options.printConsumerEnvironments = true;
+        break;
       case "--keep-temp":
         options.keepTemp = true;
         break;
@@ -2026,13 +2159,20 @@ function buildRealHooks({
       return { projectDir, outputDir };
     },
 
-    installPackages: async ({ projectDir, specs, expected, timeoutMs }) => {
-      await createProject({ root: projectDir, specs });
-      const result = await bunInstall({ projectDir, specs, timeoutMs, lockfileCache: installLockfileCache });
+    installPackages: async ({ projectDir, specs, expected, timeoutMs, overrides = {}, pins = {} }) => {
+      await createProject({ root: projectDir, specs, overrides });
+      const result = await bunInstall({
+        projectDir,
+        specs,
+        overrides,
+        timeoutMs,
+        lockfileCache: installLockfileCache
+      });
       const names = Object.keys(expected);
       const installedVersions = readInstalledVersions(projectDir, names);
       const integrity = readLockIntegrity(projectDir, names);
-      return { ...result, installedVersions, integrity };
+      const pinned = readPinnedInstallation(projectDir, pins);
+      return { ...result, installedVersions, integrity, pinned };
     },
 
     generateContract: ({ packageRoot, outputPath, timeoutMs, integrity, entrypoints = [] }) => {
@@ -2156,6 +2296,22 @@ async function main(argv = process.argv.slice(2)) {
     return;
   }
 
+  // Needs no binary: the Makefile lists the delivery runs to make with it.
+  if (options.printConsumerEnvironments) {
+    try {
+      for (const environment of loadConsumerEnvironments().environments) console.log(environment.id);
+    } catch (error) {
+      fail(`cannot read the consumer environments: ${error.message}`);
+    }
+    return;
+  }
+
+  const environmentConflicts = consumerEnvironmentConflicts(options);
+  if (environmentConflicts.length) {
+    fail(`--consumer-environment cannot be combined with ${environmentConflicts.join(", ")}`);
+    return;
+  }
+
   // Checked first and unconditionally: no manifest read, no bun install, no
   // subprocess spawn is worth attempting against binaries we have not
   // confirmed exist. See the file header for why there is no fallback.
@@ -2179,6 +2335,30 @@ async function main(argv = process.argv.slice(2)) {
     for (const problem of manifestProblems) console.error(`  - ${problem}`);
     process.exit(2);
     return;
+  }
+
+  // A delivery run replaces the manifest's probes with the environment's own,
+  // derived in memory from the rows it names. The committed manifest is
+  // validated above and never changed.
+  if (options.consumerEnvironment) {
+    try {
+      const { environments } = loadConsumerEnvironments();
+      const environment = environments.find(entry => entry.id === options.consumerEnvironment);
+      if (!environment) {
+        fail(
+          `unknown --consumer-environment ${options.consumerEnvironment}; reviewed ids: ` +
+            (environments.map(entry => entry.id).join(", ") || "(none)")
+        );
+        return;
+      }
+      manifest = consumerEnvironmentManifest(manifest, environment, {
+        auditedArchives: loadAuditedArchives()
+      });
+    } catch (error) {
+      fail(error.message);
+      return;
+    }
+    options.solidTargets = ["2"];
   }
 
   const unknownProbeIds = unknownExplicitProbeIds(manifest, [...options.probeIds, ...options.recoverProbeIds]);
@@ -2210,7 +2390,8 @@ async function main(argv = process.argv.slice(2)) {
     solidTargets: options.solidTargets,
     probeIds: options.probeIds,
     conditions: options.conditions,
-    includeSupplemental: options.includeSupplemental
+    includeSupplemental: options.includeSupplemental,
+    consumerEnvironment: options.consumerEnvironment
   });
   const defaults = defaultReportPaths(scope);
   options.json ??= defaults.json;
@@ -2250,7 +2431,8 @@ async function main(argv = process.argv.slice(2)) {
         JSON.stringify(baselineScope.families ?? []) === JSON.stringify(scope.families) &&
         JSON.stringify(baselineScope.solidTargets ?? []) === JSON.stringify(scope.solidTargets) &&
         JSON.stringify(baselineScope.probeIds ?? []) === JSON.stringify(scope.probeIds) &&
-        JSON.stringify(baselineScope.packages ?? []) === JSON.stringify(scope.packages ?? []);
+        JSON.stringify(baselineScope.packages ?? []) === JSON.stringify(scope.packages ?? []) &&
+        (baselineScope.consumerEnvironment ?? null) === (scope.consumerEnvironment ?? null);
       if (!sameScope) {
         fail(
           `baseline ${options.baseline} covers a different scope than this run ` +
