@@ -1,5 +1,36 @@
 # Precision backlog
 
+## `@solidjs/signals@2.0.0-rc.6` carries its own negative rows (2026-09-25)
+
+Status: **implemented** (ADR 0007, amendment 2026-09-25), answering the
+decision the entry below left open with option 1. Rows are now scoped to the
+archive version they were read on, so no rc.3 reading can answer for other
+bytes. `@solidjs/signals@2.0.0-rc.6` was re-read row by row on its own bytes,
+in all three runtime bundles
+(`docs/package-contract-v2/audits/2026-09-25-solid-2-rc6-signals-negative-rows.md`,
+for the owner's review): **24 of 25 rows granted**; `createOptimisticStore`
+`reads` withheld (new rc.6 landing code reads through the store the call
+created). All 72 citations were recomputed from the bytes; the rc.6 per-file
+digests are pinned under `benchmarks/package-contract-v2/phase0/rc6/`.
+
+Measured (2026-09-25 census, release binary, pinned corpus): on every head row
+(`solid-js@2.0.0-rc.3` resolving signals rc.6) `getOwner` and `onCleanup` now
+bind; `createMicrotask` closes `creates` (20 sites every-import -> some-uses),
+and `throttle` and `rootless` `createCallback` gain `creates`.
+`totals.consumer`: every-import 474 -> 454, some-uses 99 -> 119, clean
+unchanged at 421, nothing lost. Re-pinned. The two `rootless` Singleton exports
+(34 sites) now refuse at the next wall on head, a call through a local binding
+(`singleton`, `disposeRoot`), and `debounce`/`throttle` keep other domains open.
+The floor rows (signals rc.0) still refuse at the archive gate: rc.0 has no
+audited rows.
+
+Found about rc.3 on the way, no live row affected: the rc.3 summaries for
+`createOptimistic`/`createOptimisticStore` close `callbacks: []` although their
+overloads invoke the caller's function; the rc.3 audit's line-prefix scan misses
+code after `*/` on one line. rc.6's integrity is the lockfile value, not
+re-derived from a tarball; no gate provisions an rc.6 tree, so its citations are
+checked against checked-in slices and pinned digests.
+
 ## SC9005 is a warning at the open-claims gate (ADR 0119, 2026-09-25)
 
 Status: **implemented** (ways-to-improve § 3.6, step 5 of § 4). A `SC9005`
