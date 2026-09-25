@@ -16809,6 +16809,7 @@ export const value = phantom;
                                                 arguments: Vec::new(),
                                                 owner: None,
                                                 protocol: InvokeProtocol::Call,
+                                                path: Vec::new(),
                                             })
                                             .collect(),
                                     ),
@@ -16996,6 +16997,345 @@ export const value = phantom;
             finalized.bindings().probe_gate_root,
             super::finalization::empty_probe_gate_root(&plan),
             "the synthesized veto must run before a described closure closes"
+        );
+    }
+
+    /// Item B of ways-to-improve § 3.3, planned from hand-stated summaries so a
+    /// claim the generator's walk would not make can be put to the census:
+    /// each export's `callbacks` is a call per `calls` entry, a member call per
+    /// `members` entry and a `get` per `gets` entry.
+    fn member_callee_fixture_certify(
+        label: &str,
+    ) -> Option<(
+        CertificationPlan,
+        Result<super::FinalizedPolicy2Contract, super::Policy2FinalizationError>,
+    )> {
+        use solid_reactive_ir::contract_semantics::InvokeProtocol;
+        use solid_reactive_ir::{
+            ContractCallback, ContractClaim, ContractEntrypoint, ContractExport, ContractPackage,
+            PackageContract,
+        };
+        type Claim = (
+            &'static str,
+            &'static [usize],
+            &'static [(usize, &'static str)],
+            &'static [usize],
+        );
+        let exports: [Claim; 7] = [
+            // What the generator proposes (`expected.json`).
+            ("callHandler", &[1], &[(1, "0")], &[0, 1]),
+            ("callBound", &[], &[(1, "0")], &[1]),
+            ("stringKey", &[], &[(0, "run")], &[0]),
+            // Claims the walk would not make.
+            ("computedKey", &[], &[(0, "0")], &[0]),
+            ("deferredMember", &[], &[(0, "0")], &[0]),
+            // The member call alone, so the census rather than the `get`
+            // item's positive facts meets the written binding.
+            ("writtenBinding", &[], &[(0, "0")], &[]),
+            // What the generator proposes: nothing at the call.
+            ("composeEventHandlers", &[], &[], &[]),
+        ];
+        let pin = pinned_producer_for_test()?;
+        let name = "implementation-census-member-callee";
+        let root = "/project/node_modules/implementation-census-member-callee";
+        let fixture = repository_root()
+            .join("fixtures/package-contracts")
+            .join(name);
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let bindings = exports.map(|(export, ..)| {
+            (
+                export,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        let (_, resolved) = test_package_resolution(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[],
+            "/project/src/app.ts",
+        );
+        let row = |parameter: usize, path: Vec<String>| ContractCallback {
+            parameter,
+            execution: "inline".into(),
+            schedule: None,
+            clears_tracking: false,
+            arguments: Vec::new(),
+            owner: None,
+            protocol: InvokeProtocol::Call,
+            path,
+        };
+        let inferred = PackageContract {
+            package: ContractPackage {
+                name: name.into(),
+                version: "1.0.0".into(),
+                integrity: String::new(),
+            },
+            entrypoints: BTreeMap::from([(
+                ".".into(),
+                ContractEntrypoint {
+                    exports: exports
+                        .into_iter()
+                        .map(|(export, calls, members, gets)| {
+                            (
+                                export.into(),
+                                ContractExport {
+                                    kind: "function".into(),
+                                    reactive_reads: ContractClaim::Open,
+                                    callbacks: ContractClaim::Known(
+                                        calls
+                                            .iter()
+                                            .map(|parameter| row(*parameter, Vec::new()))
+                                            .chain(members.iter().map(|(parameter, key)| {
+                                                row(*parameter, vec![(*key).to_owned()])
+                                            }))
+                                            .collect(),
+                                    ),
+                                    // Published, as the generator publishes an
+                                    // owner census that decided nothing, so
+                                    // the `creates` proposal is on the table.
+                                    owner_requirements: ContractClaim::Known(Vec::new()),
+                                    returns: ContractClaim::Open,
+                                    async_behavior: ContractClaim::Known(String::new()),
+                                    direct_callback_parameters: calls.iter().copied().collect(),
+                                    direct_member_callback_parameters: members
+                                        .iter()
+                                        .map(|(parameter, key)| {
+                                            (*parameter, vec![(*key).to_owned()])
+                                        })
+                                        .collect(),
+                                    direct_accessor_parameters: gets.iter().copied().collect(),
+                                    // The generator's own walk proposes
+                                    // `creates: []` for every export here but
+                                    // `computedKey` (`expected.json`).
+                                    creates_walk_clean: export != "computedKey",
+                                    ..ContractExport::default()
+                                },
+                            )
+                        })
+                        .collect(),
+                },
+            )]),
+            source_path: String::new(),
+        };
+        let candidate =
+            crate::inferred_contract::normalize_inferred_contract(&inferred, &resolved).unwrap();
+        let plan = try_plan_supplied_candidate_for_test_package(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            candidate,
+        )
+        .expect("the hand-stated proposal plans against its own artifact");
+        let scratch = TracerScratch::new(label);
+        let probes = tracer_configuration_from(&fixture, scratch.path(), label, &[])?;
+        let outcome = tracer_certify(&plan, &pin, &probes);
+        Some((plan, outcome))
+    }
+
+    /// Whether `export`'s `creates` is closed with no item.
+    fn closed_empty_creates_in(main: &[u8], export: &str) -> bool {
+        let decoded = crate::contract_document::decode(main)
+            .expect("canonical main decodes")
+            .normalize()
+            .expect("canonical main normalizes");
+        decoded.artifact_cases().iter().any(|case| {
+            case.exports.get(export).is_some_and(|semantics| {
+                semantics
+                    .operation_claim(ClaimDomain::Creates)
+                    .is_some_and(|claim| claim.is_closed() && claim.items().is_empty())
+            })
+        })
+    }
+
+    /// The `(parameter, path, protocol)` of every item of `export`'s
+    /// `callbacks`, sorted, when the domain is closed.
+    fn closed_member_callbacks_in(
+        main: &[u8],
+        export: &str,
+    ) -> Option<
+        Vec<(
+            u16,
+            Vec<String>,
+            solid_reactive_ir::contract_semantics::InvokeProtocol,
+        )>,
+    > {
+        use solid_reactive_ir::contract_semantics::ValueSource;
+        let decoded = crate::contract_document::decode(main)
+            .expect("canonical main decodes")
+            .normalize()
+            .expect("canonical main normalizes");
+        decoded.artifact_cases().iter().find_map(|case| {
+            let semantics = case.exports.get(export)?;
+            let claim = semantics.callbacks();
+            claim.is_closed().then(|| {
+                let mut items = claim
+                    .items()
+                    .iter()
+                    .filter_map(|item| {
+                        let ValueSource::Parameter { index, path } = &item.from else {
+                            return None;
+                        };
+                        Some((
+                            *index,
+                            path.clone(),
+                            semantics.operation(&item.operation.0)?.invoke_protocol(),
+                        ))
+                    })
+                    .collect::<Vec<_>>();
+                items.sort();
+                items
+            })
+        })
+    }
+
+    /// Item B end to end: `@kobalte/utils`' `callHandler` -- a call of its
+    /// argument, a call of the argument's member 0, reads of the argument and of
+    /// the event -- certifies as a closed `callbacks` enumeration through the
+    /// census, each item's positive facts and the synthesized member veto, and
+    /// so does the bound-handler call alone. A member call behind a computed
+    /// key, in a returned closure, of a written binding, or in a local helper
+    /// reached from a returned closure (`composeEventHandlers`) withholds by
+    /// name while the row certifies; a string key is confirmed by the census and
+    /// withheld for want of a synthesized veto.
+    #[test]
+    fn the_member_callee_census_certifies_exactly_the_described_member_calls() {
+        use solid_reactive_ir::contract_semantics::InvokeProtocol::{Call, Get};
+        let Some((plan, outcome)) = member_callee_fixture_certify("member-callee") else {
+            return;
+        };
+        let finalized = outcome.unwrap_or_else(|error| {
+            panic!("every refusal here withholds by name and the row certifies: {error}")
+        });
+        let main = finalized.canonical_main();
+        let member = |key: &str| vec![key.to_owned()];
+        for (export, expected) in [
+            (
+                "callHandler",
+                vec![
+                    (0, vec![], Get),
+                    (1, vec![], Call),
+                    (1, vec![], Get),
+                    (1, member("0"), Call),
+                ],
+            ),
+            ("callBound", vec![(1, vec![], Get), (1, member("0"), Call)]),
+        ] {
+            assert_eq!(
+                closed_member_callbacks_in(main, export),
+                Some(expected),
+                "{export}: {:?} {:?}",
+                finalized.withheld_closures(),
+                finalized.withheld_operations()
+            );
+        }
+        let withheld = |export: &str| {
+            finalized
+                .withheld_closures()
+                .iter()
+                .filter(|record| record.export == export && record.domain == "callbacks")
+                .map(|record| record.reason.as_str())
+                .chain(
+                    finalized
+                        .withheld_operations()
+                        .iter()
+                        .filter(|record| record.export == export)
+                        .map(|record| record.reason.as_str()),
+                )
+                .collect::<Vec<_>>()
+        };
+        for (export, needle) in [
+            // The producer roots no member of a computed key, so no call is
+            // the item's site: its positive facts find no flow and withdraw it.
+            (
+                "computedKey",
+                "callback parameter has no exact direct-call or resolved-argument flow",
+            ),
+            // The member call and the read sit in the returned closure: the
+            // `get` item's positive facts find no use at the call.
+            (
+                "deferredMember",
+                "a get invocation of parameter 0 has no uncaptured use of the caller's value",
+            ),
+            // `h = h || [...]`: the member read's subject is not the caller's
+            // own value at the slot, and the census refuses the form.
+            (
+                "writtenBinding",
+                "the producer offered no subject derivation: written-parameter",
+            ),
+            // The member call is `callHandler`'s, reached from a returned
+            // closure, so the empty enumeration the generator proposes is false.
+            (
+                "composeEventHandlers",
+                "enumerates no invocation, but the implementation census dispositioned 5 call(s) \
+                 into the parameter-rooted family (parameter-rooted 2, parameter-rooted-accessor 3)",
+            ),
+            // Confirmed by the census; no synthesized module installs a member
+            // at a property key, so the closure has no veto and is withheld.
+            ("stringKey", "no recipe in corpus"),
+        ] {
+            let reasons = withheld(export);
+            assert!(
+                reasons.iter().any(|reason| reason.contains(needle)),
+                "{export}: {reasons:?}"
+            );
+            assert_eq!(closed_member_callbacks_in(main, export), None, "{export}");
+        }
+        // `creates`: the census dispositions `handler[0](…)` parameter-rooted
+        // from the producer's `calleeParameter` (protocol 63), so the closure
+        // the walk now proposes certifies -- `composeEventHandlers`' included,
+        // whose walk reaches `callHandler` at depth 1 -- and a written
+        // binding's member read still refuses.
+        for export in [
+            "callHandler",
+            "callBound",
+            "stringKey",
+            "deferredMember",
+            "composeEventHandlers",
+        ] {
+            assert!(
+                closed_empty_creates_in(main, export),
+                "{export}: {:?}",
+                finalized.withheld_closures()
+            );
+        }
+        assert!(
+            finalized.withheld_closures().iter().any(|record| {
+                record.export == "writtenBinding"
+                    && record.domain == "creates"
+                    && record
+                        .reason
+                        .contains("the producer offered no subject derivation: written-parameter")
+            }),
+            "{:?}",
+            finalized.withheld_closures()
+        );
+        assert!(!closed_empty_creates_in(main, "writtenBinding"));
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan),
+            "the synthesized veto must run before a described member closure closes"
         );
     }
 

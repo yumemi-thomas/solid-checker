@@ -5415,8 +5415,8 @@ fn parameter_value_source_matches(
 /// The observed path may be *longer*: reading `props.of.keys` is reading
 /// `props`, and a use of the destructured `{ children }` is a use of the object
 /// it was destructured from. It may never be shorter, and every segment the
-/// demand names has to be that exact property — a tuple or computed segment
-/// where a property is demanded answers nothing.
+/// demand names has to be that exact property ([`path_segment_names`]) — a
+/// segment with no exact key where a property is demanded answers nothing.
 fn parameter_binding_matches(
     index: usize,
     path: &[typefacts::PathSegment],
@@ -5431,9 +5431,30 @@ fn parameter_binding_matches(
     };
     index == usize::from(*expected_index)
         && path.len() >= expected_path.len()
-        && path.iter().zip(expected_path).all(|(actual, expected)| {
-            actual.kind == PathSegmentKind::Property && actual.property.as_ref() == expected
-        })
+        && path
+            .iter()
+            .zip(expected_path)
+            .all(|(actual, expected)| path_segment_names(actual, expected))
+}
+
+/// Whether one observed path segment reaches exactly the property a model path
+/// names by its key.
+///
+/// A property segment names its property. A tuple segment names the element at
+/// its index, and ToPropertyKey gives that element exactly the key of the
+/// index's canonical decimal spelling: `handler[0]` and `handler["0"]` are one
+/// member, which the model spells `"0"`. Before handshake protocol 63 a tuple
+/// segment reached a transcript only from an array binding pattern, and no
+/// generated path ever named a digit, so this admits nothing it did not admit
+/// then; since protocol 63 it is how a member-path `callbacks` item (item B of
+/// ways-to-improve § 3.3) meets the site `handler[0](…)` the producer roots.
+fn path_segment_names(actual: &typefacts::PathSegment, expected: &str) -> bool {
+    match actual.kind {
+        PathSegmentKind::Property => actual.property.as_ref() == expected,
+        PathSegmentKind::Tuple => actual
+            .index
+            .is_some_and(|index| index.to_string() == expected),
+    }
 }
 
 fn parameter_value_source_exact(
@@ -6367,9 +6388,11 @@ fn require_signature_parameter_callable(
     }
     let matches = parameter.callable_paths.iter().filter(|fact| {
         fact.path.len() == path.len()
-            && fact.path.iter().zip(path).all(|(actual, expected)| {
-                actual.kind == PathSegmentKind::Property && actual.property.as_ref() == expected
-            })
+            && fact
+                .path
+                .iter()
+                .zip(path)
+                .all(|(actual, expected)| path_segment_names(actual, expected))
     });
     let mut found = false;
     for fact in matches {
@@ -10467,11 +10490,12 @@ struct ProtocolInvocationSite {
 /// fail to be that item.
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct DirectInvocationSite {
-    /// The parameter the callee is rooted at, and whether the callee is a
-    /// *member* of it (`options.onChange()`) rather than the parameter itself.
-    /// `None` when the disposition rests on an alias the call's own
-    /// `calleeParameter` does not state, which no described item names.
-    callee: Option<(usize, bool)>,
+    /// The parameter the callee is rooted at, and the member path from it --
+    /// empty for the parameter itself, `options.onChange` or `handler[0]`
+    /// otherwise, as the call's own `calleeParameter` states it. `None` when
+    /// the disposition rests on an alias the call's own `calleeParameter`
+    /// does not state, which no described item names.
+    callee: Option<(usize, Vec<typefacts::PathSegment>)>,
     /// The frame the call was read in: 0 is the demanded export's own
     /// transcript, deeper is a local declaration the walk followed, whose
     /// parameter indices are its own and not the export's (ADR 0092).
@@ -10606,7 +10630,7 @@ impl CensusRun<'_> {
                     callee: call
                         .callee_parameter
                         .as_ref()
-                        .map(|source| (source.parameter_index, !source.path.is_empty())),
+                        .map(|source| (source.parameter_index, source.path.clone())),
                     depth,
                     captured: call.captured,
                     location: format!(
@@ -11140,6 +11164,11 @@ fn census_callbacks_domain(
                         .filter(|index| !declared_parameter_is_primitive(transcript, *index))
                         .collect(),
                     deepest: depth,
+                    unwritten: implementation
+                        .unwritten_parameters
+                        .iter()
+                        .map(|binding| binding.parameter_index)
+                        .collect(),
                 };
                 sites.push(
                     confirm_described_callbacks(
@@ -11157,13 +11186,15 @@ fn census_callbacks_domain(
 }
 
 /// The parameters a proposal's `callbacks` enumeration describes invocations
-/// of, when every item is one the census can confirm (ADR 0100): `from` a bare
-/// parameter — no member path — and its operation an unguarded, untracked
-/// `invoke` `at` the call event on the same stack. `None` is the empty
-/// enumeration. `Err`
-/// names the first item outside that shape, which keeps a `deferred`,
-/// `tracked`, member-rooted or resource-rooted description refused exactly as
-/// every non-empty description was before this premise.
+/// of, when every item is one the census can confirm (ADR 0100): `from` a
+/// parameter, and its operation an unguarded `invoke` the export does not
+/// subscribe `at` the call event on the same stack. A call item may name a
+/// member of the parameter (item B of ways-to-improve § 3.3), which the walk
+/// then confirms at exactly that path; a non-call item names the bare
+/// parameter only. `None` is the empty enumeration. `Err` names the first item
+/// outside that shape, which keeps a `deferred`, `tracked` or resource-rooted
+/// description refused exactly as every non-empty description was before this
+/// premise.
 fn described_callbacks(
     export: &solid_reactive_ir::contract_semantics::ExportSemantics,
 ) -> Result<Option<DescribedCallbacks>, String> {
@@ -11174,16 +11205,16 @@ fn described_callbacks(
     }
     let mut indices = std::collections::BTreeSet::new();
     let mut protocols = std::collections::BTreeSet::new();
+    let mut members = std::collections::BTreeSet::new();
     for item in items {
         let operation_id = item.operation.0.as_str();
-        let index = match &item.from {
-            ValueSource::Parameter { index, path } if path.is_empty() => usize::from(*index),
-            ValueSource::Parameter { index, .. } => {
-                return Err(format!(
-                    "describes `{operation_id}` as invoking a member of parameter {index}, and the \
-                     census confirms an invocation of a bare parameter only"
-                ));
+        let (index, member) = match &item.from {
+            ValueSource::Parameter { index, path } if path.is_empty() => {
+                (usize::from(*index), None)
             }
+            // Item B of ways-to-improve § 3.3: a call of the member of the
+            // caller's value at this path, confirmed site for site below.
+            ValueSource::Parameter { index, path } => (usize::from(*index), Some(path.clone())),
             ValueSource::OperationOutput { .. } | ValueSource::Resource { .. } => {
                 return Err(format!(
                     "describes `{operation_id}` as invoking a callable that did not arrive as a \
@@ -11228,15 +11259,31 @@ fn described_callbacks(
                 "guards `{operation_id}`, and the census confirms an unguarded invocation only"
             ));
         }
-        if operation.is_protocol_invocation() {
-            protocols.insert((operation.invoke_protocol(), index));
-        } else {
-            indices.insert(index);
+        match member {
+            Some(_) if operation.is_protocol_invocation() => {
+                // Validation already refuses this shape; restated here so the
+                // census never reads one member item as another.
+                return Err(format!(
+                    "describes `{operation_id}` as a {} use of a member of parameter {index}, \
+                     and the census confirms a non-call use of a bare parameter only",
+                    operation.invoke_protocol().wire_name()
+                ));
+            }
+            Some(path) => {
+                members.insert((index, path));
+            }
+            None if operation.is_protocol_invocation() => {
+                protocols.insert((operation.invoke_protocol(), index));
+            }
+            None => {
+                indices.insert(index);
+            }
         }
     }
     Ok(Some(DescribedCallbacks {
         calls: indices,
         protocols,
+        members,
     }))
 }
 
@@ -11248,6 +11295,11 @@ fn described_callbacks(
 struct ProtocolCensusFrame {
     object_premises: std::collections::BTreeSet<usize>,
     deepest: usize,
+    /// The export's parameters the producer states unwritten
+    /// (`unwrittenParameters`, protocol 39). A member-path call item is
+    /// confirmed only on one of these: the call's `calleeParameter` is rooted
+    /// by syntax, and a written binding's member is not the caller's (item B).
+    unwritten: std::collections::BTreeSet<usize>,
 }
 
 /// What a described `callbacks` enumeration names, by kind: the parameters it
@@ -11258,9 +11310,21 @@ struct DescribedCallbacks {
     calls: std::collections::BTreeSet<usize>,
     protocols:
         std::collections::BTreeSet<(solid_reactive_ir::contract_semantics::InvokeProtocol, usize)>,
+    /// `(parameter, path)` of every call item from a member of a parameter
+    /// (item B of ways-to-improve § 3.3): `(1, ["0"])` for `handler[0](…)`.
+    members: std::collections::BTreeSet<(usize, Vec<String>)>,
 }
 
 impl DescribedCallbacks {
+    /// `1[0], 0.run`: the member call items, each its parameter and path.
+    fn member_list(&self) -> String {
+        self.members
+            .iter()
+            .map(|(parameter, path)| member_path_text(*parameter, path))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
     /// `get 0, coerce 1`: the protocol items in the order the model sorts them.
     fn protocol_list(&self) -> String {
         self.protocols
@@ -11269,6 +11333,20 @@ impl DescribedCallbacks {
             .collect::<Vec<_>>()
             .join(", ")
     }
+}
+
+/// `1[0]`, `0.run`, `0.a[2]`: a member path spelled from its parameter, a key
+/// that is a canonical integer as an index and any other as a property.
+fn member_path_text(parameter: usize, path: &[String]) -> String {
+    let mut text = parameter.to_string();
+    for key in path {
+        if !key.is_empty() && key.bytes().all(|byte| byte.is_ascii_digit()) {
+            text.push_str(&format!("[{key}]"));
+        } else {
+            text.push_str(&format!(".{key}"));
+        }
+    }
+    text
 }
 
 /// Confirms a described enumeration against what the walk dispositioned, or
@@ -11292,8 +11370,8 @@ fn confirm_described_callbacks(
 ) -> Result<String, String> {
     let indices = &enumeration.calls;
     // The prefix every refusal carries. An enumeration with no non-call item
-    // keeps the ADR 0100 sentence byte for byte.
-    let described = || {
+    // and no member item keeps the ADR 0100 sentence byte for byte.
+    let described_without_members = || {
         let calls = format!(
             "the callbacks closure candidate describes call-time invocation(s) of parameter(s) {}",
             indices
@@ -11313,6 +11391,17 @@ fn confirm_described_callbacks(
             format!(
                 "{calls} and call-time use(s) {}",
                 enumeration.protocol_list()
+            )
+        }
+    };
+    let described = || {
+        let base = described_without_members();
+        if enumeration.members.is_empty() {
+            base
+        } else {
+            format!(
+                "{base} and call-time invocation(s) of member(s) {}",
+                enumeration.member_list()
             )
         }
     };
@@ -11378,8 +11467,9 @@ fn confirm_described_callbacks(
         ));
     }
     let mut seen = std::collections::BTreeSet::new();
+    let mut seen_members = std::collections::BTreeSet::new();
     for site in &walk.direct {
-        let Some((index, member)) = site.callee else {
+        let Some((index, path)) = &site.callee else {
             return Err(format!(
                 "{}, but the call at {} is parameter-rooted through an alias whose parameter the \
                  call itself does not state, and no described item names an alias",
@@ -11387,7 +11477,22 @@ fn confirm_described_callbacks(
                 site.location
             ));
         };
-        if member {
+        let index = *index;
+        // Rule 4, and item B of ways-to-improve § 3.3: a call of a member of
+        // the parameter is confirmed only by a member item naming exactly
+        // that path; every other member call still refuses in ADR 0100's
+        // words.
+        let member = (!path.is_empty()).then(|| {
+            enumeration.members.iter().find(|(parameter, described)| {
+                *parameter == index
+                    && described.len() == path.len()
+                    && path
+                        .iter()
+                        .zip(described)
+                        .all(|(actual, expected)| path_segment_names(actual, expected))
+            })
+        });
+        if let Some(None) = member {
             return Err(format!(
                 "{}, but the call at {} invokes a member of parameter {index}, which the \
                  enumeration does not describe",
@@ -11412,6 +11517,21 @@ fn confirm_described_callbacks(
                 site.location
             ));
         }
+        if let Some(Some(described_member)) = member {
+            // The producer roots a callee by syntax; the member is the
+            // caller's only while nothing writes the binding it is read from.
+            if !frame.unwritten.contains(&index) {
+                return Err(format!(
+                    "{}, but the call at {} invokes a member of parameter {index}, whose binding \
+                     the producer does not state unwritten, so the member called need not be \
+                     the caller's",
+                    described(),
+                    site.location
+                ));
+            }
+            seen_members.insert(described_member.clone());
+            continue;
+        }
         if !indices.contains(&index) {
             return Err(format!(
                 "{}, but the call at {} invokes parameter {index}, which the enumeration does not \
@@ -11429,7 +11549,19 @@ fn confirm_described_callbacks(
             described()
         ));
     }
-    let calls = format!(
+    if let Some((parameter, path)) = enumeration
+        .members
+        .iter()
+        .find(|member| !seen_members.contains(*member))
+    {
+        return Err(format!(
+            "{}, but the implementation census found no call of member {}: the enumeration \
+             describes an invocation the implementation does not perform",
+            described(),
+            member_path_text(*parameter, path)
+        ));
+    }
+    let mut calls = format!(
         "typefacts-implementation-census:callbacks:described-invocations:{}:parameters:{}",
         walk.direct.len(),
         indices
@@ -11438,6 +11570,11 @@ fn confirm_described_callbacks(
             .collect::<Vec<_>>()
             .join(",")
     );
+    // A member item is recorded beside the parameters; with none, the site is
+    // ADR 0100's byte for byte.
+    if !enumeration.members.is_empty() {
+        calls.push_str(&format!(":members:{}", enumeration.member_list()));
+    }
     if enumeration.protocols.is_empty() {
         return Ok(calls);
     }
@@ -25000,7 +25137,7 @@ mod tests {
         let plain = Some(Completion::Plain);
         let calls = |indices: &[usize]| DescribedCallbacks {
             calls: indices.iter().copied().collect(),
-            protocols: std::collections::BTreeSet::new(),
+            ..DescribedCallbacks::default()
         };
         let described = calls(&[0]);
 
@@ -25010,7 +25147,7 @@ mod tests {
         assert_eq!(
             one.direct,
             vec![DirectInvocationSite {
-                callee: Some((0, false)),
+                callee: Some((0, Vec::new())),
                 depth: 0,
                 captured: false,
                 location: format!("{source}:100..104"),
@@ -25132,7 +25269,12 @@ mod tests {
             }],
             protocol: vec![],
         };
-        refused(&described, &site(Some((0, false)), 1), plain, "at depth 1");
+        refused(
+            &described,
+            &site(Some((0, Vec::new())), 1),
+            plain,
+            "at depth 1",
+        );
         refused(&described, &site(None, 0), plain, "through an alias");
     }
 
@@ -25196,6 +25338,7 @@ mod tests {
             |calls: &[usize], protocols: &[(InvokeProtocol, usize)]| DescribedCallbacks {
                 calls: calls.iter().copied().collect(),
                 protocols: protocols.iter().copied().collect(),
+                ..DescribedCallbacks::default()
             };
         let plain = Some(Completion::Plain);
 
@@ -25401,6 +25544,7 @@ mod tests {
         let under = |object_premises: &[usize], deepest: usize| ProtocolCensusFrame {
             object_premises: object_premises.iter().copied().collect(),
             deepest,
+            ..ProtocolCensusFrame::default()
         };
         let reason = confirm_described_callbacks(
             &enumeration(&[0], &[(Get, 0)]),
@@ -25444,6 +25588,226 @@ mod tests {
                 json!([get(200, json!({})), get(240, json!({"subjectWrite": true}))]),
             ),
             "the parameter-rooted-accessor-write member (1)",
+        );
+    }
+
+    /// Item B of ways-to-improve § 3.3: a call of a literal-keyed member of a
+    /// parameter is confirmed by a member item naming exactly that path, under
+    /// ADR 0100's rules 5 to 8 and the producer's unwritten-binding fact; any
+    /// other member call still refuses at rule 4 in its own words.
+    /// `callHandler` is `handler(event)`, `handler[0](handler[1], event)` and
+    /// `event?.defaultPrevented`: call 1, call 1 at `[0]`, get 1, get 0.
+    #[test]
+    fn a_described_callbacks_enumeration_confirms_member_calls_site_for_site() {
+        use solid_reactive_ir::contract_semantics::InvokeProtocol::Get;
+        use typefacts::ImplementationCompletionForm as Completion;
+        let certified = consumer_snapshot();
+        let roots = vec![consumer_root(&certified)];
+        let source = "/project/node_modules/consumer/dist/index.js";
+        let call = |start: u64, callee: serde_json::Value| {
+            serde_json::from_value::<typefacts::ImplementationCall>(json!({
+                "location": {"path": source, "startByte": start, "endByte": start + 10},
+                "reach": "reachable",
+                "kind": "call",
+                "calleeParameter": callee,
+            }))
+            .expect("a valid call")
+        };
+        let bare = json!({"parameterIndex": 1});
+        let tuple = |index: usize| json!({"parameterIndex": 1, "path": [{"kind": "tuple", "index": index}]});
+        let get = |start: u64, parameter: usize| {
+            json!({
+                "kind": "property-access-unknown-accessor",
+                "nodeKind": "ElementAccessExpression",
+                "location": {"path": source, "startByte": start, "endByte": start + 8},
+                "reach": "reachable",
+                "subjectParameter": parameter,
+                "subjectRoot": "parameter",
+            })
+        };
+        let walk = |calls: Vec<typefacts::ImplementationCall>, forms: serde_json::Value| {
+            let mut run = census_run(&certified, &roots);
+            let transcript = census_transcript_with(calls, forms);
+            assert_eq!(
+                census_transcript(&mut run, &transcript, 0, &[]),
+                Ok(CensusStep::Decided),
+                "{:?}",
+                run.sites
+            );
+            run.caller_supplied_invocations
+        };
+        let enumeration = |members: &[(usize, &str)]| DescribedCallbacks {
+            calls: [1usize].into(),
+            protocols: [(Get, 0usize), (Get, 1)].into(),
+            members: members
+                .iter()
+                .map(|(parameter, key)| (*parameter, vec![(*key).to_owned()]))
+                .collect(),
+        };
+        let unwritten = |parameters: &[usize]| ProtocolCensusFrame {
+            unwritten: parameters.iter().copied().collect(),
+            ..ProtocolCensusFrame::default()
+        };
+        let plain = Some(Completion::Plain);
+        let call_handler = walk(
+            vec![call(100, bare.clone()), call(200, tuple(0))],
+            json!([get(200, 1), get(220, 1), get(300, 0)]),
+        );
+        assert_eq!(
+            call_handler.direct[1].callee,
+            Some((
+                1,
+                vec![typefacts::PathSegment {
+                    kind: PathSegmentKind::Tuple,
+                    property: "".into(),
+                    index: Some(0),
+                }]
+            ))
+        );
+        assert_eq!(
+            confirm_described_callbacks(
+                &enumeration(&[(1, "0")]),
+                &call_handler,
+                plain,
+                &unwritten(&[0, 1])
+            ),
+            Ok(
+                "typefacts-implementation-census:callbacks:described-invocations:2:parameters:1\
+                 :members:1[0]:protocol-sites:3:protocols:get-0,get-1"
+                    .into()
+            )
+        );
+        let refused = |described: &DescribedCallbacks,
+                       sites: &CallerSuppliedInvocations,
+                       frame: &ProtocolCensusFrame,
+                       needle: &str| {
+            let reason = confirm_described_callbacks(described, sites, plain, frame)
+                .expect_err("the census must refuse");
+            assert!(reason.contains(needle), "expected {needle:?} in: {reason}");
+        };
+        // Rule 4 as before when no member item describes the call: the
+        // enumeration that was all item A could say.
+        refused(
+            &enumeration(&[]),
+            &call_handler,
+            &unwritten(&[0, 1]),
+            "invokes a member of parameter 1, which the enumeration does not describe",
+        );
+        // A member item at another path does not describe this one.
+        refused(
+            &enumeration(&[(1, "1")]),
+            &call_handler,
+            &unwritten(&[0, 1]),
+            "invokes a member of parameter 1, which the enumeration does not describe",
+        );
+        // A member of a computed key is no member at all: the producer roots
+        // nothing, so the call is no parameter-rooted site, and the census's
+        // own unresolved-callee refusal is what meets it (pinned at the
+        // census walk). Here: a second, undescribed member call beside the
+        // described one refuses.
+        refused(
+            &enumeration(&[(1, "0")]),
+            &walk(
+                vec![
+                    call(100, bare.clone()),
+                    call(200, tuple(0)),
+                    call(260, tuple(2)),
+                ],
+                json!([get(200, 1), get(220, 1), get(300, 0)]),
+            ),
+            &unwritten(&[0, 1]),
+            "the call at /project/node_modules/consumer/dist/index.js:260..270 invokes a member \
+             of parameter 1",
+        );
+        // Rule 8: a member item the walk never saw called overstates.
+        refused(
+            &enumeration(&[(1, "0"), (1, "1")]),
+            &call_handler,
+            &unwritten(&[0, 1]),
+            "found no call of member 1[1]",
+        );
+        // Rule 6: a member call inside a returned closure is not at the call.
+        let captured = walk(
+            vec![
+                call(100, bare.clone()),
+                serde_json::from_value(json!({
+                    "location": {"path": source, "startByte": 200, "endByte": 210},
+                    "reach": "reachable",
+                    "kind": "call",
+                    "captured": true,
+                    "calleeParameter": tuple(0),
+                }))
+                .expect("a valid call"),
+            ],
+            json!([get(200, 1), get(220, 1), get(300, 0)]),
+        );
+        refused(
+            &enumeration(&[(1, "0")]),
+            &captured,
+            &unwritten(&[0, 1]),
+            "sits inside a callable nested in the implementation",
+        );
+        // A binding the producer does not state unwritten may hold anything
+        // by the time its member is called.
+        refused(
+            &enumeration(&[(1, "0")]),
+            &call_handler,
+            &unwritten(&[0]),
+            "whose binding the producer does not state unwritten",
+        );
+        // Rule 5: a member call read in a helper's frame is the helper's.
+        let helper = CallerSuppliedInvocations {
+            total: 1,
+            by_member: [(CensusDisposition::ParameterRooted.wire_name(), 1)].into(),
+            direct: vec![DirectInvocationSite {
+                callee: Some((
+                    1,
+                    vec![typefacts::PathSegment {
+                        kind: PathSegmentKind::Tuple,
+                        property: "".into(),
+                        index: Some(0),
+                    }],
+                )),
+                depth: 1,
+                captured: false,
+                location: format!("{source}:200..210"),
+            }],
+            protocol: vec![],
+        };
+        refused(
+            &DescribedCallbacks {
+                members: [(1usize, vec!["0".to_owned()])].into(),
+                ..DescribedCallbacks::default()
+            },
+            &helper,
+            &unwritten(&[1]),
+            "at depth 1",
+        );
+        // A string key is the property segment it spells: `h["run"]()` meets
+        // a member item `["run"]`, and its call-only enumeration keeps ADR
+        // 0100's site with the member beside it.
+        let string_key = walk(
+            vec![call(
+                100,
+                json!({"parameterIndex": 0, "path": [{"kind": "property", "property": "run"}]}),
+            )],
+            json!([]),
+        );
+        assert_eq!(
+            confirm_described_callbacks(
+                &DescribedCallbacks {
+                    members: [(0usize, vec!["run".to_owned()])].into(),
+                    ..DescribedCallbacks::default()
+                },
+                &string_key,
+                plain,
+                &unwritten(&[0])
+            ),
+            Ok(
+                "typefacts-implementation-census:callbacks:described-invocations:1:parameters:\
+                 :members:0.run"
+                    .into()
+            )
         );
     }
 
@@ -25515,7 +25879,20 @@ mod tests {
             )),
             Ok(Some(DescribedCallbacks {
                 calls: std::collections::BTreeSet::from([0usize, 2]),
-                protocols: std::collections::BTreeSet::new(),
+                ..DescribedCallbacks::default()
+            }))
+        );
+        // Item B of ways-to-improve § 3.3: a call item from a member of a
+        // parameter is read as that member's call, for the walk to confirm.
+        assert_eq!(
+            described_callbacks(&export(
+                vec![item(0, vec![], "a"), item(0, vec!["0".into()], "b")],
+                vec![invoke("a"), invoke("b")],
+            )),
+            Ok(Some(DescribedCallbacks {
+                calls: std::collections::BTreeSet::from([0usize]),
+                members: std::collections::BTreeSet::from([(0usize, vec!["0".to_owned()])]),
+                ..DescribedCallbacks::default()
             }))
         );
 
@@ -25523,12 +25900,16 @@ mod tests {
             let reason = described_callbacks(export).expect_err("refuses before the walk");
             assert!(reason.contains(needle), "expected {needle:?} in: {reason}");
         };
+        // A non-call use is of a bare parameter only; a member item is a call.
+        let mut member_get = invoke("a");
+        member_get.tracking = Tracking::AmbientAtExecution;
+        member_get.protocol = Some(solid_reactive_ir::contract_semantics::InvokeProtocol::Get);
         refuses(
             &export(
                 vec![item(0, vec!["onChange".into()], "a")],
-                vec![invoke("a")],
+                vec![member_get],
             ),
-            "a member of parameter 0",
+            "a get use of a member of parameter 0",
         );
         let mut deferred = invoke("a");
         deferred.schedule = Some(Schedule::Queued);

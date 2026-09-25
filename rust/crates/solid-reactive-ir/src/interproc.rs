@@ -161,12 +161,15 @@ fn equivalent_summary_reads(left: &SummaryReads, right: &SummaryReads) -> bool {
 /// [`equivalent_summary_reads`]: repeating one parameter's timing is not a
 /// different effect, but a parameter only one candidate defers is.
 fn equivalent_callbacks(left: &[ContractCallback], right: &[ContractCallback]) -> bool {
-    fn effect(callbacks: &[ContractCallback]) -> HashSet<(usize, &str, Option<&str>, String)> {
+    /// Parameter, member path, execution, owner and the arguments' JSON.
+    type Effect<'c> = (usize, &'c [String], &'c str, Option<&'c str>, String);
+    fn effect(callbacks: &[ContractCallback]) -> HashSet<Effect<'_>> {
         callbacks
             .iter()
             .map(|callback| {
                 (
                     callback.parameter,
+                    callback.path.as_slice(),
                     callback.execution.as_str(),
                     callback.owner.as_deref(),
                     serde_json::to_string(&callback.arguments)
@@ -625,18 +628,18 @@ fn callback_argument_contracts(
 /// Everything else fails closed.
 fn contract_callback_arguments_unbound(
     file: &solid_facts::FileFacts,
-    argument: &solid_facts::ast::ArgumentFact,
+    invoked: Option<Span>,
     callback: &ContractCallback,
 ) -> bool {
     if callback.arguments.iter().all(Option::is_none) {
         return false;
     }
-    let Some(function) = file
-        .ast
-        .functions
-        .iter()
-        .find(|function| function.span == file.ast.peel_ts_sugar_span(argument.span))
-    else {
+    let Some(function) = invoked.and_then(|invoked| {
+        file.ast
+            .functions
+            .iter()
+            .find(|function| function.span == file.ast.peel_ts_sugar_span(invoked))
+    }) else {
         return true;
     };
     // A non-arrow literal reaches every argument through `arguments`, and a
@@ -657,6 +660,65 @@ fn contract_callback_arguments_unbound(
                             .get(index)
                             .is_some_and(|parameter| !parameter.names.is_empty()))
             })
+        })
+}
+
+/// The span of the value a contract `callbacks` row invokes at this call, when
+/// the call's own syntax names it exactly.
+///
+/// A row whose path is empty invokes the argument written at its slot, so the
+/// answer is that argument. A member-path row (item B of ways-to-improve
+/// § 3.3: `callHandler`'s `handler[0](…)`) invokes a member of that argument,
+/// and the answer is the member's value only when the argument is an array or
+/// object literal naming it exactly (`solid_facts::ast::ArgumentFact::
+/// literal_members`): `callHandler(e, [readCount, data])` invokes `readCount`.
+/// Anything else -- an identifier (`callHandler(e, handlerProp)`), a member
+/// expression, a path longer than one segment -- is `None`: the member is
+/// whatever the caller's value holds there, which this call does not show.
+///
+/// `None` is handled exactly as an empty-path row whose argument resolves to
+/// no symbol and no inline function has always been: nothing is folded and
+/// nothing is raised. That loses nothing modelled before this row could be
+/// stated, because the export it describes (`handler[0](…)` on a caller's
+/// value) had its `callbacks` open until item B, and a consumer read no row of
+/// it at all; and it never folds the *whole* argument, which would claim the
+/// caller's array or props object is itself called.
+pub(crate) fn contract_callback_invoked_value<'c>(
+    call: &'c solid_facts::ast::CallFact,
+    callback: &ContractCallback,
+) -> Option<(&'c solid_facts::ast::ArgumentFact, Option<Span>)> {
+    let argument = call.arguments.get(callback.parameter)?;
+    let invoked = match callback.path.as_slice() {
+        // The historical answer for the argument itself, spread or not.
+        [] => Some(argument.span),
+        // A spread displaces the slot: the value there is not the literal.
+        _ if argument.spread => None,
+        [key] => argument
+            .literal_members
+            .iter()
+            .find(|member| member.key.as_str() == key)
+            .map(|member| member.value),
+        _ => None,
+    };
+    Some((argument, invoked))
+}
+
+/// The symbol a value written at `span` names: the compiler entity at the span
+/// itself, or -- for an identifier the binder resolves to a declaration in
+/// this file, whose reference inside a literal no demand asked the compiler
+/// about -- the entity at that declaration's name.
+fn value_symbol<'e>(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &'e EntitySymbols,
+) -> Option<&'e SymbolId> {
+    entities
+        .get(&location(file.path.shared(), span))
+        .or_else(|| {
+            let peeled = file.ast.peel_ts_sugar_span(span);
+            file.ast
+                .reference_declaration(peeled)
+                .and_then(|declaration| entities.get(&location(file.path.shared(), declaration)))
         })
 }
 
@@ -993,15 +1055,26 @@ struct BoundInitializer {
 /// the parameter's identifier. Anything wider (an alias, a chain root, a
 /// destructured name) derives nothing, and the census then refuses the
 /// enumeration as understating -- the fail-closed direction.
+///
+/// Item B of the same section rides on the same premises: a member that *is*
+/// the callee of a call (not a `new`), whose key is a literal naming one
+/// property (`handler[0]`, `h["run"]`, `solid_facts::ast::AstFacts::
+/// literal_computed_members`), and whose object is directly such a
+/// parameter, is a call of the caller's member at that path -- the
+/// [`DirectProtocolUses::member_calls`] entry the pass writes a member-path
+/// `inline` row for. Reading the member runs the caller's getter or trap
+/// first, so the same site also derives that parameter's `get`. A dotted
+/// member callee (`props.onClick()`) derives neither: that is ADR 0101's
+/// `parameter-member` read, unchanged.
 fn direct_protocol_parameters(
     file: &solid_facts::FileFacts,
     nodes: &[SummaryNode],
     nodes_by_path: &HashMap<String, Vec<usize>>,
-) -> Vec<(Span, crate::contract_semantics::InvokeProtocol, usize)> {
+) -> DirectProtocolUses {
     use crate::contract_semantics::InvokeProtocol;
     let ast = &file.ast;
     let Some(indices) = nodes_by_path.get(file.path.as_str()) else {
-        return Vec::new();
+        return DirectProtocolUses::default();
     };
     let functions_by_body = ast
         .functions
@@ -1027,7 +1100,7 @@ fn direct_protocol_parameters(
         }
     }
     if parameters.is_empty() {
-        return Vec::new();
+        return DirectProtocolUses::default();
     }
     // Every write position, sorted by start with the running maximum end, so
     // "does some write contain this span" is a binary search and a short walk
@@ -1088,9 +1161,33 @@ fn direct_protocol_parameters(
             .is_some_and(|innermost| innermost.body == body)
             .then_some((owner, index))
     };
+    let call_callees = ast
+        .calls
+        .iter()
+        .filter(|call| !call.construct)
+        .flat_map(|call| [call.callee, ast.peel_ts_sugar_span(call.callee)])
+        .collect::<HashSet<_>>();
     let mut uses = std::collections::BTreeSet::new();
+    let mut member_calls = std::collections::BTreeSet::new();
     for member in &ast.members {
-        if callees.contains(&member.span) || in_write(member.span) {
+        if in_write(member.span) {
+            continue;
+        }
+        if callees.contains(&member.span) {
+            if call_callees.contains(&member.span)
+                && let Ok(position) = ast
+                    .literal_computed_members
+                    .binary_search_by_key(&member.span, |fact| fact.span)
+                && let Some((owner, index)) = parameter_at(member.object, member.span)
+            {
+                member_calls.insert((
+                    member.span,
+                    owner,
+                    index,
+                    vec![ast.literal_computed_members[position].key.to_string()],
+                ));
+                uses.insert((owner, InvokeProtocol::Get, index));
+            }
             continue;
         }
         if let Some((owner, index)) = parameter_at(member.object, member.span) {
@@ -1162,7 +1259,21 @@ fn direct_protocol_parameters(
             }
         }
     }
-    uses.into_iter().collect()
+    DirectProtocolUses {
+        protocols: uses.into_iter().collect(),
+        member_calls: member_calls.into_iter().collect(),
+    }
+}
+
+/// What [`direct_protocol_parameters`] derives for one file.
+#[derive(Default)]
+struct DirectProtocolUses {
+    /// `(owner, protocol, parameter index)`: item A's `get` and `coerce`
+    /// uses, and the iterations that forbid describing an enumeration whole.
+    protocols: Vec<(Span, crate::contract_semantics::InvokeProtocol, usize)>,
+    /// `(callee member span, owner, parameter index, path)`: item B's calls
+    /// of a literal-keyed member of the parameter's own value.
+    member_calls: Vec<(Span, Span, usize, Vec<String>)>,
 }
 
 /// Whether the parameter at `index` of the function whose body is `body` binds
@@ -1209,8 +1320,15 @@ fn discover_interprocedural_graph(
         .flat_map(|parameter| &parameter.names)
         .filter_map(|name| symbols.entities.at(file.path.as_str(), name.span).cloned())
         .collect::<HashSet<_>>();
-    contribution.direct_protocol_parameters =
-        direct_protocol_parameters(file, nodes, nodes_by_path);
+    let DirectProtocolUses {
+        protocols,
+        member_calls,
+    } = direct_protocol_parameters(file, nodes, nodes_by_path);
+    contribution.direct_protocol_parameters = protocols;
+    let member_calls = member_calls
+        .into_iter()
+        .map(|(callee, owner, parameter, path)| (callee, (owner, parameter, path)))
+        .collect::<HashMap<_, _>>();
     for (call_index, call) in file.ast.calls.iter().enumerate() {
         let Some(owner) = containing_summary_function_indexed(
             nodes,
@@ -1246,6 +1364,41 @@ fn discover_interprocedural_graph(
             if !contribution.invoked_parameter_members.contains(&entry) {
                 contribution.invoked_parameter_members.push(entry);
             }
+        }
+        // Item B of ways-to-improve § 3.3: `handler[0](handler[1], event)`, a
+        // call of a literal-keyed member of the owner's own parameter written
+        // in its own body. The callee is the caller's code at a path the
+        // literal names, so the call runs before the export returns, on the
+        // caller's stack, in the caller's tracking context: an `inline` row
+        // for that member, exactly as `handler(event)` is one for the
+        // parameter. Its arguments are then the caller's callable's business,
+        // as a parameter callee's are (see the argument loop below, which
+        // skips a callee that is a parameter for the same reason), so the
+        // unresolved-callee obligation this call used to raise for them is
+        // not raised: it described a callee nothing could name, and this one
+        // is named.
+        if let Some((callback_owner, parameter, path)) =
+            member_calls.get(&file.ast.peel_ts_sugar_span(call.callee))
+        {
+            contribution.direct_member_callback_parameters.push((
+                *callback_owner,
+                *parameter,
+                path.clone(),
+            ));
+            contribution.callbacks.push((
+                *callback_owner,
+                ContractCallback {
+                    parameter: *parameter,
+                    execution: "inline".into(),
+                    schedule: None,
+                    clears_tracking: false,
+                    arguments: callback_argument_contracts(file, call, symbols.entities, accessors),
+                    owner: None,
+                    protocol: crate::contract_semantics::InvokeProtocol::Call,
+                    path: path.clone(),
+                },
+            ));
+            continue;
         }
         let candidate_symbols = lookup.callee_symbols(file, call.callee);
         // Dispatch candidates answer "which analyzed implementation could
@@ -1596,6 +1749,7 @@ fn discover_interprocedural_graph(
                         ),
                         owner: None,
                         protocol: crate::contract_semantics::InvokeProtocol::Call,
+                        path: Vec::new(),
                     },
                 ));
             } else {
@@ -1624,11 +1778,113 @@ fn discover_interprocedural_graph(
             // The map holds invocation rows only (`source_discovery`); a
             // non-call row is no edge, no invoked parameter and no re-push.
             for callback in callbacks.iter().filter(|callback| callback.is_invocation()) {
-                let Some(argument) = call.arguments.get(callback.parameter) else {
+                let Some((argument, invoked)) = contract_callback_invoked_value(call, callback)
+                else {
                     continue;
                 };
                 let argument_location = location(file.path.shared(), argument.span);
-                if contract_callback_arguments_unbound(file, argument, callback)
+                if callback.invokes_member() {
+                    // Item B: the row calls a member of the argument. It is
+                    // folded exactly when the call's own syntax names that
+                    // member (see `contract_callback_invoked_value`), as an
+                    // inline row of the member's value would be; a member it
+                    // does not name is not folded at all, and the argument
+                    // is never read as the callable.
+                    if contract_callback_arguments_unbound(file, invoked, callback)
+                        && let Some((package, export)) = lookup.contract_export_identity(symbol)
+                    {
+                        contribution
+                            .contract_consumer_obligations
+                            .push(StaticDefect {
+                                kind: StaticDefectKind::PackageContractExportMissing {
+                                    module: package.to_owned(),
+                                    export: export.to_owned(),
+                                    reexported: false,
+                                    site: crate::ContractDefectSite::Argument,
+                                },
+                                location: argument_location.clone(),
+                                analysis_context: "unbound-contract-claims:callback arguments"
+                                    .into(),
+                                fixes: vec![],
+                                uncertain: false,
+                            });
+                    }
+                    // The argument is the owner's own parameter: the owner
+                    // hands its caller's value on, so it calls the caller's
+                    // member at the same path. Restated as the owner's row,
+                    // path unchanged; nothing of the owner's is invoked, so
+                    // no edge and no invoked parameter.
+                    if argument.spread {
+                        continue;
+                    }
+                    if let Some(argument_symbol) = symbols.entities.get(&argument_location)
+                        && let Some(&(callback_owner, parameter)) =
+                            function_lookup.parameter_owner.get(argument_symbol)
+                    {
+                        contribution.callbacks.push((
+                            nodes[callback_owner].span,
+                            ContractCallback {
+                                parameter,
+                                execution: callback.execution.clone(),
+                                schedule: callback.schedule,
+                                clears_tracking: callback.clears_tracking,
+                                arguments: callback.arguments.clone(),
+                                owner: None,
+                                protocol: callback.protocol,
+                                path: callback.path.clone(),
+                            },
+                        ));
+                        continue;
+                    }
+                    let Some(invoked) = invoked else {
+                        continue;
+                    };
+                    if let Some(member_symbol) = value_symbol(file, invoked, symbols.entities) {
+                        if callback.execution == "inline" {
+                            contribution.edges.push((
+                                owner_span,
+                                InterproceduralGraphTarget::Symbol(member_symbol.clone()),
+                            ));
+                        }
+                        // The member is the owner's own parameter: the owner's
+                        // caller's value is what gets called, as if the owner
+                        // had passed it bare to an empty-path row.
+                        if let Some(&(callback_owner, parameter)) =
+                            function_lookup.parameter_owner.get(member_symbol)
+                        {
+                            if callback.execution == "inline" {
+                                contribution
+                                    .invoked_parameters
+                                    .push((owner_span, parameter));
+                            }
+                            contribution.callbacks.push((
+                                nodes[callback_owner].span,
+                                ContractCallback {
+                                    parameter,
+                                    execution: callback.execution.clone(),
+                                    schedule: callback.schedule,
+                                    clears_tracking: callback.clears_tracking,
+                                    arguments: callback.arguments.clone(),
+                                    owner: None,
+                                    protocol: callback.protocol,
+                                    path: Vec::new(),
+                                },
+                            ));
+                        }
+                    } else if callback.execution == "inline"
+                        && let Some(target) =
+                            functions_for_path(nodes, nodes_by_path, file.path.as_str())
+                                .filter(|(_, node)| invoked.contains(node.span))
+                                .min_by_key(|(_, node)| node.span.end - node.span.start)
+                                .map(|(_, node)| node.span)
+                    {
+                        contribution
+                            .edges
+                            .push((owner_span, InterproceduralGraphTarget::LocalSpan(target)));
+                    }
+                    continue;
+                }
+                if contract_callback_arguments_unbound(file, invoked, callback)
                     && let Some((package, export)) = lookup.contract_export_identity(symbol)
                 {
                     contribution
@@ -1671,6 +1927,7 @@ fn discover_interprocedural_graph(
                                 arguments: callback.arguments.clone(),
                                 owner: None,
                                 protocol: callback.protocol,
+                                path: Vec::new(),
                             },
                         ));
                     }
@@ -1908,6 +2165,7 @@ fn discover_interprocedural_graph(
                             arguments: Vec::new(),
                             owner: None,
                             protocol: crate::contract_semantics::InvokeProtocol::Call,
+                            path: Vec::new(),
                         },
                     ));
                 } else {
@@ -2020,6 +2278,7 @@ fn discover_interprocedural_graph(
                                 arguments: Vec::new(),
                                 owner: None,
                                 protocol: crate::contract_semantics::InvokeProtocol::Call,
+                                path: Vec::new(),
                             },
                         ));
                     }
@@ -2681,8 +2940,10 @@ fn callback_wrapper_at(
                 .get(symbol)?
                 .iter()
                 // A non-call row (a property read or coercion of the
-                // argument) wraps nothing: it is not an invocation of it.
-                .find(|callback| callback.parameter == argument && callback.is_invocation())
+                // argument) wraps nothing: it is not an invocation of it. Nor
+                // does a member-path row: it calls a member of the argument,
+                // and the function written at this slot is not that member.
+                .find(|callback| callback.parameter == argument && callback.invokes_argument())
                 .map(|callback| std::borrow::Cow::Owned(callback.execution.clone()))
         })?;
     Some(match execution.as_ref() {
@@ -4523,6 +4784,7 @@ struct InterproceduralGraphAssembly<'a> {
     invoked_parameters: &'a mut [Vec<usize>],
     direct_callback_parameters: &'a mut [Vec<usize>],
     direct_protocol_parameters: &'a mut [Vec<(crate::contract_semantics::InvokeProtocol, usize)>],
+    direct_member_callback_parameters: &'a mut [Vec<(usize, Vec<String>)>],
     escaped_parameters: &'a mut [Vec<usize>],
     invoked_parameter_members: &'a mut [Vec<ParameterMemberInvocation>],
     returned_bindings: &'a mut Vec<(SymbolId, SymbolId)>,
@@ -4574,6 +4836,14 @@ impl InterproceduralGraphAssembly<'_> {
                 && !self.direct_protocol_parameters[owner].contains(&(*protocol, *parameter))
             {
                 self.direct_protocol_parameters[owner].push((*protocol, *parameter));
+            }
+        }
+        for (owner, parameter, path) in &contribution.direct_member_callback_parameters {
+            if let Some(owner) = node_index(*owner) {
+                let entry = (*parameter, path.clone());
+                if !self.direct_member_callback_parameters[owner].contains(&entry) {
+                    self.direct_member_callback_parameters[owner].push(entry);
+                }
             }
         }
         for (owner, parameter) in &contribution.escaped_parameters {
@@ -5073,10 +5343,19 @@ fn interprocedural_result_reads_for_file(
         let mut context = None::<String>;
         if let Some(callbacks) = contract_callbacks.get(symbol) {
             for callback in callbacks {
-                let Some(argument) = call.arguments.get(callback.parameter) else {
+                // The value the row invokes: the argument itself for an
+                // empty path, a member of it the call names exactly for a
+                // member-path row (item B), and nothing folded otherwise --
+                // never the whole argument for a member row.
+                let Some((_, Some(invoked))) = contract_callback_invoked_value(call, callback)
+                else {
                     continue;
                 };
-                let argument_symbol = entities.get(&location(file.path.shared(), argument.span));
+                let argument_symbol = if callback.invokes_member() {
+                    value_symbol(file, invoked, entities)
+                } else {
+                    entities.get(&location(file.path.shared(), invoked))
+                };
                 let argument_summary = argument_symbol
                     .and_then(|argument_symbol| {
                         dependencies.insert(InterproceduralResultDependency::Symbol(
@@ -5092,7 +5371,7 @@ fn interprocedural_result_reads_for_file(
                             .iter()
                             .enumerate()
                             .filter(|(_, node)| {
-                                node.path == file.path.as_str() && argument.span.contains(node.span)
+                                node.path == file.path.as_str() && invoked.contains(node.span)
                             })
                             .min_by_key(|(_, node)| node.span.end - node.span.start)
                             .map(|(index, node)| {
@@ -5529,6 +5808,8 @@ fn interprocedural_reads(
     let mut direct_callback_parameters = vec![Vec::<usize>::new(); nodes.len()];
     let mut direct_protocol_parameters =
         vec![Vec::<(crate::contract_semantics::InvokeProtocol, usize)>::new(); nodes.len()];
+    let mut direct_member_callback_parameters =
+        vec![Vec::<(usize, Vec<String>)>::new(); nodes.len()];
     let mut escaped_parameters = vec![Vec::<usize>::new(); nodes.len()];
     let mut invoked_parameter_members = vec![Vec::<ParameterMemberInvocation>::new(); nodes.len()];
     let mut returned_binding_candidates = Vec::new();
@@ -5550,6 +5831,7 @@ fn interprocedural_reads(
             invoked_parameters: &mut invoked_parameters,
             direct_callback_parameters: &mut direct_callback_parameters,
             direct_protocol_parameters: &mut direct_protocol_parameters,
+            direct_member_callback_parameters: &mut direct_member_callback_parameters,
             escaped_parameters: &mut escaped_parameters,
             invoked_parameter_members: &mut invoked_parameter_members,
             returned_bindings: &mut returned_binding_candidates,
@@ -5695,6 +5977,7 @@ fn interprocedural_reads(
                     arguments: callback.arguments.clone(),
                     owner: callback.owner.clone(),
                     protocol: callback.protocol,
+                    path: callback.path.clone(),
                 };
                 if !callback_summaries[*owner].contains(&forwarded) {
                     callback_summaries[*owner].push(forwarded);
@@ -6006,6 +6289,8 @@ fn interprocedural_reads(
                 && invoked_parameters[*candidate] == invoked_parameters[first]
                 && direct_callback_parameters[*candidate] == direct_callback_parameters[first]
                 && direct_protocol_parameters[*candidate] == direct_protocol_parameters[first]
+                && direct_member_callback_parameters[*candidate]
+                    == direct_member_callback_parameters[first]
                 && invoked_parameter_members[*candidate] == invoked_parameter_members[first]
                 && nodes[*candidate].r#async == nodes[first].r#async
         });
@@ -6457,6 +6742,7 @@ fn interprocedural_reads(
         callbacks: &callback_summaries,
         direct_callback_parameters: &direct_callback_parameters,
         direct_protocol_parameters: &direct_protocol_parameters,
+        direct_member_callback_parameters: &direct_member_callback_parameters,
         escaped_parameters: &escaped_parameters,
         invoked_parameter_members: &invoked_parameter_members,
         semantics: ContractSemantics { source_kinds },
@@ -6595,6 +6881,7 @@ mod tests {
             arguments: Vec::new(),
             owner: None,
             protocol: crate::contract_semantics::InvokeProtocol::Call,
+            path: Vec::new(),
         };
         let repeated = [callback(0, "deferred"), callback(0, "deferred")];
         let distinct = [callback(0, "deferred"), callback(1, "inline")];
@@ -6615,6 +6902,7 @@ mod tests {
             arguments: Vec::new(),
             owner: Some("inherited".into()),
             protocol: crate::contract_semantics::InvokeProtocol::Call,
+            path: Vec::new(),
         };
         let leaf = ContractCallback {
             owner: Some("leaf".into()),

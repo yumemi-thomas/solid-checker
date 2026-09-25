@@ -170,6 +170,7 @@ pub fn project_export_semantics(
         direct_callback_parameters: BTreeSet::new(),
         direct_accessor_parameters: BTreeSet::new(),
         direct_coerced_parameters: BTreeSet::new(),
+        direct_member_callback_parameters: BTreeSet::new(),
         iterated_parameters: BTreeSet::new(),
         // A projected dependency export has no body here to walk.
         merged_props_return: None,
@@ -189,10 +190,11 @@ fn project_callbacks(
     }
     let mut callbacks = Vec::new();
     for callback in knowledge.items() {
-        let ValueSource::Parameter { index, .. } = callback.from else {
+        let ValueSource::Parameter { index, path } = &callback.from else {
             open.insert(ClaimDomain::Callbacks);
             continue;
         };
+        let index = *index;
         let Some(operation) = export.operation(&callback.operation.0) else {
             open.insert(ClaimDomain::Callbacks);
             continue;
@@ -233,6 +235,14 @@ fn project_callbacks(
             // wrote -- and today raises no obligation for a non-callable
             // argument at all.
             protocol: operation.invoke_protocol(),
+            // The member of the argument the item invokes (item B of
+            // ways-to-improve § 3.3), carried whole. Dropping it read
+            // `handler[0](…)` as "argument 1 itself is invoked inline": a
+            // consumer would then fold `callHandler(e, handlerProp)` as a call
+            // of `handlerProp`, and re-emission would republish the item as
+            // a call of the argument. Every pass that reads a row as a call of
+            // the argument asks `ContractCallback::invokes_argument`.
+            path: path.clone(),
             arguments: operation.inputs.iter().map(project_return_shape).collect(),
             owner: match operation.owner.source {
                 OwnerSource::None => Some("none".into()),
@@ -1884,6 +1894,9 @@ pub(super) struct ContractAnalysis<'a> {
     /// its own body (`interproc::direct_protocol_parameters`).
     pub(super) direct_protocol_parameters:
         &'a [Vec<(crate::contract_semantics::InvokeProtocol, usize)>],
+    /// Per node, the literal-keyed members of its own parameters it calls
+    /// directly in its own body (item B of ways-to-improve § 3.3).
+    pub(super) direct_member_callback_parameters: &'a [Vec<(usize, Vec<String>)>],
     /// Per node, the parameters whose caller-supplied value the analysis never
     /// accounted for. Any one of them makes this export's `callbacks` domain
     /// its callback domain open — see
@@ -1903,6 +1916,7 @@ struct ContractExportNode<'a> {
     callbacks: &'a [ContractCallback],
     direct_callback_parameters: &'a [usize],
     direct_protocol_parameters: &'a [(crate::contract_semantics::InvokeProtocol, usize)],
+    direct_member_callback_parameters: &'a [(usize, Vec<String>)],
     escaped_parameters: &'a [usize],
     invoked_parameter_members: &'a [ParameterMemberInvocation],
 }
@@ -1917,6 +1931,7 @@ impl<'a> ContractExportNode<'a> {
             callbacks: &analysis.callbacks[index],
             direct_callback_parameters: &analysis.direct_callback_parameters[index],
             direct_protocol_parameters: &analysis.direct_protocol_parameters[index],
+            direct_member_callback_parameters: &analysis.direct_member_callback_parameters[index],
             escaped_parameters: &analysis.escaped_parameters[index],
             invoked_parameter_members: &analysis.invoked_parameter_members[index],
         }
@@ -1935,6 +1950,7 @@ fn contract_export_function(
         callbacks,
         direct_callback_parameters,
         direct_protocol_parameters,
+        direct_member_callback_parameters,
         escaped_parameters,
         invoked_parameter_members,
     } = inputs;
@@ -2082,6 +2098,10 @@ fn contract_export_function(
         // the callbacks domain above stayed known -- the generator's filter
         // reads both, and an open domain proposes nothing either way.
         direct_callback_parameters: direct_callback_parameters.iter().copied().collect(),
+        direct_member_callback_parameters: direct_member_callback_parameters
+            .iter()
+            .cloned()
+            .collect(),
         direct_accessor_parameters: direct_protocol_parameters
             .iter()
             .filter(|(protocol, _)| *protocol == crate::contract_semantics::InvokeProtocol::Get)
@@ -2129,8 +2149,17 @@ fn contract_export_function(
 ///
 /// `callbacks` must already be sorted by parameter.
 fn callbacks_contradict_on_a_parameter(callbacks: &[ContractCallback]) -> bool {
-    callbacks.windows(2).any(|pair| {
-        pair[0].parameter == pair[1].parameter && pair[0].execution != pair[1].execution
+    // Per invoked value: the argument itself, or one member path of it (item
+    // B of ways-to-improve § 3.3). A row for `handler` and a row for
+    // `handler[0]` describe two different invocations and cannot contradict
+    // each other. With no member row this is exactly the adjacent-pair check
+    // over rows sorted by parameter it replaces.
+    let mut executions = HashMap::<(usize, &[String]), &str>::new();
+    callbacks.iter().any(|callback| {
+        let execution = executions
+            .entry((callback.parameter, callback.path.as_slice()))
+            .or_insert(callback.execution.as_str());
+        *execution != callback.execution.as_str()
     })
 }
 
@@ -3163,6 +3192,7 @@ mod callback_contradiction_tests {
             arguments: Vec::new(),
             owner: None,
             protocol: crate::contract_semantics::InvokeProtocol::Call,
+            path: Vec::new(),
         }
     }
 

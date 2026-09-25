@@ -230,6 +230,9 @@ pub(crate) fn synthesize(
                             Observation::DescribedProtocols(_) => {
                                 "ADR 0100 per protocol, described callbacks enumeration with non-call items"
                             }
+                            Observation::DescribedMembers(..) => {
+                                "ADR 0100 per protocol and member, described callbacks enumeration with member calls"
+                            }
                             Observation::DescribedReads(_) => {
                                 "ADR 0101, described reads enumeration"
                             }
@@ -512,6 +515,16 @@ enum Observation {
     /// An enumeration with no non-call item is `DescribedCallbacks`, byte for
     /// byte as before.
     DescribedProtocols(ProtocolMasks),
+    /// Item B of ways-to-improve § 3.3: a described `callbacks` enumeration
+    /// with at least one call item from a member of a parameter at an index
+    /// (`handler[0](…)`). The `DescribedProtocols` module, with every slot a
+    /// member item names carrying a recording callable at each index up to one
+    /// past the highest described one, so the call of a described member
+    /// inside the sample call is the item, and a call of any other of them, or
+    /// of a described one outside the call, is the contradiction. An
+    /// enumeration with no member item is one of the two variants above, byte
+    /// for byte as before; a member item at a property key is not synthesized.
+    DescribedMembers(ProtocolMasks, MemberCalls),
     /// ADR 0101: a described `reads` enumeration, every item a `read` of a
     /// caller parameter -- the generator's `parameter-member` row for
     /// `props.of.values()` -- `at` the call event on the same stack. The bits
@@ -566,11 +579,12 @@ fn candidate_observation(domain: &str, export: &ExportSemantics) -> Option<Obser
                 return Some(Observation::EmptyCallbacks);
             }
             let mut masks = ProtocolMasks::default();
+            let mut members = MemberCalls::default();
             for item in export.callbacks().items() {
                 let ValueSource::Parameter { index, path } = &item.from else {
                     return None;
                 };
-                if !path.is_empty() || u32::from(*index) >= u64::BITS {
+                if u32::from(*index) >= u64::BITS {
                     return None;
                 }
                 let operation = export.operation(&item.operation.0)?;
@@ -581,11 +595,25 @@ fn candidate_observation(domain: &str, export: &ExportSemantics) -> Option<Obser
                 {
                     return None;
                 }
+                if !path.is_empty() {
+                    // Item B: a call of the member at one index; any other
+                    // member item is not synthesized.
+                    if operation.is_protocol_invocation() {
+                        return None;
+                    }
+                    let [key] = path.as_slice() else {
+                        return None;
+                    };
+                    members.push(*index, member_index(key)?)?;
+                    continue;
+                }
                 // A non-call item is never a call slot: it is recorded under
                 // its own protocol, and its presence selects the Proxy module.
                 *masks.of_mut(operation.invoke_protocol()) |= 1 << index;
             }
-            Some(if masks.has_protocol_items() {
+            Some(if !members.is_empty() {
+                Observation::DescribedMembers(masks, members)
+            } else if masks.has_protocol_items() {
                 Observation::DescribedProtocols(masks)
             } else {
                 Observation::DescribedCallbacks(masks.call)
@@ -650,6 +678,99 @@ fn candidate_observation(domain: &str, export: &ExportSemantics) -> Option<Obser
         }
         _ => None,
     }
+}
+
+/// The member call items of a described `callbacks` enumeration (item B), as
+/// `(slot, index)` pairs: at most [`MemberCalls::CAPACITY`], each a slot below
+/// 64 and an index no larger than [`MemberCalls::MAX_INDEX`], small enough to
+/// stay `Copy`. A claim past that is not synthesized.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct MemberCalls {
+    len: u8,
+    items: [(u8, u8); MemberCalls::CAPACITY],
+}
+
+impl MemberCalls {
+    const CAPACITY: usize = 4;
+    /// The highest index a recording member is installed at is one past the
+    /// highest described one, so this bounds the target's size.
+    const MAX_INDEX: u8 = 15;
+
+    fn push(&mut self, slot: u16, index: u8) -> Option<()> {
+        let slot = u8::try_from(slot)
+            .ok()
+            .filter(|slot| u32::from(*slot) < u64::BITS)?;
+        if index > Self::MAX_INDEX {
+            return None;
+        }
+        if self.items().contains(&(slot, index)) {
+            return Some(());
+        }
+        let position = usize::from(self.len);
+        if position >= Self::CAPACITY {
+            return None;
+        }
+        self.items[position] = (slot, index);
+        self.len += 1;
+        Some(())
+    }
+
+    fn items(&self) -> &[(u8, u8)] {
+        &self.items[..usize::from(self.len)]
+    }
+
+    const fn is_empty(self) -> bool {
+        self.len == 0
+    }
+
+    /// Every slot some member item names, as bits.
+    fn slots(self) -> u64 {
+        self.items()
+            .iter()
+            .fold(0, |mask, (slot, _)| mask | (1 << slot))
+    }
+
+    /// `new Set(["1:0"])`: the described `(slot, index)` pairs.
+    fn javascript_described(self) -> String {
+        format!(
+            "new Set([{}])",
+            self.items()
+                .iter()
+                .map(|(slot, index)| format!("\"{slot}:{index}\""))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+
+    /// `{ 1: 0 }`: per member slot, the highest described index.
+    fn javascript_tops(self) -> String {
+        let mut tops = std::collections::BTreeMap::<u8, u8>::new();
+        for (slot, index) in self.items() {
+            let top = tops.entry(*slot).or_insert(*index);
+            *top = (*top).max(*index);
+        }
+        format!(
+            "{{ {} }}",
+            tops.iter()
+                .map(|(slot, top)| format!("{slot}: {top}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+}
+
+/// The index a member item's one key names, when it is a canonical decimal
+/// integer no larger than [`MemberCalls::MAX_INDEX`].
+fn member_index(key: &str) -> Option<u8> {
+    if key.is_empty() || (key.len() > 1 && key.starts_with('0')) {
+        return None;
+    }
+    if !key.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    key.parse::<u8>()
+        .ok()
+        .filter(|index| *index <= MemberCalls::MAX_INDEX)
 }
 
 /// The slots a described `callbacks` enumeration names, per protocol, as bits.
@@ -866,6 +987,11 @@ impl Observation {
                 observation: "exact for the recorded slots: a Proxy argument the sample supplied was called or constructed, had a string-keyed member read, tested with `in`, enumerated or described (get), had Symbol.iterator or Symbol.asyncIterator read (iterate), had Symbol.toPrimitive, valueOf or toString read (coerce), or had Symbol.hasInstance read (has-instance), by a protocol the enumeration does not describe for that slot, at any time up to the end of the session's drain, or by a described one outside the sample call's own stack",
                 emit: "",
             },
+            Self::DescribedMembers(..) => ReviewedObservation {
+                marker: "callback-invocation",
+                observation: "exact for the recorded slots: as for the per-protocol observation, and in addition a recording function the sample installed at each index of a member slot up to one past the highest described index was called at an index the enumeration does not describe for that slot, at any time up to the end of the session's drain, or at a described one outside the sample call's own stack",
+                emit: "",
+            },
             Self::DescribedReads(_) => ReviewedObservation {
                 marker: "read-operation",
                 observation: "exact for the described slots: a member of an object argument the sample supplied at a slot the enumeration does not describe was invoked at any time up to the end of the session's drain, or a member of one at a described slot was invoked outside the sample call's own stack; which member, and any read of a source the export owns, are not observed",
@@ -942,6 +1068,9 @@ impl Observation {
             Self::NotCallable | Self::DefaultLibraryAlias(_) => Vec::new(),
             Self::DescribedCallbacks(_) => sample_tuples_with(signatures, true),
             Self::DescribedProtocols(masks) => protocol_sample_tuples(signatures, masks),
+            Self::DescribedMembers(masks, members) => {
+                member_sample_tuples(signatures, masks, members)
+            }
             Self::DescribedReads(mask) => reads_sample_tuples(signatures, mask),
             _ => sample_tuples(signatures),
         }
@@ -954,6 +1083,9 @@ impl Observation {
             }
             Self::DescribedProtocols(_) => {
                 "at most six tuples per overload; no variadic tail or structural object construction; every described slot and every object-, array- or callable-typed slot is sampled with a recording Proxy over an empty object, an empty array or a zero-arity function, whose traps answer as the target does, and a described slot the signature types as a primitive is also sampled with the object Proxy; a symbol-keyed member other than the iteration, coercion and hasInstance symbols is not recorded, and a use on a value the export derived from an argument, rather than the argument itself, is not observed"
+            }
+            Self::DescribedMembers(..) => {
+                "at most six tuples per overload; no variadic tail or structural object construction; every described slot and every object-, array- or callable-typed slot is sampled with a recording Proxy over an empty object, an empty array or a zero-arity function, whose traps answer as the target does, and a slot a member item names is also sampled with the array Proxy; a member slot's target carries a recording function at each index up to one past the highest described one and nothing past it, so a call of a member at a higher index or at a property key throws and observes nothing; a symbol-keyed member other than the iteration, coercion and hasInstance symbols is not recorded, and a use on a value the export derived from an argument, rather than the argument itself, is not observed"
             }
             Self::DescribedReads(_) => {
                 "at most six tuples per overload; no variadic tail; every described slot and every object-typed slot is sampled with a recording tripwire whose members are all callable to a depth of eight, so an export that expects a real value there throws and observes nothing, and a walk along a member chain ends; engine-protocol members (then, valueOf, toString, toJSON, constructor, symbols) are not recorded, and iterating or coercing a tripwire throws"
@@ -1149,6 +1281,9 @@ fn module_source(
     if let Observation::DescribedProtocols(masks) = observation {
         return described_protocols_module_source(specifier, export, masks, signatures);
     }
+    if let Observation::DescribedMembers(masks, members) = observation {
+        return described_members_module_source(specifier, export, masks, members, signatures);
+    }
     if let Observation::DescribedReads(mask) = observation {
         return described_reads_module_source(specifier, export, mask, signatures);
     }
@@ -1163,6 +1298,7 @@ fn module_source(
         | Observation::DefaultLibraryAlias(_)
         | Observation::DescribedCallbacks(_)
         | Observation::DescribedProtocols(_)
+        | Observation::DescribedMembers(..)
         | Observation::DescribedReads(_) => unreachable!(),
     };
     // Only this observation emits from inside the callback. Giving every
@@ -1381,7 +1517,26 @@ fn protocol_sample_tuples(
     signatures: &[typefacts::SelectedSignature],
     masks: ProtocolMasks,
 ) -> Vec<Vec<String>> {
-    let described = masks.any();
+    protocol_sample_tuples_with(signatures, masks, 0)
+}
+
+/// [`protocol_sample_tuples`] for an enumeration with member call items: a
+/// slot a member item names is also sampled with the array Proxy, whose
+/// target carries the recording members, when its signature offers no array.
+fn member_sample_tuples(
+    signatures: &[typefacts::SelectedSignature],
+    masks: ProtocolMasks,
+    members: MemberCalls,
+) -> Vec<Vec<String>> {
+    protocol_sample_tuples_with(signatures, masks, members.slots())
+}
+
+fn protocol_sample_tuples_with(
+    signatures: &[typefacts::SelectedSignature],
+    masks: ProtocolMasks,
+    member_slots: u64,
+) -> Vec<Vec<String>> {
+    let described = masks.any() | member_slots;
     let mut tuples = Vec::new();
     for signature in signatures {
         let slots = signature
@@ -1398,6 +1553,10 @@ fn protocol_sample_tuples(
                     })
                 {
                     candidates.push(Sample::Object);
+                }
+                let member = recorded && member_slots & (1 << parameter.index) != 0;
+                if member && !candidates.contains(&Sample::Array) {
+                    candidates.push(Sample::Array);
                 }
                 (parameter.index, (candidates, literals))
             })
@@ -1517,6 +1676,116 @@ fn described_protocols_module_source(
          \x20 harness.emit({{ marker: \"call\", kind: \"call\", phase: \"exit\" }});\n\
          }}\n",
         described = masks.javascript(),
+        specifier_json = serde_json::to_string(specifier).unwrap_or_default(),
+        export_json = serde_json::to_string(export).unwrap_or_default(),
+    )
+}
+
+/// The module for a described `callbacks` enumeration with member call items
+/// (item B of ways-to-improve § 3.3): [`described_protocols_module_source`]'s
+/// per-protocol Proxy, with the target of every slot a member item names
+/// carrying `memberAt(slot, index)` -- a recording function -- at each index
+/// up to one past the highest described index for that slot. A call of a
+/// described member inside the sample call is the item and observes nothing;
+/// a call of an undescribed one, or of any of them outside the call, emits the
+/// contradiction. The member is read through the Proxy, so the read is the
+/// slot's `get` as it is for any other key. A separate function so that
+/// module stays byte-identical for every enumeration with no member item.
+fn described_members_module_source(
+    specifier: &str,
+    export: &str,
+    masks: ProtocolMasks,
+    members: MemberCalls,
+    signatures: &[typefacts::SelectedSignature],
+) -> String {
+    let tuples = member_sample_tuples(signatures, masks, members)
+        .into_iter()
+        .map(|arguments| format!("  [{}],", arguments.join(", ")))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "// Synthesized veto (ADR 0100, per protocol and member) for the described\n\
+         // `callbacks` closure of `{export}`, whose items include calls of a member\n\
+         // of an argument. Derived from the export's Type Facts call signature;\n\
+         // deterministic in it. It observes, it never proves: the implementation\n\
+         // census is the proof.\n\
+         import * as subjectModule from {specifier_json};\n\
+         \n\
+         const subject = subjectModule[{export_json}];\n\
+         const described = {described};\n\
+         const members = {members};\n\
+         const memberTops = {tops};\n\
+         let emitter = null;\n\
+         let inCall = false;\n\
+         let emitted = false;\n\
+         const contradict = () => {{\n\
+         \x20 if (!emitted && emitter) {{\n\
+         \x20   emitted = true;\n\
+         \x20   emitter.emit({{ marker: \"callback-invocation\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 }}\n\
+         }};\n\
+         const record = (slot, protocol) => {{\n\
+         \x20 if (!described[protocol].has(slot) || !inCall) contradict();\n\
+         }};\n\
+         // A call of the member the sample installed at `index` of `slot`.\n\
+         const memberAt = (slot, index) => function () {{\n\
+         \x20 if (!members.has(`${{slot}}:${{index}}`) || !inCall) contradict();\n\
+         \x20 return undefined;\n\
+         }};\n\
+         // Which protocol of the value a property key reaches. A string key is a\n\
+         // property read, except the two ToPrimitive reaches; the iteration,\n\
+         // coercion and hasInstance symbols are their protocols; any other\n\
+         // symbol is the engine's own bookkeeping and records nothing.\n\
+         const protocolOf = (key) => {{\n\
+         \x20 if (key === Symbol.iterator || key === Symbol.asyncIterator) return \"iterate\";\n\
+         \x20 if (key === Symbol.toPrimitive || key === \"valueOf\" || key === \"toString\") return \"coerce\";\n\
+         \x20 if (key === Symbol.hasInstance) return \"has-instance\";\n\
+         \x20 return typeof key === \"string\" ? \"get\" : null;\n\
+         }};\n\
+         const use = (slot, key) => {{\n\
+         \x20 const protocol = protocolOf(key);\n\
+         \x20 if (protocol !== null) record(slot, protocol);\n\
+         }};\n\
+         const slotAt = (slot, shape) => {{\n\
+         \x20 const target = shape === \"function\" ? function () {{ return undefined; }} : shape === \"array\" ? [] : {{}};\n\
+         \x20 const top = memberTops[slot];\n\
+         \x20 if (top !== undefined) {{\n\
+         \x20   for (let index = 0; index <= top + 1; index += 1) target[index] = memberAt(slot, index);\n\
+         \x20 }}\n\
+         \x20 return new Proxy(target, {{\n\
+         \x20   apply(t, self, args) {{ record(slot, \"call\"); return Reflect.apply(t, self, args); }},\n\
+         \x20   construct(t, args, next) {{ record(slot, \"call\"); return Reflect.construct(t, args, next); }},\n\
+         \x20   get(t, key, receiver) {{ use(slot, key); return Reflect.get(t, key, receiver); }},\n\
+         \x20   has(t, key) {{ use(slot, key); return Reflect.has(t, key); }},\n\
+         \x20   ownKeys(t) {{ record(slot, \"get\"); return Reflect.ownKeys(t); }},\n\
+         \x20   getOwnPropertyDescriptor(t, key) {{ use(slot, key); return Reflect.getOwnPropertyDescriptor(t, key); }},\n\
+         \x20 }});\n\
+         }};\n\
+         const samples = [\n{tuples}\n];\n\
+         \n\
+         export async function runProbeSession(_session, harness) {{\n\
+         \x20 emitter = harness;\n\
+         \x20 harness.emit({{ marker: \"call\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 if (typeof subject !== \"function\") {{\n\
+         \x20   throw new Error(\"synthesized veto: the export is not callable in this realm\");\n\
+         \x20 }}\n\
+         \x20 let threw = 0;\n\
+         \x20 for (const args of samples) {{\n\
+         \x20   inCall = true;\n\
+         \x20   try {{\n\
+         \x20     subject(...args);\n\
+         \x20   }} catch {{\n\
+         \x20     threw += 1;\n\
+         \x20   }} finally {{\n\
+         \x20     inCall = false;\n\
+         \x20   }}\n\
+         \x20 }}\n\
+         \x20 if (threw > 0) harness.emit({{ marker: \"sample-threw\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 harness.emit({{ marker: \"call\", kind: \"call\", phase: \"exit\" }});\n\
+         }}\n",
+        described = masks.javascript(),
+        members = members.javascript_described(),
+        tops = members.javascript_tops(),
         specifier_json = serde_json::to_string(specifier).unwrap_or_default(),
         export_json = serde_json::to_string(export).unwrap_or_default(),
     )

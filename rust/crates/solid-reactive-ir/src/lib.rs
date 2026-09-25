@@ -1161,6 +1161,15 @@ pub struct ContractExport {
     /// The same, for a coercing operand (`a < b`, `` `${v}` ``, `+v`) that is
     /// the parameter's own identifier: a `coerce` item.
     pub direct_coerced_parameters: BTreeSet<usize>,
+    /// `(parameter, path)` for a call this export's own body makes of a
+    /// literal-keyed member of a parameter's own unwritten binding --
+    /// `handler[0](…)`, `h["run"](…)`, outside any nested callable -- which the
+    /// interprocedural pass writes as an `inline` callback row carrying that
+    /// path (item B of ways-to-improve § 3.3). The member path's call item
+    /// the implementation census can confirm site for site. A proposal input
+    /// in the family of [`Self::direct_callback_parameters`]: never encoded,
+    /// never evidence, empty is "do not propose".
+    pub direct_member_callback_parameters: BTreeSet<(usize, Vec<String>)>,
     /// The parameters whose value, or a value reached through its members,
     /// this export iterates anywhere in its body (a `for…of`, a spread, an
     /// array pattern), and those bound by an array pattern in parameter
@@ -1422,6 +1431,13 @@ pub struct ContractCallback {
     /// callable: no consumer pass may read one as a call of the argument. See
     /// [`ContractCallback::is_invocation`].
     pub protocol: contract_semantics::InvokeProtocol,
+    /// The member of the argument at [`Self::parameter`] this row invokes,
+    /// outwards from the argument: empty for the argument itself, `["0"]` for
+    /// `handler[0](…)` (item B of ways-to-improve § 3.3). A row with a path is
+    /// a call of *that member*, never of the argument: see
+    /// [`ContractCallback::invokes_argument`] and
+    /// [`ContractCallback::invokes_member`].
+    pub path: Vec<String>,
 }
 
 impl ContractCallback {
@@ -1440,6 +1456,27 @@ impl ContractCallback {
     #[must_use]
     pub fn is_invocation(&self) -> bool {
         self.protocol == contract_semantics::InvokeProtocol::Call
+    }
+
+    /// Whether this row calls the argument at [`Self::parameter`] itself: an
+    /// invocation with an empty path. Every pass that reads a row as "the
+    /// value passed here is called" -- a call-graph edge to the argument, an
+    /// invoked parameter, a wrapper, an owner edge, an execution role for the
+    /// argument -- asks this, not [`Self::is_invocation`]: a member-path row
+    /// calls a member of the argument, and reading it as a call of the
+    /// argument would fold `callHandler(e, handlerProp)` as a call of
+    /// `handlerProp`.
+    #[must_use]
+    pub fn invokes_argument(&self) -> bool {
+        self.is_invocation() && self.path.is_empty()
+    }
+
+    /// Whether this row calls a member of the argument, at [`Self::path`]
+    /// (item B of ways-to-improve § 3.3). A consumer folds such a row only
+    /// when the argument written at the slot resolves that member exactly.
+    #[must_use]
+    pub fn invokes_member(&self) -> bool {
+        self.is_invocation() && !self.path.is_empty()
     }
 }
 

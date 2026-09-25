@@ -1303,3 +1303,154 @@ fn a_non_call_item_selects_the_protocol_observation_and_is_no_call_slot() {
         "a call-only enumeration is ADR 0100's observation, unchanged"
     );
 }
+
+fn members(items: &[(u16, u8)]) -> MemberCalls {
+    let mut members = MemberCalls::default();
+    for (slot, index) in items {
+        members.push(*slot, *index).expect("within capacity");
+    }
+    members
+}
+
+/// Item B of ways-to-improve § 3.3: the member module is quiet for exactly
+/// the described uses -- `callHandler`'s call of slot 1, call of slot 1's
+/// member 0, reads of both slots, inside the sample call -- and loud for a
+/// call of an undescribed member, a described member called after the call
+/// returned, or a member call no item describes at all. A slot a member item
+/// names is sampled with the array Proxy even where its signature offers only
+/// a callable.
+#[test]
+fn the_described_members_module_emits_outside_the_description_only() {
+    let invoked = |observed: &ObservationResult| {
+        observed
+            .markers
+            .iter()
+            .any(|marker| marker == "callback-invocation")
+    };
+    let object = value_fact(json!({"mayBeObject": true, "mayBeUndefined": true}));
+    let handler = [signature(&[object.clone(), callable_fact()])];
+    let call_handler = "export function subject(event, handler) {\n\
+         \tif (handler) if (typeof handler === \"function\") handler(event);\n\
+         \telse handler[0](handler[1], event);\n\
+         \treturn event?.defaultPrevented;\n\
+         }";
+    let described = members(&[(1, 0)]);
+    let quiet = execute(
+        call_handler,
+        Observation::DescribedMembers(masks(0b10, 0b11, 0), described),
+        &handler,
+    );
+    assert_eq!(quiet.error, None);
+    assert!(!invoked(&quiet), "{quiet:?}");
+    let source = module_source(
+        "data:text/javascript,",
+        "subject",
+        Observation::DescribedMembers(masks(0b10, 0b11, 0), described),
+        &handler,
+    );
+    assert!(source.contains("slotAt(1, \"array\")"), "{source}");
+    assert!(source.contains("slotAt(1, \"function\")"), "{source}");
+    assert!(
+        source.contains("const members = new Set([\"1:0\"]);"),
+        "{source}"
+    );
+    assert!(source.contains("const memberTops = { 1: 0 };"), "{source}");
+
+    for (implementation, described) in [
+        // The member call is the item; describing the rest without it is
+        // contradicted by the call of member 0.
+        (call_handler, members(&[(1, 1)])),
+        // A call of member 1 beside the described member 0.
+        (
+            "export function subject(event, handler) { if (typeof handler !== \"function\") { handler[0](); handler[1](); } }",
+            members(&[(1, 0)]),
+        ),
+        // A described member called after the sample call returned.
+        (
+            "export function subject(event, handler) { if (typeof handler !== \"function\") queueMicrotask(() => handler[0]()); }",
+            members(&[(1, 0)]),
+        ),
+    ] {
+        let observed = execute(
+            implementation,
+            Observation::DescribedMembers(masks(0b10, 0b11, 0), described),
+            &handler,
+        );
+        assert!(invoked(&observed), "{implementation}: {observed:?}");
+    }
+}
+
+/// A member-path call item selects the member observation, at an index only;
+/// an enumeration without one keeps the per-protocol or ADR 0100 observation,
+/// and a member at a property key, a member of a member, or a non-call use of
+/// a member is not synthesized.
+#[test]
+fn a_member_call_item_selects_the_member_observation_at_an_index_only() {
+    use solid_reactive_ir::contract_semantics::{CallbackInvocation, InvokeProtocol, ValueSource};
+    let invoke = |id: &str, protocol: Option<InvokeProtocol>| Operation {
+        id: OperationId(id.into()),
+        kind: OperationKind::Invoke,
+        output: None,
+        tracking: Tracking::AmbientAtExecution,
+        protocol,
+        ..return_operation()
+    };
+    let export = |items: Vec<CallbackInvocation>, operations: Vec<Operation>| {
+        let mut export = export_with_returns(KnowledgeSet::Unknown, operations);
+        export.call = CallSemantics::new(
+            CallClaims {
+                callbacks: KnowledgeSet::complete(items),
+                ..CallClaims::default()
+            },
+            export.call.operations.clone(),
+            vec![],
+            vec![],
+            GuardPartition::default(),
+        );
+        export
+    };
+    let item = |index: u16, path: &[&str], operation: &str| CallbackInvocation {
+        from: ValueSource::Parameter {
+            index,
+            path: path.iter().map(|key| (*key).to_owned()).collect(),
+        },
+        operation: OperationId(operation.into()),
+    };
+    assert_eq!(
+        candidate_observation(
+            "callbacks",
+            &export(
+                vec![item(1, &[], "a"), item(1, &["0"], "b"), item(1, &[], "c")],
+                vec![
+                    invoke("a", None),
+                    invoke("b", None),
+                    invoke("c", Some(InvokeProtocol::Get)),
+                ]
+            )
+        ),
+        Some(Observation::DescribedMembers(
+            ProtocolMasks {
+                call: 0b10,
+                get: 0b10,
+                ..ProtocolMasks::default()
+            },
+            members(&[(1, 0)])
+        ))
+    );
+    for (path, protocol) in [
+        (&["run"][..], None),
+        (&["0", "1"][..], None),
+        (&["01"][..], None),
+        (&["16"][..], None),
+        (&["0"][..], Some(InvokeProtocol::Get)),
+    ] {
+        assert_eq!(
+            candidate_observation(
+                "callbacks",
+                &export(vec![item(0, path, "a")], vec![invoke("a", protocol)])
+            ),
+            None,
+            "{path:?} {protocol:?}"
+        );
+    }
+}

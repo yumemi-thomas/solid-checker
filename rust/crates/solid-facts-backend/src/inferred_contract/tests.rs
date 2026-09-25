@@ -254,6 +254,7 @@ fn self_bootstrapped_callbacks_are_unknown_while_consuming_callbacks_survive() {
                 arguments: Vec::new(),
                 owner: None,
                 protocol: solid_reactive_ir::contract_semantics::InvokeProtocol::Call,
+                path: Vec::new(),
             }]),
             // The row above was written for `cb()` in the export's own body.
             direct_callback_parameters: BTreeSet::from([0]),
@@ -335,6 +336,7 @@ fn a_parameter_read_or_coercion_is_described_as_a_non_call_callbacks_item() {
         arguments: Vec::new(),
         owner: None,
         protocol: InvokeProtocol::Call,
+        path: Vec::new(),
     };
     let normalize = |summary: ContractExport| {
         normalize_inferred_contract_with_candidates(
@@ -478,6 +480,131 @@ fn a_parameter_read_or_coercion_is_described_as_a_non_call_callbacks_item() {
     );
 }
 
+/// Item B of ways-to-improve § 3.3: a call of a literal-keyed member of a
+/// parameter is published as a call item `from` that parameter at that path,
+/// in the same shape as any other same-stack call item, and the enumeration is
+/// proposable exactly when the export's own body makes that call
+/// (`direct_member_callback_parameters`). Re-emission republishes the path, so
+/// a member item never comes back as a call of the argument.
+#[test]
+fn a_member_call_of_a_parameter_is_described_with_its_path() {
+    use solid_reactive_ir::contract_semantics::{InvokeProtocol, Tracking};
+    let row = |path: Vec<String>| solid_reactive_ir::ContractCallback {
+        parameter: 1,
+        execution: "inline".into(),
+        schedule: None,
+        clears_tracking: false,
+        arguments: Vec::new(),
+        owner: None,
+        protocol: InvokeProtocol::Call,
+        path,
+    };
+    let normalize = |summary: ContractExport| {
+        normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution_for_package("package", ["read".into()]),
+        )
+        .unwrap()
+    };
+    let items = |normalized: &NormalizedInference| {
+        let export = normalized.contract.artifact_cases()[0].exports["read"].clone();
+        let mut items = export
+            .callbacks()
+            .items()
+            .iter()
+            .map(|item| {
+                let operation = export.operation(&item.operation.0).unwrap();
+                assert_eq!(operation.tracking, Tracking::AmbientAtExecution);
+                assert_eq!(operation.cardinality.min, Some(0));
+                let ValueSource::Parameter { index, path } = &item.from else {
+                    panic!("a parameter");
+                };
+                (operation.invoke_protocol(), *index, path.clone())
+            })
+            .collect::<Vec<_>>();
+        items.sort();
+        (
+            export
+                .call
+                .proposed_closures()
+                .contains(&ClaimDomain::Callbacks),
+            items,
+        )
+    };
+    let member = vec!["0".to_owned()];
+    // `callHandler`: `handler(event)`, `handler[0](handler[1], event)`,
+    // `handler[1]` and `event?.defaultPrevented`.
+    let call_handler = normalize(ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Known(vec![row(Vec::new()), row(member.clone())]),
+        direct_callback_parameters: BTreeSet::from([1]),
+        direct_member_callback_parameters: BTreeSet::from([(1, member.clone())]),
+        direct_accessor_parameters: BTreeSet::from([0, 1]),
+        ..ContractExport::default()
+    });
+    assert_eq!(
+        items(&call_handler),
+        (
+            true,
+            vec![
+                (InvokeProtocol::Call, 1, vec![]),
+                (InvokeProtocol::Call, 1, member.clone()),
+                (InvokeProtocol::Get, 0, vec![]),
+                (InvokeProtocol::Get, 1, vec![]),
+            ]
+        )
+    );
+    // The same row without the walk's fact is a member call the generator did
+    // not derive: described, and not proposed closed.
+    let underived = normalize(ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Known(vec![row(member.clone())]),
+        ..ContractExport::default()
+    });
+    assert_eq!(
+        items(&underived),
+        (false, vec![(InvokeProtocol::Call, 1, member.clone())])
+    );
+    // Nor does a derived member at one path license another.
+    let elsewhere = normalize(ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Known(vec![row(vec!["1".to_owned()])]),
+        direct_member_callback_parameters: BTreeSet::from([(1, member.clone())]),
+        ..ContractExport::default()
+    });
+    assert!(!items(&elsewhere).0);
+
+    // Re-emission: the projection of the certified export, normalized again as
+    // an inherited summary, carries each path unchanged.
+    let projected = solid_reactive_ir::project_export_semantics(
+        &call_handler.contract.artifact_cases()[0].exports["read"],
+    );
+    let rows = projected.callbacks.known().expect("closed stays known");
+    assert!(
+        rows.iter()
+            .any(|row| row.invokes_member() && row.path == member),
+        "{rows:?}"
+    );
+    assert!(
+        rows.iter()
+            .filter(|row| row.invokes_argument())
+            .all(|row| row.parameter == 1 && row.path.is_empty()),
+        "{rows:?}"
+    );
+    let again = normalize(ContractExport {
+        inherited_from: Some(solid_reactive_ir::InheritedExportOrigin {
+            package_name: "dependency".into(),
+            package_version: "1.0.0".into(),
+            artifact_case: "dependency-case".into(),
+            semantic_digest: sha('b'),
+            entrypoint: ".".into(),
+            export: "read".into(),
+        }),
+        ..projected
+    });
+    assert_eq!(items(&again).1, items(&call_handler).1);
+}
+
 /// ADR 0100's boundary: a described invocation the census cannot confirm keeps
 /// the enumeration partial and yields no candidate, exactly as every non-empty
 /// enumeration did before the premise. Two shapes: a `deferred` row, whose
@@ -501,6 +628,7 @@ fn a_deferred_callback_description_stays_partial_and_proposes_nothing() {
                 arguments: Vec::new(),
                 owner: None,
                 protocol: solid_reactive_ir::contract_semantics::InvokeProtocol::Call,
+                path: Vec::new(),
             }]),
             direct_callback_parameters: direct,
             ..ContractExport::default()
@@ -1140,6 +1268,7 @@ fn inherited_summary() -> ContractExport {
             arguments: Vec::new(),
             owner: Some("inherited".into()),
             protocol: solid_reactive_ir::contract_semantics::InvokeProtocol::Call,
+            path: Vec::new(),
         }]),
         owner_requirements: ContractClaim::Known(Vec::new()),
         async_behavior: ContractClaim::Known(String::new()),

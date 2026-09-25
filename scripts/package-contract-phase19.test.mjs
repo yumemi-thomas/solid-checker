@@ -222,7 +222,14 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // package-protocol-callbacks-consumer's, the sixth authorized fixture
       // contract: a `callbacks` closed over `get` and `coerce` items leaves
       // nothing open at the import.
-      stableMainDocuments: 144,
+      //
+      // 146 on 2026-09-25 adds implementation-census-member-callee's main
+      // document, the corpus pin of the generator's member-path `callbacks`
+      // call items (item B of ways-to-improve § 3.3), and
+      // package-member-callbacks-consumer's, the seventh authorized fixture
+      // contract: a member-path item folds the member a literal argument
+      // names, and never the argument itself.
+      stableMainDocuments: 146,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

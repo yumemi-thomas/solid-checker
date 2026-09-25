@@ -342,7 +342,14 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // arm calls, and a returned call of one is decomposed as a one-arm root. A
 // protocol-61 consumer decodes with `deny_unknown_fields` and would reject the
 // transcript outright, so the number moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 62;
+// Protocol 63 roots a literal-keyed element access (item B of ways-to-improve
+// § 3.3): `handler[0]` is `handler`'s parameter at a tuple segment and
+// `options["run"]` at a property segment, in `calleeParameter`,
+// `argumentParameters` and `calleeIteratedParameter` alike, exactly as
+// `options.run` is. No field changes; a protocol-62 consumer never saw a tuple
+// segment on a callee and would read one under its old meaning, so the number
+// moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 63;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

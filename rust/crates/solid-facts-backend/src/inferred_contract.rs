@@ -460,6 +460,12 @@ fn reads_enumeration_is_confirmable(export: &ExportSemantics) -> bool {
 /// (`direct_coerced_parameters`), each an `ambient-at-execution` invoke at the
 /// call event on the same stack. `iterate` and `has-instance` are vocabulary
 /// the generator does not derive, so an item naming one proposes nothing.
+///
+/// Item B of the same section: a call item whose `from` names a member of the
+/// parameter -- `{arg: 1, path: ["0"]}` for `handler[0](…)` -- is admissible
+/// when the export's own body calls exactly that literal-keyed member of that
+/// parameter's unwritten binding (`direct_member_callback_parameters`). Every
+/// other member path keeps the enumeration partial, as ADR 0100 decided.
 fn callbacks_enumeration_is_confirmable(
     export: &ExportSemantics,
     summary: Option<&ContractExport>,
@@ -483,19 +489,27 @@ fn callbacks_enumeration_is_confirmable(
         let Some(operation) = export.operation(&item.operation.0) else {
             return false;
         };
-        let direct = |index: u16| {
+        let direct = |index: u16, path: &[String]| {
             summary.is_some_and(|summary| {
                 let index = usize::from(index);
-                match operation.invoke_protocol() {
-                    InvokeProtocol::Call => summary.direct_callback_parameters.contains(&index),
-                    InvokeProtocol::Get => summary.direct_accessor_parameters.contains(&index),
-                    InvokeProtocol::Coerce => summary.direct_coerced_parameters.contains(&index),
-                    InvokeProtocol::Iterate | InvokeProtocol::HasInstance => false,
+                match (operation.invoke_protocol(), path) {
+                    (InvokeProtocol::Call, []) => {
+                        summary.direct_callback_parameters.contains(&index)
+                    }
+                    (InvokeProtocol::Call, path) => summary
+                        .direct_member_callback_parameters
+                        .contains(&(index, path.to_vec())),
+                    (InvokeProtocol::Get, []) => {
+                        summary.direct_accessor_parameters.contains(&index)
+                    }
+                    (InvokeProtocol::Coerce, []) => {
+                        summary.direct_coerced_parameters.contains(&index)
+                    }
+                    _ => false,
                 }
             })
         };
-        matches!(&item.from, ValueSource::Parameter { index, path }
-            if path.is_empty() && direct(*index))
+        matches!(&item.from, ValueSource::Parameter { index, path } if direct(*index, path))
             && operation.kind == OperationKind::Invoke
             && operation.at == Some(Event::Call)
             && operation.schedule == Some(Schedule::SameStack)
@@ -585,7 +599,10 @@ fn normalize_export(
                                     ),
                                 }
                             })?,
-                            path: Vec::new(),
+                            // The member of the argument the row calls, whole
+                            // (item B of ways-to-improve § 3.3): empty for the
+                            // argument itself.
+                            path: callback.path.clone(),
                         },
                         operation: id,
                     })
@@ -1014,6 +1031,7 @@ fn with_derived_protocol_items(
             arguments: Vec::new(),
             owner: None,
             protocol,
+            path: Vec::new(),
         };
         if !rows.contains(&row) {
             rows.push(row);

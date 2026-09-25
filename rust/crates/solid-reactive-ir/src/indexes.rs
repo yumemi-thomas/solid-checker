@@ -444,7 +444,10 @@ impl<'a> SemanticLookup<'a> {
     /// The known callback rows of the contract bound to `symbol` that invoke
     /// the argument as a callable. A non-call row (a property read or
     /// coercion of the argument, `ContractCallback::is_invocation`) is not an
-    /// invocation any caller of this lookup models, and is left out; `Some`
+    /// invocation any caller of this lookup models, and is left out; so is a
+    /// member-path row (item B of ways-to-improve § 3.3), which invokes a
+    /// member of the argument rather than the argument, and whose execution
+    /// or owner is no claim about the function written at the slot. `Some`
     /// still means the enumeration is known, even when it holds only such
     /// rows.
     pub(super) fn contract_callbacks(&self, symbol: &str) -> Option<Vec<&super::ContractCallback>> {
@@ -455,7 +458,7 @@ impl<'a> SemanticLookup<'a> {
             .map(|callbacks| {
                 callbacks
                     .iter()
-                    .filter(|callback| callback.is_invocation())
+                    .filter(|callback| callback.invokes_argument())
                     .collect()
             })
     }

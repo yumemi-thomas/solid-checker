@@ -1,5 +1,33 @@
 # Precision backlog
 
+## A described call of a member of the caller's argument (ADR 0120, 2026-09-25)
+
+Status: **implemented**, round 1 of the `callHandler` campaign (ways-to-improve
+§ 3.3 item B, step 6 of § 4). A `callbacks` call item may name a literal member
+of a parameter (`from: {arg: 1, path: ["0"]}` for `handler[0](…)`); handshake
+protocol 63 roots a literal-keyed element access at the parameter; the census
+lifts ADR 0100 rule 4 for exactly the described `(parameter, path)` on an
+unwritten binding; a consumer folds the row only through an array or object
+literal naming the member. Fixtures: `implementation-census-member-callee`
+(generator corpus and tracer) and `reactive-ir/package-member-callbacks-consumer`.
+
+Measured (2026-09-25 census, release binary, pinned corpus): `@kobalte/utils`
+`callHandler` closes `callbacks` and `creates` in both `dist` cases, and
+`composeEventHandlers` closes `creates` (its `callbacks` refuses: the member
+call is `callHandler`'s, reached from a returned closure). `totals.consumer`:
+every-import 454 -> 294, some-uses 119 -> 279 (all 160 on `@kobalte/utils`:
+112 + 48), clean unchanged at 421, operations and closed counts unchanged,
+nothing lost. Re-pinned. The campaign's prediction (112 sites clean, about
+533) waits on round 2: `callHandler`'s `returns` (`event?.defaultPrevented`)
+is still a withheld operation. The `./src/*.ts` cases still fail the veto on
+type stripping, as before.
+
+Still open: string-keyed member items certify only with a hand recipe (the
+synthesized veto observes indices); `composeEventHandlers` needs a deferred
+invocation item and a returned-function shape; the census treats a call
+through a written parameter (`cb = other; cb()`) as parameter-rooted, and only
+member items check `unwrittenParameters` (spun off for a separate check).
+
 ## `@solidjs/signals@2.0.0-rc.6` carries its own negative rows (2026-09-25)
 
 Status: **implemented** (ADR 0007, amendment 2026-09-25), answering the

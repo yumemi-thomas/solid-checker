@@ -1420,9 +1420,12 @@ pub(crate) fn discover_sources(
         if !parameter_reads.is_empty() {
             contract_parameter_reads.insert(contracted.symbol.clone(), parameter_reads);
         }
-        // Only the rows that invoke the argument as a callable: a non-call
-        // row (`ContractCallback::is_invocation`) is no graph edge, no invoked
-        // parameter, no wrapper and no re-pushed row. The key is still
+        // Only the rows that invoke the argument, or a member of it, as a
+        // callable: a non-call row (`ContractCallback::is_invocation`) is no
+        // graph edge, no invoked parameter, no wrapper and no re-pushed row. A
+        // member-path row is kept and every reader resolves the member it
+        // calls before folding anything (`contract_callback_invoked_value`,
+        // item B of ways-to-improve § 3.3). The key is still
         // inserted for a known enumeration holding none, because its presence
         // is the "callbacks known" fact the interprocedural pass reads.
         if let Some(callbacks) = contracted.summary.callbacks.known() {
@@ -1742,12 +1745,21 @@ pub(crate) fn discover_sources(
                 && let Some(callbacks) = contract_callbacks.get(symbol)
             {
                 for callback in callbacks {
-                    let Some(argument) = call.arguments.get(callback.parameter) else {
+                    // The function the row invokes: the argument itself, or
+                    // for a member-path row (item B) the member the call's own
+                    // literal names -- never the argument when it is only the
+                    // container of the invoked member.
+                    let Some((_, Some(invoked))) =
+                        crate::interproc::contract_callback_invoked_value(call, callback)
+                    else {
                         continue;
                     };
-                    let Some(function) = file.ast.functions.iter().find(|function| {
-                        function.span == file.ast.peel_ts_sugar_span(argument.span)
-                    }) else {
+                    let Some(function) = file
+                        .ast
+                        .functions
+                        .iter()
+                        .find(|function| function.span == file.ast.peel_ts_sugar_span(invoked))
+                    else {
                         continue;
                     };
                     for (parameter_index, descriptor) in callback.arguments.iter().enumerate() {

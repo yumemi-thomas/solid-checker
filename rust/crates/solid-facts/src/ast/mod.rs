@@ -149,6 +149,18 @@ pub struct AstFacts {
     pub members: Vec<MemberFact>,
     #[serde(default)]
     pub computed_members: Vec<Span>,
+    /// The subset of [`AstFacts::computed_members`] whose key is a literal
+    /// naming exactly one property, sorted by member span: a string literal
+    /// (its cooked value, lone surrogates refused) or a numeric literal whose
+    /// value is a non-negative integer no larger than `i32::MAX` (its
+    /// canonical decimal spelling, which is the property key ToPropertyKey
+    /// gives it). The same key the Type Facts producer's
+    /// `literalElementAccessSegment` roots a callee at, so the generator can
+    /// name `handler[0]` as the member the census sees (item B of
+    /// ways-to-improve § 3.3). Absence names nothing: a computed key the table
+    /// does not hold is unknown, never "no member".
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub literal_computed_members: Vec<LiteralMemberKeyFact>,
     #[serde(default)]
     pub parameter_properties: Vec<Span>,
     pub spreads: Vec<SpreadFact>,
@@ -264,6 +276,11 @@ pub struct CallFact {
     /// unary, and the call's result reaches *it*.
     #[serde(default)]
     pub result_discarded: bool,
+    /// Whether this is a `new` expression rather than a call. Both are
+    /// recorded here, because both run the callee; a consumer describing a
+    /// *call* of a member (item B of ways-to-improve § 3.3) asks this first.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub construct: bool,
 }
 
 impl CallFact {
@@ -341,6 +358,20 @@ pub struct ArgumentFact {
     /// `satisfies` are transparent too, but cannot launder an invalid value.
     #[serde(default)]
     pub runtime_type_escape: bool,
+    /// The members of an array or object literal written as this argument
+    /// (after transparent TypeScript wrappers), each keyed by the property key
+    /// the runtime gives it, when that set is statically exact: an array
+    /// literal's elements up to its first spread (a hole is skipped and still
+    /// counts its index), and an object literal's data properties when every
+    /// property has a static identifier, string or canonical integer key and
+    /// the literal has no spread, accessor, computed key or `__proto__` key
+    /// (a later duplicate key wins, as it does at runtime). Empty for any
+    /// other argument, which names no member: absence is unknown, never "no
+    /// such member". Read by the consumer to resolve a member-path
+    /// `callbacks` row (`handler[0]` of `[readCount, data]`, item B of
+    /// ways-to-improve § 3.3) to the value it invokes, and by nothing else.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub literal_members: Vec<ArgumentMemberFact>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -904,6 +935,26 @@ pub struct MemberFact {
     pub property: Span,
 }
 
+/// A computed member access whose key is a literal naming one property: the
+/// member's span and that property key. See
+/// [`AstFacts::literal_computed_members`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiteralMemberKeyFact {
+    pub span: Span,
+    pub key: CompactString,
+}
+
+/// One member of an array or object literal written directly as a call
+/// argument: the property key the runtime gives it and the span of the value
+/// written there. See [`ArgumentFact::literal_members`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArgumentMemberFact {
+    pub key: CompactString,
+    pub value: Span,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpreadFact {
@@ -1171,6 +1222,7 @@ impl AstFacts {
             transparent_wrappers: Vec::new(),
             members: Vec::new(),
             computed_members: Vec::new(),
+            literal_computed_members: Vec::new(),
             parameter_properties: Vec::new(),
             spreads: Vec::new(),
             conditional_tests: Vec::new(),
@@ -1304,6 +1356,7 @@ struct Collector<'s, 'semantic> {
     transparent_wrappers: Vec<TransparentWrapperFact>,
     members: Vec<MemberFact>,
     computed_members: Vec<Span>,
+    literal_computed_members: Vec<LiteralMemberKeyFact>,
     parameter_properties: Vec<Span>,
     spreads: Vec<SpreadFact>,
     conditional_tests: Vec<Span>,
@@ -1439,6 +1492,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             transparent_wrappers: Vec::new(),
             members: Vec::new(),
             computed_members: Vec::new(),
+            literal_computed_members: Vec::new(),
             parameter_properties: Vec::new(),
             spreads: Vec::new(),
             conditional_tests: Vec::new(),
@@ -1486,6 +1540,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.transparent_wrappers.sort_by_key(|fact| fact.span);
         self.members.sort_by_key(|fact| fact.span);
         self.computed_members.sort_unstable();
+        self.literal_computed_members.sort_by_key(|fact| fact.span);
         self.parameter_properties.sort_unstable();
         self.spreads.sort_by_key(|fact| fact.span);
         self.conditional_tests.sort_unstable();
@@ -1528,6 +1583,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             transparent_wrappers: self.transparent_wrappers,
             members: self.members,
             computed_members: self.computed_members,
+            literal_computed_members: self.literal_computed_members,
             parameter_properties: self.parameter_properties,
             spreads: self.spreads,
             conditional_tests: self.conditional_tests,
@@ -1914,8 +1970,10 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                 .map(|symbol| span(self.scoping.symbol_span(symbol))),
             _ => None,
         };
+        let literal_members = expression.map_or_else(Vec::new, literal_members_of);
         ArgumentFact {
             span: span(argument.span()),
+            literal_members,
             binding_declaration,
             spread: argument.is_spread(),
             value,
@@ -2216,6 +2274,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                         )
                 })
             }),
+            construct: false,
         });
         walk::walk_call_expression(self, call);
     }
@@ -2235,6 +2294,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             static_callee: self.is_static_callee(callee_span),
             result_discarded: self.discarded_expression == Some(expression.span),
             owned_write_option: false,
+            construct: true,
         });
         walk::walk_new_expression(self, expression);
     }
@@ -3176,6 +3236,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             property: span(property),
         });
         self.computed_members.push(member_span);
+        if let Some(key) = literal_property_key(&member.expression) {
+            self.literal_computed_members.push(LiteralMemberKeyFact {
+                span: member_span,
+                key,
+            });
+        }
         walk::walk_computed_member_expression(self, member);
     }
 
@@ -3383,6 +3449,92 @@ fn export_declaration_surface_names(declaration: &Declaration<'_>) -> Vec<Export
         exported: name.name.as_str().into(),
         type_only: false,
     }]
+}
+
+/// The one property key a literal names: a string literal's cooked value (lone
+/// surrogates refused), or a numeric literal whose value is a non-negative
+/// integer no larger than `i32::MAX`, in the canonical decimal spelling
+/// ToPropertyKey gives it. Everything else names no key statically.
+fn literal_property_key(expression: &Expression<'_>) -> Option<CompactString> {
+    match expression {
+        Expression::StringLiteral(literal) if !literal.lone_surrogates => {
+            Some(literal.value.as_str().into())
+        }
+        Expression::NumericLiteral(literal) => canonical_index_key(literal.value),
+        _ => None,
+    }
+}
+
+fn canonical_index_key(value: f64) -> Option<CompactString> {
+    (value.fract() == 0.0 && (0.0..=f64::from(i32::MAX)).contains(&value)).then(|| {
+        // Exact: an integral value in range converts without loss.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let index = value as u32;
+        index.to_string().into()
+    })
+}
+
+/// The statically exact members of an array or object literal: see
+/// [`ArgumentFact::literal_members`].
+fn literal_members_of(expression: &Expression<'_>) -> Vec<ArgumentMemberFact> {
+    match expression {
+        Expression::ArrayExpression(array) => {
+            let mut members = Vec::new();
+            for (index, element) in array.elements.iter().enumerate() {
+                match element {
+                    ArrayExpressionElement::SpreadElement(_) => break,
+                    ArrayExpressionElement::Elision(_) => {}
+                    element => {
+                        let Ok(index) = u32::try_from(index) else {
+                            break;
+                        };
+                        members.push(ArgumentMemberFact {
+                            key: index.to_string().into(),
+                            value: span(element.span()),
+                        });
+                    }
+                }
+            }
+            members
+        }
+        Expression::ObjectExpression(object) => {
+            let mut members = Vec::<ArgumentMemberFact>::new();
+            for property in &object.properties {
+                let ObjectPropertyKind::ObjectProperty(property) = property else {
+                    return Vec::new();
+                };
+                if property.kind != PropertyKind::Init || property.computed {
+                    return Vec::new();
+                }
+                let key: CompactString = match &property.key {
+                    PropertyKey::StaticIdentifier(key) => key.name.as_str().into(),
+                    PropertyKey::StringLiteral(key) if !key.lone_surrogates => {
+                        key.value.as_str().into()
+                    }
+                    PropertyKey::NumericLiteral(key) => {
+                        let Some(key) = canonical_index_key(key.value) else {
+                            return Vec::new();
+                        };
+                        key
+                    }
+                    _ => return Vec::new(),
+                };
+                // A non-shorthand `__proto__: value` sets the prototype rather
+                // than a property, and a shorthand one is an ordinary property:
+                // neither is worth the distinction here.
+                if key == "__proto__" {
+                    return Vec::new();
+                }
+                members.retain(|member| member.key != key);
+                members.push(ArgumentMemberFact {
+                    key,
+                    value: span(property.value.span()),
+                });
+            }
+            members
+        }
+        _ => Vec::new(),
+    }
 }
 
 /// The elements of an array literal, after parentheses and type wrappers, in
@@ -4398,6 +4550,101 @@ renamed();"#,
             &source[usize::try_from(facts.spreads[0].argument.start).unwrap()
                 ..usize::try_from(facts.spreads[0].argument.end).unwrap()],
             "props"
+        );
+    }
+
+    /// Item B of ways-to-improve § 3.3: a computed member names one property
+    /// when its key is a string literal or a non-negative integer numeric
+    /// literal -- in the canonical decimal spelling the producer states --
+    /// and names none otherwise; a `new` is marked as one.
+    #[test]
+    fn records_literal_member_keys_and_construct_calls() {
+        let source = "h[0](); h[\"run\"](); h[0x6](); h[k](); h[-1](); h[1.5](); \
+                      h[`x`](); h[1e21](); new h[2]();";
+        let facts = extract("members.ts", source).unwrap();
+        let keys = facts
+            .literal_computed_members
+            .iter()
+            .map(|fact| {
+                (
+                    source
+                        .get(fact.span.start as usize..fact.span.end as usize)
+                        .unwrap(),
+                    fact.key.as_str(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            keys,
+            [
+                ("h[0]", "0"),
+                ("h[\"run\"]", "run"),
+                ("h[0x6]", "6"),
+                ("h[2]", "2")
+            ]
+        );
+        let constructs = facts
+            .calls
+            .iter()
+            .filter(|call| call.construct)
+            .map(|call| {
+                source
+                    .get(call.span.start as usize..call.span.end as usize)
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(constructs, ["new h[2]()"]);
+    }
+
+    /// The members of an array or object literal argument, keyed by the
+    /// property key the runtime gives them, exactly when the set is static;
+    /// every other argument names none.
+    #[test]
+    fn records_the_exact_members_of_a_literal_argument() {
+        let source = "f([a, , b, ...c, d]); f({ x: a, \"y\": b, 0: c, x: d }); \
+                      f({ ...o, x: a }); f({ [k]: a }); f({ get x() { return a; } }); \
+                      f({ __proto__: a }); f(a); f([a] as const);";
+        let facts = extract("literals.ts", source).unwrap();
+        let members = facts
+            .calls
+            .iter()
+            .map(|call| {
+                call.arguments[0]
+                    .literal_members
+                    .iter()
+                    .map(|member| {
+                        (
+                            member.key.to_string(),
+                            source
+                                .get(member.value.start as usize..member.value.end as usize)
+                                .unwrap()
+                                .to_owned(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let pairs = |items: &[(&str, &str)]| {
+            items
+                .iter()
+                .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            members,
+            [
+                // A hole counts its index; the spread ends what is known.
+                pairs(&[("0", "a"), ("2", "b")]),
+                // A later duplicate key wins, as at runtime.
+                pairs(&[("y", "b"), ("0", "c"), ("x", "d")]),
+                pairs(&[]),
+                pairs(&[]),
+                pairs(&[]),
+                pairs(&[]),
+                pairs(&[]),
+                // Behind a transparent wrapper, the literal itself.
+                pairs(&[("0", "a")]),
+            ]
         );
     }
 

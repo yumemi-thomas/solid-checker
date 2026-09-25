@@ -45,6 +45,7 @@
     "implementation-census-argument-returns",
     "implementation-census-creates",
     "implementation-census-described-accessor",
+    "implementation-census-member-callee",
     "implementation-census-reads",
     "implementation-census-returns",
     "json-import",

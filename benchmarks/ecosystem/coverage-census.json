@@ -19,8 +19,8 @@
     "consumer": {
       "value": 158,
       "clean": 421,
-      "some-uses": 119,
-      "every-import": 454
+      "some-uses": 279,
+      "every-import": 294
     }
   },
   "packages": [
@@ -36,8 +36,8 @@
       "consumer": {
         "value": 28,
         "clean": 16,
-        "some-uses": 6,
-        "every-import": 170
+        "some-uses": 166,
+        "every-import": 10
       }
     },
     {

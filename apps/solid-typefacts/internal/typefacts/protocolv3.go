@@ -4,7 +4,17 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 62 (ADR 0116): **a return arm that calls an
+// TypeFactsHandshakeProtocol is 63 (item B of ways-to-improve § 3.3): **a
+// literal-keyed element access roots at the parameter it extends.** The walk
+// behind CalleeParameter, ArgumentParameters and CalleeIteratedParameter roots
+// `handler[0]` at the parameter `handler` is, with a tuple segment, and
+// `options["run"]` with a property segment, exactly as it roots `options.run`;
+// a computed non-literal key roots nothing. No field changes, but a
+// protocol-62 consumer reads every rooted callee as a call through `.name`
+// properties only and would take a tuple segment it never saw for one, so the
+// number moves.
+//
+// Protocol 62 (ADR 0116): **a return arm that calls an
 // unchanged whole input binding says so.** ReturnArm.Invoked names the
 // binding a non-optional call arm invokes, and a returned call of one is
 // decomposed as a one-arm root, so a `returns` census can enumerate "what the
@@ -399,7 +409,7 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 62
+	TypeFactsHandshakeProtocol uint64 = 63
 	TypeFactsSchemaSHA256             = "sha256:52db523547c4cdd50723488d3c1236d20daa202cd9f8a837af30128b91679024"
 )
 

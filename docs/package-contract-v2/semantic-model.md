@@ -359,6 +359,26 @@ object-admitting item's, open the domain as before. A loose comparison with the
 `null` keyword is not a coercion (the producer's own `binaryFormLocked`
 exception), so no `coerce` item is derived for it.
 
+**[Decision 2026-09-25, item B]** a call item may name a **member** of a
+parameter: `from: {arg: i, path: [key]}` is a call of the value at that path of
+the caller's argument — `handler[0](…)` in `@kobalte/utils`' `callHandler` —
+never a call of the argument itself. It is an ordinary call item in shape (`at:
+call` on the same stack, `ambient-at-execution`, count `call 0..many`,
+unguarded). Handshake protocol 63 roots a literal-keyed element access at the
+parameter it extends (a string key as that property, a canonical non-negative
+integer key as that tuple index; a computed non-literal key roots nothing), and
+a model path segment names a tuple segment by its index's decimal spelling,
+which is the property key the runtime gives it. The generator derives the item
+for a call, in the export's own body, whose callee is a literal-keyed member of
+a parameter's own unwritten binding, beside the `get` of that parameter the
+member read performs. The census lifts ADR 0100's rule 4 for exactly that
+`(parameter, path)`: such a site is confirmed under rules 5 to 8 and only on a
+parameter the producer states unwritten, and every other member call refuses as
+before. A consumer folds the item as an inline call of the member's value only
+when the argument written at the slot is an array or object literal naming
+that member exactly; any other argument folds nothing, which is what an inline
+row whose argument resolves to nothing has always done.
+
 ### reads
 
 `reads: [] closed` denies that one invocation of this export gives rise to any

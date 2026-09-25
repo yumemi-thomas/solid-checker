@@ -1771,3 +1771,103 @@ func TestExportImplementationTranscriptStatesItsCompletionForm(t *testing.T) {
 		})
 	}
 }
+
+// Handshake protocol 63 (item B of ways-to-improve § 3.3): a literal-keyed
+// element access on an already-rooted receiver roots its callee, argument or
+// iterated value at the parameter exactly as a property access does -- a
+// string key as that property, a canonical non-negative integer key as that
+// tuple index -- and every other key roots nothing.
+func TestLiteralElementAccessRootsAtTheParameterItExtends(t *testing.T) {
+	source := `export function make(h: any, k: any, local: any) {
+  h[0](h[1], k);
+  h["run"]();
+  h.a[2].b();
+  h?.[3]();
+  h[k]();
+  h[-1]();
+  h[1.5]();
+  h[0x6]();
+  h[1e21]();
+  h[k + 1]();
+  h[` + "`x`" + `]();
+  const own: any = [() => {}];
+  own[0]();
+  use(h[4]);
+  for (const f of h[5]) f();
+}
+declare function use(value: unknown): void;
+void make;
+`
+	implementation := exportImplementationForSolidMake(t, source)
+	call := func(needle string) typefacts.ImplementationCall {
+		t.Helper()
+		start := strings.Index(source, needle)
+		if start < 0 {
+			t.Fatalf("needle %q is absent from the fixture", needle)
+		}
+		for _, found := range implementation.Calls {
+			if found.Location.StartByte == start {
+				return found
+			}
+		}
+		t.Fatalf("call at %q (byte %d) is absent from the census: %#v", needle, start, implementation.Calls)
+		return typefacts.ImplementationCall{}
+	}
+	index := func(value int) *int { return &value }
+	property := func(name string) typefacts.PathSegment {
+		return typefacts.PathSegment{Kind: typefacts.PathSegmentProperty, Property: name}
+	}
+	tuple := func(value int) typefacts.PathSegment {
+		return typefacts.PathSegment{Kind: typefacts.PathSegmentTuple, Index: index(value)}
+	}
+	same := func(got *typefacts.ParameterValueSource, parameter int, path ...typefacts.PathSegment) bool {
+		if got == nil || got.ParameterIndex != parameter || len(got.Path) != len(path) {
+			return false
+		}
+		for position, segment := range path {
+			actual := got.Path[position]
+			if actual.Kind != segment.Kind || actual.Property != segment.Property ||
+				(actual.Index == nil) != (segment.Index == nil) ||
+				(actual.Index != nil && *actual.Index != *segment.Index) {
+				return false
+			}
+		}
+		return true
+	}
+	for _, row := range []struct {
+		needle string
+		path   []typefacts.PathSegment
+	}{
+		{"h[0](h[1], k)", []typefacts.PathSegment{tuple(0)}},
+		{`h["run"]()`, []typefacts.PathSegment{property("run")}},
+		{"h.a[2].b()", []typefacts.PathSegment{property("a"), tuple(2), property("b")}},
+		// Mirrors the property arm, which roots `h?.x` as it roots `h.x`.
+		{"h?.[3]()", []typefacts.PathSegment{tuple(3)}},
+		// The compiler states a numeric literal's value in its canonical
+		// decimal spelling, so a hexadecimal key is the index it denotes.
+		{"h[0x6]()", []typefacts.PathSegment{tuple(6)}},
+	} {
+		if got := call(row.needle).CalleeParameter; !same(got, 0, row.path...) {
+			t.Fatalf("callee of %q = %#v, want parameter 0 at %#v", row.needle, got, row.path)
+		}
+	}
+	for _, needle := range []string{
+		"h[k]()", "h[-1]()", "h[1.5]()", "h[1e21]()", "h[k + 1]()", "h[`x`]()", "own[0]()",
+	} {
+		if got := call(needle).CalleeParameter; got != nil {
+			t.Fatalf("callee of %q = %#v, want nothing rooted: the key names no member or the receiver is not a parameter", needle, got)
+		}
+	}
+	// The same walk roots an argument slot and a `for…of` iterable.
+	first := call("h[0](h[1], k)")
+	if len(first.ArgumentParameters) != 2 || !same(first.ArgumentParameters[0], 0, tuple(1)) ||
+		!same(first.ArgumentParameters[1], 1) {
+		t.Fatalf("argument slots = %#v, want parameter 0 at tuple 1 and parameter 1", first.ArgumentParameters)
+	}
+	if got := call("use(h[4])").ArgumentParameters; len(got) != 1 || !same(got[0], 0, tuple(4)) {
+		t.Fatalf("argument slot of use(h[4]) = %#v, want parameter 0 at tuple 4", got)
+	}
+	if got := call("f()").CalleeIteratedParameter; !same(got, 0, tuple(5)) {
+		t.Fatalf("iterated callee = %#v, want parameter 0 at tuple 5", got)
+	}
+}

@@ -1371,7 +1371,75 @@ func (p *project) parameterValueSourceLocked(
 		})
 		return source
 	}
+	// Handshake protocol 63 (item B of ways-to-improve § 3.3): an element
+	// access whose key is a literal names exactly one member, the same one a
+	// property access would, so it extends an already-rooted receiver's path
+	// the same way -- `handler[0]` is parameter 1 at tuple 0, and
+	// `options["onChange"]` is parameter 0 at property `onChange`. The receiver
+	// is rooted by this very walk; a key that is not a literal (`h[k]`,
+	// `h[i + 1]`, a template, a negative or fractional number) names no member
+	// statically and roots nothing. An optional element access (`h?.[0]`) is
+	// rooted exactly as an optional property access (`h?.x`) is by the arm
+	// above: the chain reaches the same member when it reaches one at all.
+	if nodeKindName(node) == "ElementAccessExpression" {
+		segment, ok := literalElementAccessSegment(node)
+		if !ok {
+			return nil
+		}
+		source := p.parameterValueSourceLocked(node.Expression(), bySymbol)
+		if source == nil {
+			return nil
+		}
+		source.Path = append(source.Path, segment)
+		return source
+	}
 	return nil
+}
+
+// literalElementAccessSegment answers the path segment an element access's
+// literal key names: a string literal is the property it spells (its cooked
+// value), and a numeric literal whose value is a non-negative integer is that
+// tuple index. The compiler states a numeric literal's text as the value's
+// decimal spelling (`0x6` is "6", `1e0` is "1"), and only a canonical spelling
+// of an integer no larger than MaxInt32 is accepted -- no sign, no leading
+// zero, no fraction or exponent -- so the segment is the one property key
+// ToPropertyKey gives the access. Anything else -- an identifier, an
+// expression, a template, `-1`, `1.5`, `1e21` -- is refused.
+func literalElementAccessSegment(node *ast.Node) (typefacts.PathSegment, bool) {
+	access := node.AsElementAccessExpression()
+	if access == nil || access.ArgumentExpression == nil {
+		return typefacts.PathSegment{}, false
+	}
+	key := access.ArgumentExpression
+	switch nodeKindName(key) {
+	case "StringLiteral":
+		return typefacts.PathSegment{Kind: typefacts.PathSegmentProperty, Property: key.Text()}, true
+	case "NumericLiteral":
+		index, ok := canonicalArrayIndex(key.Text())
+		if !ok {
+			return typefacts.PathSegment{}, false
+		}
+		return typefacts.PathSegment{Kind: typefacts.PathSegmentTuple, Index: &index}, true
+	}
+	return typefacts.PathSegment{}, false
+}
+
+// canonicalArrayIndex parses the canonical decimal spelling of a non-negative
+// integer no larger than math.MaxInt32, refusing every other spelling.
+func canonicalArrayIndex(text string) (int, bool) {
+	if text == "" || len(text) > 10 || (len(text) > 1 && text[0] == '0') {
+		return 0, false
+	}
+	for _, digit := range text {
+		if digit < '0' || digit > '9' {
+			return 0, false
+		}
+	}
+	value, err := strconv.ParseInt(text, 10, 32)
+	if err != nil || value < 0 {
+		return 0, false
+	}
+	return int(value), true
 }
 
 func exportValueDemandDigest(demands []typefacts.ExportValueDemand) string {

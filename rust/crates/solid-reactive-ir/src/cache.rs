@@ -225,6 +225,12 @@ pub(crate) struct InterproceduralGraphContribution {
     /// generator describes as a non-call `callbacks` item. Never evidence.
     pub(crate) direct_protocol_parameters:
         Vec<(Span, crate::contract_semantics::InvokeProtocol, usize)>,
+    /// `(owner, parameter index, member path)` for a call of a literal-keyed
+    /// member of a parameter's own unwritten binding written directly in the
+    /// owner's body -- `handler[0](…)` (item B of ways-to-improve § 3.3): the
+    /// proposal input beside the member-path `inline` row the pass writes.
+    /// Never evidence.
+    pub(crate) direct_member_callback_parameters: Vec<(Span, usize, Vec<String>)>,
     /// `(owner, parameter index)` for a parameter whose caller-supplied value
     /// this function neither invokes nor observes inertly — it stores it, hands
     /// it on, or returns it. See

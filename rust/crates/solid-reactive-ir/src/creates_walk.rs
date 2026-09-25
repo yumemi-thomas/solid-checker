@@ -689,6 +689,78 @@ fn callee_roots_at_direct_frame_parameter<'a>(
     })
 }
 
+/// [`callee_roots_at_direct_frame_parameter`] for a callee that is a
+/// literal-keyed element access (`handler[0]`, `h["run"]`, item B of
+/// ways-to-improve § 3.3): the key is one of
+/// `solid_facts::ast::AstFacts::literal_computed_members`, every member
+/// between it and its root is a dotted member or another literal-keyed one,
+/// and the root is a plain-identifier, uninitialized parameter of the
+/// outermost function whose body contains the call. The same frame and the
+/// same parameter shape the dotted question asks for, and the same blindness
+/// to writes: a written parameter proposes here and refuses in the census.
+fn literal_member_callee_roots_at_direct_frame_parameter<'a>(
+    ctx: &AnalysisContext<'a>,
+    file: &'a solid_facts::FileFacts,
+    callee: Span,
+) -> bool {
+    let ast = &file.ast;
+    let literal = |span: Span| {
+        ast.literal_computed_members
+            .binary_search_by_key(&span, |fact| fact.span)
+            .is_ok()
+    };
+    let member_at = |span: Span| {
+        ast.members
+            .binary_search_by_key(&span, |member| member.span)
+            .ok()
+            .map(|index| &ast.members[index])
+    };
+    let peeled = ast.peel_ts_sugar_span(callee);
+    if !literal(peeled) {
+        return false;
+    }
+    let mut current = peeled;
+    let root = loop {
+        let Some(member) = member_at(current) else {
+            break current;
+        };
+        if ast.computed_members.binary_search(&current).is_ok() && !literal(current) {
+            return false;
+        }
+        let next = ast.peel_ts_sugar_span(member.object);
+        // A member's object is a strict sub-span; a table that does not shrink
+        // is malformed and refused rather than walked forever.
+        if next.start < current.start || next.end >= current.end {
+            return false;
+        }
+        current = next;
+    };
+    if !is_identifier(file, root) {
+        return false;
+    }
+    // The binder's own resolution of the root reference, and the compiler's
+    // entity where a demand asked for one: either names the parameter.
+    let declaration = ast.reference_declaration(root);
+    let symbol = ctx.semantic_lookup.entity_symbol(file, root);
+    let Some(frame) = ast
+        .functions_body_containing(callee)
+        .max_by_key(|function| function.body.end.saturating_sub(function.body.start))
+    else {
+        return false;
+    };
+    frame.parameters.iter().any(|parameter| {
+        parameter.shape == solid_facts::ast::BindingShape::Identifier
+            && parameter.initializer.is_none()
+            && parameter.names.len() == 1
+            && (declaration == Some(parameter.names[0].span)
+                || symbol.is_some_and(|symbol| {
+                    ctx.semantic_lookup
+                        .entity_symbol(file, parameter.names[0].span)
+                        .is_some_and(|candidate| candidate == symbol)
+                }))
+    })
+}
+
 /// Whether `root` — or a symbol it reaches through at most
 /// [`MAX_PARAMETER_ALIAS_HOPS`] binding-initializer aliases — is a parameter
 /// name of a function whose **body contains** `callee`.
@@ -882,7 +954,7 @@ pub(crate) fn collect_project(ctx: &AnalysisContext<'_>) -> CreatesProposalWalk 
             if let Some(kind) = creates_proposal_decline(
                 ctx,
                 file,
-                call.callee,
+                call,
                 primitives.calls.get(index).and_then(Option::as_ref),
                 &imported_modules,
                 &shape_facts,
@@ -991,11 +1063,12 @@ pub(crate) fn collect_project(ctx: &AnalysisContext<'_>) -> CreatesProposalWalk 
 fn creates_proposal_decline<'a>(
     ctx: &AnalysisContext<'a>,
     file: &'a solid_facts::FileFacts,
-    callee: Span,
+    call: &solid_facts::ast::CallFact,
     primitive: Option<&PrimitiveName>,
     imported_modules: &HashMap<&str, &str>,
     shape_facts: &FileShapeFacts<'a>,
 ) -> Option<CreatesDeclineKind> {
+    let callee = call.callee;
     // A canonical primitive is decided by the dialect tables and nothing else.
     // The audits are the only negative authority about a primitive, and their
     // silence — an unaudited dialect, a withheld row, a domain no dialect has
@@ -1069,6 +1142,18 @@ fn creates_proposal_decline<'a>(
         let shape = unresolved_callee_shape(ctx, file, callee, shape_facts);
         if matches!(shape, UnresolvedCalleeShape::ParameterRooted { .. })
             && callee_roots_at_direct_frame_parameter(ctx, file, callee)
+        {
+            return None;
+        }
+        // Item B of ways-to-improve § 3.3: a literal key names one member, so
+        // `handler[0](…)` is the caller's callable exactly as `props.onClick()`
+        // is, and the census dispositions it `parameter-rooted` from the
+        // producer's `calleeParameter` (protocol 63). A `new` states no
+        // `calleeParameter` and still declines, as does every computed key
+        // that is not a literal.
+        if matches!(shape, UnresolvedCalleeShape::ComputedMember { .. })
+            && !call.construct
+            && literal_member_callee_roots_at_direct_frame_parameter(ctx, file, callee)
         {
             return None;
         }
