@@ -1743,8 +1743,10 @@ func (p *project) unwrittenParameterIdentityLocked(implementation, expression *a
 const maxReturnArms = 16
 
 // returnArmsLocked decomposes a returned expression into the values it can
-// evaluate to (ADR 0115). Only a conditional or an array literal is decomposed;
-// every other expression is described by its return site's own fields. Each
+// evaluate to (ADR 0115). Only a conditional, an array literal, a call of an
+// unwritten whole parameter (ADR 0116) and a member read of one (protocol 64)
+// are decomposed; every other expression is described by its return site's own
+// fields. Each
 // conditional contributes both branches, except that a branch a literal
 // condition excludes is left out, exactly as carriedCallableLocationsLocked
 // reads the same tree. An async function hands its caller a promise whatever
@@ -1756,7 +1758,8 @@ func (p *project) returnArmsLocked(implementation, expression *ast.Node) []typef
 	}
 	root := identityPreservingUnwrap(expression)
 	if root == nil || !(ast.IsConditionalExpression(root) || ast.IsArrayLiteralExpression(root) ||
-		p.invokedParameterLocked(implementation, root) != nil) {
+		p.invokedParameterLocked(implementation, root) != nil ||
+		p.returnedMemberLocked(implementation, root) != nil) {
 		return nil
 	}
 	var arms []typefacts.ReturnArm
@@ -1786,6 +1789,25 @@ func (p *project) returnArmsLocked(implementation, expression *ast.Node) []typef
 			return
 		}
 		value := p.invocationValueFactLocked(p.checker.GetTypeAtLocation(node))
+		// Handshake protocol 64: a member read of an unwritten parameter is
+		// that member, and an optional chain is that member or undefined --
+		// the two values the chain can evaluate to, stated together or not at
+		// all.
+		if member := p.returnedMemberLocked(implementation, node); member != nil {
+			if len(arms)+member.arms > maxReturnArms {
+				complete = false
+				return
+			}
+			arms = append(arms, typefacts.ReturnArm{
+				Location:  nodeLocation(node),
+				Value:     &value,
+				Parameter: member.source,
+			})
+			if member.optional {
+				arms = append(arms, typefacts.ReturnArm{Location: nodeLocation(node), Undefined: true})
+			}
+			return
+		}
 		arm := typefacts.ReturnArm{
 			Location:  nodeLocation(node),
 			Value:     &value,
@@ -1832,6 +1854,74 @@ func (p *project) invokedParameterLocked(implementation, node *ast.Node) *typefa
 		return nil
 	}
 	return source
+}
+
+// returnedMember is a non-call member read of an unwritten parameter: the
+// parameter with the member's path, whether a link of the chain is optional,
+// and so how many arms the read evaluates to.
+type returnedMember struct {
+	source   *typefacts.ParameterValueSource
+	optional bool
+	arms     int
+}
+
+// returnedMemberLocked answers the member of an unchanged whole input binding a
+// returned expression reads (handshake protocol 64): after identity-preserving
+// wrappers, a chain of property accesses and literal-keyed element accesses --
+// the key rooted exactly as literalElementAccessSegment roots a callee --
+// whose innermost receiver is a binding unwrittenParameterIdentityLocked
+// names. Every link is read directly off the one before, with no wrapper in
+// between, so a link that is optional makes the whole chain optional:
+// `p?.a.b` is undefined when `p` is nullish, while `(p?.a).b` breaks the chain
+// and is refused. A private name, a computed non-literal key, `this`, `super`
+// and a call anywhere in the chain are refused. Nil otherwise.
+func (p *project) returnedMemberLocked(implementation, node *ast.Node) *returnedMember {
+	node = identityPreservingUnwrap(node)
+	var reversed []typefacts.PathSegment
+	optional := false
+	for range maxReturnedCallableDepth {
+		if node == nil {
+			return nil
+		}
+		switch {
+		case ast.IsPropertyAccessExpression(node):
+			name := node.Name()
+			if name == nil || !ast.IsIdentifier(name) {
+				return nil
+			}
+			reversed = append(reversed, typefacts.PathSegment{
+				Kind:     typefacts.PathSegmentProperty,
+				Property: name.Text(),
+			})
+		case nodeKindName(node) == "ElementAccessExpression":
+			segment, ok := literalElementAccessSegment(node)
+			if !ok {
+				return nil
+			}
+			reversed = append(reversed, segment)
+		default:
+			if len(reversed) == 0 {
+				return nil
+			}
+			source := p.unwrittenParameterIdentityLocked(implementation, node)
+			if source == nil || len(source.Path) != 0 {
+				return nil
+			}
+			for index := len(reversed) - 1; index >= 0; index-- {
+				source.Path = append(source.Path, reversed[index])
+			}
+			member := &returnedMember{source: source, optional: optional, arms: 1}
+			if optional {
+				member.arms = 2
+			}
+			return member
+		}
+		if node.QuestionDotToken() != nil {
+			optional = true
+		}
+		node = node.Expression()
+	}
+	return nil
 }
 
 func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.ControlFlowCensus {

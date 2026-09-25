@@ -1989,6 +1989,14 @@ pub enum ValueShape {
     InvocationResult {
         parameter: u16,
     },
+    /// Exactly `undefined` (item B round 2 of ways-to-improve § 3.3): what an
+    /// optional chain hands back when its receiver is nullish -- `p?.key`'s
+    /// other value. Narrower than [`ValueShape::Plain`], which says only
+    /// "no reactive capability": this names the one value, so a `returns`
+    /// census can enumerate it beside the member read and a veto can compare
+    /// a completion with it by `===`. Exact, with no knowledge set and no
+    /// closure of its own.
+    Undefined,
     Action {
         transition: Option<ResourceId>,
     },

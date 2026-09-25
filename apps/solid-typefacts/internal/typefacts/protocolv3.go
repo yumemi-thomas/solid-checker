@@ -4,7 +4,18 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 63 (item B of ways-to-improve § 3.3): **a
+// TypeFactsHandshakeProtocol is 64 (item B round 2 of ways-to-improve § 3.3):
+// **a returned member read of an unchanged parameter states its arms.** A
+// return whose expression, after identity-preserving wrappers, is a non-call
+// property access or literal-keyed element access chain rooted at an
+// unwritten parameter is decomposed as a root: one arm whose Parameter carries
+// the member's path, and, when a link of the chain is optional, a second arm
+// with ReturnArm.Undefined -- `callHandler`'s `event?.defaultPrevented` is
+// parameter 0 at `defaultPrevented`, or undefined. A protocol-63 consumer
+// decodes with `deny_unknown_fields` and would reject the new field, so the
+// number moves.
+//
+// Protocol 63 (item B of ways-to-improve § 3.3): **a
 // literal-keyed element access roots at the parameter it extends.** The walk
 // behind CalleeParameter, ArgumentParameters and CalleeIteratedParameter roots
 // `handler[0]` at the parameter `handler` is, with a tuple segment, and
@@ -409,8 +420,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 63
-	TypeFactsSchemaSHA256             = "sha256:52db523547c4cdd50723488d3c1236d20daa202cd9f8a837af30128b91679024"
+	TypeFactsHandshakeProtocol uint64 = 64
+	TypeFactsSchemaSHA256             = "sha256:5540922fc6863e0533776d5f81806b73a20f7fe0bd0fc2bc29beab10a67167dc"
 )
 
 type ServiceHandshake struct {

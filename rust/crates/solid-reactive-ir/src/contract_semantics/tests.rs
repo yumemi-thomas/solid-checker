@@ -1375,6 +1375,52 @@ fn computations_digest_family_is_separate_and_frozen() {
     );
 }
 
+/// Item B round 2 of ways-to-improve § 3.3: `undefined` is appended to the
+/// canonical value encoding as tag 20, and a member of the caller's argument
+/// is the `parameter` shape's existing path. No document before it carries the
+/// tag, so it needs no digest family of its own: every other document keeps
+/// the bytes it had (the legacy vector, asserted again here), and one that
+/// states the new shape hashes to this frozen vector.
+#[test]
+fn an_undefined_output_is_an_appended_tag_with_a_frozen_vector() {
+    let read = operation("read", OperationKind::Read);
+    let write = operation("write", OperationKind::Write);
+    let owner = resource("owner", ResourceKind::Owner);
+    let cleanup = resource("cleanup", ResourceKind::Cleanup);
+    let mut legacy = call(vec![read.clone(), write.clone()], vec![owner, cleanup]);
+    legacy.edges = vec![OperationEdge {
+        kind: EdgeKind::Data,
+        from: read.id,
+        to: write.id,
+    }];
+    assert_eq!(
+        proposal_with(ValueShape::Plain, legacy)
+            .normalize()
+            .unwrap()
+            .semantic_digest()
+            .as_str(),
+        "sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9",
+        "a contract stating no undefined output keeps the legacy vector byte for byte"
+    );
+
+    let mut member = operation("return-0", OperationKind::Return);
+    member.output = Some(ValueShape::Parameter {
+        index: 0,
+        path: vec!["defaultPrevented".into()],
+    });
+    let mut undefined = operation("return-1", OperationKind::Return);
+    undefined.output = Some(ValueShape::Undefined);
+    let mut behavior = call(vec![member.clone(), undefined.clone()], vec![]);
+    behavior.claims.returns = KnowledgeSet::Complete(vec![member.id, undefined.id]);
+    let stated = proposal_with(ValueShape::Callable, behavior)
+        .normalize()
+        .unwrap();
+    assert_eq!(
+        stated.semantic_digest().as_str(),
+        "sha256:9f1c2830a0b0d90a16f7bf375001f527b4c6a979cfeb7839b1564cd5494378e1"
+    );
+}
+
 /// The label is over a closure this document states, so it is well-formed only
 /// where the domain really is closed and only where a certifier can decide it.
 #[test]

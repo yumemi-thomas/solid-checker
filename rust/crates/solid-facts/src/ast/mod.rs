@@ -28,7 +28,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 43;
+pub const AST_FACTS_SCHEMA: u32 = 44;
 
 mod emission;
 mod inert_erasure;
@@ -161,6 +161,13 @@ pub struct AstFacts {
     /// does not hold is unknown, never "no member".
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub literal_computed_members: Vec<LiteralMemberKeyFact>,
+    /// The spans of the member links written `?.`, sorted (facts schema 44):
+    /// `p?.key` and `p?.[0]`, never a later link of the same chain. What the
+    /// generator's `returns` walk reads to propose "the member, or undefined"
+    /// for a returned optional read of a parameter (item B round 2 of
+    /// ways-to-improve § 3.3); the census decides it from the producer's arms.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub optional_members: Vec<Span>,
     #[serde(default)]
     pub parameter_properties: Vec<Span>,
     pub spreads: Vec<SpreadFact>,
@@ -1223,6 +1230,7 @@ impl AstFacts {
             members: Vec::new(),
             computed_members: Vec::new(),
             literal_computed_members: Vec::new(),
+            optional_members: Vec::new(),
             parameter_properties: Vec::new(),
             spreads: Vec::new(),
             conditional_tests: Vec::new(),
@@ -1357,6 +1365,7 @@ struct Collector<'s, 'semantic> {
     members: Vec<MemberFact>,
     computed_members: Vec<Span>,
     literal_computed_members: Vec<LiteralMemberKeyFact>,
+    optional_members: Vec<Span>,
     parameter_properties: Vec<Span>,
     spreads: Vec<SpreadFact>,
     conditional_tests: Vec<Span>,
@@ -1493,6 +1502,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             members: Vec::new(),
             computed_members: Vec::new(),
             literal_computed_members: Vec::new(),
+            optional_members: Vec::new(),
             parameter_properties: Vec::new(),
             spreads: Vec::new(),
             conditional_tests: Vec::new(),
@@ -1541,6 +1551,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.members.sort_by_key(|fact| fact.span);
         self.computed_members.sort_unstable();
         self.literal_computed_members.sort_by_key(|fact| fact.span);
+        self.optional_members.sort_unstable();
         self.parameter_properties.sort_unstable();
         self.spreads.sort_by_key(|fact| fact.span);
         self.conditional_tests.sort_unstable();
@@ -1584,6 +1595,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             members: self.members,
             computed_members: self.computed_members,
             literal_computed_members: self.literal_computed_members,
+            optional_members: self.optional_members,
             parameter_properties: self.parameter_properties,
             spreads: self.spreads,
             conditional_tests: self.conditional_tests,
@@ -3216,6 +3228,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             object: span(member.object.span()),
             property: span(member.property.span),
         });
+        if member.optional {
+            self.optional_members.push(span(member.span));
+        }
         walk::walk_static_member_expression(self, member);
     }
 
@@ -3235,6 +3250,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             object: span(member.object.span()),
             property: span(property),
         });
+        if member.optional {
+            self.optional_members.push(member_span);
+        }
         self.computed_members.push(member_span);
         if let Some(key) = literal_property_key(&member.expression) {
             self.literal_computed_members.push(LiteralMemberKeyFact {
@@ -4594,6 +4612,24 @@ renamed();"#,
             })
             .collect::<Vec<_>>();
         assert_eq!(constructs, ["new h[2]()"]);
+    }
+
+    /// Facts schema 44: a member link written `?.` says so, and a later link
+    /// of the same chain, or a plain member, does not.
+    #[test]
+    fn records_which_member_links_are_optional() {
+        let source = "p?.a; p?.[0]; p.b; p?.c.d; (p?.e).f;";
+        let facts = extract("members.ts", source).unwrap();
+        let optional = facts
+            .optional_members
+            .iter()
+            .map(|member| {
+                source
+                    .get(member.start as usize..member.end as usize)
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(optional, ["p?.a", "p?.[0]", "p?.c", "p?.e"]);
     }
 
     /// The members of an array or object literal argument, keyed by the

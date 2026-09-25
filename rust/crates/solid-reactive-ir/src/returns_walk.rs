@@ -173,6 +173,18 @@ pub enum ArgumentContainer {
     /// What an invocation of the caller's argument at this index returned
     /// (ADR 0116).
     Invocation(u16),
+    /// The value the caller's argument at this index holds at this one
+    /// property key when the return reads it (item B round 2 of
+    /// ways-to-improve § 3.3): `event.defaultPrevented` is
+    /// `Member(0, "defaultPrevented")`, and `handler[0]` is key `"0"`, the key
+    /// ToPropertyKey gives the access. Read at return time, so whatever the
+    /// call ran before it -- its own body, or a callback it invoked -- may have
+    /// put it there.
+    Member(u16, String),
+    /// Exactly `undefined`: an optional chain's other value (`p?.key` when
+    /// `p` is nullish). Not an argument container; it is enumerated beside
+    /// them because the same census decides it from the same arms.
+    Undefined,
 }
 
 impl ArgumentContainer {
@@ -189,6 +201,13 @@ impl ArgumentContainer {
             crate::contract_semantics::ValueShape::InvocationResult { parameter } => {
                 Some(Self::Invocation(*parameter))
             }
+            crate::contract_semantics::ValueShape::Parameter { index, path } => {
+                match path.as_slice() {
+                    [key] => Some(Self::Member(*index, key.clone())),
+                    _ => None,
+                }
+            }
+            crate::contract_semantics::ValueShape::Undefined => Some(Self::Undefined),
             _ => None,
         }
     }
@@ -209,6 +228,11 @@ impl ArgumentContainer {
                     parameter: *parameter,
                 }
             }
+            Self::Member(index, key) => crate::contract_semantics::ValueShape::Parameter {
+                index: *index,
+                path: vec![key.clone()],
+            },
+            Self::Undefined => crate::contract_semantics::ValueShape::Undefined,
         }
     }
 
@@ -226,6 +250,8 @@ impl ArgumentContainer {
                     .join(",")
             ),
             Self::Invocation(index) => format!("invocation-{index}"),
+            Self::Member(index, key) => format!("parameter-{index}[{key:?}]"),
+            Self::Undefined => "undefined".into(),
         }
     }
 }
@@ -242,7 +268,11 @@ impl ArgumentContainer {
 /// literals of them?
 ///
 /// A completion, or a branch, may also be a call of one of those parameters,
-/// whose value is what the invocation returned (ADR 0116).
+/// whose value is what the invocation returned (ADR 0116), or a non-call read
+/// of one literal member of one (item B round 2 of ways-to-improve § 3.3):
+/// `p.key`, `p[0]` and `p["key"]` are that member, and `p?.key` that member
+/// or `undefined`. A longer path, a computed key the facts do not name, and a
+/// member of anything but a whole parameter are not read.
 ///
 /// Silence is "do not propose", and every path out is `None`: an `async`
 /// function or a generator; a completion, or a branch, that is anything else,
@@ -354,6 +384,47 @@ pub(crate) fn argument_container_return(
                 return None;
             }
             containers.insert(ArgumentContainer::Invocation(parameter_at(call.callee)?));
+            continue;
+        }
+        // Item B round 2: a read of one literal member of the caller's own
+        // argument. The key is the property's own name, or the literal key
+        // the facts name for a computed access (the one ToPropertyKey gives
+        // it, as the producer roots it); an optional link adds `undefined`.
+        if let Some(member) = file.ast.members.iter().find(|member| member.span == span) {
+            // The receiver is the parameter's own identifier, nothing longer:
+            // `options.inner.key`'s receiver is a member too, and an entity at
+            // its span is not the parameter's binding.
+            if !file.ast.identifiers.iter().any(|identifier| {
+                identifier.span == member.object
+                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
+            }) {
+                return None;
+            }
+            let index = parameter_at(member.object)?;
+            let key = if file
+                .ast
+                .computed_members
+                .binary_search(&member.span)
+                .is_ok()
+            {
+                let position = file
+                    .ast
+                    .literal_computed_members
+                    .binary_search_by_key(&member.span, |fact| fact.span)
+                    .ok()?;
+                file.ast.literal_computed_members[position].key.to_string()
+            } else {
+                file.source_text(member.property)?.to_owned()
+            };
+            containers.insert(ArgumentContainer::Member(index, key));
+            if file
+                .ast
+                .optional_members
+                .binary_search(&member.span)
+                .is_ok()
+            {
+                containers.insert(ArgumentContainer::Undefined);
+            }
             continue;
         }
         containers.insert(ArgumentContainer::Parameter(parameter_at(span)?));

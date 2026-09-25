@@ -470,7 +470,8 @@
         "parameter": { "$ref": "#/$defs/parameterValueSource" },
         "arrayLiteral": { "type": "boolean" },
         "elements": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/returnArmElement" } },
-        "invoked": { "$ref": "#/$defs/parameterValueSource" }
+        "invoked": { "$ref": "#/$defs/parameterValueSource" },
+        "undefined": { "type": "boolean" }
       }
     },
     "returnArmElement": {

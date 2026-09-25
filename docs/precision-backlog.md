@@ -1,5 +1,31 @@
 # Precision backlog
 
+## A return of a member of the caller's argument, or undefined (ADR 0121, 2026-09-25)
+
+Status: **implemented**, round 2 and close of the `callHandler` campaign
+(ways-to-improve § 3.3, § 4 step 6). A return may hand back a literal member of
+the caller's unchanged argument (`parameter i` at `[key]`) or `undefined`
+(`ValueShape::Undefined`, new); `return p?.key` is two `return` operations.
+Handshake protocol 64 states the arms, and facts schema 44 records optional
+members. The veto reads the member at return time, and the consumer reads
+both outputs as no reactive return. Fixtures: `implementation-census-member-returns`
+and `reactive-ir/package-member-returns-consumer`.
+
+Measured (2026-09-25 census, release binary, pinned corpus): `callHandler`
+closes `returns`. `totals.consumer` clean 421 -> 533 and some-uses 279 -> 167,
+all 112 on `@kobalte/utils` (whose surface share is 20% -> 30%). every-import is
+unchanged at 294, and nothing was lost. **The campaign's prediction, "112 sites,
+about 533", is confirmed exactly.** Re-pinned. Contract corpus: possible
+operations 579 -> 607.
+
+Deliberate approximation: a member return hides a reactive leaf (a store's
+member passed in and handed back is read as no reactive return), as
+`readKey({ key: count })()` pins. `p.key = 1; return p.key` certifies, because
+the claim is the member *at return time*.
+
+Still open: paths deeper than one segment, and `composeEventHandlers` (48
+sites), which needs a deferred-invocation item and a returned-function shape.
+
 ## A described call of a member of the caller's argument (ADR 0120, 2026-09-25)
 
 Status: **implemented**, round 1 of the `callHandler` campaign (ways-to-improve

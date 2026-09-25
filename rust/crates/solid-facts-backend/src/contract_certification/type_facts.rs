@@ -5395,6 +5395,7 @@ fn value_shape_constructor(value: &ValueShape) -> &'static str {
         ValueShape::MergedProps { .. } => "merged-props",
         ValueShape::ArgumentArray { .. } => "argument-array",
         ValueShape::InvocationResult { .. } => "invocation-result",
+        ValueShape::Undefined => "undefined",
         ValueShape::Action { .. } => "action",
         ValueShape::Component => "component",
         ValueShape::Cleanup { .. } => "cleanup",
@@ -12209,7 +12210,9 @@ fn census_returns_domain(
     // ADR 0115: returns that each hand back the caller's own argument or a
     // fresh array of the caller's arguments. After the single-operation arms,
     // which decide their narrower claims themselves: one whole parameter is
-    // ADR 0075's.
+    // ADR 0075's. ADR 0116 adds what calling the argument returned, and item B
+    // round 2 of ways-to-improve § 3.3 one literal member of the argument read
+    // at return time and the `undefined` an optional chain short-circuits to.
     if let Some(containers) = argument_container_claim(export, proposed) {
         let at = format!(
             "{}:{}..{}",
@@ -12221,7 +12224,7 @@ fn census_returns_domain(
     }
     if !proposed.items().is_empty() {
         return Err(refuse(format!(
-            "a returns closure candidate must enumerate no operation, one whole-parameter return, one merged props root, one plain return, or returns of argument containers, but the proposal names {} unsupported operation(s)",
+            "a returns closure candidate must enumerate no operation, one whole-parameter return, one merged props root, one plain return, or returns of argument containers (a whole argument, one literal member of one, an array of them, a call of one, or undefined), but the proposal names {} unsupported operation(s)",
             proposed.items().len()
         )));
     }
@@ -12254,11 +12257,28 @@ fn argument_container_claim(
     }
 }
 
+/// Why one return arm names no container the census can enumerate.
+enum ArmRefusal {
+    /// Neither the caller's unchanged argument, a literal member of one, an
+    /// array literal of them, a call of one, nor an optional chain's
+    /// `undefined` -- or a producer disagreement about which it is.
+    NotAContainer,
+    /// A member read of the unchanged argument through more than one segment
+    /// (item B round 2): the value is described one segment deep and no
+    /// further.
+    LongerPath(usize),
+}
+
 /// The argument container one return arm hands back, when the producer's own
 /// facts name one: an unchanged whole input binding, an array literal every
-/// element of which is one, or a call of one (ADR 0116). A spread, a hole, and
-/// any other element are not.
-fn arm_container(arm: &typefacts::ReturnArm) -> Option<solid_reactive_ir::ArgumentContainer> {
+/// element of which is one, a call of one (ADR 0116), a non-call read of one
+/// literal member of one, or the `undefined` an optional chain short-circuits
+/// to (item B round 2 of ways-to-improve § 3.3, handshake protocol 64). A
+/// spread, a hole, any other element, and an arm stating two of these at once
+/// are not.
+fn arm_container(
+    arm: &typefacts::ReturnArm,
+) -> Result<solid_reactive_ir::ArgumentContainer, ArmRefusal> {
     let whole = |source: &typefacts::ParameterValueSource| {
         source
             .path
@@ -12266,14 +12286,28 @@ fn arm_container(arm: &typefacts::ReturnArm) -> Option<solid_reactive_ir::Argume
             .then(|| u16::try_from(source.parameter_index).ok())
             .flatten()
     };
+    if arm.undefined {
+        // The producer states `undefined` on a bare arm beside the chain's
+        // member arm; one that also names a value is a disagreement.
+        if arm.parameter.is_some()
+            || arm.invoked.is_some()
+            || arm.array_literal
+            || !arm.elements.is_empty()
+        {
+            return Err(ArmRefusal::NotAContainer);
+        }
+        return Ok(solid_reactive_ir::ArgumentContainer::Undefined);
+    }
     if let Some(invoked) = arm.invoked.as_ref() {
         // The producer states `invoked` only for a call arm, which is neither
         // an array literal nor a parameter; a transcript saying otherwise is a
         // producer disagreement and names no container.
         if arm.array_literal || arm.parameter.is_some() {
-            return None;
+            return Err(ArmRefusal::NotAContainer);
         }
-        return whole(invoked).map(solid_reactive_ir::ArgumentContainer::Invocation);
+        return whole(invoked)
+            .map(solid_reactive_ir::ArgumentContainer::Invocation)
+            .ok_or(ArmRefusal::NotAContainer);
     }
     if arm.array_literal {
         return arm
@@ -12286,12 +12320,30 @@ fn arm_container(arm: &typefacts::ReturnArm) -> Option<solid_reactive_ir::Argume
                 element.parameter.as_ref().and_then(whole)
             })
             .collect::<Option<Vec<_>>>()
-            .map(solid_reactive_ir::ArgumentContainer::Array);
+            .map(solid_reactive_ir::ArgumentContainer::Array)
+            .ok_or(ArmRefusal::NotAContainer);
     }
-    arm.parameter
-        .as_ref()
-        .and_then(whole)
-        .map(solid_reactive_ir::ArgumentContainer::Parameter)
+    let source = arm.parameter.as_ref().ok_or(ArmRefusal::NotAContainer)?;
+    let index = u16::try_from(source.parameter_index).map_err(|_| ArmRefusal::NotAContainer)?;
+    match source.path.as_slice() {
+        [] => Ok(solid_reactive_ir::ArgumentContainer::Parameter(index)),
+        // The property key the access names: a property segment's name, or a
+        // tuple segment's index in the decimal spelling ToPropertyKey gives
+        // it, so `handler[0]` and `handler["0"]` are the one member.
+        [segment] => {
+            let key = match segment.kind {
+                PathSegmentKind::Property if !segment.property.is_empty() => {
+                    segment.property.to_string()
+                }
+                PathSegmentKind::Tuple => {
+                    segment.index.ok_or(ArmRefusal::NotAContainer)?.to_string()
+                }
+                PathSegmentKind::Property => return Err(ArmRefusal::NotAContainer),
+            };
+            Ok(solid_reactive_ir::ArgumentContainer::Member(index, key))
+        }
+        path => Err(ArmRefusal::LongerPath(path.len())),
+    }
 }
 
 /// ADR 0115's evidence, shared by the closure census and each operation's
@@ -12326,7 +12378,8 @@ fn argument_container_return_sites(
                 .as_ref()
                 .filter(|source| source.path.is_empty())
                 .and_then(|source| u16::try_from(source.parameter_index).ok())
-                .map(solid_reactive_ir::ArgumentContainer::Parameter);
+                .map(solid_reactive_ir::ArgumentContainer::Parameter)
+                .ok_or(ArmRefusal::NotAContainer);
             vec![(&site.location, whole)]
         } else {
             site.arms
@@ -12335,16 +12388,32 @@ fn argument_container_return_sites(
                 .collect()
         };
         for (location, container) in values {
-            let Some(container) = container else {
-                return Err(format!(
-                    "argument container returns census refuses a value at {}:{}..{}, reach {}, \
-                     that is neither the caller's unchanged argument, an array literal of them, \
-                     nor a call of one, for {at}",
-                    location.path,
-                    location.start_byte,
-                    location.end_byte,
-                    reachability_name(site.reach)
-                ));
+            let container = match container {
+                Ok(container) => container,
+                Err(ArmRefusal::NotAContainer) => {
+                    return Err(format!(
+                        "argument container returns census refuses a value at {}:{}..{}, reach \
+                         {}, that is neither the caller's unchanged argument, a literal member \
+                         of one, an array literal of them, a call of one, nor an optional \
+                         chain's undefined, for {at}",
+                        location.path,
+                        location.start_byte,
+                        location.end_byte,
+                        reachability_name(site.reach)
+                    ));
+                }
+                Err(ArmRefusal::LongerPath(segments)) => {
+                    return Err(format!(
+                        "argument container returns census refuses a value at {}:{}..{}, reach \
+                         {}, that reads the caller's unchanged argument through {segments} \
+                         member segments, and a returned member is described one segment deep, \
+                         for {at}",
+                        location.path,
+                        location.start_byte,
+                        location.end_byte,
+                        reachability_name(site.reach)
+                    ));
+                }
             };
             if !containers.contains(&container) {
                 return Err(format!(
@@ -15707,6 +15776,7 @@ const fn value_shape_kind_name(shape: &ValueShape) -> &'static str {
         ValueShape::MergedProps { .. } => "merged-props",
         ValueShape::ArgumentArray { .. } => "argument-array",
         ValueShape::InvocationResult { .. } => "invocation-result",
+        ValueShape::Undefined => "undefined",
         ValueShape::Action { .. } => "action",
         ValueShape::Component => "component",
         ValueShape::Cleanup { .. } => "cleanup",
@@ -27190,6 +27260,115 @@ mod tests {
                 {"location": at(20, 27), "arrayLiteral": true, "invoked": identity(0)}
             ]))]),
             "neither the caller's unchanged argument",
+        );
+
+        // Item B round 2: `callHandler`'s `event?.defaultPrevented`, the
+        // member arm and the optional chain's undefined arm at one location.
+        let member_claim = [
+            ArgumentContainer::Member(0, "defaultPrevented".into()),
+            ArgumentContainer::Undefined,
+        ]
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+        let member_census = |claim: &std::collections::BTreeSet<ArgumentContainer>,
+                             returns: serde_json::Value| {
+            argument_container_return_sites(
+                &primitive_census_implementation(returns, false),
+                claim,
+                "/p/index.js:0..60",
+            )
+        };
+        let member =
+            |index: usize, path: serde_json::Value| json!({"parameterIndex": index, "path": path});
+        let property = |name: &str| json!({"kind": "property", "property": name});
+        let chain = |arms: serde_json::Value| {
+            let mut site = primitive_census_site(10, 40, "reachable", Some(value()));
+            site["arms"] = arms;
+            json!([site])
+        };
+        let call_handler = chain(json!([
+            {"location": at(17, 40), "value": value(), "parameter": member(0, json!([property("defaultPrevented")]))},
+            {"location": at(17, 40), "undefined": true}
+        ]));
+        assert_eq!(
+            member_census(&member_claim, call_handler.clone()).unwrap(),
+            vec![
+                "census-return-arm:/p/index.js:17:40:reachable:parameter-0[\"defaultPrevented\"]"
+                    .to_owned(),
+                "census-return-arm:/p/index.js:17:40:reachable:undefined".to_owned(),
+                "census-returns-argument-container-total:1".to_owned(),
+            ]
+        );
+        // A tuple segment is the member its decimal index names.
+        let indexed = [
+            ArgumentContainer::Member(1, "0".into()),
+            ArgumentContainer::Undefined,
+        ]
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+        assert!(
+            member_census(
+                &indexed,
+                chain(json!([
+                    {"location": at(17, 30), "parameter": member(1, json!([{"kind": "tuple", "index": 0}]))},
+                    {"location": at(17, 30), "undefined": true}
+                ]))
+            )
+            .is_ok()
+        );
+        let member_refuses = |claim: &std::collections::BTreeSet<ArgumentContainer>,
+                              returns: serde_json::Value,
+                              needle: &str| {
+            let refusal =
+                member_census(claim, returns).expect_err("the member returns census must refuse");
+            assert!(refusal.contains(needle), "{needle}: {refusal}");
+        };
+        // The member alone (`return event.defaultPrevented`) does not hand
+        // back the undefined the claim enumerates.
+        let lone = chain(json!([
+            {"location": at(17, 40), "parameter": member(0, json!([property("defaultPrevented")]))}
+        ]));
+        member_refuses(
+            &member_claim,
+            lone.clone(),
+            "that no completion the producer did not prove unreachable",
+        );
+        // And the claim of the member alone does not enumerate the undefined an
+        // optional chain hands back.
+        let member_only = [ArgumentContainer::Member(0, "defaultPrevented".into())]
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(member_census(&member_only, lone).is_ok());
+        member_refuses(
+            &member_only,
+            call_handler,
+            "which the claim does not enumerate",
+        );
+        // A different member is not the one claimed.
+        member_refuses(
+            &member_only,
+            chain(json!([
+                {"location": at(17, 40), "parameter": member(0, json!([property("target")]))}
+            ])),
+            "which the claim does not enumerate",
+        );
+        // A longer path refuses in its own words.
+        member_refuses(
+            &member_claim,
+            chain(json!([
+                {"location": at(17, 40), "parameter": member(0, json!([property("a"), property("b")]))},
+                {"location": at(17, 40), "undefined": true}
+            ])),
+            "through 2 member segments",
+        );
+        // An undefined arm that also names a value is a producer disagreement.
+        member_refuses(
+            &member_claim,
+            chain(json!([
+                {"location": at(17, 40), "parameter": member(0, json!([property("defaultPrevented")]))},
+                {"location": at(17, 40), "undefined": true, "parameter": identity(0)}
+            ])),
+            "nor an optional chain's undefined",
         );
     }
 

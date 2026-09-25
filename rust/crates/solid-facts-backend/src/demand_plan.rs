@@ -419,6 +419,16 @@ fn plan_file(
             }
             continue;
         }
+        // Item B round 2 of ways-to-improve § 3.3: a returned member read --
+        // the whole expression or a branch -- of an identifier is named by its
+        // receiver's symbol, which is how the walk tells a member of the
+        // caller's own argument.
+        if let Some(member) = file.ast.members.iter().find(|member| member.span == span) {
+            if reference(member.object) {
+                add_symbol(member.object, false);
+            }
+            continue;
+        }
         let Some(conditional) = file
             .ast
             .conditional_expressions

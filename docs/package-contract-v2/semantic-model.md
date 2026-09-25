@@ -768,6 +768,28 @@ operations, `invocation-result 0` and `parameter 0`, and closes `returns` over
 them. The shape names no argument of the invocation: which arguments produced
 the value is the `callbacks` domain's claim, not the return's.
 
+**[Decision 2026-09-25, item B round 2]** a `return` may hand back **one
+literal member of the caller's argument**: output `parameter i` with a
+one-segment path, `[key]`, is the value the caller's argument at `i` holds at
+property key `key` *when the return reads it* -- `handler[0]` is key `"0"`, the
+key ToPropertyKey gives the access. Code the call runs before the read may
+have put it there: its own body, or a callback it invokes (`callHandler`'s
+handler calls `preventDefault()` on the event whose `defaultPrevented` it
+returns), so the value is not what the member held when the call began. A
+getter runs on that read, which is the `get` item of `callbacks`. A second
+output, `undefined`, is exactly that value -- narrower than `plain` -- and is
+what an optional chain hands back when its receiver is nullish.
+`callHandler`'s `event?.defaultPrevented` publishes two `return` operations,
+`parameter 0 ["defaultPrevented"]` and `undefined`, and closes `returns` over
+them. The census decides the enumeration from the producer's arms (handshake
+protocol 64): a non-call property access or literal-keyed element access of an
+unwritten parameter is one arm with that path, and an optional chain adds an
+`undefined` arm. A path longer than one segment, a computed non-literal key, a
+call of the member and a written binding refuse by name. A consumer resolves
+the member nowhere -- the caller's literal at the call does not determine what
+the argument holds at return time -- and reads it, alone or beside anything
+else, as no reactive return: never as the argument itself.
+
 ### cleanups
 
 `cleanups: [] closed` denies that one invocation of this export gives rise to

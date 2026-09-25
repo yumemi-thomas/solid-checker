@@ -1043,6 +1043,9 @@ fn compact_value(value: &ValueShape, ids: &CompactIds) -> Result<JsonValue, Cont
         ValueShape::InvocationResult { parameter } => {
             json!({"kind": "invocation-result", "parameter": parameter})
         }
+        // Item B round 2 of ways-to-improve § 3.3: exactly `undefined`, a
+        // shorthand like `plain`, with a detailed spelling beside it.
+        ValueShape::Undefined => json!("undefined"),
         ValueShape::Action { transition } => {
             let mut node = json!({"kind": "action"});
             if let Some(transition) = transition {
@@ -2091,6 +2094,7 @@ enum WireValue {
 enum WireValueKind {
     Unknown,
     Plain,
+    Undefined,
     Callable,
     Component,
     RefApplication,
@@ -2172,6 +2176,10 @@ enum WireValueNode {
     InvocationResult {
         parameter: u16,
     },
+    /// Item B round 2. Exactly `undefined`; it carries no field, and a struct
+    /// variant so that `deny_unknown_fields` refuses one it was given (a unit
+    /// variant of an internally tagged enum ignores them).
+    Undefined {},
     Action {
         #[serde(default)]
         transition: Option<String>,
@@ -3288,6 +3296,7 @@ fn expand_value_at(
         WireValue::Shorthand(kind) => Ok(match kind {
             WireValueKind::Unknown => ValueShape::Unknown,
             WireValueKind::Plain => ValueShape::Plain,
+            WireValueKind::Undefined => ValueShape::Undefined,
             WireValueKind::Callable => ValueShape::Callable,
             WireValueKind::Component => ValueShape::Component,
             WireValueKind::RefApplication => ValueShape::RefApplication,
@@ -3445,6 +3454,7 @@ fn expand_value_node(
         WireValueNode::InvocationResult { parameter } => Ok(ValueShape::InvocationResult {
             parameter: *parameter,
         }),
+        WireValueNode::Undefined {} => Ok(ValueShape::Undefined),
         WireValueNode::Action { transition } => Ok(ValueShape::Action {
             transition: transition.as_ref().map(|resource| ids.resource(resource)),
         }),
@@ -4457,6 +4467,8 @@ mod tests {
             serde_json::json!({"kind": "argument-array", "items": [0, 1]}),
             serde_json::json!({"kind": "argument-array", "items": []}),
             serde_json::json!({"kind": "invocation-result", "parameter": 0}),
+            serde_json::json!("undefined"),
+            serde_json::json!({"kind": "undefined"}),
         ];
         for value in values {
             let value: WireValue = serde_json::from_value(value).unwrap();
@@ -4472,6 +4484,22 @@ mod tests {
         assert!(
             serde_json::from_value::<WireValue>(serde_json::json!({"kind": "invocation-result"}))
                 .is_err()
+        );
+        // Item B round 2: `undefined` carries no field, and one is refused.
+        assert!(
+            serde_json::from_value::<WireValue>(
+                serde_json::json!({"kind": "undefined", "parameter": 0})
+            )
+            .is_err()
+        );
+        // And it is emitted as the shorthand, which reads back as itself.
+        assert_eq!(
+            compact_value(
+                &ValueShape::Undefined,
+                &CompactIds::new("case", "case", "export")
+            )
+            .unwrap(),
+            serde_json::json!("undefined")
         );
 
         let guard: WireGuard = serde_json::from_value(serde_json::json!({

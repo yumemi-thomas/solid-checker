@@ -677,7 +677,10 @@ fn normalize_export(
     // ADR 0115 and ADR 0116: one `return` per value the argument-container walk
     // saw, each with its exact output. Read wherever the reactive analysis left
     // the return undescribed -- `Open` for a lone `[value]`, `Known(None)` for a
-    // union whose branches disagree -- and never over a described return.
+    // union whose branches disagree -- and never over a described return. Item
+    // B round 2 of ways-to-improve § 3.3 adds a literal member of an argument
+    // and the `undefined` of an optional chain (`callHandler`'s
+    // `event?.defaultPrevented`).
     let container_returns = |operations: &mut Vec<Operation>| {
         (scope.publishes_bootstrapped_reactive_domains()
             && summary.kind == "function"

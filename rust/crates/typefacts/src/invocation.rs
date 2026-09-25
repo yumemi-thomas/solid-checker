@@ -1704,7 +1704,11 @@ pub struct ReturnArm {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<InvocationValueFact>,
     /// Positive identity of an unchanged whole input binding, exactly as on
-    /// [`ReturnSite::parameter`]. Absence is open.
+    /// [`ReturnSite::parameter`], when its path is empty. A non-empty path
+    /// (handshake protocol 64) states that the arm is a non-call read of that
+    /// member of the unchanged binding -- a property access or a literal-keyed
+    /// element access -- whose value is what the member held when the read
+    /// ran. Absence is open.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parameter: Option<ParameterValueSource>,
     /// The arm is an array literal, and [`Self::elements`] lists every one of
@@ -1718,6 +1722,11 @@ pub struct ReturnArm {
     /// arm's value is what the invocation returned. Absence is open.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub invoked: Option<ParameterValueSource>,
+    /// The arm an optional chain short-circuits to (handshake protocol 64):
+    /// `p?.key` is `undefined`, exactly, when `p` is nullish. Stated beside
+    /// the chain's member arm, with no value fact and no other field.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub undefined: bool,
 }
 
 /// One element of an array-literal [`ReturnArm`].

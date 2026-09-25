@@ -2,6 +2,7 @@ package tsgo
 
 import (
 	"context"
+	"fmt"
 	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts"
 	"path/filepath"
 	"strings"
@@ -11,7 +12,9 @@ import (
 // ADR 0115: a returned conditional or array literal states the values it can
 // evaluate to, exhaustively or not at all. ADR 0116: an arm that calls an
 // unwritten whole parameter names it, and a returned call of one is a one-arm
-// root.
+// root. Handshake protocol 64: a non-call member read of an unwritten whole
+// parameter is a root too, one arm carrying the member's path and, for an
+// optional chain, a second arm that is exactly undefined.
 func TestReturnArmsDecomposeConditionalsAndArrayLiterals(t *testing.T) {
 	type element struct {
 		parameter int // -1: no identity
@@ -22,7 +25,9 @@ func TestReturnArmsDecomposeConditionalsAndArrayLiterals(t *testing.T) {
 		parameter int // -1: no identity
 		array     bool
 		elements  []element
-		invoked   int // the invoked parameter's index + 1; 0: none
+		invoked   int      // the invoked parameter's index + 1; 0: none
+		path      []string // the parameter's member path; "#n" is tuple n
+		undefined bool
 	}
 	cases := []struct {
 		name, code string
@@ -79,6 +84,71 @@ func TestReturnArmsDecomposeConditionalsAndArrayLiterals(t *testing.T) {
 		{
 			name: "callOfAnythingElse",
 			code: `export const check = (value: any) => Array.from(value);`,
+		},
+		{
+			// `@kobalte/utils@2.0.0-alpha.0`'s `callHandler`, typed `any`.
+			name: "callHandler",
+			code: `export function check(event: any, handler: any) {
+	if (handler) if (typeof handler === "function") handler(event);
+	else handler[0](handler[1], event);
+	return event?.defaultPrevented;
+}`,
+			want: []arm{
+				{text: "event?.defaultPrevented", parameter: 0, path: []string{"defaultPrevented"}},
+				{text: "event?.defaultPrevented", parameter: -1, undefined: true},
+			},
+		},
+		{
+			name: "memberRead",
+			code: `export const check = (p: any) => p.key;`,
+			want: []arm{{text: "p.key", parameter: 0, path: []string{"key"}}},
+		},
+		{
+			name: "literalKeys",
+			code: `export const check = (p: any, c: any) => c ? p?.[0] : (p as any)["run"];`,
+			want: []arm{
+				{text: "p?.[0]", parameter: 0, path: []string{"#0"}},
+				{text: "p?.[0]", parameter: -1, undefined: true},
+				{text: `(p as any)["run"]`, parameter: 0, path: []string{"run"}},
+			},
+		},
+		{
+			// A longer path is stated; the census refuses it.
+			name: "longerOptionalPath",
+			code: `export const check = (p: any) => p?.a.b;`,
+			want: []arm{
+				{text: "p?.a.b", parameter: 0, path: []string{"a", "b"}},
+				{text: "p?.a.b", parameter: -1, undefined: true},
+			},
+		},
+		{
+			name: "memberBesideParameter",
+			code: `export const check = (p: any, c: any) => c ? p.key : p;`,
+			want: []arm{
+				{text: "p.key", parameter: 0, path: []string{"key"}},
+				{text: "p", parameter: 0},
+			},
+		},
+		{
+			// A parenthesized link breaks the chain: nullish p throws.
+			name: "brokenChain",
+			code: `export const check = (p: any) => (p?.a).b;`,
+		},
+		{
+			name: "computedKey",
+			code: `export const check = (p: any, k: any) => p[k];`,
+		},
+		{
+			name: "memberCall",
+			code: `export const check = (p: any) => p.key();`,
+		},
+		{
+			name: "writtenReceiver",
+			code: `export function check(p: any) { p = p || {}; return p.key; }`,
+		},
+		{
+			name: "memberOfLocal",
+			code: `export function check(p: any) { const q = p; return q.key; }`,
 		},
 		{
 			name: "literalCondition",
@@ -159,9 +229,26 @@ func TestReturnArmsDecomposeConditionalsAndArrayLiterals(t *testing.T) {
 				if text := source[got.Location.StartByte:got.Location.EndByte]; text != want.text {
 					t.Fatalf("arm %d spells %q, want %q", index, text, want.text)
 				}
-				if identity(got.Parameter) != want.parameter || got.ArrayLiteral != want.array || got.Value == nil ||
+				if identity(got.Parameter) != want.parameter || got.ArrayLiteral != want.array ||
+					(got.Value == nil) != want.undefined || got.Undefined != want.undefined ||
 					identity(got.Invoked)+1 != want.invoked {
 					t.Fatalf("arm %d = %+v, want %+v", index, got, want)
+				}
+				var path []string
+				if got.Parameter != nil {
+					for _, segment := range got.Parameter.Path {
+						switch {
+						case segment.Kind == typefacts.PathSegmentProperty:
+							path = append(path, segment.Property)
+						case segment.Kind == typefacts.PathSegmentTuple && segment.Index != nil:
+							path = append(path, fmt.Sprintf("#%d", *segment.Index))
+						default:
+							path = append(path, fmt.Sprintf("?%+v", segment))
+						}
+					}
+				}
+				if strings.Join(path, ".") != strings.Join(want.path, ".") {
+					t.Fatalf("arm %d path = %v, want %v", index, path, want.path)
 				}
 				if len(got.Elements) != len(want.elements) {
 					t.Fatalf("arm %d elements = %+v, want %+v", index, got.Elements, want.elements)

@@ -229,7 +229,14 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // package-member-callbacks-consumer's, the seventh authorized fixture
       // contract: a member-path item folds the member a literal argument
       // names, and never the argument itself.
-      stableMainDocuments: 146,
+      //
+      // 148 on 2026-09-25 adds implementation-census-member-returns' main
+      // document, the corpus pin of the generator's member `returns`
+      // (item B round 2 of ways-to-improve § 3.3), and
+      // package-member-returns-consumer's, the eighth authorized fixture
+      // contract: a member of the caller's argument, or undefined, leaves
+      // nothing open at the import and names no reactive leaf.
+      stableMainDocuments: 148,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

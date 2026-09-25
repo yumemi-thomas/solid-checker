@@ -16349,10 +16349,7 @@ export const value = phantom;
         CertificationPlan,
         Result<super::FinalizedPolicy2Contract, super::Policy2FinalizationError>,
     )> {
-        use solid_reactive_ir::{
-            ArgumentContainer, ContractClaim, ContractEntrypoint, ContractExport, ContractPackage,
-            PackageContract,
-        };
+        use solid_reactive_ir::ArgumentContainer;
         let exports: [(&str, Vec<ArgumentContainer>); 13] = [
             (
                 "asArray",
@@ -16437,9 +16434,27 @@ export const value = phantom;
                 ],
             ),
         ];
+        container_returns_fixture_certify("implementation-census-argument-returns", &exports, label)
+    }
+
+    /// A `returns`-census fixture planned with each export's containers set by
+    /// hand and certified against the real producer, with ADR 0115's
+    /// synthesized veto as the only probe: `argument-returns` and, for item B
+    /// round 2 of ways-to-improve § 3.3, `member-returns`.
+    fn container_returns_fixture_certify(
+        name: &str,
+        exports: &[(&str, Vec<solid_reactive_ir::ArgumentContainer>)],
+        label: &str,
+    ) -> Option<(
+        CertificationPlan,
+        Result<super::FinalizedPolicy2Contract, super::Policy2FinalizationError>,
+    )> {
+        use solid_reactive_ir::{
+            ContractClaim, ContractEntrypoint, ContractExport, ContractPackage, PackageContract,
+        };
         let pin = pinned_producer_for_test()?;
-        let name = "implementation-census-argument-returns";
-        let root = "/project/node_modules/implementation-census-argument-returns";
+        let root = format!("/project/node_modules/{name}");
+        let root = root.as_str();
         let fixture = repository_root()
             .join("fixtures/package-contracts")
             .join(name);
@@ -16455,14 +16470,17 @@ export const value = phantom;
                 ("package/index.d.ts", declarations.as_slice()),
             ],
         );
-        let bindings = exports.clone().map(|(export, _)| {
-            (
-                export,
-                ("index.js", runtime.as_slice()),
-                ("index.d.ts", declarations.as_slice()),
-                root,
-            )
-        });
+        let bindings = exports
+            .iter()
+            .map(|(export, _)| {
+                (
+                    *export,
+                    ("index.js", runtime.as_slice()),
+                    ("index.d.ts", declarations.as_slice()),
+                    root,
+                )
+            })
+            .collect::<Vec<_>>();
         let (_, resolved) = test_package_resolution(
             &archive,
             name,
@@ -16484,10 +16502,10 @@ export const value = phantom;
                 ".".into(),
                 ContractEntrypoint {
                     exports: exports
-                        .into_iter()
+                        .iter()
                         .map(|(export, containers)| {
                             (
-                                export.into(),
+                                (*export).into(),
                                 ContractExport {
                                     kind: "function".into(),
                                     reactive_reads: ContractClaim::Open,
@@ -16495,7 +16513,7 @@ export const value = phantom;
                                     owner_requirements: ContractClaim::Open,
                                     returns: ContractClaim::Known(None),
                                     async_behavior: ContractClaim::Known(String::new()),
-                                    returns_argument_containers: containers,
+                                    returns_argument_containers: containers.clone(),
                                     ..ContractExport::default()
                                 },
                             )
@@ -16524,6 +16542,48 @@ export const value = phantom;
         let probes = tracer_configuration_from(&fixture, scratch.path(), label, &[])?;
         let outcome = tracer_certify(&plan, &pin, &probes);
         Some((plan, outcome))
+    }
+
+    /// Item B round 2 of ways-to-improve § 3.3's tracer,
+    /// `implementation-census-member-returns`, planned the same way: the
+    /// walk's own answers for the six that certify and for `writtenBinding`
+    /// and `overclaimedUndefined`, and a claim the walk would not make for the
+    /// four refused on their merits.
+    fn member_returns_fixture_certify(
+        label: &str,
+    ) -> Option<(
+        CertificationPlan,
+        Result<super::FinalizedPolicy2Contract, super::Policy2FinalizationError>,
+    )> {
+        use solid_reactive_ir::ArgumentContainer;
+        let member = |index, key: &str| ArgumentContainer::Member(index, key.into());
+        let exports = [
+            (
+                "callHandler",
+                vec![member(0, "defaultPrevented"), ArgumentContainer::Undefined],
+            ),
+            ("readKey", vec![member(0, "key")]),
+            (
+                "firstOrUndefined",
+                vec![member(0, "0"), ArgumentContainer::Undefined],
+            ),
+            ("stringKey", vec![member(0, "run")]),
+            (
+                "keyOrSelf",
+                vec![ArgumentContainer::Parameter(0), member(0, "key")],
+            ),
+            ("writtenMember", vec![member(0, "key")]),
+            ("computedKey", vec![member(0, "key")]),
+            ("writtenBinding", vec![member(0, "key")]),
+            ("longerPath", vec![member(0, "inner")]),
+            ("memberCall", vec![member(0, "key")]),
+            ("readBeforeWrite", vec![member(0, "key")]),
+            (
+                "overclaimedUndefined",
+                vec![member(0, "key"), ArgumentContainer::Undefined],
+            ),
+        ];
+        container_returns_fixture_certify("implementation-census-member-returns", &exports, label)
     }
 
     /// `member-alias-proposals` planned from the generator's own summaries of
@@ -17430,6 +17490,91 @@ export const value = phantom;
             finalized.bindings().probe_gate_root,
             super::finalization::empty_probe_gate_root(&plan),
             "the synthesized veto must run before an argument container closure closes"
+        );
+    }
+
+    /// Item B round 2 of ways-to-improve § 3.3 end to end: a return of one
+    /// literal member of the caller's argument, alone, beside the argument, or
+    /// beside the `undefined` an optional chain short-circuits to, certifies
+    /// through the census, each return's positive fact and the synthesized
+    /// veto -- `@kobalte/utils`' `callHandler` byte for byte, and a member the
+    /// body writes before the return reads it, since the claim is what the
+    /// argument holds there at return time. The wrong claims withhold by name
+    /// while the row certifies: a computed key, a written binding, a call of
+    /// the member, a value read before the write, a path two segments deep,
+    /// and an `undefined` no optional chain hands back.
+    #[test]
+    fn the_member_returns_census_certifies_exactly_the_enumerated_members() {
+        let Some((plan, outcome)) = member_returns_fixture_certify("member-returns") else {
+            return;
+        };
+        let finalized = outcome.unwrap_or_else(|error| {
+            panic!("every refusal here withholds by name and the row certifies: {error}")
+        });
+        let main = finalized.canonical_main();
+        let member = |index, key: &str| ValueShape::Parameter {
+            index,
+            path: vec![key.into()],
+        };
+        for (export, expected) in [
+            (
+                "callHandler",
+                vec![member(0, "defaultPrevented"), ValueShape::Undefined],
+            ),
+            ("readKey", vec![member(0, "key")]),
+            (
+                "firstOrUndefined",
+                vec![member(0, "0"), ValueShape::Undefined],
+            ),
+            ("stringKey", vec![member(0, "run")]),
+            (
+                "keyOrSelf",
+                vec![
+                    ValueShape::Parameter {
+                        index: 0,
+                        path: Vec::new(),
+                    },
+                    member(0, "key"),
+                ],
+            ),
+            ("writtenMember", vec![member(0, "key")]),
+        ] {
+            assert_eq!(
+                closed_containers_in(main, export),
+                Some(expected),
+                "{export}: {:?} {:?}",
+                finalized.withheld_closures(),
+                finalized.withheld_operations()
+            );
+        }
+        for (export, needle) in [
+            ("computedKey", "neither the caller's unchanged argument"),
+            ("writtenBinding", "neither the caller's unchanged argument"),
+            ("memberCall", "neither the caller's unchanged argument"),
+            ("readBeforeWrite", "neither the caller's unchanged argument"),
+            ("longerPath", "through 2 member segments"),
+            (
+                "overclaimedUndefined",
+                "that no completion the producer did not prove unreachable",
+            ),
+        ] {
+            assert!(
+                finalized.withheld_operations().iter().any(|record| {
+                    record.export == export
+                        && record
+                            .reason
+                            .starts_with(super::WITHHELD_OPERATION_CENSUS_REFUSED_PREFIX)
+                        && record.reason.contains(needle)
+                }),
+                "{export}: {:?}",
+                finalized.withheld_operations()
+            );
+            assert_eq!(closed_containers_in(main, export), None, "{export}");
+        }
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan),
+            "the synthesized veto must run before a member returns closure closes"
         );
     }
 
@@ -18498,7 +18643,8 @@ export const value = phantom;
             // exports' `returns: []`, which is what the lists below pin, and
             // ADR 0115's argument containers apart from both.
             let domain = if record.domain == "returns"
-                && CENSUS_FIXTURE_CONTAINER_RETURNS.contains(&record.export.as_str())
+                && (CENSUS_FIXTURE_CONTAINER_RETURNS.contains(&record.export.as_str())
+                    || CENSUS_FIXTURE_MEMBER_RETURNS.contains(&record.export.as_str()))
             {
                 "returns-containers"
             } else if record.domain == "returns"
@@ -18574,6 +18720,7 @@ export const value = phantom;
                 !CENSUS_FIXTURE_VALUELESS_EXPORTS.contains(export)
                     && !CENSUS_FIXTURE_UNPROPOSED_PLAIN_RETURNS.contains(export)
                     && !CENSUS_FIXTURE_CONTAINER_RETURNS.contains(export)
+                    && !CENSUS_FIXTURE_MEMBER_RETURNS.contains(export)
             })
         {
             let is_closed = plain_return_is_closed_in(main, export);
@@ -18599,6 +18746,28 @@ export const value = phantom;
             plain_withdrawn.len(),
             CENSUS_FIXTURE_GENERATED_PLAIN_RETURNS_WITHDRAWN
         );
+        // Item B round 2: a member of a defaulted or written binding is not the
+        // caller's, and the census withdraws each such return by name.
+        for export in CENSUS_FIXTURE_MEMBER_RETURNS {
+            assert_eq!(closed_containers_in(main, export), None, "{export}");
+            assert!(
+                finalized.withheld_operations().iter().any(|record| {
+                    record.export == export
+                        && record
+                            .reason
+                            .starts_with(super::WITHHELD_OPERATION_CENSUS_REFUSED_PREFIX)
+                        && record
+                            .reason
+                            .contains("neither the caller's unchanged argument")
+                }),
+                "{export}: {:?}",
+                finalized
+                    .withheld_operations()
+                    .iter()
+                    .filter(|record| record.export == export)
+                    .collect::<Vec<_>>()
+            );
+        }
         // ADR 0115: `typedCoercion` is a clamp, and every one of its
         // completions is one of its own three parameters, so it proposes
         // those three returns instead of a plain one, and certifies them.
@@ -18629,6 +18798,27 @@ export const value = phantom;
     /// plain return.
     const CENSUS_FIXTURE_CONTAINER_RETURNS: [&str; 1] = ["typedCoercion"];
 
+    /// Item B round 2 of ways-to-improve § 3.3: the census fixture's exports
+    /// that return one literal member of a parameter, which propose that
+    /// member instead of ADR 0113's plain return. Every one reads it off a
+    /// defaulted or written binding, which the producer states no identity
+    /// for, so each member return is withdrawn by the census by name.
+    const CENSUS_FIXTURE_MEMBER_RETURNS: [&str; 13] = [
+        "defaultedFromDefaulted",
+        "defaultedFromModuleValue",
+        "defaultedFromParameter",
+        "defaultedListRead",
+        "defaultedLiteralWithAccessor",
+        "defaultedOptionsRead",
+        "defaultedThenWritten",
+        "writtenBeforeRead",
+        "writtenParameterCallResult",
+        "writtenParameterDestructured",
+        "writtenParameterLoop",
+        "writtenParameterModuleValue",
+        "writtenParameterTwoSlots",
+    ];
+
     /// ADR 0113: the census fixture's plain returns that certify -- the
     /// exports whose every live completion the producer types a primitive.
     const CENSUS_FIXTURE_GENERATED_PLAIN_RETURNS_CLOSED: [&str; 9] = [
@@ -18650,11 +18840,14 @@ export const value = phantom;
     ];
 
     /// ADR 0113: how many plain-return operations the census evidence refused:
-    /// the rest of the 102, whose completions are the caller's values, objects,
-    /// or results the producer types `any`. Counted rather than listed, because
+    /// the rest of the 102 returns proposed beside the valueless ones, less the
+    /// one container and thirteen member returns, whose completions are the
+    /// caller's values, objects, or results the producer types `any`. It was 90
+    /// before the thirteen member returns (item B round 2 of ways-to-improve
+    /// § 3.3) stopped proposing a plain one. Counted rather than listed, because
     /// the fixture exists to pin the `creates` census and what these return is
     /// incidental to it.
-    const CENSUS_FIXTURE_GENERATED_PLAIN_RETURNS_WITHDRAWN: usize = 90;
+    const CENSUS_FIXTURE_GENERATED_PLAIN_RETURNS_WITHDRAWN: usize = 77;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).

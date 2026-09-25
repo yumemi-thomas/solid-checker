@@ -1126,6 +1126,9 @@ impl CanonicalWriter {
                 self.u8(19);
                 self.u16(*parameter);
             }
+            // Item B round 2 of ways-to-improve § 3.3. Appended, and no
+            // document before it carries the tag, so it needs no digest family.
+            ValueShape::Undefined => self.u8(20),
         }
     }
 

@@ -355,7 +355,7 @@ fn project_return(
         .iter()
         .filter_map(|id| export.operation(&id.0))
         .filter_map(|operation| operation.output.as_ref())
-        .filter_map(project_return_shape)
+        .filter_map(project_returned_output)
         .collect::<Vec<_>>();
     returns.sort_by(|left, right| format!("{left:?}").cmp(&format!("{right:?}")));
     returns.dedup();
@@ -388,6 +388,10 @@ fn project_return(
     // strings, the second 2026-09-24 amendment to ADR 0103) is exact the same
     // way: it holds nothing reactive, which is what describing no reactive
     // return says.
+    // Item B round 2: a member of the caller's argument, and `undefined`, are
+    // exact too, and both are dropped returns (`project_returned_output`), so
+    // `callHandler`'s `event?.defaultPrevented` -- the member, or undefined --
+    // reads as no reactive return, and so does a lone `return p.key`.
     let exact_only = !knowledge.items().is_empty()
         && knowledge.items().iter().all(|id| {
             export.operation(&id.0).is_some_and(|operation| {
@@ -398,6 +402,7 @@ fn project_return(
                             | ValueShape::Parameter { .. }
                             | ValueShape::ArgumentArray { .. }
                             | ValueShape::InvocationResult { .. }
+                            | ValueShape::Undefined
                     )
                 ) || matches!(
                     &operation.output,
@@ -413,7 +418,7 @@ fn project_return(
             operation
                 .output
                 .as_ref()
-                .and_then(project_return_shape)
+                .and_then(project_returned_output)
                 .is_none()
         })
         .count();
@@ -430,6 +435,29 @@ fn project_return(
             open.insert(ClaimDomain::Returns);
             ContractClaim::Open
         }
+    }
+}
+
+/// One `return` operation's output as the consumer's return leaf: exactly
+/// [`project_return_shape`], except that a member of the caller's argument
+/// (`parameter i` at a non-empty path, item B round 2 of ways-to-improve
+/// § 3.3) and `undefined` name no leaf.
+///
+/// The member is the value the argument holds at that key **when the return
+/// reads it**, and code the call runs before then may have replaced it: its
+/// own body, or a callback it invokes -- `callHandler`'s handler calls
+/// `preventDefault()` on the very event whose `defaultPrevented` it returns.
+/// The caller's literal at the call site therefore does not determine it, and
+/// nothing the consumer can see does, so it is resolved nowhere. Reading it
+/// as the whole argument -- what [`project_return_shape`] answers for any
+/// `parameter`, path or not -- would invent a return. Contract returns are
+/// only ever read to *find* a reactive leaf, so this can hide one (a store's
+/// member, say) and never invents one.
+fn project_returned_output(shape: &ValueShape) -> Option<ContractReturn> {
+    match shape {
+        ValueShape::Parameter { path, .. } if !path.is_empty() => None,
+        ValueShape::Undefined => None,
+        shape => project_return_shape(shape),
     }
 }
 
@@ -497,6 +525,7 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
         | ValueShape::Plain
         | ValueShape::ArgumentArray { .. }
         | ValueShape::InvocationResult { .. }
+        | ValueShape::Undefined
         | ValueShape::Tuple(_)
         | ValueShape::Array { .. }
         | ValueShape::Object(_)
@@ -910,6 +939,43 @@ mod owner_requirement_projection_tests {
         assert_eq!(
             project(true, vec![returned("return", strings())]),
             (ContractClaim::Known(None), false)
+        );
+
+        // Item B round 2: `callHandler`'s `event?.defaultPrevented` -- the
+        // member of the caller's argument, or undefined -- and a lone
+        // `return p.key`. The member is what the argument holds when the
+        // return reads it, which nothing at the call site determines, so it
+        // names no leaf: never the whole argument, which is what reading its
+        // `parameter` alone would say. This is the hiding direction, and it is
+        // deliberate: a store passed there, whose member is itself a store
+        // path, is read as no reactive return.
+        let member = |index, key: &str| ValueShape::Parameter {
+            index,
+            path: vec![key.into()],
+        };
+        assert_eq!(
+            project(
+                true,
+                vec![
+                    returned("return-0", member(0, "defaultPrevented")),
+                    returned("return-1", ValueShape::Undefined)
+                ]
+            ),
+            (ContractClaim::Known(None), false),
+            "a member of the argument, or undefined, names no one leaf"
+        );
+        assert_eq!(
+            project(true, vec![returned("return-0", member(0, "key"))]),
+            (ContractClaim::Known(None), false),
+            "a member of the argument is not the argument"
+        );
+        assert_eq!(
+            project(true, vec![returned("return-0", ValueShape::Undefined)]),
+            (ContractClaim::Known(None), false)
+        );
+        assert_eq!(
+            project(false, vec![returned("return-0", member(0, "key"))]),
+            (ContractClaim::Open, true)
         );
     }
 

@@ -1413,13 +1413,16 @@ type ReturnSite struct {
 	CarryReach *Reachability               `cbor:"carryReach,omitempty" json:"carryReach,omitempty"`
 	Sources    []ImplementationValueSource `cbor:"sources,omitempty" json:"sources,omitempty"`
 	// Arms are the values this site can hand back when its expression is a
-	// conditional or an array literal (ADR 0115), or a call of an unchanged
-	// whole input binding (ADR 0116, one arm): the leaves of the conditional
-	// tree after identity-preserving wrappers, in source order, a branch a
-	// literal condition excludes left out. When present the list is
-	// exhaustive, because a conditional expression evaluates to one of its two
-	// branches; a tree too deep or too wide states no arms rather than some.
-	// Absent for every other expression, which the site's own fields describe.
+	// conditional or an array literal (ADR 0115), a call of an unchanged
+	// whole input binding (ADR 0116, one arm), or a non-call member read of
+	// one (handshake protocol 64: one arm, and a second, Undefined, when the
+	// read is an optional chain): the leaves of the conditional tree after
+	// identity-preserving wrappers, in source order, a branch a literal
+	// condition excludes left out. When present the list is exhaustive,
+	// because a conditional expression evaluates to one of its two branches
+	// and an optional chain to its read or to undefined; a tree too deep or
+	// too wide states no arms rather than some. Absent for every other
+	// expression, which the site's own fields describe.
 	Arms []ReturnArm `cbor:"arms,omitempty" json:"arms,omitempty"`
 }
 
@@ -1428,7 +1431,11 @@ type ReturnArm struct {
 	Location Location             `cbor:"location" json:"location"`
 	Value    *InvocationValueFact `cbor:"value,omitempty" json:"value,omitempty"`
 	// Parameter identifies an unchanged whole input binding, exactly as on
-	// ReturnSite. Absence carries no identity premise.
+	// ReturnSite, when its Path is empty. A non-empty Path (handshake protocol
+	// 64) states that the arm is a non-call read of that member of the
+	// unchanged binding -- a property access, or an element access whose key
+	// is a literal -- so the arm's value is what that member held when the
+	// read ran. Absence carries no identity premise.
 	Parameter *ParameterValueSource `cbor:"parameter,omitempty" json:"parameter,omitempty"`
 	// ArrayLiteral marks an arm that is an array literal. Elements then lists
 	// every element in order, and is empty for `[]`.
@@ -1440,6 +1447,12 @@ type ReturnArm struct {
 	// binding itself. The arm's value is then what that invocation returned.
 	// Absence carries no premise.
 	Invoked *ParameterValueSource `cbor:"invoked,omitempty" json:"invoked,omitempty"`
+	// Undefined marks the arm an optional chain short-circuits to (handshake
+	// protocol 64): `p?.key` evaluates to undefined, exactly, when `p` is
+	// nullish. It stands beside the chain's member arm at the same location,
+	// carries no value fact and no other field, and is stated for nothing
+	// else.
+	Undefined bool `cbor:"undefined,omitempty" json:"undefined,omitempty"`
 }
 
 // ReturnArmElement is one element of an array-literal ReturnArm.

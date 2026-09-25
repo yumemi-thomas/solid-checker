@@ -18,8 +18,8 @@
     "unmeasured": 84,
     "consumer": {
       "value": 158,
-      "clean": 421,
-      "some-uses": 279,
+      "clean": 533,
+      "some-uses": 167,
       "every-import": 294
     }
   },
@@ -35,8 +35,8 @@
       "ownerRequirement": 0,
       "consumer": {
         "value": 28,
-        "clean": 16,
-        "some-uses": 166,
+        "clean": 128,
+        "some-uses": 54,
         "every-import": 10
       }
     },
@@ -304,8 +304,8 @@
         "package": "@kobalte/utils",
         "exports": 10,
         "value": 1,
-        "clean": 1,
-        "share": 0.2
+        "clean": 2,
+        "share": 0.3
       },
       {
         "package": "@solid-primitives/context",

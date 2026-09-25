@@ -839,8 +839,44 @@ struct ContainerSlot {
     array: bool,
     /// ADR 0116: what an invocation of the argument at `items[0]` returned.
     invocation: bool,
+    /// Item B round 2 of ways-to-improve § 3.3: what the argument at
+    /// `items[0]` holds at `key` when the call has returned.
+    member: bool,
+    /// Item B round 2: exactly `undefined`. Names no argument (`len` 0).
+    undefined: bool,
     len: u8,
     items: [u8; 4],
+    key: MemberKey,
+}
+
+/// A member slot's property key, inline so the set stays `Copy`: at most
+/// [`MemberKey::CAPACITY`] bytes of UTF-8. A longer key is not synthesized,
+/// and its candidate stays withheld for want of a recipe.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct MemberKey {
+    len: u8,
+    bytes: [u8; MemberKey::CAPACITY],
+}
+
+impl MemberKey {
+    const CAPACITY: usize = 32;
+
+    fn new(key: &str) -> Option<Self> {
+        if key.len() > Self::CAPACITY {
+            return None;
+        }
+        let mut bytes = [0; Self::CAPACITY];
+        bytes[..key.len()].copy_from_slice(key.as_bytes());
+        Some(Self {
+            len: u8::try_from(key.len()).ok()?,
+            bytes,
+        })
+    }
+
+    fn as_str(&self) -> &str {
+        // Built from a `&str` and never written since.
+        std::str::from_utf8(&self.bytes[..usize::from(self.len)]).unwrap_or_default()
+    }
 }
 
 impl ContainerSet {
@@ -862,23 +898,34 @@ impl ContainerSet {
             }
             let slot = match operation.output.as_ref()? {
                 ValueShape::Parameter { index, path } if path.is_empty() => ContainerSlot {
-                    array: false,
-                    invocation: false,
                     len: 1,
                     items: [u8::try_from(*index).ok()?, 0, 0, 0],
+                    ..ContainerSlot::default()
                 },
                 ValueShape::InvocationResult { parameter } => ContainerSlot {
-                    array: false,
                     invocation: true,
                     len: 1,
                     items: [u8::try_from(*parameter).ok()?, 0, 0, 0],
+                    ..ContainerSlot::default()
+                },
+                // Item B round 2: one literal member of the argument, and the
+                // undefined an optional chain short-circuits to.
+                ValueShape::Parameter { index, path } if path.len() == 1 => ContainerSlot {
+                    member: true,
+                    len: 1,
+                    items: [u8::try_from(*index).ok()?, 0, 0, 0],
+                    key: MemberKey::new(&path[0])?,
+                    ..ContainerSlot::default()
+                },
+                ValueShape::Undefined => ContainerSlot {
+                    undefined: true,
+                    ..ContainerSlot::default()
                 },
                 ValueShape::ArgumentArray { items } if items.len() <= 4 => {
                     let mut slot = ContainerSlot {
                         array: true,
-                        invocation: false,
                         len: u8::try_from(items.len()).ok()?,
-                        items: [0; 4],
+                        ..ContainerSlot::default()
                     };
                     for (position, index) in items.iter().enumerate() {
                         slot.items[position] = u8::try_from(*index).ok()?;
@@ -896,10 +943,41 @@ impl ContainerSet {
             set.len += 1;
         }
         // A lone whole parameter is ADR 0096's identity veto, never this one.
-        if set.len == 1 && !set.slots[0].array && !set.slots[0].invocation {
+        if set.len == 1
+            && !set.slots[0].array
+            && !set.slots[0].invocation
+            && !set.slots[0].member
+            && !set.slots[0].undefined
+        {
             return None;
         }
         Some(set)
+    }
+
+    /// Whether the set names a member of an argument or `undefined` (item B
+    /// round 2). A set naming neither is synthesized byte for byte as before.
+    fn reads_members(&self) -> bool {
+        self.slots()
+            .iter()
+            .any(|slot| slot.member || slot.undefined)
+    }
+
+    /// Whether the set enumerates `undefined` (item B round 2).
+    fn admits_undefined(&self) -> bool {
+        self.slots().iter().any(|slot| slot.undefined)
+    }
+
+    /// The `(argument index, key)` of each claimed member, once each, in
+    /// claim order (item B round 2).
+    fn members(&self) -> Vec<(u16, &str)> {
+        let mut members = Vec::new();
+        for slot in self.slots().iter().filter(|slot| slot.member) {
+            let member = (u16::from(slot.items[0]), slot.key.as_str());
+            if !members.contains(&member) {
+                members.push(member);
+            }
+        }
+        members
     }
 
     /// The argument indices a claimed invocation result is read from, once
@@ -934,18 +1012,30 @@ impl ContainerSet {
     }
 
     fn javascript(&self) -> String {
+        let members = self.reads_members();
         self.slots()
             .iter()
             .map(|slot| {
+                let items = slot.items[..usize::from(slot.len)]
+                    .iter()
+                    .map(u8::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                // A set naming no member keeps the spelling it had, so its
+                // module is byte for byte the module it was.
+                if !members {
+                    return format!(
+                        "{{ array: {}, invocation: {}, items: [{items}] }}",
+                        slot.array, slot.invocation
+                    );
+                }
                 format!(
-                    "{{ array: {}, invocation: {}, items: [{}] }}",
+                    "{{ array: {}, invocation: {}, member: {}, undefined: {}, key: {}, items: [{items}] }}",
                     slot.array,
                     slot.invocation,
-                    slot.items[..usize::from(slot.len)]
-                        .iter()
-                        .map(u8::to_string)
-                        .collect::<Vec<_>>()
-                        .join(", ")
+                    slot.member,
+                    slot.undefined,
+                    serde_json::to_string(slot.key.as_str()).unwrap_or_default()
                 )
             })
             .collect::<Vec<_>>()
@@ -1012,6 +1102,11 @@ impl Observation {
                 observation: "exact on a normal completion: Object.is(result, original argument at the claimed index) is false; object contents and throwing calls are not observed",
                 emit: "",
             },
+            Self::ArgumentContainers(set) if set.reads_members() => ReviewedObservation {
+                marker: "return-outside-containers",
+                observation: "exact on a normal completion for the argument returns: the result is not the argument at any claimed index by SameValue; for a member return, the result is not by SameValue what the argument at the claimed index holds at the claimed key when the call has returned, read once with the member operator after it, and not undefined when the argument is nullish; for an undefined return, the result is not undefined by ===; for the array returns, not exact: an object whose length and elements equal the claimed arguments in order by SameValue satisfies it whether or not it is a fresh array; throwing calls are not observed",
+                emit: "",
+            },
             Self::ArgumentContainers(_) => ReviewedObservation {
                 marker: "return-outside-containers",
                 observation: "exact on a normal completion for the argument returns: the result is not the argument at any claimed index by SameValue; for the array returns, not exact: an object whose length and elements equal the claimed arguments in order by SameValue satisfies it whether or not it is a fresh array; throwing calls are not observed",
@@ -1063,6 +1158,37 @@ impl Observation {
                         }
                     }
                 }
+                // Item B round 2: a claimed member's slot also receives an
+                // object whose member at the claimed key holds a fresh token,
+                // and, where the claim enumerates `undefined`, the two nullish
+                // values an optional chain short-circuits on.
+                for (index, key) in set.members() {
+                    let slot = usize::from(index);
+                    let mut values = vec![format!(
+                        "({{ {}: {{}} }})",
+                        serde_json::to_string(key).unwrap_or_default()
+                    )];
+                    if set.admits_undefined() {
+                        values.push("undefined".into());
+                        values.push("null".into());
+                    }
+                    let variants = tuples
+                        .iter()
+                        .filter(|tuple| tuple.len() > slot)
+                        .flat_map(|tuple| {
+                            values.iter().map(move |value| {
+                                let mut variant = tuple.clone();
+                                variant[slot] = value.clone();
+                                variant
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    for variant in variants {
+                        if !tuples.contains(&variant) {
+                            tuples.push(variant);
+                        }
+                    }
+                }
                 tuples
             }
             Self::NotCallable | Self::DefaultLibraryAlias(_) => Vec::new(),
@@ -1101,6 +1227,9 @@ impl Observation {
             }
             Self::PrimitiveReturn => {
                 "at most six tuples per overload, no variadic tail or structural object construction; an input outside the sample that makes the export return an object is not observed; throwing-only runs are incomplete and cannot satisfy the veto"
+            }
+            Self::ArgumentContainers(set) if set.reads_members() => {
+                "identity samples for each claimed index, distinct object/callable identities per slot; a claimed invocation slot's callables replaced by recording functions of the same arity (zero, and one sample of one) whose returned tokens are the only values the invocation result admits; a claimed member's slot also sampled with an object holding a fresh token at the claimed key, and with undefined and null where the claim enumerates undefined; the member is read after the call, so a getter the export installs there runs again and a key longer than 32 bytes is not synthesized; at most twelve tuples per index and overload before those variants, no variadic tail or structural object construction; an input outside the sample that selects another completion is not observed; throwing-only runs are incomplete and cannot satisfy the veto"
             }
             Self::ArgumentContainers(_) => {
                 "identity samples for each claimed index, distinct object/callable identities per slot; a claimed invocation slot's callables replaced by recording functions of the same arity (zero, and one sample of one) whose returned tokens are the only values the invocation result admits; at most twelve tuples per index and overload, no variadic tail or structural object construction; an input outside the sample that selects another completion is not observed; throwing-only runs are incomplete and cannot satisfy the veto"
@@ -2004,7 +2133,7 @@ const recorder = (slot, arity) => arity === 0
   ? function () {{ const token = {{}}; tokens[slot][tokens[slot].length] = token; return token; }}
   : function (_) {{ const token = {{}}; tokens[slot][tokens[slot].length] = token; return token; }};
 const holds = (result, args) => {{
-  for (const container of containers) {{
+  for (const container of containers) {{{member_branches}
     if (container.invocation) {{
       const returned = tokens[container.items[0]];
       for (let position = 0; position < returned.length; position += 1) {{
@@ -2060,6 +2189,27 @@ export async function runProbeSession(_session, harness) {{
         specifier = serde_json::to_string(specifier).unwrap(),
         export = serde_json::to_string(export).unwrap(),
         containers = set.javascript(),
+        // Item B round 2, and only for a set that names a member or undefined,
+        // so every other module is byte for byte what it was. The member is
+        // read once with the member operator after the call has returned: the
+        // claim is what the argument holds there when the return reads it.
+        member_branches = if set.reads_members() {
+            r#"
+    if (container.undefined) {
+      if (result === undefined) return true;
+      continue;
+    }
+    if (container.member) {
+      const receiver = args[container.items[0]];
+      if (receiver === undefined || receiver === null) continue;
+      let held;
+      try { held = receiver[container.key]; } catch { continue; }
+      if (sameValue(result, held)) return true;
+      continue;
+    }"#
+        } else {
+            ""
+        },
         invocation_slots = set
             .invocation_indices()
             .iter()

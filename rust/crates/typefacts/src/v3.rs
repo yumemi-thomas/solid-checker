@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:52db523547c4cdd50723488d3c1236d20daa202cd9f8a837af30128b91679024";
+    "sha256:5540922fc6863e0533776d5f81806b73a20f7fe0bd0fc2bc29beab10a67167dc";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -349,7 +349,13 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // `options.run` is. No field changes; a protocol-62 consumer never saw a tuple
 // segment on a callee and would read one under its old meaning, so the number
 // moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 63;
+// Protocol 64 decomposes a returned member read of an unwritten parameter
+// (item B round 2 of ways-to-improve § 3.3): a non-call property access or
+// literal-keyed element access chain rooted at one is a `returns` root whose
+// arm carries the member's path in `parameter`, and an optional chain adds a
+// second arm with `ReturnArm::undefined`. A protocol-63 consumer decodes with
+// `deny_unknown_fields` and would reject the new field, so the number moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 64;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

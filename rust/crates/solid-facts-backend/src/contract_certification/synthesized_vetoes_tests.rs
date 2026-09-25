@@ -496,10 +496,22 @@ fn claim_filter_selects_only_one_whole_parameter_return() {
     }
     let mut wrong_kind = operation.clone();
     wrong_kind.kind = OperationKind::Read;
+    // Item B round 2 of ways-to-improve § 3.3: one literal member of the
+    // argument is the container observation's, never the identity one; a
+    // longer path is no observation's.
     let mut member = operation.clone();
     member.output = Some(ValueShape::Parameter {
         index: 1,
         path: vec!["value".into()],
+    });
+    assert!(matches!(
+        candidate_observation("returns", &export_with_returns(claim.clone(), vec![member])),
+        Some(Observation::ArgumentContainers(_))
+    ));
+    let mut deep_member = operation.clone();
+    deep_member.output = Some(ValueShape::Parameter {
+        index: 1,
+        path: vec!["value".into(), "inner".into()],
     });
     // ADR 0113: a `plain` output is its own observation, never the identity
     // one -- `Object.is` against an argument would contradict every primitive
@@ -527,7 +539,7 @@ fn claim_filter_selects_only_one_whole_parameter_return() {
         Some(Observation::ParameterReturn(1)),
         "the independent census still requires this identity at every possible return",
     );
-    for unsupported in [wrong_kind, member, plain_read, missing_output] {
+    for unsupported in [wrong_kind, deep_member, plain_read, missing_output] {
         assert!(
             candidate_observation(
                 "returns",
@@ -715,6 +727,124 @@ fn the_invocation_result_module_admits_only_what_the_invocation_returned() {
         assert!(observed.contradicted(), "{implementation}: {observed:?}");
         assert!(observed.error.is_none(), "{implementation}: {observed:?}");
     }
+}
+
+/// Item B round 2 of ways-to-improve § 3.3 on the same module: a member of the
+/// argument is what the argument holds at the claimed key when the call has
+/// returned, and `undefined` is exactly `undefined`. `callHandler`'s
+/// `event?.defaultPrevented` holds on every sample -- including a handler that
+/// writes the member before the return reads it -- and a value read before a
+/// write, another member, and an `undefined` the claim does not enumerate
+/// fire. A set that names neither shape keeps its module byte for byte.
+#[test]
+fn the_member_module_admits_what_the_argument_holds_at_return_and_undefined() {
+    let returned = |id: &str, output: ValueShape| Operation {
+        id: OperationId(id.into()),
+        output: Some(output),
+        ..return_operation()
+    };
+    let member = |key: &str| ValueShape::Parameter {
+        index: 0,
+        path: vec![key.into()],
+    };
+    let claim_of = |operations: &[Operation]| {
+        KnowledgeSet::complete(
+            operations
+                .iter()
+                .map(|operation| operation.id.clone())
+                .collect(),
+        )
+    };
+    let optional = vec![
+        returned("return-0", member("defaultPrevented")),
+        returned("return-1", ValueShape::Undefined),
+    ];
+    let Some(chain @ Observation::ArgumentContainers(_)) = candidate_observation(
+        "returns",
+        &export_with_returns(claim_of(&optional), optional.clone()),
+    ) else {
+        panic!("a member and undefined select the container observation");
+    };
+    let lone = vec![returned("return-0", member("key"))];
+    let Some(read @ Observation::ArgumentContainers(_)) =
+        candidate_observation("returns", &export_with_returns(claim_of(&lone), lone))
+    else {
+        panic!("a lone member is this observation's, not the identity veto's");
+    };
+    // A key the inline table cannot hold is not synthesized.
+    let long = vec![returned("return-0", member(&"k".repeat(33)))];
+    assert_eq!(
+        candidate_observation("returns", &export_with_returns(claim_of(&long), long)),
+        None
+    );
+    let object = || value_fact(json!({"mayBeObject": true}));
+    let mut handler = value_fact(json!({"mayBeObject": true, "mayBeUndefined": true}));
+    handler["callability"] = json!("callable");
+    let two = [signature(&[object(), handler])];
+    for implementation in [
+        // `@kobalte/utils@2.0.0-alpha.0`'s `callHandler`, byte for byte.
+        "export function subject(event, handler) {\n\tif (handler) if (typeof handler === \"function\") handler(event);\n\telse handler[0](handler[1], event);\n\treturn event?.defaultPrevented;\n}",
+        // The member written before the return reads it is still the member.
+        "export function subject(event) { if (event) event.defaultPrevented = 1; return event?.defaultPrevented; }",
+        "export function subject(event) { return event == null ? undefined : event.defaultPrevented; }",
+    ] {
+        let observed = execute(implementation, chain, &two);
+        assert!(!observed.contradicted(), "{implementation}: {observed:?}");
+        assert!(observed.error.is_none(), "{implementation}: {observed:?}");
+    }
+    for implementation in [
+        // The value read before a write is not what the argument holds when
+        // the call returns.
+        "export function subject(event) { const before = event?.defaultPrevented; if (event) event.defaultPrevented = {}; return before; }",
+        "export function subject(event) { return { value: event?.defaultPrevented }; }",
+        "export function subject(event) { return event; }",
+        "export function subject() { return null; }",
+    ] {
+        let observed = execute(implementation, chain, &two);
+        assert!(observed.contradicted(), "{implementation}: {observed:?}");
+        assert!(observed.error.is_none(), "{implementation}: {observed:?}");
+    }
+    let one = [signature(&[object()])];
+    let quiet = execute("export function subject(p) { return p.key; }", read, &one);
+    assert!(!quiet.contradicted(), "{quiet:?}");
+    assert!(quiet.error.is_none(), "{quiet:?}");
+    // The object sample whose member holds a fresh token is what tells the
+    // member from anything else. (A different member the samples leave
+    // unset reads `undefined` on each of them, which the lone member claim
+    // admits whenever the claimed member is unset too: that is the census's
+    // to refuse, not this finite sample's.)
+    for implementation in [
+        "export function subject(p) { return {}; }",
+        "export function subject(p) { return p; }",
+    ] {
+        let observed = execute(implementation, read, &one);
+        assert!(observed.contradicted(), "{implementation}: {observed:?}");
+    }
+    // A set naming no member and no undefined is synthesized as it was.
+    let unchanged = vec![
+        returned(
+            "return-0",
+            ValueShape::Parameter {
+                index: 0,
+                path: vec![],
+            },
+        ),
+        returned("return-1", ValueShape::ArgumentArray { items: vec![0] }),
+    ];
+    let Some(unchanged @ Observation::ArgumentContainers(_)) = candidate_observation(
+        "returns",
+        &export_with_returns(claim_of(&unchanged), unchanged.clone()),
+    ) else {
+        panic!("argument containers select their own observation");
+    };
+    let source = module_source("subject-module", "subject", unchanged, &one);
+    assert!(
+        source.contains(
+            "const containers = [{ array: false, invocation: false, items: [0] }, { array: true, invocation: false, items: [0] }];"
+        ),
+        "{source}"
+    );
+    assert!(!source.contains("container.member"), "{source}");
 }
 
 /// A throwing sample observes nothing, and a run in which no sample completes
