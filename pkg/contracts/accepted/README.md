@@ -14,8 +14,9 @@ about one of those is refused here, by the generator and by the loader.
 - `index.json` — one entry per bundle: the five fields that make up the
   artifact's identity (package name, version, tarball integrity, requested
   entrypoint, sorted export conditions), the package-relative runtime and
-  declaration targets, the object paths and their digests, and the receipt
-  bindings.
+  declaration targets, the object paths and their digests, the receipt
+  bindings, and the `dependencyEnvironment` the receipt's
+  `dependencyEnvironmentRoot` commits to (index version 2, ADR 0123).
 - `objects/<sha256>.main.json` — the canonical contract document, byte-identical
   to what certification published.
 - `objects/<sha256>.receipt.json` — a **built-in** receipt re-issued over that
@@ -39,14 +40,28 @@ authority is review, and it should be described that way.
 
 ## What makes a bundle apply to a project
 
-Only the artifact. `policy2_artifact_acceptance_root` commits to the five
-identity fields and to **no importer and no path**, so a project whose installed
-tree reproduces that root demonstrably resolved the same published artifact the
-contract was proven about, whatever file imported it. Admission recomputes the
-root from the consumer's own lockfile integrity and refuses when it does not
-reproduce — see `accepted_bundles::admitted_bundle_artifacts`, which shares its
-case-selection rule with the project-catalog tier so "does this acceptance
-apply here" has one answer rather than two.
+The artifact, **and the environment it was certified in** (ADR 0123).
+`policy2_artifact_acceptance_root` commits to the five identity fields and to
+no importer and no path, so a project whose installed tree reproduces that root
+resolved the same published artifact the contract was proven about, whatever
+file imported it. Admission recomputes the root from the consumer's own lockfile
+integrity and refuses when it does not reproduce.
+
+That alone is not enough: a verdict also depends on which dialect archive
+answered its negative rows (for example `@solidjs/signals` rc.6, which has
+audited rows, against rc.0, which has none) and on each semantic dependency's
+certified contract. So every bundle carries its receipt's signed
+`dependencyEnvironmentRoot` and the `{name, version, integrity}` entries behind
+it. The bundle is admitted only when Node resolution from the imported
+package's location reaches exactly those entries in the consumer's tree:
+anything missing, different, ambiguous or unreadable refuses, and the import
+behaves as if no bundle existed. See `accepted_bundles::admitted_bundle_artifacts`,
+which shares its case-selection rule with the project-catalog tier.
+
+One artifact therefore usually has several bundles, one per environment the
+corpus certified it in: the floor row (signals rc.0) and the head row (rc.6),
+plus dependency-node certifications, whose environment is graph-wide and so
+rarely applies. A version-1 index (no environment) loads but admits nothing.
 
 A project's own catalogs always win: the tier is folded in with
 `with_fallback`, and admission keeps the first answer for a specifier.
@@ -70,7 +85,8 @@ even though a script writes them.
 ## Refresh policy
 
 A bundle is pinned to an exact `(package, version, integrity, entrypoint,
-conditions)`. It helps a user on that version and nobody else, silently — an
+conditions)` and dependency environment. It helps a user whose tree reproduces
+both and nobody else, silently — an
 unmatched project simply keeps the behaviour it has today.
 
 Two things can invalidate a bundle, and only one of them is a rebuild:
@@ -80,8 +96,9 @@ Two things can invalidate a bundle, and only one of them is a rebuild:
   therefore refuses every bundle in the set, and they must be re-certified and
   re-issued. `every_bundle_this_build_carries_authenticates` fails first, so
   this cannot ship silently.
-- **A new package version.** Nothing breaks; the bundle stops matching. Adding
-  the new version is a fresh certification run.
+- **A new package version, or a new version of a dependency in its
+  environment.** Nothing breaks; the bundle stops matching. Adding it is a
+  fresh certification run.
 
 The verifier build digest is *not* a refresh trigger, despite what an earlier
 note in `phase21/2026-09-15-what-blocks-the-open-claims-gate.md` § 23 said:
