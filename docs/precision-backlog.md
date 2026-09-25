@@ -29,8 +29,20 @@ Measured (2026-09-25):
 - one unit expectation moved: an SSR package's client case is no longer
   admissible beside its server case for an undeclared host.
 
-The row's yield needs a separate `--conditions browser` run, recorded in its
-own entry below when measured.
+Yield, measured on a separate `--conditions browser` run (2026-09-25, release
+binary, the census packages, `rust/target/coverage-census-browser/run.json`;
+the census script refuses conditioned runs, so the two runs' refusals were
+compared directly):
+
+- `@solid-primitives/utils` `createHydratableSignal` is now **proposed** for
+  `creates`, where the pinned run declined it as dialect-silent;
+- on head cases (solid-js rc.3) its `createSignal` call terminates at the
+  row, and the census refuses at the next wall: a call through the local
+  `setState` binding, "no function-like declaration node";
+- on floor cases (solid-js rc.0) it still refuses at `createSignal`, since the
+  row is rc.3-only.
+
+So the row works, and closes 0 domains in the corpus, as estimated.
 
 Still open:
 
