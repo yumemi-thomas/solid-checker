@@ -115,6 +115,99 @@ pub struct Policy2ReceiptBindings {
     pub closed_claims_root: String,
     pub verifier_source_digest: String,
     pub verifier_build_digest: String,
+    /// Which installed packages, besides the certified one, this certification
+    /// read: [`policy2_dependency_environment_root`] over every
+    /// [`DependencyEnvironmentEntry`] the proof relied on.
+    ///
+    /// A contract is proven about one artifact *in one environment*. A closure
+    /// that a dialect axiom discharged is true of `@solidjs/signals@2.0.0-rc.6`
+    /// and says nothing about rc.0, and a claim composed from a dependency's
+    /// receipt is true only where that dependency is the certified one. The
+    /// artifact acceptance root commits to neither, so this root is what lets a
+    /// consumer ask whether its own installed tree is the environment the proof
+    /// was about.
+    ///
+    /// Empty means the receipt states none -- it was issued before this binding
+    /// existed -- and such a receipt can never be applied by environment
+    /// (`accepted_bundles` refuses it). It is skipped when empty so an older
+    /// receipt re-encodes to the exact bytes it was signed over.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub dependency_environment_root: String,
+}
+
+/// One installed package, besides the certified one, whose bytes a
+/// certification read: a semantic dependency whose receipt it composed, or an
+/// authenticated source package (the dialect's own archives among them) whose
+/// declarations or source the Type Facts census could consult.
+///
+/// Exactly the three facts a consumer can recompute about its own installed
+/// copy -- the directory name, the manifest version and the lockfile's
+/// registry integrity -- and nothing else. The integrity fixes every byte; name
+/// and version make a mismatch name itself.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DependencyEnvironmentEntry {
+    pub name: String,
+    pub version: String,
+    pub integrity: String,
+}
+
+/// The upper bound on one certification's stated environment. Generous: the
+/// environment is the transitive declaration closure of one package, and a
+/// catalog entry carrying more than this is refused rather than hashed.
+pub const MAX_DEPENDENCY_ENVIRONMENT_ENTRIES: usize = 4096;
+
+/// The canonical order and validity of a stated environment: every entry's
+/// fields present and printable, strictly ascending, so one environment has
+/// one spelling and one root.
+pub fn validate_dependency_environment(
+    entries: &[DependencyEnvironmentEntry],
+) -> Result<(), Policy2ReceiptError> {
+    let invalid = || Policy2ReceiptError::InvalidBinding {
+        field: "dependencyEnvironment",
+    };
+    if entries.len() > MAX_DEPENDENCY_ENVIRONMENT_ENTRIES {
+        return Err(invalid());
+    }
+    for entry in entries {
+        for value in [&entry.name, &entry.version, &entry.integrity] {
+            if value.is_empty()
+                || value.len() > MAX_STRING_BYTES
+                || value.bytes().any(|byte| byte.is_ascii_control())
+            {
+                return Err(invalid());
+            }
+        }
+    }
+    if entries.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+/// The root a receipt binds for its stated dependency environment.
+///
+/// Order-independent by construction -- the entries are sorted and deduplicated
+/// first -- so a caller cannot produce two roots for one environment. An empty
+/// environment has its own root: "this proof read no other package" is a
+/// statement, distinct from a receipt that states nothing.
+#[must_use]
+pub fn policy2_dependency_environment_root(entries: &[DependencyEnvironmentEntry]) -> String {
+    let mut canonical = entries.to_vec();
+    canonical.sort();
+    canonical.dedup();
+    let mut bytes = Vec::new();
+    frame(
+        &mut bytes,
+        b"solid-checker:policy2-dependency-environment:v1",
+    );
+    number(&mut bytes, canonical.len() as u64);
+    for entry in &canonical {
+        frame(&mut bytes, entry.name.as_bytes());
+        frame(&mut bytes, entry.version.as_bytes());
+        frame(&mut bytes, entry.integrity.as_bytes());
+    }
+    digest_bytes(&bytes)
 }
 
 impl Policy2ReceiptBindings {
@@ -160,6 +253,13 @@ impl Policy2ReceiptBindings {
             validate_digest(&self.artifact_acceptance_root).map_err(|_| {
                 Policy2ReceiptError::InvalidBinding {
                     field: "artifactAcceptanceRoot",
+                }
+            })?;
+        }
+        if !self.dependency_environment_root.is_empty() {
+            validate_digest(&self.dependency_environment_root).map_err(|_| {
+                Policy2ReceiptError::InvalidBinding {
+                    field: "dependencyEnvironmentRoot",
                 }
             })?;
         }
@@ -503,9 +603,39 @@ pub struct AuthenticatedPolicy2Receipt {
     issuer_scope: String,
     bindings: Policy2ReceiptBindings,
     contract: NormalizedContract,
+    /// The environment behind `bindings.dependency_environment_root`, when
+    /// this process is the one that computed it. A receipt read back from disk
+    /// carries only the root; finalization attaches the entries it hashed, so
+    /// publication can state them beside the receipt for a consumer to check.
+    dependency_environment: Option<Vec<DependencyEnvironmentEntry>>,
 }
 
 impl AuthenticatedPolicy2Receipt {
+    /// The entries this receipt's `dependencyEnvironmentRoot` was computed
+    /// over, when known in this process.
+    #[must_use]
+    pub fn dependency_environment(&self) -> Option<&[DependencyEnvironmentEntry]> {
+        self.dependency_environment.as_deref()
+    }
+
+    /// Attaches the environment this process computed, after checking it is
+    /// the one the receipt binds.
+    pub(super) fn with_dependency_environment(
+        mut self,
+        entries: Vec<DependencyEnvironmentEntry>,
+    ) -> Result<Self, Policy2ReceiptError> {
+        validate_dependency_environment(&entries)?;
+        if self.bindings.dependency_environment_root
+            != policy2_dependency_environment_root(&entries)
+        {
+            return Err(Policy2ReceiptError::BindingMismatch {
+                field: "dependencyEnvironmentRoot",
+            });
+        }
+        self.dependency_environment = Some(entries);
+        Ok(self)
+    }
+
     #[must_use]
     pub fn receipt_digest(&self) -> &str {
         &self.receipt_digest
@@ -619,6 +749,11 @@ struct ReceiptPayload {
     closed_claims_root: String,
     verifier_source_digest: String,
     verifier_build_digest: String,
+    // Added after receipts with an artifact acceptance root were issued, on
+    // the same terms: absent means "states no environment", and it is skipped
+    // when empty so every older receipt re-encodes to its signed bytes.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    dependency_environment_root: String,
     issuer_kind: ReceiptIssuerKind,
     issuer_scope: String,
     key_id: String,
@@ -938,6 +1073,7 @@ pub fn authenticate_policy2_receipt(
         issuer_scope: document.payload.issuer_scope,
         bindings: expected.clone(),
         contract: normalized,
+        dependency_environment: None,
     })
 }
 
@@ -1047,6 +1183,7 @@ fn payload_bindings(payload: &ReceiptPayload) -> Policy2ReceiptBindings {
         closed_claims_root: payload.closed_claims_root.clone(),
         verifier_source_digest: payload.verifier_source_digest.clone(),
         verifier_build_digest: payload.verifier_build_digest.clone(),
+        dependency_environment_root: payload.dependency_environment_root.clone(),
     }
 }
 
@@ -1136,6 +1273,10 @@ fn binding_mismatch(
             "verifierBuildDigest",
             actual.verifier_build_digest == expected.verifier_build_digest,
         ),
+        (
+            "dependencyEnvironmentRoot",
+            actual.dependency_environment_root == expected.dependency_environment_root,
+        ),
     ] {
         if !matches {
             return field;
@@ -1182,6 +1323,7 @@ fn payload(
         closed_claims_root: bindings.closed_claims_root.clone(),
         verifier_source_digest: bindings.verifier_source_digest.clone(),
         verifier_build_digest: bindings.verifier_build_digest.clone(),
+        dependency_environment_root: bindings.dependency_environment_root.clone(),
         issuer_kind,
         issuer_scope: issuer_scope.into(),
         key_id: key_id.into(),
@@ -1231,6 +1373,14 @@ fn canonical_payload(payload: &ReceiptPayload) -> Vec<u8> {
         &payload.verifier_build_digest,
     ] {
         frame(&mut bytes, value.as_bytes());
+    }
+    // Signed only when stated, so every receipt issued before this binding
+    // existed keeps the exact payload it was signed over. Unambiguous against
+    // that older shape: a frame starts with its eight-byte length, whose first
+    // byte is zero, and no issuer-kind code is.
+    if !payload.dependency_environment_root.is_empty() {
+        frame(&mut bytes, b"dependency-environment-root:v1");
+        frame(&mut bytes, payload.dependency_environment_root.as_bytes());
     }
     bytes.push(payload.issuer_kind.code());
     frame(&mut bytes, payload.issuer_scope.as_bytes());
@@ -1432,6 +1582,13 @@ struct CatalogEntry<'a> {
     /// target, say) was refused while a project declaring the wrong ones was
     /// admitted. Declaring honestly broke it; that is why this field exists.
     export_conditions: &'a [String],
+    /// The entries behind `bindings.dependencyEnvironmentRoot`. The receipt
+    /// carries only the root, and a consumer needs the entries to compare
+    /// against its own installed tree; every reader recomputes the root from
+    /// these and refuses a difference, so this states nothing the receipt does
+    /// not already authenticate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dependency_environment: Option<&'a [DependencyEnvironmentEntry]>,
 }
 
 #[derive(Clone, Copy, Serialize)]
@@ -1513,6 +1670,7 @@ pub fn publish_policy2_catalog(
             status,
             import: resolved_import,
             export_conditions,
+            dependency_environment: authenticated.dependency_environment(),
         }],
     })
     .map_err(|error| ReceiptPublicationError::Io(error.to_string()))?;

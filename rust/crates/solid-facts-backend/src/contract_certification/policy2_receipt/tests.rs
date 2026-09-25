@@ -65,6 +65,7 @@ fn bindings(main: &[u8]) -> Policy2ReceiptBindings {
         closed_claims_root: root("closed"),
         verifier_source_digest: root("verifier-source"),
         verifier_build_digest: root("verifier-build"),
+        dependency_environment_root: String::new(),
     }
 }
 
@@ -433,6 +434,154 @@ fn every_mutable_certification_root_is_rechecked() {
             Err(Policy2ReceiptError::BindingMismatch { field })
         );
     }
+}
+
+fn environment_entry(name: &str, version: &str, integrity: &str) -> DependencyEnvironmentEntry {
+    DependencyEnvironmentEntry {
+        name: name.into(),
+        version: version.into(),
+        integrity: integrity.into(),
+    }
+}
+
+#[test]
+fn the_dependency_environment_root_names_one_environment() {
+    let signals = |version: &str| environment_entry("@solidjs/signals", version, "sha512-s");
+    let utils = environment_entry("@solid-primitives/utils", "7.0.0-next.4", "sha512-u");
+    let forward = [utils.clone(), signals("2.0.0-rc.6")];
+    let backward = [signals("2.0.0-rc.6"), utils.clone()];
+    assert_eq!(
+        policy2_dependency_environment_root(&forward),
+        policy2_dependency_environment_root(&backward),
+        "one environment has one root, however it is listed"
+    );
+    assert_ne!(
+        policy2_dependency_environment_root(&[utils.clone(), signals("2.0.0-rc.0")]),
+        policy2_dependency_environment_root(&forward),
+        "the floor and head environments are different statements"
+    );
+    // Adjacent fields cannot slide into each other.
+    assert_ne!(
+        policy2_dependency_environment_root(&[environment_entry("a", "bc", "d")]),
+        policy2_dependency_environment_root(&[environment_entry("ab", "c", "d")])
+    );
+    // "Read nothing else" is a root of its own, never the absent binding.
+    assert!(!policy2_dependency_environment_root(&[]).is_empty());
+
+    assert!(validate_dependency_environment(&forward).is_ok());
+    assert!(
+        validate_dependency_environment(&backward).is_err(),
+        "a stated environment is canonically ordered"
+    );
+    assert!(validate_dependency_environment(&[utils.clone(), utils]).is_err());
+    assert!(validate_dependency_environment(&[environment_entry("", "1", "sha512-x")]).is_err());
+}
+
+#[test]
+fn a_stated_environment_is_signed_and_an_unstated_one_keeps_the_older_bytes() {
+    let main = canonical_main(MAIN);
+    let unstated = bindings(&main);
+    let mut stated = unstated.clone();
+    stated.dependency_environment_root = policy2_dependency_environment_root(&[environment_entry(
+        "@solidjs/signals",
+        "2.0.0-rc.6",
+        "sha512-signals",
+    )]);
+    let issuer = local_issuer(4);
+    let trust = trust_store(&issuer, &stated, None);
+    let verify = |receipt: &[u8], expected: &Policy2ReceiptBindings| {
+        authenticate_policy2_receipt(
+            &main,
+            receipt,
+            expected,
+            Policy2ReceiptProvenance::PersistentLocal {
+                trust_store: &trust,
+                scope: &issuer.scope,
+            },
+        )
+    };
+
+    // A receipt issued with no environment has no field for it at all, which
+    // is exactly the shape every receipt issued before the binding has.
+    let older = issue_policy2_receipt(&main, &unstated, &issuer).unwrap();
+    assert!(!String::from_utf8_lossy(&older).contains("dependencyEnvironmentRoot"));
+    assert!(verify(&older, &unstated).is_ok());
+
+    let receipt = issue_policy2_receipt(&main, &stated, &issuer).unwrap();
+    assert!(verify(&receipt, &stated).is_ok());
+    assert_eq!(
+        verify(&receipt, &unstated),
+        Err(Policy2ReceiptError::BindingMismatch {
+            field: "dependencyEnvironmentRoot"
+        })
+    );
+    // The root is inside the signature: rewriting it to another environment,
+    // or stripping it to pass as an older receipt, breaks the signature.
+    let rewritten = canonical_mutation(&receipt, |document| {
+        document.payload.dependency_environment_root =
+            policy2_dependency_environment_root(&[environment_entry(
+                "@solidjs/signals",
+                "2.0.0-rc.0",
+                "sha512-signals",
+            )]);
+    });
+    let mut rewritten_bindings = stated.clone();
+    rewritten_bindings.dependency_environment_root.clone_from(
+        &policy2_dependency_environment_root(&[environment_entry(
+            "@solidjs/signals",
+            "2.0.0-rc.0",
+            "sha512-signals",
+        )]),
+    );
+    assert_eq!(
+        verify(&rewritten, &rewritten_bindings),
+        Err(Policy2ReceiptError::InvalidSignature)
+    );
+    let stripped = canonical_mutation(&receipt, |document| {
+        document.payload.dependency_environment_root.clear();
+    });
+    assert_eq!(
+        verify(&stripped, &unstated),
+        Err(Policy2ReceiptError::InvalidSignature)
+    );
+}
+
+#[test]
+fn published_environment_entries_must_reproduce_the_signed_root() {
+    let main = canonical_main(MAIN);
+    let entries = vec![environment_entry(
+        "@solidjs/signals",
+        "2.0.0-rc.6",
+        "sha512-signals",
+    )];
+    let mut stated = bindings(&main);
+    stated.dependency_environment_root = policy2_dependency_environment_root(&entries);
+    let verified = |bindings: &Policy2ReceiptBindings,
+                    entries: Option<&[DependencyEnvironmentEntry]>| {
+        crate::contract_interface::verified_dependency_environment(bindings, entries)
+    };
+    assert_eq!(
+        verified(&stated, Some(&entries)).unwrap(),
+        Some(entries.clone())
+    );
+    assert!(
+        verified(&stated, None).unwrap().is_none(),
+        "stated, but not published"
+    );
+    let floor = [environment_entry(
+        "@solidjs/signals",
+        "2.0.0-rc.0",
+        "sha512-signals",
+    )];
+    assert!(
+        verified(&stated, Some(&floor)).is_err(),
+        "entries nobody signed"
+    );
+    assert!(
+        verified(&bindings(&main), Some(&entries)).is_err(),
+        "entries beside a receipt that states no environment"
+    );
+    assert!(verified(&bindings(&main), None).unwrap().is_none());
 }
 
 #[test]

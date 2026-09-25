@@ -125,13 +125,43 @@ function bundleCatalog(catalog, trust) {
   return JSON.parse(stdout);
 }
 
-/** The one key a bundle is unique under: an artifact identity, spelled out. */
-function bundleKey(entry) {
+/**
+ * The dependency environment a bundle was proven in, canonically: every
+ * package besides its own that the certification read, as the receipt's
+ * `dependencyEnvironmentRoot` binds it. The Rust tool already refused an entry
+ * whose published list does not reproduce that root, and one that states none.
+ */
+export function environmentOf(entry) {
+  const environment = entry.dependencyEnvironment;
+  if (!Array.isArray(environment)) {
+    throw new Error(
+      `${entry.packageName}@${entry.packageVersion} ${entry.requestedEntrypoint} states no dependency environment`
+    );
+  }
+  return environment.map(({ name, version, integrity }) => `${name}@${version}#${integrity}`).join(",");
+}
+
+/**
+ * The one key a bundle is unique under: an artifact identity, spelled out, and
+ * the environment it was proven in.
+ *
+ * The environment is part of the key because it is part of what was proven.
+ * The ecosystem corpus certifies the same package bytes on a floor row
+ * (`@solidjs/signals@2.0.0-rc.0`) and a head row (rc.6), and the head rows
+ * close claims -- `@solid-primitives/utils` `createMicrotask` `creates` among
+ * them -- that only rc.6's audited rows discharge. Keyed by artifact alone,
+ * the "keep the closing certification" rule below shipped those closures to
+ * rc.0 projects; keyed by environment, the floor and head certifications are
+ * two bundles, and each is admitted only where its own environment is
+ * installed.
+ */
+export function bundleKey(entry) {
   return [
     entry.packageName,
     entry.packageVersion,
     entry.requestedEntrypoint,
-    entry.exportConditions.join("+")
+    entry.exportConditions.join("+"),
+    environmentOf(entry)
   ].join(" | ");
 }
 
@@ -197,7 +227,10 @@ function stableJson(value) {
 }
 
 /**
- * How two certifications of one published artifact relate.
+ * How two certifications of one published artifact **in one environment**
+ * relate. Only ever asked within one `bundleKey`: an open-versus-closed
+ * difference between two environments is not a difference of demand scope,
+ * and neither refines the other.
  *
  * Measured over a full census run: 89 artifact/entrypoint pairs, 87 where every
  * certification agreed exactly, 2 that differed, and **no contradiction at all**.
@@ -257,24 +290,82 @@ function main() {
     }
   }
 
-  const bundles = new Map();
-  const objects = new Map();
+  const results = [];
   const refused = [];
-  const conflicted = new Set();
-  const refinements = new Map();
   for (const catalog of roots.flatMap(publishedCatalogs)) {
     const trust = trustConfigurationFor(catalog);
     if (!trust) {
       refused.push([catalog, "no trust configuration beside or above the catalog"]);
       continue;
     }
-    let result;
     try {
-      result = bundleCatalog(catalog, trust);
+      results.push(bundleCatalog(catalog, trust));
     } catch (error) {
       refused.push([catalog, String(error.stderr ?? error.message ?? "").trim()]);
-      continue;
     }
+  }
+  const { ordered, objects, conflicted, refinements } = collectBundles(results, options);
+  const index = {
+    format: "solid-checker-accepted-contract-bundle-index",
+    bundleIndexVersion: BUNDLE_INDEX_VERSION,
+    bundles: ordered
+  };
+
+  for (const [catalog, reason] of refused) {
+    console.error(`  refused ${relative(REPOSITORY, catalog)}: ${reason.split("\n")[0]}`);
+  }
+  for (const key of [...conflicted].sort()) {
+    console.error(`  dropped ${key}: two certifications of it do not agree`);
+  }
+  for (const key of [...refinements.keys()].sort()) {
+    console.log(`  kept the closing certification of ${key}`);
+  }
+  const packages = new Set(ordered.map(entry => entry.packageName));
+  console.log(`${ordered.length} bundle(s) over ${packages.size} package(s)`);
+  for (const entry of ordered) {
+    console.log(
+      `  ${entry.packageName}@${entry.packageVersion} ${entry.requestedEntrypoint}`
+      + ` (${entry.dependencyEnvironment.length} environment package(s))`
+    );
+  }
+  if (options.dryRun) return;
+
+  rmSync(OBJECT_ROOT, { recursive: true, force: true });
+  mkdirSync(OBJECT_ROOT, { recursive: true });
+  // Exactly what the index names. A run reaches many certifications of one
+  // artifact and keeps one; the rest are not this build's business.
+  const named = new Set(ordered.flatMap(entry => [entry.document, entry.receipt]));
+  const members = [...objects.keys()].filter(member => named.has(member)).sort();
+  for (const member of members) {
+    const bytes = objects.get(member);
+    const address = member.split("/").pop().split(".")[0];
+    if (sha256(bytes) !== `sha256:${address}`) fail(`${member} is not at its content address`);
+    writeFileSync(join(BUNDLE_ROOT, member), bytes);
+  }
+  writeFileSync(INDEX_PATH, `${JSON.stringify(index, null, 2)}\n`);
+  writeFileSync(EMBEDDED_PATH, embeddedSource(members));
+  console.log(`wrote ${relative(REPOSITORY, INDEX_PATH)} and ${members.length} object(s)`);
+}
+
+/// Version 2 states each bundle's dependency environment and keys bundles by
+/// it. The loader still reads version 1, as inert: none of its bundles states
+/// an environment, so none is ever admitted.
+export const BUNDLE_INDEX_VERSION = 2;
+
+/**
+ * Every bundle a set of `solid-contract-bundle` results yields, one per
+ * `bundleKey`, with the objects they name.
+ *
+ * Pure, so the floor/head behaviour is testable without a certification run:
+ * `results` is exactly what the Rust tool prints, `{ bundles, objects }` per
+ * catalog.
+ */
+export function collectBundles(results, options = {}) {
+  const bundles = new Map();
+  const objects = new Map();
+  const conflicted = new Set();
+  const refinements = new Map();
+  for (const result of results) {
     for (const entry of result.bundles) {
       // An entrypoint reached only through a `./*` wildcard answers no import a
       // consumer writes, and the census does not count it either. Bundling one
@@ -326,43 +417,7 @@ function main() {
       void claims;
       return published;
     });
-  const index = {
-    format: "solid-checker-accepted-contract-bundle-index",
-    bundleIndexVersion: 1,
-    bundles: ordered
-  };
-
-  for (const [catalog, reason] of refused) {
-    console.error(`  refused ${relative(REPOSITORY, catalog)}: ${reason.split("\n")[0]}`);
-  }
-  for (const key of [...conflicted].sort()) {
-    console.error(`  dropped ${key}: two certifications of it do not agree`);
-  }
-  for (const key of [...refinements.keys()].sort()) {
-    console.log(`  kept the closing certification of ${key}`);
-  }
-  const packages = new Set(ordered.map(entry => entry.packageName));
-  console.log(`${ordered.length} bundle(s) over ${packages.size} package(s)`);
-  for (const entry of ordered) {
-    console.log(`  ${entry.packageName}@${entry.packageVersion} ${entry.requestedEntrypoint}`);
-  }
-  if (options.dryRun) return;
-
-  rmSync(OBJECT_ROOT, { recursive: true, force: true });
-  mkdirSync(OBJECT_ROOT, { recursive: true });
-  // Exactly what the index names. A run reaches many certifications of one
-  // artifact and keeps one; the rest are not this build's business.
-  const named = new Set(ordered.flatMap(entry => [entry.document, entry.receipt]));
-  const members = [...objects.keys()].filter(member => named.has(member)).sort();
-  for (const member of members) {
-    const bytes = objects.get(member);
-    const address = member.split("/").pop().split(".")[0];
-    if (sha256(bytes) !== `sha256:${address}`) fail(`${member} is not at its content address`);
-    writeFileSync(join(BUNDLE_ROOT, member), bytes);
-  }
-  writeFileSync(INDEX_PATH, `${JSON.stringify(index, null, 2)}\n`);
-  writeFileSync(EMBEDDED_PATH, embeddedSource(members));
-  console.log(`wrote ${relative(REPOSITORY, INDEX_PATH)} and ${members.length} object(s)`);
+  return { ordered, objects, conflicted, refinements };
 }
 
 function embeddedSource(members) {

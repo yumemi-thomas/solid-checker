@@ -25,10 +25,11 @@ use thiserror::Error;
 
 use crate::{
     contract_certification::{
-        AuthenticatedPolicy2Receipt, BuiltInReceiptEntry, Policy2ReceiptBindings,
-        Policy2ReceiptProvenance, Policy2TrustConfiguration, authenticate_policy2_receipt,
-        canonicalize_policy2_main, decode_policy2_trust_configuration,
-        policy2_resolved_import_root,
+        AuthenticatedPolicy2Receipt, BuiltInReceiptEntry, DependencyEnvironmentEntry,
+        Policy2ReceiptBindings, Policy2ReceiptProvenance, Policy2TrustConfiguration,
+        authenticate_policy2_receipt, canonicalize_policy2_main,
+        decode_policy2_trust_configuration, policy2_dependency_environment_root,
+        policy2_resolved_import_root, validate_dependency_environment,
     },
     contract_document,
 };
@@ -295,6 +296,45 @@ struct AcceptedCatalogEntry {
     /// behaviour it had, and a newer one stops needing the guess.
     #[serde(default)]
     export_conditions: Option<Vec<String>>,
+    /// The entries behind the receipt's `dependencyEnvironmentRoot`. `None`
+    /// for a catalog published before the binding existed; read only where an
+    /// acceptance is applied by environment, and there only after
+    /// [`verified_dependency_environment`] reproduces the signed root.
+    #[serde(default)]
+    dependency_environment: Option<Vec<DependencyEnvironmentEntry>>,
+}
+
+/// The dependency environment a receipt's bindings state, from the entries
+/// published beside it.
+///
+/// The receipt binds only `dependencyEnvironmentRoot`; the entries travel in a
+/// catalog or bundle index, which is not authenticated. So they are admitted
+/// only when they are canonical and hash to exactly the signed root, and an
+/// entry list beside a receipt that binds no root is refused rather than read:
+/// it would be an environment nobody signed.
+///
+/// `Ok(None)` means the receipt states no environment, or states one whose
+/// entries were not published; a caller that applies acceptances by
+/// environment must refuse both.
+pub(crate) fn verified_dependency_environment(
+    bindings: &Policy2ReceiptBindings,
+    entries: Option<&[DependencyEnvironmentEntry]>,
+) -> Result<Option<Vec<DependencyEnvironmentEntry>>, ContractFailure> {
+    let mismatch = || ContractFailure::ReceiptMismatch {
+        field: "dependencyEnvironment",
+    };
+    match (bindings.dependency_environment_root.is_empty(), entries) {
+        (_, None) => Ok(None),
+        (true, Some(_)) => Err(mismatch()),
+        (false, Some(entries)) => {
+            validate_dependency_environment(entries).map_err(|_| mismatch())?;
+            if policy2_dependency_environment_root(entries) != bindings.dependency_environment_root
+            {
+                return Err(mismatch());
+            }
+            Ok(Some(entries.to_vec()))
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -611,6 +651,10 @@ pub struct AuthenticatedCatalogEntry {
     pub bindings: Policy2ReceiptBindings,
     pub import: ResolvedImport,
     pub export_conditions: Vec<String>,
+    /// The published entries behind `bindings.dependency_environment_root`,
+    /// already checked to reproduce it; `None` when the receipt states no
+    /// environment or the catalog published none.
+    pub dependency_environment: Option<Vec<DependencyEnvironmentEntry>>,
 }
 
 /// Reads a published catalog and returns every entry whose receipt
@@ -675,9 +719,12 @@ pub fn authenticated_catalog_entries(
             &bindings,
             provenance,
         )?;
+        let dependency_environment =
+            verified_dependency_environment(&bindings, entry.dependency_environment.as_deref())?;
         entries.push(AuthenticatedCatalogEntry {
             canonical_main: canonicalize_policy2_main(&document).map_err(authentication_error)?,
             bindings,
+            dependency_environment,
             import: entry.import,
             export_conditions: entry
                 .export_conditions

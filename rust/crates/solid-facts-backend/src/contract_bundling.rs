@@ -21,6 +21,10 @@
 //! - a receipt that states no `artifactAcceptanceRoot` — bundling is
 //!   *entirely* artifact matching, and an importer-only acceptance can never
 //!   apply to another project;
+//! - a receipt that states no `dependencyEnvironmentRoot`, or a catalog that
+//!   does not publish the entries behind it — a bundle is admitted only where
+//!   the consumer's installed tree reproduces the environment the proof read,
+//!   and an unstated environment is one no tree can be checked against;
 //! - a document with more than one artifact case, which
 //!   `load_authenticated_policy2_embedded_contract` refuses;
 //! - an entrypoint whose runtime or declaration file is not inside the package
@@ -90,6 +94,19 @@ fn bundle_entry(entry: &AuthenticatedCatalogEntry) -> Result<BundledAcceptance, 
                 .into(),
         );
     }
+    // `authenticated_catalog_entries` already checked that published entries
+    // hash to the signed root; what remains is that both exist.
+    let Some(dependency_environment) = entry
+        .dependency_environment
+        .as_ref()
+        .filter(|_| !entry.bindings.dependency_environment_root.is_empty())
+    else {
+        return Err(
+            "the receipt states no dependency environment (or the catalog publishes none), so no \
+             consumer's installed tree could be checked against the one this proof read"
+                .into(),
+        );
+    };
     // What the index will state has to be what the receipt signed, or admission
     // would recompute one identity and authenticate another.
     let identity = policy2_artifact_acceptance_root_for_identity(
@@ -152,6 +169,7 @@ fn bundle_entry(entry: &AuthenticatedCatalogEntry) -> Result<BundledAcceptance, 
             "receipt": object(&receipt_digest, "receipt"),
             "receiptDigest": receipt_digest,
             "bindings": entry.bindings,
+            "dependencyEnvironment": dependency_environment,
         }),
         document: entry.canonical_main.clone(),
         document_digest,

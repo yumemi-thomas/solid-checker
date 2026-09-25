@@ -1076,6 +1076,59 @@ impl PublishedContractGraphPlan {
             .collect())
     }
 
+    /// Every package, besides `node` itself, whose bytes `node`'s
+    /// certification can rely on through this graph: each transitive semantic
+    /// dependency, and every declaration-only source of `node` and of each of
+    /// them.
+    ///
+    /// Static, from the plan, on purpose. A dependency's claims hold only in
+    /// the environment *its* proof read, and a parent that composes them
+    /// inherits that premise -- `@solid-primitives/rootless` closing
+    /// `createCallback` on `@solid-primitives/utils`'s closed `createMicrotask`
+    /// is true only where utils resolves the `@solidjs/signals` whose audited
+    /// rows closed it. The dependency's receipt carries only a root, so the
+    /// union is taken over what the graph planned, which contains every root
+    /// any node's Type Facts census could have admitted.
+    fn dependency_environment(
+        &self,
+        node: &PlannedGraphNode,
+    ) -> Result<BTreeSet<super::DependencyEnvironmentEntry>, DependencyReceiptCompositionError>
+    {
+        let mut environment = node
+            .source_dependencies
+            .iter()
+            .map(|source| source.snapshot.dependency_environment_entry())
+            .collect::<BTreeSet<_>>();
+        let mut reachable = BTreeSet::new();
+        let mut pending = node.dependencies.clone();
+        while let Some(identity) = pending.pop() {
+            if !reachable.insert(identity.clone()) {
+                continue;
+            }
+            let dependency = self
+                .nodes
+                .iter()
+                .find(|candidate| candidate.identity == identity)
+                .ok_or_else(
+                    || DependencyReceiptCompositionError::DependencyOutsideGraph {
+                        dependency: identity.digest().into(),
+                    },
+                )?;
+            environment.insert(dependency.plan.snapshot.dependency_environment_entry());
+            environment.extend(
+                dependency
+                    .source_dependencies
+                    .iter()
+                    .map(|source| source.snapshot.dependency_environment_entry()),
+            );
+            pending.extend(dependency.dependencies.iter().cloned());
+        }
+        // A graph can reach another copy of the node's own package; the node's
+        // own bytes are its artifact identity, never its environment.
+        environment.remove(&node.plan.snapshot.dependency_environment_entry());
+        Ok(environment)
+    }
+
     /// Authenticates every dependency-composition demand for one planned
     /// parent. The caller may transport opaque receipts, but cannot construct
     /// this token from a digest or assign a valid receipt to another edge.
@@ -1138,6 +1191,7 @@ impl PublishedContractGraphPlan {
                 ))
             })
             .collect::<Result<BTreeMap<_, _>, DependencyReceiptCompositionError>>()?;
+        let environment = self.dependency_environment(node)?;
         VerifiedDependencyComposition::authenticate(
             &node.plan,
             &node.dependencies,
@@ -1148,6 +1202,7 @@ impl PublishedContractGraphPlan {
             issuer,
             revocation_epoch,
             type_facts,
+            environment,
         )
     }
 
@@ -3441,6 +3496,8 @@ pub struct VerifiedDependencyComposition {
     semantic_dependency_count: usize,
     census_requirements_root: Option<String>,
     factory_requirements_root: Option<String>,
+    /// See [`PublishedContractGraphPlan::dependency_environment`].
+    dependency_environment: BTreeSet<super::DependencyEnvironmentEntry>,
 }
 
 impl VerifiedDependencyComposition {
@@ -3458,6 +3515,7 @@ impl VerifiedDependencyComposition {
         issuer: &ConfiguredReceiptIssuer,
         revocation_epoch: u64,
         type_facts: Option<&super::type_facts::VerifiedTypeFactsEvidence>,
+        dependency_environment: BTreeSet<super::DependencyEnvironmentEntry>,
     ) -> Result<Self, DependencyReceiptCompositionError> {
         if expected_dependencies.len() != receipts.len() {
             return Err(DependencyReceiptCompositionError::ReceiptCensus {
@@ -3775,7 +3833,13 @@ impl VerifiedDependencyComposition {
                 .and_then(super::type_facts::VerifiedTypeFactsEvidence::dependency_census_root),
             factory_requirements_root: type_facts
                 .and_then(super::type_facts::VerifiedTypeFactsEvidence::factory_requirements_root),
+            dependency_environment,
         })
+    }
+
+    /// The environment this composition relies on, canonically ordered.
+    pub(super) fn dependency_environment(&self) -> &BTreeSet<super::DependencyEnvironmentEntry> {
+        &self.dependency_environment
     }
 
     pub(super) fn verify_plan(

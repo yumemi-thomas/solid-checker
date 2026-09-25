@@ -1157,11 +1157,129 @@ pub fn admitted_bundled_artifacts(
     let installed = |specifier: &str| installed_artifact_identity(project_directory, specifier);
     let resolved_target =
         |specifier: &str| resolved_target_identity(project_directory, facts, specifier);
-    crate::accepted_bundles::admitted_bundle_artifacts(conditions, &installed, &resolved_target)
-        .map_err(|error| BackendError::Contract(error.to_string()))
+    let environment = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
+        installed_environment_matches(project_directory, specifier, environment)
+    };
+    crate::accepted_bundles::admitted_bundle_artifacts(
+        conditions,
+        &installed,
+        &resolved_target,
+        &environment,
+    )
+    .map_err(|error| BackendError::Contract(error.to_string()))
 }
 
-fn installed_artifact_identity(
+/// Whether this project's installed tree, resolved from the installed copy of
+/// the package `specifier` names, is the dependency environment a compiled-in
+/// bundle was proven in.
+///
+/// The root is the directory [`installed_artifact_identity`] reads the
+/// package's own identity from, so the environment is checked from exactly the
+/// copy whose bytes were matched. Every lookup after that is Node's, from real
+/// paths: a pnpm store sibling is found where Node finds it, and a hoisted
+/// copy only where no nearer `node_modules` shadows it. Anything this cannot
+/// state exactly -- a missing package, an unreadable manifest, a lockfile that
+/// names no integrity or two -- answers `false`, so the bundle is not admitted.
+pub(crate) fn installed_environment_matches(
+    project_directory: &Path,
+    specifier: &str,
+    environment: &[crate::DependencyEnvironmentEntry],
+) -> bool {
+    if environment.is_empty() {
+        return true;
+    }
+    let Some(module) = package_name_of_specifier(specifier) else {
+        return false;
+    };
+    let Ok(Some(directory)) = discover_package_directory(project_directory, &module) else {
+        return false;
+    };
+    let (Ok(root), Ok(project)) = (
+        fs::canonicalize(&directory),
+        fs::canonicalize(project_directory),
+    ) else {
+        return false;
+    };
+    crate::accepted_bundles::environment_is_installed(
+        environment,
+        root,
+        |from, name| node_package_lookup(from, name),
+        |at| installed_environment_identity(&project, at),
+    )
+}
+
+/// Node's lookup of the bare package `name` from the package installed at
+/// `from` (a real path): the nearest `<ancestor>/node_modules/<name>`, skipping
+/// ancestors that are themselves `node_modules` directories, as
+/// `Module._nodeModulePaths` does.
+///
+/// A candidate Node would load that is not a package directory with a manifest
+/// -- `<name>.js` beside it, or a directory with no `package.json` -- is not a
+/// fact this can state, and answers `Err` rather than walking past what Node
+/// would have stopped at.
+fn node_package_lookup(from: &Path, name: &str) -> Result<Option<PathBuf>, ()> {
+    for ancestor in from.ancestors() {
+        if ancestor.file_name().is_some_and(|it| it == "node_modules") {
+            continue;
+        }
+        let candidate = ancestor.join("node_modules").join(name);
+        for extension in ["js", "json", "node"] {
+            let mut file = candidate.clone().into_os_string();
+            file.push(".");
+            file.push(extension);
+            match fs::symlink_metadata(PathBuf::from(file)) {
+                Ok(_) => return Err(()),
+                Err(error) if absent(&error) => {}
+                Err(_) => return Err(()),
+            }
+        }
+        match fs::metadata(&candidate) {
+            Ok(metadata) if metadata.is_dir() => {
+                return match fs::metadata(candidate.join("package.json")) {
+                    Ok(manifest) if manifest.is_file() => {
+                        fs::canonicalize(&candidate).map(Some).map_err(|_| ())
+                    }
+                    _ => Err(()),
+                };
+            }
+            Ok(_) => return Err(()),
+            Err(error) if absent(&error) => {}
+            Err(_) => return Err(()),
+        }
+    }
+    Ok(None)
+}
+
+fn absent(error: &io::Error) -> bool {
+    matches!(
+        error.kind(),
+        io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+    )
+}
+
+/// The three facts an environment entry states, read from the package
+/// installed at `directory` exactly as [`installed_artifact_identity`] reads
+/// them for the imported package: the installed directory's package name, the
+/// manifest version, and the lockfile integrity.
+fn installed_environment_identity(
+    project_directory: &Path,
+    directory: &Path,
+) -> Option<crate::DependencyEnvironmentEntry> {
+    let name = installed_package_name(directory)?;
+    let manifest: PackageManifest =
+        serde_json::from_slice(&fs::read(directory.join("package.json")).ok()?).ok()?;
+    if manifest.version.is_empty() {
+        return None;
+    }
+    let integrity = installed_package_integrity(project_directory, directory).ok()??;
+    Some(crate::DependencyEnvironmentEntry {
+        name,
+        version: manifest.version,
+        integrity,
+    })
+}
+
+pub(crate) fn installed_artifact_identity(
     project_directory: &Path,
     specifier: &str,
 ) -> Option<(String, String, String)> {
@@ -1648,7 +1766,8 @@ mod tests {
     use solid_reactive_ir::{RuntimeEnvironment, contract_semantics::AcceptedContractIndex};
 
     use super::{
-        DiagnosticSession, agreed_admissions, installed_package_integrity, retain_enabled,
+        DiagnosticSession, agreed_admissions, installed_environment_matches,
+        installed_package_integrity, retain_enabled,
     };
 
     const MINIMAL: &[u8] = include_bytes!(concat!(
@@ -2151,6 +2270,112 @@ mod tests {
             "an enabled-rule change must miss retained analysis"
         );
     }
+    /// The filesystem half of environment admission, on a real installed
+    /// tree: the certified environment is resolved from the imported package's
+    /// own copy, the way Node resolves it, and compared by name, manifest
+    /// version and lockfile integrity. Anything else refuses the bundle.
+    #[test]
+    fn a_bundle_environment_is_checked_against_the_installed_tree() {
+        let directory = std::env::temp_dir().join(format!(
+            "solid-checker-bundle-environment-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        let write = |relative: &str, text: &str| {
+            let path = directory.join(relative);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        };
+        let lock = |signals: &str, nested: Option<&str>| {
+            let nested = nested.map_or_else(String::new, |integrity| {
+                format!(
+                    r#","node_modules/@solid-primitives/utils/node_modules/@solidjs/signals":
+                        {{"version":"2.0.0-rc.0","integrity":"{integrity}"}}"#
+                )
+            });
+            format!(
+                r#"{{"lockfileVersion":3,"packages":{{
+                    "node_modules/@solid-primitives/utils":
+                        {{"version":"7.0.0-next.4","integrity":"sha512-utils"}},
+                    "node_modules/@solidjs/signals":
+                        {{"version":"2.0.0-rc.6","integrity":"{signals}"}}{nested}}}}}"#
+            )
+        };
+        write(
+            "node_modules/@solid-primitives/utils/package.json",
+            r#"{"name":"@solid-primitives/utils","version":"7.0.0-next.4"}"#,
+        );
+        write(
+            "node_modules/@solidjs/signals/package.json",
+            r#"{"name":"@solidjs/signals","version":"2.0.0-rc.6"}"#,
+        );
+        write("package-lock.json", &lock("sha512-signals-rc6", None));
+        let signals = |version: &str, integrity: &str| crate::DependencyEnvironmentEntry {
+            name: "@solidjs/signals".into(),
+            version: version.into(),
+            integrity: integrity.into(),
+        };
+        let head = [signals("2.0.0-rc.6", "sha512-signals-rc6")];
+        let matches = |environment: &[crate::DependencyEnvironmentEntry]| {
+            installed_environment_matches(&directory, "@solid-primitives/utils", environment)
+        };
+
+        assert!(
+            matches(&head),
+            "the certified signals, hoisted beside utils"
+        );
+        assert!(matches(&[]), "an empty environment needs nothing installed");
+        assert!(
+            !matches(&[signals("2.0.0-rc.0", "sha512-signals-rc6")]),
+            "a different signals version refuses"
+        );
+        assert!(
+            !matches(&[signals("2.0.0-rc.6", "sha512-signals-repacked")]),
+            "a different dependency integrity refuses"
+        );
+        assert!(
+            !matches(&[crate::DependencyEnvironmentEntry {
+                name: "@solidjs/web".into(),
+                version: "2.0.0-rc.6".into(),
+                integrity: "sha512-web".into(),
+            }]),
+            "a dependency that is not installed refuses"
+        );
+
+        // The lockfile names no integrity for the installed copy: not a fact
+        // this project makes available, so nothing is admitted on it.
+        write(
+            "package-lock.json",
+            r#"{"lockfileVersion":3,"packages":{
+                "node_modules/@solid-primitives/utils":{"version":"7.0.0-next.4","integrity":"sha512-utils"},
+                "node_modules/@solidjs/signals":{"version":"2.0.0-rc.6"}}}"#,
+        );
+        assert!(
+            !matches(&head),
+            "a dependency with no stated integrity refuses"
+        );
+
+        // utils carries its own nested rc.0, which is what Node loads from it,
+        // however right the hoisted copy is.
+        write(
+            "node_modules/@solid-primitives/utils/node_modules/@solidjs/signals/package.json",
+            r#"{"name":"@solidjs/signals","version":"2.0.0-rc.0"}"#,
+        );
+        write(
+            "package-lock.json",
+            &lock("sha512-signals-rc6", Some("sha512-signals-rc0")),
+        );
+        assert!(
+            !matches(&head),
+            "the copy the imported package resolves is the nested one"
+        );
+        assert!(
+            matches(&[signals("2.0.0-rc.0", "sha512-signals-rc0")]),
+            "and that nested copy is the one checked"
+        );
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
     /// A rule-options document naming a *removed* rule must load, and one
     /// naming a rule that never existed must still fail. The first half is the
     /// migration path for a project that had disabled a rule this checker went

@@ -22,6 +22,21 @@
 //! `@solidjs/signals` and `@solidjs/web` from the dialect. A contract about one
 //! of those is refused here rather than loaded.
 //!
+//! **And the environment the proof read.** An artifact is proven about in one
+//! installed environment: a closure a dialect axiom discharged holds for the
+//! `@solidjs/signals` archive whose audited rows answered, and a claim composed
+//! from a dependency's receipt holds only where that dependency is the one
+//! certified. Two certifications of the same bytes against different
+//! environments are two different acceptances. So a bundle states the
+//! environment its receipt binds (`dependencyEnvironmentRoot`, reproduced from
+//! the entries the index publishes), and admission resolves every entry from
+//! the imported package's own installed location, the way Node would, and
+//! compares name, manifest version and lockfile integrity. A missing, different
+//! or unstatable dependency refuses the bundle; the import then behaves as if
+//! no bundle existed. The dialect chosen for the analysis is never consulted:
+//! it answers which language the project is written in, not which archive this
+//! package resolves.
+//!
 //! **What the compiled-in authority actually is.** The receipt is issued with
 //! `ReceiptIssuerKind::BuiltIn`, whose authentication compares the receipt's
 //! own digest against a compiled-in entry digest — so the authority is that
@@ -38,15 +53,18 @@ use std::{
 };
 
 use serde::Deserialize;
+use sha2::{Digest as _, Sha256};
 use solid_reactive_ir::contract_semantics::AcceptedContractIndex;
 
 use crate::{
     contract_certification::{
-        BuiltInReceiptEntry, Policy2ReceiptBindings, policy2_artifact_acceptance_root_for_identity,
+        BuiltInReceiptEntry, DependencyEnvironmentEntry, Policy2ReceiptBindings,
+        policy2_artifact_acceptance_root_for_identity, policy2_dependency_environment_root,
     },
     contract_interface::{
         AuthenticCase, ContractFailure, InstalledArtifactIdentity, ResolvedTargetIdentity,
         admissible_cases, declared_conditions, load_authenticated_policy2_embedded_contract,
+        verified_dependency_environment,
     },
 };
 
@@ -56,7 +74,16 @@ mod embedded;
 mod tests;
 
 const BUNDLE_INDEX_FORMAT: &str = "solid-checker-accepted-contract-bundle-index";
-const BUNDLE_INDEX_VERSION: u16 = 1;
+/// Version 2: every bundle states the dependency environment its receipt
+/// binds, and bundles are unique by artifact *and* environment.
+const BUNDLE_INDEX_VERSION: u16 = 2;
+/// The version before environments were stated. Still read, and still
+/// authenticated byte for byte, but **inert**: its receipts bind no
+/// environment, so no consumer tree can be shown to be the one the proof read,
+/// and none of its bundles is ever admitted. Kept loadable only so a build
+/// carrying such an index still starts; it is provably sound because it
+/// supplies nothing.
+const INERT_BUNDLE_INDEX_VERSION: u16 = 1;
 
 /// The reviewed index. Compiled in beside the objects it names, so a build
 /// carries exactly the bundles the repository does.
@@ -94,6 +121,11 @@ struct BundleEntry {
     receipt: String,
     receipt_digest: String,
     bindings: Policy2ReceiptBindings,
+    /// The entries behind `bindings.dependencyEnvironmentRoot`, in canonical
+    /// order. Unauthenticated on their own: the loader admits them only when
+    /// they hash to the root the receipt binds.
+    #[serde(default)]
+    dependency_environment: Option<Vec<DependencyEnvironmentEntry>>,
 }
 
 struct LoadedBundle {
@@ -102,7 +134,16 @@ struct LoadedBundle {
     export_conditions: Vec<String>,
     runtime_target: String,
     declaration_target: String,
+    /// `policy2_artifact_acceptance_root` of the five identity fields, which is
+    /// what a consumer's installed identity must reproduce.
+    acceptance_root: String,
+    /// The key this bundle is indexed and admitted under: the acceptance root
+    /// and the environment together, because two certifications of one
+    /// artifact in different environments are two acceptances, and keyed by
+    /// the artifact alone `AcceptedContractIndex` would drop both.
     identity: String,
+    /// `None` for an inert bundle (see [`INERT_BUNDLE_INDEX_VERSION`]).
+    environment: Option<Vec<DependencyEnvironmentEntry>>,
     contract: solid_reactive_ir::contract_semantics::AcceptedContract,
 }
 
@@ -119,13 +160,15 @@ fn load_bundles() -> Result<Vec<LoadedBundle>, ContractFailure> {
         serde_json::from_slice(INDEX_BYTES).map_err(|error| ContractFailure::DocumentDecode {
             message: format!("decode the compiled-in accepted-contract index: {error}"),
         })?;
-    if index.format != BUNDLE_INDEX_FORMAT || index.bundle_index_version != BUNDLE_INDEX_VERSION {
-        return Err(ContractFailure::DocumentDecode {
-            message: format!(
-                "the compiled-in accepted-contract index must use format \
-                 {BUNDLE_INDEX_FORMAT:?} version {BUNDLE_INDEX_VERSION}"
-            ),
-        });
+    let inert = match index.bundle_index_version {
+        BUNDLE_INDEX_VERSION => false,
+        INERT_BUNDLE_INDEX_VERSION => true,
+        _ => {
+            return Err(unsupported_index());
+        }
+    };
+    if index.format != BUNDLE_INDEX_FORMAT {
+        return Err(unsupported_index());
     }
     index
         .bundles
@@ -133,9 +176,49 @@ fn load_bundles() -> Result<Vec<LoadedBundle>, ContractFailure> {
         .map(|entry| {
             let document = object(&entry.document)?;
             let receipt = object(&entry.receipt)?;
-            load_bundle(entry, document, receipt)
+            let mut bundle = load_bundle(entry, document, receipt)?;
+            if inert {
+                bundle.environment = None;
+                bundle.identity.clone_from(&bundle.acceptance_root);
+            } else if bundle.environment.is_none() {
+                return Err(ContractFailure::ReceiptMismatch {
+                    field: "dependencyEnvironment",
+                });
+            }
+            Ok(bundle)
         })
         .collect()
+}
+
+fn unsupported_index() -> ContractFailure {
+    ContractFailure::DocumentDecode {
+        message: format!(
+            "the compiled-in accepted-contract index must use format {BUNDLE_INDEX_FORMAT:?} \
+             version {BUNDLE_INDEX_VERSION} (or the inert version {INERT_BUNDLE_INDEX_VERSION})"
+        ),
+    }
+}
+
+/// The key one bundle is indexed under: its artifact and the environment its
+/// proof read. An environment-less bundle is never admitted, and keeps the bare
+/// acceptance root only so it has a key at all.
+fn bundle_identity(
+    acceptance_root: &str,
+    environment: Option<&[DependencyEnvironmentEntry]>,
+) -> String {
+    let Some(environment) = environment else {
+        return acceptance_root.to_owned();
+    };
+    let mut hash = Sha256::new();
+    hash.update(b"solid-checker:accepted-bundle-identity:v1");
+    for field in [
+        acceptance_root,
+        policy2_dependency_environment_root(environment).as_str(),
+    ] {
+        hash.update(u64::try_from(field.len()).unwrap_or(u64::MAX).to_be_bytes());
+        hash.update(field.as_bytes());
+    }
+    format!("sha256:{:x}", hash.finalize())
 }
 
 fn load_bundle(
@@ -192,13 +275,21 @@ fn load_bundle(
             field: "artifactAcceptanceRoot",
         });
     }
+    // The environment the index states has to be the one the receipt signed,
+    // for the same reason: admission checks the consumer's tree against these
+    // entries, and an entry nobody signed would be an environment nobody
+    // proved anything in.
+    let environment =
+        verified_dependency_environment(&entry.bindings, entry.dependency_environment.as_deref())?;
     Ok(LoadedBundle {
         specifier: entry.specifier.clone(),
         requested_entrypoint: entry.requested_entrypoint.clone(),
         export_conditions: entry.export_conditions.clone(),
         runtime_target: entry.runtime_target.clone(),
         declaration_target: entry.declaration_target.clone(),
-        identity,
+        identity: bundle_identity(&identity, environment.as_deref()),
+        acceptance_root: identity,
+        environment,
         contract,
     })
 }
@@ -236,8 +327,76 @@ pub fn compiled_in_accepted_contracts() -> Result<AcceptedContractIndex, Contrac
     Ok(AcceptedContractIndex::from_artifact_acceptances(
         bundles()?
             .iter()
+            // An inert bundle can never be admitted, so it is not offered.
+            .filter(|bundle| bundle.environment.is_some())
             .map(|bundle| (bundle.identity.clone(), bundle.contract.clone())),
     ))
+}
+
+/// Whether this project's installed tree reproduces a bundle's dependency
+/// environment, resolved from the installed location of the package the
+/// specifier (the first argument) names.
+///
+/// The native answer is `diagnostics`' filesystem walk over
+/// [`environment_is_installed`]. A host with no filesystem answers `true` only
+/// for the empty environment.
+pub type InstalledEnvironment<'a> = dyn Fn(&str, &[DependencyEnvironmentEntry]) -> bool + 'a;
+
+/// Whether an installed tree reproduces `environment`, starting from `root`,
+/// the imported package's installed location.
+///
+/// `resolve(from, name)` is Node's lookup of the bare package `name` from the
+/// package installed at `from`: `Ok(None)` when nothing is installed under any
+/// `node_modules` it walks, `Err` when the tree cannot state the answer
+/// exactly. `identity(at)` is the name, manifest version and lockfile integrity
+/// of the package installed at `at`, or `None` when those are not all stated.
+///
+/// The rule, and why it is this strict:
+///
+/// - Every entry must be found from at least one located package: the root, or
+///   a package an earlier entry resolved to. An entry nothing reaches is a
+///   premise this tree cannot supply.
+/// - **Every** resolution of an entry's name, from **every** located package,
+///   must reach exactly that entry's identity. The certification states which
+///   packages it read, not which package read each one, so a nested copy under
+///   one dependency that differs from the hoisted one another dependency sees
+///   is exactly the swap this cannot tell apart from the certified tree. It is
+///   refused rather than guessed.
+/// - Two entries with the same name -- two copies of one package in the
+///   certified environment -- can therefore never both hold, and refuse.
+pub(crate) fn environment_is_installed<L: Clone + Ord>(
+    environment: &[DependencyEnvironmentEntry],
+    root: L,
+    resolve: impl Fn(&L, &str) -> Result<Option<L>, ()>,
+    identity: impl Fn(&L) -> Option<DependencyEnvironmentEntry>,
+) -> bool {
+    let mut names = BTreeSet::new();
+    if !environment
+        .iter()
+        .all(|entry| names.insert(entry.name.as_str()))
+    {
+        return false;
+    }
+    let mut located = BTreeSet::from([root.clone()]);
+    let mut pending = vec![root];
+    let mut found = BTreeSet::new();
+    while let Some(from) = pending.pop() {
+        for entry in environment {
+            let at = match resolve(&from, &entry.name) {
+                Ok(Some(at)) => at,
+                Ok(None) => continue,
+                Err(()) => return false,
+            };
+            if identity(&at).as_ref() != Some(entry) {
+                return false;
+            }
+            found.insert(entry.name.as_str());
+            if located.insert(at.clone()) {
+                pending.push(at);
+            }
+        }
+    }
+    found.len() == names.len()
 }
 
 /// Which specifiers this project may import under a compiled-in acceptance.
@@ -252,12 +411,14 @@ pub fn admitted_bundle_artifacts(
     conditions: &BTreeSet<String>,
     installed_integrity: &InstalledArtifactIdentity,
     resolved_target: &ResolvedTargetIdentity,
+    installed_environment: &InstalledEnvironment,
 ) -> Result<Vec<(String, String)>, ContractFailure> {
     Ok(admitted_from(
         bundles()?,
         conditions,
         installed_integrity,
         resolved_target,
+        installed_environment,
     ))
 }
 
@@ -266,10 +427,14 @@ fn admitted_from(
     conditions: &BTreeSet<String>,
     installed_integrity: &InstalledArtifactIdentity,
     resolved_target: &ResolvedTargetIdentity,
+    installed_environment: &InstalledEnvironment,
 ) -> Vec<(String, String)> {
     let declared = declared_conditions(conditions);
     let mut authentic: BTreeMap<String, Vec<AuthenticCase>> = BTreeMap::new();
     for bundle in loaded {
+        let Some(environment) = bundle.environment.as_deref() else {
+            continue;
+        };
         let Some((name, version, integrity)) = installed_integrity(&bundle.specifier) else {
             continue;
         };
@@ -280,14 +445,19 @@ fn admitted_from(
             &bundle.requested_entrypoint,
             &bundle.export_conditions,
         );
-        if derived != bundle.identity {
+        if derived != bundle.acceptance_root {
+            continue;
+        }
+        // The same artifact, and now the same environment, or it is a
+        // different acceptance this project never reproduced.
+        if !installed_environment(&bundle.specifier, environment) {
             continue;
         }
         authentic
             .entry(bundle.specifier.clone())
             .or_default()
             .push(AuthenticCase::from_relative(
-                derived,
+                bundle.identity.clone(),
                 bundle.runtime_target.clone(),
                 bundle.declaration_target.clone(),
                 bundle.export_conditions.clone(),

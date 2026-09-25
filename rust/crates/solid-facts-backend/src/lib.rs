@@ -116,10 +116,10 @@ pub use contract_certification::{
     CertificationPlan, CertificationPlanningError, CertificationPlanningTransaction,
     CertificationRequest, ConfiguredReceiptIssuer, ControlledExecution, ControlledExecutionError,
     DependencyCompositionError, DependencyCompositionRequirement, DependencyCompositionSchedule,
-    DependencyNodeIdentity, DependencyQueueNode, DependencyReceiptCompositionError,
-    FinalizedGraphNode, FinalizedPolicy2Contract, FinalizedPolicy2Graph,
-    IMPORT_FREE_EXECUTION_PROFILE, INERT_EXECUTION_PROFILE, LocalArtifact, LockPinnedArchive,
-    Policy2FinalizationError, Policy2ReceiptBindings, Policy2ReceiptError,
+    DependencyEnvironmentEntry, DependencyNodeIdentity, DependencyQueueNode,
+    DependencyReceiptCompositionError, FinalizedGraphNode, FinalizedPolicy2Contract,
+    FinalizedPolicy2Graph, IMPORT_FREE_EXECUTION_PROFILE, INERT_EXECUTION_PROFILE, LocalArtifact,
+    LockPinnedArchive, Policy2FinalizationError, Policy2ReceiptBindings, Policy2ReceiptError,
     Policy2ReceiptProvenance, Policy2TrustConfiguration, Policy2TrustEntry, Policy2TrustStore,
     ProbeGate, ProbeGateError, ProbeGateSchedule, ProbeHarnessConfiguration, ProbeHarnessError,
     PublishedArchive, PublishedContractGraphPlan, PublishedGraphCertificationError,
@@ -135,9 +135,9 @@ pub use contract_certification::{
     decode_policy2_trust_configuration, encode_policy2_trust_configuration,
     issue_builtin_policy2_receipt, issue_policy2_receipt, plan_certification,
     plan_published_contract_graph, policy2_artifact_acceptance_root,
-    policy2_artifact_acceptance_root_for_identity, policy2_main_closed_claims_root,
-    policy2_main_semantic_digest, policy2_policy_digest, policy2_resolved_import_root,
-    policy2_trust_configuration_for_issuer, publish_policy2_catalog,
+    policy2_artifact_acceptance_root_for_identity, policy2_dependency_environment_root,
+    policy2_main_closed_claims_root, policy2_main_semantic_digest, policy2_policy_digest,
+    policy2_resolved_import_root, policy2_trust_configuration_for_issuer, publish_policy2_catalog,
 };
 #[cfg(feature = "dialect-v2")]
 pub use contract_certification::{

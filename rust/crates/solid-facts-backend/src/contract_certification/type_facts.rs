@@ -419,9 +419,26 @@ pub struct VerifiedTypeFactsEvidence {
     /// nothing and binds nothing; the census reads it from the transcript.
     not_callable_exports: std::collections::BTreeMap<String, typefacts::NotCallableValue>,
     default_library_aliases: std::collections::BTreeMap<String, typefacts::DefaultLibraryAlias>,
+    /// Every authenticated snapshot, other than the certified package's own,
+    /// that this evidence's source census admitted as a root: the packages
+    /// whose declarations and source the producer's program could consult and
+    /// the census could answer from -- the dialect's audited archives among
+    /// them, which is where a `census-dialect-axiom` terminator reads.
+    ///
+    /// Deliberately every admitted root rather than the ones a transcript
+    /// happened to name. What the program resolved is not a narrower premise
+    /// the verifier re-derives, so the receipt states the whole supply.
+    dependency_environment: std::collections::BTreeSet<super::DependencyEnvironmentEntry>,
 }
 
 impl VerifiedTypeFactsEvidence {
+    /// See the field. Canonically ordered.
+    pub(super) fn dependency_environment(
+        &self,
+    ) -> &std::collections::BTreeSet<super::DependencyEnvironmentEntry> {
+        &self.dependency_environment
+    }
+
     pub(super) fn factory_return_claims(&self) -> Vec<(String, FactoryReturnDependencyClaim)> {
         self.bindings
             .iter()
@@ -2975,6 +2992,9 @@ pub(super) fn verify_live_answer(
         call_signatures: std::collections::BTreeMap::new(),
         not_callable_exports: std::collections::BTreeMap::new(),
         default_library_aliases: std::collections::BTreeMap::new(),
+        // The invocation census admits no dependency root at all (its source
+        // census runs with none), so it read no other package.
+        dependency_environment: std::collections::BTreeSet::new(),
     })
 }
 
@@ -3294,12 +3314,14 @@ fn verify_live_export_value_answer_with_project_census(
             refusals: census_refusals,
         });
     }
+    let dependency_environment = dependency_environment_of_roots(&source_roots, &plan.snapshot);
     Ok(VerifiedTypeFactsEvidence {
         bindings,
         session_evidence_root: identity.evidence_root().to_owned(),
         call_signatures,
         not_callable_exports,
         default_library_aliases,
+        dependency_environment,
     })
 }
 
@@ -8935,6 +8957,21 @@ struct SnapshotSourceRoot<'a> {
     evidence_prefix: String,
     snapshot: &'a super::ArtifactSnapshot,
     dependency: bool,
+}
+
+/// The dependency environment one source census admitted: every root that is
+/// a dependency's authenticated snapshot rather than the certified package's
+/// own. It is the same slice [`census_dialect_axiom_for_callee`] answers from,
+/// so an archive whose audited rows closed a domain is always in it.
+fn dependency_environment_of_roots(
+    roots: &[SnapshotSourceRoot<'_>],
+    certified: &super::ArtifactSnapshot,
+) -> std::collections::BTreeSet<super::DependencyEnvironmentEntry> {
+    roots
+        .iter()
+        .filter(|root| root.dependency && root.snapshot.root() != certified.root())
+        .map(|root| root.snapshot.dependency_environment_entry())
+        .collect()
 }
 
 fn deduplicate_snapshot_source_roots(
@@ -23910,6 +23947,25 @@ mod tests {
         assert_eq!(
             terminator.witness_site,
             "census-dialect-axiom:@solidjs/signals@2.0.0-rc.3#sha512-/yPhTf3xS1FRR4MX:createTrackedEffect:creates"
+        );
+        // The archive that answered is in the environment the receipt binds,
+        // which is what stops this closure reaching a project on another
+        // signals; the certified package's own root never is.
+        let own = SnapshotSourceRoot {
+            path: "/project/node_modules/consumer/".to_owned(),
+            evidence_prefix: "/node_modules/consumer/".to_owned(),
+            snapshot: &certified,
+            dependency: false,
+        };
+        assert_eq!(
+            dependency_environment_of_roots(&[root(&dependency, true), own], &certified)
+                .into_iter()
+                .collect::<Vec<_>>(),
+            vec![super::super::DependencyEnvironmentEntry {
+                name: "@solidjs/signals".into(),
+                version: "2.0.0-rc.3".into(),
+                integrity: SIGNALS_INTEGRITY.into(),
+            }]
         );
 
         // Identity: the coordinate alone is never enough.

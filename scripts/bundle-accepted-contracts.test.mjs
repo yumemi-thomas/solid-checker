@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "vitest";
 
-import { claimsOf, relate } from "./bundle-accepted-contracts.mjs";
+import { bundleKey, claimsOf, collectBundles, relate } from "./bundle-accepted-contracts.mjs";
 
 const document = (summary) =>
   JSON.stringify({
@@ -77,5 +77,77 @@ describe("resolving two certifications of one artifact", () => {
       summaries: { s1: { shape: "callable", call: { ...invoke, closed: ["creates"], creates: [] } } }
     });
     assert.equal(relate(claimsOf(extra), claimsOf(open)), "conflict");
+  });
+});
+
+// The defect this key exists for, measured on the ecosystem corpus: the same
+// `@solid-primitives/utils@7.0.0-next.4` bytes certified on a floor row
+// (`@solidjs/signals@2.0.0-rc.0`, no audited rows) and a head row (rc.6,
+// audited), and only the head rows close `createMicrotask` `creates`. Keyed by
+// artifact alone, "keep the closing certification" shipped the head closure to
+// rc.0 projects.
+describe("certifications of one artifact in different environments", () => {
+  const signals = version => [
+    { name: "@solidjs/signals", version, integrity: `sha512-signals-${version}` }
+  ];
+  const entry = (environment, document, digest) => ({
+    packageName: "@solid-primitives/utils",
+    packageVersion: "7.0.0-next.4",
+    packageIntegrity: "sha512-utils",
+    specifier: "@solid-primitives/utils",
+    requestedEntrypoint: ".",
+    exportConditions: ["import"],
+    document: `objects/${digest}.main.json`,
+    documentDigest: `sha256:${digest}`,
+    receipt: `objects/${digest}.receipt.json`,
+    receiptDigest: `sha256:${digest}r`,
+    dependencyEnvironment: environment,
+    _document: document
+  });
+  const result = (...entries) => ({
+    bundles: entries.map(({ _document, ...published }) => published),
+    objects: Object.fromEntries(
+      entries.flatMap(({ _document, document, receipt }) => [
+        [document, _document],
+        [receipt, "{}"]
+      ])
+    )
+  });
+
+  test("the environment is part of the key", () => {
+    const floor = entry(signals("2.0.0-rc.0"), open, "a");
+    const head = entry(signals("2.0.0-rc.6"), closing, "b");
+    assert.notEqual(bundleKey(floor), bundleKey(head));
+    assert.equal(bundleKey(floor), bundleKey(entry(signals("2.0.0-rc.0"), closing, "c")));
+  });
+
+  test("a floor and a head certification are two bundles, and neither refines the other", () => {
+    const floor = entry(signals("2.0.0-rc.0"), open, "a");
+    const head = entry(signals("2.0.0-rc.6"), closing, "b");
+    for (const order of [[floor, head], [head, floor]]) {
+      const { ordered, conflicted, refinements } = collectBundles([result(...order)]);
+      assert.equal(ordered.length, 2, "one bundle per environment");
+      assert.equal(conflicted.size, 0);
+      assert.equal(refinements.size, 0, "a closure proven in one environment refines nothing in another");
+      const byEnvironment = new Map(
+        ordered.map(bundle => [bundle.dependencyEnvironment[0].version, bundle.documentDigest])
+      );
+      assert.equal(byEnvironment.get("2.0.0-rc.0"), "sha256:a", "the floor keeps its own, open, claim");
+      assert.equal(byEnvironment.get("2.0.0-rc.6"), "sha256:b");
+    }
+  });
+
+  test("within one environment the closing certification still refines", () => {
+    const narrow = entry(signals("2.0.0-rc.6"), open, "a");
+    const full = entry(signals("2.0.0-rc.6"), closing, "b");
+    const { ordered, refinements } = collectBundles([result(narrow), result(full)]);
+    assert.equal(ordered.length, 1);
+    assert.equal(ordered[0].documentDigest, "sha256:b");
+    assert.equal(refinements.size, 1);
+  });
+
+  test("an entry that states no environment is refused rather than keyed", () => {
+    const unstated = entry(undefined, open, "a");
+    assert.throws(() => collectBundles([result(unstated)]), /states no dependency environment/);
   });
 });

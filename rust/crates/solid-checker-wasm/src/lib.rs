@@ -274,10 +274,20 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
             .iter()
             .cloned()
             .collect::<std::collections::BTreeSet<_>>();
+        // This adapter has no filesystem, so it cannot resolve a bundle's
+        // dependency environment from the imported package's location the way
+        // the native side does. Only a bundle whose proof read no other
+        // package can be shown to apply; every other one is refused, which is
+        // the import behaving exactly as if no bundle existed.
+        let environment =
+            |_: &str, environment: &[solid_facts_backend::DependencyEnvironmentEntry]| {
+                environment.is_empty()
+            };
         let admitted = solid_facts_backend::admitted_bundle_artifacts(
             &conditions,
             &installed,
             &resolved_target,
+            &environment,
         )?;
         let contracts =
             contracts.with_fallback(solid_facts_backend::compiled_in_accepted_contracts()?);
@@ -437,6 +447,7 @@ mod policy2_receipt_tests {
             closed_claims_root: root(17),
             verifier_source_digest: root(18),
             verifier_build_digest: root(19),
+            dependency_environment_root: String::new(),
         }
     }
 

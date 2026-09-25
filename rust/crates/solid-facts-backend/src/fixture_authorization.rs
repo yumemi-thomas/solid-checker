@@ -274,6 +274,9 @@ pub fn authorize_fixture_contract(
         closed_claims_root: policy2_main_closed_claims_root(&canonical_main).map_err(refused)?,
         verifier_source_digest: stand_in(17),
         verifier_build_digest: stand_in(18),
+        // A fixture authorization supplies a project catalog, which is applied
+        // by importer and artifact, never by environment; it states none.
+        dependency_environment_root: String::new(),
     };
 
     let issuer =

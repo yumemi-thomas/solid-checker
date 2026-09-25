@@ -266,7 +266,8 @@ pub(super) fn finalize_value_only_with_dependencies(
         }
     };
     let authenticated =
-        authenticate_policy2_receipt(&canonical_main, &receipt, &bindings, provenance)?;
+        authenticate_policy2_receipt(&canonical_main, &receipt, &bindings, provenance)?
+            .with_dependency_environment(dependency_environment(type_facts, dependencies))?;
     Ok(FinalizedPolicy2Contract {
         canonical_main,
         receipt,
@@ -487,8 +488,34 @@ pub(super) fn prepare_value_only(
         closed_claims_root,
         verifier_source_digest: pin.source_manifest_sha256().to_owned(),
         verifier_build_digest: verifier_build_digest.clone(),
+        dependency_environment_root: super::policy2_dependency_environment_root(
+            &dependency_environment(type_facts, dependencies),
+        ),
     };
     Ok((canonical_main, bindings))
+}
+
+/// Every installed package besides the certified one that this proof read:
+/// the roots its Type Facts census admitted, and everything its dependency
+/// composition relied on (each semantic dependency, and transitively the
+/// environment that dependency's own proof read).
+///
+/// This is what a receipt's `dependencyEnvironmentRoot` states, and what a
+/// consumer must reproduce before the contract may be applied to its tree. A
+/// certification that read no other package states the empty environment,
+/// which is a statement, not an absence.
+fn dependency_environment(
+    type_facts: Option<&VerifiedTypeFactsEvidence>,
+    dependencies: Option<&VerifiedDependencyComposition>,
+) -> Vec<super::DependencyEnvironmentEntry> {
+    let mut environment = std::collections::BTreeSet::new();
+    if let Some(type_facts) = type_facts {
+        environment.extend(type_facts.dependency_environment().iter().cloned());
+    }
+    if let Some(dependencies) = dependencies {
+        environment.extend(dependencies.dependency_environment().iter().cloned());
+    }
+    environment.into_iter().collect()
 }
 
 impl From<super::RecipeGatingError> for Policy2FinalizationError {

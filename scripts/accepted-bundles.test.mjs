@@ -35,10 +35,28 @@ function named() {
   return [...new Set(index.bundles.flatMap(bundle => [bundle.document, bundle.receipt]))].sort();
 }
 
+// Version 2 states every bundle's dependency environment. Version 1 predates
+// that binding; the loader still reads it, as inert (no bundle of it is ever
+// admitted), so a checked-in version-1 tier builds and supplies nothing.
+const stated = index.bundleIndexVersion === 2;
+
 test("the index is the format the checker compiles in", () => {
   assert.equal(index.format, "solid-checker-accepted-contract-bundle-index");
-  assert.equal(index.bundleIndexVersion, 1);
+  assert.ok([1, 2].includes(index.bundleIndexVersion), `version ${index.bundleIndexVersion}`);
   assert.ok(Array.isArray(index.bundles));
+});
+
+test("a version-2 bundle states the environment its receipt binds", () => {
+  if (!stated) return;
+  for (const bundle of index.bundles) {
+    assert.ok(
+      bundle.bindings?.dependencyEnvironmentRoot,
+      `${bundle.packageName} binds no dependency environment, so no project could be checked against it`
+    );
+    assert.ok(Array.isArray(bundle.dependencyEnvironment), `${bundle.packageName} publishes no environment`);
+    const spelled = bundle.dependencyEnvironment.map(entry => JSON.stringify([entry.name, entry.version, entry.integrity]));
+    assert.deepEqual(spelled, [...new Set(spelled)].sort(), `${bundle.packageName}'s environment is not canonical`);
+  }
 });
 
 test("every object is at its content address and is named by the index", () => {
@@ -101,13 +119,17 @@ test("a bundle states every field admission recomputes", () => {
   }
 });
 
-test("no two bundles claim the same artifact", () => {
-  // Two contracts for one acceptance root is two answers about the same bytes.
-  // `AcceptedContractIndex` drops such a pair rather than choosing, so a
-  // duplicate here silently removes both from every build.
+test("no two bundles claim the same artifact in the same environment", () => {
+  // Two contracts for one acceptance root in one environment is two answers
+  // about the same bytes. `AcceptedContractIndex` drops such a pair rather than
+  // choosing, so a duplicate here silently removes both from every build. The
+  // same artifact in two environments is two acceptances (a floor and a head
+  // certification), and the loader keys them apart.
   const seen = new Map();
   for (const bundle of index.bundles) {
-    const root = bundle.bindings.artifactAcceptanceRoot;
+    const root = stated
+      ? `${bundle.bindings.artifactAcceptanceRoot} ${bundle.bindings.dependencyEnvironmentRoot}`
+      : bundle.bindings.artifactAcceptanceRoot;
     const previous = seen.get(root);
     assert.equal(
       previous,

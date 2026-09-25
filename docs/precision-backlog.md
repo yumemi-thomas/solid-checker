@@ -1,5 +1,44 @@
 # Precision backlog
 
+## A compiled-in contract is admitted only in its certified environment (ADR 0123, 2026-09-25)
+
+Status: **implemented**, closing the delivery gap the entry below found. A
+receipt now signs `dependencyEnvironmentRoot`, a hash over the sorted
+`{name, version, integrity}` of every dependency snapshot the Type Facts census
+admitted as a root (including the dialect archive whose negative rows
+answered), and over every semantic dependency with its sources. Admission
+refuses a compiled-in bundle unless Node resolution from the imported package's
+location reaches exactly those entries in the consumer's tree. The bundler keys
+bundles by environment and refines only within one. Index format:
+`bundleIndexVersion` 2; a version-1 index loads but admits nothing.
+
+Measured (2026-09-25):
+
+- the change alone, with the 47566ff8 tier (now inert): coverage 87 projects,
+  452 findings, nothing moved; `make contract-corpus` 104 fixtures green;
+- re-certification by this build (release binary, pinned corpus): census
+  unchanged at clean 533;
+- regenerated tier: 162 bundles over 16 packages (was 137), no
+  `(package, entrypoint, conditions)` key lost, every key split into a floor
+  (signals rc.0) and a head (signals rc.6) bundle. `@solid-primitives/utils`
+  `.` is back with 10 bundles; 8 of them come from dependency-node
+  certifications, whose graph-wide environment names the dependent package and
+  so rarely applies;
+- `make verify` green on the regenerated tier (284 s).
+
+The tier now delivers what ADRs 0113-0122 certify; it had been frozen at
+2026-09-18. What it changes for real consumers is not measured: the ecosystem
+consumer benchmark was not run.
+
+Still open:
+
+- the project-catalog tier (`admitted_project_artifacts`) still matches by
+  artifact alone;
+- `artifactAcceptanceRoot` is outside the Ed25519 signed payload (spun off);
+- there is no process-level fixture pair (a stub signals rc.0 tree and an rc.6
+  tree with lockfiles) proving admission end to end; unit tests on real on-disk
+  trees stand in for it.
+
 ## Tracking at execution is stated per execution word (ADR 0122, 2026-09-25)
 
 Status: **implemented**, step 7 part 1 of ways-to-improve § 4. The design pass

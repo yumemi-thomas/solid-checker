@@ -77,14 +77,16 @@ pub use module_closure::SnapshotVerifiedClosure;
 #[doc(hidden)]
 pub use policy2_receipt::{
     AuthenticatedPolicy2Receipt, BuiltInReceiptEntry, ConfiguredReceiptIssuer,
-    Policy2ReceiptBindings, Policy2ReceiptError, Policy2ReceiptProvenance,
-    Policy2TrustConfiguration, Policy2TrustEntry, Policy2TrustStore, PublishedPolicy2Catalog,
-    RECEIPT_WITNESS_FAMILIES, ReceiptIssuerKind, ReceiptPublicationError,
+    DependencyEnvironmentEntry, Policy2ReceiptBindings, Policy2ReceiptError,
+    Policy2ReceiptProvenance, Policy2TrustConfiguration, Policy2TrustEntry, Policy2TrustStore,
+    PublishedPolicy2Catalog, RECEIPT_WITNESS_FAMILIES, ReceiptIssuerKind, ReceiptPublicationError,
     authenticate_policy2_receipt, canonicalize_policy2_main, decode_policy2_trust_configuration,
     encode_policy2_trust_configuration, issue_builtin_policy2_receipt, issue_policy2_receipt,
     policy2_artifact_acceptance_root, policy2_artifact_acceptance_root_for_identity,
-    policy2_main_closed_claims_root, policy2_main_semantic_digest, policy2_policy_digest,
-    policy2_resolved_import_root, policy2_trust_configuration_for_issuer, publish_policy2_catalog,
+    policy2_dependency_environment_root, policy2_main_closed_claims_root,
+    policy2_main_semantic_digest, policy2_policy_digest, policy2_resolved_import_root,
+    policy2_trust_configuration_for_issuer, publish_policy2_catalog,
+    validate_dependency_environment,
 };
 pub use probe_gates::{ProbeGate, ProbeGateError, ProbeGateSchedule, VerifiedProbeGateBatch};
 pub use probe_harness::{ProbeHarnessConfiguration, ProbeHarnessError};
@@ -2905,6 +2907,17 @@ impl ArtifactSnapshot {
         &self.package_integrity
     }
 
+    /// This snapshot as one entry of another certification's dependency
+    /// environment: the three facts a consumer can recompute about its own
+    /// installed copy.
+    pub(crate) fn dependency_environment_entry(&self) -> DependencyEnvironmentEntry {
+        DependencyEnvironmentEntry {
+            name: self.package_name.clone(),
+            version: self.package_version.clone(),
+            integrity: self.package_integrity.clone(),
+        }
+    }
+
     /// Re-resolves the exact import from snapshot-owned manifest and file
     /// bytes. The supplied record is comparison material only; none of its
     /// paths, digests, or condition traces become authority by being nonempty.
@@ -3921,14 +3934,15 @@ mod tests {
     use super::{
         ArtifactSnapshot, ArtifactSnapshotError, CertificationPlan,
         CertificationPlanningTransaction, CertificationRequest, ConfiguredReceiptIssuer,
-        DependencyReceiptCompositionError, LocalArtifact, LockPinnedArchive,
-        Policy2ReceiptBindings, Policy2ReceiptProvenance, PublishedArchive,
+        DependencyEnvironmentEntry, DependencyReceiptCompositionError, LocalArtifact,
+        LockPinnedArchive, Policy2ReceiptBindings, Policy2ReceiptProvenance, PublishedArchive,
         PublishedGraphLockSelection, PublishedGraphNodeRequest, PublishedGraphPlanningError,
         PublishedGraphSourceRequest, ResolutionAxis, SnapshotLimits, SnapshotPackageManifest,
         SnapshotVerifiedResolution, UntrustedArtifactEnvelope, authenticate_policy2_receipt,
         declaration_candidate, issue_policy2_receipt, plan_certification,
-        plan_published_contract_graph, policy2_main_semantic_digest,
-        policy2_trust_configuration_for_issuer, resolve_snapshot_export,
+        plan_published_contract_graph, policy2_dependency_environment_root,
+        policy2_main_semantic_digest, policy2_trust_configuration_for_issuer,
+        resolve_snapshot_export,
     };
     use crate::artifact_resolution::{
         AcceptedDependencyEdge, ClosureEntry, ClosureFileRole, ClosureHazardKind, ClosureManifest,
@@ -10843,6 +10857,7 @@ export const value = phantom;
             closed_claims_root: root(32),
             verifier_source_digest: root(33),
             verifier_build_digest: root(34),
+            dependency_environment_root: String::new(),
         };
         let receipt = issue_policy2_receipt(&canonical_main, &bindings, issuer).unwrap();
         let trust = policy2_trust_configuration_for_issuer(
@@ -20436,6 +20451,63 @@ export const value = phantom;
                 .finalized()
                 .bindings()
                 .dependency_receipts_root
+        );
+        // The root composed the leaf's receipt, so the leaf's bytes are part of
+        // the environment the root was proven in, and the receipt binds it.
+        let leaf = finalized
+            .nodes()
+            .iter()
+            .find(|node| node.identity() != graph.root_identity())
+            .unwrap();
+        let root_environment = finalized
+            .root()
+            .authenticated()
+            .dependency_environment()
+            .expect("finalization attaches the environment it bound");
+        assert!(
+            root_environment.contains(&DependencyEnvironmentEntry {
+                name: leaf.identity().package_name.clone(),
+                version: leaf.identity().package_version.clone(),
+                integrity: leaf.identity().integrity.clone(),
+            }),
+            "{root_environment:?}"
+        );
+        assert_eq!(
+            finalized.root().bindings().dependency_environment_root,
+            policy2_dependency_environment_root(root_environment)
+        );
+        // The leaf's census ran in the graph's one private project, whose
+        // source roots are graph-wide, so the root package is among what it
+        // could have read -- and the receipt says so rather than narrowing to
+        // what the leaf's claims happen to need. Never the leaf itself.
+        let leaf_environment = leaf
+            .finalized()
+            .authenticated()
+            .dependency_environment()
+            .expect("finalization attaches the environment it bound");
+        let root_node = finalized
+            .nodes()
+            .iter()
+            .find(|node| node.identity() == graph.root_identity())
+            .unwrap();
+        let entry_of =
+            |identity: &super::CanonicalDependencyNodeIdentity| DependencyEnvironmentEntry {
+                name: identity.package_name.clone(),
+                version: identity.package_version.clone(),
+                integrity: identity.integrity.clone(),
+            };
+        assert_eq!(
+            leaf_environment,
+            [entry_of(root_node.identity())],
+            "{leaf_environment:?}"
+        );
+        assert!(!root_environment.contains(&entry_of(root_node.identity())));
+        assert!(
+            !leaf
+                .finalized()
+                .bindings()
+                .dependency_environment_root
+                .is_empty()
         );
     }
 
