@@ -215,7 +215,14 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // package-argument-container-consumer's, the fifth authorized fixture
       // contract: a `returns` closed over the caller's argument and fresh
       // arrays of it leaves nothing open at the import.
-      stableMainDocuments: 142,
+      //
+      // 144 on 2026-09-24 adds implementation-census-described-accessor's
+      // main document, the corpus pin of the generator's non-call `callbacks`
+      // items (item A of ways-to-improve § 3.3), and
+      // package-protocol-callbacks-consumer's, the sixth authorized fixture
+      // contract: a `callbacks` closed over `get` and `coerce` items leaves
+      // nothing open at the import.
+      stableMainDocuments: 144,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

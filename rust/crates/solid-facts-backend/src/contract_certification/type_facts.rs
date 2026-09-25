@@ -3691,7 +3691,19 @@ fn verify_export_value_family(
                 require_export_implementation(plan, proof, transcript, &open)?;
             let source = callback_parameter_source(export, proof)?;
             let floor = callback_reachability_floor(export, proof);
-            require_parameter_flow(implementation, &source, floor, &open, &mut sites)?;
+            if let Some((protocol, source)) = callback_protocol_use(export, proof) {
+                require_protocol_use(
+                    implementation,
+                    transcript,
+                    protocol,
+                    &source,
+                    floor,
+                    &open,
+                    &mut sites,
+                )?;
+            } else {
+                require_parameter_flow(implementation, &source, floor, &open, &mut sites)?;
+            }
         }
         ProofFamily::CallablePath => match &proof.subject {
             ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
@@ -3709,6 +3721,28 @@ fn verify_export_value_family(
                     &open,
                     &mut sites,
                 )?
+            }
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::CallbackBinding { .. })
+                if let Some((protocol, source)) =
+                    require_export_implementation(plan, proof, transcript, &open)
+                        .ok()
+                        .and_then(|(export, _)| callback_protocol_use(export, proof)) =>
+            {
+                // A non-call item binds no callable: a property read or a
+                // coercion of the caller's value is what it claims, whatever the
+                // value's type, so the path it names is the use itself.
+                let (export, implementation) =
+                    require_export_implementation(plan, proof, transcript, &open)?;
+                let floor = callback_reachability_floor(export, proof);
+                require_protocol_use(
+                    implementation,
+                    transcript,
+                    protocol,
+                    &source,
+                    floor,
+                    &open,
+                    &mut sites,
+                )?;
             }
             ProofDemandSubject::PositiveFact(PositiveFactSubject::CallbackBinding { .. }) => {
                 let (export, implementation) =
@@ -3806,7 +3840,7 @@ fn verify_export_value_family(
                 export,
                 operation,
                 proof,
-                implementation,
+                (implementation, transcript),
                 transcripts,
                 &open,
                 &mut sites,
@@ -3832,7 +3866,7 @@ fn verify_export_value_family(
                 export,
                 operation,
                 proof,
-                implementation,
+                (implementation, transcript),
                 transcripts,
                 &open,
                 &mut sites,
@@ -5500,6 +5534,154 @@ fn callback_reachability_floor(
         .map_or(ReachabilityFloor::Reachable, operation_reachability_floor)
 }
 
+/// The non-call protocol a callback binding's operation invokes, when it
+/// invokes one (item A of ways-to-improve § 3.3), with the bare parameter it
+/// is `from`. `None` for every call item, which keeps its own witnesses.
+fn callback_protocol_use(
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    proof: &ScheduledProofDemand,
+) -> Option<(
+    solid_reactive_ir::contract_semantics::InvokeProtocol,
+    ValueSource,
+)> {
+    let ProofDemandSubject::PositiveFact(PositiveFactSubject::CallbackBinding {
+        ordinal,
+        operation,
+        ..
+    }) = &proof.subject
+    else {
+        return None;
+    };
+    let callback = export
+        .callbacks()
+        .items()
+        .get(usize::try_from(*ordinal).unwrap_or(usize::MAX))
+        .filter(|callback| callback.operation.0 == *operation)?;
+    let operation = export.operation(&callback.operation.0)?;
+    operation
+        .is_protocol_invocation()
+        .then(|| (operation.invoke_protocol(), callback.from.clone()))
+}
+
+/// Evidence for a non-call `invoke` item: an uncensused invoking form of the
+/// implementation's own frame, not inside a nested callable, admitted by the
+/// demand's reachability floor, that uses exactly the caller's value at that
+/// slot by exactly that protocol -- a read-position accessor whose subject the
+/// producer roots at the bare parameter (`get`), a coercion naming the slot
+/// among its operands (`coerce`), an iteration of it (`iterate`), an
+/// `instanceof` against it (`has-instance`).
+///
+/// The same forms the `callbacks` census dispositions into the
+/// parameter-rooted family and confirms the enumeration against; this is the
+/// positive half, "the use happens", beside the census's "and nothing else
+/// does". A call item never reaches here: its witnesses are calls.
+fn require_protocol_use(
+    implementation: &typefacts::ExportImplementationTranscript,
+    declared: &ExportValueTranscript,
+    protocol: solid_reactive_ir::contract_semantics::InvokeProtocol,
+    source: &ValueSource,
+    floor: ReachabilityFloor,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    use solid_reactive_ir::contract_semantics::InvokeProtocol;
+    use typefacts::UncensusedInvokingFormKind as Kind;
+    let ValueSource::Parameter { index, path } = source else {
+        return Err(open("a non-call invocation is not from a bare parameter"));
+    };
+    if !path.is_empty() {
+        return Err(open("a non-call invocation is not from a bare parameter"));
+    }
+    let index = usize::from(*index);
+    let rooted = |form: &typefacts::UncensusedInvokingForm| {
+        form.subject_root == "parameter"
+            && form.subject_parameter == Some(index)
+            && census_form_shape_reads_the_subject(form)
+    };
+    let mut found = false;
+    for form in &implementation.uncensused_invoking_forms {
+        if form.captured || !floor.admits(form.reach) || form.local_literal_result.is_some() {
+            continue;
+        }
+        let matches = match protocol {
+            InvokeProtocol::Get => {
+                !matches!(
+                    form.kind,
+                    Kind::IterationProtocol | Kind::InstanceOf | Kind::Coercion
+                ) && !form.subject_write
+                    && rooted(form)
+            }
+            InvokeProtocol::Iterate => form.kind == Kind::IterationProtocol && rooted(form),
+            InvokeProtocol::HasInstance => form.kind == Kind::InstanceOf && rooted(form),
+            InvokeProtocol::Coerce => {
+                form.kind == Kind::Coercion
+                    && census_coercion_disposition(form, 0).is_some()
+                    && form.coercion_subject_root == "parameter"
+                    && form.coercion_subject_parameters.contains(&index)
+            }
+            InvokeProtocol::Call => false,
+        };
+        if matches {
+            found = true;
+            sites.push(format!(
+                "implementation-protocol-use:{}:{}:{}:{}",
+                protocol.wire_name(),
+                form.location.path,
+                form.location.start_byte,
+                form.location.end_byte
+            ));
+        }
+    }
+    if !found {
+        // The narrowing case (item A, decision 2026-09-25): a parameter every
+        // declared overload types as a primitive and nothing else cannot hand
+        // this export an object, so no trap, getter or ToPrimitive method of
+        // the caller's can run through it, and the declared-signature premise
+        // is exactly why the producer recorded no form. The item then narrows
+        // out of its closed enumeration rather than opening it, and the census
+        // re-confirms what is left. An object-admitting type may be a Proxy
+        // the premise cannot see, so its item opens the domain as before.
+        let narrows = if declared_parameter_is_primitive(declared, index) {
+            format!("; {}", super::PROTOCOL_ITEM_NARROWS)
+        } else {
+            String::new()
+        };
+        return Err(open(&format!(
+            "a {} invocation of parameter {index} has no uncaptured use of the caller's value by \
+             that protocol in the implementation's own frame{narrows}",
+            protocol.wire_name()
+        )));
+    }
+    Ok(())
+}
+
+/// Whether every declared overload of the export types parameter `index` as a
+/// primitive the caller cannot hand as an object: no object, nothing callable,
+/// and nothing unknown or open. `false` whenever the signature cannot answer --
+/// no signature, no such slot, a rest slot -- which is the refusing direction.
+fn declared_parameter_is_primitive(declared: &ExportValueTranscript, index: usize) -> bool {
+    let signatures = declared
+        .call_signature
+        .iter()
+        .chain(declared.call_signatures.iter())
+        .collect::<Vec<_>>();
+    !signatures.is_empty()
+        && signatures.iter().all(|signature| {
+            signature
+                .parameters
+                .iter()
+                .find(|parameter| parameter.index == index)
+                .is_some_and(|parameter| {
+                    let value = &parameter.value;
+                    !parameter.rest
+                        && value.callability == typefacts::Callability::NonCallable
+                        && !value.primitive.may_be_object
+                        && !value.primitive.unknown
+                        && value.open_reasons.is_empty()
+                })
+        })
+}
+
 fn require_parameter_flow(
     implementation: &typefacts::ExportImplementationTranscript,
     source: &ValueSource,
@@ -6213,7 +6395,10 @@ fn require_operation_evidence(
     export: &solid_reactive_ir::contract_semantics::ExportSemantics,
     operation: &solid_reactive_ir::contract_semantics::Operation,
     proof: &ScheduledProofDemand,
-    implementation: &typefacts::ExportImplementationTranscript,
+    (implementation, declared): (
+        &typefacts::ExportImplementationTranscript,
+        &ExportValueTranscript,
+    ),
     transcripts: ExportTranscripts<'_>,
     open: &impl Fn(&str) -> TypeFactsCertificationError,
     sites: &mut Vec<String>,
@@ -6227,7 +6412,19 @@ fn require_operation_evidence(
                 .iter()
                 .find(|callback| callback.operation == operation.id)
                 .ok_or_else(|| open("invoke operation has no exact callback source"))?;
-            require_parameter_flow(implementation, &callback.from, floor, open, sites)
+            if operation.is_protocol_invocation() {
+                require_protocol_use(
+                    implementation,
+                    declared,
+                    operation.invoke_protocol(),
+                    &callback.from,
+                    floor,
+                    open,
+                    sites,
+                )
+            } else {
+                require_parameter_flow(implementation, &callback.from, floor, open, sites)
+            }
         }
         OperationKind::Read => {
             let input = operation
@@ -10237,6 +10434,30 @@ struct CallerSuppliedInvocations {
     /// no such record: an accessor, an iteration or a coercion is an
     /// invocation no proposal describes yet, so any one of them refuses.
     direct: Vec<DirectInvocationSite>,
+    /// Every non-call site of the family a described item can name (item A
+    /// of ways-to-improve § 3.3): a property read of the caller's value
+    /// (`parameter-rooted-accessor`, read position only), each operand slot of
+    /// a coercion (`parameter-rooted-coercion`), an iteration
+    /// (`parameter-rooted-iterable`) and an `instanceof`
+    /// (`parameter-rooted-has-instance`), in walk order.
+    protocol: Vec<ProtocolInvocationSite>,
+}
+
+/// One non-call use of caller-supplied code the walk dispositioned into the
+/// parameter-rooted family, as a described non-call `callbacks` item is
+/// confirmed against it: ADR 0100's rules 5 to 8, per protocol.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ProtocolInvocationSite {
+    protocol: solid_reactive_ir::contract_semantics::InvokeProtocol,
+    /// The frame's parameter the subject (or coerced operand) is rooted at.
+    parameter: usize,
+    /// The derivation that rooted it: the form's `subjectRoot`, or a
+    /// coercion's `coercionSubjectRoot`. Only `parameter` -- the caller's own
+    /// value at that slot -- is what an item `from` a bare parameter says.
+    subject_root: String,
+    depth: usize,
+    captured: bool,
+    location: String,
 }
 
 /// One call the walk dispositioned `ParameterRooted` — the export invoking a
@@ -10395,6 +10616,55 @@ impl CensusRun<'_> {
                 });
         }
         self.record(disposition, site);
+    }
+
+    /// [`Self::record`] for an uncensused invoking form, which additionally
+    /// keeps the non-call sites a described `callbacks` enumeration's
+    /// protocol items are confirmed against. A write-position accessor, an
+    /// element, and every other member keep no site: no item describes them,
+    /// and the confirmation refuses them by member exactly as before.
+    fn record_form(
+        &mut self,
+        disposition: CensusDisposition,
+        form: &typefacts::UncensusedInvokingForm,
+        depth: usize,
+    ) {
+        use solid_reactive_ir::contract_semantics::InvokeProtocol;
+        let location = format!(
+            "{}:{}..{}",
+            form.location.path, form.location.start_byte, form.location.end_byte
+        );
+        let site = |protocol, parameter, subject_root: &str| ProtocolInvocationSite {
+            protocol,
+            parameter,
+            subject_root: subject_root.to_owned(),
+            depth,
+            captured: form.captured,
+            location: location.clone(),
+        };
+        let protocol = match disposition {
+            CensusDisposition::ParameterRootedAccessor => Some(InvokeProtocol::Get),
+            CensusDisposition::ParameterRootedIterable => Some(InvokeProtocol::Iterate),
+            CensusDisposition::ParameterRootedHasInstance => Some(InvokeProtocol::HasInstance),
+            _ => None,
+        };
+        if let (Some(protocol), Some(parameter)) = (protocol, form.subject_parameter) {
+            self.caller_supplied_invocations.protocol.push(site(
+                protocol,
+                parameter,
+                &form.subject_root,
+            ));
+        }
+        if disposition == CensusDisposition::ParameterRootedCoercion {
+            for parameter in &form.coercion_subject_parameters {
+                self.caller_supplied_invocations.protocol.push(site(
+                    InvokeProtocol::Coerce,
+                    *parameter,
+                    &form.coercion_subject_root,
+                ));
+            }
+        }
+        self.record(disposition, census_form_site(form, disposition));
     }
 }
 
@@ -10858,12 +11128,25 @@ fn census_callbacks_domain(
                         .into(),
                 );
             }
-            Some(indices) => {
+            Some(described) => {
+                let CensusOutcome::Decided { depth, .. } = outcome else {
+                    unreachable!("matched as decided above");
+                };
+                let frame = ProtocolCensusFrame {
+                    object_premises: implementation
+                        .parameter_premises
+                        .iter()
+                        .map(|premise| premise.index)
+                        .filter(|index| !declared_parameter_is_primitive(transcript, *index))
+                        .collect(),
+                    deepest: depth,
+                };
                 sites.push(
                     confirm_described_callbacks(
-                        indices,
+                        described,
                         &caller_supplied,
                         implementation.completion_form,
+                        &frame,
                     )
                     .map_err(refuse)?,
                 );
@@ -10883,13 +11166,14 @@ fn census_callbacks_domain(
 /// every non-empty description was before this premise.
 fn described_callbacks(
     export: &solid_reactive_ir::contract_semantics::ExportSemantics,
-) -> Result<Option<std::collections::BTreeSet<usize>>, String> {
+) -> Result<Option<DescribedCallbacks>, String> {
     use solid_reactive_ir::contract_semantics::{Event, OperationKind, Schedule, ValueSource};
     let items = export.callbacks().items();
     if items.is_empty() {
         return Ok(None);
     }
     let mut indices = std::collections::BTreeSet::new();
+    let mut protocols = std::collections::BTreeSet::new();
     for item in items {
         let operation_id = item.operation.0.as_str();
         let index = match &item.from {
@@ -10944,9 +11228,47 @@ fn described_callbacks(
                 "guards `{operation_id}`, and the census confirms an unguarded invocation only"
             ));
         }
-        indices.insert(index);
+        if operation.is_protocol_invocation() {
+            protocols.insert((operation.invoke_protocol(), index));
+        } else {
+            indices.insert(index);
+        }
     }
-    Ok(Some(indices))
+    Ok(Some(DescribedCallbacks {
+        calls: indices,
+        protocols,
+    }))
+}
+
+/// What bounds the forms a described enumeration's non-call items are
+/// confirmed against (item A): which parameters the producer classified under a
+/// declared-signature premise whose type admits an object, and the deepest
+/// frame the walk read.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct ProtocolCensusFrame {
+    object_premises: std::collections::BTreeSet<usize>,
+    deepest: usize,
+}
+
+/// What a described `callbacks` enumeration names, by kind: the parameters it
+/// describes a call of (ADR 0100), and the `(protocol, parameter)` pairs of
+/// its non-call items (item A of ways-to-improve § 3.3).
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct DescribedCallbacks {
+    calls: std::collections::BTreeSet<usize>,
+    protocols:
+        std::collections::BTreeSet<(solid_reactive_ir::contract_semantics::InvokeProtocol, usize)>,
+}
+
+impl DescribedCallbacks {
+    /// `get 0, coerce 1`: the protocol items in the order the model sorts them.
+    fn protocol_list(&self) -> String {
+        self.protocols
+            .iter()
+            .map(|(protocol, parameter)| format!("{} {parameter}", protocol.wire_name()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
 }
 
 /// Confirms a described enumeration against what the walk dispositioned, or
@@ -10963,19 +11285,36 @@ fn described_callbacks(
 /// helper's parameter is the helper's, not the export's, until per-argument
 /// provenance carries the export's own parameter into that frame.
 fn confirm_described_callbacks(
-    indices: &std::collections::BTreeSet<usize>,
+    enumeration: &DescribedCallbacks,
     walk: &CallerSuppliedInvocations,
     completion: Option<typefacts::ImplementationCompletionForm>,
+    frame: &ProtocolCensusFrame,
 ) -> Result<String, String> {
+    let indices = &enumeration.calls;
+    // The prefix every refusal carries. An enumeration with no non-call item
+    // keeps the ADR 0100 sentence byte for byte.
     let described = || {
-        format!(
+        let calls = format!(
             "the callbacks closure candidate describes call-time invocation(s) of parameter(s) {}",
             indices
                 .iter()
                 .map(ToString::to_string)
                 .collect::<Vec<_>>()
                 .join(", ")
-        )
+        );
+        if enumeration.protocols.is_empty() {
+            calls
+        } else if indices.is_empty() {
+            format!(
+                "the callbacks closure candidate describes call-time use(s) {}",
+                enumeration.protocol_list()
+            )
+        } else {
+            format!(
+                "{calls} and call-time use(s) {}",
+                enumeration.protocol_list()
+            )
+        }
     };
     if completion != Some(typefacts::ImplementationCompletionForm::Plain) {
         return Err(format!(
@@ -10988,10 +11327,49 @@ fn confirm_described_callbacks(
             )
         ));
     }
+    // Rule 2. With no non-call item described, every member but the direct
+    // call refuses, as ADR 0100 decided. With one, the members a non-call item
+    // can name are confirmed below site for site instead of refusing as such;
+    // every other member -- a write-position accessor, an element, the
+    // own-result accessors -- still refuses here, in the same words.
+    // A member is describable only when the enumeration names at least one
+    // item of its protocol: an iteration beside a described `get` refuses here,
+    // in ADR 0100's words, exactly as it did before any non-call item existed.
+    let describable = |member: &str| {
+        use solid_reactive_ir::contract_semantics::InvokeProtocol;
+        let protocol = [
+            (
+                CensusDisposition::ParameterRootedAccessor,
+                InvokeProtocol::Get,
+            ),
+            (
+                CensusDisposition::ParameterRootedCoercion,
+                InvokeProtocol::Coerce,
+            ),
+            (
+                CensusDisposition::ParameterRootedIterable,
+                InvokeProtocol::Iterate,
+            ),
+            (
+                CensusDisposition::ParameterRootedHasInstance,
+                InvokeProtocol::HasInstance,
+            ),
+        ]
+        .into_iter()
+        .find(|(disposition, _)| disposition.wire_name() == member)
+        .map(|(_, protocol)| protocol);
+        member == CensusDisposition::ParameterRooted.wire_name()
+            || protocol.is_some_and(|protocol| {
+                enumeration
+                    .protocols
+                    .iter()
+                    .any(|(described, _)| *described == protocol)
+            })
+    };
     if let Some((member, count)) = walk
         .by_member
         .iter()
-        .find(|(member, _)| **member != CensusDisposition::ParameterRooted.wire_name())
+        .find(|(member, _)| !describable(member))
     {
         return Err(format!(
             "{}, but the implementation census dispositioned {walk}: the {member} member ({count}) \
@@ -11051,12 +11429,125 @@ fn confirm_described_callbacks(
             described()
         ));
     }
-    Ok(format!(
+    let calls = format!(
         "typefacts-implementation-census:callbacks:described-invocations:{}:parameters:{}",
         walk.direct.len(),
         indices
             .iter()
             .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    if enumeration.protocols.is_empty() {
+        return Ok(calls);
+    }
+    // What the forms cannot show. Under ADR 0038's declared-signature premise
+    // the producer classifies the type-decided forms -- iteration, coercion,
+    // `await`, and a read of a member the declaration resolves -- by the
+    // parameter's *declared* type, and records none for a value that type
+    // makes the engine's (`[x, y] = point` with `point: [number, number]`; its
+    // own comment: "a Proxy is outside every producer census"). For a
+    // primitive type that is exact. For a type admitting an object it is not:
+    // a caller-supplied Proxy of that type runs its traps there, and a non-call
+    // enumeration claims to name every such use, so it cannot be confirmed
+    // whole from forms that are absent by premise. `@kobalte/utils`'
+    // `isPointInPolygon` is the case: `[get 1]` confirmed, the veto's Proxy
+    // contradicted. A local declaration's frame is refused for the same reason:
+    // its call-argument premise may clear a use of the caller's value there.
+    if !frame.object_premises.is_empty() {
+        return Err(format!(
+            "{}, but the implementation census ran under the declared-signature premise for \
+             parameter(s) {} whose declared type admits an object: the premise clears the \
+             iteration, coercion and member reads of such a value by its type, so a \
+             caller-supplied object's traps run where this census records no site, and the \
+             enumeration's non-call uses cannot be confirmed whole",
+            described(),
+            frame
+                .object_premises
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    if frame.deepest > 0 {
+        return Err(format!(
+            "{}, but the walk read a local declaration at depth {}, whose premise-classified \
+             uses of a caller's value are not sites the enumeration's non-call uses can be \
+             confirmed against",
+            described(),
+            frame.deepest
+        ));
+    }
+    // Rules 5 to 8, per protocol. A non-call item says "this export uses the
+    // caller's own value at that slot, at the call, on the caller's stack", so
+    // a site confirms it only when it is exactly that: rooted at the caller's
+    // value itself (not a default, not a callee's result), read in the
+    // export's own frame, outside any nested callable.
+    let mut seen_protocols = std::collections::BTreeSet::new();
+    for site in &walk.protocol {
+        let name = site.protocol.wire_name();
+        if site.subject_root != "parameter" {
+            return Err(format!(
+                "{}, but the {name} use at {} is rooted at parameter {} through {:?}, which is not \
+                 the caller's own value at that slot",
+                described(),
+                site.location,
+                site.parameter,
+                site.subject_root
+            ));
+        }
+        if site.depth != 0 {
+            return Err(format!(
+                "{}, but the {name} use at {} is read inside a local declaration at depth {}: its \
+                 parameter {} is the helper's, not the export's (ADR 0092)",
+                described(),
+                site.location,
+                site.depth,
+                site.parameter
+            ));
+        }
+        if site.captured {
+            return Err(format!(
+                "{}, but the {name} use at {} sits inside a callable nested in the \
+                 implementation, so its execution point is not the call event",
+                described(),
+                site.location
+            ));
+        }
+        if !enumeration
+            .protocols
+            .contains(&(site.protocol, site.parameter))
+        {
+            return Err(format!(
+                "{}, but the {name} use at {} is of parameter {}, which the enumeration does not \
+                 describe",
+                described(),
+                site.location,
+                site.parameter
+            ));
+        }
+        seen_protocols.insert((site.protocol, site.parameter));
+    }
+    if let Some((protocol, parameter)) = enumeration
+        .protocols
+        .iter()
+        .find(|item| !seen_protocols.contains(item))
+    {
+        return Err(format!(
+            "{}, but the implementation census found no {} use of parameter {parameter}: the \
+             enumeration describes a use the implementation does not perform",
+            described(),
+            protocol.wire_name()
+        ));
+    }
+    Ok(format!(
+        "{calls}:protocol-sites:{}:protocols:{}",
+        walk.protocol.len(),
+        enumeration
+            .protocols
+            .iter()
+            .map(|(protocol, parameter)| format!("{}-{parameter}", protocol.wire_name()))
             .collect::<Vec<_>>()
             .join(",")
     ))
@@ -12556,7 +13047,7 @@ fn census_transcript_calls(
             continue;
         }
         if let Some(disposition) = census_form_disposition(run, form, depth) {
-            run.record(disposition, census_form_site(form, disposition));
+            run.record_form(disposition, form, depth);
             continue;
         }
         if form.kind == typefacts::UncensusedInvokingFormKind::Coercion
@@ -16506,6 +16997,7 @@ mod tests {
             output: None,
             composed_from: None,
             resources: std::collections::BTreeSet::new(),
+            protocol: None,
         }
     }
 
@@ -18932,6 +19424,7 @@ mod tests {
             inputs: Vec::new(),
             output: None,
             resources: std::collections::BTreeSet::new(),
+            protocol: None,
         };
         let demand = proof(ProofFamily::OperationReachability, selected_subject());
         let mut owner_sites = Vec::new();
@@ -24347,7 +24840,11 @@ mod tests {
             run.caller_supplied_invocations
         };
         let plain = Some(Completion::Plain);
-        let described = std::collections::BTreeSet::from([0usize]);
+        let calls = |indices: &[usize]| DescribedCallbacks {
+            calls: indices.iter().copied().collect(),
+            protocols: std::collections::BTreeSet::new(),
+        };
+        let described = calls(&[0]);
 
         // Confirmed: one bare-parameter call written in the export's own body.
         let one = walk(vec![call(100, json!({}))], json!([]));
@@ -24362,7 +24859,7 @@ mod tests {
             }]
         );
         assert_eq!(
-            confirm_described_callbacks(&described, &one, plain),
+            confirm_described_callbacks(&described, &one, plain, &ProtocolCensusFrame::default()),
             Ok(
                 "typefacts-implementation-census:callbacks:described-invocations:1:parameters:0"
                     .into()
@@ -24378,19 +24875,24 @@ mod tests {
             json!([]),
         );
         assert_eq!(
-            confirm_described_callbacks(&described, &twice, plain),
+            confirm_described_callbacks(&described, &twice, plain, &ProtocolCensusFrame::default()),
             Ok(
                 "typefacts-implementation-census:callbacks:described-invocations:2:parameters:0"
                     .into()
             )
         );
 
-        let refused = |indices: &std::collections::BTreeSet<usize>,
+        let refused = |indices: &DescribedCallbacks,
                        sites: &CallerSuppliedInvocations,
                        completion: Option<Completion>,
                        needle: &str| {
-            let reason = confirm_described_callbacks(indices, sites, completion)
-                .expect_err("the census must refuse");
+            let reason = confirm_described_callbacks(
+                indices,
+                sites,
+                completion,
+                &ProtocolCensusFrame::default(),
+            )
+            .expect_err("the census must refuse");
             assert!(reason.contains(needle), "expected {needle:?} in: {reason}");
         };
         // `at: call, same-stack` needs a body that completes plainly.
@@ -24438,12 +24940,7 @@ mod tests {
             "invokes parameter 1, which the enumeration does not describe",
         );
         // A parameter the walk never saw called: the proposal overstates.
-        refused(
-            &std::collections::BTreeSet::from([0usize, 1]),
-            &one,
-            plain,
-            "found no call of parameter 1",
-        );
+        refused(&calls(&[0, 1]), &one, plain, "found no call of parameter 1");
         // Another member of the family beside the call — here the getter a
         // caller-supplied receiver may carry — is an invocation no item
         // describes, and the refusal names the member.
@@ -24475,9 +24972,321 @@ mod tests {
                 captured: false,
                 location: format!("{source}:100..104"),
             }],
+            protocol: vec![],
         };
         refused(&described, &site(Some((0, false)), 1), plain, "at depth 1");
         refused(&described, &site(None, 0), plain, "through an alias");
+    }
+
+    /// Item A of ways-to-improve § 3.3: a described enumeration with non-call
+    /// items is confirmed against the walk's protocol sites -- ADR 0100's
+    /// rules 5 to 8, per protocol -- and every other member of the family
+    /// still refuses by name. `access` (`!v.length ? v() : v`) is a call of 0
+    /// and a get of 0; `compare` (`a < b`) coerces 0 and 1.
+    #[test]
+    fn a_described_callbacks_enumeration_confirms_its_protocol_uses_site_for_site() {
+        use solid_reactive_ir::contract_semantics::InvokeProtocol::{self, Coerce, Get};
+        use typefacts::ImplementationCompletionForm as Completion;
+        let certified = consumer_snapshot();
+        let roots = vec![consumer_root(&certified)];
+        let source = "/project/node_modules/consumer/dist/index.js";
+        let call: typefacts::ImplementationCall = serde_json::from_value(json!({
+            "location": {"path": source, "startByte": 100, "endByte": 104},
+            "reach": "reachable",
+            "kind": "call",
+            "target": "symbol:cb",
+            "calleeParameter": {"parameterIndex": 0},
+        }))
+        .expect("a valid call");
+        let get = |start: u64, extra: serde_json::Value| {
+            let mut value = json!({
+                "kind": "property-access-unknown-accessor",
+                "nodeKind": "PropertyAccessExpression",
+                "location": {"path": source, "startByte": start, "endByte": start + 8},
+                "reach": "reachable",
+                "subjectParameter": 0,
+                "subjectRoot": "parameter",
+            });
+            let object = value.as_object_mut().expect("an object");
+            for (key, replacement) in extra.as_object().expect("an object") {
+                object.insert(key.clone(), replacement.clone());
+            }
+            value
+        };
+        let coercion = |start: u64, slots: serde_json::Value| {
+            json!({
+                "kind": "coercion",
+                "nodeKind": "BinaryExpression",
+                "location": {"path": source, "startByte": start, "endByte": start + 5},
+                "reach": "reachable",
+                "coercionSubjectRoot": "parameter",
+                "coercionSubjectParameters": slots,
+            })
+        };
+        let walk = |calls: Vec<typefacts::ImplementationCall>, forms: serde_json::Value| {
+            let mut run = census_run(&certified, &roots);
+            let transcript = census_transcript_with(calls, forms);
+            assert_eq!(
+                census_transcript(&mut run, &transcript, 0, &[]),
+                Ok(CensusStep::Decided),
+                "{:?}",
+                run.sites
+            );
+            run.caller_supplied_invocations
+        };
+        let enumeration =
+            |calls: &[usize], protocols: &[(InvokeProtocol, usize)]| DescribedCallbacks {
+                calls: calls.iter().copied().collect(),
+                protocols: protocols.iter().copied().collect(),
+            };
+        let plain = Some(Completion::Plain);
+
+        // `access`: the call and the `v.length` read, each described.
+        let access = walk(vec![call.clone()], json!([get(200, json!({}))]));
+        assert_eq!(
+            access.protocol,
+            vec![ProtocolInvocationSite {
+                protocol: Get,
+                parameter: 0,
+                subject_root: "parameter".into(),
+                depth: 0,
+                captured: false,
+                location: format!("{source}:200..208"),
+            }]
+        );
+        assert_eq!(
+            confirm_described_callbacks(
+                &enumeration(&[0], &[(Get, 0)]),
+                &access,
+                plain,
+                &ProtocolCensusFrame::default()
+            ),
+            Ok(
+                "typefacts-implementation-census:callbacks:described-invocations:1:parameters:0\
+                :protocol-sites:1:protocols:get-0"
+                    .into()
+            )
+        );
+        // `compare`: two coercions, each over both slots, and no call.
+        let compare = walk(
+            vec![],
+            json!([coercion(300, json!([0, 1])), coercion(320, json!([0, 1]))]),
+        );
+        assert_eq!(compare.protocol.len(), 4, "one site per coerced slot");
+        assert_eq!(
+            confirm_described_callbacks(
+                &enumeration(&[], &[(Coerce, 0), (Coerce, 1)]),
+                &compare,
+                plain,
+                &ProtocolCensusFrame::default()
+            ),
+            Ok(
+                "typefacts-implementation-census:callbacks:described-invocations:0:parameters:\
+                :protocol-sites:4:protocols:coerce-0,coerce-1"
+                    .into()
+            )
+        );
+
+        let refused =
+            |described: &DescribedCallbacks, sites: &CallerSuppliedInvocations, needle: &str| {
+                let reason = confirm_described_callbacks(
+                    described,
+                    sites,
+                    plain,
+                    &ProtocolCensusFrame::default(),
+                )
+                .expect_err("the census must refuse");
+                assert!(reason.contains(needle), "expected {needle:?} in: {reason}");
+            };
+        // With no non-call item described, the accessor refuses at rule 2 in
+        // ADR 0100's own words -- today's refusal of `access`, unchanged.
+        refused(
+            &enumeration(&[0], &[]),
+            &access,
+            "the parameter-rooted-accessor member (1) is an invocation of caller-supplied code \
+             the enumeration does not describe",
+        );
+        // Rule 8, per protocol: an item the walk has no site for overstates.
+        refused(
+            &enumeration(&[0], &[(Get, 0), (Coerce, 0)]),
+            &access,
+            "found no coerce use of parameter 0",
+        );
+        // Rule 7, per protocol: `get 0` described, but the package also coerces
+        // parameter 0 -- the falsifying variant must not certify.
+        refused(
+            &enumeration(&[0], &[(Get, 0)]),
+            &walk(
+                vec![call.clone()],
+                json!([get(200, json!({})), coercion(300, json!([0]))]),
+            ),
+            "the parameter-rooted-coercion member (1) is an invocation of caller-supplied code \
+             the enumeration does not describe",
+        );
+        // With a `coerce` item for another parameter the member is describable,
+        // and the site itself refuses: parameter 0's coercion is undescribed.
+        refused(
+            &enumeration(&[0], &[(Get, 0), (Coerce, 1)]),
+            &walk(
+                vec![call.clone()],
+                json!([
+                    get(200, json!({})),
+                    coercion(300, json!([0])),
+                    coercion(320, json!([1]))
+                ]),
+            ),
+            "the coerce use at /project/node_modules/consumer/dist/index.js:300..305 is of \
+             parameter 0, which the enumeration does not describe",
+        );
+        // A get of another parameter understates too.
+        refused(
+            &enumeration(&[0], &[(Get, 0)]),
+            &walk(
+                vec![call.clone()],
+                json!([
+                    get(200, json!({})),
+                    get(240, json!({"subjectParameter": 1}))
+                ]),
+            ),
+            "is of parameter 1, which the enumeration does not describe",
+        );
+        // Rule 6: a read deferred into a nested callable is not at the call.
+        refused(
+            &enumeration(&[], &[(Get, 0)]),
+            &walk(vec![], json!([get(200, json!({"captured": true}))])),
+            "sits inside a callable nested in the implementation",
+        );
+        // A default-rooted subject is not the caller's own value at the slot.
+        refused(
+            &enumeration(&[], &[(Get, 0)]),
+            &walk(
+                vec![],
+                json!([get(200, json!({"subjectRoot": "parameter-default"}))]),
+            ),
+            "through \"parameter-default\", which is not the caller's own value",
+        );
+        // Rule 5: a site in a helper frame names the helper's parameter.
+        let helper = CallerSuppliedInvocations {
+            total: 1,
+            by_member: [(CensusDisposition::ParameterRootedAccessor.wire_name(), 1)].into(),
+            direct: vec![],
+            protocol: vec![ProtocolInvocationSite {
+                protocol: Get,
+                parameter: 0,
+                subject_root: "parameter".into(),
+                depth: 1,
+                captured: false,
+                location: format!("{source}:200..208"),
+            }],
+        };
+        refused(&enumeration(&[], &[(Get, 0)]), &helper, "at depth 1");
+        // Every other member of the family keeps ADR 0100's rule 2 refusal in
+        // its own words beside a described non-call item: an iteration and an
+        // `instanceof` beside a described `get`, which name no protocol the
+        // enumeration describes, and an element and an own-result accessor,
+        // which no protocol describes at all.
+        let iterable = json!({
+            "kind": "iteration-protocol",
+            "nodeKind": "ArrayBindingPattern",
+            "location": {"path": source, "startByte": 280, "endByte": 290},
+            "reach": "reachable",
+            "subjectParameter": 0,
+            "subjectRoot": "parameter",
+        });
+        refused(
+            &enumeration(&[0], &[(Get, 0)]),
+            &walk(vec![call.clone()], json!([get(200, json!({})), iterable])),
+            "the parameter-rooted-iterable member (1) is an invocation of caller-supplied code \
+             the enumeration does not describe",
+        );
+        let has_instance = json!({
+            "kind": "instanceof",
+            "nodeKind": "BinaryExpression",
+            "location": {"path": source, "startByte": 300, "endByte": 310},
+            "reach": "reachable",
+            "subjectParameter": 1,
+            "subjectRoot": "parameter",
+        });
+        refused(
+            &enumeration(&[], &[(Get, 0)]),
+            &walk(vec![], json!([get(200, json!({})), has_instance])),
+            "the parameter-rooted-has-instance member (1)",
+        );
+        for (member, disposition) in [
+            ("element", CensusDisposition::ParameterRootedElement),
+            (
+                "own-result",
+                CensusDisposition::ParameterOrOwnResultAccessor,
+            ),
+        ] {
+            let mut sites = helper.clone();
+            sites.protocol[0].depth = 0;
+            sites.total += 1;
+            sites.by_member.insert(disposition.wire_name(), 1);
+            let reason = confirm_described_callbacks(
+                &enumeration(&[], &[(Get, 0)]),
+                &sites,
+                plain,
+                &ProtocolCensusFrame::default(),
+            )
+            .expect_err(member);
+            assert!(
+                reason.contains(&format!("the {} member (1)", disposition.wire_name())),
+                "{member}: {reason}"
+            );
+        }
+        // The forms a declared-signature premise clears are absent, not
+        // absent-by-proof: a premise on a parameter whose declared type admits
+        // an object refuses a non-call enumeration whole (`@kobalte/utils`'
+        // `isPointInPolygon`, `point: [number, number]`), and so does a walk
+        // that read a helper's frame. A call-only enumeration is unaffected.
+        let under = |object_premises: &[usize], deepest: usize| ProtocolCensusFrame {
+            object_premises: object_premises.iter().copied().collect(),
+            deepest,
+        };
+        let reason = confirm_described_callbacks(
+            &enumeration(&[0], &[(Get, 0)]),
+            &access,
+            plain,
+            &under(&[1], 0),
+        )
+        .expect_err("an object-typed premise hides uses");
+        assert!(
+            reason.contains(
+                "declared-signature premise for parameter(s) 1 whose declared type \
+                             admits an object"
+            ),
+            "{reason}"
+        );
+        let reason = confirm_described_callbacks(
+            &enumeration(&[0], &[(Get, 0)]),
+            &access,
+            plain,
+            &under(&[], 1),
+        )
+        .expect_err("a helper frame hides uses");
+        assert!(reason.contains("local declaration at depth 1"), "{reason}");
+        let call_only = walk(vec![call.clone()], json!([]));
+        assert!(
+            confirm_described_callbacks(
+                &enumeration(&[0], &[]),
+                &call_only,
+                plain,
+                &under(&[0], 1)
+            )
+            .is_ok(),
+            "ADR 0100's call-only confirmation reads no premise"
+        );
+        // A write-position accessor is no `get` item: it still refuses by
+        // member, exactly as before, even beside a described get.
+        refused(
+            &enumeration(&[], &[(Get, 0)]),
+            &walk(
+                vec![],
+                json!([get(200, json!({})), get(240, json!({"subjectWrite": true}))]),
+            ),
+            "the parameter-rooted-accessor-write member (1)",
+        );
     }
 
     /// ADR 0100: which proposals `described_callbacks` reads as a described
@@ -24504,6 +25313,7 @@ mod tests {
             output: None,
             resources: Default::default(),
             composed_from: None,
+            protocol: None,
         };
         let export = |items: Vec<CallbackInvocation>, operations: Vec<Operation>| {
             let target = ExportTargetIdentity {
@@ -24545,7 +25355,10 @@ mod tests {
                 vec![item(0, vec![], "a"), item(2, vec![], "b")],
                 vec![invoke("a"), invoke("b")],
             )),
-            Ok(Some(std::collections::BTreeSet::from([0usize, 2])))
+            Ok(Some(DescribedCallbacks {
+                calls: std::collections::BTreeSet::from([0usize, 2]),
+                protocols: std::collections::BTreeSet::new(),
+            }))
         );
 
         let refuses = |export: &ExportSemantics, needle: &str| {

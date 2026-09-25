@@ -914,11 +914,16 @@ pub(super) fn positive_fact_refusal_withholding(
                 return None;
             };
             let (artifact_case, export, operation) = positive_fact_operation(subject)?;
+            let prefix = if reason.contains(PROTOCOL_ITEM_NARROWS) {
+                WITHHELD_OPERATION_NARROWED_PREFIX
+            } else {
+                WITHHELD_OPERATION_CENSUS_REFUSED_PREFIX
+            };
             Some(WithheldOperation {
                 artifact_case: artifact_case.to_owned(),
                 export: export.to_owned(),
                 operation,
-                reason: format!("{WITHHELD_OPERATION_CENSUS_REFUSED_PREFIX}{reason}"),
+                reason: format!("{prefix}{reason}"),
             })
         })
         .collect()
@@ -1651,6 +1656,20 @@ pub struct WithheldOperation {
 /// follows the prefix.
 pub const WITHHELD_OPERATION_CENSUS_REFUSED_PREFIX: &str = "operation census refused: ";
 
+/// The prefix of the reason a non-call `callbacks` item carries when it is
+/// withdrawn by **narrowing** rather than by opening its domain: its positive
+/// facts found no use of a parameter the declared signature types
+/// primitive-only, so the declared-signature premise leaves no form for it and
+/// no caller code can run through it (item A of ways-to-improve § 3.3). The
+/// census's own text follows, and names the narrowing. The domain stays closed
+/// and proposed, and the census re-confirms the narrowed enumeration.
+pub const WITHHELD_OPERATION_NARROWED_PREFIX: &str =
+    "narrowed out of a closed callbacks enumeration: ";
+
+/// The phrase `type_facts::require_protocol_use` writes, and only it, when the
+/// item it could not witness may narrow instead of opening its domain.
+pub(crate) const PROTOCOL_ITEM_NARROWS: &str = "the declared signature types the parameter primitive-only, so no caller code can run through it";
+
 /// The reason recipe-gated planning withholds a candidate no corpus addresses.
 pub const WITHHELD_CLOSURE_NO_RECIPE: &str = "no recipe in corpus";
 
@@ -1757,6 +1776,22 @@ pub(crate) fn withheld_operation_weakening(
             .or_default()
             .insert(OperationId(operation.operation.clone()));
     }
+    // An operation narrows only when **every** record withdrawing it is a
+    // narrowing one: a single refusal on other grounds opens its domain.
+    let narrows = |artifact_case: &str, export: &str, id: &OperationId| {
+        withheld
+            .iter()
+            .filter(|record| {
+                record.artifact_case == artifact_case
+                    && record.export == export
+                    && record.operation == id.0
+            })
+            .all(|record| {
+                record
+                    .reason
+                    .starts_with(WITHHELD_OPERATION_NARROWED_PREFIX)
+            })
+    };
     let mut gone: BTreeMap<String, BTreeSet<(String, OperationId)>> = BTreeMap::new();
     for ((artifact_case, export_name), ids) in seeds {
         let export = artifact_cases
@@ -1767,7 +1802,12 @@ pub(crate) fn withheld_operation_weakening(
                 artifact_case: artifact_case.clone(),
                 export: export_name.clone(),
             })?;
-        let withdrawn = export.withhold_operations(&ids);
+        let narrowed = ids
+            .iter()
+            .filter(|id| narrows(&artifact_case, &export_name, id))
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let withdrawn = export.withhold_operations_narrowing(&ids, &narrowed);
         gone.entry(artifact_case)
             .or_default()
             .extend(withdrawn.into_iter().map(|id| (export_name.clone(), id)));
@@ -6318,6 +6358,7 @@ mod tests {
             output: None,
             resources: BTreeSet::new(),
             composed_from: None,
+            protocol: None,
         }
     }
 
@@ -15319,14 +15360,41 @@ export const value = phantom;
             !weakened.is_closed() && weakened.items().len() == 1,
             "weakened to partial, the item kept: {weakened:?}"
         );
-        // The four siblings still propose the empty enumeration, as before.
-        for export in READS_FIXTURE_EXPORTS {
-            if export != "invokesCallerAccessor" {
-                let claim = case.exports[export].callbacks();
-                assert!(
-                    claim.is_closed() && claim.items().is_empty(),
-                    "{export}: {claim:?}"
-                );
+        // The siblings propose closed enumerations too. Since item A of
+        // ways-to-improve § 3.3 the generator describes a property read of a
+        // parameter as a `get` item and a coercion of one as a `coerce` item,
+        // so those enumerations are no longer empty.
+        {
+            use solid_reactive_ir::contract_semantics::InvokeProtocol::{Coerce, Get};
+            for (export, expected) in [
+                ("invokesCallerMember", vec![(Get, 0)]),
+                ("invokesCallerMemberLater", vec![]),
+                ("plainArithmetic", vec![(Coerce, 0), (Coerce, 1)]),
+                ("readsCallerElement", vec![(Get, 0)]),
+                ("readsCallerMember", vec![(Get, 0)]),
+                ("readsOwnLiteral", vec![]),
+            ] {
+                let semantics = &case.exports[export];
+                let claim = semantics.callbacks();
+                let mut items = claim
+                    .items()
+                    .iter()
+                    .map(|item| {
+                        let ValueSource::Parameter { index, .. } = &item.from else {
+                            panic!("{export}: a bare parameter");
+                        };
+                        (
+                            semantics
+                                .operation(&item.operation.0)
+                                .expect("the item names its operation")
+                                .invoke_protocol(),
+                            *index,
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                items.sort();
+                assert!(claim.is_closed(), "{export}: {claim:?}");
+                assert_eq!(items, expected, "{export}");
             }
         }
 
@@ -15369,6 +15437,28 @@ export const value = phantom;
         assert!(
             bound_callbacks.is_closed() && bound_callbacks.items().len() == 1,
             "the receipt binds a closed, non-empty enumeration: {bound_callbacks:?}"
+        );
+        // The narrowed outcome: `plainArithmetic(a: number, b: number)`'s two
+        // `coerce` items find no form under the declared-signature premise, so
+        // they narrow out of the closure rather than opening it, the census
+        // confirms what is left, and the receipt binds `callbacks: []`. The
+        // narrowing is recorded by name.
+        let narrowed = bound_case.exports["plainArithmetic"].callbacks();
+        assert!(
+            narrowed.is_closed() && narrowed.items().is_empty(),
+            "narrowed to the empty closure: {narrowed:?} {:?} {:?}",
+            finalized.withheld_closures(),
+            finalized.withheld_operations()
+        );
+        assert!(
+            finalized.withheld_operations().iter().any(|record| {
+                record.export == "plainArithmetic"
+                    && record
+                        .reason
+                        .starts_with(super::WITHHELD_OPERATION_NARROWED_PREFIX)
+            }),
+            "{:?}",
+            finalized.withheld_operations()
         );
         assert_ne!(
             finalized.bindings().probe_gate_root,
@@ -16613,6 +16703,300 @@ export const value = phantom;
                 finalized.withheld_closures()
             );
         }
+    }
+
+    /// Item A of ways-to-improve § 3.3, planned from hand-stated summaries so a
+    /// claim the generator's walk would not make can be put to the census: each
+    /// export's `callbacks` is `calls` plus a `get` per `gets` entry and a
+    /// `coerce` per `coerces` entry.
+    fn described_accessor_fixture_certify(
+        label: &str,
+    ) -> Option<(
+        CertificationPlan,
+        Result<super::FinalizedPolicy2Contract, super::Policy2FinalizationError>,
+    )> {
+        use solid_reactive_ir::contract_semantics::InvokeProtocol;
+        use solid_reactive_ir::{
+            ContractCallback, ContractClaim, ContractEntrypoint, ContractExport, ContractPackage,
+            PackageContract,
+        };
+        type Claim = (
+            &'static str,
+            &'static [usize],
+            &'static [usize],
+            &'static [usize],
+        );
+        let exports: [Claim; 11] = [
+            // What the generator proposes (`expected.json`).
+            ("access", &[0], &[0], &[]),
+            ("compare", &[], &[], &[0, 1]),
+            ("plainArithmetic", &[], &[], &[0, 1]),
+            ("callAndAdd", &[0], &[], &[1]),
+            ("isNonNullable", &[], &[], &[]),
+            // What the generator proposed before it saw the destructuring.
+            ("destructureAndMeasure", &[], &[1], &[]),
+            ("isPointInPolygon", &[], &[1], &[]),
+            // Claims the walk would not make.
+            ("deferredRead", &[], &[0], &[]),
+            ("nestedRead", &[], &[0], &[]),
+            ("defaultRead", &[], &[1], &[]),
+            // The falsifying variant: the read is described, the coercion of
+            // the same argument is not.
+            ("readAndCoerce", &[], &[0], &[]),
+        ];
+        let pin = pinned_producer_for_test()?;
+        let name = "implementation-census-described-accessor";
+        let root = "/project/node_modules/implementation-census-described-accessor";
+        let fixture = repository_root()
+            .join("fixtures/package-contracts")
+            .join(name);
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let bindings = exports.map(|(export, ..)| {
+            (
+                export,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        let (_, resolved) = test_package_resolution(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[],
+            "/project/src/app.ts",
+        );
+        let inferred = PackageContract {
+            package: ContractPackage {
+                name: name.into(),
+                version: "1.0.0".into(),
+                integrity: String::new(),
+            },
+            entrypoints: BTreeMap::from([(
+                ".".into(),
+                ContractEntrypoint {
+                    exports: exports
+                        .into_iter()
+                        .map(|(export, calls, gets, coerces)| {
+                            (
+                                export.into(),
+                                ContractExport {
+                                    kind: "function".into(),
+                                    reactive_reads: ContractClaim::Open,
+                                    callbacks: ContractClaim::Known(
+                                        calls
+                                            .iter()
+                                            .map(|parameter| ContractCallback {
+                                                parameter: *parameter,
+                                                execution: "inline".into(),
+                                                schedule: None,
+                                                clears_tracking: false,
+                                                arguments: Vec::new(),
+                                                owner: None,
+                                                protocol: InvokeProtocol::Call,
+                                            })
+                                            .collect(),
+                                    ),
+                                    owner_requirements: ContractClaim::Open,
+                                    returns: ContractClaim::Open,
+                                    async_behavior: ContractClaim::Known(String::new()),
+                                    direct_callback_parameters: calls.iter().copied().collect(),
+                                    direct_accessor_parameters: gets.iter().copied().collect(),
+                                    direct_coerced_parameters: coerces.iter().copied().collect(),
+                                    ..ContractExport::default()
+                                },
+                            )
+                        })
+                        .collect(),
+                },
+            )]),
+            source_path: String::new(),
+        };
+        let candidate =
+            crate::inferred_contract::normalize_inferred_contract(&inferred, &resolved).unwrap();
+        let plan = try_plan_supplied_candidate_for_test_package(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            candidate,
+        )
+        .expect("the hand-stated proposal plans against its own artifact");
+        let scratch = TracerScratch::new(label);
+        let probes = tracer_configuration_from(&fixture, scratch.path(), label, &[])?;
+        let outcome = tracer_certify(&plan, &pin, &probes);
+        Some((plan, outcome))
+    }
+
+    /// The `(protocol, parameter)` of every item of `export`'s `callbacks`,
+    /// sorted, when the domain is closed.
+    fn closed_callbacks_in(
+        main: &[u8],
+        export: &str,
+    ) -> Option<Vec<(solid_reactive_ir::contract_semantics::InvokeProtocol, u16)>> {
+        use solid_reactive_ir::contract_semantics::ValueSource;
+        let decoded = crate::contract_document::decode(main)
+            .expect("canonical main decodes")
+            .normalize()
+            .expect("canonical main normalizes");
+        decoded.artifact_cases().iter().find_map(|case| {
+            let semantics = case.exports.get(export)?;
+            let claim = semantics.callbacks();
+            claim.is_closed().then(|| {
+                let mut items = claim
+                    .items()
+                    .iter()
+                    .filter_map(|item| {
+                        let ValueSource::Parameter { index, .. } = &item.from else {
+                            return None;
+                        };
+                        Some((
+                            semantics.operation(&item.operation.0)?.invoke_protocol(),
+                            *index,
+                        ))
+                    })
+                    .collect::<Vec<_>>();
+                items.sort();
+                items
+            })
+        })
+    }
+
+    /// Item A end to end: `access`'s call and `.length` read, and `compare`'s
+    /// two coercions, certify as closed `callbacks` enumerations through the
+    /// census, each item's positive facts and the synthesized Proxy veto; a
+    /// deferred read, a read in a nested callable, a read of a defaulted
+    /// parameter, and a read described beside an undescribed coercion of the
+    /// same argument withhold by name while the row certifies.
+    #[test]
+    fn the_described_accessor_census_certifies_exactly_the_described_protocols() {
+        use solid_reactive_ir::contract_semantics::InvokeProtocol::{Call, Coerce, Get};
+        let Some((plan, outcome)) = described_accessor_fixture_certify("described-accessor") else {
+            return;
+        };
+        let finalized = outcome.unwrap_or_else(|error| {
+            panic!("every refusal here withholds by name and the row certifies: {error}")
+        });
+        let main = finalized.canonical_main();
+        for (export, expected) in [
+            ("access", vec![(Call, 0), (Get, 0)]),
+            ("compare", vec![(Coerce, 0), (Coerce, 1)]),
+            // Narrowed: the number-typed operands leave no form, so each
+            // `coerce` item is withdrawn from a closure that stays closed, and
+            // the census confirms what is left.
+            ("plainArithmetic", vec![]),
+            ("callAndAdd", vec![(Call, 0)]),
+            ("isNonNullable", vec![]),
+        ] {
+            assert_eq!(
+                closed_callbacks_in(main, export),
+                Some(expected),
+                "{export}: {:?} {:?}",
+                finalized.withheld_closures(),
+                finalized.withheld_operations()
+            );
+        }
+        // A use the census does not see at the call withdraws the item by its
+        // own positive facts first -- no uncaptured use of the caller's value by
+        // that protocol in the export's frame -- which opens the domain before
+        // the closure is reached; one it does see beside an undescribed use is
+        // refused by the closure census.
+        let no_use = "has no uncaptured use of the caller's value by that protocol";
+        for (export, needle) in [
+            ("deferredRead", no_use),
+            ("nestedRead", no_use),
+            // `w = v`: whatever roots `w`, it is not the caller's own value at
+            // slot 1.
+            (
+                "defaultRead",
+                "a get invocation of parameter 1 has no uncaptured use",
+            ),
+            (
+                "readAndCoerce",
+                "describes call-time use(s) get 0, but the implementation census dispositioned \
+                 2 call(s) into the parameter-rooted family (parameter-rooted-accessor 1, \
+                 parameter-rooted-coercion 1): the parameter-rooted-coercion member (1)",
+            ),
+            // `polygon.length` resolves to the engine's `Array.length` under
+            // the premise, so the item finds no form; `Polygon` admits an
+            // object, so it does not narrow and the domain opens.
+            ("destructureAndMeasure", no_use),
+            // Its `polygon[i]` reads are sites, but `[x, y] = point` and
+            // `[xi, yi] = polygon[i]` record no form under the premise: the
+            // census refuses the enumeration whole rather than confirm it.
+            (
+                "isPointInPolygon",
+                "declared-signature premise for parameter(s) 0, 1 whose declared type admits \
+                 an object",
+            ),
+        ] {
+            assert!(
+                finalized
+                    .withheld_closures()
+                    .iter()
+                    .filter(|record| record.export == export && record.domain == "callbacks")
+                    .map(|record| record.reason.as_str())
+                    .chain(
+                        finalized
+                            .withheld_operations()
+                            .iter()
+                            .filter(|record| record.export == export)
+                            .map(|record| record.reason.as_str())
+                    )
+                    .any(|reason| reason.contains(needle)),
+                "{export}: {:?} {:?}",
+                finalized.withheld_closures(),
+                finalized.withheld_operations()
+            );
+            assert_eq!(closed_callbacks_in(main, export), None, "{export}");
+        }
+        // The narrowing is recorded by name, and only for the narrowed items.
+        for export in ["plainArithmetic", "callAndAdd"] {
+            assert!(
+                finalized.withheld_operations().iter().any(|record| {
+                    record.export == export
+                        && record
+                            .reason
+                            .starts_with(super::WITHHELD_OPERATION_NARROWED_PREFIX)
+                }),
+                "{export}: {:?}",
+                finalized.withheld_operations()
+            );
+        }
+        assert!(
+            finalized
+                .withheld_operations()
+                .iter()
+                .filter(|record| record.export == "destructureAndMeasure")
+                .all(|record| !record
+                    .reason
+                    .starts_with(super::WITHHELD_OPERATION_NARROWED_PREFIX)),
+            "an object-admitting parameter never narrows: {:?}",
+            finalized.withheld_operations()
+        );
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan),
+            "the synthesized veto must run before a described closure closes"
+        );
     }
 
     /// The argument containers `export`'s `returns` is closed over, when it is.
@@ -19762,6 +20146,7 @@ export const value = phantom;
                     }),
                     resources: BTreeSet::new(),
                     composed_from: None,
+                    protocol: None,
                 }],
                 vec![],
                 vec![],
@@ -20094,6 +20479,7 @@ export const value = phantom;
                         output: None,
                         resources: BTreeSet::new(),
                         composed_from: None,
+                        protocol: None,
                     }],
                     vec![],
                     vec![],
@@ -20323,6 +20709,7 @@ export const value = phantom;
                     output: None,
                     resources: BTreeSet::new(),
                     composed_from: None,
+                    protocol: None,
                 }],
                 vec![],
                 vec![],

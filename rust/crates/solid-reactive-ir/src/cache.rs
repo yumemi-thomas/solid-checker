@@ -219,6 +219,12 @@ pub(crate) struct InterproceduralGraphContribution {
     /// site (ADR 0100). Recorded beside the row rather than in it: the wire
     /// spells this and a primitive's inline position with the same word.
     pub(crate) direct_callback_parameters: Vec<(Span, usize)>,
+    /// `(owner, protocol, parameter index)` for a property read (`Get`) or a
+    /// coercion (`Coerce`) of a parameter's own value written directly in the
+    /// owner's body (item A of ways-to-improve § 3.3): the proposal input the
+    /// generator describes as a non-call `callbacks` item. Never evidence.
+    pub(crate) direct_protocol_parameters:
+        Vec<(Span, crate::contract_semantics::InvokeProtocol, usize)>,
     /// `(owner, parameter index)` for a parameter whose caller-supplied value
     /// this function neither invokes nor observes inertly — it stores it, hands
     /// it on, or returns it. See

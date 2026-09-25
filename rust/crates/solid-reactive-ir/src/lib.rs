@@ -1150,6 +1150,24 @@ pub struct ContractExport {
     /// can confirm site for site. A proposal input, never evidence: empty is
     /// "do not propose", and a summary no pass reached is empty.
     pub direct_callback_parameters: BTreeSet<usize>,
+    /// The parameters whose own value this export's own body reads a property
+    /// of -- `v.length` with `v` the parameter itself, outside any nested
+    /// callable, not in write position and not the callee of a call -- which
+    /// the generator describes as a `get` item in `callbacks` (item A of
+    /// ways-to-improve § 3.3). A proposal input in the same family as
+    /// [`Self::direct_callback_parameters`]: never encoded, never evidence,
+    /// empty is "describe nothing".
+    pub direct_accessor_parameters: BTreeSet<usize>,
+    /// The same, for a coercing operand (`a < b`, `` `${v}` ``, `+v`) that is
+    /// the parameter's own identifier: a `coerce` item.
+    pub direct_coerced_parameters: BTreeSet<usize>,
+    /// The parameters whose value, or a value reached through its members,
+    /// this export iterates anywhere in its body (a `for…of`, a spread, an
+    /// array pattern), and those bound by an array pattern in parameter
+    /// position. The generator derives no `iterate` item, so it declines to
+    /// propose a `callbacks` enumeration with non-call items beside any of
+    /// these: it could not describe the enumeration whole. Never evidence.
+    pub iterated_parameters: BTreeSet<usize>,
     /// ADR 0109: the parameter whose reactivity a props merge this export
     /// returns carries, when the generator's own walk cleared the body
     /// ([`crate::returns_walk::MergedPropsReturns`]).
@@ -1396,6 +1414,33 @@ pub struct ContractCallback {
     /// `untrack`'s did. False here publishes `ambient-at-execution` instead,
     /// which is what a transparent wrapper actually does.
     pub clears_tracking: bool,
+    /// Which protocol of the caller's value this row invokes. `Call` is every
+    /// row an analysis pass writes; the others arrive only from an accepted
+    /// contract's non-call `invoke` items (a property read, iteration,
+    /// coercion or `hasInstance` of the argument), and the generator's own
+    /// derivation of them, and they are **not** inline invocations of a
+    /// callable: no consumer pass may read one as a call of the argument. See
+    /// [`ContractCallback::is_invocation`].
+    pub protocol: contract_semantics::InvokeProtocol,
+}
+
+impl ContractCallback {
+    /// Whether this row is an invocation of the argument *as a callable* --
+    /// the only kind of row an interprocedural or owner pass models.
+    ///
+    /// A non-call row is kept in [`ContractExport::callbacks`] so a closed
+    /// enumeration stays closed and re-emission republishes it; every pass
+    /// that reads rows to build edges, invoked parameters, wrappers, owner
+    /// edges or accessor arguments filters on this first. A property read or
+    /// coercion of the caller's value runs that value's own traps at the call,
+    /// on the caller's stack, in the caller's tracking context -- what the
+    /// value's author wrote -- and today such a use of a non-callable argument
+    /// raises no obligation at all, so ignoring the row loses nothing the
+    /// consumer modelled.
+    #[must_use]
+    pub fn is_invocation(&self) -> bool {
+        self.protocol == contract_semantics::InvokeProtocol::Call
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

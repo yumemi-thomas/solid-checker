@@ -373,6 +373,7 @@ fn operation(id: &str, kind: OperationKind, event: Event, min: u32) -> Operation
         output: None,
         resources: BTreeSet::new(),
         composed_from: None,
+        protocol: None,
     }
 }
 

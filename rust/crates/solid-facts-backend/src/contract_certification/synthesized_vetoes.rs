@@ -30,7 +30,8 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest as _, Sha256};
 use solid_reactive_ir::contract_semantics::{
-    ClaimDomain, Event, ExportSemantics, OperationKind, Schedule, ValueShape, ValueSource,
+    ClaimDomain, Event, ExportSemantics, InvokeProtocol, OperationKind, Schedule, ValueShape,
+    ValueSource,
 };
 
 use super::ProbeHarnessConfiguration;
@@ -225,6 +226,9 @@ pub(crate) fn synthesize(
                         match observation {
                             Observation::DescribedCallbacks(_) => {
                                 "ADR 0100, described callbacks enumeration"
+                            }
+                            Observation::DescribedProtocols(_) => {
+                                "ADR 0100 per protocol, described callbacks enumeration with non-call items"
                             }
                             Observation::DescribedReads(_) => {
                                 "ADR 0101, described reads enumeration"
@@ -496,6 +500,18 @@ enum Observation {
     /// contradiction is an invocation of a callable at a slot outside the
     /// set, or of one inside it after the sample call has returned.
     DescribedCallbacks(u64),
+    /// Item A of ways-to-improve § 3.3: a described `callbacks` enumeration
+    /// with at least one non-call item (a property read, iteration, coercion or
+    /// `hasInstance` of a bare parameter). Every described slot, and every
+    /// slot whose sample is an object, array or callable, is a recording
+    /// `Proxy` whose traps classify each use by protocol and return the
+    /// target's own answer (`Reflect.*`), so `.length` reads 0 and `access`
+    /// takes its call branch. The contradiction is a use of a slot by a
+    /// protocol the enumeration does not describe for that slot, at any time up
+    /// to the end of the drain, or a described use outside the sample call.
+    /// An enumeration with no non-call item is `DescribedCallbacks`, byte for
+    /// byte as before.
+    DescribedProtocols(ProtocolMasks),
     /// ADR 0101: a described `reads` enumeration, every item a `read` of a
     /// caller parameter -- the generator's `parameter-member` row for
     /// `props.of.values()` -- `at` the call event on the same stack. The bits
@@ -549,7 +565,7 @@ fn candidate_observation(domain: &str, export: &ExportSemantics) -> Option<Obser
             if export.callbacks().items().is_empty() {
                 return Some(Observation::EmptyCallbacks);
             }
-            let mut mask = 0u64;
+            let mut masks = ProtocolMasks::default();
             for item in export.callbacks().items() {
                 let ValueSource::Parameter { index, path } = &item.from else {
                     return None;
@@ -565,9 +581,15 @@ fn candidate_observation(domain: &str, export: &ExportSemantics) -> Option<Obser
                 {
                     return None;
                 }
-                mask |= 1 << index;
+                // A non-call item is never a call slot: it is recorded under
+                // its own protocol, and its presence selects the Proxy module.
+                *masks.of_mut(operation.invoke_protocol()) |= 1 << index;
             }
-            Some(Observation::DescribedCallbacks(mask))
+            Some(if masks.has_protocol_items() {
+                Observation::DescribedProtocols(masks)
+            } else {
+                Observation::DescribedCallbacks(masks.call)
+            })
         }
         // The empty `reads` enumeration deliberately registers no observation
         // (`reviewed_observation`): its contradiction is a read of a source the
@@ -627,6 +649,57 @@ fn candidate_observation(domain: &str, export: &ExportSemantics) -> Option<Obser
             }
         }
         _ => None,
+    }
+}
+
+/// The slots a described `callbacks` enumeration names, per protocol, as bits.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct ProtocolMasks {
+    call: u64,
+    get: u64,
+    iterate: u64,
+    coerce: u64,
+    has_instance: u64,
+}
+
+impl ProtocolMasks {
+    fn of_mut(&mut self, protocol: InvokeProtocol) -> &mut u64 {
+        match protocol {
+            InvokeProtocol::Call => &mut self.call,
+            InvokeProtocol::Get => &mut self.get,
+            InvokeProtocol::Iterate => &mut self.iterate,
+            InvokeProtocol::Coerce => &mut self.coerce,
+            InvokeProtocol::HasInstance => &mut self.has_instance,
+        }
+    }
+
+    const fn has_protocol_items(self) -> bool {
+        self.get | self.iterate | self.coerce | self.has_instance != 0
+    }
+
+    /// Every slot some item names, whatever its protocol.
+    const fn any(self) -> u64 {
+        self.call | self.get | self.iterate | self.coerce | self.has_instance
+    }
+
+    /// The JavaScript object literal naming each protocol's described slots,
+    /// keyed by the protocol's wire name.
+    fn javascript(self) -> String {
+        let set = |mask: u64| {
+            (0..u64::BITS)
+                .filter(|bit| mask & (1 << bit) != 0)
+                .map(|bit| bit.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        format!(
+            "{{ call: new Set([{}]), get: new Set([{}]), iterate: new Set([{}]), coerce: new Set([{}]), \"has-instance\": new Set([{}]) }}",
+            set(self.call),
+            set(self.get),
+            set(self.iterate),
+            set(self.coerce),
+            set(self.has_instance)
+        )
     }
 }
 
@@ -788,6 +861,11 @@ impl Observation {
                 observation: "exact: a callable argument the sample supplied at a slot the enumeration does not describe was invoked at any time up to the end of the session's drain, or one at a described slot was invoked outside the sample call's own stack",
                 emit: "",
             },
+            Self::DescribedProtocols(_) => ReviewedObservation {
+                marker: "callback-invocation",
+                observation: "exact for the recorded slots: a Proxy argument the sample supplied was called or constructed, had a string-keyed member read, tested with `in`, enumerated or described (get), had Symbol.iterator or Symbol.asyncIterator read (iterate), had Symbol.toPrimitive, valueOf or toString read (coerce), or had Symbol.hasInstance read (has-instance), by a protocol the enumeration does not describe for that slot, at any time up to the end of the session's drain, or by a described one outside the sample call's own stack",
+                emit: "",
+            },
             Self::DescribedReads(_) => ReviewedObservation {
                 marker: "read-operation",
                 observation: "exact for the described slots: a member of an object argument the sample supplied at a slot the enumeration does not describe was invoked at any time up to the end of the session's drain, or a member of one at a described slot was invoked outside the sample call's own stack; which member, and any read of a source the export owns, are not observed",
@@ -863,6 +941,7 @@ impl Observation {
             }
             Self::NotCallable | Self::DefaultLibraryAlias(_) => Vec::new(),
             Self::DescribedCallbacks(_) => sample_tuples_with(signatures, true),
+            Self::DescribedProtocols(masks) => protocol_sample_tuples(signatures, masks),
             Self::DescribedReads(mask) => reads_sample_tuples(signatures, mask),
             _ => sample_tuples(signatures),
         }
@@ -872,6 +951,9 @@ impl Observation {
         match self {
             Self::DescribedCallbacks(_) => {
                 "at most six tuples per overload; no variadic tail or structural object construction; a described slot the signature does not type as callable is sampled with a non-callable value, so a call of it throws and observes nothing"
+            }
+            Self::DescribedProtocols(_) => {
+                "at most six tuples per overload; no variadic tail or structural object construction; every described slot and every object-, array- or callable-typed slot is sampled with a recording Proxy over an empty object, an empty array or a zero-arity function, whose traps answer as the target does, and a described slot the signature types as a primitive is also sampled with the object Proxy; a symbol-keyed member other than the iteration, coercion and hasInstance symbols is not recorded, and a use on a value the export derived from an argument, rather than the argument itself, is not observed"
             }
             Self::DescribedReads(_) => {
                 "at most six tuples per overload; no variadic tail; every described slot and every object-typed slot is sampled with a recording tripwire whose members are all callable to a depth of eight, so an export that expects a real value there throws and observes nothing, and a walk along a member chain ends; engine-protocol members (then, valueOf, toString, toJSON, constructor, symbols) are not recorded, and iterating or coercing a tripwire throws"
@@ -1064,6 +1146,9 @@ fn module_source(
     if let Observation::DescribedCallbacks(mask) = observation {
         return described_callbacks_module_source(specifier, export, mask, signatures);
     }
+    if let Observation::DescribedProtocols(masks) = observation {
+        return described_protocols_module_source(specifier, export, masks, signatures);
+    }
     if let Observation::DescribedReads(mask) = observation {
         return described_reads_module_source(specifier, export, mask, signatures);
     }
@@ -1077,6 +1162,7 @@ fn module_source(
         | Observation::NotCallable
         | Observation::DefaultLibraryAlias(_)
         | Observation::DescribedCallbacks(_)
+        | Observation::DescribedProtocols(_)
         | Observation::DescribedReads(_) => unreachable!(),
     };
     // Only this observation emits from inside the callback. Giving every
@@ -1280,6 +1366,157 @@ fn described_reads_module_source(
          \x20 if (threw > 0) harness.emit({{ marker: \"sample-threw\", kind: \"call\", phase: \"enter\" }});\n\
          \x20 harness.emit({{ marker: \"call\", kind: \"call\", phase: \"exit\" }});\n\
          }}\n",
+        specifier_json = serde_json::to_string(specifier).unwrap_or_default(),
+        export_json = serde_json::to_string(export).unwrap_or_default(),
+    )
+}
+
+/// [`sample_tuples`] for a described enumeration with non-call items: every
+/// slot whose sample is an object, array or callable is rendered as
+/// `slotAt(<slot>, <shape>)`, and a described slot also gets the object
+/// sample when its signature offers none, so each described protocol meets a
+/// recording value in at least one tuple. Other primitive samples stay
+/// primitives: nothing of the caller's runs on a number.
+fn protocol_sample_tuples(
+    signatures: &[typefacts::SelectedSignature],
+    masks: ProtocolMasks,
+) -> Vec<Vec<String>> {
+    let described = masks.any();
+    let mut tuples = Vec::new();
+    for signature in signatures {
+        let slots = signature
+            .parameters
+            .iter()
+            .filter(|parameter| !parameter.rest)
+            .map(|parameter| {
+                let (mut candidates, literals) = slot_candidates(parameter);
+                let recorded = u32::try_from(parameter.index).is_ok_and(|bit| bit < u64::BITS)
+                    && described & (1 << parameter.index) != 0;
+                if recorded
+                    && !candidates.iter().any(|sample| {
+                        matches!(sample, Sample::Object | Sample::Array | Sample::Callable)
+                    })
+                {
+                    candidates.push(Sample::Object);
+                }
+                (parameter.index, (candidates, literals))
+            })
+            .collect::<Vec<_>>();
+        let widest = slots
+            .iter()
+            .map(|(_, (candidates, _))| candidates.len())
+            .max()
+            .unwrap_or(1)
+            .clamp(1, MAX_SAMPLE_CALLS);
+        for index in 0..widest {
+            let tuple = slots
+                .iter()
+                .map(
+                    |(slot, (candidates, literals))| match candidates[index % candidates.len()] {
+                        Sample::Object => format!("slotAt({slot}, \"object\")"),
+                        Sample::Array => format!("slotAt({slot}, \"array\")"),
+                        Sample::Callable => format!("slotAt({slot}, \"function\")"),
+                        sample => render(sample, literals),
+                    },
+                )
+                .collect::<Vec<_>>();
+            if !tuples.contains(&tuple) {
+                tuples.push(tuple);
+            }
+        }
+    }
+    tuples
+}
+
+/// The module for a described `callbacks` enumeration with non-call items
+/// (item A of ways-to-improve § 3.3). One recording mechanism for every
+/// protocol: `slotAt(slot, shape)` is a `Proxy` over a fresh empty object,
+/// array or zero-arity function whose every trap records the slot and the
+/// protocol it classifies the use as, then answers with the target's own
+/// `Reflect.*` result -- so the value behaves as the plain value it wraps,
+/// `typeof` and `.length` included, and the export takes the branch it would
+/// take on that value. It is the `DescribedReads` tripwire's per-slot member
+/// recording widened from "a member was invoked" to "which protocol ran",
+/// with the engine-protocol members it deliberately ignored (`valueOf`,
+/// `toString`, the symbols) now the very uses it classifies; that module is
+/// left byte-identical so its receipts keep their construction digests.
+fn described_protocols_module_source(
+    specifier: &str,
+    export: &str,
+    masks: ProtocolMasks,
+    signatures: &[typefacts::SelectedSignature],
+) -> String {
+    let tuples = protocol_sample_tuples(signatures, masks)
+        .into_iter()
+        .map(|arguments| format!("  [{}],", arguments.join(", ")))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "// Synthesized veto (ADR 0100, per protocol) for the described `callbacks`\n\
+         // closure of `{export}`, whose items include non-call uses of an argument.\n\
+         // Derived from the export's Type Facts call signature; deterministic in it.\n\
+         // It observes, it never proves: the implementation census is the proof.\n\
+         import * as subjectModule from {specifier_json};\n\
+         \n\
+         const subject = subjectModule[{export_json}];\n\
+         const described = {described};\n\
+         let emitter = null;\n\
+         let inCall = false;\n\
+         let emitted = false;\n\
+         const record = (slot, protocol) => {{\n\
+         \x20 if (!emitted && emitter && (!described[protocol].has(slot) || !inCall)) {{\n\
+         \x20   emitted = true;\n\
+         \x20   emitter.emit({{ marker: \"callback-invocation\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 }}\n\
+         }};\n\
+         // Which protocol of the value a property key reaches. A string key is a\n\
+         // property read, except the two ToPrimitive reaches; the iteration,\n\
+         // coercion and hasInstance symbols are their protocols; any other\n\
+         // symbol is the engine's own bookkeeping and records nothing.\n\
+         const protocolOf = (key) => {{\n\
+         \x20 if (key === Symbol.iterator || key === Symbol.asyncIterator) return \"iterate\";\n\
+         \x20 if (key === Symbol.toPrimitive || key === \"valueOf\" || key === \"toString\") return \"coerce\";\n\
+         \x20 if (key === Symbol.hasInstance) return \"has-instance\";\n\
+         \x20 return typeof key === \"string\" ? \"get\" : null;\n\
+         }};\n\
+         const use = (slot, key) => {{\n\
+         \x20 const protocol = protocolOf(key);\n\
+         \x20 if (protocol !== null) record(slot, protocol);\n\
+         }};\n\
+         const slotAt = (slot, shape) => {{\n\
+         \x20 const target = shape === \"function\" ? function () {{ return undefined; }} : shape === \"array\" ? [] : {{}};\n\
+         \x20 return new Proxy(target, {{\n\
+         \x20   apply(t, self, args) {{ record(slot, \"call\"); return Reflect.apply(t, self, args); }},\n\
+         \x20   construct(t, args, next) {{ record(slot, \"call\"); return Reflect.construct(t, args, next); }},\n\
+         \x20   get(t, key, receiver) {{ use(slot, key); return Reflect.get(t, key, receiver); }},\n\
+         \x20   has(t, key) {{ use(slot, key); return Reflect.has(t, key); }},\n\
+         \x20   ownKeys(t) {{ record(slot, \"get\"); return Reflect.ownKeys(t); }},\n\
+         \x20   getOwnPropertyDescriptor(t, key) {{ use(slot, key); return Reflect.getOwnPropertyDescriptor(t, key); }},\n\
+         \x20 }});\n\
+         }};\n\
+         const samples = [\n{tuples}\n];\n\
+         \n\
+         export async function runProbeSession(_session, harness) {{\n\
+         \x20 emitter = harness;\n\
+         \x20 harness.emit({{ marker: \"call\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 if (typeof subject !== \"function\") {{\n\
+         \x20   throw new Error(\"synthesized veto: the export is not callable in this realm\");\n\
+         \x20 }}\n\
+         \x20 let threw = 0;\n\
+         \x20 for (const args of samples) {{\n\
+         \x20   inCall = true;\n\
+         \x20   try {{\n\
+         \x20     subject(...args);\n\
+         \x20   }} catch {{\n\
+         \x20     threw += 1;\n\
+         \x20   }} finally {{\n\
+         \x20     inCall = false;\n\
+         \x20   }}\n\
+         \x20 }}\n\
+         \x20 if (threw > 0) harness.emit({{ marker: \"sample-threw\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 harness.emit({{ marker: \"call\", kind: \"call\", phase: \"exit\" }});\n\
+         }}\n",
+        described = masks.javascript(),
         specifier_json = serde_json::to_string(specifier).unwrap_or_default(),
         export_json = serde_json::to_string(export).unwrap_or_default(),
     )

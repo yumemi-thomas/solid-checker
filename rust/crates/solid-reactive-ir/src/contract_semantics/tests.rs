@@ -67,6 +67,7 @@ fn operation(id: &str, kind: OperationKind) -> Operation {
         output: None,
         resources: BTreeSet::new(),
         composed_from: None,
+        protocol: None,
     }
 }
 
@@ -2021,4 +2022,349 @@ fn a_recipe_address_binds_the_closure_bytes_and_refuses_unaddressable_subjects()
         RecipeAddress::parse(claim.as_str()),
         Err(ModelError::RecipeAddressFormat)
     );
+}
+
+/// One export whose `callbacks` closes over one bare-parameter `invoke`
+/// operation, with the artifact-case prefix a generated document gives it.
+fn invoking_contract(case_id: &str) -> NormalizedContract {
+    let mut case = artifact_case(case_id);
+    case.dependency_closure = digest('d');
+    let mut invoke = operation(
+        &format!("{case_id}:createResource:operation:callback-0"),
+        OperationKind::Invoke,
+    );
+    invoke.tracking = Tracking::AmbientAtExecution;
+    let call = call(vec![invoke], vec![]);
+    let export = export(&case, "createResource", ValueShape::Callable, call);
+    case.exports.insert("createResource".into(), export);
+    ContractProposal::new(package(), vec![case])
+        .normalize()
+        .unwrap()
+}
+
+const CALLBACKS: SemanticClaimPath =
+    SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Callbacks));
+
+/// ADR 0117's addresses and the semantic digest of a contract stating no
+/// non-call protocol, frozen before the invoke-protocol family existed: the
+/// 95 addresses migrated into the recipe corpus stay valid only if the stream
+/// a call-only claim writes never moves.
+#[test]
+fn call_only_recipe_addresses_and_digests_are_frozen() {
+    let reads = addressed_contract("case-a", 'd', Tracking::Untracked, 1);
+    assert_eq!(
+        address_of(&reads, "case-a", READS, "closure").as_str(),
+        "recipe-address:v1:sha256:c1a7b40c824ccff08c8e393eaa5996846847cca99ebac44fec4a7252f8d9b148"
+    );
+    let invoking = invoking_contract("case-a");
+    assert_eq!(
+        address_of(&invoking, "case-a", CALLBACKS, "closure").as_str(),
+        "recipe-address:v1:sha256:f0cb2480183d4f915cf277d21a8eb6efa14d5ec3e021688275171b9333c14428"
+    );
+    assert_eq!(
+        invoking.semantic_digest().as_str(),
+        "sha256:2e2e4199fc90e25040d2a2f45950a871cef1cd551b83b0c508b994c8d437120f"
+    );
+}
+
+/// `invoking_contract` with the one `invoke` restated as a non-call protocol.
+fn protocol_contract(
+    case_id: &str,
+    protocol: Option<InvokeProtocol>,
+) -> Result<NormalizedContract, ModelError> {
+    let mut case = artifact_case(case_id);
+    case.dependency_closure = digest('d');
+    let mut invoke = operation(
+        &format!("{case_id}:createResource:operation:callback-0"),
+        OperationKind::Invoke,
+    );
+    invoke.tracking = Tracking::AmbientAtExecution;
+    invoke.cardinality = Cardinality {
+        scope: Some(CardinalityScope::Call),
+        min: Some(0),
+        max: Some(UpperBound::Many),
+    };
+    invoke.protocol = protocol;
+    let call = call(vec![invoke], vec![]);
+    let export = export(&case, "createResource", ValueShape::Callable, call);
+    case.exports.insert("createResource".into(), export);
+    ContractProposal::new(package(), vec![case]).normalize()
+}
+
+/// Item A of ways-to-improve § 3.3: a non-call protocol is its own digest
+/// family. A stated `call` is the absent protocol, so it hashes as a
+/// call-only contract does; a `get` writes the marker first and the protocol
+/// of every operation, under a frozen vector of its own; each protocol is a
+/// distinct claim.
+#[test]
+fn invoke_protocol_digest_family_is_separate_and_frozen() {
+    assert_eq!(
+        SEMANTIC_INVOKE_PROTOCOL_MARKER,
+        "solid-checker:semantic-invoke-protocol:v1"
+    );
+    let call = protocol_contract("case-a", None).unwrap();
+    let stated_call = protocol_contract("case-a", Some(InvokeProtocol::Call)).unwrap();
+    assert_eq!(
+        stated_call.artifact_cases()[0].exports["createResource"]
+            .call
+            .operations[0]
+            .protocol,
+        None,
+        "a decoded `call` normalizes to the absent protocol"
+    );
+    assert_eq!(call.semantic_digest(), stated_call.semantic_digest());
+    let get = protocol_contract("case-a", Some(InvokeProtocol::Get)).unwrap();
+    assert_ne!(call.semantic_digest(), get.semantic_digest());
+    assert_eq!(
+        get.semantic_digest().as_str(),
+        "sha256:3d793b66c3a616cee35f786386d1ffb8eb6ac0fba98e278a51b1dae05976c375"
+    );
+    let digests = [
+        InvokeProtocol::Get,
+        InvokeProtocol::Iterate,
+        InvokeProtocol::Coerce,
+        InvokeProtocol::HasInstance,
+    ]
+    .map(|protocol| {
+        protocol_contract("case-a", Some(protocol))
+            .unwrap()
+            .semantic_digest()
+            .clone()
+    });
+    for (index, digest) in digests.iter().enumerate() {
+        assert!(
+            digests[index + 1..].iter().all(|other| other != digest),
+            "each protocol is a distinct claim"
+        );
+    }
+}
+
+/// ADR 0117's address, per claim: a call-only callbacks claim keeps the
+/// frozen address above, and a claim naming a non-call protocol is addressed
+/// in the invoke-protocol family, differently per protocol.
+#[test]
+fn a_recipe_address_binds_the_invoke_protocol() {
+    let call = address_of(
+        &protocol_contract("case-a", None).unwrap(),
+        "case-a",
+        CALLBACKS,
+        "closure",
+    );
+    let get = address_of(
+        &protocol_contract("case-a", Some(InvokeProtocol::Get)).unwrap(),
+        "case-a",
+        CALLBACKS,
+        "closure",
+    );
+    let coerce = address_of(
+        &protocol_contract("case-a", Some(InvokeProtocol::Coerce)).unwrap(),
+        "case-a",
+        CALLBACKS,
+        "closure",
+    );
+    assert_ne!(call, get);
+    assert_ne!(get, coerce);
+    assert_eq!(
+        get.as_str(),
+        "recipe-address:v1:sha256:8e315333ad3d92c5e421d0baad2fac181723605f9860ded22a9b972638143cdb"
+    );
+}
+
+/// A non-call invocation states one shape: an `invoke`, at the call event on
+/// the same stack, `ambient-at-execution` (never `untracked`), counted per
+/// call from zero to many, unguarded, named by exactly one `callbacks` item
+/// from a bare parameter.
+#[test]
+fn a_non_call_invocation_is_validated_to_its_one_shape() {
+    let refused = |mutate: &dyn Fn(&mut CallSemantics), needle: &str| {
+        let mut invoke = operation("callback-0", OperationKind::Invoke);
+        invoke.tracking = Tracking::AmbientAtExecution;
+        invoke.cardinality = Cardinality {
+            scope: Some(CardinalityScope::Call),
+            min: Some(0),
+            max: Some(UpperBound::Many),
+        };
+        invoke.protocol = Some(InvokeProtocol::Get);
+        let mut behavior = call(vec![invoke], vec![]);
+        mutate(&mut behavior);
+        let error = proposal_with(ValueShape::Callable, behavior)
+            .normalize()
+            .expect_err("the shape is refused");
+        assert!(error.to_string().contains(needle), "{needle:?} in {error}");
+    };
+    refused(
+        &|call| call.operations[0].tracking = Tracking::Untracked,
+        "ambient-at-execution",
+    );
+    refused(
+        &|call| call.operations[0].tracking = Tracking::Tracked,
+        "ambient-at-execution",
+    );
+    refused(
+        &|call| call.operations[0].tracking = Tracking::Unknown,
+        "ambient-at-execution",
+    );
+    refused(
+        &|call| call.operations[0].schedule = Some(Schedule::Queued),
+        "at the call event on the same stack",
+    );
+    refused(
+        &|call| call.operations[0].cardinality.min = Some(1),
+        "from zero to many",
+    );
+    refused(
+        &|call| {
+            call.claims.callbacks = KnowledgeSet::Complete(vec![CallbackInvocation {
+                from: ValueSource::Parameter {
+                    index: 0,
+                    path: vec!["length".into()],
+                },
+                operation: OperationId("callback-0".into()),
+            }]);
+        },
+        "exactly one callbacks item from a bare parameter",
+    );
+    refused(
+        &|call| {
+            let item = call.claims.callbacks.items()[0].clone();
+            let second = CallbackInvocation {
+                from: ValueSource::Parameter {
+                    index: 1,
+                    path: vec![],
+                },
+                ..item.clone()
+            };
+            call.claims.callbacks = KnowledgeSet::Complete(vec![item, second]);
+        },
+        "exactly one callbacks item from a bare parameter",
+    );
+    // Only an invoke may state a protocol.
+    let mut read = operation("read", OperationKind::Read);
+    read.protocol = Some(InvokeProtocol::Coerce);
+    let error = proposal_with(ValueShape::Callable, call(vec![read], vec![]))
+        .normalize()
+        .expect_err("a read states no protocol");
+    assert!(
+        error
+            .to_string()
+            .contains("only an invoke operation may state a protocol"),
+        "{error}"
+    );
+}
+
+/// A non-call item withdrawn by narrowing leaves `callbacks` closed and its
+/// proposal standing, down to the empty enumeration; a call item, or a non-call
+/// item not marked as narrowing, opens the domain exactly as before.
+#[test]
+fn a_narrowed_non_call_item_keeps_its_callbacks_closure() {
+    let invoke = |id: &str, protocol: Option<InvokeProtocol>| {
+        let mut invoke = operation(id, OperationKind::Invoke);
+        invoke.tracking = Tracking::AmbientAtExecution;
+        invoke.cardinality = Cardinality {
+            scope: Some(CardinalityScope::Call),
+            min: Some(0),
+            max: Some(UpperBound::Many),
+        };
+        invoke.protocol = protocol;
+        invoke
+    };
+    let item = |index: u16, id: &str| CallbackInvocation {
+        from: ValueSource::Parameter {
+            index,
+            path: vec![],
+        },
+        operation: OperationId(id.into()),
+    };
+    let mixed = || {
+        let mut call = call(
+            vec![
+                invoke("callback-0", None),
+                invoke("callback-1", Some(InvokeProtocol::Coerce)),
+            ],
+            vec![],
+        );
+        call.claims.callbacks =
+            KnowledgeSet::Complete(vec![item(0, "callback-0"), item(1, "callback-1")]);
+        normalized_export(proposal_with(
+            ValueShape::Callable,
+            call.with_proposed_closures([ClaimDomain::Callbacks]),
+        ))
+    };
+    let ids = |ids: &[&str]| {
+        ids.iter()
+            .map(|id| OperationId((*id).into()))
+            .collect::<BTreeSet<_>>()
+    };
+    let case_id = |export: &ExportSemantics, id: &str| {
+        export
+            .call
+            .operations
+            .iter()
+            .find(|operation| operation.id.0.ends_with(id))
+            .unwrap()
+            .id
+            .0
+            .clone()
+    };
+
+    // The coerce narrows: closed, proposed, and only the call is left.
+    let mut narrowed = mixed();
+    let coerce = case_id(&narrowed, "callback-1");
+    narrowed.withhold_operations_narrowing(&ids(&[&coerce]), &ids(&[&coerce]));
+    assert!(narrowed.callbacks().is_closed());
+    assert_eq!(narrowed.callbacks().items().len(), 1);
+    assert!(
+        narrowed
+            .call
+            .proposed_closures()
+            .contains(&ClaimDomain::Callbacks)
+    );
+
+    // The same withdrawal without the narrowing mark opens the domain.
+    let mut opened = mixed();
+    opened.withhold_operations_narrowing(&ids(&[&coerce]), &BTreeSet::new());
+    assert!(!opened.callbacks().is_closed());
+
+    // A call item is never narrowed, whatever the caller asks.
+    let mut call_item = mixed();
+    let call = case_id(&call_item, "callback-0");
+    call_item.withhold_operations_narrowing(&ids(&[&call]), &ids(&[&call]));
+    assert!(!call_item.callbacks().is_closed());
+
+    // Narrowed to nothing is the closed empty enumeration, not unknown.
+    let mut empty = mixed();
+    empty.withhold_operations_narrowing(&ids(&[&call, &coerce]), &ids(&[&coerce]));
+    assert!(
+        !empty.callbacks().is_closed(),
+        "the call's withdrawal opens it"
+    );
+    let mut only_protocols = {
+        let mut call = call_semantics_with_one_coerce();
+        call.claims.callbacks = KnowledgeSet::Complete(vec![item(0, "callback-0")]);
+        normalized_export(proposal_with(
+            ValueShape::Callable,
+            call.with_proposed_closures([ClaimDomain::Callbacks]),
+        ))
+    };
+    let only = case_id(&only_protocols, "callback-0");
+    only_protocols.withhold_operations_narrowing(&ids(&[&only]), &ids(&[&only]));
+    assert_eq!(only_protocols.callbacks(), &KnowledgeSet::Complete(vec![]));
+    assert!(
+        only_protocols
+            .call
+            .proposed_closures()
+            .contains(&ClaimDomain::Callbacks)
+    );
+}
+
+fn call_semantics_with_one_coerce() -> CallSemantics {
+    let mut invoke = operation("callback-0", OperationKind::Invoke);
+    invoke.tracking = Tracking::AmbientAtExecution;
+    invoke.cardinality = Cardinality {
+        scope: Some(CardinalityScope::Call),
+        min: Some(0),
+        max: Some(UpperBound::Many),
+    };
+    invoke.protocol = Some(InvokeProtocol::Coerce);
+    call(vec![invoke], vec![])
 }

@@ -35,6 +35,7 @@ fn operation(id: &str, min: u32) -> Operation {
         output: None,
         composed_from: None,
         resources: BTreeSet::new(),
+        protocol: None,
     }
 }
 

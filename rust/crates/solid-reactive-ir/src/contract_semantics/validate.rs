@@ -431,6 +431,13 @@ fn normalize_operation(
     if let Some(output) = &mut operation.output {
         normalize_value(output, resources, &format!("{op_path}.output"))?;
     }
+    // One meaning for a call: a stated `call` is the absent protocol.
+    if operation.protocol == Some(InvokeProtocol::Call) {
+        operation.protocol = None;
+    }
+    if let Some(protocol) = operation.protocol {
+        validate_protocol_operation(operation, protocol, &op_path)?;
+    }
     if let Some(composed) = &operation.composed_from {
         let composed_path = format!("{op_path}.composedFrom");
         require_text(&composed.export, &format!("{composed_path}.export"))?;
@@ -460,6 +467,55 @@ fn normalize_operation(
                 "composed provenance names an operation of the composing export itself",
             );
         }
+    }
+    Ok(())
+}
+
+/// A non-call `invoke` (a property read, iteration, coercion or
+/// `hasInstance` of the caller's value) states exactly one shape.
+///
+/// It runs whatever the caller's value carries, at the call, on the caller's
+/// stack, in the caller's tracking context: so `at` the call event,
+/// `same-stack`, and `ambient-at-execution` -- never `untracked`, which would
+/// claim the export cleared the caller's listener, and never `tracked` or
+/// unknown. How often it happens is not proved, so the count is the call's
+/// `0..many`, and nothing guards it. Which `callbacks` item names it, and from
+/// where, is checked with the claims (`validate_call_claims`).
+fn validate_protocol_operation(
+    operation: &Operation,
+    protocol: InvokeProtocol,
+    path: &str,
+) -> Result<(), ModelError> {
+    let protocol_path = format!("{path}.protocol");
+    let refuse = |reason: &str| {
+        contradiction(
+            protocol_path.clone(),
+            format!("a {} invocation {reason}", protocol.wire_name()),
+        )
+    };
+    if operation.kind != OperationKind::Invoke {
+        return contradiction(
+            protocol_path,
+            "only an invoke operation may state a protocol",
+        );
+    }
+    if operation.at != Some(Event::Call) || operation.schedule != Some(Schedule::SameStack) {
+        return refuse("happens at the call event on the same stack");
+    }
+    if operation.tracking != Tracking::AmbientAtExecution {
+        return refuse("runs in the caller's tracking context and is ambient-at-execution");
+    }
+    if operation.cardinality
+        != (Cardinality {
+            scope: Some(CardinalityScope::Call),
+            min: Some(0),
+            max: Some(UpperBound::Many),
+        })
+    {
+        return refuse("is counted per call, from zero to many");
+    }
+    if operation.guard.is_some() {
+        return refuse("is unguarded");
     }
     Ok(())
 }
@@ -1171,6 +1227,31 @@ fn validate_call_claims(
         &operation_kinds,
         &format!("{path}.computations"),
     )?;
+    // A non-call protocol is a use of the caller's own argument: exactly one
+    // item names it, from a bare parameter. A member of the argument, an
+    // operation's output or a resource is a value this export reached rather
+    // than one the caller handed it, and no census confirms a protocol there.
+    for operation in operations
+        .iter()
+        .filter(|operation| operation.protocol.is_some())
+    {
+        let naming = claims
+            .callbacks
+            .items()
+            .iter()
+            .filter(|callback| callback.operation == operation.id)
+            .collect::<Vec<_>>();
+        match naming.as_slice() {
+            [callback] if matches!(&callback.from, ValueSource::Parameter { path, .. } if path.is_empty()) =>
+                {}
+            _ => {
+                return contradiction(
+                    format!("{path}.operation.{}.protocol", operation.id.0),
+                    "a non-call invocation is named by exactly one callbacks item from a bare parameter",
+                );
+            }
+        }
+    }
     for operation in operations {
         let represented = match operation.kind {
             OperationKind::Invoke => claims

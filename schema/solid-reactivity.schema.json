@@ -299,7 +299,11 @@
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/nonemptyString" }
         },
-        "composedFrom": { "$ref": "#/$defs/composedFrom" }
+        "composedFrom": { "$ref": "#/$defs/composedFrom" },
+        "protocol": {
+          "$comment": "Which protocol of the caller's value an `invoke` runs: a call (the default, and never written), a property read (`get`), the iteration protocol, a coercion (ToPrimitive), or `Symbol.hasInstance`. Only an `invoke` may carry it. A non-call protocol is always at the call event on the same stack, `ambient-at-execution`, count call 0..many, unguarded, and named by exactly one `callbacks` item from a bare parameter. A decoder that predates this field refuses the document, which is intended.",
+          "enum": ["call", "get", "iterate", "coerce", "has-instance"]
+        }
       }
     },
     "composedFrom": {

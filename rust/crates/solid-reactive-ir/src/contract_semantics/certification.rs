@@ -2105,6 +2105,7 @@ mod tests {
             output: None,
             resources: std::collections::BTreeSet::new(),
             composed_from: None,
+            protocol: None,
         };
         let call = CallSemantics::new(
             CallClaims::default(),

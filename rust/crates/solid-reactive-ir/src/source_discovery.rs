@@ -1420,8 +1420,20 @@ pub(crate) fn discover_sources(
         if !parameter_reads.is_empty() {
             contract_parameter_reads.insert(contracted.symbol.clone(), parameter_reads);
         }
+        // Only the rows that invoke the argument as a callable: a non-call
+        // row (`ContractCallback::is_invocation`) is no graph edge, no invoked
+        // parameter, no wrapper and no re-pushed row. The key is still
+        // inserted for a known enumeration holding none, because its presence
+        // is the "callbacks known" fact the interprocedural pass reads.
         if let Some(callbacks) = contracted.summary.callbacks.known() {
-            contract_callbacks.insert(contracted.symbol.clone(), callbacks.clone());
+            contract_callbacks.insert(
+                contracted.symbol.clone(),
+                callbacks
+                    .iter()
+                    .filter(|callback| callback.is_invocation())
+                    .cloned()
+                    .collect(),
+            );
         }
         if let Some(returned) = contracted.summary.returns.known().and_then(Option::as_ref) {
             contract_returns.insert(

@@ -977,6 +977,209 @@ struct BoundInitializer {
     whole: bool,
 }
 
+/// The parameters each function of `file` reads a property of, or coerces,
+/// directly in its own body (item A of ways-to-improve § 3.3): the proposal
+/// input from which the generator describes a non-call `callbacks` item
+/// (ADR 0006: the generator derives the item itself, and the implementation
+/// census confirms it site for site).
+///
+/// Syntactic and exact, from Oxc's own scope resolution, and deliberately
+/// narrow: the parameter is a plain identifier with no default and is written
+/// nowhere in the file; the use sits in the function's own body, outside any
+/// nested callable; for a `get`, the member's object -- after transparent
+/// wrappers only -- *is* the parameter's identifier, the member is not the
+/// callee of a call (`v.x()` is a member invocation, not a described read),
+/// and it is not in write position; for a `coerce`, the coercing operand is
+/// the parameter's identifier. Anything wider (an alias, a chain root, a
+/// destructured name) derives nothing, and the census then refuses the
+/// enumeration as understating -- the fail-closed direction.
+fn direct_protocol_parameters(
+    file: &solid_facts::FileFacts,
+    nodes: &[SummaryNode],
+    nodes_by_path: &HashMap<String, Vec<usize>>,
+) -> Vec<(Span, crate::contract_semantics::InvokeProtocol, usize)> {
+    use crate::contract_semantics::InvokeProtocol;
+    let ast = &file.ast;
+    let Some(indices) = nodes_by_path.get(file.path.as_str()) else {
+        return Vec::new();
+    };
+    let functions_by_body = ast
+        .functions
+        .iter()
+        .map(|function| (function.body, function))
+        .collect::<HashMap<_, _>>();
+    // The candidate parameters first: a plain identifier with no default, of a
+    // function a summary node names. Everything below is keyed by the
+    // declaration span, so each table is walked once per file however many
+    // functions it holds.
+    let mut parameters = HashMap::<Span, (Span, usize, Span)>::new();
+    for node in indices.iter().map(|index| &nodes[*index]) {
+        let Some(function) = functions_by_body.get(&node.body) else {
+            continue;
+        };
+        for (index, parameter) in function.parameters.iter().enumerate() {
+            if let [name] = parameter.names.as_slice()
+                && parameter.shape == solid_facts::ast::BindingShape::Identifier
+                && parameter.initializer.is_none()
+            {
+                parameters.insert(name.span, (node.span, index, function.body));
+            }
+        }
+    }
+    if parameters.is_empty() {
+        return Vec::new();
+    }
+    // Every write position, sorted by start with the running maximum end, so
+    // "does some write contain this span" is a binary search and a short walk
+    // back rather than a scan of every assignment.
+    let mut written = ast
+        .assignments
+        .iter()
+        .map(|assignment| assignment.target)
+        .chain(ast.iteration_targets.iter().copied())
+        .collect::<Vec<_>>();
+    written.sort_unstable_by_key(|target| (target.start, target.end));
+    let reach = written
+        .iter()
+        .scan(0, |end, target| {
+            *end = (*end).max(target.end);
+            Some(*end)
+        })
+        .collect::<Vec<_>>();
+    let in_write = |span: Span| {
+        let mut index = written.partition_point(|target| target.start <= span.start);
+        while index > 0 {
+            index -= 1;
+            if reach[index] < span.end {
+                return false;
+            }
+            if written[index].contains(span) {
+                return true;
+            }
+        }
+        false
+    };
+    let written_parameters = ast
+        .reference_declarations
+        .iter()
+        .filter(|(reference, target)| parameters.contains_key(target) && in_write(*reference))
+        .map(|(_, target)| *target)
+        .collect::<HashSet<_>>();
+    let unwritten = parameters
+        .keys()
+        .copied()
+        .filter(|declaration| !written_parameters.contains(declaration))
+        .collect::<HashSet<_>>();
+    let callees = ast
+        .calls
+        .iter()
+        .flat_map(|call| [call.callee, ast.peel_ts_sugar_span(call.callee)])
+        .collect::<HashSet<_>>();
+    // The parameter a span names directly, after transparent wrappers only,
+    // when the use sits in that parameter's own function body and outside any
+    // callable nested in it.
+    let parameter_at = |span: Span, used_at: Span| {
+        let declaration = ast.reference_declaration(ast.peel_ts_sugar_span(span))?;
+        if !unwritten.contains(&declaration) {
+            return None;
+        }
+        let (owner, index, body) = parameters[&declaration];
+        crate::owners::containing_ast_function(ast, used_at)
+            .is_some_and(|innermost| innermost.body == body)
+            .then_some((owner, index))
+    };
+    let mut uses = std::collections::BTreeSet::new();
+    for member in &ast.members {
+        if callees.contains(&member.span) || in_write(member.span) {
+            continue;
+        }
+        if let Some((owner, index)) = parameter_at(member.object, member.span) {
+            uses.insert((owner, InvokeProtocol::Get, index));
+        }
+    }
+    for operand in &ast.coercing_operands {
+        if let Some((owner, index)) = parameter_at(*operand, *operand) {
+            uses.insert((owner, InvokeProtocol::Coerce, index));
+        }
+    }
+    // An iteration of a parameter's value, or of a value reached through its
+    // members (`const [x, y] = point`, `const [xi] = polygon[i]`, `for (const
+    // item of options.items)`), anywhere in the function, nested callables
+    // included, and an array pattern in parameter position. The generator
+    // derives no `iterate` item, so any of these leaves a `callbacks`
+    // enumeration it could not describe whole; recorded so it declines to
+    // propose rather than publish a closure the census must refuse. Unlike the
+    // two tables above this asks nothing of writes or of the innermost frame:
+    // it only ever withholds a proposal.
+    let member_objects = ast
+        .members
+        .iter()
+        .map(|member| (member.span, member.object))
+        .collect::<HashMap<_, _>>();
+    let all_parameters = indices
+        .iter()
+        .map(|index| &nodes[*index])
+        .filter_map(|node| Some((node, *functions_by_body.get(&node.body)?)))
+        .flat_map(|(node, function)| {
+            function
+                .parameters
+                .iter()
+                .enumerate()
+                .flat_map(move |(index, parameter)| {
+                    parameter
+                        .names
+                        .iter()
+                        .map(move |name| (name.span, (node.span, index, function.body)))
+                })
+        })
+        .collect::<HashMap<_, _>>();
+    for operand in &ast.iterated_operands {
+        let mut root = ast.peel_ts_sugar_span(*operand);
+        let mut hops = 0;
+        while let Some(object) = member_objects.get(&root) {
+            root = ast.peel_ts_sugar_span(*object);
+            hops += 1;
+            if hops > 64 {
+                break;
+            }
+        }
+        if let Some(&(owner, index, body)) = ast
+            .reference_declaration(root)
+            .and_then(|declaration| all_parameters.get(&declaration))
+            && body.contains(*operand)
+            && parameters_by_shape_is_whole(ast, body, index)
+        {
+            uses.insert((owner, InvokeProtocol::Iterate, index));
+        }
+    }
+    for node in indices.iter().map(|index| &nodes[*index]) {
+        let Some(function) = functions_by_body.get(&node.body) else {
+            continue;
+        };
+        for (index, parameter) in function.parameters.iter().enumerate() {
+            if parameter.shape == solid_facts::ast::BindingShape::Array {
+                uses.insert((node.span, InvokeProtocol::Iterate, index));
+            }
+        }
+    }
+    uses.into_iter().collect()
+}
+
+/// Whether the parameter at `index` of the function whose body is `body` binds
+/// the argument itself (a plain identifier), so a reference to one of its
+/// names is a reference to the caller's value rather than to one slot of it.
+fn parameters_by_shape_is_whole(
+    ast: &solid_facts::ast::AstFacts,
+    body: Span,
+    index: usize,
+) -> bool {
+    ast.functions
+        .iter()
+        .find(|function| function.body == body)
+        .and_then(|function| function.parameters.get(index))
+        .is_some_and(|parameter| parameter.shape == solid_facts::ast::BindingShape::Identifier)
+}
+
 #[derive(Clone, Copy)]
 struct InterproceduralGraphSymbols<'a> {
     entities: &'a EntitySymbols,
@@ -1006,6 +1209,8 @@ fn discover_interprocedural_graph(
         .flat_map(|parameter| &parameter.names)
         .filter_map(|name| symbols.entities.at(file.path.as_str(), name.span).cloned())
         .collect::<HashSet<_>>();
+    contribution.direct_protocol_parameters =
+        direct_protocol_parameters(file, nodes, nodes_by_path);
     for (call_index, call) in file.ast.calls.iter().enumerate() {
         let Some(owner) = containing_summary_function_indexed(
             nodes,
@@ -1390,6 +1595,7 @@ fn discover_interprocedural_graph(
                             accessors,
                         ),
                         owner: None,
+                        protocol: crate::contract_semantics::InvokeProtocol::Call,
                     },
                 ));
             } else {
@@ -1415,7 +1621,9 @@ fn discover_interprocedural_graph(
             }
         }
         if !ambiguous_dispatch && let Some(callbacks) = contracts.callbacks.get(symbol) {
-            for callback in callbacks {
+            // The map holds invocation rows only (`source_discovery`); a
+            // non-call row is no edge, no invoked parameter and no re-push.
+            for callback in callbacks.iter().filter(|callback| callback.is_invocation()) {
                 let Some(argument) = call.arguments.get(callback.parameter) else {
                     continue;
                 };
@@ -1462,6 +1670,7 @@ fn discover_interprocedural_graph(
                                 clears_tracking: callback.clears_tracking,
                                 arguments: callback.arguments.clone(),
                                 owner: None,
+                                protocol: callback.protocol,
                             },
                         ));
                     }
@@ -1698,6 +1907,7 @@ fn discover_interprocedural_graph(
                             clears_tracking: detaches,
                             arguments: Vec::new(),
                             owner: None,
+                            protocol: crate::contract_semantics::InvokeProtocol::Call,
                         },
                     ));
                 } else {
@@ -1809,6 +2019,7 @@ fn discover_interprocedural_graph(
                                 clears_tracking: false,
                                 arguments: Vec::new(),
                                 owner: None,
+                                protocol: crate::contract_semantics::InvokeProtocol::Call,
                             },
                         ));
                     }
@@ -2469,7 +2680,9 @@ fn callback_wrapper_at(
                 .callbacks
                 .get(symbol)?
                 .iter()
-                .find(|callback| callback.parameter == argument)
+                // A non-call row (a property read or coercion of the
+                // argument) wraps nothing: it is not an invocation of it.
+                .find(|callback| callback.parameter == argument && callback.is_invocation())
                 .map(|callback| std::borrow::Cow::Owned(callback.execution.clone()))
         })?;
     Some(match execution.as_ref() {
@@ -4309,6 +4522,7 @@ struct InterproceduralGraphAssembly<'a> {
     edges: &'a mut [Vec<usize>],
     invoked_parameters: &'a mut [Vec<usize>],
     direct_callback_parameters: &'a mut [Vec<usize>],
+    direct_protocol_parameters: &'a mut [Vec<(crate::contract_semantics::InvokeProtocol, usize)>],
     escaped_parameters: &'a mut [Vec<usize>],
     invoked_parameter_members: &'a mut [Vec<ParameterMemberInvocation>],
     returned_bindings: &'a mut Vec<(SymbolId, SymbolId)>,
@@ -4353,6 +4567,13 @@ impl InterproceduralGraphAssembly<'_> {
                 && !self.direct_callback_parameters[owner].contains(parameter)
             {
                 self.direct_callback_parameters[owner].push(*parameter);
+            }
+        }
+        for (owner, protocol, parameter) in &contribution.direct_protocol_parameters {
+            if let Some(owner) = node_index(*owner)
+                && !self.direct_protocol_parameters[owner].contains(&(*protocol, *parameter))
+            {
+                self.direct_protocol_parameters[owner].push((*protocol, *parameter));
             }
         }
         for (owner, parameter) in &contribution.escaped_parameters {
@@ -5306,6 +5527,8 @@ fn interprocedural_reads(
     let mut edges = vec![Vec::<usize>::new(); nodes.len()];
     let mut invoked_parameters = vec![Vec::<usize>::new(); nodes.len()];
     let mut direct_callback_parameters = vec![Vec::<usize>::new(); nodes.len()];
+    let mut direct_protocol_parameters =
+        vec![Vec::<(crate::contract_semantics::InvokeProtocol, usize)>::new(); nodes.len()];
     let mut escaped_parameters = vec![Vec::<usize>::new(); nodes.len()];
     let mut invoked_parameter_members = vec![Vec::<ParameterMemberInvocation>::new(); nodes.len()];
     let mut returned_binding_candidates = Vec::new();
@@ -5326,6 +5549,7 @@ fn interprocedural_reads(
             edges: &mut edges,
             invoked_parameters: &mut invoked_parameters,
             direct_callback_parameters: &mut direct_callback_parameters,
+            direct_protocol_parameters: &mut direct_protocol_parameters,
             escaped_parameters: &mut escaped_parameters,
             invoked_parameter_members: &mut invoked_parameter_members,
             returned_bindings: &mut returned_binding_candidates,
@@ -5470,6 +5694,7 @@ fn interprocedural_reads(
                     clears_tracking,
                     arguments: callback.arguments.clone(),
                     owner: callback.owner.clone(),
+                    protocol: callback.protocol,
                 };
                 if !callback_summaries[*owner].contains(&forwarded) {
                     callback_summaries[*owner].push(forwarded);
@@ -5780,6 +6005,7 @@ fn interprocedural_reads(
                 && equivalent_callbacks(&callback_summaries[*candidate], &callback_summaries[first])
                 && invoked_parameters[*candidate] == invoked_parameters[first]
                 && direct_callback_parameters[*candidate] == direct_callback_parameters[first]
+                && direct_protocol_parameters[*candidate] == direct_protocol_parameters[first]
                 && invoked_parameter_members[*candidate] == invoked_parameter_members[first]
                 && nodes[*candidate].r#async == nodes[first].r#async
         });
@@ -6230,6 +6456,7 @@ fn interprocedural_reads(
         structured_returns: &structured_returns,
         callbacks: &callback_summaries,
         direct_callback_parameters: &direct_callback_parameters,
+        direct_protocol_parameters: &direct_protocol_parameters,
         escaped_parameters: &escaped_parameters,
         invoked_parameter_members: &invoked_parameter_members,
         semantics: ContractSemantics { source_kinds },
@@ -6367,6 +6594,7 @@ mod tests {
             clears_tracking: false,
             arguments: Vec::new(),
             owner: None,
+            protocol: crate::contract_semantics::InvokeProtocol::Call,
         };
         let repeated = [callback(0, "deferred"), callback(0, "deferred")];
         let distinct = [callback(0, "deferred"), callback(1, "inline")];
@@ -6386,6 +6614,7 @@ mod tests {
             clears_tracking: false,
             arguments: Vec::new(),
             owner: Some("inherited".into()),
+            protocol: crate::contract_semantics::InvokeProtocol::Call,
         };
         let leaf = ContractCallback {
             owner: Some("leaf".into()),

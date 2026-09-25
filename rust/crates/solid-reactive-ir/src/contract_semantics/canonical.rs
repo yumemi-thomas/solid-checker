@@ -57,7 +57,25 @@ pub(super) fn semantic_digest(
             .values()
             .any(|export| !export.call.claims.computations.items().is_empty())
     });
+    // The invoke-protocol family (item A of ways-to-improve § 3.3) is the same
+    // shape once more: a contract in which no operation states a non-call
+    // protocol emits the stream it always did, byte for byte, and keeps its
+    // digest and its receipts; one that states any writes the marker first
+    // and the protocol of every operation.
+    let invoke_protocols = artifact_cases.iter().any(|case| {
+        case.exports.values().any(|export| {
+            export
+                .call
+                .operations
+                .iter()
+                .any(|operation| operation.protocol.is_some())
+        })
+    });
     let mut writer = CanonicalWriter::new();
+    if invoke_protocols {
+        writer.text(SEMANTIC_INVOKE_PROTOCOL_MARKER);
+    }
+    writer.invoke_protocols = invoke_protocols;
     if computations {
         writer.text("solid-checker:semantic-computations:v1");
     }
@@ -152,7 +170,50 @@ pub(super) fn recipe_address(
     path: &SemanticClaimPath,
     case_bytes: &Digest,
 ) -> Result<RecipeAddress, ModelError> {
+    let referenced = |operation: &OperationId| {
+        export
+            .operation(&operation.0)
+            .ok_or_else(|| ModelError::Unaddressable {
+                reason: format!("the claim references missing operation {}", operation.0),
+            })
+    };
+    // The operations this claim's value writes, in the order it writes them.
+    let operations = match path {
+        SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Callbacks)) => export
+            .call
+            .claims
+            .callbacks
+            .items()
+            .iter()
+            .map(|callback| referenced(&callback.operation))
+            .collect::<Result<Vec<_>, _>>()?,
+        SemanticClaimPath::Domain(ClaimPath::Call(domain)) => export
+            .call
+            .claims
+            .operation_claim(*domain)
+            .expect("every non-callback call domain is an operation set")
+            .items()
+            .iter()
+            .map(referenced)
+            .collect::<Result<Vec<_>, _>>()?,
+        SemanticClaimPath::Operation(operation) => vec![referenced(operation)?],
+        SemanticClaimPath::Domain(_) => {
+            return Err(ModelError::Unaddressable {
+                reason: "only call-domain and operation subjects carry a recipe address".into(),
+            });
+        }
+    };
     let mut writer = CanonicalWriter::new();
+    // The invoke-protocol family, per claim: a claim none of whose operations
+    // states a non-call protocol writes exactly the stream it wrote before the
+    // field existed, so every address already in a recipe corpus still binds.
+    if operations
+        .iter()
+        .any(|operation| operation.protocol.is_some())
+    {
+        writer.text(SEMANTIC_INVOKE_PROTOCOL_MARKER);
+        writer.invoke_protocols = true;
+    }
     writer.local_ids = true;
     writer.address_case = Some(artifact_case.id.clone());
     writer.composed_provenance = true;
@@ -162,20 +223,9 @@ pub(super) fn recipe_address(
     writer.digest(case_bytes);
     writer.export_identity(&export.identity);
     writer.semantic_claim_path(path);
-    let referenced = |operation: &OperationId| {
-        export
-            .operation(&operation.0)
-            .ok_or_else(|| ModelError::Unaddressable {
-                reason: format!("the claim references missing operation {}", operation.0),
-            })
-    };
     match path {
         SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Callbacks)) => {
-            let callbacks = &export.call.claims.callbacks;
-            writer.knowledge(callbacks, CanonicalWriter::callback);
-            for callback in callbacks.items() {
-                writer.operation(referenced(&callback.operation)?);
-            }
+            writer.knowledge(&export.call.claims.callbacks, CanonicalWriter::callback);
         }
         SemanticClaimPath::Domain(ClaimPath::Call(domain)) => {
             let set = export
@@ -184,18 +234,11 @@ pub(super) fn recipe_address(
                 .operation_claim(*domain)
                 .expect("every non-callback call domain is an operation set");
             writer.knowledge(set, CanonicalWriter::operation_id);
-            for operation in set.items() {
-                writer.operation(referenced(operation)?);
-            }
         }
-        SemanticClaimPath::Operation(operation) => {
-            writer.operation(referenced(operation)?);
-        }
-        SemanticClaimPath::Domain(_) => {
-            return Err(ModelError::Unaddressable {
-                reason: "only call-domain and operation subjects carry a recipe address".into(),
-            });
-        }
+        _ => {}
+    }
+    for operation in operations {
+        writer.operation(operation);
     }
     Ok(RecipeAddress::from_sha256(writer.finish()))
 }
@@ -234,6 +277,11 @@ struct CanonicalWriter {
     /// Whether this stream belongs to the `computations` family (ADR 0114).
     /// Set from the contract by [`semantic_digest`], false everywhere else.
     computations: bool,
+    /// Whether this stream belongs to the invoke-protocol family: set from
+    /// the contract by [`semantic_digest`] and from the claim by
+    /// [`recipe_address`], false everywhere else. When false an operation's
+    /// encoding is the one it had before the field existed, byte for byte.
+    invoke_protocols: bool,
 }
 
 impl CanonicalWriter {
@@ -246,6 +294,7 @@ impl CanonicalWriter {
             proposed_closure: false,
             initialization: false,
             computations: false,
+            invoke_protocols: false,
         }
     }
 
@@ -623,6 +672,24 @@ impl CanonicalWriter {
         if self.composed_provenance {
             self.option(operation.composed_from.as_ref(), Self::composed_from);
         }
+        // Written only in the invoke-protocol family, through `option`, so a
+        // call (`None`) and each protocol are distinct inside it and the
+        // family itself is absent from every stream that states none.
+        if self.invoke_protocols {
+            self.option(operation.protocol.as_ref(), |writer, protocol| {
+                writer.invoke_protocol(*protocol);
+            });
+        }
+    }
+
+    fn invoke_protocol(&mut self, protocol: InvokeProtocol) {
+        self.u8(match protocol {
+            InvokeProtocol::Call => 0,
+            InvokeProtocol::Get => 1,
+            InvokeProtocol::Iterate => 2,
+            InvokeProtocol::Coerce => 3,
+            InvokeProtocol::HasInstance => 4,
+        });
     }
 
     fn composed_from(&mut self, composed: &ComposedFrom) {

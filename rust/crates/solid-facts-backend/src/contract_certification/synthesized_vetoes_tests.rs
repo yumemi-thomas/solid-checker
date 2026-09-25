@@ -419,6 +419,7 @@ fn return_operation() -> Operation {
         }),
         resources: Default::default(),
         composed_from: None,
+        protocol: None,
     }
 }
 
@@ -1128,5 +1129,177 @@ fn the_described_callbacks_observation_is_selected_from_the_exact_enumeration() 
         candidate_observation("callbacks", &export(vec![item(64, "a")], vec![invoke("a")])),
         None,
         "an index the mask cannot hold is not synthesized"
+    );
+}
+
+fn masks(call: u64, get: u64, coerce: u64) -> ProtocolMasks {
+    ProtocolMasks {
+        call,
+        get,
+        coerce,
+        ..ProtocolMasks::default()
+    }
+}
+
+/// Item A of ways-to-improve § 3.3: the per-protocol module is quiet for
+/// exactly the described uses -- `access`'s `.length` read and call of slot 0,
+/// `compare`'s coercions of slots 0 and 1, inside the sample call -- and loud
+/// for a use by an undescribed protocol, of an undescribed slot, or after the
+/// call returned. Its Proxy answers as the target does, so `.length` reads 0
+/// and `access` reaches its call branch.
+#[test]
+fn the_described_protocols_module_emits_outside_the_description_only() {
+    let invoked = |observed: &ObservationResult| {
+        observed
+            .markers
+            .iter()
+            .any(|marker| marker == "callback-invocation")
+    };
+    let any = value_fact(json!({"unknown": true}));
+    let callable = [signature(&[callable_fact()])];
+    let pair = [signature(&[any.clone(), any])];
+    let object = value_fact(json!({"mayBeObject": true}));
+    let objects = [signature(&[object.clone(), object])];
+
+    let access = "export const subject = (v) => typeof v === \"function\" && !v.length ? v() : v;";
+    let quiet = execute(
+        access,
+        Observation::DescribedProtocols(masks(1, 1, 0)),
+        &callable,
+    );
+    assert_eq!(quiet.error, None);
+    assert!(!invoked(&quiet), "{quiet:?}");
+    // The Proxy's `.length` is the zero-arity target's own, so the call branch
+    // runs: describing the read alone is contradicted by that call.
+    let call_undescribed = execute(
+        access,
+        Observation::DescribedProtocols(masks(0, 1, 0)),
+        &callable,
+    );
+    assert!(invoked(&call_undescribed), "{call_undescribed:?}");
+
+    let compare = "export const subject = (a, b) => a < b ? -1 : a > b ? 1 : 0;";
+    let quiet = execute(
+        compare,
+        Observation::DescribedProtocols(masks(0, 0, 0b11)),
+        &pair,
+    );
+    assert_eq!(quiet.error, None);
+    assert!(!invoked(&quiet), "{quiet:?}");
+    let one_slot = execute(
+        compare,
+        Observation::DescribedProtocols(masks(0, 0, 0b01)),
+        &pair,
+    );
+    assert!(invoked(&one_slot), "slot 1 is coerced too: {one_slot:?}");
+
+    for (implementation, described) in [
+        // The falsifying variant: `get 0` described, and the export also
+        // coerces parameter 0.
+        (
+            "export const subject = (v) => v.length + v;",
+            masks(0, 1, 0),
+        ),
+        // A read deferred past the sample call.
+        (
+            "export const subject = (v) => { queueMicrotask(() => v.length); };",
+            masks(0, 1, 0),
+        ),
+        // A read of an undescribed slot.
+        (
+            "export const subject = (a, b) => a.x + b.y;",
+            masks(0, 1, 0),
+        ),
+        // An iteration no item describes.
+        (
+            "export const subject = (v) => { for (const x of v) {} };",
+            masks(0, 1, 0),
+        ),
+    ] {
+        let observed = execute(
+            implementation,
+            Observation::DescribedProtocols(described),
+            &objects,
+        );
+        assert!(invoked(&observed), "{implementation}: {observed:?}");
+    }
+
+    let source = module_source(
+        "data:text/javascript,",
+        "subject",
+        Observation::DescribedProtocols(masks(1, 1, 0)),
+        &callable,
+    );
+    assert!(source.contains("slotAt(0, \"function\")"), "{source}");
+    assert!(
+        source.contains(
+            "const described = { call: new Set([0]), get: new Set([0]), iterate: new Set([]), coerce: new Set([]), \"has-instance\": new Set([]) };"
+        ),
+        "{source}"
+    );
+    assert!(source.contains("Reflect.get(t, key, receiver)"), "{source}");
+}
+
+/// A described enumeration selects the per-protocol observation exactly when
+/// one of its items is a non-call use, and never counts that item as a call
+/// slot; a call-only enumeration keeps ADR 0100's module.
+#[test]
+fn a_non_call_item_selects_the_protocol_observation_and_is_no_call_slot() {
+    use solid_reactive_ir::contract_semantics::{CallbackInvocation, InvokeProtocol, ValueSource};
+    let invoke = |id: &str, protocol: Option<InvokeProtocol>| Operation {
+        id: OperationId(id.into()),
+        kind: OperationKind::Invoke,
+        output: None,
+        tracking: Tracking::AmbientAtExecution,
+        protocol,
+        ..return_operation()
+    };
+    let export = |items: Vec<CallbackInvocation>, operations: Vec<Operation>| {
+        let mut export = export_with_returns(KnowledgeSet::Unknown, operations);
+        export.call = CallSemantics::new(
+            CallClaims {
+                callbacks: KnowledgeSet::complete(items),
+                ..CallClaims::default()
+            },
+            export.call.operations.clone(),
+            vec![],
+            vec![],
+            GuardPartition::default(),
+        );
+        export
+    };
+    let item = |index: u16, operation: &str| CallbackInvocation {
+        from: ValueSource::Parameter {
+            index,
+            path: vec![],
+        },
+        operation: OperationId(operation.into()),
+    };
+    assert_eq!(
+        candidate_observation(
+            "callbacks",
+            &export(
+                vec![item(0, "a"), item(0, "b"), item(2, "c")],
+                vec![
+                    invoke("a", None),
+                    invoke("b", Some(InvokeProtocol::Get)),
+                    invoke("c", Some(InvokeProtocol::Coerce)),
+                ]
+            )
+        ),
+        Some(Observation::DescribedProtocols(ProtocolMasks {
+            call: 0b001,
+            get: 0b001,
+            coerce: 0b100,
+            ..ProtocolMasks::default()
+        }))
+    );
+    assert_eq!(
+        candidate_observation(
+            "callbacks",
+            &export(vec![item(1, "a")], vec![invoke("a", None)])
+        ),
+        Some(Observation::DescribedCallbacks(0b10)),
+        "a call-only enumeration is ADR 0100's observation, unchanged"
     );
 }

@@ -171,6 +171,35 @@ pub struct AstFacts {
     /// is this checker's to report.
     #[serde(default)]
     pub coercive_operands: Vec<CoerciveOperandFact>,
+    /// Every operand span of an operator that applies ToPrimitive to it, by
+    /// span, sorted: the binary and compound-assignment operators the Type
+    /// Facts producer's `coercingBinaryOperators` lists (arithmetic, the four
+    /// relational comparisons, loose equality, shifts and bitwise operators,
+    /// and each compound assignment of one), the prefix `+ - ~`, the prefix
+    /// and postfix `++ --`, and each substitution of an untagged template
+    /// literal.
+    ///
+    /// A different fact from [`AstFacts::coercive_operands`], deliberately:
+    /// that table is about positions where TypeScript *accepts* a function
+    /// operand, so it omits binary arithmetic, and it includes `!` (ToBoolean,
+    /// which runs no user code). This one is about the runtime protocol --
+    /// which operands can reach a value's `Symbol.toPrimitive`, `valueOf` or
+    /// `toString` -- and is read by the contract generator to describe a
+    /// coercion of a caller's argument, never by a rule.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub coercing_operands: Vec<Span>,
+    /// Every value the iteration protocol is driven over, by span, sorted: the
+    /// iterated operand of a `for…of` (and `for await…of`), of an array or
+    /// argument spread (an object spread is a property enumeration, not an
+    /// iteration, and is absent), of `yield*`, and the initializer of an array
+    /// binding pattern or the right side of an array assignment pattern.
+    ///
+    /// Read by the contract generator only, to decline describing a
+    /// `callbacks` enumeration it could not describe whole: it derives no
+    /// `iterate` item, so an iteration of a caller's value leaves the
+    /// enumeration undescribable.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub iterated_operands: Vec<Span>,
     #[serde(default)]
     pub assignments: Vec<AssignmentFact>,
     #[serde(default)]
@@ -1150,6 +1179,8 @@ impl AstFacts {
             object_properties: Vec::new(),
             template_literals: Vec::new(),
             coercive_operands: Vec::new(),
+            coercing_operands: Vec::new(),
+            iterated_operands: Vec::new(),
             assignments: Vec::new(),
             if_regions: Vec::new(),
             jump_statements: Vec::new(),
@@ -1281,6 +1312,8 @@ struct Collector<'s, 'semantic> {
     object_properties: Vec<ObjectPropertyFact>,
     template_literals: Vec<TemplateLiteralFact>,
     coercive_operands: Vec<CoerciveOperandFact>,
+    coercing_operands: Vec<Span>,
+    iterated_operands: Vec<Span>,
     assignments: Vec<AssignmentFact>,
     if_regions: Vec<IfRegionFact>,
     jump_statements: Vec<Span>,
@@ -1414,6 +1447,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             object_properties: Vec::new(),
             template_literals: Vec::new(),
             coercive_operands: Vec::new(),
+            coercing_operands: Vec::new(),
+            iterated_operands: Vec::new(),
             assignments: Vec::new(),
             if_regions: Vec::new(),
             jump_statements: Vec::new(),
@@ -1459,6 +1494,10 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.object_properties.sort_by_key(|fact| fact.span);
         self.template_literals.sort_by_key(|fact| fact.span);
         self.coercive_operands.sort_by_key(|fact| fact.span);
+        self.coercing_operands.sort_unstable();
+        self.coercing_operands.dedup();
+        self.iterated_operands.sort_unstable();
+        self.iterated_operands.dedup();
         self.assignments.sort_by_key(|fact| fact.target);
         self.if_regions.sort_by_key(|fact| fact.consequent);
         self.jump_statements.sort_unstable();
@@ -1497,6 +1536,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             object_properties: self.object_properties,
             template_literals: self.template_literals,
             coercive_operands: self.coercive_operands,
+            coercing_operands: self.coercing_operands,
+            iterated_operands: self.iterated_operands,
             assignments: self.assignments,
             if_regions: self.if_regions,
             jump_statements: self.jump_statements,
@@ -2199,6 +2240,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_variable_declarator(&mut self, declaration: &VariableDeclarator<'a>) {
+        if matches!(declaration.id, BindingPattern::ArrayPattern(_))
+            && let Some(init) = &declaration.init
+        {
+            self.iterated_operands.push(span(init.span()));
+        }
         let initializer = declaration.init.as_ref().map(GetSpan::span);
         let initializer_function = declaration.init.as_ref().is_some_and(|expression| {
             matches!(
@@ -2658,6 +2704,30 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             });
         }
         let plain = expression.operator == AssignmentOperator::Assign;
+        if plain && matches!(expression.left, AssignmentTarget::ArrayAssignmentTarget(_)) {
+            self.iterated_operands.push(span(expression.right.span()));
+        }
+        // A compound assignment coerces exactly as its binary operator does:
+        // `total += obj` is `total + obj`. The logical assignments coerce
+        // nothing.
+        if matches!(
+            expression.operator,
+            AssignmentOperator::Addition
+                | AssignmentOperator::Subtraction
+                | AssignmentOperator::Multiplication
+                | AssignmentOperator::Exponential
+                | AssignmentOperator::Division
+                | AssignmentOperator::Remainder
+                | AssignmentOperator::ShiftLeft
+                | AssignmentOperator::ShiftRight
+                | AssignmentOperator::ShiftRightZeroFill
+                | AssignmentOperator::BitwiseAnd
+                | AssignmentOperator::BitwiseOR
+                | AssignmentOperator::BitwiseXOR
+        ) {
+            self.coercing_operands
+                .extend([span(expression.left.span()), span(expression.right.span())]);
+        }
         let inner = expression.right.get_inner_expression();
         self.assignments.push(AssignmentFact {
             target: span(expression.left.span()),
@@ -2713,6 +2783,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             call_initializer: None,
             array_slots: Vec::new(),
         });
+        // Prefix and postfix `++`/`--` apply ToNumeric to the old value.
+        self.coercing_operands
+            .push(span(expression.argument.span()));
         walk::walk_update_expression(self, expression);
     }
 
@@ -2801,6 +2874,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_for_of_statement(&mut self, statement: &oxc_ast::ast::ForOfStatement<'a>) {
+        self.iterated_operands.push(span(statement.right.span()));
         self.conditional_flow_depth += 1;
         walk::walk_for_of_statement(self, statement);
         self.conditional_flow_depth -= 1;
@@ -2873,6 +2947,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_template_literal(&mut self, literal: &oxc_ast::ast::TemplateLiteral<'a>) {
+        // Untagged only (see `visit_tagged_template_expression`): each
+        // substitution is converted with ToString.
+        self.coercing_operands.extend(
+            literal
+                .expressions
+                .iter()
+                .map(|interpolated| span(interpolated.span())),
+        );
         self.template_literals.push(TemplateLiteralFact {
             span: span(literal.span),
             expressions: literal
@@ -3097,6 +3179,33 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         walk::walk_computed_member_expression(self, member);
     }
 
+    fn visit_array_expression_element(&mut self, element: &ArrayExpressionElement<'a>) {
+        if let ArrayExpressionElement::SpreadElement(spread) = element {
+            self.iterated_operands.push(span(spread.argument.span()));
+        }
+        walk::walk_array_expression_element(self, element);
+    }
+
+    // `walk_arguments` visits a spread argument through `visit_spread_element`
+    // directly, never through `visit_argument`, so the list is the hook.
+    fn visit_arguments(&mut self, arguments: &oxc_allocator::Vec<'a, Argument<'a>>) {
+        for argument in arguments {
+            if let Argument::SpreadElement(spread) = argument {
+                self.iterated_operands.push(span(spread.argument.span()));
+            }
+        }
+        walk::walk_arguments(self, arguments);
+    }
+
+    fn visit_yield_expression(&mut self, expression: &oxc_ast::ast::YieldExpression<'a>) {
+        if expression.delegate
+            && let Some(argument) = &expression.argument
+        {
+            self.iterated_operands.push(span(argument.span()));
+        }
+        walk::walk_yield_expression(self, expression);
+    }
+
     fn visit_spread_element(&mut self, spread: &SpreadElement<'a>) {
         self.spreads.push(SpreadFact {
             span: span(spread.span),
@@ -3107,6 +3216,46 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_binary_expression(&mut self, expression: &BinaryExpression<'a>) {
         use oxc_syntax::operator::BinaryOperator;
+
+        // The producer's `coercingBinaryOperators`, exactly: every operator
+        // that applies ToPrimitive to both operands. `===`/`!==`, `in` and
+        // `instanceof` are absent there and here. And its one exception, also
+        // exactly (`binaryFormLocked`): a loose (in)equality with the `null`
+        // keyword itself as an operand -- unparenthesized, as the producer
+        // compares the operand's own node kind -- takes IsLooselyEqual's
+        // null arm and applies ToPrimitive to nothing. `undefined` is an
+        // identifier there, not a keyword, and stays a coercion on both sides.
+        let null_comparison = matches!(
+            expression.operator,
+            BinaryOperator::Equality | BinaryOperator::Inequality
+        ) && (matches!(&expression.left, Expression::NullLiteral(_))
+            || matches!(&expression.right, Expression::NullLiteral(_)));
+        if !null_comparison
+            && matches!(
+                expression.operator,
+                BinaryOperator::Addition
+                    | BinaryOperator::Subtraction
+                    | BinaryOperator::Multiplication
+                    | BinaryOperator::Exponential
+                    | BinaryOperator::Division
+                    | BinaryOperator::Remainder
+                    | BinaryOperator::LessThan
+                    | BinaryOperator::GreaterThan
+                    | BinaryOperator::LessEqualThan
+                    | BinaryOperator::GreaterEqualThan
+                    | BinaryOperator::Equality
+                    | BinaryOperator::Inequality
+                    | BinaryOperator::ShiftLeft
+                    | BinaryOperator::ShiftRight
+                    | BinaryOperator::ShiftRightZeroFill
+                    | BinaryOperator::BitwiseAnd
+                    | BinaryOperator::BitwiseOR
+                    | BinaryOperator::BitwiseXOR
+            )
+        {
+            self.coercing_operands
+                .extend([span(expression.left.span()), span(expression.right.span())]);
+        }
 
         // Most binary operators reject function operands themselves, so a
         // checker finding there would duplicate TypeScript. Keep only the
@@ -3153,6 +3302,15 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 span: span(expression.argument.span()),
                 kind,
             });
+        }
+        // The producer's `coercingUnaryOperators`: `!` is ToBoolean and runs
+        // no user code, so it is in the table above and not in this one.
+        if matches!(
+            expression.operator,
+            UnaryOperator::UnaryPlus | UnaryOperator::UnaryNegation | UnaryOperator::BitwiseNot
+        ) {
+            self.coercing_operands
+                .push(span(expression.argument.span()));
         }
         walk::walk_unary_expression(self, expression);
     }
@@ -4241,6 +4399,68 @@ renamed();"#,
                 ..usize::try_from(facts.spreads[0].argument.end).unwrap()],
             "props"
         );
+    }
+
+    /// The runtime coercion table mirrors the Type Facts producer's own
+    /// `coercingBinaryOperators`/`coercingUnaryOperators` and template
+    /// substitutions, and is a separate fact from `coercive_operands`:
+    /// binary arithmetic is in, `!` is out, and so are strict equality,
+    /// `in`, `instanceof` and a tagged template's substitutions.
+    #[test]
+    fn records_the_operands_every_coercing_operator_reaches() {
+        let source = "a < b; c * d; e == f; g += h; +i; ~j; k++; --l; `${m}`; \
+                      !n; o === p; q in r; s instanceof t; tag`${u}`; v && w; \
+                      x != null; null == y; z == undefined;";
+        let facts = extract("coercions.ts", source).unwrap();
+        let operands = facts
+            .coercing_operands
+            .iter()
+            .filter_map(|span| source.get(span.start as usize..span.end as usize))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            operands,
+            [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e",
+                "f",
+                "g",
+                "h",
+                "i",
+                "j",
+                "k",
+                "l",
+                "m",
+                "z",
+                "undefined"
+            ],
+            "a loose comparison with the `null` keyword coerces nothing, as the producer \
+             counts it; `undefined` is an identifier and still does"
+        );
+        assert!(
+            facts.coercive_operands.iter().all(|operand| source
+                .get(operand.span.start as usize..operand.span.end as usize)
+                != Some("c")),
+            "`coercive_operands` keeps its own meaning: binary arithmetic stays out"
+        );
+    }
+
+    /// The operands the iteration protocol is driven over: a `for…of` operand,
+    /// an array or argument spread, `yield*`, and an array pattern's source.
+    /// An object spread is a property enumeration and is absent.
+    #[test]
+    fn records_every_value_the_iteration_protocol_is_driven_over() {
+        let source = "for (const x of a) {} [...b]; f(...c); const [d0] = d; [e0] = e; \
+                      function* g() { yield* h; } ({ ...i }); const { j0 } = j;";
+        let facts = extract("iterations.ts", source).unwrap();
+        let operands = facts
+            .iterated_operands
+            .iter()
+            .filter_map(|span| source.get(span.start as usize..span.end as usize))
+            .collect::<Vec<_>>();
+        assert_eq!(operands, ["a", "b", "c", "d", "e", "h"]);
     }
 
     #[test]

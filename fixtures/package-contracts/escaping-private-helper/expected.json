@@ -13,7 +13,7 @@
             "sha256": "67c87e9353518624028ed881420db7708d03e701f48bf0c2eeddbc1e961fd521"
           },
           "exports": {
-            "Escaped": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "Escaped": "summary-2bea96ef54a98a43971017a6037500e6147b57eee612e1b64a4bb8a48e2097ce",
             "Isolated": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d"
           },
           "resolution": {
@@ -59,7 +59,7 @@
             "sha256": "9c69d63fb8fb4f42ccaaf6a519282448a3981835be1a51caca10e3a4ec267125"
           },
           "exports": {
-            "Direct": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "Direct": "summary-2bea96ef54a98a43971017a6037500e6147b57eee612e1b64a4bb8a48e2097ce",
             "Isolated": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece"
           },
           "resolution": {
@@ -82,7 +82,7 @@
             "sha256": "e774e6bb653d906422694023c6dbc80ede5f436a4b5666e6842450288c162c8b"
           },
           "exports": {
-            "App": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "App": "summary-2bea96ef54a98a43971017a6037500e6147b57eee612e1b64a4bb8a48e2097ce",
             "Isolated": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749"
           },
           "resolution": {
@@ -105,7 +105,7 @@
             "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
           },
           "exports": {
-            "App": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "App": "summary-2bea96ef54a98a43971017a6037500e6147b57eee612e1b64a4bb8a48e2097ce",
             "Isolated": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749"
           },
           "resolution": {
@@ -151,7 +151,7 @@
             "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
           },
           "exports": {
-            "App": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "App": "summary-2bea96ef54a98a43971017a6037500e6147b57eee612e1b64a4bb8a48e2097ce",
             "Isolated": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d"
           },
           "resolution": {
@@ -174,7 +174,7 @@
             "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
           },
           "exports": {
-            "App": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "App": "summary-2bea96ef54a98a43971017a6037500e6147b57eee612e1b64a4bb8a48e2097ce",
             "Isolated": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d"
           },
           "resolution": {
@@ -197,7 +197,7 @@
             "sha256": "90413c15159993deaa9eef6ae5088d3e05267b2d32e2c3662db132dd8c5f5dfd"
           },
           "exports": {
-            "Held": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "Held": "summary-2bea96ef54a98a43971017a6037500e6147b57eee612e1b64a4bb8a48e2097ce",
             "Isolated": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d"
           },
           "resolution": {
@@ -220,7 +220,7 @@
             "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
           },
           "exports": {
-            "App": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "App": "summary-2bea96ef54a98a43971017a6037500e6147b57eee612e1b64a4bb8a48e2097ce",
             "Isolated": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749"
           },
           "resolution": {
@@ -266,7 +266,7 @@
             "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
           },
           "exports": {
-            "App": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "App": "summary-2bea96ef54a98a43971017a6037500e6147b57eee612e1b64a4bb8a48e2097ce",
             "Isolated": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749"
           },
           "resolution": {
@@ -291,6 +291,49 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
+    "summary-2bea96ef54a98a43971017a6037500e6147b57eee612e1b64a4bb8a48e2097ce": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "protocol": "get",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "creates"
+        ]
+      },
+      "shape": "callable"
+    },
     "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d": {
       "call": {
         "callbacks": [],

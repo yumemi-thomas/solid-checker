@@ -14,7 +14,7 @@
           },
           "exports": {
             "Arrow": "summary-e1e4716f4b5a5d2a1ab7bcb3cfc7a4040d6b89945d43b1ab44d1621f8b19c4b0",
-            "Direct": "summary-e1e4716f4b5a5d2a1ab7bcb3cfc7a4040d6b89945d43b1ab44d1621f8b19c4b0",
+            "Direct": "summary-6c7f370a513559e6c4410e46306804629618eeb5b9060e8a1cb17a5b80e945e2",
             "Helper": "summary-e1e4716f4b5a5d2a1ab7bcb3cfc7a4040d6b89945d43b1ab44d1621f8b19c4b0",
             "inert": "summary-a92036a905be73d15099362eafaa5fec79503e721807be33524d979de89f07d7"
           },
@@ -40,6 +40,73 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
+    "summary-6c7f370a513559e6c4410e46306804629618eeb5b9060e8a1cb17a5b80e945e2": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-1"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-1",
+            "kind": "invoke",
+            "protocol": "get",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "creates"
+        ]
+      },
+      "shape": "callable"
+    },
     "summary-a92036a905be73d15099362eafaa5fec79503e721807be33524d979de89f07d7": {
       "call": {
         "callbacks": [

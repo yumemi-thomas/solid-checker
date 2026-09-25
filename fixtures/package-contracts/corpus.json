@@ -44,6 +44,7 @@
     "function-supertype-kind",
     "implementation-census-argument-returns",
     "implementation-census-creates",
+    "implementation-census-described-accessor",
     "implementation-census-reads",
     "implementation-census-returns",
     "json-import",

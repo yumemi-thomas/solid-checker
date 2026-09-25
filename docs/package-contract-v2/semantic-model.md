@@ -315,6 +315,50 @@ nor contradicted; the closure is a claim about the *set* of invocations. A
 primitive's position rather than from a call of the parameter itself, keeps
 the enumeration partial and is not proposed.
 
+**[Decision 2026-09-24]** four of the non-call forms above are describable as
+items too, when the value they reach is the caller's own argument: an `invoke`
+may state a `protocol` — `get` (a property read, `in`, key enumeration or
+descriptor lookup, which may run a getter or a proxy trap), `iterate`,
+`coerce` (ToPrimitive), or `has-instance` — and absence is `call`, the only
+meaning every earlier document has. A non-call item is one shape only: `from`
+a bare parameter, named by exactly one item, `at: call` on the same stack,
+`ambient-at-execution` (never `untracked`: the use runs in the caller's
+tracking context and clears nothing), count `call 0..many`, unguarded. The
+generator derives `get` and `coerce` items from its own walk — the parameter's
+own identifier as a member's object or as a coercing operand, in the export's
+own body, outside any nested callable — and never `iterate` or `has-instance`,
+which are vocabulary only for now. The census confirms them per protocol on
+ADR 0100's rules 5 to 8: every read-position accessor, coercion operand,
+iteration and `instanceof` site dispositioned into the parameter-rooted family
+must be rooted at the caller's own value (`subjectRoot: parameter`), read at
+depth 0, uncaptured, and described for that slot and protocol, and every
+described item must have such a site; a write-position accessor, an element
+and the own-result accessors still refuse as members no item describes. A
+contract stating a non-call protocol hashes in a digest family of its own
+(`solid-checker:semantic-invoke-protocol:v1`), so every other contract, and
+every recipe address of a claim naming no such operation, is unchanged. A
+consumer keeps the items — the domain stays closed — and models none of them as
+an invocation: a property read or coercion of the caller's value runs that
+value's own code, what its author wrote, and raised no obligation before.
+
+**[Decision 2026-09-25]** two limits of the census behind those items. First,
+ADR 0038's declared-signature premise classifies iteration, coercion and
+declared-member reads by the parameter's *declared* type, so for a type that
+admits an object the forms a caller-supplied Proxy would reach are absent by
+premise, not by proof (`@kobalte/utils@2.0.0-alpha.0` `isPointInPolygon`: its
+`[x, y] = point` recorded no form, and the synthesized Proxy veto contradicted
+`[get 1]`). A non-call enumeration is therefore refused whole when the census
+ran under a premise for an object-admitting parameter or read a helper's
+frame, and the generator does not propose one beside an iteration of a
+caller's value. Second, a non-call item whose positive facts find no use of a
+parameter every declared overload types primitive-only is **narrowed** out of
+its closed enumeration instead of opening it — a primitive carries no trap —
+and the census re-confirms the narrowed enumeration site for site; the
+withdrawal is recorded by name. A call item's withdrawal, and an
+object-admitting item's, open the domain as before. A loose comparison with the
+`null` keyword is not a coercion (the producer's own `binaryFormLocked`
+exception), so no `coerce` item is derived for it.
+
 ### reads
 
 `reads: [] closed` denies that one invocation of this export gives rise to any

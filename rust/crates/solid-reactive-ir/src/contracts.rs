@@ -168,6 +168,9 @@ pub fn project_export_semantics(
         member_alias_spelling: None,
         returns_argument_containers: Vec::new(),
         direct_callback_parameters: BTreeSet::new(),
+        direct_accessor_parameters: BTreeSet::new(),
+        direct_coerced_parameters: BTreeSet::new(),
+        iterated_parameters: BTreeSet::new(),
         // A projected dependency export has no body here to walk.
         merged_props_return: None,
         // The projection alone states no acceptance identity;
@@ -218,6 +221,18 @@ fn project_callbacks(
             // `ambient-at-execution` is a transparent wrapper and leaves the
             // caller's listener in place.
             clears_tracking: operation.tracking == Tracking::Untracked,
+            // A non-call item (a property read, iteration, coercion or
+            // `hasInstance` of the argument) is projected with its protocol and
+            // kept: the domain's closure is a statement about *every* use of
+            // caller-supplied code, and dropping the item would either reopen
+            // the domain or, re-emitted, silently delete a claim. Every pass
+            // that models invocations filters it out
+            // (`ContractCallback::is_invocation`), which is sound because such
+            // a use runs the caller's own traps, at the call, on the caller's
+            // stack, in the caller's tracking context -- what the value's author
+            // wrote -- and today raises no obligation for a non-callable
+            // argument at all.
+            protocol: operation.invoke_protocol(),
             arguments: operation.inputs.iter().map(project_return_shape).collect(),
             owner: match operation.owner.source {
                 OwnerSource::None => Some("none".into()),
@@ -575,7 +590,7 @@ fn project_owner_requirements(
 mod owner_requirement_projection_tests {
     use std::collections::BTreeSet;
 
-    use super::{project_owner_requirements, project_return};
+    use super::{project_export_semantics, project_owner_requirements, project_return};
     use crate::contract_semantics::{
         ArtifactIdentity, CallClaims, CallSemantics, Cardinality, CardinalityScope, ClaimDomain,
         Digest, Event, ExportIdentity, ExportSemantics, ExportTargetIdentity, GuardPartition,
@@ -627,6 +642,7 @@ mod owner_requirement_projection_tests {
                 .map(|resource| ResourceId((*resource).into()))
                 .collect(),
             composed_from: None,
+            protocol: None,
         }
     }
 
@@ -675,6 +691,66 @@ mod owner_requirement_projection_tests {
             disposals: KnowledgeSet::Unknown,
             computations: KnowledgeSet::Unknown,
         }
+    }
+
+    /// Item A of ways-to-improve § 3.3: a closed `callbacks` whose items include
+    /// non-call uses of an argument stays closed, and each row carries its
+    /// protocol so re-emission republishes it; only the call row is an
+    /// invocation any consumer pass models.
+    #[test]
+    fn a_closed_callbacks_with_protocol_items_projects_closed_with_each_protocol() {
+        use crate::contract_semantics::{CallbackInvocation, InvokeProtocol, ValueSource};
+        let invoke = |id: &str, protocol: Option<InvokeProtocol>| {
+            let mut invoke = operation(id, OperationKind::Invoke, &[]);
+            invoke.tracking = Tracking::AmbientAtExecution;
+            invoke.protocol = protocol;
+            invoke
+        };
+        let item = |index: u16, id: &str| CallbackInvocation {
+            from: ValueSource::Parameter {
+                index,
+                path: Vec::new(),
+            },
+            operation: OperationId(id.into()),
+        };
+        let projected = project_export_semantics(&export(
+            CallClaims {
+                callbacks: KnowledgeSet::Complete(vec![
+                    item(0, "callback-0"),
+                    item(0, "callback-1"),
+                    item(1, "callback-2"),
+                ]),
+                ..claims()
+            },
+            vec![
+                invoke("callback-0", None),
+                invoke("callback-1", Some(InvokeProtocol::Get)),
+                invoke("callback-2", Some(InvokeProtocol::Coerce)),
+            ],
+            Vec::new(),
+        ));
+        assert!(
+            !projected.open_claims.contains(&ClaimDomain::Callbacks),
+            "{:?}",
+            projected.open_claims
+        );
+        let rows = projected.callbacks.known().expect("the domain stays known");
+        let protocols = rows
+            .iter()
+            .map(|row| (row.parameter, row.protocol, row.is_invocation()))
+            .collect::<Vec<_>>();
+        assert_eq!(protocols.len(), 3);
+        for expected in [
+            (0, InvokeProtocol::Call, true),
+            (0, InvokeProtocol::Get, false),
+            (1, InvokeProtocol::Coerce, false),
+        ] {
+            assert!(protocols.contains(&expected), "{protocols:?}");
+        }
+        assert!(
+            rows.iter().all(|row| !row.clears_tracking),
+            "an ambient row never claims to clear the caller's listener"
+        );
     }
 
     /// ADR 0113: a closed `returns` whose every operation hands back a `plain`
@@ -1804,6 +1880,10 @@ pub(super) struct ContractAnalysis<'a> {
     /// Per node, the parameters the node calls itself, directly, in its own
     /// body (ADR 0100) -- see `InterproceduralGraphContribution`.
     pub(super) direct_callback_parameters: &'a [Vec<usize>],
+    /// Per node, the parameters it reads a property of or coerces directly in
+    /// its own body (`interproc::direct_protocol_parameters`).
+    pub(super) direct_protocol_parameters:
+        &'a [Vec<(crate::contract_semantics::InvokeProtocol, usize)>],
     /// Per node, the parameters whose caller-supplied value the analysis never
     /// accounted for. Any one of them makes this export's `callbacks` domain
     /// its callback domain open — see
@@ -1822,6 +1902,7 @@ struct ContractExportNode<'a> {
     structured_return: Option<&'a ContractReturn>,
     callbacks: &'a [ContractCallback],
     direct_callback_parameters: &'a [usize],
+    direct_protocol_parameters: &'a [(crate::contract_semantics::InvokeProtocol, usize)],
     escaped_parameters: &'a [usize],
     invoked_parameter_members: &'a [ParameterMemberInvocation],
 }
@@ -1835,6 +1916,7 @@ impl<'a> ContractExportNode<'a> {
             structured_return: analysis.structured_returns[index].as_ref(),
             callbacks: &analysis.callbacks[index],
             direct_callback_parameters: &analysis.direct_callback_parameters[index],
+            direct_protocol_parameters: &analysis.direct_protocol_parameters[index],
             escaped_parameters: &analysis.escaped_parameters[index],
             invoked_parameter_members: &analysis.invoked_parameter_members[index],
         }
@@ -1852,6 +1934,7 @@ fn contract_export_function(
         structured_return,
         callbacks,
         direct_callback_parameters,
+        direct_protocol_parameters,
         escaped_parameters,
         invoked_parameter_members,
     } = inputs;
@@ -1999,6 +2082,21 @@ fn contract_export_function(
         // the callbacks domain above stayed known -- the generator's filter
         // reads both, and an open domain proposes nothing either way.
         direct_callback_parameters: direct_callback_parameters.iter().copied().collect(),
+        direct_accessor_parameters: direct_protocol_parameters
+            .iter()
+            .filter(|(protocol, _)| *protocol == crate::contract_semantics::InvokeProtocol::Get)
+            .map(|(_, parameter)| *parameter)
+            .collect(),
+        direct_coerced_parameters: direct_protocol_parameters
+            .iter()
+            .filter(|(protocol, _)| *protocol == crate::contract_semantics::InvokeProtocol::Coerce)
+            .map(|(_, parameter)| *parameter)
+            .collect(),
+        iterated_parameters: direct_protocol_parameters
+            .iter()
+            .filter(|(protocol, _)| *protocol == crate::contract_semantics::InvokeProtocol::Iterate)
+            .map(|(_, parameter)| *parameter)
+            .collect(),
     }
 }
 
@@ -3064,6 +3162,7 @@ mod callback_contradiction_tests {
             clears_tracking: false,
             arguments: Vec::new(),
             owner: None,
+            protocol: crate::contract_semantics::InvokeProtocol::Call,
         }
     }
 

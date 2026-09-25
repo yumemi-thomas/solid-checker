@@ -17,9 +17,9 @@ use solid_reactive_ir::contract_semantics::{
     ArrayLength, ArtifactCase, ArtifactIdentity, CallbackInvocation, CapabilityClaim,
     CapabilityKnowledge, Cardinality, CardinalityScope, ClaimDomain, ContractProposal, Digest,
     EdgeKind, Event, ExportIdentity, ExportSemantics, ExportTargetIdentity, Guard, GuardAtom,
-    GuardPartition, GuardedCase, KnowledgeSet, Lifetime, Literal, ModuleInitializationClaim,
-    NormalizedContract, ObjectProperty, ObservableCapability, Operation, OperationEdge,
-    OperationId, OperationKind, OwnerCapabilities, OwnerProduction, OwnerRelation,
+    GuardPartition, GuardedCase, InvokeProtocol, KnowledgeSet, Lifetime, Literal,
+    ModuleInitializationClaim, NormalizedContract, ObjectProperty, ObservableCapability, Operation,
+    OperationEdge, OperationId, OperationKind, OwnerCapabilities, OwnerProduction, OwnerRelation,
     OwnerRequirements, OwnerSource, PackageIdentity, ReactiveRole, Requirement, ResolutionStep,
     Resource, ResourceCapability, ResourceId, ResourceKind, ResourceState, SEMANTIC_MODEL_VERSION,
     Schedule, StabilityKnowledge, Tracking, Trigger, UpperBound, ValueKind, ValueShape,
@@ -612,6 +612,12 @@ fn compact_operation(
                     .collect::<Result<_, ContractFailure>>()?,
             ),
         );
+    }
+    if let Some(protocol) = operation
+        .protocol
+        .filter(|protocol| *protocol != InvokeProtocol::Call)
+    {
+        object.insert("protocol".into(), json!(protocol.wire_name()));
     }
     if let Some(composed) = &operation.composed_from {
         object.insert(
@@ -1540,6 +1546,34 @@ struct WireOperation {
     resources: Vec<String>,
     #[serde(default, rename = "composedFrom")]
     composed_from: Option<WireComposedFrom>,
+    /// Which protocol of the caller's value an `invoke` runs. Absent is a
+    /// call, and a call is never encoded; a decoder that predates the field
+    /// refuses the document through `deny_unknown_fields`, which is intended.
+    #[serde(default)]
+    protocol: Option<WireInvokeProtocol>,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum WireInvokeProtocol {
+    Call,
+    Get,
+    Iterate,
+    Coerce,
+    HasInstance,
+}
+
+impl WireInvokeProtocol {
+    /// The model's one meaning for a call is the absent protocol.
+    const fn normalized(self) -> Option<InvokeProtocol> {
+        match self {
+            Self::Call => None,
+            Self::Get => Some(InvokeProtocol::Get),
+            Self::Iterate => Some(InvokeProtocol::Iterate),
+            Self::Coerce => Some(InvokeProtocol::Coerce),
+            Self::HasInstance => Some(InvokeProtocol::HasInstance),
+        }
+    }
 }
 
 /// The `(export, operation)` a composed operation was composed from, inside
@@ -2859,6 +2893,7 @@ fn expand_operation(operation: WireOperation, ids: &IdScope) -> Result<Operation
                 operation: ids.operation_in(&composed.export, &composed.operation),
             }
         }),
+        protocol: operation.protocol.and_then(WireInvokeProtocol::normalized),
     })
 }
 
@@ -3694,6 +3729,107 @@ mod tests {
             "the encoder dropped the provenance"
         );
         assert_eq!(normalized(&encoded), normalized_contract);
+    }
+
+    /// The generator fixture that publishes non-call `callbacks` items.
+    const PROTOCOLS: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../fixtures/package-contracts/implementation-census-described-accessor/expected.json"
+    ));
+
+    /// Item A of ways-to-improve § 3.3: `protocol` on an `invoke` survives the
+    /// round trip in both directions; a stated `call` is the absent protocol
+    /// and is never written back; an unknown spelling, and a protocol on any
+    /// other kind of operation, refuse the document.
+    #[test]
+    fn an_invoke_protocol_survives_the_round_trip_and_call_is_never_written() {
+        let normalized_contract = normalized(PROTOCOLS);
+        let protocols = normalized_contract.artifact_cases()[0]
+            .exports
+            .iter()
+            .flat_map(|(name, export)| {
+                export
+                    .call
+                    .operations
+                    .iter()
+                    .filter_map(move |operation| Some((name.as_str(), operation.protocol?)))
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            protocols.contains(&("access", InvokeProtocol::Get))
+                && protocols.contains(&("compare", InvokeProtocol::Coerce)),
+            "{protocols:?}"
+        );
+        assert!(
+            protocols
+                .iter()
+                .all(|(_, protocol)| *protocol != InvokeProtocol::Call)
+        );
+        let encoded = encode(&normalized_contract, &SidecarDigests::default(), true).unwrap();
+        let text = String::from_utf8_lossy(&encoded);
+        assert!(
+            text.contains("\"protocol\": \"get\""),
+            "the encoder dropped the protocol"
+        );
+        assert!(!text.contains("\"protocol\": \"call\""));
+        assert_eq!(normalized(&encoded), normalized_contract);
+
+        // A stated `call` decodes to the absent protocol.
+        let stated_call = serde_json::to_vec(&protocols_rewritten("get", &json!("call"))).unwrap();
+        let decoded = decode(&stated_call).unwrap().normalize().unwrap();
+        assert!(
+            decoded.artifact_cases()[0].exports["access"]
+                .call
+                .operations
+                .iter()
+                .all(|operation| operation.protocol.is_none())
+        );
+        // An unknown spelling refuses.
+        let unknown = serde_json::to_vec(&protocols_rewritten("get", &json!("read"))).unwrap();
+        assert!(decode(&unknown).is_err());
+        // A protocol on another kind of operation is refused by the model.
+        let mut on_return = protocols_rewritten("get", &json!("get"));
+        for summary in on_return["summaries"].as_object_mut().unwrap().values_mut() {
+            for operation in summary
+                .get_mut("call")
+                .and_then(|call| call.get_mut("operations"))
+                .and_then(JsonValue::as_array_mut)
+                .into_iter()
+                .flatten()
+            {
+                if operation["kind"] == json!("return") {
+                    operation["protocol"] = json!("coerce");
+                }
+            }
+        }
+        let refused = decode(&serde_json::to_vec(&on_return).unwrap())
+            .and_then(|decoded| decoded.normalize())
+            .expect_err("only an invoke states a protocol");
+        assert!(
+            refused
+                .to_string()
+                .contains("only an invoke operation may state a protocol"),
+            "{refused}"
+        );
+    }
+
+    /// The protocol golden with every `"protocol": from` replaced by `to`.
+    fn protocols_rewritten(from: &str, to: &JsonValue) -> JsonValue {
+        let mut document: JsonValue = serde_json::from_slice(PROTOCOLS).unwrap();
+        for summary in document["summaries"].as_object_mut().unwrap().values_mut() {
+            for operation in summary
+                .get_mut("call")
+                .and_then(|call| call.get_mut("operations"))
+                .and_then(JsonValue::as_array_mut)
+                .into_iter()
+                .flatten()
+            {
+                if operation.get("protocol") == Some(&json!(from)) {
+                    operation["protocol"] = to.clone();
+                }
+            }
+        }
+        document
     }
 
     /// `proposedClosures` labels a closure the document states, so it names a

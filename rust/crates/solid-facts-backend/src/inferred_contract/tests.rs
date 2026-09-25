@@ -253,6 +253,7 @@ fn self_bootstrapped_callbacks_are_unknown_while_consuming_callbacks_survive() {
                 clears_tracking: false,
                 arguments: Vec::new(),
                 owner: None,
+                protocol: solid_reactive_ir::contract_semantics::InvokeProtocol::Call,
             }]),
             // The row above was written for `cb()` in the export's own body.
             direct_callback_parameters: BTreeSet::from([0]),
@@ -317,6 +318,166 @@ fn self_bootstrapped_callbacks_are_unknown_while_consuming_callbacks_survive() {
     }
 }
 
+/// Item A of ways-to-improve § 3.3: the generator derives a non-call item for
+/// every parameter its own body reads a property of or coerces, beside the call
+/// rows, and proposes the enumeration closed. `access` is a call of 0 and a get
+/// of 0; `compare` coerces 0 and 1 and calls nothing. Every such item is an
+/// `ambient-at-execution` invoke at the call event on the same stack, counted
+/// per call from zero to many, and the ids continue the `callback-<n>` scheme.
+#[test]
+fn a_parameter_read_or_coercion_is_described_as_a_non_call_callbacks_item() {
+    use solid_reactive_ir::contract_semantics::{InvokeProtocol, Tracking};
+    let call_row = solid_reactive_ir::ContractCallback {
+        parameter: 0,
+        execution: "inline".into(),
+        schedule: None,
+        clears_tracking: false,
+        arguments: Vec::new(),
+        owner: None,
+        protocol: InvokeProtocol::Call,
+    };
+    let normalize = |summary: ContractExport| {
+        normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution_for_package("package", ["read".into()]),
+        )
+        .unwrap()
+    };
+    let described = |normalized: &NormalizedInference| {
+        let export = normalized.contract.artifact_cases()[0].exports["read"].clone();
+        assert!(
+            export
+                .call
+                .proposed_closures()
+                .contains(&ClaimDomain::Callbacks),
+            "{:?}",
+            export.call.claims().callbacks
+        );
+        let mut items = export
+            .callbacks()
+            .items()
+            .iter()
+            .map(|item| {
+                let operation = export.operation(&item.operation.0).unwrap();
+                if operation.is_protocol_invocation() {
+                    assert_eq!(operation.tracking, Tracking::AmbientAtExecution);
+                    assert_eq!(operation.cardinality.min, Some(0));
+                }
+                let ValueSource::Parameter { index, path } = &item.from else {
+                    panic!("a bare parameter");
+                };
+                assert!(path.is_empty());
+                (
+                    operation.invoke_protocol(),
+                    *index,
+                    item.operation.0.rsplit(':').next().unwrap().to_owned(),
+                )
+            })
+            .collect::<Vec<_>>();
+        items.sort();
+        items
+    };
+
+    let access = normalize(ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Known(vec![call_row.clone()]),
+        direct_callback_parameters: BTreeSet::from([0]),
+        direct_accessor_parameters: BTreeSet::from([0]),
+        ..ContractExport::default()
+    });
+    assert_eq!(
+        described(&access),
+        vec![
+            (InvokeProtocol::Call, 0, "callback-0".to_owned()),
+            (InvokeProtocol::Get, 0, "callback-1".to_owned()),
+        ]
+    );
+    let compare = normalize(ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Known(Vec::new()),
+        direct_coerced_parameters: BTreeSet::from([0, 1]),
+        ..ContractExport::default()
+    });
+    assert_eq!(
+        described(&compare),
+        vec![
+            (InvokeProtocol::Coerce, 0, "callback-0".to_owned()),
+            (InvokeProtocol::Coerce, 1, "callback-1".to_owned()),
+        ]
+    );
+
+    // Re-emission: the projection of the certified export, normalized again as
+    // an inherited summary, republishes each item with its own protocol and
+    // derives nothing twice.
+    let projected = solid_reactive_ir::project_export_semantics(
+        &access.contract.artifact_cases()[0].exports["read"],
+    );
+    let rows = projected.callbacks.known().expect("closed stays known");
+    assert_eq!(rows.len(), 2);
+    let again = normalize(ContractExport {
+        inherited_from: Some(solid_reactive_ir::InheritedExportOrigin {
+            package_name: "dependency".into(),
+            package_version: "1.0.0".into(),
+            artifact_case: "dependency-case".into(),
+            semantic_digest: sha('b'),
+            entrypoint: ".".into(),
+            export: "read".into(),
+        }),
+        ..projected
+    });
+    assert_eq!(described(&again), described(&access));
+
+    // Beside an iteration of a caller's value -- `const [x, y] = point` -- the
+    // enumeration is one the generator cannot describe whole (it derives no
+    // `iterate` item), so it keeps the items and proposes no closure.
+    let iterates = normalize(ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Known(Vec::new()),
+        direct_accessor_parameters: BTreeSet::from([1]),
+        iterated_parameters: BTreeSet::from([0]),
+        ..ContractExport::default()
+    });
+    let export = &iterates.contract.artifact_cases()[0].exports["read"];
+    assert!(
+        !export
+            .call
+            .proposed_closures()
+            .contains(&ClaimDomain::Callbacks)
+            && !export.callbacks().is_closed()
+            && export.callbacks().items().len() == 1,
+        "{:?}",
+        export.callbacks()
+    );
+    // An iteration beside no non-call item blocks nothing: the empty
+    // enumeration is proposed exactly as before item A.
+    let iterates_only = normalize(ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Known(Vec::new()),
+        iterated_parameters: BTreeSet::from([0]),
+        ..ContractExport::default()
+    });
+    assert!(
+        iterates_only.contract.artifact_cases()[0].exports["read"]
+            .call
+            .proposed_closures()
+            .contains(&ClaimDomain::Callbacks)
+    );
+
+    // With the enumeration open, nothing is derived into it.
+    let open = normalize(ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Open,
+        direct_accessor_parameters: BTreeSet::from([0]),
+        ..ContractExport::default()
+    });
+    assert!(
+        open.contract.artifact_cases()[0].exports["read"]
+            .callbacks()
+            .items()
+            .is_empty()
+    );
+}
+
 /// ADR 0100's boundary: a described invocation the census cannot confirm keeps
 /// the enumeration partial and yields no candidate, exactly as every non-empty
 /// enumeration did before the premise. Two shapes: a `deferred` row, whose
@@ -339,6 +500,7 @@ fn a_deferred_callback_description_stays_partial_and_proposes_nothing() {
                 clears_tracking: false,
                 arguments: Vec::new(),
                 owner: None,
+                protocol: solid_reactive_ir::contract_semantics::InvokeProtocol::Call,
             }]),
             direct_callback_parameters: direct,
             ..ContractExport::default()
@@ -977,6 +1139,7 @@ fn inherited_summary() -> ContractExport {
             clears_tracking: false,
             arguments: Vec::new(),
             owner: Some("inherited".into()),
+            protocol: solid_reactive_ir::contract_semantics::InvokeProtocol::Call,
         }]),
         owner_requirements: ContractClaim::Known(Vec::new()),
         async_behavior: ContractClaim::Known(String::new()),

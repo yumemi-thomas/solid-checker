@@ -58,6 +58,11 @@ pub const SEMANTIC_DIGEST_DOMAIN_PROPOSED_CLOSURE: &str =
 /// proposed closure.
 pub const SEMANTIC_DIGEST_DOMAIN_COMPOSED_PROPOSED_CLOSURE: &str =
     "solid-checker:normalized-package-contract:composed-provenance:proposed-closure";
+/// The length-prefixed marker a semantic digest or a recipe address writes
+/// first when some operation it encodes states a non-call
+/// [`InvokeProtocol`]. A stream with no such operation never writes it, so it
+/// hashes exactly as it did before the protocol existed.
+pub const SEMANTIC_INVOKE_PROTOCOL_MARKER: &str = "solid-checker:semantic-invoke-protocol:v1";
 pub const SEMANTIC_CLAIM_ID_VERSION: u16 = 1;
 /// Version of the byte-only artifact-case identity a [`RecipeAddress`] binds.
 pub const ARTIFACT_CASE_BYTES_VERSION: u16 = 1;
@@ -885,6 +890,39 @@ impl ExportSemantics {
     /// can record the cascade rather than infer it. An id this export does not
     /// carry contributes nothing.
     pub fn withhold_operations(&mut self, seeds: &BTreeSet<OperationId>) -> BTreeSet<OperationId> {
+        self.withhold_operations_narrowing(seeds, &BTreeSet::new())
+    }
+
+    /// [`Self::withhold_operations`], except that a seed in `narrowed` which is
+    /// a non-call `invoke` (a property read, iteration, coercion or
+    /// `hasInstance` of the caller's value) *narrows* `callbacks` instead of
+    /// opening it: its item is removed and the domain keeps its knowledge
+    /// state, closed or partial, and with it any proposed closure.
+    ///
+    /// Narrowing is not a weaker claim that the census is spared from checking.
+    /// A closed enumeration that lost an item is still a closure candidate, and
+    /// the implementation census re-confirms the narrowed enumeration site for
+    /// site -- a use it does see still refuses as undescribed -- so nothing is
+    /// certified the census did not confirm. The caller decides which items may
+    /// narrow (the certifier: an item whose positive facts found no use of a
+    /// parameter its declared signature types primitive-only); any other
+    /// removal from `callbacks`, or a narrowed id that is not a non-call
+    /// invoke, opens the domain as before.
+    pub fn withhold_operations_narrowing(
+        &mut self,
+        seeds: &BTreeSet<OperationId>,
+        narrowed: &BTreeSet<OperationId>,
+    ) -> BTreeSet<OperationId> {
+        let narrows: BTreeSet<OperationId> = self
+            .call
+            .operations
+            .iter()
+            .filter(|operation| narrowed.contains(&operation.id))
+            .filter(|operation| {
+                operation.kind == OperationKind::Invoke && operation.is_protocol_invocation()
+            })
+            .map(|operation| operation.id.clone())
+            .collect();
         let mut gone: BTreeSet<OperationId> = self
             .call
             .operations
@@ -955,16 +993,37 @@ impl ExportSemantics {
             ValueSource::OperationOutput { operation, .. } => gone.contains(operation),
             _ => false,
         };
+        let mut callbacks_narrowed = false;
         let callbacks_changed = match &mut self.call.claims.callbacks {
             KnowledgeSet::Unknown => false,
             KnowledgeSet::Partial(items) | KnowledgeSet::Complete(items) => {
-                let before = items.len();
+                // Removals that open the domain; a narrowing one does not.
+                let mut opening = 0usize;
                 items.retain(|invocation| {
-                    !gone.contains(&invocation.operation) && !sourced_from_gone(&invocation.from)
+                    let removed =
+                        gone.contains(&invocation.operation) || sourced_from_gone(&invocation.from);
+                    if !removed {
+                        return true;
+                    }
+                    if narrows.contains(&invocation.operation) {
+                        callbacks_narrowed = true;
+                    } else {
+                        opening += 1;
+                    }
+                    false
                 });
-                before != items.len()
+                opening > 0
             }
         };
+        // A partial enumeration narrowed to nothing is not "partial with no
+        // item", which the model refuses; it says nothing, so it is unknown.
+        if callbacks_narrowed
+            && !callbacks_changed
+            && !self.call.claims.callbacks.is_closed()
+            && self.call.claims.callbacks.items().is_empty()
+        {
+            self.call.claims.callbacks = KnowledgeSet::Unknown;
+        }
         if callbacks_changed {
             if self.call.claims.callbacks.items().is_empty() {
                 self.call.claims.callbacks = KnowledgeSet::Unknown;
@@ -1414,6 +1473,41 @@ pub enum Schedule {
     External,
 }
 
+/// Which protocol of the caller's value an `invoke` operation runs.
+///
+/// A call is the historical meaning of every `invoke`, and stays the one
+/// spelled by absence: [`Operation::protocol`] is `None` for it, and a decoded
+/// `call` normalizes to `None`, so the model has one meaning for it. The other
+/// four are the non-call invocations of caller-supplied code `semantic-model.md`
+/// § callbacks names: a property read that may run a getter or a proxy trap
+/// (`Get`), the iteration protocol (`Iterate`), ToPrimitive (`Coerce`), and
+/// `Symbol.hasInstance` (`HasInstance`). Each runs whatever the caller's value
+/// carries, at the call, on the caller's stack, in the caller's tracking
+/// context, so a non-call item is always `ambient-at-execution` and never a
+/// claim that the export clears or establishes tracking.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum InvokeProtocol {
+    Call,
+    Get,
+    Iterate,
+    Coerce,
+    HasInstance,
+}
+
+impl InvokeProtocol {
+    /// The wire spelling (`has-instance`, kebab-case).
+    #[must_use]
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::Call => "call",
+            Self::Get => "get",
+            Self::Iterate => "iterate",
+            Self::Coerce => "coerce",
+            Self::HasInstance => "has-instance",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Tracking {
     Tracked,
@@ -1595,6 +1689,9 @@ pub struct Operation {
     /// only route to discharging it. Provenance may only *add* a discharge
     /// route, never remove one.
     pub composed_from: Option<ComposedFrom>,
+    /// The protocol a non-call `invoke` runs (see [`InvokeProtocol`]). `None`
+    /// is a call, and is the only value any other kind may carry.
+    pub protocol: Option<InvokeProtocol>,
 }
 
 impl Operation {
@@ -1611,6 +1708,21 @@ impl Operation {
     pub fn imposes_owner_requirement(&self) -> bool {
         self.owner.requirements.owner == Requirement::Required
             && !matches!(self.owner.source, OwnerSource::Created(_))
+    }
+
+    /// The protocol this operation invokes, `Call` for every operation that
+    /// states none.
+    #[must_use]
+    pub fn invoke_protocol(&self) -> InvokeProtocol {
+        self.protocol.unwrap_or(InvokeProtocol::Call)
+    }
+
+    /// Whether this is an `invoke` of a protocol other than a call — a
+    /// property read, iteration, coercion or `hasInstance` of the caller's
+    /// value, which is not an inline invocation of a callable.
+    #[must_use]
+    pub fn is_protocol_invocation(&self) -> bool {
+        self.invoke_protocol() != InvokeProtocol::Call
     }
 }
 

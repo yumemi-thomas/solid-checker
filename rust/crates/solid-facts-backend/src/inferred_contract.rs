@@ -150,10 +150,7 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                 .filter(|domain| {
                     *domain != ClaimDomain::Callbacks
                         || inherited
-                        || callbacks_enumeration_is_confirmable(
-                            export,
-                            summary.map(|summary| &summary.direct_callback_parameters),
-                        )
+                        || callbacks_enumeration_is_confirmable(export, summary)
                 })
                 // ADR 0101: a described `reads` enumeration is proposable when
                 // every item is the generator's own `parameter-member` row -- a
@@ -456,24 +453,54 @@ fn reads_enumeration_is_confirmable(export: &ExportSemantics) -> bool {
         })
 }
 
+///
+/// A non-call item (item A of ways-to-improve § 3.3) is admissible on the same
+/// footing: a `get` whose parameter this export's own body reads a property of
+/// (`direct_accessor_parameters`), or a `coerce` whose parameter it coerces
+/// (`direct_coerced_parameters`), each an `ambient-at-execution` invoke at the
+/// call event on the same stack. `iterate` and `has-instance` are vocabulary
+/// the generator does not derive, so an item naming one proposes nothing.
 fn callbacks_enumeration_is_confirmable(
     export: &ExportSemantics,
-    direct_callback_parameters: Option<&BTreeSet<usize>>,
+    summary: Option<&ContractExport>,
 ) -> bool {
+    use solid_reactive_ir::contract_semantics::InvokeProtocol;
+    // A non-call enumeration beside an iteration of a caller's value is one
+    // the generator could not describe whole -- it derives no `iterate` item --
+    // so it is not proposed. The census would refuse it, and under the
+    // declared-signature premise may not even see the iteration: the veto's
+    // Proxy does (`@kobalte/utils`' `isPointInPolygon`).
+    let describes_protocols = export.callbacks().items().iter().any(|item| {
+        export
+            .operation(&item.operation.0)
+            .is_some_and(solid_reactive_ir::contract_semantics::Operation::is_protocol_invocation)
+    });
+    if describes_protocols && summary.is_some_and(|summary| !summary.iterated_parameters.is_empty())
+    {
+        return false;
+    }
     export.callbacks().items().iter().all(|item| {
+        let Some(operation) = export.operation(&item.operation.0) else {
+            return false;
+        };
+        let direct = |index: u16| {
+            summary.is_some_and(|summary| {
+                let index = usize::from(index);
+                match operation.invoke_protocol() {
+                    InvokeProtocol::Call => summary.direct_callback_parameters.contains(&index),
+                    InvokeProtocol::Get => summary.direct_accessor_parameters.contains(&index),
+                    InvokeProtocol::Coerce => summary.direct_coerced_parameters.contains(&index),
+                    InvokeProtocol::Iterate | InvokeProtocol::HasInstance => false,
+                }
+            })
+        };
         matches!(&item.from, ValueSource::Parameter { index, path }
-            if path.is_empty()
-                && direct_callback_parameters
-                    .is_some_and(|direct| direct.contains(&usize::from(*index))))
-            && export
-                .operation(&item.operation.0)
-                .is_some_and(|operation| {
-                    operation.kind == OperationKind::Invoke
-                        && operation.at == Some(Event::Call)
-                        && operation.schedule == Some(Schedule::SameStack)
-                        && export_does_not_subscribe(operation.tracking)
-                        && operation.guard.is_none()
-                })
+            if path.is_empty() && direct(*index))
+            && operation.kind == OperationKind::Invoke
+            && operation.at == Some(Event::Call)
+            && operation.schedule == Some(Schedule::SameStack)
+            && export_does_not_subscribe(operation.tracking)
+            && operation.guard.is_none()
     })
 }
 
@@ -542,7 +569,7 @@ fn normalize_export(
         }
         ContractClaim::Open => KnowledgeSet::Unknown,
         ContractClaim::Known(callbacks) => KnowledgeSet::Complete(
-            callbacks
+            with_derived_protocol_items(callbacks, summary)
                 .iter()
                 .enumerate()
                 .map(|(index, callback)| {
@@ -955,11 +982,63 @@ fn normalize_export(
     })
 }
 
+/// A known enumeration's rows, followed by one non-call item per property read
+/// (`get`) and per coercion (`coerce`) of a parameter the export's own body
+/// performs (item A of ways-to-improve § 3.3). The generator derives these
+/// itself, from its own syntax walk (ADR 0006); the implementation census
+/// confirms them site for site. An inherited summary carries no such sets, and
+/// its projected non-call rows are republished as they were rather than
+/// derived again, so a row is never stated twice.
+fn with_derived_protocol_items(
+    callbacks: &[ContractCallback],
+    summary: &ContractExport,
+) -> Vec<ContractCallback> {
+    use solid_reactive_ir::contract_semantics::InvokeProtocol;
+    let mut rows = callbacks.to_vec();
+    let derived = summary
+        .direct_accessor_parameters
+        .iter()
+        .map(|parameter| (InvokeProtocol::Get, *parameter))
+        .chain(
+            summary
+                .direct_coerced_parameters
+                .iter()
+                .map(|parameter| (InvokeProtocol::Coerce, *parameter)),
+        );
+    for (protocol, parameter) in derived {
+        let row = ContractCallback {
+            parameter,
+            execution: "inline".into(),
+            schedule: None,
+            clears_tracking: false,
+            arguments: Vec::new(),
+            owner: None,
+            protocol,
+        };
+        if !rows.contains(&row) {
+            rows.push(row);
+        }
+    }
+    rows
+}
+
 fn callback_operation(
     id: OperationId,
     callback: &ContractCallback,
     resources: &mut Vec<Resource>,
 ) -> Result<Operation, ContractFailure> {
+    // A non-call row is one shape and only one (the model's
+    // `validate_protocol_operation`): at the call event on the same stack, in
+    // the caller's tracking context, counted per call from zero to many,
+    // unguarded, with no inputs and no owner claim. Built directly, so no
+    // attribute a call row's execution word carries can leak into it, and a
+    // projected row is republished as that shape whatever it was read from.
+    if !callback.is_invocation() {
+        let mut operation = operation(id, OperationKind::Invoke, Vec::new(), None);
+        operation.tracking = Tracking::AmbientAtExecution;
+        operation.protocol = Some(callback.protocol);
+        return Ok(operation);
+    }
     // `inline` and `deferred` carry their schedule in the word. `tracked` does
     // not: it is an attribution word, and 1.x `createMemo`/`mergeProps` have
     // already run the callback when the export returns while 1.x `createEffect`
@@ -1074,6 +1153,7 @@ fn operation(
         output,
         resources: BTreeSet::new(),
         composed_from: None,
+        protocol: None,
     }
 }
 

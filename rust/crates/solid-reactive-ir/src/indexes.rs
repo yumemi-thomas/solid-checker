@@ -441,12 +441,23 @@ impl<'a> SemanticLookup<'a> {
         }
     }
 
-    pub(super) fn contract_callbacks(&self, symbol: &str) -> Option<&[super::ContractCallback]> {
+    /// The known callback rows of the contract bound to `symbol` that invoke
+    /// the argument as a callable. A non-call row (a property read or
+    /// coercion of the argument, `ContractCallback::is_invocation`) is not an
+    /// invocation any caller of this lookup models, and is left out; `Some`
+    /// still means the enumeration is known, even when it holds only such
+    /// rows.
+    pub(super) fn contract_callbacks(&self, symbol: &str) -> Option<Vec<&super::ContractCallback>> {
         self.resolved_contracts
             .by_symbol
             .get(symbol)
             .and_then(|binding| binding.summary.callbacks.known())
-            .map(Vec::as_slice)
+            .map(|callbacks| {
+                callbacks
+                    .iter()
+                    .filter(|callback| callback.is_invocation())
+                    .collect()
+            })
     }
 
     /// The package and imported export name a symbol's contract binding

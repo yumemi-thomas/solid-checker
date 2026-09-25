@@ -1369,7 +1369,7 @@ pub(super) fn allowed_callback_spans(
             });
         if let Some(symbol) = lookup.callee_symbol(file, call.callee) {
             if let Some(callbacks) = lookup.contract_callbacks(symbol) {
-                for callback in callbacks {
+                for callback in &callbacks {
                     let exclusively_deferred = callbacks.iter().all(|candidate| {
                         candidate.parameter != callback.parameter
                             || candidate.execution == "deferred"
