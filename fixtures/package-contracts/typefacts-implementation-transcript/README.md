@@ -7,7 +7,8 @@ distinguish after a demand leaves the declaration-rooted export value:
   remains reachable even though whole-function control-flow completeness is
   deliberately open for `try`.
 - `returned` invokes its callback in a named closure which the export returns.
-  The return census binds parameter 0 into that executable closure.
+  The return census binds parameter 0 into that executable closure. Its row is
+  `queued` and `ambient-at-execution`: the closure runs on its caller's stack.
 - `retained` is the negative control. It contains the same nested invocation,
   but returns a different closure. A captured call that is merely retained in
   the implementation cannot certify callback execution.

@@ -9,7 +9,12 @@ answers it has to keep apart:
   the call returns.
 - **`queued`**: the observer constructors (`ReportingObserver`,
   `IntersectionObserver`), `scheduler.postTask`, both geolocation callbacks
-  (`getCurrentPosition`, `watchPosition` -- two separate parameters).
+  (`getCurrentPosition`, `watchPosition` -- two separate parameters). The
+  observers and `postTask` are `untracked`: they deliver from a queued task, a
+  fresh stack (`runtime_semantics::FRESH_STACK_SCHEDULERS`). The geolocation
+  pair is `ambient-at-execution`: both methods "call back with error"
+  synchronously when the document is not fully active, so their stack is not
+  reviewed as fresh.
 - **retained, invocation unknown**: `Array#push`, `Set#add` and `Map#set`
   store the value without proving it will ever be called (ADR 0023).
 - **no claim at all**: the conversion functions (`Number`, `Boolean`, `BigInt`,

@@ -1508,3 +1508,68 @@ fn a_member_alias_proposes_its_empty_call_domains_for_the_alias_census() {
         "{dialect:?}"
     );
 }
+
+/// Step 7 of ways-to-improve: each execution word states its tracking from the
+/// row's own clearing bit, `deferred` included, and the consumer's read-back
+/// inverts the mapping exactly. `deferred` used to publish `untracked`
+/// unconditionally, so `safe(transform)` -- `(raw) => transform(raw)`, run by
+/// whoever calls the returned closure -- claimed the same clearing a
+/// `setTimeout` callback earns.
+#[test]
+fn every_execution_word_states_tracking_from_the_row_and_reads_back_to_it() {
+    use solid_reactive_ir::contract_semantics::{InvokeProtocol, OperationId, Tracking};
+    let row = |execution: &str, clears_tracking: bool| solid_reactive_ir::ContractCallback {
+        parameter: 0,
+        execution: execution.into(),
+        schedule: None,
+        clears_tracking,
+        arguments: Vec::new(),
+        owner: None,
+        protocol: InvokeProtocol::Call,
+        path: Vec::new(),
+    };
+    for (execution, clears_tracking, expected) in [
+        ("inline", true, Tracking::Untracked),
+        ("inline", false, Tracking::AmbientAtExecution),
+        ("deferred", true, Tracking::Untracked),
+        ("deferred", false, Tracking::AmbientAtExecution),
+        ("tracked", false, Tracking::Tracked),
+    ] {
+        let operation = callback_operation(
+            OperationId("callback-0".into()),
+            &row(execution, clears_tracking),
+            &mut Vec::new(),
+        )
+        .unwrap();
+        assert_eq!(
+            operation.tracking, expected,
+            "{execution} {clears_tracking}"
+        );
+        assert_eq!(
+            solid_reactive_ir::ContractCallback::clears_tracking_from(
+                execution,
+                operation.tracking
+            ),
+            clears_tracking,
+            "{execution} {clears_tracking} round-trips"
+        );
+    }
+    // A `tracked` row's word is its whole claim: a stray bit publishes
+    // nothing, and no tracking word reads back as one.
+    let tracked = callback_operation(
+        OperationId("callback-0".into()),
+        &row("tracked", true),
+        &mut Vec::new(),
+    )
+    .unwrap();
+    assert_eq!(tracked.tracking, Tracking::Tracked);
+    for tracking in [
+        Tracking::Tracked,
+        Tracking::Untracked,
+        Tracking::AmbientAtExecution,
+    ] {
+        assert!(!solid_reactive_ir::ContractCallback::clears_tracking_from(
+            "tracked", tracking
+        ));
+    }
+}

@@ -1,5 +1,56 @@
 # Precision backlog
 
+## Tracking at execution is stated per execution word (ADR 0122, 2026-09-25)
+
+Status: **implemented**, step 7 part 1 of ways-to-improve § 4. The design pass
+found that d15aaa69 had already moved `inline` rows to `ambient-at-execution`.
+What remained, and is now fixed:
+
+- G1: every `deferred` row said `untracked`. It now says so only for the
+  reviewed fresh-stack schedulers (`FRESH_STACK_SCHEDULERS`), a dialect slot
+  stated untracked, or a clear inside the deferral; returned closures, `bind`,
+  `addEventListener`, `onCleanup` and Geolocation are `ambient-at-execution`.
+- G3: a local `untrack` helper under `createMemo` published `tracked`. It now
+  publishes `inline` + `untracked`, and the fold honours a package slot's
+  stated clear.
+- G4: the read-back is the exact inverse of the generator.
+
+`read` tracking (G2) is deliberately unchanged.
+
+Measured (2026-09-25):
+
+- generator corpus regenerated with a fresh debug binary: 9 rows in six
+  fixtures go `untracked` -> `ambient-at-execution`, with no closure or claim
+  change, plus the new fixture `forwarded-local-untrack-wrapper`;
+- coverage: 87 projects, 452 findings, nothing moved; ownership gate 37 cases;
+- ecosystem census (release binary, pinned corpus, non-updating): unchanged at
+  clean 533, some-uses 167, every-import 294, with 95 recipes addressed (15 by
+  address only). No dependent recipe went stale.
+
+No rule reads the tracking word, and none may until a veto observes the
+listener (ADR 0122).
+
+**Found while regenerating the compiled-in tier, and not shipped.**
+`make accepted-bundles` from this run would lose `@solid-primitives/utils` `.`,
+dropped as "two certifications of it do not agree". It would also ship two
+head-only closures: rootless `createCallback` `creates` and scheduled
+`throttle` `creates`. Measured by comparing all 10 utils `.` certifications in
+the run:
+
+- the head rows (signals rc.6, audited since 4878e163) close `createMicrotask`
+  `creates`, and the floor rows (signals rc.0, no audited rows) do not;
+- the bundler keys a bundle on package, version, entrypoint and conditions,
+  and its "keep the closing certification" rule assumes an open-versus-closed
+  difference comes from demand scope, not from the installed dependencies;
+- admission checks only the imported package's own identity, never the
+  installed `@solidjs/signals` (`accepted_bundles.rs:264-312`,
+  `policy2_receipt.rs:790-817`).
+
+So a regenerated tier would apply rc.6-proven negatives to rc.0 projects. The
+tier stays at 47566ff8 (2026-09-18) until the bundler or admission accounts for
+the dependency environment. That tier also predates ADRs 0113-0121, and still
+carries 10 `deferred` rows stated `untracked`, which no rule reads.
+
 ## A described bare call needs an unwritten binding (2026-09-25)
 
 Status: **implemented**, fail-closed. ADR 0100's census confirmed a bare call

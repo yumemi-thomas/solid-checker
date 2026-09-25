@@ -236,7 +236,12 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // package-member-returns-consumer's, the eighth authorized fixture
       // contract: a member of the caller's argument, or undefined, leaves
       // nothing open at the import and names no reactive leaf.
-      stableMainDocuments: 148,
+      //
+      // 149 on 2026-09-25 adds forwarded-local-untrack-wrapper's main
+      // document, the corpus pin of ways-to-improve step 7: a local clearing
+      // helper keeps its clear across the forwarding seam, and a `deferred`
+      // row says `untracked` only for a proven fresh-stack deferral.
+      stableMainDocuments: 149,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

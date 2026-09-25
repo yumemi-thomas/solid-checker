@@ -1413,16 +1413,32 @@ pub struct ContractCallback {
     /// means the package contract describes timing only; consumers must keep
     /// the existing fail-closed owner behavior for that callback.
     pub owner: Option<String>,
-    /// Whether the export is proven to clear the caller's listener around this
-    /// callback, as `untrack` does and a bare `fn()` does not.
+    /// Whether the callback is proven to run with no listener of the caller's
+    /// current, defined per execution word. `true` publishes
+    /// `tracking: "untracked"`; `false` publishes `ambient-at-execution`, which
+    /// claims nothing about the listener and is the fail-closed answer.
     ///
-    /// `execution` answers the schedule axis alone -- `inline` promises only
-    /// that the callback runs before the export returns. Both spellings used to
-    /// serialize as `tracking: "untracked"`, which made the field
-    /// unfalsifiable: `@solid-primitives/utils`' `access` is
-    /// `typeof v === "function" ? v() : v` and its row said `untracked` like
-    /// `untrack`'s did. False here publishes `ambient-at-execution` instead,
-    /// which is what a transparent wrapper actually does.
+    /// - `inline`: a `Detaching` wrapper (`untrack`, `createRoot`,
+    ///   `runWithOwner`, a package row that states the same) stands between the
+    ///   export and the callback. A bare `fn()` does not clear:
+    ///   `@solid-primitives/utils`' `access` is `typeof v === "function" ? v() : v`
+    ///   and its row once said `untracked` like `untrack`'s did.
+    /// - `deferred`: the deferral is proven to run the callback on a fresh stack
+    ///   or with the listener cleared -- a reviewed host queue
+    ///   (`runtime_semantics::FRESH_STACK_SCHEDULERS`), a dialect deferred slot
+    ///   the dialect states untracked, a clearing wrapper *inside* the deferral,
+    ///   or a dependency's row that states one. "Runs after the export returns"
+    ///   is not that proof: a returned closure (`safe`, `pipe`), a bound
+    ///   function and an event listener all run on their caller's stack, inside
+    ///   whatever computation that caller is in.
+    /// - `tracked`: always `false`. The word is the attribution claim, and a
+    ///   clearing wrapper outside a tracking one cannot undo its subscription.
+    ///
+    /// A bool rather than an enum because the state space is exactly
+    /// (word x proven-or-not): no consumer distinguishes *why* a clearing was
+    /// proven, and the one invalid pair, `tracked` with `true`, is excluded at
+    /// both constructors -- the chain composition and
+    /// [`ContractCallback::clears_tracking_from`].
     pub clears_tracking: bool,
     /// Which protocol of the caller's value this row invokes. `Call` is every
     /// row an analysis pass writes; the others arrive only from an accepted
@@ -1442,6 +1458,16 @@ pub struct ContractCallback {
 }
 
 impl ContractCallback {
+    /// The clearing bit a contract operation's tracking word states for a row
+    /// with this execution word: the exact inverse of the generator's mapping,
+    /// so a row that round-trips through a document keeps its claim and a
+    /// `tracked` row never acquires one. See [`Self::clears_tracking`].
+    #[must_use]
+    pub fn clears_tracking_from(execution: &str, tracking: contract_semantics::Tracking) -> bool {
+        matches!(execution, "inline" | "deferred")
+            && tracking == contract_semantics::Tracking::Untracked
+    }
+
     /// Whether this row is an invocation of the argument *as a callable* --
     /// the only kind of row an interprocedural or owner pass models.
     ///

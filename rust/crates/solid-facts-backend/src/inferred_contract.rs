@@ -1086,11 +1086,24 @@ fn callback_operation(
                 Tracking::AmbientAtExecution
             },
         ),
-        // Unchanged, and not by omission. A deferred callback runs after the
-        // export returns, so no tracking scope of the caller is still open; and
-        // a package that *did* run it inside a computation of its own would
-        // have composed to `tracked` rather than `deferred`.
-        "deferred" => (Some(Schedule::Queued), Tracking::Untracked),
+        // `deferred` is the schedule axis alone too. "Runs after the export
+        // returns" does not mean no tracking scope is open when it runs: a
+        // callback reached through a returned closure (`safe(transform)` is
+        // `(raw) => transform(raw)`, `pipe`), a bound function or an event
+        // listener runs on whoever calls it, inside whatever computation that
+        // caller is in. Only a deferral proven to clear -- a reviewed
+        // fresh-stack host queue, a dialect slot stated untracked, a clearing
+        // wrapper inside the deferral -- says `untracked`
+        // (`ContractCallback::clears_tracking`); every other deferral says
+        // `ambient-at-execution`.
+        "deferred" => (
+            Some(Schedule::Queued),
+            if callback.clears_tracking {
+                Tracking::Untracked
+            } else {
+                Tracking::AmbientAtExecution
+            },
+        ),
         "tracked" => (
             match callback.schedule {
                 Some(CallbackSchedule::SameStack) => Some(Schedule::SameStack),

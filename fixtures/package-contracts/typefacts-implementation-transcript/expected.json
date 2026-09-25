@@ -15,7 +15,7 @@
           "exports": {
             "direct": "summary-091b1d9c2b5cda13367902440e8f50e3789630c614638926e6136ca3e4c0861c",
             "retained": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "returned": "summary-6298b0d77b2a4513dab7a2f434bee5615052ceb355daa9671e21fcadc1dc086f"
+            "returned": "summary-7f6695a9f44fbaaa1f5e3146fc2c82663147a0b7a91f6487af041a6caef2abe3"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -87,7 +87,7 @@
       },
       "shape": "callable"
     },
-    "summary-6298b0d77b2a4513dab7a2f434bee5615052ceb355daa9671e21fcadc1dc086f": {
+    "summary-7f6695a9f44fbaaa1f5e3146fc2c82663147a0b7a91f6487af041a6caef2abe3": {
       "call": {
         "callbacks": [
           {
@@ -117,7 +117,7 @@
             },
             "id": "callback-0",
             "kind": "invoke",
-            "tracking": "untracked",
+            "tracking": "ambient-at-execution",
             "trigger": {
               "event": "call"
             }

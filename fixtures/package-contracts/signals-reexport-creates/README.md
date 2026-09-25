@@ -14,7 +14,7 @@ in `expected-refusals.json`.
 | export | callee | `creates` | why |
 | --- | --- | --- | --- |
 | `trackEach` | `createTrackedEffect` | proposed, beside one `compute` | the walk is clean (the row is audited), and the call registers a computation on the caller's owner, which is stated |
-| `cleanUp` | `onCleanup` | proposed | the control: its requirement is published as a `cleanups` item |
+| `cleanUp` | `onCleanup` | proposed | the control: its requirement is published as a `cleanups` item. Its callback row is `queued` and `ambient-at-execution`: the dialect states nothing about the listener a cleanup runs under |
 | `runUnder` | `runWithOwner` | proposed | 2026-09-23 audit § 1, keyed on `@solidjs/signals` |
 | `makeContext` | `createContext` | proposed | same audit § 2, `solid-js`' own |
 | `readContext` | `useContext` | proposed | same audit § 3, `solid-js`' own |

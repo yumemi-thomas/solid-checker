@@ -140,6 +140,30 @@ Tracking is independent of scheduling and ownership:
 the caller's eventual tracking state. It is not normalized prematurely to
 tracked or untracked.
 
+**[Decision 2026-09-25]** the generator states an `invoke`'s tracking per
+execution word, and `untracked` only where a clearing is proven
+(`ContractCallback::clears_tracking`):
+
+- a same-stack (`inline`) invocation is `untracked` when a clearing wrapper
+  (`untrack`, `createRoot`, `runWithOwner`, a local helper or dependency row
+  that proves the same) stands between the export and the callback, and
+  `ambient-at-execution` for a bare call;
+- a queued (`deferred`) invocation is `untracked` only when the deferral is
+  proven to run with no caller's listener current: a reviewed fresh-stack host
+  queue (`FRESH_STACK_SCHEDULERS` in `solid-reactive-ir/src/runtime_semantics.rs`
+  -- timers, microtasks, `Promise` reactions, animation-frame and idle
+  callbacks, `scheduler.postTask`, the observer constructors), a dialect slot
+  the dialect states untracked, or a clearing wrapper inside the deferral.
+  "Runs after the export returns" is not that proof: a returned closure, a
+  bound function and an event listener run on whoever calls them, inside
+  whatever computation that caller is in, and are `ambient-at-execution`;
+- a `tracked` invocation is `tracked`: the word is the attribution claim.
+
+A consumer's read-back is the exact inverse, so a row keeps its claim across
+re-emission. No consumer rule reads the tracking word as evidence yet; the one
+reader is the wrapper fold, which classifies a dependency's clearing row as a
+clearing wrapper.
+
 ## Ownership
 
 Owner source is relational:
@@ -299,8 +323,9 @@ carries the vocabulary and the limits, including why an *absent* field is not
 the same fact as a present empty one.
 
 **[Decision 2026-09-13]** a *described* enumeration is provable by the same
-census, for exactly the items the call walk derives: an unguarded, untracked
-`invoke` `from` a bare parameter (no member path) `at: call` on the same stack.
+census, for exactly the items the call walk derives: an unguarded `invoke` the
+export does not subscribe (`untracked` or `ambient-at-execution`) `from` a bare
+parameter (no member path) `at: call` on the same stack.
 Such an item is a `parameter-rooted` call read in the export's own frame,
 outside any nested callable, in a body that completes plainly, and the census
 confirms the enumeration in both directions — every such site is an item, every

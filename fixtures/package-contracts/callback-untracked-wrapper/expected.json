@@ -13,7 +13,7 @@
             "sha256": "6117a2a911c4be332c2ccd905c7a0355445e9b530b3e09cf5da31da551f7ee1b"
           },
           "exports": {
-            "deferredWrapper": "summary-1dc839445ba4e94bb85ea4a5846e1d314c1601f1c248059bb38a41bddfa39dc0",
+            "deferredWrapper": "summary-0b2cceb6a6feade06cb72c1296f4ef1e6f30c91482b74e69affbad12d81ef6c7",
             "ownerWrapper": "summary-86caee91a475bb55187269bba10bc1d5d2b27ed65f4dce931faedf08b874f46f",
             "rootWrapper": "summary-c341c230b1445395b521966ce3b41a9cf14f62c46fd568e104137806817bd020",
             "trackedWrapper": "summary-7123c8fdc02e24e87156c456c8f7d1161b291f29036c8d8656d188a2b0327429",
@@ -41,7 +41,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-1dc839445ba4e94bb85ea4a5846e1d314c1601f1c248059bb38a41bddfa39dc0": {
+    "summary-0b2cceb6a6feade06cb72c1296f4ef1e6f30c91482b74e69affbad12d81ef6c7": {
       "call": {
         "callbacks": [
           {
@@ -72,7 +72,7 @@
             },
             "id": "callback-0",
             "kind": "invoke",
-            "tracking": "untracked",
+            "tracking": "ambient-at-execution",
             "trigger": {
               "event": "call"
             }

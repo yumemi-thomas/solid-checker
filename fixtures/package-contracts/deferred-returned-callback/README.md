@@ -16,7 +16,14 @@ leave the function:
 - `nestedThroughCallable` returns it through a helper that re-wraps it in a
   `.call` forwarder and then mutates a property on the result.
 
-`debounce`, `decorated`, and `throughIdentity` keep their existing summary.
+`debounce`, `decorated`, and `throughIdentity` keep their existing schedule.
+Their tracking words differ, and that is the second point of the fixture
+(ways-to-improve step 7): `debounce`'s callback runs from a `setTimeout` task, a
+reviewed fresh-stack host queue on which no caller's listener can be current,
+so it stays `untracked`. `decorated` and `throughIdentity` run their callback
+from the returned closure, on the stack of whoever calls it -- inside whatever
+computation that caller is in -- so they are `ambient-at-execution`. Both
+published `untracked` while every `deferred` row did.
 The two `nestedThrough*` cases remain unknown after ADR 0015: their callback
 calls belong to nested helpers, whose execution the return inference does not
 prove. A returned ancestor's lexical containment was the old, invalid premise;

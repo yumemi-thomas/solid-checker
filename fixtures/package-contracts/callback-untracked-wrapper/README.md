@@ -23,7 +23,7 @@ measuring timing, at which point every affected row failed.
 | `rootWrapper` | `inline` | `createRoot` runs its callback synchronously under a fresh owner; `@solid-primitives/rootless`' `createSubRoot` |
 | `ownerWrapper` | `inline` at parameter **1** | the clearing wrapper's callback slot is not always index 0 |
 | `trackedWrapper` | `tracked`, same-stack | negative: no clearing wrapper, so the tracked claim is untouched. Same-stack because 2.0's `createEffect` runs its *compute* during the creating call — see below |
-| `deferredWrapper` | `deferred` | negative: `onCleanup` really does run its callback later |
+| `deferredWrapper` | `deferred`, `ambient-at-execution` | negative: `onCleanup` really does run its callback later. The tracking word is ambient because the dialect states nothing about the listener a cleanup runs under, and "later" is not that statement (ways-to-improve step 7) |
 
 The two negatives are the whole reason the rule is a rule rather than "answer
 `inline` for anything wrapped in a call".

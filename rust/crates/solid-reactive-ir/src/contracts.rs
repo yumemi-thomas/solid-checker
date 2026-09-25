@@ -218,11 +218,14 @@ fn project_callbacks(
                 Some(Schedule::External) => CallbackSchedule::External,
                 None => CallbackSchedule::Unestablished,
             }),
-            // The inverse of the producer's mapping: only a proven clearing is
-            // written as `untracked`, so only that reads back as one.
-            // `ambient-at-execution` is a transparent wrapper and leaves the
-            // caller's listener in place.
-            clears_tracking: operation.tracking == Tracking::Untracked,
+            // The inverse of the producer's mapping, word for word
+            // (`ContractCallback::clears_tracking`): `untracked` on an `inline`
+            // row is a proven clearing wrapper, on a `deferred` row a deferral
+            // proven to run with no caller's listener, and neither word reads
+            // back from `ambient-at-execution`, which leaves the listener to
+            // whoever runs the callback. A `tracked` row never carries the bit
+            // -- its word is the claim.
+            clears_tracking: ContractCallback::clears_tracking_from(execution, operation.tracking),
             // A non-call item (a property read, iteration, coercion or
             // `hasInstance` of the argument) is projected with its protocol and
             // kept: the domain's closure is a statement about *every* use of
@@ -790,6 +793,76 @@ mod owner_requirement_projection_tests {
             rows.iter().all(|row| !row.clears_tracking),
             "an ambient row never claims to clear the caller's listener"
         );
+    }
+
+    /// The read-back is the generator's per-word mapping inverted: a document's
+    /// `untracked` is a clearing on an `inline` or `deferred` row and nothing on
+    /// a `tracked` one, and `ambient-at-execution` is never a clearing. This is
+    /// the bit the wrapper fold reads to call a package row `Detaching`.
+    #[test]
+    fn a_projected_row_clears_tracking_exactly_where_its_word_says_so() {
+        use crate::contract_semantics::{CallbackInvocation, ValueSource};
+        let invoke = |id: &str, schedule: Schedule, tracking: Tracking| {
+            let mut invoke = operation(id, OperationKind::Invoke, &[]);
+            invoke.schedule = Some(schedule);
+            invoke.tracking = tracking;
+            invoke
+        };
+        let item = |index: u16, id: &str| CallbackInvocation {
+            from: ValueSource::Parameter {
+                index,
+                path: Vec::new(),
+            },
+            operation: OperationId(id.into()),
+        };
+        let cases = [
+            (Schedule::SameStack, Tracking::Untracked, "inline", true),
+            (
+                Schedule::SameStack,
+                Tracking::AmbientAtExecution,
+                "inline",
+                false,
+            ),
+            (Schedule::Queued, Tracking::Untracked, "deferred", true),
+            (
+                Schedule::Queued,
+                Tracking::AmbientAtExecution,
+                "deferred",
+                false,
+            ),
+            (Schedule::SameStack, Tracking::Tracked, "tracked", false),
+        ];
+        let ids = (0..cases.len())
+            .map(|index| format!("callback-{index}"))
+            .collect::<Vec<_>>();
+        let projected = project_export_semantics(&export(
+            CallClaims {
+                callbacks: KnowledgeSet::Complete(
+                    (0..cases.len())
+                        .map(|index| item(u16::try_from(index).unwrap(), &ids[index]))
+                        .collect(),
+                ),
+                ..claims()
+            },
+            cases
+                .iter()
+                .zip(&ids)
+                .map(|((schedule, tracking, _, _), id)| invoke(id, *schedule, *tracking))
+                .collect(),
+            Vec::new(),
+        ));
+        let rows = projected.callbacks.known().expect("the domain stays known");
+        for (index, (_, _, execution, clears)) in cases.iter().enumerate() {
+            let row = rows
+                .iter()
+                .find(|row| row.parameter == index)
+                .expect("one row per parameter");
+            assert_eq!(
+                (row.execution.as_str(), row.clears_tracking),
+                (*execution, *clears),
+                "{index}"
+            );
+        }
     }
 
     /// ADR 0113: a closed `returns` whose every operation hands back a `plain`

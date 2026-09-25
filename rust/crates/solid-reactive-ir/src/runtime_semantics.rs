@@ -13,15 +13,109 @@ use typefacts::{
 pub(super) enum RuntimeArgumentBehavior {
     /// The argument is invoked before the runtime call returns.
     InlineCallback,
-    /// The argument may be retained and invoked after the runtime call returns.
+    /// The argument may be retained and invoked after the runtime call returns,
+    /// on a stack this table does not establish.
+    ///
+    /// "After the call returns" is not "on a fresh stack", and the members
+    /// that stay here are the ones where the difference is observable:
+    /// `addEventListener` (a synchronous `dispatchEvent` or `el.click()` runs
+    /// the listener on the dispatcher's stack, inside whatever computation made
+    /// that call), `Function.prototype.bind`'s bound arguments (the bound
+    /// function is called by whoever holds it), `PromiseLike.then` (any
+    /// thenable, which may call back synchronously) and the Geolocation pair
+    /// (both methods "call back with error" synchronously when the document is
+    /// not fully active). A caller's listener may still be current when such a
+    /// callback runs, so no clearing is claimed for it.
     DeferredCallback,
+    /// The argument is handed to a host task or microtask queue and invoked
+    /// from it: after the runtime call returns, and on an otherwise empty
+    /// JavaScript execution-context stack, so no listener of any caller can be
+    /// current when it runs. See [`FRESH_STACK_SCHEDULERS`].
+    FreshStackCallback,
     /// Storage exposes the value to later code without proving invocation.
     RetainedValue,
     /// The argument value may be read, copied, or retained, but is not invoked.
     ValueOnly,
 }
 
+/// The reviewed host schedulers that invoke a callback argument only from a
+/// task or microtask queue, never on the scheduling call's own stack or on a
+/// stack another caller can enter synchronously. Each is a standard-library
+/// declaration the table below matches by its compiler-selected qualified
+/// name, never by spelling:
+///
+/// - `queueMicrotask`, `Promise.then`/`catch`/`finally` -- microtasks (HTML
+///   "queue a microtask"; ECMA-262 `HostEnqueuePromiseJob`), which run only
+///   when the execution-context stack is empty;
+/// - `setTimeout`, `setInterval` -- HTML timer initialization steps, which
+///   queue a global task;
+/// - `requestAnimationFrame`, `requestIdleCallback` -- run from the event
+///   loop's "update the rendering" and idle-period steps;
+/// - `Scheduler.postTask` -- queues a scheduler task;
+/// - the `IntersectionObserver`, `ResizeObserver`, `MutationObserver`,
+///   `PerformanceObserver` and `ReportingObserver` constructors -- their
+///   callbacks are delivered by a queued task or microtask; `takeRecords()`
+///   returns records without invoking the callback.
+///
+/// This is the list [`RuntimeArgumentBehavior::FreshStackCallback`] answers
+/// for, and the only host evidence that lets a package contract say a
+/// `deferred` callback runs `untracked`. `PromiseLike.then`, `addEventListener`,
+/// `Function.prototype.bind` and Geolocation are deliberately absent; see
+/// [`RuntimeArgumentBehavior::DeferredCallback`].
+pub(super) const FRESH_STACK_SCHEDULERS: &[&str] = &[
+    "queueMicrotask",
+    "setTimeout",
+    "setInterval",
+    "requestAnimationFrame",
+    "requestIdleCallback",
+    "Promise.then",
+    "Promise.catch",
+    "Promise.finally",
+    "Scheduler.postTask",
+    "IntersectionObserver.construct",
+    "ResizeObserver.construct",
+    "MutationObserver.construct",
+    "PerformanceObserver.construct",
+    "ReportingObserver.construct",
+];
+
+impl RuntimeArgumentBehavior {
+    /// Whether the callback, when it runs, is proven to run with no caller's
+    /// listener current -- the one fact a `deferred` contract row needs before
+    /// it may say `untracked`.
+    pub(super) const fn runs_on_fresh_stack(self) -> bool {
+        matches!(self, Self::FreshStackCallback)
+    }
+}
+
+/// The audited behavior of `argument` at `call`, with the fresh-stack subset of
+/// the deferring schedulers split out.
+///
+/// The table in [`timing_behavior`] answers *when* the argument runs; whether a
+/// deferred one runs on a fresh stack is a second, separately reviewed fact,
+/// and [`FRESH_STACK_SCHEDULERS`] is its only source. Keeping the list apart
+/// from the timing arms means a scheduler added to the table is `deferred` and
+/// `ambient-at-execution` until someone reviews its stack, rather than
+/// inheriting a clearing claim from the arm it was pasted beside.
 pub(super) fn argument_behavior(
+    call: &ResolvedCall,
+    actual_callability: Option<Callability>,
+    argument: usize,
+) -> Option<RuntimeArgumentBehavior> {
+    let behavior = timing_behavior(call, actual_callability, argument)?;
+    let fresh_stack = behavior == RuntimeArgumentBehavior::DeferredCallback
+        && call.declaration.as_ref().is_some_and(|declaration| {
+            declaration.standard_library
+                && FRESH_STACK_SCHEDULERS.contains(&declaration.qualified_name.as_ref())
+        });
+    Some(if fresh_stack {
+        RuntimeArgumentBehavior::FreshStackCallback
+    } else {
+        behavior
+    })
+}
+
+fn timing_behavior(
     call: &ResolvedCall,
     actual_callability: Option<Callability>,
     argument: usize,
@@ -428,7 +522,7 @@ mod tests {
                 callability(Callability::Callable),
                 0,
             ),
-            Some(RuntimeArgumentBehavior::DeferredCallback)
+            Some(RuntimeArgumentBehavior::FreshStackCallback)
         );
     }
 
@@ -443,7 +537,7 @@ mod tests {
                     callability(Callability::Callable),
                     0,
                 ),
-                Some(RuntimeArgumentBehavior::DeferredCallback)
+                Some(RuntimeArgumentBehavior::FreshStackCallback)
             );
             assert_eq!(
                 argument_behavior(
@@ -539,7 +633,7 @@ mod tests {
                     callability(Callability::Callable),
                     0,
                 ),
-                Some(RuntimeArgumentBehavior::DeferredCallback),
+                Some(RuntimeArgumentBehavior::FreshStackCallback),
                 "{owner}"
             );
         }
@@ -595,7 +689,7 @@ mod tests {
                 callability(Callability::Callable),
                 0,
             ),
-            Some(RuntimeArgumentBehavior::DeferredCallback)
+            Some(RuntimeArgumentBehavior::FreshStackCallback)
         );
     }
 
@@ -745,11 +839,34 @@ mod tests {
             Some(RuntimeArgumentBehavior::InlineCallback)
         );
 
-        for (owner, name, argument) in [
-            ("Geolocation", "getCurrentPosition", 0),
-            ("Geolocation", "getCurrentPosition", 1),
-            ("Geolocation", "watchPosition", 0),
-            ("Scheduler", "postTask", 0),
+        // Geolocation defers, and does not promise a fresh stack: "call back
+        // with error" runs synchronously when the document is not fully
+        // active. `postTask` only ever runs its callback from a queued task.
+        for (owner, name, argument, expected) in [
+            (
+                "Geolocation",
+                "getCurrentPosition",
+                0,
+                RuntimeArgumentBehavior::DeferredCallback,
+            ),
+            (
+                "Geolocation",
+                "getCurrentPosition",
+                1,
+                RuntimeArgumentBehavior::DeferredCallback,
+            ),
+            (
+                "Geolocation",
+                "watchPosition",
+                0,
+                RuntimeArgumentBehavior::DeferredCallback,
+            ),
+            (
+                "Scheduler",
+                "postTask",
+                0,
+                RuntimeArgumentBehavior::FreshStackCallback,
+            ),
         ] {
             let mut call = resolved_call(name, Some(owner), true, Callability::Callable);
             if argument == 1 {
@@ -760,7 +877,7 @@ mod tests {
             }
             assert_eq!(
                 argument_behavior(&call, callability(Callability::Unknown), argument),
-                Some(RuntimeArgumentBehavior::DeferredCallback),
+                Some(expected),
                 "{owner}.{name} argument {argument}"
             );
         }
@@ -792,5 +909,89 @@ mod tests {
             argument_behavior(&call, callability(Callability::Unknown), 0),
             None
         );
+    }
+
+    /// The deferring schedulers that are *not* a fresh stack keep their timing
+    /// and gain no clearing: a synchronous `dispatchEvent`/`click()` runs an
+    /// event listener on the dispatcher's stack, a bound function is called by
+    /// whoever holds it, and a thenable's `then` may call back at once.
+    #[test]
+    fn deferrals_a_caller_can_enter_synchronously_are_not_fresh_stacks() {
+        for owner in ["EventTarget", "Window"] {
+            let mut listen =
+                resolved_call("addEventListener", Some(owner), true, Callability::Callable);
+            listen.arguments = Arc::from([
+                argument_mapping(0, Callability::NonCallable),
+                argument_mapping(1, Callability::Callable),
+            ]);
+            let behavior = argument_behavior(&listen, callability(Callability::Callable), 1);
+            assert_eq!(
+                behavior,
+                Some(RuntimeArgumentBehavior::DeferredCallback),
+                "{owner}"
+            );
+            assert!(!behavior.is_some_and(RuntimeArgumentBehavior::runs_on_fresh_stack));
+        }
+
+        let mut bind = resolved_call(
+            "bind",
+            Some("CallableFunction"),
+            true,
+            Callability::Callable,
+        );
+        bind.arguments = Arc::from([
+            argument_mapping(0, Callability::Unknown),
+            argument_mapping(1, Callability::Callable),
+        ]);
+        assert_eq!(
+            argument_behavior(&bind, callability(Callability::Callable), 1),
+            Some(RuntimeArgumentBehavior::DeferredCallback)
+        );
+
+        let mut thenable = resolved_call("then", Some("PromiseLike"), true, Callability::Callable);
+        thenable.arguments = Arc::from([argument_mapping(0, Callability::Callable)]);
+        assert_eq!(
+            argument_behavior(&thenable, callability(Callability::Callable), 0),
+            Some(RuntimeArgumentBehavior::DeferredCallback)
+        );
+        let mut promise = resolved_call("then", Some("Promise"), true, Callability::Callable);
+        promise.arguments = Arc::from([argument_mapping(0, Callability::Callable)]);
+        assert_eq!(
+            argument_behavior(&promise, callability(Callability::Callable), 0),
+            Some(RuntimeArgumentBehavior::FreshStackCallback)
+        );
+    }
+
+    /// The fresh-stack list is a refinement of the timing table, never a
+    /// source of timing on its own: a same-named project declaration, or a
+    /// listed name at a position the table does not defer, gains nothing.
+    #[test]
+    fn the_fresh_stack_list_only_refines_a_standard_deferral() {
+        assert_eq!(
+            argument_behavior(
+                &resolved_call("setTimeout", None, false, Callability::Callable),
+                callability(Callability::Callable),
+                0,
+            ),
+            None
+        );
+        let mut timer = resolved_call("setTimeout", None, true, Callability::Callable);
+        timer.arguments = Arc::from([
+            argument_mapping(0, Callability::Callable),
+            argument_mapping(1, Callability::NonCallable),
+        ]);
+        assert_eq!(
+            argument_behavior(&timer, callability(Callability::NonCallable), 1),
+            Some(RuntimeArgumentBehavior::ValueOnly)
+        );
+        assert!(RuntimeArgumentBehavior::FreshStackCallback.runs_on_fresh_stack());
+        for behavior in [
+            RuntimeArgumentBehavior::InlineCallback,
+            RuntimeArgumentBehavior::DeferredCallback,
+            RuntimeArgumentBehavior::RetainedValue,
+            RuntimeArgumentBehavior::ValueOnly,
+        ] {
+            assert!(!behavior.runs_on_fresh_stack(), "{behavior:?}");
+        }
     }
 }
