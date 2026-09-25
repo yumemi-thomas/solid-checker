@@ -1,5 +1,53 @@
 # Precision backlog
 
+## The dialect-callee refusal is an archive-coverage question, not a binding bug (2026-09-25)
+
+Status: **measured; nothing fixed yet, a decision is open** (ways-to-improve
+§ 3.4, step 4 of § 4). The 59 demanded `creates` domain-sites refused "a
+resolved callee that is neither a default-library member, a dialect primitive
+under the negative authority, nor a declaration in this artifact's own runtime
+source" for `getOwner` / `onCleanup` (`createHydratableSingletonRoot` 27,
+`createMicrotask` 20, `createSingletonRoot` 7, `debounce` 4, `throttle` 1).
+
+Measured with one temporary diagnostic in `census_dialect_axiom_for_callee`
+(removed after the run; the file was restored byte for byte) and one
+certification of `@solid-primitives/scheduled@2.0.0-next.2`, floor and head
+rows, debug binary with pins, 2026-09-25. All 8 `getOwner` `creates` calls
+decline at the same gate, **gate 8, `audited_archive_for_snapshot` ->
+`Version`**:
+
+- The callee resolves exactly: the declaration is
+  `node_modules/@solidjs/signals/dist/types/core/owner.d.ts::getOwner`, it
+  strips to an authenticated source root marked `dependency`, and it is a
+  member of that archive. Gates 1 to 7 pass.
+- The archive under that root is `@solidjs/signals@2.0.0-rc.0` on the floor
+  row and **`@solidjs/signals@2.0.0-rc.6`** on the head row. The dialect's
+  audited tuple, and every negative row bound to it (`solid_2.rs`,
+  `RC3_CORE_PRIMITIVES_AUDIT`), is `@solidjs/signals@2.0.0-rc.3`.
+- Across the retained install trees (measured): every `solid-js@2.0.0-rc.3`
+  declares `@solidjs/signals: ^2.0.0-rc.3` and resolves rc.6 (34 trees), the
+  rc.0 trees resolve rc.0 (26), and **no tree installs rc.3**. So no
+  `@solidjs/signals` negative row the dialect carries can bind anywhere in this
+  corpus, not only these two.
+
+So it is neither a binding bug nor a row-shape question: the rows are right
+and bind the archive they audited, and the ecosystem does not install that
+archive. The options, for the owner:
+
+1. Audit the same primitives on `@solidjs/signals@2.0.0-rc.6` (and rc.0 if
+   the floor matters) as new audited tuples with their own slice digests: a
+   reading of small functions per archive, days, and it recurs at every
+   signals prerelease (§ 3.8's delivery problem, on the dialect side).
+2. Pin the census corpus to `@solidjs/signals@2.0.0-rc.3` with an install
+   override: moves the measurement, not any consumer, since a consumer
+   installing `solid-js@2.0.0-rc.3` today gets rc.6 too.
+3. Both, with 1 as the consumer-facing fix.
+
+Even with the rows binding, all five exports keep other domains open
+(`callbacks`/`returns` never proposed on the graph lane for the two rootless
+exports; `returns`/`callbacks` for the others), so this frees `creates` and
+closes 0 sites on its own (estimated, from the strict open-import evidence).
+
 ## A described invocation for a caller's accessor or coercion (ADR 0118, 2026-09-25)
 
 Status: **implemented** (ways-to-improve § 3.3, step 3 of § 4). An `invoke`
