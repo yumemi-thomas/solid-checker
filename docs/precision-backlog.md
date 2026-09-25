@@ -1,5 +1,33 @@
 # Precision backlog
 
+## The compiled-in tier reaches no real Solid 2 consumer (2026-09-26)
+
+Status: **measured, open**. Report:
+[`phase22/2026-09-26-consumer-effect-of-the-regenerated-tier.md`](package-contract-v2/phase22/2026-09-26-consumer-effect-of-the-regenerated-tier.md).
+The sweep covered 151 consumer projects: solid-primitives `next` 134c5cac,
+kobalte `solid2` e9d426d4 and corvu `features/solid-v2` ffacbff0, installed
+without scripts. Each was swept with the checker at c7473c46 (the 2026-09-18
+tier) and at c6ab8d71 (the ADR 0123 tier).
+
+- **Ceiling:** 27 installed instances of tier packages. 5 match a bundle's
+  package identity, all in kobalte. **0 match its environment:** kobalte
+  installs signals rc.3, while the tier's environments are rc.0/rc.0 and
+  solid-js rc.3 with signals rc.6. The other repos use workspace links, which
+  carry no integrity, or other versions (solid-js rc.9, 2.0.0-experimental.1).
+- **Old to new:** 150 of 151 result files are byte-identical. In
+  `kobalte/packages/core`, open-claims `SC9005` went 97 -> 0 and acceptance
+  gate 305 -> 308; 15 bindings the old tier certified became uncertifiable. No
+  finding of another kind appeared or disappeared.
+- **Why:** a control with `--no-bundled-contracts` is byte-identical to the new
+  sweep. So the whole difference is the old tier's identity-only admission,
+  which applied rc.0-certified claims to an rc.3 tree. ADR 0123 now refuses
+  exactly that, so the old tier's only real-world effect was unsound.
+
+Consequence: a tier pinned to exact package and environment versions from the
+census corpus does not meet the versions consumers install. Delivery needs
+either certifying the environments consumers actually run, or project-side
+certification (`contract certify`), which binds the consumer's own tree.
+
 ## A negative row may be scoped to a host target (ADR 0124, 2026-09-25)
 
 Status: **implemented**, step 7 part 2 slices 2a and 2b. `NegativeClaimRow` has
