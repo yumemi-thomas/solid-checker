@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "dfc6c0f43b6c4fce17fb16f3147814552a4e08b5d57864f05c3339fdfa185986",
+            "closureSha256": "717af2dfe8a5d1b54efc77f3947fef4d0c6c0e5291b6a5cbb19e7f0c97d79a19",
             "path": "./index.js",
-            "sha256": "053585f9ee2a2b0dc09a4fc2f9c1b969773ec114699377fbf193d0105e28131c"
+            "sha256": "477439e7bb87202d7c238680d89336317fbe4abcea42435f00a94f7495151fae"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "638d0152517158c187e83995caa15ab36452aa3d5be5c861d6c6a354c3419019"
+            "sha256": "4e672809b2bc09c29d14caa417c3df4cdfe6cfc8f4d8778d21d12754bbdedc32"
           },
           "exports": {
             "callBound": "summary-b8dd5df3758f47db8efd211ba59ef889042a24f31b8bddf27683f5c236a9ec22",
@@ -19,7 +19,10 @@
             "computedKey": "summary-554dcd4438cbaeb5dcdc06611db8eb9be479d61186bbe359f74d20afb703e7ec",
             "deferredMember": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
             "stringKey": "summary-27c0ebe489f8b4cfe1299b41fd83ddb3ca96c21550517aef19229bfb251f53ca",
-            "writtenBinding": "summary-531f27f0017c6b946639511260e54cfaa3d9358d2914244c0afbd3f102680f26"
+            "writtenBareCallee": "summary-791cb4c57004018a3fb0b4d95eff7e5e6d9ddfa314766fc6a3ad977a3fa3d055",
+            "writtenBareCalleeAfterCall": "summary-791cb4c57004018a3fb0b4d95eff7e5e6d9ddfa314766fc6a3ad977a3fa3d055",
+            "writtenBinding": "summary-531f27f0017c6b946639511260e54cfaa3d9358d2914244c0afbd3f102680f26",
+            "writtenLocalCallee": "summary-fc1c6c51dc0ec7e9a48dcf1c32918b7ca0d1d0428ba93fd46d9a006876a6799e"
           },
           "resolution": {
             "runtimeBranch": "/exports/./import",
@@ -172,6 +175,24 @@
           "creates"
         ],
         "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-791cb4c57004018a3fb0b4d95eff7e5e6d9ddfa314766fc6a3ad977a3fa3d055": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": []
       },
       "shape": "callable"
     },
@@ -410,6 +431,52 @@
         ],
         "proposedClosures": [
           "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-fc1c6c51dc0ec7e9a48dcf1c32918b7ca0d1d0428ba93fd46d9a006876a6799e": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
           "reads",
           "creates",
           "returns"

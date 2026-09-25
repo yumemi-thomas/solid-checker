@@ -11297,9 +11297,10 @@ struct ProtocolCensusFrame {
     object_premises: std::collections::BTreeSet<usize>,
     deepest: usize,
     /// The export's parameters the producer states unwritten
-    /// (`unwrittenParameters`, protocol 39). A member-path call item is
-    /// confirmed only on one of these: the call's `calleeParameter` is rooted
-    /// by syntax, and a written binding's member is not the caller's (item B).
+    /// (`unwrittenParameters`, protocol 39). A call item, bare or member-path,
+    /// is confirmed only on one of these: the call's `calleeParameter` is
+    /// rooted by syntax, and a written binding -- or its member (item B) -- is
+    /// not the caller's.
     unwritten: std::collections::BTreeSet<usize>,
 }
 
@@ -11537,6 +11538,18 @@ fn confirm_described_callbacks(
             return Err(format!(
                 "{}, but the call at {} invokes parameter {index}, which the enumeration does not \
                  describe",
+                described(),
+                site.location
+            ));
+        }
+        // The same premise for the parameter itself: the producer roots a
+        // bare callee by symbol, so `cb = other; cb()` is parameter 0's call
+        // by syntax and `other`'s by value. Written anywhere -- even after the
+        // call, or in a default -- the binding is refused, not ordered.
+        if !frame.unwritten.contains(&index) {
+            return Err(format!(
+                "{}, but the call at {} invokes parameter {index}, whose binding the producer \
+                 does not state unwritten, so the value called need not be the caller's",
                 described(),
                 site.location
             ));
@@ -25169,6 +25182,15 @@ mod tests {
         );
     }
 
+    /// The frame of an export whose parameters 0 and 1 the producer states
+    /// unwritten, the premise every call item is confirmed on.
+    fn unwritten_frame() -> ProtocolCensusFrame {
+        ProtocolCensusFrame {
+            unwritten: [0, 1].into(),
+            ..ProtocolCensusFrame::default()
+        }
+    }
+
     /// ADR 0100: a described `callbacks` enumeration is confirmed against the
     /// walk's own `parameter-rooted` sites, in both directions, and refused by
     /// name on every way a site or an item can fail to be "from a bare
@@ -25224,7 +25246,7 @@ mod tests {
             }]
         );
         assert_eq!(
-            confirm_described_callbacks(&described, &one, plain, &ProtocolCensusFrame::default()),
+            confirm_described_callbacks(&described, &one, plain, &unwritten_frame()),
             Ok(
                 "typefacts-implementation-census:callbacks:described-invocations:1:parameters:0"
                     .into()
@@ -25240,7 +25262,7 @@ mod tests {
             json!([]),
         );
         assert_eq!(
-            confirm_described_callbacks(&described, &twice, plain, &ProtocolCensusFrame::default()),
+            confirm_described_callbacks(&described, &twice, plain, &unwritten_frame()),
             Ok(
                 "typefacts-implementation-census:callbacks:described-invocations:2:parameters:0"
                     .into()
@@ -25251,13 +25273,9 @@ mod tests {
                        sites: &CallerSuppliedInvocations,
                        completion: Option<Completion>,
                        needle: &str| {
-            let reason = confirm_described_callbacks(
-                indices,
-                sites,
-                completion,
-                &ProtocolCensusFrame::default(),
-            )
-            .expect_err("the census must refuse");
+            let reason =
+                confirm_described_callbacks(indices, sites, completion, &unwritten_frame())
+                    .expect_err("the census must refuse");
             assert!(reason.contains(needle), "expected {needle:?} in: {reason}");
         };
         // `at: call, same-stack` needs a body that completes plainly.
@@ -25430,7 +25448,7 @@ mod tests {
                 &enumeration(&[0], &[(Get, 0)]),
                 &access,
                 plain,
-                &ProtocolCensusFrame::default()
+                &unwritten_frame()
             ),
             Ok(
                 "typefacts-implementation-census:callbacks:described-invocations:1:parameters:0\
@@ -25449,7 +25467,7 @@ mod tests {
                 &enumeration(&[], &[(Coerce, 0), (Coerce, 1)]),
                 &compare,
                 plain,
-                &ProtocolCensusFrame::default()
+                &unwritten_frame()
             ),
             Ok(
                 "typefacts-implementation-census:callbacks:described-invocations:0:parameters:\
@@ -25458,17 +25476,13 @@ mod tests {
             )
         );
 
-        let refused =
-            |described: &DescribedCallbacks, sites: &CallerSuppliedInvocations, needle: &str| {
-                let reason = confirm_described_callbacks(
-                    described,
-                    sites,
-                    plain,
-                    &ProtocolCensusFrame::default(),
-                )
+        let refused = |described: &DescribedCallbacks,
+                       sites: &CallerSuppliedInvocations,
+                       needle: &str| {
+            let reason = confirm_described_callbacks(described, sites, plain, &unwritten_frame())
                 .expect_err("the census must refuse");
-                assert!(reason.contains(needle), "expected {needle:?} in: {reason}");
-            };
+            assert!(reason.contains(needle), "expected {needle:?} in: {reason}");
+        };
         // With no non-call item described, the accessor refuses at rule 2 in
         // ADR 0100's own words -- today's refusal of `access`, unchanged.
         refused(
@@ -25598,7 +25612,7 @@ mod tests {
                 &enumeration(&[], &[(Get, 0)]),
                 &sites,
                 plain,
-                &ProtocolCensusFrame::default(),
+                &unwritten_frame(),
             )
             .expect_err(member);
             assert!(
@@ -25614,7 +25628,7 @@ mod tests {
         let under = |object_premises: &[usize], deepest: usize| ProtocolCensusFrame {
             object_premises: object_premises.iter().copied().collect(),
             deepest,
-            ..ProtocolCensusFrame::default()
+            ..unwritten_frame()
         };
         let reason = confirm_described_callbacks(
             &enumeration(&[0], &[(Get, 0)]),
@@ -25879,6 +25893,70 @@ mod tests {
                     .into()
             )
         );
+    }
+
+    /// The bare call's half of the unwritten premise: the producer roots a
+    /// bare callee by symbol, so `cb = () => {}; cb()` is a `calleeParameter`
+    /// 0 site whose value is the local arrow. A call item is confirmed only on
+    /// a parameter the producer states unwritten, whichever side of the call
+    /// the write sits on.
+    #[test]
+    fn a_described_bare_call_of_a_written_binding_is_refused() {
+        use typefacts::ImplementationCompletionForm as Completion;
+        let certified = consumer_snapshot();
+        let roots = vec![consumer_root(&certified)];
+        let source = "/project/node_modules/consumer/dist/index.js";
+        let mut run = census_run(&certified, &roots);
+        let transcript = census_transcript_with(
+            vec![
+                serde_json::from_value(json!({
+                    "location": {"path": source, "startByte": 100, "endByte": 104},
+                    "reach": "reachable",
+                    "kind": "call",
+                    "target": "symbol:cb",
+                    "calleeParameter": {"parameterIndex": 0},
+                }))
+                .expect("a valid call"),
+            ],
+            json!([]),
+        );
+        assert_eq!(
+            census_transcript(&mut run, &transcript, 0, &[]),
+            Ok(CensusStep::Decided),
+            "{:?}",
+            run.sites
+        );
+        let sites = run.caller_supplied_invocations;
+        let described = DescribedCallbacks {
+            calls: [0usize].into(),
+            ..DescribedCallbacks::default()
+        };
+        let frame = |unwritten: &[usize]| ProtocolCensusFrame {
+            unwritten: unwritten.iter().copied().collect(),
+            ..ProtocolCensusFrame::default()
+        };
+        let plain = Some(Completion::Plain);
+        assert_eq!(
+            confirm_described_callbacks(&described, &sites, plain, &frame(&[0])),
+            Ok(
+                "typefacts-implementation-census:callbacks:described-invocations:1:parameters:0"
+                    .into()
+            )
+        );
+        // Written, or unwritten facts only for another slot: the call site is
+        // the same, and the value it calls need not be the caller's.
+        for unwritten in [&[][..], &[1]] {
+            let reason = confirm_described_callbacks(&described, &sites, plain, &frame(unwritten))
+                .expect_err("a written binding's call is not the caller's");
+            assert!(
+                reason.contains(
+                    "the call at /project/node_modules/consumer/dist/index.js:100..104 invokes \
+                     parameter 0, whose binding the producer does not state unwritten, so the \
+                     value called need not be the caller's"
+                ),
+                "{unwritten:?}: {reason}"
+            );
+        }
     }
 
     /// ADR 0100: which proposals `described_callbacks` reads as a described

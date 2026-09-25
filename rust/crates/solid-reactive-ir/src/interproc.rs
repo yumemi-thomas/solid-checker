@@ -1066,6 +1066,11 @@ struct BoundInitializer {
 /// first, so the same site also derives that parameter's `get`. A dotted
 /// member callee (`props.onClick()`) derives neither: that is ADR 0101's
 /// `parameter-member` read, unchanged.
+///
+/// The same premise bounds ADR 0100's bare call: the pass records a direct
+/// own call of a parameter as describable only when that parameter is in
+/// [`DirectProtocolUses::unwritten_parameters`], since `cb = other; cb()` is
+/// a call of `cb` by syntax and of `other` by value.
 fn direct_protocol_parameters(
     file: &solid_facts::FileFacts,
     nodes: &[SummaryNode],
@@ -1262,6 +1267,13 @@ fn direct_protocol_parameters(
     DirectProtocolUses {
         protocols: uses.into_iter().collect(),
         member_calls: member_calls.into_iter().collect(),
+        unwritten_parameters: unwritten
+            .iter()
+            .map(|declaration| {
+                let (owner, index, _) = parameters[declaration];
+                (owner, index)
+            })
+            .collect(),
     }
 }
 
@@ -1274,6 +1286,11 @@ struct DirectProtocolUses {
     /// `(callee member span, owner, parameter index, path)`: item B's calls
     /// of a literal-keyed member of the parameter's own value.
     member_calls: Vec<(Span, Span, usize, Vec<String>)>,
+    /// `(owner, parameter index)` of every plain, undefaulted parameter
+    /// written nowhere in the file: the only parameters whose bare call is
+    /// the caller's value, and so the only ones a described call item is
+    /// proposed for (`direct_callback_parameters`).
+    unwritten_parameters: HashSet<(Span, usize)>,
 }
 
 /// Whether the parameter at `index` of the function whose body is `body` binds
@@ -1323,6 +1340,7 @@ fn discover_interprocedural_graph(
     let DirectProtocolUses {
         protocols,
         member_calls,
+        unwritten_parameters,
     } = direct_protocol_parameters(file, nodes, nodes_by_path);
     contribution.direct_protocol_parameters = protocols;
     let member_calls = member_calls
@@ -1706,7 +1724,14 @@ fn discover_interprocedural_graph(
                     .or_else(|| direct_own_call.then_some("inline")),
             };
             if let Some(execution) = execution {
-                if direct_own_call {
+                // Recorded only for a binding nothing writes: `cb = other;
+                // cb()` is a call of `cb` by syntax and of `other` by value,
+                // and the census refuses a described call of a parameter the
+                // producer does not state unwritten. The row itself is still
+                // written; only the closed enumeration is not proposed.
+                if direct_own_call
+                    && unwritten_parameters.contains(&(nodes[callback_owner].span, parameter))
+                {
                     contribution
                         .direct_callback_parameters
                         .push((nodes[callback_owner].span, parameter));

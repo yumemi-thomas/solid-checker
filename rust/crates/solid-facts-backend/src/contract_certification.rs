@@ -17081,7 +17081,7 @@ export const value = phantom;
             &'static [(usize, &'static str)],
             &'static [usize],
         );
-        let exports: [Claim; 7] = [
+        let exports: [Claim; 10] = [
             // What the generator proposes (`expected.json`).
             ("callHandler", &[1], &[(1, "0")], &[0, 1]),
             ("callBound", &[], &[(1, "0")], &[1]),
@@ -17094,6 +17094,12 @@ export const value = phantom;
             ("writtenBinding", &[], &[(0, "0")], &[]),
             // What the generator proposes: nothing at the call.
             ("composeEventHandlers", &[], &[], &[]),
+            // A bare call of a written binding: the call is of whatever the
+            // binding holds, not necessarily the caller's value. The generator
+            // proposes the item only for `writtenLocalCallee`.
+            ("writtenBareCallee", &[0], &[], &[]),
+            ("writtenLocalCallee", &[0], &[], &[]),
+            ("writtenBareCalleeAfterCall", &[0], &[], &[]),
         ];
         let pin = pinned_producer_for_test()?;
         let name = "implementation-census-member-callee";
@@ -17278,7 +17284,8 @@ export const value = phantom;
     /// key, in a returned closure, of a written binding, or in a local helper
     /// reached from a returned closure (`composeEventHandlers`) withholds by
     /// name while the row certifies; a string key is confirmed by the census and
-    /// withheld for want of a synthesized veto.
+    /// withheld for want of a synthesized veto. A bare call of a written
+    /// binding, before or after the write, is refused by the census.
     #[test]
     fn the_member_callee_census_certifies_exactly_the_described_member_calls() {
         use solid_reactive_ir::contract_semantics::InvokeProtocol::{Call, Get};
@@ -17354,6 +17361,27 @@ export const value = phantom;
             // Confirmed by the census; no synthesized module installs a member
             // at a property key, so the closure has no veto and is withheld.
             ("stringKey", "no recipe in corpus"),
+            // A bare call of a written binding: the census refuses it before
+            // the veto runs. When the census confirmed it, `writtenBareCallee`'s
+            // claim was contradicted by the probe, which failed the whole row,
+            // and `writtenLocalCallee`'s -- a call of a local arrow -- certified
+            // a call of the caller's value that never happens. The write after
+            // the call refuses too: fail-closed.
+            (
+                "writtenBareCallee",
+                "invokes parameter 0, whose binding the producer does not state unwritten, so \
+                 the value called need not be the caller's",
+            ),
+            (
+                "writtenLocalCallee",
+                "invokes parameter 0, whose binding the producer does not state unwritten, so \
+                 the value called need not be the caller's",
+            ),
+            (
+                "writtenBareCalleeAfterCall",
+                "invokes parameter 0, whose binding the producer does not state unwritten, so \
+                 the value called need not be the caller's",
+            ),
         ] {
             let reasons = withheld(export);
             assert!(
@@ -17373,6 +17401,9 @@ export const value = phantom;
             "stringKey",
             "deferredMember",
             "composeEventHandlers",
+            "writtenBareCallee",
+            "writtenLocalCallee",
+            "writtenBareCalleeAfterCall",
         ] {
             assert!(
                 closed_empty_creates_in(main, export),

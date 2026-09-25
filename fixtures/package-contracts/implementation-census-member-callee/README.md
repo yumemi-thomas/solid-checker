@@ -33,6 +33,9 @@ producer with the synthesized member veto.
 | `deferredMember` | `[]` (the call is in a returned closure) | call 0 at `[0]`, get 0 | withheld: no uncaptured use of the argument at the call | certified |
 | `writtenBinding` | `[]` | call 0 at `[0]` | refused: the member read's subject is a written parameter | refused, the same |
 | `composeEventHandlers` | `[]` | the same | refused: the member call is `callHandler`'s, reached from a returned closure | certified (the walk reaches `callHandler` at depth 1) |
+| `writtenBareCallee` | open (`cb = other` hands `other` on, which opens the domain) | call 0 | refused: a bare call of a parameter the producer does not state unwritten | certified |
+| `writtenLocalCallee` | open, with the call 0 item (was `[call 0]` closed) | call 0 | refused, the same | certified |
+| `writtenBareCalleeAfterCall` | open (as `writtenBareCallee`) | call 0 | refused, the same, although the call is the caller's | certified |
 
 `callHandler` and `composeEventHandlers` are `@kobalte/utils@2.0.0-alpha.0`'s
 `dist/index.js` bytes. `index.d.ts` declares them as that package does, with
@@ -50,6 +53,17 @@ that path, under rules 5 to 8 (depth 0, uncaptured, every such site described,
 every described member called), and only on a parameter the producer states
 unwritten. Every other member call still refuses at rule 4 in its own words,
 and item A's premise rule and narrowing apply to the non-call items unchanged.
+
+The same premise bounds a bare call. The producer roots `cb()` at parameter 0
+by symbol, whatever the binding holds by then, so a described call item is
+confirmed only on a parameter the producer states unwritten, and the generator
+proposes the closed enumeration only for a plain, undefaulted parameter written
+nowhere in the file. Before that, `writtenLocalCallee` (`cb = () => {}; cb()`)
+was proposed and certified `callbacks: [call 0]`, a call of the caller's value
+that never happens, and a hand-set `[call 0]` for `writtenBareCallee` passed
+the census and was contradicted by the veto, which failed the whole row. The
+write after the call (`writtenBareCalleeAfterCall`) refuses too: the census
+does not order a write against the call, which is the fail-closed direction.
 
 `composeEventHandlers`' `callbacks` stays open: it needs a deferred-invocation
 item and a returned-function `returns` shape (ways-to-improve § 3.3). Its

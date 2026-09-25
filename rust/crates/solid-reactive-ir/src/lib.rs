@@ -1141,8 +1141,9 @@ pub struct ContractExport {
     /// the producer's own arms of each return.
     pub returns_argument_containers: Vec<ArgumentContainer>,
     /// The parameters this export's own body calls directly -- the callee is
-    /// the parameter itself, and the call is written in the body of the
-    /// function that declares it, outside any nested callable (ADR 0100). The
+    /// the parameter itself, a plain undefaulted binding written nowhere, and
+    /// the call is written in the body of the function that declares it,
+    /// outside any nested callable (ADR 0100). The
     /// interprocedural pass writes an `inline` callback row for exactly that
     /// shape and for a dialect primitive's inline position alike, and the wire
     /// does not tell them apart; this set does, so the generator proposes a

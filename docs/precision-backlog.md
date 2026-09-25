@@ -1,5 +1,66 @@
 # Precision backlog
 
+## A described bare call needs an unwritten binding (2026-09-25)
+
+Status: **implemented**, fail-closed. ADR 0100's census confirmed a bare call
+item (`callbacks: [call i]`, empty path) on the producer's `calleeParameter`,
+which roots the callee by symbol and ignores writes, and never read
+`unwrittenParameters`; only ADR 0120's member items did. `confirm_described_callbacks`
+now refuses a bare call site whose parameter the producer does not state
+unwritten ("whose binding the producer does not state unwritten, so the value
+called need not be the caller's"), and the generator records a direct own call
+as describable (`direct_callback_parameters`) only for a plain, undefaulted
+parameter written nowhere in the file, the premise item A and item B already
+used. The `inline` row itself is still written, so the domain stays open with
+the item instead of closing. Fixture: `implementation-census-member-callee`
+(`writtenBareCallee`, `writtenLocalCallee`, `writtenBareCalleeAfterCall`), and
+the unit test `a_described_bare_call_of_a_written_binding_is_refused`.
+
+Measured before the fix (2026-09-25, the tracer
+`the_member_callee_census_certifies_exactly_the_described_member_calls` run
+through `make test-focused` against the pinned producer, one hand-set
+`[call 0]` claim at a time):
+
+- `writtenLocalCallee(cb) { cb = () => {}; cb(); }`: **certified** closed
+  `callbacks: [call 0]`, a call of the caller's value that never happens. The
+  generator proposed exactly that closure too (fresh debug binary,
+  `contract generate` on the fixture). This was the false positive.
+- `writtenBareCallee(cb, other) { cb = other; cb(); }`: confirmed by the census,
+  then contradicted by the probe, which failed the **whole row** (every export
+  of the package lost its contract). The generator did not propose it, but only
+  because `cb = other` hands `other` on, which opens `callbacks` by itself
+  (checked with an assignment-only export), not because of any write check.
+- `writtenBareCalleeAfterCall(cb, other) { cb(); cb = other; }`: certified, and
+  true.
+
+Measured after the fix (same tracer and binary): all three refuse at the census
+in the new wording, before the veto runs, and the row certifies; each keeps its
+closed `creates: []`. The generator no longer proposes `writtenLocalCallee`'s
+closure. Generator corpus (every `corpus.json` fixture regenerated with the
+fresh debug binary and compared byte for byte): 1 fixture moved, this one, and
+only by the three exports added to it. `make contract-corpus` (same day):
+103 fixtures green, possible operations 607 -> 608, the one being
+`writtenLocalCallee`'s open `call 0` row. Coverage (fresh debug binary): 87
+projects, 452 findings, no snapshot moved.
+
+Deliberate conservatism: `writtenBareCalleeAfterCall` now refuses although its
+call is the caller's; the census does not order a write against a call. So does
+any bare call of a parameter the producer omits from `unwrittenParameters`: a
+default (`cb = noop`), a rest or destructured slot, a function that touches
+`arguments` or `eval`, a write anywhere including unreachable code, and a
+signature whose declarations are not the implementation's parameters.
+
+Measured on the ecosystem (2026-09-25 coverage census, release binary, pinned
+corpus, non-updating): no movement. `totals.consumer` stays at clean 533,
+some-uses 167, every-import 294, and no closed `callbacks` was lost, so no
+demanded export relied on a bare call of a written or defaulted parameter.
+
+Still open: an **open**-domain positive `call i` item on a written binding is
+still written by the generator, and the positive-fact check
+(`require_parameter_flow`) matches `calleeParameter` by symbol without the
+unwritten fact, so it may certify a "may invoke" item for a call that is not
+the caller's (read from code, not measured).
+
 ## A return of a member of the caller's argument, or undefined (ADR 0121, 2026-09-25)
 
 Status: **implemented**, round 2 and close of the `callHandler` campaign
@@ -52,7 +113,8 @@ Still open: string-keyed member items certify only with a hand recipe (the
 synthesized veto observes indices); `composeEventHandlers` needs a deferred
 invocation item and a returned-function shape; the census treats a call
 through a written parameter (`cb = other; cb()`) as parameter-rooted, and only
-member items check `unwrittenParameters` (spun off for a separate check).
+member items check `unwrittenParameters` (closed for described bare calls by the
+entry above).
 
 ## `@solidjs/signals@2.0.0-rc.6` carries its own negative rows (2026-09-25)
 

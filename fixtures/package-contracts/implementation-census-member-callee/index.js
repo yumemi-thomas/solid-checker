@@ -54,4 +54,29 @@ export function stringKey(h) {
 	h["run"]();
 }
 
+// A written bare callee: the call is of whatever `cb` holds after the write,
+// which is `other`, not the caller's first argument. The census refuses a
+// described call of a binding the producer does not state unwritten.
+export function writtenBareCallee(cb, other) {
+	cb = other;
+	cb();
+}
+
+// A written bare callee whose new value is local: nothing of the caller's
+// escapes, so the walk writes a `call 0` row, which is false -- the call is of
+// the local arrow, never of the caller's `cb`. The generator does not propose
+// the closed enumeration, and the census refuses it.
+export function writtenLocalCallee(cb) {
+	cb = () => {};
+	cb();
+}
+
+// The same write after the call: the call itself is of the caller's `cb`, but
+// the binding is written, so the producer does not state it unwritten and the
+// census refuses the item as well -- conservative, not ordered.
+export function writtenBareCalleeAfterCall(cb, other) {
+	cb();
+	cb = other;
+}
+
 export { callHandler, composeEventHandlers };

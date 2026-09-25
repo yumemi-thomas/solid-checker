@@ -41,3 +41,6 @@ export declare function computedKey(h: Record<string, () => void>, k: string): v
 export declare function deferredMember(h: [() => void]): () => void;
 export declare function writtenBinding(h?: [() => void]): void;
 export declare function stringKey(h: { run: () => void }): void;
+export declare function writtenBareCallee(cb: () => void, other: () => void): void;
+export declare function writtenBareCalleeAfterCall(cb: () => void, other: () => void): void;
+export declare function writtenLocalCallee(cb: () => void): void;
