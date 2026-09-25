@@ -5,7 +5,7 @@
       "rule": "package-contract-incomplete",
       "code": "SC9005",
       "kind": "uncertifiable",
-      "severity": "error",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/package-plain-return-consumer/App.tsx",
       "start": 18,
       "end": 29,

@@ -1003,6 +1003,24 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             if defect.uncertain {
                 finding.kind = "uncertifiable".into();
             }
+            // ADR 0119: severity by gate. An accepted contract that leaves
+            // claims open is analysis over a stated partial premise, so its
+            // obligation is a warning; every other SC9005 gate -- no accepted
+            // contract, an obsolete policy, an export the contract omits, a
+            // claim the site cannot bind -- stays the rule's error. The kind
+            // stays `uncertifiable`, so the run still certifies nothing. This
+            // inverts the owner-requirement precedent
+            // (`Finding::for_owner_requirement`), which *raises* an uncertain
+            // requirement to error; the ADR says why.
+            if matches!(
+                defect.kind,
+                StaticDefectKind::PackageContractExportMissing { .. }
+            ) && defect
+                .analysis_context
+                .starts_with("unknown-contract-claims:")
+            {
+                finding.severity = "warning".into();
+            }
         }
         FindingSeed::AsyncRead(read) => {
             finding.related_locations = vec![read.declaration.clone()];
@@ -1113,6 +1131,116 @@ mod tests {
                 end_byte: end,
             },
         )
+    }
+
+    /// A catalog whose every rule is an uncertifiable error, as SC9005 is.
+    struct ErrorCatalog;
+
+    impl CatalogWording for ErrorCatalog {
+        fn capabilities(&self) -> CatalogCapabilities {
+            CatalogCapabilities::SOLID_2
+        }
+
+        fn wording(&self, _seed: FindingSeed<'_>) -> FindingWording {
+            FindingWording::new(
+                RuleMetadata {
+                    code: "SC9005",
+                    name: "package-contract-incomplete",
+                    severity: "error",
+                    uncertifiable: true,
+                    default_enabled: true,
+                    presets: &[],
+                },
+                "contract",
+                "",
+            )
+        }
+    }
+
+    fn contract_defect(context: &str, site: crate::ContractDefectSite, at: u64) -> StaticDefect {
+        StaticDefect {
+            kind: StaticDefectKind::PackageContractExportMissing {
+                module: "pkg".into(),
+                export: "access".into(),
+                reexported: false,
+                site,
+            },
+            location: location(at),
+            analysis_context: context.into(),
+            fixes: vec![],
+            uncertain: false,
+        }
+    }
+
+    #[test]
+    fn only_the_open_claims_gate_lowers_package_contract_severity_to_warning() {
+        // ADR 0119: an accepted contract's open claims warn; every other gate
+        // keeps the rule's error, and every one stays uncertifiable.
+        let cases = [
+            (
+                "unknown-contract-claims:returns",
+                crate::ContractDefectSite::Import,
+                "warning",
+            ),
+            (
+                "unknown-contract-claims:callbacks",
+                crate::ContractDefectSite::Argument,
+                "warning",
+            ),
+            (
+                crate::contracts::UNACCEPTED_IMPORT_CONTEXT,
+                crate::ContractDefectSite::Import,
+                "error",
+            ),
+            (
+                "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics",
+                crate::ContractDefectSite::Import,
+                "error",
+            ),
+            (
+                "unbound-contract-claims:callback arguments",
+                crate::ContractDefectSite::Argument,
+                "error",
+            ),
+            ("", crate::ContractDefectSite::Import, "error"),
+        ];
+        for (index, (context, site, severity)) in cases.into_iter().enumerate() {
+            let defect = contract_defect(context, site, index as u64);
+            let finding = project_finding(FindingSeed::StaticDefect(&defect), &ErrorCatalog);
+            assert_eq!(finding.severity, severity, "{context:?}");
+            assert_eq!(finding.kind, "uncertifiable", "{context:?}");
+        }
+        // A claim group collapsed over its import sites keeps the lowered
+        // severity, and the acceptance gate collapsed over a package keeps
+        // the error.
+        let defects = vec![
+            contract_defect(
+                "unknown-contract-claims:returns",
+                crate::ContractDefectSite::Import,
+                1,
+            ),
+            contract_defect(
+                "unknown-contract-claims:returns",
+                crate::ContractDefectSite::Import,
+                2,
+            ),
+            contract_defect(
+                crate::contracts::UNACCEPTED_IMPORT_CONTEXT,
+                crate::ContractDefectSite::Import,
+                3,
+            ),
+            contract_defect(
+                crate::contracts::UNACCEPTED_IMPORT_CONTEXT,
+                crate::ContractDefectSite::Import,
+                4,
+            ),
+        ];
+        let collapsed = collapse_unaccepted_contract_defects(&defects, &ErrorCatalog);
+        let severities = collapsed
+            .iter()
+            .map(|finding| finding.severity.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(severities, ["warning", "error"]);
     }
 
     #[test]

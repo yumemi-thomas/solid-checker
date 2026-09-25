@@ -22,6 +22,23 @@ open-claim context naming the exact callback and independent semantic axes; the
 diagnostic never emits an editable contract or treats an omitted field as
 negative proof.
 
+## Severity by gate
+
+The rule's severity is **error**, and it stays error at every gate but one
+([ADR 0119](../adr/0119-sc9005-severity-by-gate.md)):
+
+| gate | severity |
+| --- | --- |
+| no receipt-accepted contract matches the import (acceptance gate) | error |
+| a contract authorized only by obsolete proof policy 1 | error |
+| an accepted contract omits the imported export | error |
+| an accepted contract states a claim the call site cannot bind | error |
+| **an accepted contract leaves claims open** (`unknown-contract-claims:…`) | **warning** |
+
+Every one of them is `uncertifiable`, so a run with any of them still certifies
+nothing; the warning only says the analysis ran over an accepted, partial
+premise rather than a missing one.
+
 ## Why it matters
 
 Reactive reads, writes, ownership, and timing can cross ordinary function and

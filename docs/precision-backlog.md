@@ -1,5 +1,21 @@
 # Precision backlog
 
+## SC9005 is a warning at the open-claims gate (ADR 0119, 2026-09-25)
+
+Status: **implemented** (ways-to-improve § 3.6, step 5 of § 4). A `SC9005`
+finding raised because an accepted contract leaves claims open
+(`unknown-contract-claims:…`, at an import or a call argument) has severity
+`warning`; no accepted contract, a policy-1-only contract, an omitted export
+and an unbindable claim keep the rule's `error`. Kind stays `uncertifiable`,
+and run status is derived from kinds, so a run with only such warnings still
+certifies nothing. This inverts the owner-requirement precedent
+(`Finding::for_owner_requirement` raises an uncertain requirement to error);
+ADR 0119 says why the two are consistent. Measured: exactly three fixture
+snapshots move, one `severity` line each (`package-argument-container-consumer`,
+`package-plain-return-consumer`, `package-protocol-callbacks-consumer`).
+Not done: the import-level `creates` obligation moved to each call (§ 3.6's
+second half), which needs a per-call owner-context measurement first.
+
 ## The dialect-callee refusal is an archive-coverage question, not a binding bug (2026-09-25)
 
 Status: **measured; nothing fixed yet, a decision is open** (ways-to-improve
