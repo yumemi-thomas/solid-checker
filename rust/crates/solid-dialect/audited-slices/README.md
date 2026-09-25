@@ -14,19 +14,35 @@ archive*, which this repository does not carry — so without these files the
 slice half of the check could only run where the archive happened to be
 installed, and "green" would have meant "skipped" on most machines. Every
 `slice_sha256` in `solid_2.rs` is therefore verified against the bytes here
-**unconditionally**; the archive-reading arm (`SOLID_CHECKER_RC3_ARCHIVE_ROOT`)
-is a second, stronger check that confirms these bytes are still the archive's
-bytes at the cited offsets, and `scripts/verify.sh` always arms it.
+**unconditionally**, and the cited file against its archive's pinned
+`files.json` (digest and byte length). The archive-reading arm is a second,
+stronger check that confirms these bytes are still the archive's bytes at the
+cited offsets. It is armed per release:
+
+- rc.3, `SOLID_CHECKER_RC3_ARCHIVE_ROOT`: `scripts/verify.sh` always arms it
+  from the tsc-oracle install, and `SOLID_CHECKER_EXPECT_PROBE_PINS=1` makes
+  its absence a failure.
+- rc.6, `SOLID_CHECKER_RC6_ARCHIVE_ROOT`: optional. Nothing provisions an rc.6
+  tree today, so a run without it is not a failure, and for rc.6 the
+  unconditional slice-and-pin check is what runs. Point it at a directory
+  holding `@solidjs/signals/` of the installed `2.0.0-rc.6` to add the
+  archive-reading check.
 
 ## Layout
 
-    solid-v2/<phase0-archive-dir>/<package-relative path>.<start>-<end>.slice
+    solid-v2/<phase0-release-dir>/<phase0-archive-dir>/<package-relative path>.<start>-<end>.slice
 
-`<phase0-archive-dir>` is the directory name under
-`benchmarks/package-contract-v2/phase0/rc3/`, which is where the whole file's
-pinned `sha256` and byte length live. `<start>-<end>` is the citation's own
-half-open byte range. The path is derived from the citation's fields, so a row
-and its slice cannot be named inconsistently.
+`<phase0-release-dir>/<phase0-archive-dir>` is the directory under
+`benchmarks/package-contract-v2/phase0/` that pins the archive the citation's
+row is about — `rc3/solidjs-signals`, `rc3/solid-js`, `rc6/solidjs-signals` —
+which is where the whole file's pinned `sha256` and byte length live. The
+release directory is part of the path because two prereleases of one package
+cite the same package-relative paths (both `@solidjs/signals` archives cite
+`dist/prod/core/owner.js` at `10535-10655`, with different file digests), and a
+slice is a claim about one archive's file. `<start>-<end>` is the citation's
+own half-open byte range. The path is derived from the row's
+`(package, version)` and the citation's fields, so a row and its slice cannot be
+named inconsistently.
 
 Two slices may hash to the same value — `@solidjs/signals`' `import` default
 and `require` bundles are byte-identical for `createRoot`, `getOwner` and
@@ -35,9 +51,14 @@ about each file.
 
 ## Provenance and licence
 
-These bytes are from `@solidjs/signals@2.0.0-rc.3`
-(`sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA==`),
-published by the SolidJS project under the MIT licence. They are reproduced
+The bytes under `solid-v2/rc3/` are from `@solidjs/signals@2.0.0-rc.3`
+(`sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA==`)
+and `solid-js@2.0.0-rc.3`; those under `solid-v2/rc6/` are from
+`@solidjs/signals@2.0.0-rc.6`
+(`sha512-lPqwZNLPq1Z9CBvgXkMvi1ZFr5OHUiFNz1X40+yehszDWEbJkneZx7BGKIe9eMT/AN1NSL+PMjOiMyZaqVB2xw==`,
+`package.json` sha256 `de11cde1dd28b678f380c865be674a1f1a18a198e399ad2f997fd83aef1c163c`),
+cited by `docs/package-contract-v2/audits/2026-09-25-solid-2-rc6-signals-negative-rows.md`.
+All are published by the SolidJS project under the MIT licence. They are reproduced
 here as citation evidence only. Do not edit a slice: it is not source, it is a
 quotation, and the test that reads it exists to detect exactly such an edit.
 
@@ -48,7 +69,7 @@ both belong in the same commit as the audit section they cite.
 
     solid-v1/<phase0-archive-dir>/<package-relative path>.<start>-<end>.slice
 
-Solid 1.x had the same layout, rooted at
+Solid 1.x had the same layout without the release directory, rooted at
 `benchmarks/package-contract-v2/phase0/solid-1x/` instead of `rc3/`, verified by
 `solid_1x::tests::every_negative_row_citation_resolves_to_the_bytes_it_claims`
 with `SOLID_CHECKER_SOLID1_ARCHIVE_ROOT` as the archive-reading arm. **That

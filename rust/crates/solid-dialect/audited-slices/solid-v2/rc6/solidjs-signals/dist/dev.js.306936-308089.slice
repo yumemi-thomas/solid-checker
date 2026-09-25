@@ -1,0 +1,23 @@
+function onSettled(callback) {
+  const owner = getOwner();
+  owner && !(owner._config & CONFIG_CHILDREN_FORBIDDEN)
+    ? createTrackedEffect(() => untrack(callback), { name: "onSettled" })
+    : globalQueue.enqueue(EFFECT_USER, () => {
+        // Unowned, out-of-band fire (no owner, or a children-forbidden one this
+        // one-shot must not bind to): a returned cleanup has no lifecycle to
+        // attach to. Reject it in dev; in production the return is simply
+        // dropped — never bound to an unrelated owner or run eagerly.
+        const cleanup = callback();
+        if (cleanup !== undefined) {
+          const message =
+            "[SETTLED_CLEANUP_UNOWNED] onSettled returned a cleanup in an unowned scope; a cleanup can only be honored under an owner. Call your setup helper from an owned scope (e.g. the component body) instead of from inside an event handler, tracked effect, or another onSettled.";
+          emitDiagnostic({
+            code: "SETTLED_CLEANUP_UNOWNED",
+            kind: "lifecycle",
+            severity: "error",
+            message
+          });
+          throw new Error(message);
+        }
+      });
+}

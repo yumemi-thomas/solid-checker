@@ -333,3 +333,31 @@ reach to the domain's operation withholds the row.**
   path — but the tier binds the declaration's archive and cannot see the split,
   so the rows rest on the audit having read both. It is the mirror image of the
   "Four rows dead via cross-archive re-export" item, and belongs beside it.
+
+## Amendment 2026-09-25: a row answers only for the archive it was read on
+
+A row used to name a package and an export, and bound through the one audited
+tuple its package had. That was sound only while each package had one tuple.
+The corpus turned out never to install the audited `@solidjs/signals@2.0.0-rc.3`
+(every `solid-js@2.0.0-rc.3` resolves rc.6 through its caret range), so no
+signals row bound anywhere, and adding an rc.6 tuple to that table would have
+extended every rc.3 reading, most of them resting on the rc.3 bundled contract
+document, to bytes nobody had read.
+
+So every row now names the archive **version** it was audited against, and
+`denies` answers only when the snapshot matches that exact four-field tuple
+(name, version, integrity, manifest digest) **and** the row's version. Every
+row that existed is stated as rc.3. `@solidjs/signals@2.0.0-rc.6` carries its
+own 24 rows, each an implementation reading of rc.6's bytes in every runtime
+bundle its `exports` can select
+(`docs/package-contract-v2/audits/2026-09-25-solid-2-rc6-signals-negative-rows.md`);
+`createOptimisticStore` `reads` is withheld there, because rc.6 adds landing
+code that reads through the store the call created. The checked-in slices are
+laid out per release (`audited-slices/solid-v2/<release>/…`) because the two
+releases cite the same path and range with different bytes.
+
+What stays approximate: rc.6's integrity is the value the ecosystem's lockfiles
+record, not re-derived from a tarball (a wrong value can only stop the rows
+binding); no gate provisions an rc.6 tree, so its citations are verified against
+the checked-in slices and the pinned per-file digests rather than a live
+archive; and a new signals prerelease is, again, a new reading.

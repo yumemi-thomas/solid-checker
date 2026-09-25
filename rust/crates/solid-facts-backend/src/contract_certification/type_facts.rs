@@ -23472,16 +23472,25 @@ mod tests {
     /// identity gate reachable from a unit test at all: the fourth field is a
     /// digest of these bytes, and no synthesised payload can produce it.
     fn audited_rc3_manifest(directory: &str) -> Vec<u8> {
+        audited_phase0_manifest("rc3", directory)
+    }
+
+    /// The pinned `package.json` bytes of one audited archive, from
+    /// `benchmarks/package-contract-v2/phase0/<release>/<directory>/`. For rc.6
+    /// there is no bundled contract; the pin is the manifest itself, and
+    /// `solid-dialect`'s tuple test holds its digest to the archive tuple.
+    fn audited_phase0_manifest(release: &str, directory: &str) -> Vec<u8> {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("..")
             .join("..")
-            .join("benchmarks/package-contract-v2/phase0/rc3")
+            .join("benchmarks/package-contract-v2/phase0")
+            .join(release)
             .join(directory)
             .join("package.json");
         std::fs::read(&path).unwrap_or_else(|error| {
             panic!(
-                "the audited rc.3 manifest {} is not readable: {error}",
+                "the audited {release} manifest {} is not readable: {error}",
                 path.display()
             )
         })
@@ -23533,6 +23542,7 @@ mod tests {
     const SIGNALS_INTEGRITY: &str = "sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA==";
     const WEB_INTEGRITY: &str = "sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg==";
     const SOLID_JS_INTEGRITY: &str = "sha512-pmW6bRoTvfp/rN4jN7JmLvSaoIpFt7wm0Hi3j508S/smuJqUbRg3dQEjOPTkAwHW+McYnXrMG7cJ4AMNpLevtQ==";
+    const SIGNALS_RC6_INTEGRITY: &str = "sha512-lPqwZNLPq1Z9CBvgXkMvi1ZFr5OHUiFNz1X40+yehszDWEbJkneZx7BGKIe9eMT/AN1NSL+PMjOiMyZaqVB2xw==";
 
     /// A call whose callee resolves into `@solidjs/signals`' installed tree.
     fn signals_call(export: &str, overrides: serde_json::Value) -> typefacts::ImplementationCall {
@@ -23825,6 +23835,154 @@ mod tests {
                 "{why} must not receive the terminator"
             );
         }
+    }
+
+    /// `@solidjs/signals@2.0.0-rc.6` — the prerelease the ecosystem installs —
+    /// binds on its own rows, and only on them.
+    ///
+    /// `getOwner` and `onCleanup` `creates` are the two domains the census
+    /// refused on 59 demanded consumer sites while only rc.3 was audited. They
+    /// now terminate for an exact rc.6 snapshot, with the rc.6 coordinate in
+    /// the witness. `createOptimisticStore` `reads` is the scoping control: rc.3
+    /// carries the row, the rc.6 re-audit withheld it, so the same call answers
+    /// on rc.3 and stays silent on rc.6. And gate 8 still binds all four
+    /// fields: rc.6's coordinate over another integrity, or over rc.3's
+    /// manifest, receives nothing.
+    #[test]
+    fn census_dialect_axiom_binds_rc6_signals_on_its_own_rows() {
+        let rc6_manifest = audited_phase0_manifest("rc6", "solidjs-signals");
+        let rc3_manifest = audited_rc3_manifest("solidjs-signals");
+        let certified = archive_snapshot(
+            "consumer",
+            "1.0.0",
+            "sha512-consumer",
+            b"{\"name\":\"consumer\"}",
+            "/snapshot/consumer",
+        );
+        let terminator = |snapshot: &super::super::ArtifactSnapshot,
+                          export: &str,
+                          domain: solid_dialect::CallClaimDomain| {
+            let roots = vec![SnapshotSourceRoot {
+                path: "/project/node_modules/@solidjs/signals/".to_owned(),
+                evidence_prefix: "/node_modules/@solidjs/signals/".to_owned(),
+                snapshot,
+                dependency: true,
+            }];
+            census_dialect_axiom_for_callee(
+                &signals_call(export, json!({})),
+                domain,
+                ReachabilityFloor::MayExecute,
+                &certified,
+                &roots,
+            )
+        };
+        let rc6 = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.6",
+            SIGNALS_RC6_INTEGRITY,
+            &rc6_manifest,
+            "/snapshot/signals-rc6",
+        );
+        let rc3 = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.3",
+            SIGNALS_INTEGRITY,
+            &rc3_manifest,
+            "/snapshot/signals-rc3",
+        );
+
+        for export in ["getOwner", "onCleanup"] {
+            assert_eq!(
+                terminator(&rc6, export, solid_dialect::CallClaimDomain::Creates)
+                    .unwrap_or_else(|| panic!("rc.6 denies {export}'s creates"))
+                    .witness_site,
+                format!(
+                    "census-dialect-axiom:@solidjs/signals@2.0.0-rc.6#sha512-lPqwZNLPq1Z9CBvg:{export}:creates"
+                )
+            );
+        }
+
+        // An rc.3 row does not answer for rc.6 bytes.
+        assert!(
+            terminator(
+                &rc3,
+                "createOptimisticStore",
+                solid_dialect::CallClaimDomain::Reads
+            )
+            .is_some(),
+            "rc.3 carries createOptimisticStore's reads row"
+        );
+        assert!(
+            terminator(
+                &rc6,
+                "createOptimisticStore",
+                solid_dialect::CallClaimDomain::Reads
+            )
+            .is_none(),
+            "rc.6 withheld createOptimisticStore's reads row; rc.3's must not stand in"
+        );
+        assert!(
+            terminator(
+                &rc6,
+                "createOptimisticStore",
+                solid_dialect::CallClaimDomain::Creates
+            )
+            .is_some(),
+            "rc.6 re-granted createOptimisticStore's creates row"
+        );
+
+        // Gate 8: rc.6's coordinate is not rc.6's bytes.
+        for (why, snapshot) in [
+            (
+                "rc.6's coordinate over another integrity",
+                archive_snapshot(
+                    "@solidjs/signals",
+                    "2.0.0-rc.6",
+                    "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+                    &rc6_manifest,
+                    "/snapshot/rc6-mirror",
+                ),
+            ),
+            (
+                "rc.6's coordinate and integrity over rc.3's manifest",
+                archive_snapshot(
+                    "@solidjs/signals",
+                    "2.0.0-rc.6",
+                    SIGNALS_RC6_INTEGRITY,
+                    &rc3_manifest,
+                    "/snapshot/rc6-rc3-manifest",
+                ),
+            ),
+            (
+                "rc.6's coordinate over rc.3's integrity and manifest",
+                archive_snapshot(
+                    "@solidjs/signals",
+                    "2.0.0-rc.6",
+                    SIGNALS_INTEGRITY,
+                    &rc3_manifest,
+                    "/snapshot/rc6-rc3-bytes",
+                ),
+            ),
+        ] {
+            for export in ["getOwner", "onCleanup"] {
+                assert!(
+                    terminator(&snapshot, export, solid_dialect::CallClaimDomain::Creates)
+                        .is_none(),
+                    "{why} must not receive {export}'s terminator"
+                );
+            }
+        }
+        assert_eq!(
+            audited_archive_for_snapshot(&archive_snapshot(
+                "@solidjs/signals",
+                "2.0.0-rc.6",
+                SIGNALS_RC6_INTEGRITY,
+                &rc3_manifest,
+                "/snapshot/rc6-rc3-manifest",
+            ))
+            .map(|archive| archive.name),
+            Err(AuditedArchiveDisagreement::Manifest)
+        );
     }
 
     /// Gate 7: the artifact under certification may not itself be an audited

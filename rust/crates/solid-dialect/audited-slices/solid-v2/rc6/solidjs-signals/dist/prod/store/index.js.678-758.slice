@@ -1,0 +1,3 @@
+function reconcile(e, t = "id") {
+    return r => reconcileNextState(e, r, t);
+}

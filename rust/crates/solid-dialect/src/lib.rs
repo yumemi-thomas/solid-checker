@@ -656,8 +656,11 @@ pub enum AuditedCitation {
         /// The runtime file inside the archive, package-relative, exactly as
         /// spelled in the pinned per-file manifest.
         archive_path: &'static str,
-        /// `sha256` of that whole file as recorded in
-        /// `benchmarks/package-contract-v2/phase0/rc3/<archive>/files.json`.
+        /// `sha256` of that whole file as recorded in the pinned per-file
+        /// manifest of the row's own archive,
+        /// `benchmarks/package-contract-v2/phase0/<release>/<archive>/files.json`
+        /// (`rc3/` for the `2.0.0-rc.3` archives, `rc6/` for
+        /// `@solidjs/signals@2.0.0-rc.6`).
         file_sha256: &'static str,
         /// First byte of the cited definition in that file.
         start_byte: usize,
@@ -677,11 +680,24 @@ pub enum AuditedCitation {
 /// Every artifact case and condition of the audited archive that exports the
 /// name must close the domain empty, or the row is absent. Absence is
 /// "not modelled", never "no" — see [`primitive_performs_no_operation`].
+///
+/// # A row is about one archive, not one package
+///
+/// `(package, version)` names exactly one [`AuditedArchive`] of the same
+/// authority, and [`DialectNegativeAuthority::denies`] matches both. A reading
+/// of one prerelease's bytes therefore never answers for another prerelease of
+/// the same package, however similar the bytes: listing a second archive under
+/// a name extends *no* existing row to it, and every row the new archive
+/// carries has to be read on its own bytes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NegativeClaimRow {
     /// Must equal the [`AuditedArchive::name`] of the archive this row is
     /// about; the row is meaningless without the rest of that tuple.
     pub package: &'static str,
+    /// Must equal the [`AuditedArchive::version`] of the archive this row was
+    /// read against. Together with `package` it names exactly one archive of
+    /// the authority; a test pins that.
+    pub version: &'static str,
     /// The audited document's own export key, which is also a canonical
     /// primitive spelling of the owning dialect.
     pub export: &'static str,
@@ -707,8 +723,8 @@ pub struct DialectNegativeAuthority {
     /// "this dialect audited these bytes and found nothing to deny" different
     /// from "this dialect never looked".
     pub archives: &'static [AuditedArchive],
-    /// Sorted by `(package, export, domain)`; a test pins the order and the
-    /// absence of duplicates.
+    /// Sorted by `(package, version, export, domain)`; a test pins the order
+    /// and the absence of duplicates.
     pub rows: &'static [NegativeClaimRow],
 }
 
@@ -720,12 +736,23 @@ impl DialectNegativeAuthority {
             .filter(move |archive| archive.name == name)
     }
 
-    /// Whether this authority carries the row for `(package, export, domain)`.
+    /// Whether this authority lists exactly `archive` and carries the row for
+    /// `(archive, export, domain)`.
+    ///
+    /// The row must name the archive's **name and version**: a row read on one
+    /// prerelease never answers for another prerelease of the same package.
+    /// An archive this authority does not list — including one that agrees on
+    /// name and version but not on integrity or manifest digest — denies
+    /// nothing.
     #[must_use]
-    pub fn denies(&self, package: &str, export: &str, domain: CallClaimDomain) -> bool {
-        self.rows
-            .iter()
-            .any(|row| row.package == package && row.export == export && row.domain == domain)
+    pub fn denies(&self, archive: &AuditedArchive, export: &str, domain: CallClaimDomain) -> bool {
+        self.archives.contains(archive)
+            && self.rows.iter().any(|row| {
+                row.package == archive.name
+                    && row.version == archive.version
+                    && row.export == export
+                    && row.domain == domain
+            })
     }
 }
 
@@ -811,6 +838,11 @@ pub fn canonical_primitive_name(name: &str) -> bool {
 /// census may refuse — it can never certify anything. The generator's use is
 /// also polarity-correct: silence means *do not propose*, so an unaudited or
 /// withheld primitive keeps the domain open rather than closing it.
+///
+/// It is version-blind as well as integrity-blind: a row read on *any* audited
+/// archive of `package` answers here. That is the same proposal-only latitude,
+/// and it is why this function must never grow a proof-bearing caller — the
+/// archive-scoped answer is [`primitive_performs_no_operation`]'s.
 #[must_use]
 pub fn some_audit_denies_primitive(package: &str, export: &str, domain: CallClaimDomain) -> bool {
     if package.is_empty() || export.is_empty() || !canonical_primitive_name(export) {
@@ -866,6 +898,11 @@ pub fn some_audit_denies_primitive(package: &str, export: &str, domain: CallClai
 /// that name. Among the authorities that do list this archive, the answer is
 /// `true` only when every one of them carries the row; disagreement —
 /// including one authority's silence — is silence.
+///
+/// Within one authority the same holds between archives: a row names its
+/// archive's version as well as its name ([`NegativeClaimRow::version`]), so
+/// `@solidjs/signals@2.0.0-rc.3`'s rows say nothing about
+/// `@solidjs/signals@2.0.0-rc.6`'s bytes, which carry their own.
 #[must_use]
 pub fn primitive_performs_no_operation(
     archive: &AuditedArchive,
@@ -882,7 +919,7 @@ pub fn primitive_performs_no_operation(
             authority
                 .archives
                 .contains(archive)
-                .then(|| authority.denies(archive.name, export, domain))
+                .then(|| authority.denies(archive, export, domain))
         })
         .collect::<Vec<_>>();
     !answers.is_empty() && answers.into_iter().all(|denied| denied)
@@ -2140,15 +2177,18 @@ mod tests {
         DIALECTS
     }
 
-    /// The single archive some dialect audited under `name`, for tests that
-    /// need the bound tuple `primitive_performs_no_operation` now takes
+    /// The single archive some dialect audited as `name@version`, for tests
+    /// that need the bound tuple `primitive_performs_no_operation` now takes
     /// rather than a bare name.
-    fn only_audited_archive(name: &str) -> AuditedArchive {
-        let archives = audited_archives(name);
+    fn audited_archive(name: &str, version: &str) -> AuditedArchive {
+        let archives = audited_archives(name)
+            .into_iter()
+            .filter(|archive| archive.version == version)
+            .collect::<Vec<_>>();
         assert_eq!(
             archives.len(),
             1,
-            "expected exactly one archive audited under {name}"
+            "expected exactly one archive audited as {name}@{version}"
         );
         *archives[0]
     }
@@ -3490,8 +3530,8 @@ mod tests {
     /// operation exists.
     #[test]
     fn the_negative_authority_answers_only_denials_and_silence() {
-        let signals = only_audited_archive("@solidjs/signals");
-        let web = only_audited_archive("@solidjs/web");
+        let signals = audited_archive("@solidjs/signals", "2.0.0-rc.3");
+        let web = audited_archive("@solidjs/web", "2.0.0-rc.3");
 
         // A denial the 2.0 audit carries.
         assert!(primitive_performs_no_operation(
@@ -3578,6 +3618,80 @@ mod tests {
         ));
     }
 
+    /// A row answers for the archive it was read on, and a same-named archive
+    /// at another version answers only from rows of its own.
+    ///
+    /// `createOptimisticStore` `reads` is the case that proves the scoping is
+    /// real rather than cosmetic: rc.3 carries the row, and the 2026-09-25
+    /// re-audit withheld it on rc.6 (its new landing path reads through the
+    /// store proxy the call created), so the two archives must disagree.
+    #[test]
+    fn negative_rows_answer_only_for_the_archive_they_were_read_on() {
+        let rc3 = audited_archive("@solidjs/signals", "2.0.0-rc.3");
+        let rc6 = audited_archive("@solidjs/signals", "2.0.0-rc.6");
+
+        // The two `creates` rows the ecosystem's census demanded.
+        for export in ["getOwner", "onCleanup"] {
+            for archive in [&rc3, &rc6] {
+                assert!(
+                    primitive_performs_no_operation(archive, export, CallClaimDomain::Creates),
+                    "{}@{} {export}",
+                    archive.name,
+                    archive.version
+                );
+            }
+        }
+
+        // Denied on rc.3, withheld on rc.6: the rc.3 row does not travel.
+        assert!(primitive_performs_no_operation(
+            &rc3,
+            "createOptimisticStore",
+            CallClaimDomain::Reads
+        ));
+        assert!(!primitive_performs_no_operation(
+            &rc6,
+            "createOptimisticStore",
+            CallClaimDomain::Reads
+        ));
+        // Its `creates` row was re-granted on rc.6's own bytes.
+        assert!(primitive_performs_no_operation(
+            &rc6,
+            "createOptimisticStore",
+            CallClaimDomain::Creates
+        ));
+
+        // A tuple spliced from both archives is neither, and one carrying
+        // rc.6's coordinate over other bytes is not rc.6.
+        for (why, archive) in [
+            (
+                "rc.6's coordinate with rc.3's integrity and manifest",
+                AuditedArchive {
+                    version: rc6.version,
+                    ..rc3
+                },
+            ),
+            (
+                "rc.6 with another integrity",
+                AuditedArchive {
+                    integrity: "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+                    ..rc6
+                },
+            ),
+            (
+                "rc.6 with another manifest digest",
+                AuditedArchive {
+                    manifest_sha256: rc3.manifest_sha256,
+                    ..rc6
+                },
+            ),
+        ] {
+            assert!(
+                !primitive_performs_no_operation(&archive, "getOwner", CallClaimDomain::Creates),
+                "{why} must deny nothing"
+            );
+        }
+    }
+
     /// The export has to be a canonical dialect spelling, not merely a key the
     /// audited document happens to close.
     ///
@@ -3596,7 +3710,7 @@ mod tests {
         // `createRenderEffect`, so it is not a canonical name.
         assert!(!canonical_primitive_name("effect"));
         assert!(!primitive_performs_no_operation(
-            &only_audited_archive("@solidjs/signals"),
+            &audited_archive("@solidjs/signals", "2.0.0-rc.3"),
             "isEqual",
             CallClaimDomain::Creates
         ));
@@ -3605,11 +3719,22 @@ mod tests {
     /// The identity tuples a caller must bind before consulting the table.
     #[test]
     fn audited_archives_are_looked_up_by_name_and_carry_all_four_fields() {
+        // Two `@solidjs/signals` archives, each read on its own bytes: rc.3,
+        // and rc.6 (the one the ecosystem installs, 2026-09-25 re-audit).
         let signals = audited_archives("@solidjs/signals");
-        assert_eq!(signals.len(), 1);
-        assert_eq!(signals[0].version, "2.0.0-rc.3");
-        assert!(signals[0].integrity.starts_with("sha512-"));
-        assert_eq!(signals[0].manifest_sha256.len(), 64);
+        assert_eq!(
+            signals
+                .iter()
+                .map(|archive| archive.version)
+                .collect::<Vec<_>>(),
+            ["2.0.0-rc.3", "2.0.0-rc.6"]
+        );
+        for archive in &signals {
+            assert!(archive.integrity.starts_with("sha512-"));
+            assert_eq!(archive.manifest_sha256.len(), 64);
+        }
+        assert_ne!(signals[0].integrity, signals[1].integrity);
+        assert_ne!(signals[0].manifest_sha256, signals[1].manifest_sha256);
         assert!(audited_archives("").is_empty());
         assert!(audited_archives("@solidjs/router").is_empty());
         // One archive named `solid-js` is audited now that the 1.x dialect,

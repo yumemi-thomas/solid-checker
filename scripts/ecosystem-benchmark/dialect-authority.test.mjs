@@ -53,7 +53,12 @@ test("the checked-in pins load and name the archives the Rust tables audit", () 
   );
   assert.deepEqual(
     solid2.archives.map(archive => `${archive.name}@${archive.version}`).sort(),
-    ["@solidjs/signals@2.0.0-rc.3", "@solidjs/web@2.0.0-rc.3", "solid-js@2.0.0-rc.3"]
+    [
+      "@solidjs/signals@2.0.0-rc.3",
+      "@solidjs/signals@2.0.0-rc.6",
+      "@solidjs/web@2.0.0-rc.3",
+      "solid-js@2.0.0-rc.3"
+    ]
   );
 });
 

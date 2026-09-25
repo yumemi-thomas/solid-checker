@@ -1,0 +1,3 @@
+function createProjectionNext(e, t, n) {
+    return createProjectionNextInternal(e, t, n).store;
+}

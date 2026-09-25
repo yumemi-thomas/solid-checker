@@ -22,6 +22,14 @@ RC.0 bundled Solid 2 contracts to RC.3.
 - `rc3/audit.md` is its human rendering.
 - Each directory below `rc3/` preserves registry metadata, the published
   manifest, the ordered export map, and the complete extracted-file hash list.
+- `rc6/solidjs-signals/` pins `@solidjs/signals@2.0.0-rc.6`, the prerelease
+  the ecosystem installs, for the negative table's rc.6 rows
+  (`docs/package-contract-v2/audits/2026-09-25-solid-2-rc6-signals-negative-rows.md`):
+  the published manifest verbatim, its export map, and the extracted-file hash
+  list, taken from an installed tree. There is no `registry-metadata.json` and
+  no `rc6/audit.json`: no tarball was downloaded, so the integrity the Rust
+  archive tuple carries is the one the ecosystem's lockfiles record and is not
+  re-derived here. It is not part of the frozen baseline below.
 
 Raw tarballs are deliberately not committed. The audit binds their registry
 URLs, SHA-1, SRI SHA-512, SHA-256, size, safe archive layout, complete file

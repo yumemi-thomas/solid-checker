@@ -12,6 +12,12 @@
           "manifestSha256": "22d27a9ebdc7b4fbfc65b9857bbea96ea60d3617697fd628b42b6e1253ffdb76"
         },
         {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.6",
+          "integrity": "sha512-lPqwZNLPq1Z9CBvgXkMvi1ZFr5OHUiFNz1X40+yehszDWEbJkneZx7BGKIe9eMT/AN1NSL+PMjOiMyZaqVB2xw==",
+          "manifestSha256": "de11cde1dd28b678f380c865be674a1f1a18a198e399ad2f997fd83aef1c163c"
+        },
+        {
           "name": "@solidjs/web",
           "version": "2.0.0-rc.3",
           "integrity": "sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg==",
@@ -24,7 +30,7 @@
           "manifestSha256": "e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b"
         }
       ],
-      "negativeRowCount": 50
+      "negativeRowCount": 74
     }
   ]
 }
