@@ -1,5 +1,78 @@
 # Precision backlog
 
+## Remaining items after the parallel batch, fixed (2026-09-26)
+
+Status: **implemented**, 689b6b5c through db38b432. `make verify` passed at
+db38b432 (325 s).
+
+- **Releases are judged per owning package** (db38b432). The rc.1-rc.8
+  review is in `audits/2026-09-26-solid-2-rc1-rc8-release-review.md`
+  (689b6b5c; 30 tarballs, integrities checked against the registry). Every
+  release-dependent answer comes from the package that owns it:
+  - store root typing and the `omit` predicate from `@solidjs/signals`;
+  - `until` from solid-js and signals together (rc.5 and later);
+  - the static `dynamic` form from `@solidjs/web` (rc.9).
+
+  Two measured defects closed:
+  - a fresh install of the audited solid-js rc.3 resolves signals rc.9, which
+    types stores as mutable. A store root write there was certified; it is now
+    SC2003 plus SC9014;
+  - SC2005 and the static-`dynamic` model fired on releases lacking the
+    feature, where tsc rejects the code (an absolute-rule breach). They no
+    longer do.
+
+  An unknown version keeps the readonly answer, silent under SC9014, because
+  treating it as mutable would duplicate TS2540 on older releases. Five new
+  fixtures were added, tsc-checked against stubs and real installs; no
+  existing snapshot moved.
+- **The `omit` predicate** (28fcca11): predicate code that reads reactive
+  state, calls a project helper, or cannot be inspected is SC9012
+  uncertifiable. The predicate form is rc.9 only; rc.3's bytes never call the
+  keys argument. `props-split-vocabulary` is back to closed `callbacks` on
+  rc.3.
+- **Signals rc.9 negative rows** (59643beb): five `creates` rows
+  (`getOwner`, `onCleanup`, `createRoot`, `untrack`, `runWithOwner`), read in
+  the prod, dev and observe builds, with the tarball integrity verified.
+  rc.9's `createSignal` is unread, so the browser `solid-js` rc.3
+  `createSignal` row fails closed beside signals rc.9 (`DELEGATE_GAPS`).
+- **Monorepo roots:**
+  - `contract check` rows come from each importer's own install (3cffe544);
+  - admission is evaluated per install for its own importers (ce8abb22).
+
+  Kobalte root `contract check` went from 3 certified / 22 missing to 15 / 10;
+  0 of core's 20 packages now differ between root and core.
+- **Owners inside `createRoot`:**
+  - a render-effect apply is uncertifiable (e2a2c3c2);
+  - `createEffect` applies, event handlers, `createReaction` invalidation,
+    `runWithOwner(null)` and `onSettled` in an apply are proven SC4001
+    (6cda9f14; probed on rc.3 and rc.9).
+
+  SC1001 now names the actual effect primitive.
+
+Kobalte re-sweep (release binary, core catalog trust), measured:
+
+- `packages/core` is unchanged;
+- the monorepo root's acceptance-gate sites went 206 -> 106, and it lost 15
+  findings (6 SC1001, 4 SC2001, 5 SC9011), exactly the false positives
+  already removed from core (`dismissable-layer.tsx:176`,
+  `navigation-menu-root.tsx:176`, `toast-root.tsx:178`,
+  `segmented-control-indicator.tsx:73-75`, `tabs-indicator.tsx:122,129`).
+  Root analysis now matches core for core's files.
+
+Still open:
+
+- timers (`setTimeout`) inside a root are unowned but carry no owner edge (a
+  probed false negative);
+- event handlers are assumed unowned even under a synchronous `el.click()`;
+- a mixed release triple is always uncertifiable;
+- rc.1, rc.2, rc.4 and rc.5 signals have no negative rows;
+- the rc.9 N2 re-export typing bug is upstream (a draft issue exists; not
+  filed);
+- rule candidates:
+  - a setter in a module-level `createRoot` body (throws on rc.3 and rc.9);
+  - `flush()` in an action (rc.8+);
+  - a static `dynamic` source returning a Promise.
+
 ## Kobalte re-swept after the parallel batch (2026-09-26)
 
 Measured with the release binary at 90d3bde9 on kobalte `solid2` e9d426d4.
