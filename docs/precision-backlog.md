@@ -1,5 +1,53 @@
 # Precision backlog
 
+## Project-side certification: defects 1-4 fixed (2026-09-26)
+
+Status: **implemented**. These are the four defects the kobalte-core run found
+(entry below). They were fixed in parallel worktrees and merged: de7a4c48,
+5d3b644c, ea6b6f60 and ba0501a6.
+
+1. **Catalog without its trust file** (de7a4c48). A catalog found
+   automatically that needs trust nobody supplied is withheld whole. The run
+   is identical to no catalog, and one stderr notice names the path and
+   `--receipt-trust-configuration`. The daemon behaves the same; its client
+   prints the notice.
+   - Hard errors remain for an explicit `--accepted-contracts` and for a
+     broken or missing trust file.
+   - `SOLID_CHECKER_POLICY2_TRUST_CONFIG` stays an output path only: reading
+     it at analysis time would let an inherited environment grant trust.
+2. **A crashing probe withholds only its gate** (5d3b644c). An
+   uncaught async error in the probe worker (a signals flush reading
+   `document`) is reported as that run's `error` outcome. A worker that dies
+   after its startup frame becomes `SessionExited`, withheld with the
+   worker's first stderr line. A crash is never read as a pass. On the real
+   `@solid-primitives/interaction@1.0.0-next.4`, certify now exits 0; it
+   withholds `createHideOutside`/`returns` ("the worker threw: ReferenceError:
+   document is not defined") and one unrelated claim.
+3. **Node built-ins are not packages** (ea6b6f60). A bare core-module name
+   (`assert`, `fs/promises`) matches Node, which prefers the built-in, and
+   adds no environment entry. The table is fixed in code, because Bun reports
+   `ws`/`undici` as built-ins. `contract certify` exits 1, with a plain last
+   line, when it publishes an entry whose environment was not acquired.
+4. **`packageSummaries` reports admission** (ba0501a6). `accepted` now means an
+   import binds the contract, and a present but unadmitted entry is
+   `refused` with a `detail` reason. The acceptance-gate `SC9005` at that
+   import gains one evidence step with the reason; its message is unchanged.
+
+Measured: every fix left coverage unchanged (87 projects, 452 findings).
+`make test-rust` passed on the merge of 1, 3 and 4.
+
+Still open:
+
+- the ESLint adapter has no trust option, so it never shows the notice, and
+  an `acceptedContracts` naming a policy-2 catalog fails with no fix from the
+  config;
+- a worker that writes a partial run frame and then dies still refuses;
+- the browser lane's "exited without answering" is unchanged;
+- compiled-in tier refusals show only in `contract check`;
+- defects 5-7 remain: catalog discovery from a monorepo root, leftover
+  `.solid-checker-certification-*.mjs` files, and per-call open-claims
+  warnings.
+
 ## Project-side certification on a real consumer (2026-09-26)
 
 Status: **measured, open defects**. Report:
