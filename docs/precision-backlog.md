@@ -1,5 +1,81 @@
 # Precision backlog
 
+## Open items after project-side certification, fixed in parallel (2026-09-26)
+
+Status: **implemented**. Nine changes were merged from parallel worktrees, 182d44d1 through 943adc95.
+
+- **ESLint trust** (182d44d1, e0607940): `settings.solidChecker.receiptTrustConfiguration`,
+  with the trust bytes in the cache key. Run notes (a withheld catalog) are
+  reported by a new `solid-checker/contract-note` rule, `warn` in every shipped
+  config, so a note never fails a lint by itself. `acceptedContracts` now
+  resolves against `cwd` like the new option (a behaviour change for relative
+  paths).
+- **Catalog discovery** (8c3a2e33): each file uses the `.solid-checker/`
+  catalogs of its ancestor directories up to the analysed project; the nearest
+  wins, and a sibling package's catalog never applies. The daemon hashes nested
+  catalogs. Open: `contract check` from a pnpm monorepo root does not list a
+  package installed only under `packages/x/node_modules`.
+- **Certify cleanup** (8be7b65c): the `.solid-checker-certification-*.mjs`
+  importer exists only while certify runs, and is removed on success, refusal,
+  throw, exit and SIGINT/SIGTERM/SIGHUP. A catalog reads when the file is
+  absent. SIGKILL still leaves it until the next certify of the same root.
+- **Open-claims grouping** (aa8a390d): argument-site `unknown-contract-claims`
+  becomes one finding per (module, export, open domains) per project, with
+  "(N call sites)" and `relatedLocations`. Measured on its fixture: 6 -> 2
+  covering the same sites. Also fixed: since mid-September, ESLint had dropped
+  every non-primary file's sites of a grouped `SC9005`. It now reports the
+  finding once in each file holding a site.
+- **Prerelease awareness** (a55a24d9, ADR-level decisions in the rc.9 review):
+  - rc.3 and rc.0 are analysed as audited;
+  - rc.9 is analysed under `solid-v2@2.0.0-rc.9`, plus one `SC9014`
+    `unaudited-solid-release` warning;
+  - other 2.x releases get `SC9014` "not reviewed";
+  - `2.0.0-experimental.x` is refused with `SC9013`.
+  B1: on rc.9 `SC2003` reports store-root writes (`Store<T> = T`, tsc silent,
+  runtime drops the write); on rc.3 it stays silent (TS2540 against the real
+  typings, checked with tsc).
+- **rc.9 additions B2-B4** (2990ec25):
+  - `dynamic(source, { static: true })` behaves like `untrack`, and an
+    unreadable option claims nothing;
+  - the `omit(props, predicate)` predicate runs on result access and is
+    unclassified;
+  - `until` joins the vocabulary, with a new rule, **SC2005**
+    `until-in-tracked-scope`. It is tsc-oracle exempt until the oracle
+    provisions rc.9.
+  - Cost on rc.3: untyped two-argument `omit(props, keys)` leaves `callbacks`
+    open on every 2.x release. Now that the release seam exists, this can be
+    restricted to rc.9.
+- **`createRenderEffect` apply** (943adc95): the first run of the apply is
+  during the call, under the caller's owner and listener, on rc.3 and rc.9
+  (probed; the bytes are cited in the commit). A new
+  `CallbackOwner::InheritsFirstRun` makes an owner edge in a component body's
+  render-effect apply uncertifiable (a module-scope one stays a violation).
+  First-run reads stay in the caller's summary, and contracts leave that
+  callback open. Nothing moved beyond the new fixtures.
+
+rc.9's `SC9014` still names three open gaps:
+
+- code inside an `omit` predicate is unclassified;
+- rc.9's typings re-export five names they no longer declare
+  (`createErrorBoundary`, `createLoadingBoundary`, `createRevealOrder`,
+  `sharedConfig`, `$DEVCOMP`);
+- no signals rc.9 negative row is granted. Five could be granted cheaply:
+  `getOwner`, `onCleanup`, `untrack`, `runWithOwner`, `createRoot`.
+
+Also open:
+
+- a write in a component-body render-effect apply throws in dev but cannot be
+  proven, so it stays silent;
+- a render-effect apply inside `createRoot` reports nothing;
+- rc.4-rc.8 are unreviewed and get the notice.
+
+Merge faults caught by `make verify` and fixed:
+
+- the rule array size (29);
+- the ledger pin (152);
+- rustfmt;
+- the rc.9 fixtures' new `SC9014` in two process tests and three snapshots.
+
 ## The tier re-certified with resolution edges (2026-09-26)
 
 Status: **shipped**. The census and the kobalte delivery run were re-certified
@@ -196,7 +272,7 @@ open:
 
 ## Newer Solid 2 prereleases are analysed with rc.3 vocabulary (2026-09-26)
 
-Status: **open, owner decision: record and review later**. Dialect selection
+Status: **addressed 2026-09-26**: reviewed (docs/package-contract-v2/audits/2026-09-26-solid-2-rc9-vocabulary-review.md), release-aware detection with SC9014/SC9013 (a55a24d9), B1-B4 modelled (a55a24d9, 2990ec25). Original finding: Dialect selection
 goes by major version only (`dialect.rs:497-515`). The 2026-09-26 sweep
 analysed solid-js 2.0.0-rc.9 (solid-primitives `next`) and
 2.0.0-experimental.1 (corvu) projects with the rc.3-audited vocabulary,
