@@ -3157,9 +3157,10 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 dialect::Detection::Unsupported {
                     installed,
                     manifest,
+                    refusal,
                     ..
                 } => {
-                    unsupported_runtime = Some((installed, manifest));
+                    unsupported_runtime = Some((installed, manifest, refusal));
                     dialect::default_dialect()
                 }
                 dialect::Detection::Defaulted { .. } => dialect::default_dialect(),
@@ -3293,8 +3294,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // there would be correct in a debug build and silently absent in every
     // shipped one -- and no gate here runs a release binary against an
     // unsupported install, so nothing would have caught it.
-    if let Some((installed, manifest)) = unsupported_runtime {
-        let snapshot = solid_facts_backend::unsupported_runtime_snapshot(&installed, &manifest);
+    if let Some((installed, manifest, refusal)) = unsupported_runtime {
+        let snapshot =
+            solid_facts_backend::unsupported_runtime_snapshot(&installed, &manifest, refusal);
         let emission = snapshot_emission::emit(
             dialect,
             &request.format,

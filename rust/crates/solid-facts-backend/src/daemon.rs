@@ -145,12 +145,21 @@ fn resolve_dialect(
             solid_facts_backend::dialect::Detection::Unsupported {
                 installed,
                 manifest,
+                refusal,
                 ..
-            } => Err(format!(
-                "solid-js {installed} at {} is a runtime this build carries no dialect for [{}]",
-                manifest.display(),
-                solid_facts_backend::dialect::UNSUPPORTED_RUNTIME_CODE
-            )
+            } => Err(match refusal {
+                None => format!(
+                    "solid-js {installed} at {} is a runtime this build carries no dialect for [{}]",
+                    manifest.display(),
+                    solid_facts_backend::dialect::UNSUPPORTED_RUNTIME_CODE
+                ),
+                Some(refusal) => format!(
+                    "solid-js {installed} at {} is a runtime this build refuses: {} [{}]",
+                    manifest.display(),
+                    refusal.reason,
+                    solid_facts_backend::dialect::UNSUPPORTED_RUNTIME_CODE
+                ),
+            }
             .into()),
             solid_facts_backend::dialect::Detection::Defaulted { .. } => {
                 Ok(solid_facts_backend::dialect::default_dialect())
@@ -858,6 +867,18 @@ fn contract_files(
     // at the same version keeps serving the previous verdict for a whole
     // generation.
     paths.extend(solid_facts_backend::admission_input_paths(directory));
+    // The installed `solid-js` manifest decides the release notice (SC9014)
+    // that `DiagnosticSession::analyze` re-reads on every run, so an install
+    // moving between an audited and an unaudited release must not keep
+    // serving the previous answer for a whole generation.
+    match solid_facts_backend::dialect::detect_detailed(&state.project) {
+        solid_facts_backend::dialect::Detection::Installed { manifest, .. }
+        | solid_facts_backend::dialect::Detection::Unsupported { manifest, .. }
+        | solid_facts_backend::dialect::Detection::Defaulted {
+            manifest: Some(manifest),
+        } => paths.push(manifest),
+        solid_facts_backend::dialect::Detection::Defaulted { manifest: None } => {}
+    }
     if !receipt_trust_configuration.is_empty() {
         paths.push(PathBuf::from(receipt_trust_configuration));
     }

@@ -380,6 +380,12 @@ const EXEMPT = {
   // not a case. Its own pin is in `dialects_process`, run in the one feature
   // configuration where the refusal is reachable.
   "unsupported-solid-runtime": "the subject is which solid-js version is installed, not any expression in the project; no snippet can express it and tsc has nothing to say about it",
+  // The same subject, one step further: which *release* of a carried major is
+  // installed. Also decided by dialect detection and appended beside the
+  // analysis rather than produced by the rules engine, and the oracle installs
+  // the audited rc.3, on which the notice cannot appear. Its pins are in
+  // `dialects_process` and `dialect.rs`.
+  "unaudited-solid-release": "the subject is which solid-js release is installed, not any expression in the project; no snippet can express it and tsc has nothing to say about it",
 };
 
 const catalogRules = catalogEntries.map((rule) => rule.name);

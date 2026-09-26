@@ -1,11 +1,13 @@
 # Rules
 
-solid-checker ships one dialect-owned catalog: 27 rules for Solid 2.0, with
+solid-checker ships one dialect-owned catalog: 28 rules for Solid 2.0, with
 unprefixed rule names. The checker detects the installed `solid-js` major and
 **refuses** a project whose runtime it has no vocabulary for
 ([`unsupported-solid-runtime`](unsupported-solid-runtime.md)) rather than
 analyzing it under the wrong language; `--dialect solid-v2` is available for
-unusual layouts. The Solid 1.x catalog was retired on 2026-09-16 — see
+unusual layouts. A Solid 2 release the vocabulary was not audited on is
+analyzed with a notice
+([`unaudited-solid-release`](unaudited-solid-release.md)). The Solid 1.x catalog was retired on 2026-09-16 — see
 [ADR 0110](../adr/0110-the-checker-analyzes-solid-2-only.md), and
 [the catalog migration note](../rule-catalog-migration.md) for mapping a `v1/`
 suppression onto its 2.0 identity.
@@ -95,15 +97,18 @@ whose disables deliberately do not transfer are listed in the
 | SC9011 | [reactive-source-uncaptured](reactive-source-uncaptured.md) | warning | on |
 | SC9012 | [reactive-dispatch-unresolved](reactive-dispatch-unresolved.md) | warning | on |
 | SC9013 | [unsupported-solid-runtime](unsupported-solid-runtime.md) | error | on |
+| SC9014 | [unaudited-solid-release](unaudited-solid-release.md) | warning | on |
 
 `http-response-after-flush`, `package-contract-incomplete`,
-`reactive-source-uncaptured`, `reactive-dispatch-unresolved`, and
-`unsupported-solid-runtime` can produce uncertifiable results. Their pages name
+`reactive-source-uncaptured`, `reactive-dispatch-unresolved`,
+`unsupported-solid-runtime`, and `unaudited-solid-release` can produce
+uncertifiable results. Their pages name
 the missing evidence and remediation.
 
-`unsupported-solid-runtime` is the one identity here the rules engine never
-produces: dialect detection emits it before analysis, and it appears **alone**
-when it appears at all. See ADR 0110.
+`unsupported-solid-runtime` and `unaudited-solid-release` are the two
+identities here the rules engine never produces. Dialect detection decides
+both. The refusal replaces the analysis and appears **alone** when it appears
+at all (ADR 0110). The notice accompanies the analysis.
 
 ## Migrating from eslint-plugin-solid
 

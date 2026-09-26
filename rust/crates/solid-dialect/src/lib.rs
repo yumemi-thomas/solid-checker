@@ -146,6 +146,61 @@ pub enum Classification {
     UnmodelledMajor(u32),
 }
 
+/// How a vocabulary stands against one installed release of the major it
+/// models.
+///
+/// [`Version::for_solid_js`] reads the major and nothing else, because a major
+/// is what selects a *language*. Within a major the published bytes still move
+/// between prereleases, and a vocabulary is only as good as the bytes it was
+/// read on. This is the second question: given the exact installed version
+/// string, did anyone read *these* bytes against this vocabulary, and what did
+/// they find? The answer is the dialect's, never shared code's, because only
+/// the dialect knows which releases it was written against
+/// ([`Dialect::review_release`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReleaseReview {
+    /// A release the vocabulary was read on. Analysis proceeds and says
+    /// nothing about the release.
+    Audited,
+    /// A release reviewed against the vocabulary, with the gaps the review
+    /// found still open. Analysis proceeds, under the vocabulary the review
+    /// names for this release, and the result carries a project-level
+    /// uncertifiable notice naming the gaps.
+    ReviewedWithGaps(&'static ReviewedRelease),
+    /// A release of the right major nobody has compared against the
+    /// vocabulary. Analysis proceeds under the audited vocabulary, and the
+    /// result carries a project-level uncertifiable notice: fail-visible
+    /// rather than silently substituted, because the one reviewed prerelease
+    /// so far moved four vocabulary answers.
+    Unreviewed,
+    /// A release whose runtime the vocabulary does not describe, even though
+    /// its major matches. Refused exactly like an uncarried major.
+    Refused(&'static RefusedRelease),
+}
+
+/// A reviewed release and the gaps its review left open.
+#[derive(Debug, Eq, PartialEq)]
+pub struct ReviewedRelease {
+    /// The exact `solid-js` version the review read.
+    pub version: &'static str,
+    /// Each open gap, as one sentence a user can act on. Empty would mean the
+    /// release is audited, which is [`ReleaseReview::Audited`]'s to say.
+    pub known_gaps: &'static [&'static str],
+    /// The review document, repository-relative.
+    pub review: &'static str,
+}
+
+/// A release line refused within a modelled major, and why.
+#[derive(Debug, Eq, PartialEq)]
+pub struct RefusedRelease {
+    /// The line, as a user would recognise it (`2.0.0-experimental.x`).
+    pub line: &'static str,
+    /// Why the vocabulary cannot model it: the runtime difference, stated.
+    pub reason: &'static str,
+    /// Where that difference was measured, repository-relative.
+    pub review: &'static str,
+}
+
 /// A Solid primitive the checker models.
 ///
 /// The union of both dialects. A dialect recognizes a subset: asking
@@ -1326,6 +1381,17 @@ pub trait Dialect: Sync {
     /// Which version this adapter speaks.
     fn version(&self) -> Version;
 
+    /// How this vocabulary stands against an installed `solid-js` release of
+    /// its major, from the version string exactly as the manifest spells it.
+    ///
+    /// The default is [`ReleaseReview::Unreviewed`]: a dialect that has not
+    /// said which releases it was read on has not been read on any, and the
+    /// fail-visible answer is a notice rather than silence.
+    fn review_release(&self, installed: &str) -> ReleaseReview {
+        let _ = installed;
+        ReleaseReview::Unreviewed
+    }
+
     /// Whether a binding spelling is a dialect convention that makes
     /// component identity possible but does not prove it.
     ///
@@ -1553,6 +1619,12 @@ pub trait Dialect: Sync {
     /// at all (verified against `solid-js@1.9.14`). The 1.x rule is therefore
     /// fully independent -- which is exactly why this is asked of the dialect
     /// instead of assumed from the 2.0 answer.
+    ///
+    /// It is also the first answer that differs between two prereleases of
+    /// one major: `@solidjs/signals@2.0.0-rc.9` declares `Store<T> = T`, so
+    /// TS2540 is gone there while the runtime still drops the write. A
+    /// vocabulary therefore answers this for the release it was selected for
+    /// ([`Dialect::review_release`]), never for its major alone.
     fn store_root_properties_are_readonly(&self) -> bool {
         false
     }
@@ -2880,6 +2952,12 @@ mod tests {
         assert!(!silent.leaf_owner_requires_owned_call_site(Primitive::OnCleanup));
         assert!(!silent.store_root_properties_are_readonly());
         assert!(!silent.store_setter_callback_enables_proxy_writes());
+        // No release is audited for a dialect that names none: the notice,
+        // not silence.
+        assert_eq!(
+            silent.review_release("2.0.0-rc.3"),
+            ReleaseReview::Unreviewed
+        );
 
         // Surfaces this dialect has not claimed to model.
         assert!(!silent.models_server_functions());

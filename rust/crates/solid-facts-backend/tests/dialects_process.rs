@@ -747,3 +747,108 @@ fn unsupported_runtime_refusal_yields_to_an_explicit_dialect() {
     );
     assert_eq!(code, 0);
 }
+
+/// A carried major whose vocabulary refuses the release line is refused like
+/// an uncarried major, and the refusal says why.
+///
+/// `2.0.0-experimental.1` classifies as Solid 2 by its major alone. The
+/// construction is the one above: any build that analyzed the tree reports
+/// SC1003, so SC9013 alone proves the refusal replaced the analysis.
+#[test]
+fn the_pre_beta_experiment_is_refused_although_its_major_is_carried() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let (code, snapshot) = run_checker("unsupported-runtime-experimental", &[]);
+    assert_eq!(
+        finding_ids(&snapshot),
+        vec!["SC9013".to_owned()],
+        "the pre-beta experiment is refused; SC1003 here would be the rc vocabulary \
+         misreading its argument positions"
+    );
+    assert_eq!(snapshot["status"], "uncertifiable");
+    let finding = &snapshot["findings"][0];
+    assert_eq!(finding["rule"], "unsupported-solid-runtime");
+    let message = finding["message"].as_str().unwrap();
+    assert!(
+        message.contains("2.0.0-experimental.1")
+            && message.contains("2.0.0-experimental.x")
+            && message.contains("@solidjs/signals 0.x"),
+        "the refusal quotes the version and the vocabulary's reason: {message}"
+    );
+    assert!(
+        !message.contains("carries no dialect"),
+        "the dialect is carried; saying otherwise would send the user looking for one: {message}"
+    );
+    let path = finding["primaryLocation"]["path"].as_str().unwrap();
+    assert!(
+        path.ends_with("unsupported-runtime-experimental/node_modules/solid-js/package.json"),
+        "{path}"
+    );
+    assert_eq!(code, 0);
+    assert_eq!(
+        run_checker("unsupported-runtime-experimental", &["--certify"]).0,
+        1
+    );
+}
+
+/// A reviewed-with-gaps release is analyzed, and the analysis carries one
+/// project-level uncertifiable notice naming the release, its open gaps, and
+/// the review.
+#[test]
+fn a_reviewed_release_is_analyzed_with_one_notice_beside_the_findings() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let (code, snapshot) = run_checker("unaudited-release-rc9", &[]);
+    let ids = finding_ids(&snapshot);
+    assert!(
+        ids.contains(&"SC1003".to_owned()),
+        "the analysis ran: the notice accompanies findings, it does not replace them: {ids:?}"
+    );
+    let notices = snapshot["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|finding| finding["id"] == "SC9014")
+        .collect::<Vec<_>>();
+    assert_eq!(notices.len(), 1, "exactly one notice per project: {ids:?}");
+    let notice = notices[0];
+    assert_eq!(notice["rule"], "unaudited-solid-release");
+    assert_eq!(notice["kind"], "uncertifiable");
+    assert_eq!(notice["severity"], "warning");
+    assert_eq!(notice["subjectKind"], "project");
+    let message = notice["message"].as_str().unwrap();
+    assert!(message.contains("2.0.0-rc.9"), "{message}");
+    let hint = notice["hint"].as_str().unwrap();
+    assert!(
+        hint.contains(
+            "docs/package-contract-v2/audits/2026-09-26-solid-2-rc9-vocabulary-review.md"
+        ),
+        "the notice points at the review: {hint}"
+    );
+    let gaps = notice["evidence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|step| step["message"].as_str())
+        .filter(|message| message.starts_with("known gap "))
+        .collect::<Vec<_>>();
+    assert!(
+        !gaps.is_empty() && gaps.iter().all(|gap| gap.starts_with("known gap B")),
+        "every open gap is named by its review item: {gaps:?}"
+    );
+    let path = notice["primaryLocation"]["path"].as_str().unwrap();
+    assert!(
+        path.ends_with("unaudited-release-rc9/node_modules/solid-js/package.json"),
+        "{path}"
+    );
+    assert_eq!(code, 0);
+
+    // `--dialect solid-v2` is the decision to analyze under the audited
+    // vocabulary; it is not a detection, so it carries no notice.
+    let (_, explicit) = run_checker("unaudited-release-rc9", &["--dialect", "solid-v2"]);
+    let ids = finding_ids(&explicit);
+    assert!(!ids.contains(&"SC9014".to_owned()), "{ids:?}");
+    assert!(ids.contains(&"SC1003".to_owned()), "{ids:?}");
+}

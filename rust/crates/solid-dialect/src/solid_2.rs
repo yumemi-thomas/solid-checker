@@ -17,9 +17,26 @@ use crate::{
     Version, lookup, reverse,
 };
 
-/// Solid 2.0.
+mod releases;
+
+/// Solid 2.0, answering for one reviewed line of its prereleases.
+///
+/// Every answer but one is the same on every release this vocabulary was read
+/// on, so the release is carried as data rather than as a second type: the
+/// `store_root` typing is the one answer two prereleases disagree on
+/// (`releases.rs`). `Solid2` the value is the audited vocabulary
+/// ([`Solid2::AUDITED`]); [`Solid2::RC9`] is the one reviewed variant.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct Solid2;
+pub struct Solid2 {
+    store_root: releases::StoreRootTyping,
+}
+
+/// The audited Solid 2 vocabulary, spelled like the unit struct it used to be
+/// so the value keeps its name everywhere the engine and its tests hold it.
+/// A braced struct lives only in the type namespace, which leaves the value
+/// namespace free for this constant.
+#[allow(non_upper_case_globals)]
+pub const Solid2: Solid2 = Solid2::AUDITED;
 
 /// Source: the pre-ADR-0006 hardcoded name list `solid-reactive-ir` used to
 /// carry (26 names), plus the four the namespace-import expansion adds in
@@ -2507,11 +2524,19 @@ impl Dialect for Solid2 {
     }
 
     /// `createStore` returns `Readonly<T>` over the root record
-    /// (`@solidjs/signals@2.0.0-rc.0`), so a write to one of its own properties
-    /// is TS2540 and belongs to TypeScript. Nested records and props objects are
-    /// not readonly and stay this checker's.
+    /// (`@solidjs/signals@2.0.0-rc.0` and `rc.3`), so a write to one of its own
+    /// properties is TS2540 and belongs to TypeScript. Nested records and props
+    /// objects are not readonly and stay this checker's.
+    ///
+    /// `rc.9` declares `Store<T> = T`: the write type-checks and the runtime
+    /// still drops it, so the rc.9 vocabulary answers `false` and SC2003 reports
+    /// it (`releases.rs`).
     fn store_root_properties_are_readonly(&self) -> bool {
-        true
+        self.store_root == releases::StoreRootTyping::Readonly
+    }
+
+    fn review_release(&self, installed: &str) -> crate::ReleaseReview {
+        releases::review(installed)
     }
 
     /// Source: rc.0 store setters put the store into the Writing set for the

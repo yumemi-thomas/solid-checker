@@ -24,6 +24,26 @@ still silently dropped at runtime and stays a finding, as does any write
 outside a setter. 1.x setters never unlock the proxy, so the `v1/` twin has no
 such exemption.
 
+A write to a store **root record's own property** is TypeScript's on the
+releases whose typings make it `readonly`, and this rule's where they do not.
+The runtime drops the write outside a setter either way. The difference is the
+declared type:
+
+- On `2.0.0-rc.3` (and rc.0), `Store<T> = Readonly<T>`, so `store.name = "b"`
+  is `TS2540: Cannot assign to 'name' because it is a read-only property`.
+  This rule stays silent there, because it never reports what TypeScript
+  already reports.
+- On `2.0.0-rc.9`, `Store<T> = T`, so the same write type-checks and nothing
+  else would report it. This rule reports it there.
+
+The rule does not decide this from the installed version. The dialect's
+vocabulary for the detected release answers it
+(`rust/crates/solid-dialect/src/solid_2/releases.rs`). Nested records, props
+objects and cast-away roots are writable to TypeScript on every release, so
+they stay this rule's everywhere. The fixture pair
+`fixtures/reactive-ir/store-root-write-rc3` and `store-root-write-rc9` pins
+both sides against byte-faithful copies of the published declarations.
+
 Read-modify-write spellings are writes in both dialects: `store.count += 1` and
 `store.count++` reach the proxy with a value that is dropped, and both also read
 the old value, so [strict-read-untracked](strict-read-untracked.md) reports the

@@ -21,6 +21,10 @@ fixtures/upstream-parity/.staging/
 !rust/crates/solid-facts-backend/tests/fixtures/unsupported-runtime-v1/node_modules/**
 !rust/crates/solid-facts-backend/tests/fixtures/unsupported-runtime-future-major/node_modules/
 !rust/crates/solid-facts-backend/tests/fixtures/unsupported-runtime-future-major/node_modules/**
+!rust/crates/solid-facts-backend/tests/fixtures/unsupported-runtime-experimental/node_modules/
+!rust/crates/solid-facts-backend/tests/fixtures/unsupported-runtime-experimental/node_modules/**
+!rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc9/node_modules/
+!rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc9/node_modules/**
 # Contract integration tests use small, hand-written packages as fixtures.
 !fixtures/reactive-ir/package-*/node_modules/
 !fixtures/reactive-ir/package-*/node_modules/**
@@ -60,6 +64,10 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/namespace-import-v2/node_modules/**
 !fixtures/reactive-ir/solid2-precision/node_modules/
 !fixtures/reactive-ir/solid2-precision/node_modules/**
+!fixtures/reactive-ir/store-root-write-rc3/node_modules/
+!fixtures/reactive-ir/store-root-write-rc3/node_modules/**
+!fixtures/reactive-ir/store-root-write-rc9/node_modules/
+!fixtures/reactive-ir/store-root-write-rc9/node_modules/**
 !fixtures/reactive-ir/solid2-contract-callback-variants-node/node_modules/
 !fixtures/reactive-ir/solid2-contract-callback-variants-node/node_modules/**
 !fixtures/reactive-ir/ported-structure-v2/node_modules/

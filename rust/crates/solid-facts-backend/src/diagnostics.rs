@@ -142,6 +142,10 @@ struct DiagnosticIdentity {
     /// edited `.solid-checker/rule-options.json` invalidates a retained
     /// diagnostic even within one generation.
     rule_options: RuleOptions,
+    /// The installed-release notice is re-read from disk on every analysis
+    /// too: an install that moves `solid-js` between an audited and an
+    /// unaudited release changes the result without changing a source file.
+    release_notice: Option<dialect::ReleaseNotice>,
 }
 
 struct RetainedDiagnostic {
@@ -213,12 +217,14 @@ impl DiagnosticSession {
             .validate()
             .map_err(BackendError::Contract)?;
         rule_options.runtime = enablement.runtime;
+        let release_notice = dialect::release_notice(self.dialect, project);
         let identity = DiagnosticIdentity {
             dialect: self.dialect.id,
             project_id: facts.project_id.clone(),
             generation: facts.generation.get(),
             contracts: vec![contracts.cache_fingerprint()],
             rule_options: rule_options.clone(),
+            release_notice: release_notice.clone(),
         };
         if let Some(retained) = &self.retained
             && retained.identity == identity
@@ -243,6 +249,11 @@ impl DiagnosticSession {
         let mut findings = self.dialect.solve(&program);
         retain_enabled(self.dialect, &rule_options, &mut findings)?;
         suppress_findings_owned_by_enabled_rules(&mut findings, self.dialect.catalog_capabilities);
+        // After enablement, like the refusal: the notice is about the installed
+        // runtime, not a site, so there is nothing to suppress it at.
+        if let Some(notice) = &release_notice {
+            findings.push(unaudited_release_finding(notice));
+        }
         let metrics = analysis_metrics(facts, &program, contracts);
         let snapshot = snapshot_with_package_summaries(
             sources,
@@ -315,6 +326,77 @@ fn retain_enabled(
     })
 }
 
+/// The `SC9014` notice: the analysis beside it ran, under a vocabulary that was
+/// not audited on the installed release, so the result cannot certify.
+///
+/// Uncertifiable rather than a violation for SC9013's reason -- the claim is
+/// about the installed runtime, never the project's source -- and located at
+/// the deciding manifest, as a project-scoped finding, for the same reason.
+/// Unlike SC9013 it *accompanies* the analysis: the vocabulary is the one the
+/// review measured to hold for everything except the gaps it names.
+#[must_use]
+pub fn unaudited_release_finding(notice: &dialect::ReleaseNotice) -> Finding {
+    let manifest: Arc<str> = notice.manifest.display().to_string().into();
+    let location = typefacts::Location {
+        path: Arc::clone(&manifest),
+        start_byte: 0,
+        end_byte: 0,
+    };
+    let installed = &notice.installed;
+    let (message, hint, mut evidence) = match notice.review {
+        solid_dialect::ReleaseReview::ReviewedWithGaps(reviewed) => (
+            format!(
+                "solid-js {installed} is installed; this build's Solid 2 vocabulary was audited on 2.0.0-rc.3 and reviewed against {} with {} known gaps still open, so the analysis ran and cannot certify the project",
+                reviewed.version,
+                reviewed.known_gaps.len()
+            ),
+            format!(
+                "Findings beside this notice stand; certification waits on the known gaps. Pin solid-js 2.0.0-rc.3, the audited release, to certify. The review is {}.",
+                reviewed.review
+            ),
+            reviewed
+                .known_gaps
+                .iter()
+                .map(|gap| solid_reactive_ir::EvidenceStep {
+                    message: format!("known gap {gap}"),
+                    location: None,
+                })
+                .collect::<Vec<_>>(),
+        ),
+        _ => (
+            format!(
+                "solid-js {installed} is installed; this build's Solid 2 vocabulary was audited on 2.0.0-rc.3 and has not been reviewed against {installed}, so the analysis ran under the audited vocabulary and cannot certify the project"
+            ),
+            "Findings beside this notice stand, but a release nobody compared can move what the vocabulary answers by name, as rc.9 did. Pin solid-js 2.0.0-rc.3, the audited release, to certify, or use a checker release that has reviewed this one."
+                .into(),
+            Vec::new(),
+        ),
+    };
+    evidence.insert(
+        0,
+        solid_reactive_ir::EvidenceStep {
+            message: format!(
+                "the nearest node_modules/solid-js above the project resolves here, and names version {installed}"
+            ),
+            location: Some(location.clone()),
+        },
+    );
+    let metadata = solid_reactive_ir::RuleMetadata {
+        code: dialect::UNAUDITED_RELEASE_CODE,
+        name: dialect::UNAUDITED_RELEASE_RULE,
+        severity: "warning",
+        uncertifiable: true,
+        default_enabled: true,
+        presets: &[],
+    };
+    let mut finding = Finding::new(metadata, message, location);
+    finding.hint = hint;
+    finding.analysis_context = "dialect-detection".into();
+    finding.subject_kind = "project".into();
+    finding.evidence = evidence;
+    finding
+}
+
 /// The whole result for a project whose installed Solid runtime this build has
 /// no dialect for.
 ///
@@ -327,9 +409,37 @@ fn retain_enabled(
 /// an assertion about source that was never analyzed under the language it
 /// actually runs. `metrics` is all zeroes for the same reason -- nothing was
 /// read, and reporting otherwise would overstate what happened.
+///
+/// `refusal` is `Some` when the major is carried and its vocabulary refuses the
+/// release line (the pre-beta `2.0.0-experimental.x`): the message then states
+/// the vocabulary's reason instead of "carries no dialect for it", which would
+/// be false.
 #[must_use]
-pub fn unsupported_runtime_snapshot(installed: &str, manifest: &Path) -> Snapshot {
+pub fn unsupported_runtime_snapshot(
+    installed: &str,
+    manifest: &Path,
+    refusal: Option<&solid_dialect::RefusedRelease>,
+) -> Snapshot {
     let manifest = manifest.display().to_string();
+    let (message, hint) = match refusal {
+        None => (
+            format!(
+                "solid-js {installed} is installed, and this build of solid-checker carries no dialect for it; the project was not analyzed"
+            ),
+            "Upgrade the project to Solid 2.0, or use a checker release carrying the dialect for this runtime. Passing --dialect analyzes the project anyway, under a language it does not run."
+                .to_owned(),
+        ),
+        Some(refusal) => (
+            format!(
+                "solid-js {installed} is installed, and this build of solid-checker refuses the {} line: {}; the project was not analyzed",
+                refusal.line, refusal.reason
+            ),
+            format!(
+                "Upgrade the project to a Solid 2.0 release candidate (the audited one is 2.0.0-rc.3). Passing --dialect analyzes the project anyway, under a runtime it does not run. The measurement is in {}.",
+                refusal.review
+            ),
+        ),
+    };
     Snapshot {
         status: "uncertifiable".into(),
         findings: vec![SnapshotFinding {
@@ -337,11 +447,8 @@ pub fn unsupported_runtime_snapshot(installed: &str, manifest: &Path) -> Snapsho
             rule: dialect::UNSUPPORTED_RUNTIME_RULE.into(),
             kind: "uncertifiable".into(),
             severity: "error".into(),
-            message: format!(
-                "solid-js {installed} is installed, and this build of solid-checker carries no dialect for it; the project was not analyzed"
-            ),
-            hint: "Upgrade the project to Solid 2.0, or use a checker release carrying the dialect for this runtime. Passing --dialect analyzes the project anyway, under a language it does not run."
-                .into(),
+            message,
+            hint,
             analysis_context: "dialect-detection".into(),
             subject_kind: "project".into(),
             primary_location: SourceLocation {

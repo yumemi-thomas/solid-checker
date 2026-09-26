@@ -544,7 +544,10 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         // Never reaches any wording channel: dialect detection emits it
         // directly, with the message built at the refusal site because the
         // manifest path and installed version are what it has to say.
-        | Rule::UnsupportedSolidRuntime => panic!(
+        | Rule::UnsupportedSolidRuntime
+        // Likewise: the backend builds it beside the analysis from the
+        // detected release and the dialect's review of it.
+        | Rule::UnauditedSolidRelease => panic!(
             "rule {} is not emitted through the static-violation channel",
             rule.metadata().name
         ),

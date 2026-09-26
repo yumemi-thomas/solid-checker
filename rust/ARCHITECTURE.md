@@ -69,6 +69,18 @@ is its callback, which JSX tags open a boundary. The reactive engine takes a
 ADR 0006 reopened so one engine could serve two dialects rather than one
 engine per branch.
 
+A vocabulary also judges the exact installed release of its major
+(`Dialect::review_release`). Detection asks that question once it has chosen
+the language. The answer can be audited (analyze), reviewed with gaps (analyze
+under the release variant the review names, plus an `SC9014` notice),
+unreviewed (analyze under the audited vocabulary, plus the notice), or refused
+(`SC9013`). A release variant, `dialect::RELEASE_VARIANTS`, is the same
+catalog with a vocabulary value that answers differently. Today that is
+`Solid2::RC9`, whose store root is not `Readonly`. It has its own id, so
+caches and daemon sockets never mix the two. Shared code never classifies a
+release. The vocabulary does that, and the registry only keys a variant by the
+version string the review names. See `solid-dialect/src/solid_2/releases.rs`.
+
 **Compiler.** `solid_facts::compiler::CompilerFactsProvider` is the checker's
 whole view of a Solid JSX compiler: `AnalysisRequest` in, validated
 `ExecutionMap` out. `solid-v2-compiler` implements it over the pinned

@@ -184,7 +184,11 @@ By default the analysis picks its dialect from the `solid-js` version the
 project resolves. This build analyzes **Solid 2.0 only**: a project whose
 resolved `solid-js` is a major it has no vocabulary for is refused outright
 with `SC9013 unsupported-solid-runtime` and no other findings, rather than
-analyzed under the wrong language (ADR 0110). Set
+analyzed under the wrong language (ADR 0110). The pre-beta
+`2.0.0-experimental.x` line is refused the same way. A Solid 2 release the
+vocabulary was not audited on (anything but `2.0.0-rc.3` and `rc.0`) is
+analyzed, with one `SC9014 unaudited-solid-release` notice that keeps the
+result from certifying. Set
 `settings.solidChecker.dialect` to `"solid-v2"` to override detection for every
 rule the adapter runs — which also overrides that refusal, and is appropriate
 only when the resolved manifest misreports what will actually be installed.

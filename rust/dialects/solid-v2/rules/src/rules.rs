@@ -45,6 +45,11 @@ pub enum Rule {
     /// adapters resolve its code and severity here, `docs/rules/` documents
     /// it, and a suppression naming it has to be a known rule. See ADR 0110.
     UnsupportedSolidRuntime,
+    /// Decided by dialect detection too, but *beside* the analysis rather than
+    /// instead of it: the installed release of a carried major is one this
+    /// vocabulary was not audited on. The backend appends it to the analysis
+    /// result (`diagnostics.rs`); the rules engine never produces it.
+    UnauditedSolidRelease,
     JsxNoDuplicateProps,
     PreferFor,
     PreferShow,
@@ -62,7 +67,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 27] = [
+    pub const ALL: [Self; 28] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -87,6 +92,7 @@ impl Rule {
         Self::ServerFunctionRichArgument,
         Self::PackageContractIncomplete,
         Self::UnsupportedSolidRuntime,
+        Self::UnauditedSolidRelease,
         Self::JsxNoDuplicateProps,
         Self::PreferFor,
         Self::PreferShow,
@@ -183,6 +189,10 @@ impl Rule {
             // analyzed. Error severity because the alternative is a silent
             // analysis under the wrong language.
             Self::UnsupportedSolidRuntime => ("SC9013", "unsupported-solid-runtime", "error", true),
+            // Uncertifiable for the same reason as SC9013 -- the claim is about
+            // the installed runtime, not the project's source -- but a warning:
+            // the analysis ran, and every other finding beside it stands.
+            Self::UnauditedSolidRelease => ("SC9014", "unaudited-solid-release", "warning", true),
             Self::JsxNoDuplicateProps => ("SC8003", "jsx-no-duplicate-props", "error", false),
             Self::PreferFor => ("SC8014", "prefer-for", "error", false),
             Self::PreferShow => ("SC8015", "prefer-show", "warning", false),
