@@ -55,7 +55,21 @@ test("a version-2 bundle states the environment its receipt binds", () => {
     );
     assert.ok(Array.isArray(bundle.dependencyEnvironment), `${bundle.packageName} publishes no environment`);
     const spelled = bundle.dependencyEnvironment.map(entry => JSON.stringify([entry.name, entry.version, entry.integrity]));
-    assert.deepEqual(spelled, [...new Set(spelled)].sort(), `${bundle.packageName}'s environment is not canonical`);
+    // ADR 0126: an environment is edged on every entry or on none. An edged one
+    // may name one package more than once, under different importers, so it is
+    // canonical when its entries are sorted and no whole entry repeats.
+    const edged = bundle.dependencyEnvironment.filter(entry => entry.resolvedFrom).length;
+    assert.ok(
+      edged === 0 || edged === bundle.dependencyEnvironment.length,
+      `${bundle.packageName}'s environment is edged on some entries only`
+    );
+    if (edged === 0) {
+      assert.deepEqual(spelled, [...new Set(spelled)].sort(), `${bundle.packageName}'s environment is not canonical`);
+    } else {
+      assert.deepEqual(spelled, [...spelled].sort(), `${bundle.packageName}'s environment is not sorted`);
+      const whole = bundle.dependencyEnvironment.map(entry => JSON.stringify(entry));
+      assert.equal(new Set(whole).size, whole.length, `${bundle.packageName}'s environment repeats an entry`);
+    }
   }
 });
 
