@@ -593,3 +593,192 @@ function syntheticContext(snapshot, reported) {
     report: entry => reported.push(entry)
   };
 }
+
+function recordingAnalyzer(root, body = "") {
+  const calls = join(root, "calls.txt");
+  const analyzer = join(root, "analyzer.mjs");
+  writeFileSync(analyzer, `import { appendFileSync } from "node:fs";
+appendFileSync(process.argv[2], JSON.stringify(process.argv.slice(3)) + "\\n");
+${body}
+process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
+`);
+  const invocations = () => {
+    try {
+      return readFileSync(calls, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse);
+    } catch {
+      return [];
+    }
+  };
+  return { command: process.execPath, commandArgs: [analyzer, calls], invocations };
+}
+
+function flagValue(args, flag) {
+  const index = args.indexOf(flag);
+  return index === -1 ? undefined : args[index + 1];
+}
+
+test("receiptTrustConfiguration reaches the checker absolute, and its bytes are cache identity", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-trust-"));
+  const project = join(root, "app", "tsconfig.json");
+  mkdirSync(join(root, "app"));
+  writeFileSync(project, "{}\n");
+  const trustPath = join(root, "trust.json");
+  writeFileSync(trustPath, "{\"issuers\":[]}\n");
+  const { command, commandArgs, invocations } = recordingAnalyzer(root);
+  // Relative to `cwd`, like `project` and `snapshotPath` -- not to the
+  // tsconfig directory the checker runs in.
+  const context = settings => ({
+    filename: join(root, "app", "App.tsx"),
+    physicalFilename: join(root, "app", "App.tsx"),
+    settings: { solidChecker: { command, commandArgs, project, cwd: root, ...settings } },
+    options: []
+  });
+  plugin._testing.snapshotCache.clear();
+  const trusted = context({
+    receiptTrustConfiguration: "trust.json",
+    acceptedContracts: "catalog.json"
+  });
+  plugin._testing.loadSnapshot(trusted);
+  plugin._testing.loadSnapshot(trusted);
+  assert.equal(invocations().length, 1, "unchanged trust bytes reuse the snapshot");
+  assert.equal(flagValue(invocations()[0], "--receipt-trust-configuration"), trustPath);
+  assert.equal(flagValue(invocations()[0], "--accepted-contracts"), join(root, "catalog.json"));
+
+  // Same path, new bytes: a persistent ESLint session must not serve the
+  // verdict the old trust produced.
+  writeFileSync(trustPath, "{\"issuers\":[\"replaced\"]}\n");
+  plugin._testing.loadSnapshot(trusted);
+  assert.equal(invocations().length, 2, "edited trust bytes re-run the analysis");
+
+  // And no trust is a different identity from any trust.
+  plugin._testing.loadSnapshot(context({ acceptedContracts: "catalog.json" }));
+  assert.equal(invocations().length, 3);
+  assert.equal(flagValue(invocations()[2], "--receipt-trust-configuration"), undefined);
+  plugin._testing.snapshotCache.clear();
+});
+
+test("an unreadable receiptTrustConfiguration is a clear ESLint error, not an analysis", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-trust-missing-"));
+  const project = join(root, "tsconfig.json");
+  writeFileSync(project, "{}\n");
+  const filename = join(root, "App.js");
+  const { command, commandArgs, invocations } = recordingAnalyzer(root);
+  plugin._testing.snapshotCache.clear();
+  const config = [{
+    plugins: { "solid-checker": plugin },
+    settings: { solidChecker: {
+      command, commandArgs, project, cwd: root, receiptTrustConfiguration: "missing-trust.json"
+    } },
+    rules: { "solid-checker/certification": "error" }
+  }];
+  assert.throws(
+    () => new Linter({ cwd: root }).verify("export {};\n", config, { filename }),
+    error =>
+      error.message.includes("settings.solidChecker.receiptTrustConfiguration") &&
+      error.message.includes(join(root, "missing-trust.json")) &&
+      error.message.includes("ENOENT")
+  );
+  assert.equal(invocations().length, 0, "the checker never starts on a bad trust path");
+
+  // Not cached: supplying the file recovers in the same process.
+  writeFileSync(join(root, "missing-trust.json"), "{}\n");
+  assert.deepEqual(new Linter({ cwd: root }).verify("export {};\n", config, { filename }), []);
+  assert.equal(invocations().length, 1);
+  plugin._testing.snapshotCache.clear();
+});
+
+test("a withheld-catalog note reaches ESLint once per linted file", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-note-"));
+  const project = join(root, "tsconfig.json");
+  writeFileSync(project, "{}\n");
+  // The native checker's notice, in shape: exit 0, findings on stdout, the
+  // note on stderr, which the adapter used to drop.
+  const note =
+    "solid-checker: note: project catalog /p/.solid-checker/accepted-contracts.json was not read: " +
+    "policy-2 receipts need a trusted issuer and no trust configuration was supplied, so the " +
+    "contracts for @kobalte/core are not admitted and the analysis proceeds as if the catalog " +
+    "was absent; pass --receipt-trust-configuration <trust.json> to admit them";
+  const { command, commandArgs, invocations } = recordingAnalyzer(
+    root,
+    `process.stderr.write(${JSON.stringify(`timing noise\n${note}\n`)});`
+  );
+  const settings = { solidChecker: { command, commandArgs, project } };
+  const lint = (rules, name) => new Linter({ cwd: root }).verify(
+    "export const a = 1;\n",
+    [{ plugins: { "solid-checker": plugin }, settings, rules }],
+    { filename: join(root, name) }
+  );
+  plugin._testing.snapshotCache.clear();
+
+  for (const name of ["App.js", "Other.js"]) {
+    const messages = lint(plugin.configs.recommended.rules, name);
+    assert.equal(messages.length, 1, `${name} carries the note`);
+    assert.equal(messages[0].ruleId, "solid-checker/certification");
+    assert.equal(messages[0].line, 1);
+    assert.equal(messages[0].column, 1);
+    assert.match(messages[0].message, /^\[solid-checker note\] project catalog /);
+    assert.ok(!messages[0].message.includes("timing noise"), "only note lines surface");
+    assert.match(messages[0].message, /settings\.solidChecker\.receiptTrustConfiguration/);
+  }
+  assert.equal(invocations().length, 1, "the note rides the cached snapshot");
+
+  // Per-rule configs, with certification off or re-enabled: still exactly one.
+  for (const rules of [
+    plugin.configs.v2.rules,
+    { ...plugin.configs.v2.rules, ...plugin.configs.recommended.rules }
+  ]) {
+    const messages = lint(rules, "App.js");
+    assert.equal(messages.length, 1);
+    assert.match(messages[0].message, /^\[solid-checker note\]/);
+  }
+  const perRule = lint(plugin.configs.v2.rules, "App.js");
+  assert.notEqual(perRule[0].ruleId, "solid-checker/certification");
+  assert.ok(
+    ![...plugin._testing.noticeReporters.keys()].some(path => path.startsWith(root)),
+    "registrations live for one pass"
+  );
+
+  // A pass that ends in a thrown analysis never reaches Program:exit. Its
+  // certification registration must not survive to make a later per-rule
+  // pass over the same file defer to a reporter that is no longer enabled.
+  const broken = join(root, "broken.mjs");
+  writeFileSync(broken, "process.stderr.write('exploded'); process.exit(2);\n");
+  const failing = [{
+    plugins: { "solid-checker": plugin },
+    settings: { solidChecker: { command: process.execPath, commandArgs: [broken], project } },
+    rules: plugin.configs.recommended.rules
+  }];
+  const filename = join(root, "Third.js");
+  assert.throws(
+    () => new Linter({ cwd: root }).verify("export {};\n", failing, { filename }),
+    /exploded/
+  );
+  const after = lint(plugin.configs.v2.rules, "Third.js");
+  assert.equal(after.length, 1, "the note survives a pass that aborted");
+  assert.match(after[0].message, /^\[solid-checker note\]/);
+  plugin._testing.snapshotCache.clear();
+});
+
+test("a named catalog that needs trust fails naming the ESLint setting", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-named-"));
+  const project = join(root, "tsconfig.json");
+  writeFileSync(project, "{}\n");
+  const analyzer = join(root, "analyzer.mjs");
+  writeFileSync(analyzer, `process.stderr.write("--accepted-contracts c.json: policy-2 acceptance receipt requires authenticated issuer provenance; pass --receipt-trust-configuration <trust.json> naming the issuer that certified it");
+process.exit(2);
+`);
+  const context = {
+    filename: join(root, "App.tsx"),
+    physicalFilename: join(root, "App.tsx"),
+    settings: { solidChecker: {
+      command: process.execPath, commandArgs: [analyzer], project, acceptedContracts: "c.json"
+    } },
+    options: []
+  };
+  plugin._testing.snapshotCache.clear();
+  assert.throws(
+    () => plugin._testing.loadSnapshot(context),
+    /authenticated issuer provenance[\s\S]*settings\.solidChecker\.receiptTrustConfiguration/
+  );
+  plugin._testing.snapshotCache.clear();
+});

@@ -193,6 +193,33 @@ set `settings.solidChecker.runtime` with explicit `target`, `build`,
 contradictory selections remain uncertifiable; the adapter includes the full
 selection in its analysis cache identity.
 
+Package contracts reach the adapter the way they reach the CLI: the analysis
+discovers the project's `.solid-checker/` catalogs itself, and
+`settings.solidChecker.acceptedContracts` names one catalog instead. A catalog
+holding policy-2 receipts is only read with the issuer trust that certified
+it, so set `settings.solidChecker.receiptTrustConfiguration` to the file
+`contract certify --trust-configuration-output` wrote; the adapter passes it
+as `--receipt-trust-configuration`. Both paths resolve against
+`settings.solidChecker.cwd`, else the ESLint working directory, and reach the
+checker absolute. The trust file's bytes are part of the adapter's analysis
+cache identity, as they are of the daemon's, so replacing it in a running
+editor session re-runs the analysis. A trust path that cannot be read fails
+the lint with an error naming the setting and the path, before any analysis
+starts.
+
+Without trust, a *discovered* policy-2 catalog is withheld rather than fatal:
+the analysis proceeds as if it were absent, so its imports fall back to the
+compiled-in tier or report `SC9005`. The checker's note saying so (a
+`solid-checker: note:` line on stderr) is reported in ESLint as a
+`[solid-checker note]` message at line 1 of every linted file, through
+`certification` when it is enabled and otherwise through one enabled per-rule
+rule, so it takes that rule's severity. Every file, not the first one linted,
+because the note is about the run, the same reason a project-scoped finding is
+reported on every file: an editor lints only the open file, and ESLint gives a
+plugin no project-level message or warning channel that its formatters and
+editors display. A catalog named by `acceptedContracts` that needs trust still
+fails the lint, and the error names the setting to add.
+
 Every catalog rule is also its own ESLint rule, so a project can disable one
 finding without losing the rest; the names are unprefixed
 (`solid-checker/strict-read-untracked`), since the Solid 2.0 catalog is the

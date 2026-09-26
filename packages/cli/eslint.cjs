@@ -3,9 +3,92 @@
 const { existsSync, readFileSync, readdirSync } = require("node:fs");
 const { dirname, isAbsolute, join, parse, resolve } = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { createHash } = require("node:crypto");
 
 const packageVersion = require("./package.json").version;
 const snapshotCache = new Map();
+
+/**
+ * The native analysis's `solid-checker: note:` stderr lines, per snapshot.
+ *
+ * A note is not a finding: it says something about the run itself -- today,
+ * that a discovered project catalog was withheld because no receipt trust
+ * configuration was supplied, so the contracts it carries were not admitted.
+ * The standalone CLI prints it to the terminal; the adapter captures the
+ * child's stderr, so without this the note died in a pipe ESLint never shows
+ * and the user saw uncertified imports with no reason given.
+ */
+const snapshotNotices = new WeakMap();
+
+/**
+ * Per-file registry of every solid-checker rule enabled for the current lint
+ * pass, so exactly one of them reports each run note (see `reportNotices`).
+ * Registered in `create`, released in `Program:exit`, like `ownedRules`.
+ *
+ * One difference: a rule that throws in `Program` (a failed analysis) ends
+ * the pass with no `Program:exit`, and a registration left behind would make
+ * a later pass pick a reporter that is no longer enabled -- silently losing
+ * the note. Every create of a pass precedes every `Program` of it, so an
+ * entry whose `Program` already ran when a rule is created belongs to an
+ * earlier pass, and the file's registry is discarded before registering.
+ */
+const noticeReporters = new Map();
+
+function registerNoticeReporter(filename, key, isCertification) {
+  let reporters = noticeReporters.get(filename);
+  if (reporters && [...reporters.values()].some(entry => entry.visited)) {
+    reporters = undefined;
+  }
+  if (!reporters) {
+    reporters = new Map();
+    noticeReporters.set(filename, reporters);
+  }
+  reporters.set(key, { isCertification, visited: false });
+}
+
+function releaseNoticeReporter(filename, key) {
+  const reporters = noticeReporters.get(filename);
+  if (!reporters) return;
+  reporters.delete(key);
+  if (reporters.size === 0) noticeReporters.delete(filename);
+}
+
+/**
+ * Whether the rule registered as `key` is the one that reports run notes for
+ * this file: `certification` when it is enabled, otherwise the enabled
+ * per-rule rule whose key sorts first. Deterministic, and exactly one per
+ * file whichever configs enabled which rules.
+ */
+function reportsNotices(filename, key) {
+  const reporters = noticeReporters.get(filename);
+  const own = reporters?.get(key);
+  if (!own) return false;
+  own.visited = true;
+  const keys = [...reporters.keys()].sort();
+  const chosen = keys.find(candidate => reporters.get(candidate).isCertification) ?? keys[0];
+  return chosen === key;
+}
+
+const NOTE_PREFIX = "solid-checker: note: ";
+
+function stderrNotices(stderr) {
+  return (stderr ?? "")
+    .split(/\r?\n/)
+    .filter(line => line.startsWith(NOTE_PREFIX))
+    .map(line => line.slice(NOTE_PREFIX.length).trim())
+    .filter(line => line.length > 0);
+}
+
+const TRUST_REMEDY =
+  "In ESLint, set settings.solidChecker.receiptTrustConfiguration to that trust file.";
+
+/** A note as an ESLint message, naming the setting behind the flag it cites. */
+function noticeMessage(notice) {
+  const remedy = notice.includes("--receipt-trust-configuration")
+    ? `\n\n${TRUST_REMEDY}`
+    : "";
+  return `[solid-checker note] ${notice}${remedy}`;
+}
 
 /**
  * Per-file registry of the diagnostic identities that enabled per-rule rules
@@ -119,6 +202,45 @@ function runtimeConfiguration(config) {
   };
 }
 
+/**
+ * A configured path, resolved exactly as `project` and `snapshotPath` are:
+ * against `settings.solidChecker.cwd`, else the ESLint process's working
+ * directory. Passed to the native checker absolute, because the checker runs
+ * in the tsconfig's directory and a daemon may run somewhere else again.
+ */
+function configuredPath(config, name) {
+  const value = config[name];
+  if (value == null) return null;
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`settings.solidChecker.${name} must be a non-empty string`);
+  }
+  return resolve(config.cwd ?? process.cwd(), value);
+}
+
+/**
+ * The receipt trust configuration, as a cache identity: its resolved path and
+ * the digest of its bytes. The native daemon already hashes the file into its
+ * cached-answer inputs; this is the same rule for the adapter's in-process
+ * snapshot cache, so an edited or replaced trust file re-runs the analysis in
+ * a persistent ESLint session instead of serving a verdict it no longer
+ * supports. An unreadable file is a configuration error, reported before any
+ * analysis starts and not cached, so fixing the file recovers.
+ */
+function receiptTrust(config) {
+  const path = configuredPath(config, "receiptTrustConfiguration");
+  if (path == null) return null;
+  let bytes;
+  try {
+    bytes = readFileSync(path);
+  } catch (error) {
+    throw new Error(
+      "solid-checker adapter could not read settings.solidChecker.receiptTrustConfiguration " +
+      `${path}: ${error.message}`
+    );
+  }
+  return { path, sha256: createHash("sha256").update(bytes).digest("hex") };
+}
+
 function loadSnapshot(context) {
   const config = configuration(context);
   if (config.snapshot != null) return config.snapshot;
@@ -136,9 +258,8 @@ function loadSnapshot(context) {
   const commandArgs = config.command || process.env.SOLID_CHECKER_BIN
     ? [...(config.commandArgs ?? [])]
     : [join(__dirname, "bin", "solid-checker.mjs")];
-  const acceptedContracts = typeof config.acceptedContracts === "string"
-    ? config.acceptedContracts
-    : null;
+  const acceptedContracts = configuredPath(config, "acceptedContracts");
+  const trust = receiptTrust(config);
   const dialect = config.dialect ?? null;
   const presets = [...new Set(Array.isArray(config.preset) ? config.preset : [])].sort();
   const runtime = runtimeConfiguration(config);
@@ -151,6 +272,7 @@ function loadSnapshot(context) {
     commandArgs,
     project,
     acceptedContracts,
+    trust,
     dialect,
     presets,
     enableRules,
@@ -180,6 +302,7 @@ function loadSnapshot(context) {
   ];
   if (dialect) args.push("--dialect", dialect);
   if (acceptedContracts) args.push("--accepted-contracts", acceptedContracts);
+  if (trust) args.push("--receipt-trust-configuration", trust.path);
   for (const preset of presets) args.push("--preset", preset);
   for (const rule of enableRules) args.push("--enable-rule", rule);
   if (runtime?.target) args.push("--runtime-target", runtime.target);
@@ -203,8 +326,14 @@ function loadSnapshot(context) {
     throw failure(`solid-checker adapter could not start analysis: ${result.error.message}`);
   }
   if (result.status !== 0) {
+    const stderr = result.stderr.trim();
+    // A named policy-2 catalog without trust refuses by citing the CLI flag;
+    // name the setting that supplies it here.
+    const remedy = !trust && stderr.includes("--receipt-trust-configuration")
+      ? `\n\n${TRUST_REMEDY}`
+      : "";
     throw failure(
-      `solid-checker adapter analysis failed (${result.status}): ${result.stderr.trim()}`
+      `solid-checker adapter analysis failed (${result.status}): ${stderr}${remedy}`
     );
   }
   let snapshot;
@@ -212,6 +341,10 @@ function loadSnapshot(context) {
     snapshot = JSON.parse(result.stdout);
   } catch (error) {
     throw failure(`solid-checker adapter received invalid JSON: ${error.message}`);
+  }
+  const notices = stderrNotices(result.stderr);
+  if (notices.length > 0 && snapshot && typeof snapshot === "object") {
+    snapshotNotices.set(snapshot, notices);
   }
   snapshotCache.set(key, snapshot);
   return snapshot;
@@ -272,6 +405,7 @@ const adapterSchema = [{
     project: { type: "string" },
     cwd: { type: "string" },
     acceptedContracts: { type: "string" },
+    receiptTrustConfiguration: { type: "string" },
     dialect: { type: "string" },
     preset: { type: "array", items: { type: "string" } },
     enableRule: { type: "array", items: { type: "string" } },
@@ -317,6 +451,34 @@ function projectFindings(context, program, findings) {
   }
 }
 
+/**
+ * Report the snapshot's run notes on this file, if this rule is the file's
+ * designated reporter.
+ *
+ * A note is about the run, not about a file, so it is reported the way a
+ * project-scoped finding is: on every linted file, at the file's origin. Once
+ * per ESLint process would pin it to whichever file happened to be linted
+ * first -- an editor, which lints the open file alone, would show it on one
+ * buffer and never again, and `eslint --cache` would replay it on an
+ * arbitrary file. ESLint gives a plugin no project-level message and no
+ * warning channel its formatters or editors display; `process.emitWarning`
+ * reaches only a terminal, which is the invisibility this replaces.
+ */
+function reportNotices(context, program, snapshot, reporter) {
+  const notices = snapshotNotices.get(snapshot);
+  if (!notices || !reporter) return;
+  const sourceCode = context.sourceCode ?? context.getSourceCode();
+  const origin = sourceCode.getLocFromIndex(0);
+  for (const notice of notices) {
+    context.report({
+      node: program,
+      loc: { start: origin, end: origin },
+      messageId: "notice",
+      data: { message: noticeMessage(notice) }
+    });
+  }
+}
+
 const certification = {
   meta: {
     type: "problem",
@@ -326,12 +488,19 @@ const certification = {
     },
     fixable: "code",
     schema: adapterSchema,
-    messages: { finding: "{{message}}" }
+    messages: { finding: "{{message}}", notice: "{{message}}" }
   },
   create(context) {
+    const filename = contextFilename(context);
+    const key = context.id ?? "certification";
+    registerNoticeReporter(filename, key, true);
     return {
       Program(program) {
+        // Asked before the analysis, so the registration is marked visited
+        // for this pass even when loading the snapshot throws.
+        const reporter = reportsNotices(filename, key);
         const snapshot = loadSnapshot(context);
+        reportNotices(context, program, snapshot, reporter);
         // Skip findings a per-rule rule registered for during this pass:
         // that rule reports them at its own severity, so certification
         // reporting them again would duplicate every one of its findings.
@@ -340,6 +509,9 @@ const certification = {
           finding => !owned?.has(finding.rule)
         );
         projectFindings(context, program, findings);
+      },
+      "Program:exit"() {
+        releaseNoticeReporter(filename, key);
       }
     };
   }
@@ -370,13 +542,19 @@ function reportingRule(entry, catalog) {
       },
       fixable: "code",
       schema: adapterSchema,
-      messages: { finding: "{{message}}" }
+      messages: { finding: "{{message}}", notice: "{{message}}" }
     },
     create(context) {
       const filename = contextFilename(context);
       registerOwnedRule(filename, entry.name);
+      // The ESLint rule id, not the catalog name: a deprecated key and its
+      // replacement share `entry.name`, and both enabled must still yield one
+      // note reporter.
+      const key = context.id ?? entry.name;
+      registerNoticeReporter(filename, key, false);
       return {
         Program(program) {
+          const reporter = reportsNotices(filename, key);
           // A namespaced compatibility rule analyzes with its manifest's
           // dialect unless the config already chose one. The default,
           // unprefixed surface leaves selection to project detection.
@@ -385,6 +563,7 @@ function reportingRule(entry, catalog) {
               ? contextWithDialect(context, catalog.dialect)
               : context;
           const snapshot = loadSnapshot(forced);
+          reportNotices(context, program, snapshot, reporter);
           const findings = (snapshot.findings ?? []).filter(
             finding => finding.rule === entry.name
           );
@@ -393,6 +572,7 @@ function reportingRule(entry, catalog) {
         },
         "Program:exit"() {
           releaseOwnedRule(filename, entry.name);
+          releaseNoticeReporter(filename, key);
         }
       };
     }
@@ -528,6 +708,7 @@ module.exports._testing = {
   manifests,
   manifestEntriesByRule,
   deprecatedRuleKeys: DEPRECATED_RULE_KEYS,
+  noticeReporters,
   ownedRules,
   snapshotCache
 };

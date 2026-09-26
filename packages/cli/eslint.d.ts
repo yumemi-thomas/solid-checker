@@ -29,8 +29,19 @@ export interface SolidCheckerSettings {
   command?: string;
   /** Arguments placed before solid-checker's generated CLI arguments. */
   commandArgs?: string[];
-  /** Receipt-issued stable-v1 contract catalog for exact imports. */
+  /**
+   * Receipt-issued stable-v1 contract catalog for exact imports. A relative
+   * path resolves against `cwd`.
+   */
   acceptedContracts?: string;
+  /**
+   * Policy-2 issuer trust (`--receipt-trust-configuration`), the file
+   * `contract certify --trust-configuration-output` wrote. Without it a
+   * discovered policy-2 catalog is not read, and one named by
+   * `acceptedContracts` fails the analysis. A relative path resolves against
+   * `cwd`; its bytes are part of the analysis cache identity.
+   */
+  receiptTrustConfiguration?: string;
   /** Force a dialect instead of detecting it from the project. */
   dialect?: "solid-v2" | (string & {});
   /** Exact runtime selection used for artifact cases and rendering proofs. */

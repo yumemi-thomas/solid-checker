@@ -165,7 +165,11 @@ With Oxlint:
 
 The plugin finds the nearest `tsconfig.json` automatically (in ESLint it also
 reuses `parserOptions.project`). Set `settings.solidChecker.project` if your
-config has a nonstandard name or is a solution-style root config.
+config has a nonstandard name or is a solution-style root config. If your
+project's package contracts were certified with policy-2 receipts, set
+`settings.solidChecker.receiptTrustConfiguration` to the trust file
+certification wrote; without it those contracts are not read, and the lint
+says so on every file (see `packages/cli/README.md`).
 
 > The plugin analyzes the project once per lint run and reports from that
 > snapshot, so it fits lint commands, editor-on-save, and CI.
