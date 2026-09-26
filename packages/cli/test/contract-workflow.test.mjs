@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -105,6 +105,7 @@ import {
   staticRuntimeDependencies,
   staticBindingDependencies,
   certificationImporterPathFor,
+  claimCertificationImporter,
   parseCertifyArguments,
   probeCorpusExpected,
   partialProposalHasDependencyFrontier,
@@ -3980,6 +3981,110 @@ test("certificationImporterPathFor is deterministic in the package root and cata
     assert.notEqual(first, other, "the catalog is part of the importer identity");
     assert.equal(dirname(first), realpathSync(dirname(packageRoot)), "the importer sits beside the package root");
     assert.match(first.split("/").pop(), /^\.solid-checker-certification-[0-9a-f]{64}\.mjs$/);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+const certificationImporters = directory =>
+  readdirSync(directory).filter(name => name.startsWith(".solid-checker-certification-"));
+
+test("certify leaves no certification importer in the installed tree when it refuses or throws", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-importer-cleanup-"));
+  try {
+    const modules = join(project, "node_modules");
+    const packageRoot = join(modules, "example");
+    mkdirSync(packageRoot, { recursive: true });
+    writeFileSync(join(packageRoot, "package.json"), '{"name":"example","version":"1.0.0"}\n');
+    const catalog = join(project, "accepted-contracts.json");
+    const importer = certificationImporterPathFor({ packageRoot, catalog });
+    const metadata = new TextEncoder().encode(JSON.stringify({
+      versions: { "1.0.0": { name: "example", version: "1.0.0", dist: {
+        integrity: "sha512-registry",
+        tarball: "https://registry.npmjs.org/example/-/example-1.0.0.tgz"
+      } } }
+    }));
+    const refusing = async () => ({ ok: true, status: 200, arrayBuffer: async () => metadata.buffer });
+    const throwing = async () => {
+      throw new TypeError("network is down");
+    };
+    for (const [fetch_, expected] of [[refusing, /registry integrity .* disagrees/], [throwing, /network is down/]]) {
+      // An earlier run that was killed, or a build that kept the file after
+      // success, left the importer behind: this run adopts and removes it.
+      writeFileSync(importer, "export {};\n");
+      await assert.rejects(
+        certifyContract(
+          ["--package-root", packageRoot, "--integrity", "sha512-lockfile", "--catalog", catalog],
+          { fetch_ }
+        ),
+        expected
+      );
+      assert.deepEqual(certificationImporters(modules), []);
+    }
+    // A file at the importer's name with other bytes is not ours to remove.
+    writeFileSync(importer, "export const user = 1;\n");
+    await assert.rejects(
+      certifyContract(
+        ["--package-root", packageRoot, "--integrity", "sha512-lockfile", "--catalog", catalog],
+        { fetch_: refusing }
+      ),
+      /EEXIST/
+    );
+    assert.equal(readFileSync(importer, "utf8"), "export const user = 1;\n");
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("a claimed certification importer is removed on release and on every process exit path", async context => {
+  const probe = spawnSync("node", ["--version"], { encoding: "utf8" });
+  if (probe.error || probe.status !== 0) {
+    context.skip("no node on PATH");
+    return;
+  }
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-importer-exit-"));
+  try {
+    const importer = join(project, ".solid-checker-certification-test.mjs");
+    const release = claimCertificationImporter(importer);
+    assert.equal(readFileSync(importer, "utf8"), "export {};\n");
+    release();
+    release();
+    assert.equal(existsSync(importer), false, "released on the ordinary path");
+
+    const module = new URL("../scripts/certify-contract.mjs", import.meta.url).href;
+    const child = ending => [
+      "--input-type=module",
+      "-e",
+      `const { claimCertificationImporter } = await import(${JSON.stringify(module)});
+       claimCertificationImporter(${JSON.stringify(importer)});
+       process.stdout.write("claimed\\n");
+       ${ending}`
+    ];
+    for (const [ending, check] of [
+      ["process.exit(3);", result => assert.equal(result.status, 3)],
+      ['throw new Error("crash");', result => assert.equal(result.status, 1)]
+    ]) {
+      const result = spawnSync("node", child(ending), { encoding: "utf8" });
+      assert.equal(result.stdout, "claimed\n", result.stderr);
+      check(result);
+      assert.equal(existsSync(importer), false, ending);
+    }
+    for (const signal of ["SIGTERM", "SIGINT"]) {
+      const running = spawn("node", child("setInterval(() => {}, 1000);"), { stdio: ["ignore", "pipe", "pipe"] });
+      await new Promise((resolve, reject) => {
+        running.once("error", reject);
+        running.stdout.on("data", chunk => {
+          if (String(chunk).includes("claimed")) resolve();
+        });
+      });
+      assert.equal(existsSync(importer), true, "materialized while certification runs");
+      const exited = new Promise(resolve => running.once("exit", (code, received) => resolve({ code, received })));
+      running.kill(signal);
+      const { code, received } = await exited;
+      assert.equal(received, signal, "the signal still terminates the process");
+      assert.equal(code, null);
+      assert.equal(existsSync(importer), false, signal);
+    }
   } finally {
     rmSync(project, { recursive: true, force: true });
   }

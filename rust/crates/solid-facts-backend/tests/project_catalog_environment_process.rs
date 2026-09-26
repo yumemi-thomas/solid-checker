@@ -98,13 +98,10 @@ fn consumer_tree(project: &Path, dependency_version: &str) {
         .unwrap(),
     )
     .unwrap();
-    // The file `contract certify` writes beside the package root and binds the
-    // receipt to. No project file is it.
-    fs::write(
-        project.join("node_modules/@solid-primitives/.solid-checker-certification.mjs"),
-        "import \"@solid-primitives/debounce\";\n",
-    )
-    .unwrap();
+    // The receipt binds the certification importer `contract certify` writes
+    // beside the package root (see `resolved_import`), and certify removes that
+    // file before it returns: nothing of it is left in the installed tree, so
+    // none is written here. The catalog names it as a path identity only.
     fs::create_dir_all(project.join("src")).unwrap();
     for (file, name) in [("App.ts", "save"), ("Other.ts", "search")] {
         fs::write(
@@ -681,12 +678,8 @@ fn pnpm_consumer_tree(project: &Path) {
     symlink(&dependency_two, store.join("node_modules").join(DEPENDENCY)).unwrap();
     fs::create_dir_all(flat.join("@solid-primitives")).unwrap();
     symlink(package_store.join(PACKAGE), flat.join(PACKAGE)).unwrap();
-    // `contract certify` writes its importer beside the package's real root.
-    fs::rename(
-        staged.join("@solid-primitives/.solid-checker-certification.mjs"),
-        package_store.join("@solid-primitives/.solid-checker-certification.mjs"),
-    )
-    .unwrap();
+    // The importer the receipt binds sits beside the package's real root, in
+    // the store directory, and -- as in the flat tree -- no longer exists.
     fs::remove_dir_all(&staged).unwrap();
     fs::remove_file(project.join("package-lock.json")).unwrap();
     let entry = |name: &str, version: &str, integrity: &str| {

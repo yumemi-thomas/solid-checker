@@ -1628,7 +1628,7 @@ fn read_boundary_file(
 }
 
 fn rebase_catalog_import(base: &Path, import: &mut ResolvedImport) -> Result<(), ContractFailure> {
-    import.importer = catalog_absolute_path(base, &import.importer)?;
+    import.importer = catalog_importer_path(base, &import.importer)?;
     import.package_root = catalog_absolute_path(base, &import.package_root)?;
     if let Some(real_root) = &mut import.package_real_root {
         *real_root = catalog_absolute_path(base, real_root)?;
@@ -1654,13 +1654,50 @@ fn rebase_catalog_file(base: &Path, file: &mut ResolvedFile) -> Result<(), Contr
     Ok(())
 }
 
-fn catalog_absolute_path(base: &Path, value: &str) -> Result<String, ContractFailure> {
-    let path = Path::new(value);
-    let path = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        catalog_member_path(base, value)?
+/// The importer an entry is keyed on, canonicalized as a *path identity*: the
+/// file itself when it exists, and otherwise its canonical directory joined
+/// with its file name. The certification importer `contract certify` binds a
+/// receipt to lives only for the duration of certification -- certify removes
+/// it so nothing is left in the user's installed tree -- and it is spelled at
+/// certification time as the real path of a regular file it has just created,
+/// which is exactly its canonical directory joined with its name. Requiring
+/// the file to exist here would make every published project catalog
+/// unreadable the moment certify cleaned up after itself.
+fn catalog_importer_path(base: &Path, value: &str) -> Result<String, ContractFailure> {
+    let path = catalog_path(base, value)?;
+    if let Ok(canonical) = path.canonicalize() {
+        return Ok(canonical.to_string_lossy().into_owned());
+    }
+    let (Some(directory), Some(name)) = (path.parent(), path.file_name()) else {
+        return Err(ContractFailure::DocumentDecode {
+            message: format!(
+                "accepted contract catalog importer {} names no file",
+                path.display()
+            ),
+        });
     };
+    directory
+        .canonicalize()
+        .map(|directory| directory.join(name).to_string_lossy().into_owned())
+        .map_err(|error| ContractFailure::DocumentDecode {
+            message: format!(
+                "accepted contract catalog importer directory {}: {error}",
+                directory.display()
+            ),
+        })
+}
+
+fn catalog_path(base: &Path, value: &str) -> Result<PathBuf, ContractFailure> {
+    let path = Path::new(value);
+    if path.is_absolute() {
+        Ok(path.to_path_buf())
+    } else {
+        catalog_member_path(base, value)
+    }
+}
+
+fn catalog_absolute_path(base: &Path, value: &str) -> Result<String, ContractFailure> {
+    let path = catalog_path(base, value)?;
     path.canonicalize()
         .map(|path| path.to_string_lossy().into_owned())
         .map_err(|error| ContractFailure::DocumentDecode {

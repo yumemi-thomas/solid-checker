@@ -84,6 +84,12 @@ asks Rust for policy-2 proof demands, and attempts authoritative certification.
 The catalog is replaced only after Rust has produced accepted bytes and a
 configured issuer has produced a receipt. Audit files are non-authoritative.
 
+While it runs, certification writes a one-line importer module beside the
+package root (.solid-checker-certification-<hash>.mjs) and resolves the
+package from it. The file is removed before certify exits -- on success,
+refusal, failure, or a terminating signal -- and one an earlier run left
+behind is adopted and removed. The receipt keeps its path as an identity only.
+
 Options:
   --package-root <DIR>    Installed package root (default: current directory)
   --integrity <SRI>       Package-manager-pinned archive integrity (required)
@@ -1618,6 +1624,11 @@ export function isReusableDependencyRefusalAudit({
 /// the package root and catalog it certifies. Exported so a harness that
 /// generates a proposal ahead of certification can generate it under the same
 /// importer and hand it over with `--proposal`.
+///
+/// The name is a path identity: receipts and catalog entries are keyed on it,
+/// and nothing after certification needs the file to exist (the catalog reader
+/// canonicalizes a missing importer by its directory). The file itself exists
+/// only while certification runs -- see `claimCertificationImporter`.
 export function certificationImporterPathFor({ packageRoot, catalog }) {
   const resolvedRoot = realpathSync(resolve(packageRoot));
   const resolvedCatalog = resolve(
@@ -1630,6 +1641,88 @@ export function certificationImporterPathFor({ packageRoot, catalog }) {
     .update(resolvedCatalog)
     .digest("hex");
   return join(dirname(resolvedRoot), `.solid-checker-certification-${importerIdentity}.mjs`);
+}
+
+const CERTIFICATION_IMPORTER_SOURCE = "export {};\n";
+const CERTIFICATION_IMPORTER_SIGNALS = Object.freeze(["SIGINT", "SIGTERM", "SIGHUP"]);
+// Importers this process has materialized and not yet removed. Every exit path
+// that does not reach the owner's `finally` -- `process.exit`, an uncaught
+// exception, a terminating signal -- removes them from here.
+const liveCertificationImporters = new Set();
+let certificationImporterHooks = null;
+
+function removeLiveCertificationImporters() {
+  for (const path of liveCertificationImporters) {
+    try {
+      rmSync(path, { force: true });
+    } catch {
+      // Best effort on the way out; a failure here must not mask the exit.
+    }
+  }
+  liveCertificationImporters.clear();
+}
+
+function installCertificationImporterHooks() {
+  if (certificationImporterHooks) return;
+  const onExit = () => removeLiveCertificationImporters();
+  const onSignal = signal => {
+    removeLiveCertificationImporters();
+    uninstallCertificationImporterHooks();
+    // Re-raise only when this handler was the signal's sole listener: the
+    // default action then terminates exactly as it would have without it. A
+    // host that listens for the signal itself has already been told.
+    if (process.listenerCount(signal) === 0) process.kill(process.pid, signal);
+  };
+  process.on("exit", onExit);
+  for (const signal of CERTIFICATION_IMPORTER_SIGNALS) process.on(signal, onSignal);
+  certificationImporterHooks = { onExit, onSignal };
+}
+
+function uninstallCertificationImporterHooks() {
+  if (!certificationImporterHooks) return;
+  const { onExit, onSignal } = certificationImporterHooks;
+  process.off("exit", onExit);
+  for (const signal of CERTIFICATION_IMPORTER_SIGNALS) process.off(signal, onSignal);
+  certificationImporterHooks = null;
+}
+
+/// Materializes the certification importer at `path` for the duration of one
+/// certification and returns the function that removes it. Certification must
+/// leave nothing in the user's installed tree, so the caller releases it on
+/// every path out (`finally`), and a process exit, uncaught exception or
+/// terminating signal that bypasses the caller removes it too.
+///
+/// A file already at `path` with exactly the importer's bytes is one an earlier
+/// run left behind (killed with SIGKILL, or a build that kept the file after
+/// success): the name is derived from this package root and catalog, so it is
+/// this certification's own, and it is adopted and removed with this run. Any
+/// other bytes there are not ours and refuse. Two concurrent certifications of
+/// the same package root into the same catalog share the name and would remove
+/// each other's file; they already race on that catalog.
+export function claimCertificationImporter(path) {
+  try {
+    writeFileSync(path, CERTIFICATION_IMPORTER_SOURCE, { flag: "wx", mode: 0o600 });
+  } catch (error) {
+    if (
+      error?.code !== "EEXIST" ||
+      readFileSync(path, "utf8") !== CERTIFICATION_IMPORTER_SOURCE
+    ) {
+      throw error;
+    }
+  }
+  liveCertificationImporters.add(path);
+  installCertificationImporterHooks();
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    liveCertificationImporters.delete(path);
+    try {
+      rmSync(path, { force: true });
+    } finally {
+      if (liveCertificationImporters.size === 0) uninstallCertificationImporterHooks();
+    }
+  };
 }
 
 function samePathIdentity(left, right) {
@@ -4121,30 +4214,24 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
   if (!manifest.name || !manifest.version) {
     throw new Error("package.json must declare an exact package name and version");
   }
-  const scratch = mkdtempSync(join(tmpdir(), "solid-checker-certify-"));
-  const importerIdentity = createHash("sha256")
-    .update("solid-checker:certification-importer:v1\0")
-    .update(options.packageRoot)
-    .update("\0")
-    .update(options.catalog)
-    .digest("hex");
-  const certificationImporterPath = join(
-    dirname(options.packageRoot),
-    `.solid-checker-certification-${importerIdentity}.mjs`
-  );
-  let createdCertificationImporter = false;
+  // The importer sits beside the package root so that resolving the package's
+  // own specifier from it walks the same node_modules chain a consumer's
+  // import does. It is materialized only while certification runs and removed
+  // on every way out; the receipt and catalog keep its path as an identity.
+  const certificationImporterPath = certificationImporterPathFor({
+    packageRoot: options.packageRoot,
+    catalog: options.catalog
+  });
+  const releaseCertificationImporter = claimCertificationImporter(certificationImporterPath);
+  let certificationImporter;
+  let scratch;
   try {
-    writeFileSync(certificationImporterPath, "export {};\n", { flag: "wx", mode: 0o600 });
-    createdCertificationImporter = true;
+    certificationImporter = realpathSync(certificationImporterPath);
+    scratch = mkdtempSync(join(tmpdir(), "solid-checker-certify-"));
   } catch (error) {
-    if (
-      error?.code !== "EEXIST" ||
-      readFileSync(certificationImporterPath, "utf8") !== "export {};\n"
-    ) {
-      throw error;
-    }
+    releaseCertificationImporter();
+    throw error;
   }
-  const certificationImporter = realpathSync(certificationImporterPath);
   const demandPlans = [];
   let graphPreparation = null;
   let reusedProposal = false;
@@ -4159,7 +4246,6 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
   let dependencyEnvironment = null;
   let selfAdmission = null;
   const stageDurationsMs = {};
-  let certified = false;
   // Returned to the caller, which owns the exit status: `bin/solid-checker.mjs`
   // and the benchmark worker both map it through `outcome.exitCode`.
   let outcome = null;
@@ -4401,7 +4487,6 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       dependencyEnvironment,
       selfAdmission
     );
-    certified = true;
     outcome = certificationOutcome(manifest, dependencyEnvironment, selfAdmission);
     if (outcome.message) process.stderr.write(`${outcome.message}\n`);
   } catch (error) {
@@ -4429,9 +4514,10 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
     );
     throw refusal;
   } finally {
-    rmSync(scratch, { recursive: true, force: true });
-    if (!certified && createdCertificationImporter) {
-      rmSync(certificationImporterPath, { force: true });
+    try {
+      rmSync(scratch, { recursive: true, force: true });
+    } finally {
+      releaseCertificationImporter();
     }
   }
   return outcome;
