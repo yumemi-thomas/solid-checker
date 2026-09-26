@@ -1,5 +1,29 @@
 # Precision backlog
 
+## pnpm hoisting defeats environment admission in the certifying tree (2026-09-26)
+
+Status: **open, fix in progress**. Measured on kobalte core at 65d64399:
+`vite-plugin-solid@3.0.0-next.5` acquires a 12-entry environment and is then
+refused in the very tree it was certified in, with "merge-anything installed
+6.0.6, certified 5.1.7".
+
+- 6.0.6 is pnpm's hoisted `.pnpm/node_modules` copy. The ADR 0123/0125 rule
+  (`environment_difference` in `accepted_bundles.rs`) requires every lookup
+  from every located package to match, and the other located packages see the
+  hoisted copy.
+- `solid-refresh` (0.7.8 against 0.8.0-next.7) hits the same thing.
+- This is sound but far too strict. Estimated: any pnpm tree with two versions
+  of a package in the environment refuses.
+- Certify exits 0 silently, because it never evaluates artifact admission.
+
+Fix: environment entries record the importer that resolved them, and admission
+resolves each edge from that importer. Certify then checks its own admission
+and exits 1 when it fails.
+
+Confirmed on the same run: defects 1-4 are fixed on the real tree. Acceptance-
+gate sites 131 -> 77 (55 -> 1 excluding testing-library), with no violation
+moved (phase22 report, re-run section).
+
 ## Project-side certification: defects 1-4 fixed (2026-09-26)
 
 Status: **implemented**. These are the four defects the kobalte-core run found

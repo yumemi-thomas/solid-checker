@@ -84,3 +84,46 @@ Each changed finding was classified by hand:
    (3 here).
 7. **Open-claims `SC9005` is reported per call argument,** so admitting a
    partly closed contract increases the finding count.
+
+## Re-run after defects 1-4 were fixed (65d64399)
+
+Same tree and procedure, with a fresh issuer and release binaries at 65d64399.
+Every number is measured.
+
+| package | wall | exit | outcome, previous run in brackets |
+| --- | ---: | ---: | --- |
+| form | 22.5 s | 0 | certified [same] |
+| interaction | 17.4 s | **0** | **publishes**; only `createHideOutside`/`returns` withheld ("the worker threw: ReferenceError: document is not defined") [refused whole, exit 2] |
+| utils (`.`, `./colors`) | 22.0 s | 0 | certified [same] |
+| testing-library | 2.7 s | 2 | refused, `aria-query` [same] |
+| vite-plugin-solid | 1.8 s | 0 | environment acquired, 12 entries [0]; **not admitted** (below) |
+
+- End to end: 84.1 s. Packages admitted: 14 of 18 non-builtin (78 %).
+- `packages/core` acceptance-gate import sites: 131 (baseline) -> 85
+  (previous run) -> **77**. Excluding testing-library: 55 -> 9 -> **1**.
+- No violation moved, and no non-`SC9005` finding was gained. The 16 lost
+  `SC9011` each became an `SC9005` at the same position.
+- Defect 1: without trust, the JSON is byte-identical to no catalog, with one
+  notice. Defect 2: see interaction. Defect 3: the environment is acquired.
+  Defect 4: `packageSummaries` says `refused` with a detail. **All confirmed.**
+- Controls: 4 runs byte-identical. In the signals rc.6 tree the catalog is
+  refused with the named reason; the rc.3 twin admits it.
+
+**New blocker: pnpm hoisting.** vite-plugin-solid is refused in the very tree
+it was certified in: "merge-anything installed 6.0.6, certified 5.1.7".
+
+- Its own `merge-anything` is 5.1.7. The 6.0.6 is pnpm's hoisted
+  `.pnpm/node_modules` copy, which every other located package in the
+  environment resolves.
+- The admission rule requires every lookup from every located package to match,
+  so it refuses. `solid-refresh` 0.7.8 against 0.8.0-next.7 hits the same
+  thing.
+- Certify exits 0 silently, because it never evaluates artifact admission.
+
+Fix in progress: environment entries record which package resolved them;
+admission checks each lookup from that importer; certify checks its own
+admission and exits 1 if it fails.
+
+Minor wording issues: the no-trust notice lists vite-plugin-solid as
+admittable, and `packageSummaries` in the rc.6 tree says "no exact lockfile
+integrity" for packages that are not installed there.
