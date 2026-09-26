@@ -1270,6 +1270,21 @@ pub enum CallbackOwner {
     Inherits,
     /// No owner at all, whatever the call site.
     None,
+    /// The call site's owner on the callback's **first** run, and no owner on
+    /// every later one.
+    ///
+    /// The shape of a callback the primitive runs once *during* the creating
+    /// call, in the caller's owner and listener context, and afterwards from
+    /// the scheduler's flush, where no owner is current. It is not
+    /// [`Self::Inherits`], which would certify what a later run creates, and
+    /// not [`Self::None`], which would claim the first run is unowned too:
+    /// what the callback creates is owned exactly as the call site is on its
+    /// first run and may be detached on a later one.
+    ///
+    /// Write legality follows the same split. A write on the first run
+    /// answers to the call site's owner; a write on a later run is not under
+    /// any owner.
+    InheritsFirstRun,
     /// An owner that cannot hold cleanup — a leaf.
     Leaf,
 }
@@ -2190,8 +2205,14 @@ pub trait Dialect: Sync {
     }
 
     /// The argument that is this primitive's **apply** callback: the slot the
-    /// runtime defers and runs outside the tracked compute, so a read there
-    /// does not subscribe and the phase deserves its own name.
+    /// runtime runs outside the tracked compute, with its strict-read window
+    /// open, so a read there does not subscribe the effect and the phase
+    /// deserves its own name.
+    ///
+    /// Outside the compute is not the same as after the call. 2.0's
+    /// `createEffect` queues its apply, while `createRenderEffect` runs its
+    /// first apply before the call returns; [`Dialect::callback_owners`] and
+    /// [`Dialect::contract_callback_execution_at`] carry that difference.
     ///
     /// Not the same question as "is this callback deferred". Several
     /// primitives defer a callback the caller supplies — an executor, a
@@ -3300,10 +3321,19 @@ mod tests {
         );
 
         // 2.0 splits the effect into a compute arm that creates an owner and
-        // an apply arm that runs unowned.
+        // an apply arm. `createEffect` queues the apply, so it always runs
+        // unowned; `createRenderEffect` runs its first apply during the call,
+        // under the caller's owner, and only its later runs unowned.
         assert_eq!(
             (&Solid2 as &dyn Dialect).callback_owners(Primitive::CreateEffect),
             &[(0, CallbackOwner::Creates), (1, CallbackOwner::None)]
+        );
+        assert_eq!(
+            (&Solid2 as &dyn Dialect).callback_owners(Primitive::CreateRenderEffect),
+            &[
+                (0, CallbackOwner::Creates),
+                (1, CallbackOwner::InheritsFirstRun)
+            ]
         );
 
         // Both signatures accept Owner | null. A concrete call sharpens this

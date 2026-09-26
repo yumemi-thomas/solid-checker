@@ -642,6 +642,25 @@
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
+      "checkerKind": "uncertifiable",
+      "why": "createRenderEffect runs its first apply during the call, under the component's owner, so the cleanup registers there; only a later run, from the flush, has no owner, and whether one happens depends on the compute's sources changing. The published signature accepts both callbacks, so the ownership claim is the checker's own and stays an obligation rather than a violation.",
+      "code": "import { createRenderEffect, createSignal, onCleanup } from \"solid-js\";\nconst [count] = createSignal(0);\nexport function App() {\n  createRenderEffect(() => count(), () => {\n    onCleanup(() => {});\n  });\n  return <div />;\n}\n"
+    },
+    {
+      "rule": "missing-owner",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerCount": 2,
+      "why": "The module-scope control for the render-effect apply obligation: with no owner at the call, neither the render effect nor any run of its apply has one, so the effect and the cleanup inside the apply are both proven. TypeScript has nothing to say about where either is created.",
+      "code": "import { createRenderEffect, createSignal, onCleanup } from \"solid-js\";\nconst [count] = createSignal(0);\ncreateRenderEffect(() => count(), () => {\n  onCleanup(() => {});\n});\n"
+    },
+    {
+      "rule": "missing-owner",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
       "checkerCount": 3,
       "sourceExtension": "ts",
       "why": "The undirected control for the server-entry uncertainty case: the identical three constructors without the directive. Every call is well typed -- TypeScript has nothing to say about where an effect is created -- and each allocates a computation at module scope that no owner will dispose. If the server-entry uncertainty ever widens past the directive, these three go silent and this case fails.",

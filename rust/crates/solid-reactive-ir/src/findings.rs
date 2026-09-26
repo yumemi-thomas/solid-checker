@@ -152,6 +152,7 @@ impl Finding {
     ) -> Self {
         let uncertain = requirement.uncertain;
         let conditional_owner = requirement.conditional_owner;
+        let later_run_unowned = requirement.later_run_unowned;
         let runtime_uncertain = requirement.runtime_uncertain;
         let component_uncertain = requirement.component_uncertain;
         let missing_jsx_census = requirement.missing_jsx_census;
@@ -161,6 +162,7 @@ impl Finding {
             || (uncertain
                 && !runtime_uncertain
                 && !conditional_owner
+                && !later_run_unowned
                 && !component_uncertain
                 && !missing_jsx_census);
         let mut message = message.to_string();
@@ -190,6 +192,9 @@ impl Finding {
                     .into()
             } else if conditional_owner {
                 "runWithOwner receives a nullable owner, so this operation may execute detached"
+                    .into()
+            } else if later_run_unowned {
+                "the enclosing callback runs under its caller's owner only on its first run; a later run comes from the scheduler's flush, where no owner is current"
                     .into()
             } else {
                 "no containing component, computation, or root owner dominates this operation"
@@ -223,6 +228,14 @@ impl Finding {
             );
             hint.push_str(
                 " Narrow the owner to a non-null value before runWithOwner, or handle the detached lifetime explicitly.",
+            );
+        }
+        if later_run_unowned {
+            message.push_str(
+                "; the enclosing callback is owned only on its first run and runs with no owner on any later run, so solid-checker cannot prove every execution has an owner",
+            );
+            hint.push_str(
+                " Create owned work in the effect's compute, or keep the apply callback free of primitives and cleanups that a later run would leave detached.",
             );
         }
         if component_uncertain {
@@ -607,6 +620,7 @@ mod tests {
             runtime_uncertain: false,
             caller_uncertain: false,
             conditional_owner: false,
+            later_run_unowned: false,
             component_uncertain: false,
             missing_jsx_census: false,
             report: true,
@@ -643,5 +657,22 @@ mod tests {
                 .message
                 .contains("no containing component, computation, or root owner dominates")
         );
+
+        // A later run of a first-run-owned callback names its own reason, not
+        // a nullable `runWithOwner` owner the source never wrote.
+        let mut later = requirement();
+        later.uncertain = true;
+        later.later_run_unowned = true;
+        let later = Finding::for_owner_requirement(
+            metadata,
+            &later,
+            "onCleanup is called without a reactive owner",
+            "Register it under a component or root.",
+        );
+        assert_eq!(later.kind, "uncertifiable");
+        assert!(later.message.contains("owned only on its first run"));
+        assert!(later.evidence[0].message.contains("only on its first run"));
+        assert!(!later.message.contains("runWithOwner"));
+        assert!(!later.message.contains("is exported"));
     }
 }

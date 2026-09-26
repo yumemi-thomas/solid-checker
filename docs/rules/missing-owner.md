@@ -14,6 +14,16 @@ scope, and detached callbacks. Exported functions with unseen callers, nullable
 `runWithOwner` values, unresolved component identity, and unresolved runtime
 allocation paths are uncertifiable rather than proven violations.
 
+The apply callback of `createEffect(compute, apply)` is always a detached
+callback: the runtime queues it, and it runs from the flush with no owner. The
+apply callback of `createRenderEffect(compute, apply)` is not. Its first run
+happens before `createRenderEffect` returns, under the caller's owner, and only
+its later runs come from the flush with no owner. An operation in that callback
+is therefore owned on the first run whenever the call site is owned, and is
+reported as uncertifiable, because whether a later run happens depends on its
+compute's sources changing. Under an unowned call site every run is unowned,
+and the operation stays a proven violation.
+
 The proven `onSettled` cleanup variant has **error** severity because Solid 2.0
 throws `SETTLED_CLEANUP_UNOWNED` in development and silently drops the cleanup
 in production. Other proven variants are warnings: an effect keeps its

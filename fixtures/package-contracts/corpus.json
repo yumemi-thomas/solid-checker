@@ -79,6 +79,7 @@
     "published-export-entity",
     "rc9-callback-forms",
     "reexport-value-sibling-callback",
+    "render-effect-apply-callback",
     "retained-callback-parameter",
     "retained-value-callback",
     "returned-callback-descendant",

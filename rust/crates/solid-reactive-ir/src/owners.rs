@@ -218,6 +218,12 @@ pub(crate) const OWNER_CONTEXT_COMPONENT_UNCERTAIN: u8 = 8;
 /// one proven unowned invocation is enough to prove an ownership defect even
 /// when other invocations may be owned.
 pub(crate) const OWNER_CONTEXT_PROVEN_UNOWNED: u8 = 16;
+/// The possible-unowned half of this context comes from a callback that runs
+/// under its caller's owner only on its first run
+/// ([`solid_dialect::CallbackOwner::InheritsFirstRun`]): a later run, from the
+/// scheduler's flush, runs with no owner. Kept as its own bit so the finding
+/// names that reason instead of a nullable `runWithOwner` owner.
+pub(crate) const OWNER_CONTEXT_LATER_RUN_UNOWNED: u8 = 32;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum OwnerEdgeKind {
@@ -225,6 +231,9 @@ pub(crate) enum OwnerEdgeKind {
     Owned,
     Unowned,
     Conditional,
+    /// The source's context on the callback's first run, and possibly no
+    /// owner on a later one.
+    InheritsFirstRun,
     Leaf,
 }
 
@@ -631,6 +640,7 @@ pub(crate) struct OwnerRequirementStatus {
     pub(crate) runtime_uncertain: bool,
     pub(crate) caller_uncertain: bool,
     pub(crate) conditional_owner: bool,
+    pub(crate) later_run_unowned: bool,
     pub(crate) component_uncertain: bool,
     pub(crate) report: bool,
 }
@@ -781,7 +791,10 @@ pub(crate) fn find_missing_owners(
                 && let Some(requirements_for_call) = lookup.contract_owner_requirements(symbol)
             {
                 let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
+                let later_run_unowned =
+                    !proven_unowned && context & OWNER_CONTEXT_LATER_RUN_UNOWNED != 0;
                 let conditional_owner = !proven_unowned
+                    && !later_run_unowned
                     && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
                         == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
                 let component_uncertain = context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0;
@@ -799,10 +812,13 @@ pub(crate) fn find_missing_owners(
                         file,
                         call.span,
                         OwnerRequirementStatus {
-                            uncertain: conditional_owner || component_uncertain,
+                            uncertain: conditional_owner
+                                || later_run_unowned
+                                || component_uncertain,
                             runtime_uncertain: false,
                             caller_uncertain: false,
                             conditional_owner,
+                            later_run_unowned,
                             component_uncertain,
                             report: context & OWNER_CONTEXT_UNOWNED != 0,
                         },
@@ -930,8 +946,12 @@ pub(crate) fn find_missing_owners(
                 let component_uncertain = !proven_unowned
                     && (context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0
                         || owner_index.is_some_and(|index| nodes[index].component_uncertain));
+                let later_run_unowned = !component_uncertain
+                    && !proven_unowned
+                    && context & OWNER_CONTEXT_LATER_RUN_UNOWNED != 0;
                 let conditional_owner = !component_uncertain
                     && !proven_unowned
+                    && !later_run_unowned
                     && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
                         == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
                 let caller_uncertain = !proven_unowned
@@ -943,6 +963,7 @@ pub(crate) fn find_missing_owners(
                     });
                 let uncertain = runtime_uncertain
                     || conditional_owner
+                    || later_run_unowned
                     || caller_uncertain
                     || component_uncertain;
                 let operation_span = if operation == "settled-cleanup" {
@@ -963,6 +984,7 @@ pub(crate) fn find_missing_owners(
                         runtime_uncertain,
                         caller_uncertain,
                         conditional_owner,
+                        later_run_unowned,
                         component_uncertain,
                         report,
                     },
@@ -1001,8 +1023,12 @@ pub(crate) fn find_missing_owners(
                         element.span,
                     )
                     .is_some_and(|index| nodes[index].component_uncertain));
+            let later_run_unowned = !component_uncertain
+                && !proven_unowned
+                && context & OWNER_CONTEXT_LATER_RUN_UNOWNED != 0;
             let conditional_owner = !component_uncertain
                 && !proven_unowned
+                && !later_run_unowned
                 && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
                     == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
             push_owner_requirement(
@@ -1012,10 +1038,11 @@ pub(crate) fn find_missing_owners(
                 file,
                 Span::new(element.span.start, element.name.span.end),
                 OwnerRequirementStatus {
-                    uncertain: conditional_owner || component_uncertain,
+                    uncertain: conditional_owner || later_run_unowned || component_uncertain,
                     runtime_uncertain: false,
                     caller_uncertain: false,
                     conditional_owner,
+                    later_run_unowned,
                     component_uncertain,
                     report: context & OWNER_CONTEXT_UNOWNED != 0,
                 },
@@ -1419,8 +1446,12 @@ pub(crate) fn find_missing_owners_incremental(
             let component_uncertain = !proven_unowned
                 && (context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0
                     || owner_index.is_some_and(|index| nodes[index].component_uncertain));
+            let later_run_unowned = !component_uncertain
+                && !proven_unowned
+                && context & OWNER_CONTEXT_LATER_RUN_UNOWNED != 0;
             let conditional_owner = !component_uncertain
                 && !proven_unowned
+                && !later_run_unowned
                 && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
                     == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
             let caller_uncertain = candidate.allow_uncertain
@@ -1459,8 +1490,11 @@ pub(crate) fn find_missing_owners_incremental(
                         )
                     });
             let runtime_uncertain = candidate.runtime_uncertain || cleanup_return_uncertain;
-            let uncertain =
-                runtime_uncertain || conditional_owner || caller_uncertain || component_uncertain;
+            let uncertain = runtime_uncertain
+                || conditional_owner
+                || later_run_unowned
+                || caller_uncertain
+                || component_uncertain;
             push_owner_requirement(
                 &mut requirements,
                 &mut seen,
@@ -1472,6 +1506,7 @@ pub(crate) fn find_missing_owners_incremental(
                     runtime_uncertain,
                     caller_uncertain,
                     conditional_owner,
+                    later_run_unowned,
                     component_uncertain,
                     report: context & candidate.report_mask != 0,
                 },
@@ -1531,6 +1566,13 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
         OwnerEdgeKind::Owned => OWNER_CONTEXT_OWNED,
         OwnerEdgeKind::Unowned => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
         OwnerEdgeKind::Conditional => OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED,
+        // Not proven unowned: a later run happens only if the primitive runs
+        // the callback again, which needs a change nothing here proves. A
+        // source that is itself proven unowned stays proven: then every run,
+        // first or later, is unowned.
+        OwnerEdgeKind::InheritsFirstRun => {
+            source | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LATER_RUN_UNOWNED
+        }
         OwnerEdgeKind::Leaf => OWNER_CONTEXT_LEAF,
     }
 }
@@ -1585,6 +1627,7 @@ pub(crate) fn push_owner_requirement(
             runtime_uncertain: status.runtime_uncertain,
             caller_uncertain: status.caller_uncertain,
             conditional_owner: status.conditional_owner,
+            later_run_unowned: status.later_run_unowned,
             component_uncertain: status.component_uncertain,
             missing_jsx_census,
             report: status.report,
@@ -1696,6 +1739,7 @@ pub(crate) const fn callback_owner_edge_kind(owner: solid_dialect::CallbackOwner
         solid_dialect::CallbackOwner::Conditional => OwnerEdgeKind::Conditional,
         solid_dialect::CallbackOwner::Inherits => OwnerEdgeKind::Preserve,
         solid_dialect::CallbackOwner::None => OwnerEdgeKind::Unowned,
+        solid_dialect::CallbackOwner::InheritsFirstRun => OwnerEdgeKind::InheritsFirstRun,
         solid_dialect::CallbackOwner::Leaf => OwnerEdgeKind::Leaf,
     }
 }
@@ -2528,6 +2572,11 @@ pub(crate) fn returned_arrow_function(ast: &solid_facts::ast::AstFacts, span: Sp
 /// invents an untracked-read violation in a function whose only read is
 /// inside a tracked or deferred callback.
 ///
+/// One `Deferred` slot is the exception, and the owner word says which:
+/// a [`solid_dialect::CallbackOwner::InheritsFirstRun`] callback (2.0
+/// `createRenderEffect`'s apply) runs its first time during the call with the
+/// caller's listener still current, so that run's reads are the caller's.
+///
 /// The read must sit inside a function *literal* in that argument. An
 /// eagerly evaluated argument — `createEffect(count())` — is read while the
 /// argument list is built, which is the caller's read after all.
@@ -2551,10 +2600,21 @@ pub(crate) fn read_escapes_synchronous_extent(
             .as_ref()
             .and_then(PrimitiveName::primitive)
             .is_some_and(|primitive| {
+                let semantics =
+                    dialect.callback_semantics_at(primitive, index, call.arguments.len());
+                // A callback the primitive first runs during the call, under the
+                // caller's owner and listener, performs its first run's reads
+                // inside the caller's synchronous extent -- 2.0
+                // `createRenderEffect`'s apply, whose attribution word is
+                // `Deferred` for its later runs only. Probed: a memo whose compute
+                // creates the render effect re-runs when a signal read only in
+                // that apply changes. Dropping the read from the caller's summary
+                // would close a `reads` domain over a read the call performs.
+                if semantics.owner == Some(solid_dialect::CallbackOwner::InheritsFirstRun) {
+                    return false;
+                }
                 matches!(
-                    dialect
-                        .callback_semantics_at(primitive, index, call.arguments.len())
-                        .execution,
+                    semantics.execution,
                     Some(solid_dialect::Execution::Tracked | solid_dialect::Execution::Deferred)
                 )
             })

@@ -92,6 +92,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/callback-slot-derived-store/node_modules/**
 !fixtures/package-contracts/callback-untracked-wrapper/node_modules/
 !fixtures/package-contracts/callback-untracked-wrapper/node_modules/**
+!fixtures/package-contracts/render-effect-apply-callback/node_modules/
+!fixtures/package-contracts/render-effect-apply-callback/node_modules/**
 !fixtures/package-contracts/callback-deferred-untracked-chain/node_modules/
 !fixtures/package-contracts/callback-deferred-untracked-chain/node_modules/**
 !fixtures/package-contracts/forwarded-local-untrack-wrapper/node_modules/

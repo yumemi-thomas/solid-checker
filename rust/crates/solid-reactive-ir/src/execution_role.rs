@@ -377,6 +377,11 @@ enum WriteRegionAdjustment {
     /// which clears tracking but keeps the caller's owner context; the write
     /// is exactly as legal as at the wrapped call itself, so classify there.
     CallSite(Span),
+    /// The write sits in a callback that shares its call site's owner only on
+    /// its first run ([`solid_dialect::CallbackOwner::InheritsFirstRun`], 2.0
+    /// `createRenderEffect`'s apply). Later runs come from the flush, where
+    /// writes are legal; the first run is as legal as the call site.
+    FirstRunAtCallSite(Span),
 }
 
 /// The write-legality adjustment for the innermost callback directly
@@ -410,6 +415,11 @@ fn write_region_adjustment(
             {
                 return Some(WriteRegionAdjustment::CallSite(call.span));
             }
+            if callback_owner_at_call(file, call, primitive, index, lookup)
+                == Some(solid_dialect::CallbackOwner::InheritsFirstRun)
+            {
+                return Some(WriteRegionAdjustment::FirstRunAtCallSite(call.span));
+            }
             None
         })
 }
@@ -433,6 +443,31 @@ fn semantic_write_execution_role_within(
         match write_region_adjustment(file, span, lookup) {
             Some(WriteRegionAdjustment::LeafScope) => return ExecutionRole::DeferredCallback,
             Some(WriteRegionAdjustment::CallSite(outer)) => span = outer,
+            Some(WriteRegionAdjustment::FirstRunAtCallSite(call)) => {
+                // Where the call site forbids the write, the first run throws
+                // exactly when it runs during the call -- which needs the
+                // compute to settle synchronously on its first pass, with no
+                // `defer`/`schedule` option, and on rc.9 outside a staged
+                // transaction. None of that is proven here, so the write is
+                // neither a violation nor legal: it is unclassified. A call
+                // site that allows the write leaves every run legal, and the
+                // write keeps its own (apply) role.
+                let first_run = semantic_write_execution_role_within(
+                    file,
+                    call,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    visiting,
+                );
+                match first_run {
+                    ExecutionRole::DiscardedRendering => return first_run,
+                    ExecutionRole::Unknown => return ExecutionRole::Unknown,
+                    role if role.reports_disallowed_write() => return ExecutionRole::Unknown,
+                    _ => break,
+                }
+            }
             None => break,
         }
     }

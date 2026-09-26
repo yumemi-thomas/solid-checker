@@ -10,9 +10,21 @@ component body or a children-capable computation.
 Flags calls to setters returned by `createSignal`/`createStore` and to `refresh()`
 when they execute under a live children-capable owner: a component body, a memo,
 or an effect's compute function. Writes are allowed in event handlers, actions,
-effect apply callbacks, directive apply callbacks, and the children-forbidden
+`createEffect` apply callbacks, directive apply callbacks, and the children-forbidden
 leaf scopes `onSettled` and `createTrackedEffect` — the runtime's write guard
 explicitly exempts leaf imperative scopes.
+
+A `createRenderEffect` apply callback is only partly such a scope. Its first run
+happens before `createRenderEffect` returns, under the caller's owner, so a
+write there throws `REACTIVE_WRITE_IN_OWNED_SCOPE` in a component body or a
+computation exactly as a write at the call site would. That run is withheld,
+though, when the call passes `defer` or `schedule`, when the compute returns a
+promise or reads a source that is still pending, and (on rc.9) when the first
+pass was staged into a transaction; it then runs later from the flush, where
+the write is legal, as every later run is. The checker cannot prove the compute
+settles synchronously, so it reports nothing for such a write rather than
+claiming either answer. A `createRenderEffect` created where writes are legal
+(an event handler, module scope) leaves every run of its apply legal.
 
 `untrack` is **not** an allowed write region. The `2.0.0-rc.0` guard keys on the
 ambient *owner*, not on tracking: `untrack` clears the tracking listener but

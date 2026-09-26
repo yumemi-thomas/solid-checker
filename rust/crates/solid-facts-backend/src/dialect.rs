@@ -928,6 +928,7 @@ mod tests {
                 runtime_uncertain: false,
                 caller_uncertain: false,
                 conditional_owner: false,
+                later_run_unowned: false,
                 component_uncertain: false,
                 missing_jsx_census: false,
                 report: true,

@@ -2706,9 +2706,29 @@ impl Dialect for Solid2 {
             Primitive::CreateErrorBoundary | Primitive::CreateLoadingBoundary => {
                 &[(0, CallbackOwner::Creates), (1, CallbackOwner::Creates)]
             }
-            Primitive::CreateEffect | Primitive::CreateRenderEffect => {
-                &[(0, CallbackOwner::Creates), (1, CallbackOwner::None)]
-            }
+            // `createEffect` queues its apply (`effect()` enqueues every
+            // `EFFECT_USER` run), so the apply always runs from the flush,
+            // where no owner is current.
+            Primitive::CreateEffect => &[(0, CallbackOwner::Creates), (1, CallbackOwner::None)],
+            // `createRenderEffect` does not. `effect()` ends
+            // `recompute(node, true); !options?.defer && (… || options?.schedule
+            // ? node._queue.enqueue(…) : runEffect(node))`
+            // (`@solidjs/signals@2.0.0-rc.3` `dist/dev.js:5285-5289`, the same
+            // in `dist/prod/core/effect.js:16-17`; rc.9 `dist/dev.js:1612-1620`),
+            // and `runEffect` sets neither `context` nor `tracking`, so the
+            // first apply runs before the call returns under the caller's
+            // owner. Probed on both prereleases, dev and prod: `getOwner()` in
+            // the first apply is the enclosing root, a render effect created
+            // there raises no `NO_OWNER_EFFECT`, and a setter there throws
+            // `REACTIVE_WRITE_IN_OWNED_SCOPE` (dev builds) under a root or a
+            // component.
+            // Every later run comes from the flush, where `getOwner()` is
+            // `null` and a render effect created there raises
+            // `NO_OWNER_EFFECT`.
+            Primitive::CreateRenderEffect => &[
+                (0, CallbackOwner::Creates),
+                (1, CallbackOwner::InheritsFirstRun),
+            ],
             // `createReaction` is deliberately absent from this arm: 1.x
             // runs its invalidation callback as a leaf owner, but the
             // RC.0 runtime allocates the reaction a computation like
@@ -2909,6 +2929,22 @@ impl Dialect for Solid2 {
     /// callbacks are deferred scopes, so that reachability changes no read
     /// or owner diagnostic.
     ///
+    /// The effect apply at argument 1 is `Deferred` for both effect
+    /// constructors, and for `createRenderEffect` that is an attribution
+    /// answer, not a schedule. Its first apply runs *during* the call
+    /// (see [`Solid2::callback_owners`]), with the caller's `tracking` still
+    /// set, so a read there does subscribe an enclosing tracked computation
+    /// (probed: a memo whose compute creates the render effect re-runs when a
+    /// signal read only in that apply changes). What `Deferred` keeps true is
+    /// the part the strict-read rule mirrors: `runEffect` opens the
+    /// `"an effect callback"` strict-read window on every run, the first
+    /// included, and a read in any later run subscribes nothing. The first
+    /// run's owner, and with it the fact that its reads are the caller's, is
+    /// stated by `callback_owners` (`CallbackOwner::InheritsFirstRun`, which
+    /// the engine reads to keep those reads in the caller's summary), and its
+    /// schedule by [`Solid2::contract_callback_execution_at`]; neither is read
+    /// off this word.
+    ///
     /// This row now also decides contract bytes, through
     /// [`Dialect::runs_callback_synchronously`], so the evidence is worth
     /// stating exactly: `@solidjs/signals`' `flush(fn)` is
@@ -3009,12 +3045,28 @@ impl Dialect for Solid2 {
     /// 2.0's package-contract words, moved off `interproc.rs`'s hardcoded
     /// table by ADR 0111.
     ///
-    /// `createEffect`/`createRenderEffect` defer to the attribution answer:
-    /// argument 0 is the tracked compute, argument 1 the deferred effect
-    /// function, and a contract says the same of both. Everything else is
-    /// stated directly, because the contract word is not derivable from the
-    /// attribution one -- `onCleanup` carries no `callback_executions` row at
-    /// all here and still promises `deferred` to a consumer.
+    /// `createEffect` defers to the attribution answer: argument 0 is the
+    /// tracked compute and argument 1 the effect function, which `effect()`
+    /// always enqueues (`options.user` selects `EFFECT_USER`), so `deferred`
+    /// is a true promise about it. Everything else is stated directly,
+    /// because the contract word is not derivable from the attribution one --
+    /// `onCleanup` carries no `callback_executions` row at all here and still
+    /// promises `deferred` to a consumer.
+    ///
+    /// `createRenderEffect`'s apply has **no** word, and that is the answer
+    /// the bytes support rather than a gap. `deferred` promises the callback
+    /// has not run when the export returns, and the plain two-argument call
+    /// runs it before returning (`@solidjs/signals@2.0.0-rc.3`
+    /// `dist/dev.js:5285-5289`; probed on rc.3 and rc.9, dev and prod, inside
+    /// no owner, a root, a memo compute, a render-effect compute and a
+    /// component body under `render`: `compute,apply,returned` every time).
+    /// `inline` would be false too: the same call leaves the first apply for
+    /// later when `options.defer` (skipped) or `options.schedule` (queued)
+    /// is set, when the compute returns a promise or reads a source that is
+    /// still pending (probed: the apply runs after the source settles), and
+    /// on rc.9 when the first pass was staged into a live transaction
+    /// (`dist/dev.js:1617`); and every later run comes from the flush. A
+    /// contract leaf left open is the fail-closed reading of both.
     ///
     /// Three arms of the old shared table are absent rather than ported:
     /// `createResource`, `on` and `mergeProps` are Solid 1.x names this
@@ -3026,7 +3078,7 @@ impl Dialect for Solid2 {
         argument_count: usize,
     ) -> Option<Execution> {
         match (primitive, argument) {
-            (Primitive::CreateEffect | Primitive::CreateRenderEffect, _) => {
+            (Primitive::CreateEffect, _) | (Primitive::CreateRenderEffect, 0) => {
                 self.callback_execution_at(primitive, argument, argument_count)
             }
             (
@@ -3556,8 +3608,8 @@ mod tests {
         assert_eq!(word(Primitive::RunWithOwner, 1, 2), Some(Execution::Inline));
         assert_eq!(word(Primitive::RunWithOwner, 0, 2), None);
 
-        // The effect pair defers to the attribution answer, and says the same
-        // of both arguments: a tracked compute and a deferred effect function.
+        // `createEffect` defers to the attribution answer for both arguments:
+        // a tracked compute and a queued effect function.
         assert_eq!(
             word(Primitive::CreateEffect, 0, 2),
             Some(Execution::Tracked)
@@ -3569,6 +3621,18 @@ mod tests {
         assert_eq!(
             word(Primitive::CreateRenderEffect, 0, 2),
             Some(Execution::Tracked)
+        );
+        // `createRenderEffect`'s apply runs before the call returns on the
+        // plain path and after it under `defer`/`schedule`, an async or
+        // pending compute, or (rc.9) a staged transaction, so neither `inline`
+        // nor `deferred` is a true promise at any arity. The attribution word
+        // stays `Deferred`; only the contract refuses to restate it.
+        for count in 2..=3 {
+            assert_eq!(word(Primitive::CreateRenderEffect, 1, count), None);
+        }
+        assert_eq!(
+            two.callback_execution_at(Primitive::CreateRenderEffect, 1, 2),
+            Some(Execution::Deferred)
         );
 
         // `onCleanup` is the case that proves the word is stated, not derived.

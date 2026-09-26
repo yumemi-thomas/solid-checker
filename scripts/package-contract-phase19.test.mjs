@@ -250,7 +250,13 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // contract side of the three rc.9 callback forms (`dynamic`'s static
       // option, `omit`'s predicate, `until`), each forwarded straight from a
       // parameter.
-      stableMainDocuments: 151,
+      //
+      // 152 on 2026-09-26 adds render-effect-apply-callback's main document,
+      // the corpus pin of `createRenderEffect`'s apply having no execution
+      // word: its first run is during the call on the plain path and later
+      // under `defer`/`schedule` or an async compute, so neither `inline` nor
+      // `deferred` is published for a callback forwarded there.
+      stableMainDocuments: 152,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

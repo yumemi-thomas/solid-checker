@@ -8024,6 +8024,7 @@ fn generated_owner_requirements_by_symbol(
     for requirement in program.missing_owners.iter().filter(|requirement| {
         !requirement.runtime_uncertain
             && !requirement.conditional_owner
+            && !requirement.later_run_unowned
             && !requirement.component_uncertain
     }) {
         let Some(file) = facts

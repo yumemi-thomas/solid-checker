@@ -860,6 +860,12 @@ pub struct OwnerRequirement {
     /// `runWithOwner`, rather than an exported function's unknown callers.
     #[serde(default, skip_serializing_if = "is_false")]
     pub conditional_owner: bool,
+    /// The uncertainty comes from a callback that runs under its caller's
+    /// owner only on its first run, and with no owner on every later run --
+    /// 2.0 `createRenderEffect`'s apply. The first run is owned exactly as the
+    /// call site is; whether a later run happens is a runtime fact.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub later_run_unowned: bool,
     /// The containing Solid 1 function is component-shaped only by a naming
     /// convention; JSX invocation and ordinary invocation imply different
     /// owner contexts.
