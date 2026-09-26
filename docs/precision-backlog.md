@@ -1,5 +1,33 @@
 # Precision backlog
 
+## Project-side certification on a real consumer (2026-09-26)
+
+Status: **measured, open defects**. Report:
+[`phase22/2026-09-26-project-side-certification-on-kobalte-core.md`](package-contract-v2/phase22/2026-09-26-project-side-certification-on-kobalte-core.md).
+The project was kobalte core (e9d426d4), at c4ab5c54 with the release binary.
+
+- Certifying its 5 uncovered packages took 62.3 s; the whole loop is about
+  80 s [E].
+- 13 of 17 imported packages are now admitted.
+- Acceptance-gate import sites: 131 -> 85; excluding test-only
+  testing-library, 55 -> 9.
+- No violation moved and nothing was gained. The 31 `access` sites and 2
+  callback-execution findings that cleared were false uncertainty.
+
+Product defects, in priority order:
+
+1. A project catalog without its trust file makes every analysis run exit 2
+   with no findings.
+2. One probe crash (`document is not defined`) refuses a package's whole
+   certification.
+3. Node built-ins (`assert`) count as missing dependencies in environment
+   acquisition, so a "certified" exit 0 is admitted nowhere.
+4. `packageSummaries` reports `accepted` for entries that were not admitted.
+5. The catalog is found only in its own project directory, never from a
+   monorepo root.
+6. Certify leaves `.solid-checker-certification-*.mjs` files in `.pnpm`.
+7. Open-claims `SC9005` is per call argument, so the count rises (+12 here).
+
 ## Delivering kobalte's own environment removes false positives in kobalte core (2026-09-26)
 
 Status: **measured, shipped**. The first delivery-only run,
