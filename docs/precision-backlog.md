@@ -1,5 +1,23 @@
 # Precision backlog
 
+## Kobalte re-swept after the parallel batch (2026-09-26)
+
+Measured with the release binary at 90d3bde9 on kobalte `solid2` e9d426d4.
+"Before" is the previous sweep at 53c9a41b; "with trust" also passes the trust
+file of the `packages/core` catalog certified in the 65d64399 re-run.
+
+- `packages/core`: open-claims `SC9005` 89 -> 58 findings, covering the same
+  172 sites. That is the per-export grouping (aa8a390d). With trust, the
+  acceptance gate is 4 findings / 123 sites -> 2 / 77.
+- **Monorepo root** (`kobalte/tsconfig.json`): before the batch the root never
+  saw `packages/core`'s catalog. With trust it now does (8c3a2e33):
+  - acceptance gate 31 / 272 sites -> 27 / 206;
+  - `SC9011` 25 -> 9;
+  - open claims 0 -> 24 (79 sites).
+- No other finding moved: `SC1001`, `SC2001`, `SC4001`, `SC5003`, `SC8015`
+  and `SC9012` are unchanged. The `createRenderEffect` fix moves nothing on
+  this tree.
+
 ## Open items after project-side certification, fixed in parallel (2026-09-26)
 
 Status: **implemented**. Nine changes were merged from parallel worktrees, 182d44d1 through 943adc95.
