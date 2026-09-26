@@ -38,6 +38,14 @@ under `?` and reported, not guessed. Argument-site findings (an obligation at
 one call argument, not at an import) are counted separately and are not
 demand.
 
+Open claims at call arguments collapse too (2026-09-26, kobalte defect 7): one
+finding per (module, export, open domains) for the project, with the sentence
+unchanged plus "(N call sites)" and the other sites in `relatedLocations`, as a
+collapsed import-site claim group now ends "(N import sites)". Both keep the
+per-export sentence, so every site of either counts toward that export, exactly
+as the uncollapsed per-call findings did. `SC9005 by gate` counts sites, not
+findings, so it does not move when a collapse does.
+
     python3 docs/package-contract-v2/phase21/2026-09-12-consumer-demand-measurement.py --self-test
 """
 import argparse
@@ -54,7 +62,7 @@ import sys
 PER_EXPORT = [
     re.compile(r"the reactivity contract for (\S+) has no entrypoint/export summary for (?:imported|re-exported) export (\S+);"),
     re.compile(r"the reactivity contract for (\S+) leaves .+? unknown for (?:imported|re-exported) export (\S+);"),
-    re.compile(r"the discovered reactivity contract for (\S+) was authorized only by obsolete proof policy 1; its claims cannot be used for (?:imported|re-exported) export (\S+)$"),
+    re.compile(r"the discovered reactivity contract for (\S+) was authorized only by obsolete proof policy 1; its claims cannot be used for (?:imported|re-exported) export (\S+)(?: \(\d+ import sites\))?$"),
 ]
 # The same obligation at one call argument: not an import, so not demand.
 ARGUMENT = re.compile(r"the reactivity contract for (\S+) states .+? for (?:imported|re-exported) export (\S+), but this call site")
@@ -174,10 +182,19 @@ def collapsed_sites(module, locations, cache):
     return attributed, unattributed
 
 
+def site_locations(finding):
+    """Every site of an SC9005 finding: a collapsed one carries the rest in `relatedLocations`."""
+    return [finding.get("primaryLocation") or {}] + list(finding.get("relatedLocations") or [])
+
+
+def site_count(finding):
+    return len(site_locations(finding))
+
+
 def import_sites(finding, cache):
     """((module, export) -> sites, unattributed sites, argument sites) for one SC9005 finding."""
     message = finding.get("message", "")
-    locations = [finding.get("primaryLocation") or {}] + list(finding.get("relatedLocations") or [])
+    locations = site_locations(finding)
     if ARGUMENT.search(message):
         return collections.Counter(), collections.Counter(), len(locations)
     for pattern in PER_EXPORT:
@@ -236,6 +253,37 @@ def self_test():
             "relatedLocations": [first, first],
         }
         assert import_sites(claims, {})[0] == collections.Counter({("m", "a"): 3})
+        # A collapsed import-site claim group states its count and keeps the
+        # sentence, the obsolete-policy one included.
+        obsolete = {
+            "message": "the discovered reactivity contract for m was authorized only by obsolete proof policy 1; "
+            "its claims cannot be used for imported export a (2 import sites)",
+            "primaryLocation": first,
+            "relatedLocations": [third],
+        }
+        assert import_sites(obsolete, {})[0] == collections.Counter({("m", "a"): 2})
+        # Open claims at call arguments, collapsed over a project: two exports,
+        # three call sites each, across two files. Every site counts toward its
+        # export, as the six per-call findings it replaces did.
+        other = os.path.join(scratch, "Other.tsx")
+        open(other, "w").write(source)
+        elsewhere = dict(member, path=other)
+        open_calls = [
+            {
+                "message": f"the reactivity contract for m leaves callbacks unknown for imported export {export}; "
+                "code whose proof depends on those claims cannot be certified (3 call sites)",
+                "primaryLocation": member,
+                "relatedLocations": [dict(member, startByte=start), elsewhere],
+            }
+            for export, start in (("run", 90), ("walk", 95))
+        ]
+        total = collections.Counter()
+        for finding in open_calls:
+            sites, unnamed, arguments = import_sites(finding, {})
+            assert not unnamed and arguments == 0, (unnamed, arguments)
+            total.update(sites)
+        assert total == collections.Counter({("m", "run"): 3, ("m", "walk"): 3}), total
+        assert [site_count(finding) for finding in open_calls] == [3, 3]
         argument = {
             "message": "the reactivity contract for m states callbacks for imported export a, but this call site gives ...",
             "primaryLocation": member,
@@ -275,6 +323,7 @@ def main():
     projects = collections.defaultdict(set)
     status = collections.Counter()
     gates = collections.Counter()
+    gate_findings = collections.Counter()
     demand_gates = collections.defaultdict(collections.Counter)
     unattributed = collections.Counter()
     argument_sites = 0
@@ -302,7 +351,8 @@ def main():
                     gate = "obsolete policy 1"
                 else:
                     gate = "callback execution (not an import site)"
-                gates[gate] += 1
+                gates[gate] += site_count(finding)
+                gate_findings[gate] += 1
                 sites, unnamed, arguments = import_sites(finding, sources)
                 argument_sites += arguments
                 unattributed.update(unnamed)
@@ -329,7 +379,8 @@ def main():
     # Print this before the demand totals: a corpus whose findings all stop at
     # the acceptance gate has no closure-sensitive demand at all, whatever the
     # per-export table below says a closure would move after acceptance.
-    print("SC9005 by gate:", gates.most_common())
+    print("SC9005 sites by gate:", gates.most_common())
+    print("SC9005 findings by gate (collapsed):", gate_findings.most_common())
     print(f"distinct (module, export) demanded: {len(demand)}; import sites: {sum(demand.values())}")
     print(f"import sites whose export the bytes do not settle: {sum(unattributed.values())}", unattributed.most_common(10))
     print(f"argument-site findings (not demand): {argument_sites}")

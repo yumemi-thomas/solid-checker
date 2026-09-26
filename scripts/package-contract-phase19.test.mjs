@@ -241,7 +241,11 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // document, the corpus pin of ways-to-improve step 7: a local clearing
       // helper keeps its clear across the forwarding seam, and a `deferred`
       // row says `untracked` only for a proven fresh-stack deferral.
-      stableMainDocuments: 149,
+      //
+      // 150 on 2026-09-26 adds package-open-claims-call-sites', the ninth
+      // authorized fixture contract: open `callbacks` claims at call
+      // arguments collapse to one finding per export for the project.
+      stableMainDocuments: 150,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

@@ -7,6 +7,13 @@ const { createHash } = require("node:crypto");
 
 const packageVersion = require("./package.json").version;
 const snapshotCache = new Map();
+/**
+ * Subject kinds whose `relatedLocations` are further sites of the finding
+ * itself: the checker collapses one package-contract obligation per package,
+ * or per package export, over the whole project (`projection.rs`,
+ * `collapse_unaccepted_contract_defects`).
+ */
+const SITE_SUBJECTS = new Set(["package", "package-export"]);
 
 /**
  * The native analysis's `solid-checker: note:` stderr lines, per snapshot.
@@ -383,8 +390,20 @@ function projectFindings(context, program, findings) {
     // every linted file, and its span is this file's origin rather than an
     // offset into some other file's bytes.
     const projectScoped = finding.subjectKind === "project";
-    if (!projectScoped && location?.path && !samePath(location.path, filename)) continue;
-    const range = location && !projectScoped ? findingRange(sourceCode, location) : [0, 0];
+    // A finding about a package or one package export is collapsed over the
+    // project: its related locations are further *sites* of the same finding,
+    // not supporting context. Report it in every file holding a site, at that
+    // file's first one, so the collapse never hides a file's sites from ESLint.
+    const collapsed = SITE_SUBJECTS.has(finding.subjectKind);
+    const site = collapsed
+      ? [location, ...(finding.relatedLocations ?? [])]
+        .filter(candidate => candidate?.path && samePath(candidate.path, filename))
+        .reduce((first, candidate) =>
+          first && first.startByte <= candidate.startByte ? first : candidate, undefined)
+      : location;
+    if (!projectScoped && collapsed && !site) continue;
+    if (!projectScoped && site?.path && !samePath(site.path, filename)) continue;
+    const range = site && !projectScoped ? findingRange(sourceCode, site) : [0, 0];
     context.report({
       node: program,
       loc: {

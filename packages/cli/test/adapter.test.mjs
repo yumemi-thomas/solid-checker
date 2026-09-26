@@ -585,6 +585,49 @@ test("a project-scoped finding is reported on every linted file, not matched by 
   );
 });
 
+test("a finding collapsed over a package export is reported in every file holding a site", () => {
+  // Open-claims SC9005 is one finding per (package, export, open domains) for
+  // the whole project: its related locations are further sites, not context.
+  // A per-file reporter must still see it in each file that has one, once, at
+  // that file's first site.
+  const collapsed = {
+    id: "SC9005",
+    rule: "package-contract-incomplete",
+    kind: "uncertifiable",
+    severity: "warning",
+    message: "the reactivity contract for pkg leaves callbacks unknown for imported export run; " +
+      "code whose proof depends on those claims cannot be certified (3 call sites)",
+    analysisContext: "unknown-contract-claims:callbacks",
+    subjectKind: "package-export",
+    primaryLocation: { path: "/tmp/app/App.ts", startByte: 2, endByte: 4 },
+    relatedLocations: [
+      { path: "/tmp/app/Other.ts", startByte: 8, endByte: 10 },
+      { path: "/tmp/app/Other.ts", startByte: 4, endByte: 6 }
+    ]
+  };
+  const snapshot = { status: "uncertifiable", findings: [collapsed] };
+  const text = "0123456789ab";
+
+  const primary = run(snapshot, "/tmp/app/App.ts", text);
+  assert.equal(primary.length, 1);
+  assert.deepEqual(primary[0].loc.start, { line: 1, column: 2 });
+
+  const other = run(snapshot, "/tmp/app/Other.ts", text);
+  assert.equal(other.length, 1, "one report per file, not one per site");
+  assert.deepEqual(other[0].loc.start, { line: 1, column: 4 }, "at the file's first site");
+  assert.equal(other[0].data.message, primary[0].data.message);
+
+  assert.equal(run(snapshot, "/tmp/app/Unrelated.ts", text).length, 0);
+
+  // The same shape without a site subject keeps ordinary per-file matching:
+  // a strict read's related location is its declaration, not a second read.
+  const context = { ...collapsed, subjectKind: "" };
+  assert.equal(
+    run({ status: "uncertifiable", findings: [context] }, "/tmp/app/Other.ts", text).length,
+    0
+  );
+});
+
 function finding(id, rule, start, end) {
   return {
     id,

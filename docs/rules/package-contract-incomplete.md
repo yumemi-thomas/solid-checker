@@ -39,6 +39,23 @@ Every one of them is `uncertifiable`, so a run with any of them still certifies
 nothing; the warning only says the analysis ran over an accepted, partial
 premise rather than a missing one.
 
+## One finding per fix, not per site
+
+Where every site would carry the same sentence, the sites collapse into one
+finding for the project, anchored at the first site, with the others in
+`relatedLocations` and their count in the message:
+
+| gate | one finding per |
+| --- | --- |
+| acceptance gate | package ("N exports used across K import sites") |
+| any other gate, at an import | package, export and gate ("N import sites") |
+| open claims at call arguments | package, export and open domains ("N call sites") |
+
+An unbound claim at a call stays one finding per call, because its fix — pass
+the callback inline — is at that call. A collapsed finding carries
+`subjectKind` `package` or `package-export`, and the ESLint adapter reports it
+in every file holding one of its sites, at that file's first site.
+
 ## Why it matters
 
 Reactive reads, writes, ownership, and timing can cross ordinary function and
