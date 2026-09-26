@@ -1,5 +1,46 @@
 # Precision backlog
 
+## Delivering kobalte's own environment removes false positives in kobalte core (2026-09-26)
+
+Status: **measured, shipped**. The first delivery-only run,
+`kobalte-solid2-e9d426d4` (solid-js, web and signals rc.3; 21 packages, 21
+complete contracts), was bundled into the tier beside the census run: 209
+bundles over 31 packages, up from 162 over 16; 20 packages now have a signals
+rc.3 bundle.
+
+The kobalte tree (e9d426d4, 7 projects) was re-swept with the release binary
+in 28 s. Only `kobalte/packages/core` moved, against the HEAD-tier sweep:
+
+| finding | before | after |
+| --- | ---: | ---: |
+| SC9005, no accepted contract | 13 | 4 |
+| SC9005, open claims (warning) | 0 | 85 |
+| SC9005, other | 32 | 30 |
+| SC1001 | 229 | 223 |
+| SC2001 | 64 | 60 |
+| SC9011 | 24 | 20 |
+
+Every lost non-`SC9005` finding was checked against the source:
+
+- `SC1001` reads inside `createShortcut` key handlers
+  (`dismissable-layer.tsx:176`) and inside `createPresence` accessors, which
+  the package tracks itself (`navigation-menu-root.tsx:176`,
+  `toast-root.tsx:178`);
+- `SC1001`/`SC2001` inside `createResizeObserver` callbacks, which run later
+  (`segmented-control-indicator.tsx:73-75`, `tabs-indicator.tsx:122,129`);
+- `SC9011` for `createElementSize` and `createFocusGroup`, which now have
+  contracts.
+
+All are **false positives removed**, and no finding was gained. The 85
+open-claims warnings are per call site of partly closed contracts (for example
+`access`), and may read as noise.
+
+Caveat: 8 of the 14 lost findings have distinct locations. The other 6
+collapse onto the same (id, file, span), so they were not listed one by one.
+
+This is one project whose installed tree matches the certified environment
+exactly.
+
 ## A project catalog is admitted only in its certified environment (ADR 0125, 2026-09-26)
 
 Status: **implemented, with one open soundness gap**. Project catalogs and the
