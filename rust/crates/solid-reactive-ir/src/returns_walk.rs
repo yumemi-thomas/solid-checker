@@ -566,10 +566,9 @@ pub(crate) fn merged_props_return(
     let mut agreed = None::<usize>;
     for completion in completions {
         let call = file.ast.calls.iter().find(|call| call.span == completion)?;
-        let primitive = crate::known_primitive(&crate::primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
+        let primitive = crate::known_primitive(&crate::call_primitive_name(
+            file,
+            call,
             entities,
             symbol_names,
             dialect,

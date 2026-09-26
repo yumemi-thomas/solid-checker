@@ -13,7 +13,8 @@ use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::runtime_semantics::is_proven_array_filter;
 use crate::symbols::async_symbol_root;
 use crate::{
-    ReactiveSourceKind, StaticDefect, StaticDefectKind, known_primitive, location, primitive_name,
+    ReactiveSourceKind, StaticDefect, StaticDefectKind, call_primitive_name, known_primitive,
+    location,
 };
 use solid_facts::core::Span;
 use std::collections::HashSet;
@@ -280,10 +281,9 @@ fn binding_initializes_reactive_store(
         _ => false,
     });
     contracted_store
-        || known_primitive(&primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
+        || known_primitive(&call_primitive_name(
+            file,
+            call,
             ctx.entities,
             ctx.symbol_names,
             ctx.dialect,
@@ -578,14 +578,8 @@ fn tracked_async_computation_context(
             if !lexical && !semantic {
                 return None;
             }
-            let primitive = primitive_name(
-                file.path.as_str(),
-                candidate.callee,
-                candidate.static_callee(&file.source),
-                ctx.entities,
-                ctx.symbol_names,
-                ctx.dialect,
-            )?;
+            let primitive =
+                call_primitive_name(file, candidate, ctx.entities, ctx.symbol_names, ctx.dialect)?;
             // A tracked callback is what makes this a computation
             // whose reads matter after an await. The list this
             // replaced was 2.0's eight; under 1.x three of them

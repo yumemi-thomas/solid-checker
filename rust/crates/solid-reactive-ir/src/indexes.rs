@@ -842,10 +842,9 @@ impl<'a> SemanticLookup<'a> {
                     .calls
                     .iter()
                     .map(|call| {
-                        super::primitive_name(
-                            file.path.as_str(),
-                            call.callee,
-                            call.static_callee(&file.source),
+                        super::call_primitive_name(
+                            file,
+                            call,
                             self.entities,
                             self.symbol_names,
                             self.dialect,

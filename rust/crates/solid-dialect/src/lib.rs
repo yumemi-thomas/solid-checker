@@ -281,6 +281,30 @@ pub enum Primitive {
     /// `httpHeader(name, value, options?)` from `@solidjs/web`; the same
     /// committed-gate contract as [`Primitive::HttpStatus`].
     HttpHeader,
+    /// `dynamic(source, { static: true })`: the *call form* of
+    /// [`Primitive::Dynamic`] whose options object is an exact literal setting
+    /// `static` to `true`. Never a name — no table maps a spelling to it; a
+    /// call reaches it only through [`Dialect::call_form`], which is where the
+    /// dialect states which literal selects it.
+    ///
+    /// `@solidjs/web@2.0.0-rc.9` answers the option before anything else:
+    /// `if (options?.static) return staticDynamic(untrack(source))`
+    /// (`dist/web.dev.js:2199`, `dist/web.js:2034`; the server build calls
+    /// `untrack(source)` the same way at `dist/server.js:3729-3730`). The
+    /// source runs once, untracked, before `dynamic` returns, and no memo is
+    /// built — the opposite of the default form's lazy tracked memo.
+    DynamicStatic,
+    /// `dynamic(source, options)` where `options` does not prove the value of
+    /// `static`: an identifier, a spread, a non-literal `static` value, a
+    /// getter. The runtime takes one of two forms that disagree on execution,
+    /// tracking and ownership, so the dialect models neither; reached only
+    /// through [`Dialect::call_form`].
+    DynamicUnknownForm,
+    /// `until(fn, options?)`, added to `@solidjs/signals` (and re-exported by
+    /// `solid-js`) in `2.0.0-rc.9`. The same observer-guarded
+    /// `new Promise` + `createRoot` + user-`effect` shape as
+    /// [`Primitive::Resolve`], resolving on the first truthy value.
+    Until,
 
     // Control flow — component tags
     For,
@@ -337,6 +361,27 @@ pub enum OwnerRequirementRole {
     Effect,
     Cleanup,
     SettledCleanup,
+}
+
+/// What one call's arguments prove about one boolean option key, as the
+/// engine read it for [`Dialect::call_form`].
+///
+/// The engine reads syntax and nothing else here; which key matters, at which
+/// argument, and what each answer selects is the dialect's.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OptionLiteral {
+    /// The key is proven absent at runtime: the argument is missing, a
+    /// `null`/`undefined` literal, or an exact object literal (no spread,
+    /// computed key or accessor) that does not name the key.
+    Absent,
+    /// The exact object literal's final `key` property is the literal `true`.
+    True,
+    /// The exact object literal's final `key` property is the literal `false`.
+    False,
+    /// Anything else: an identifier, a spread (in the options or in the call's
+    /// argument list), a non-literal value, a wrapped literal. The value is
+    /// not proven, and a dialect must not pick a form for it.
+    Unknown,
 }
 
 /// Returns an owner-requirement role only when every dialect that recognizes
@@ -1462,6 +1507,31 @@ pub trait Dialect: Sync {
     /// The exported name for a primitive in this dialect.
     fn name_of(&self, primitive: Primitive) -> Option<&'static str>;
 
+    /// The primitive one concrete call of `primitive` denotes, once the
+    /// options it passes are known.
+    ///
+    /// Some exports are two runtimes behind one name, selected by an option
+    /// the runtime reads before anything else. Every other question on this
+    /// trait is keyed by primitive and argument position, so a form whose
+    /// execution, tracking and ownership all differ is a different primitive
+    /// here rather than a flag threaded through each of them: the engine asks
+    /// this once, where it resolves a call, and every later question answers
+    /// for the form.
+    ///
+    /// `option(argument, key)` reads what the call's syntax proves about one
+    /// boolean option key ([`OptionLiteral`]). An implementation must map
+    /// [`OptionLiteral::Unknown`] to a form it states nothing for, never to
+    /// the more common of the two runtimes. The default answers `primitive`
+    /// for every call: most exports have one runtime.
+    fn call_form(
+        &self,
+        primitive: Primitive,
+        option: &dyn Fn(usize, &str) -> OptionLiteral,
+    ) -> Primitive {
+        let _ = option;
+        primitive
+    }
+
     /// The argument positions the legacy engine treats as the primitive's
     /// *primary* callback slots — the places a rule looks when it needs "the"
     /// effect or compute function of a call.
@@ -1777,7 +1847,37 @@ pub trait Dialect: Sync {
     /// `splitProps(props, ...keys)` is 2.0's `omit(props, ...keys)`
     /// (`@solidjs/signals`' `store/utils.d.ts`), and shared code used to name
     /// only 1.x's.
+    ///
+    /// "Every argument" has one exception a split can declare, and it
+    /// outranks this answer: an argument
+    /// [`Dialect::callback_runs_on_result_access`] names is a callback the
+    /// runtime invokes, not a value.
     fn splits_props(&self, primitive: Primitive) -> bool;
+
+    /// Whether the function at `argument` is invoked when the call's
+    /// **returned object is read** — a property get, an `in` test, a key
+    /// enumeration — in the reading code's tracking and ownership, rather than
+    /// by the call itself.
+    ///
+    /// No [`Execution`] word describes that: the callback runs once per read,
+    /// at whatever time and under whatever observer the reader has, and the
+    /// engine does not follow reads of a returned view back to the call that
+    /// made it. So the answer is a positive fact with a fail-closed consumer:
+    /// the engine must treat such a callback as invoked at a time it cannot
+    /// place — never as a value (which is what [`Dialect::splits_props`]
+    /// would otherwise make it), and never as running where it is written.
+    ///
+    /// The case that needs it is rc.9's `omit(props, hidden)` predicate; the
+    /// default is `false`.
+    fn callback_runs_on_result_access(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> bool {
+        let _ = (primitive, argument, argument_count);
+        false
+    }
 
     /// Whether a call of `primitive` returns a **tuple** whose first slot
     /// carries the reactive value.

@@ -100,6 +100,12 @@ const TABLE: &[(&str, Primitive)] = &[
     ("Show", Primitive::Show),
     ("snapshot", Primitive::Snapshot),
     ("Switch", Primitive::Switch),
+    // New in `2.0.0-rc.9`: `until<T>(fn: () => T, options?: UntilOptions):
+    // Promise<Truthy<T>>` (`@solidjs/signals` `dist/types/signals.d.ts:608`),
+    // re-exported from the `solid-js` root (`types/index.d.ts:1`). rc.3's
+    // typings do not export it (TS2305), so the row answers only for code
+    // compiled against a later prerelease.
+    ("until", Primitive::Until),
     ("untrack", Primitive::Untrack),
     ("useContext", Primitive::UseContext),
     ("useHead", Primitive::UseHead),
@@ -2387,8 +2393,10 @@ impl Dialect for Solid2 {
     }
 
     /// Reviewed Solid 2 semantics in this module, not a package certificate.
+    /// Revision 2 (2026-09-26) models the three rc.9 callback forms: `until`,
+    /// `dynamic`'s option-selected call forms, and `omit`'s predicate.
     fn runtime_model_identity(&self) -> &'static str {
-        "solid-v2/model-1"
+        "solid-v2/model-2"
     }
 
     /// [`AUDITED_ARCHIVES`] and [`NEGATIVE_ROWS`] — 75 archive-scoped rows:
@@ -2406,8 +2414,51 @@ impl Dialect for Solid2 {
         lookup(&INDEX, &[TABLE], name)
     }
 
+    /// The two `dynamic` call forms have no row of their own in [`TABLE`]: a
+    /// form is reached from the name, never the other way round, so both
+    /// spell as the export they are a call of.
     fn name_of(&self, primitive: Primitive) -> Option<&'static str> {
-        reverse(TABLE, primitive)
+        match primitive {
+            Primitive::DynamicStatic | Primitive::DynamicUnknownForm => Some("dynamic"),
+            _ => reverse(TABLE, primitive),
+        }
+    }
+
+    /// `dynamic(source, options?)` is the one 2.0 export whose runtime is
+    /// chosen by an option. `@solidjs/web@2.0.0-rc.9` opens every build of it
+    /// with `if (options?.static) …` (`dist/web.dev.js:2199`,
+    /// `dist/web.js:2034`, `dist/web.observe.js:2056`, `dist/server.js:3729`,
+    /// `dist/server.dev.js:3977`, `dist/server.observe.js:3817`), a
+    /// truthiness test, so:
+    ///
+    /// - a literal `static: true` is [`Primitive::DynamicStatic`];
+    /// - no options, a `null`/`undefined` literal, an exact literal without
+    ///   `static`, or `static: false` is the default runtime, unchanged: the
+    ///   first statement is skipped and the lazy tracked memo is built exactly
+    ///   as rc.3 builds it;
+    /// - anything the syntax does not prove is
+    ///   [`Primitive::DynamicUnknownForm`], which states nothing. Keeping the
+    ///   default model there instead would publish `tracked` in a package
+    ///   contract, and claim a created owner, for a source the runtime may run
+    ///   once, untracked, under the caller's owner.
+    ///
+    /// rc.3 declares `dynamic(source)` with one parameter, so any call this
+    /// refines away from the default form is TS2554 against rc.3's own
+    /// typings: no rc.3-valid call changes form.
+    fn call_form(
+        &self,
+        primitive: Primitive,
+        option: &dyn Fn(usize, &str) -> crate::OptionLiteral,
+    ) -> Primitive {
+        use crate::OptionLiteral;
+        if primitive != Primitive::Dynamic {
+            return primitive;
+        }
+        match option(1, "static") {
+            OptionLiteral::True => Primitive::DynamicStatic,
+            OptionLiteral::Unknown => Primitive::DynamicUnknownForm,
+            OptionLiteral::Absent | OptionLiteral::False => Primitive::Dynamic,
+        }
     }
 
     /// Source: `solid-reactive-ir/src/execution_role.rs`, the argument-index
@@ -2434,16 +2485,22 @@ impl Dialect for Solid2 {
             | Primitive::CreateOptimistic
             | Primitive::CreateOptimisticStore
             | Primitive::Dynamic
+            // Both `dynamic` call forms keep the source at 0; the form
+            // changes how it runs, not where it sits.
+            | Primitive::DynamicStatic
+            | Primitive::DynamicUnknownForm
             | Primitive::ClientOnly
             | Primitive::Flush
             | Primitive::Untrack
             | Primitive::OnSettled
             | Primitive::CreateReaction
             | Primitive::Action
-            // latest(fn), isPending(fn), resolve(fn) each take one thunk.
+            // latest(fn), isPending(fn), resolve(fn), until(fn, options?)
+            // each take one thunk.
             | Primitive::Latest
             | Primitive::IsPending
             | Primitive::Resolve
+            | Primitive::Until
             | Primitive::Lazy
             | Primitive::UseHead
             | Primitive::CreateRevealOrder => &[0],
@@ -2483,7 +2540,15 @@ impl Dialect for Solid2 {
                 // resolve(fn) returns a Promise -- the thunk's reads settle
                 // outside the current computation.
                 | Primitive::Resolve
+                // until(fn) is resolve's shape (see `callback_executions`):
+                // its predicate is the compute of a user effect under a fresh
+                // root, and the caller has no observer for it to subscribe.
+                | Primitive::Until
                 | Primitive::Lazy
+                // dynamic(source, { static: true }) is
+                // `staticDynamic(untrack(source))`: the signals `untrack`,
+                // which clears the listener around the call.
+                | Primitive::DynamicStatic
         )
     }
 
@@ -2507,8 +2572,13 @@ impl Dialect for Solid2 {
     /// for write legality `untrack` is transparent to its call site. (The
     /// official RFC text claims `untrack` blocks allow writes; the rc.0
     /// runtime contradicts it — the runtime wins.)
+    ///
+    /// `dynamic(source, { static: true })` runs its source through that same
+    /// `untrack` (`@solidjs/web@2.0.0-rc.9` `dist/web.dev.js:2199`), with no
+    /// owner of its own, so a write in a static source is exactly as legal as
+    /// at the `dynamic` call.
     fn callback_preserves_owner_write_context(&self, primitive: Primitive) -> bool {
-        primitive == Primitive::Untrack
+        matches!(primitive, Primitive::Untrack | Primitive::DynamicStatic)
     }
 
     /// Source: rc.0 `onSettled` (`dev.js:4855-4893`). Called under a live
@@ -2616,6 +2686,14 @@ impl Dialect for Solid2 {
             | Primitive::CreateOptimistic
             | Primitive::CreateOptimisticStore
             | Primitive::Resolve => &[(0, CallbackOwner::Creates)],
+            // `@solidjs/signals@2.0.0-rc.9` `until` (`dist/dev.js:2717-2785`,
+            // `dist/prod/signals.js:530`): `new Promise(… createRoot(dispose =>
+            // { …; effect(fn, …) }))`, the predicate is the compute of an
+            // effect created under that fresh root -- except when
+            // `options.signal` is already aborted, where it rejects before
+            // `createRoot` and never runs `fn` at all (`:2734`). Either way no owner of
+            // the caller's is used.
+            Primitive::Until => &[(0, CallbackOwner::Creates)],
             // The supplied owner is nullable. The call-site classifier
             // sharpens this to Creates or None when its value is proven.
             Primitive::RunWithOwner => &[(1, CallbackOwner::Conditional)],
@@ -2663,6 +2741,13 @@ impl Dialect for Solid2 {
             // component owner the wrapper creates, so primitives created in
             // the thunk are disposed with the dynamic node.
             Primitive::Dynamic => &[(0, CallbackOwner::Creates)],
+            // The static form builds no memo and no wrapper computation: the
+            // source is `untrack(source)` at the `dynamic` call itself
+            // (`@solidjs/web@2.0.0-rc.9` `dist/web.dev.js:2199`,
+            // `dist/server.js:3730`), under whatever owner the caller has.
+            Primitive::DynamicStatic => &[(0, CallbackOwner::Inherits)],
+            // `DynamicUnknownForm` is absent: its two runtimes disagree
+            // (Creates versus Inherits), and absent is "unmodelled".
             _ => &[],
         }
     }
@@ -2855,6 +2940,10 @@ impl Dialect for Solid2 {
             Primitive::CreateReaction
             | Primitive::OnSettled
             | Primitive::Resolve
+            // The same attribution answer as `resolve`, on the same reading:
+            // the predicate subscribes the effect `until` creates, never the
+            // caller (who has no observer, or the call throws).
+            | Primitive::Until
             | Primitive::Lazy
             | Primitive::Action
             | Primitive::ClientOnly => &[(0, Execution::Deferred)],
@@ -2862,6 +2951,10 @@ impl Dialect for Solid2 {
             | Primitive::CreateRevealOrder
             | Primitive::Flush
             | Primitive::Untrack
+            // `staticDynamic(untrack(source))`: invoked once, before
+            // `dynamic` returns, and never again (`@solidjs/web@2.0.0-rc.9`
+            // `dist/web.dev.js:2199`, `dist/web.js:2034`).
+            | Primitive::DynamicStatic
             | Primitive::Latest
             | Primitive::IsPending => &[(0, Execution::Inline)],
             Primitive::RunWithOwner => &[(1, Execution::Inline)],
@@ -2954,8 +3047,30 @@ impl Dialect for Solid2 {
                 | Primitive::OnCleanup,
                 0,
             ) => Some(Execution::Deferred),
-            (Primitive::CreateRoot | Primitive::Untrack | Primitive::Flush, 0)
+            // The static `dynamic` form is `untrack(source)` at the call
+            // (`@solidjs/web@2.0.0-rc.9` `dist/web.dev.js:2199`,
+            // `dist/server.js:3730`): the source has run and returned before
+            // `dynamic` does, so it is `inline`, with `untrack`'s clearing
+            // travelling separately exactly as it does for `untrack`.
+            (
+                Primitive::CreateRoot
+                | Primitive::Untrack
+                | Primitive::Flush
+                | Primitive::DynamicStatic,
+                0,
+            )
             | (Primitive::RunWithOwner, 1) => Some(Execution::Inline),
+            // Deliberately unanswered, so a forwarded parameter opens the
+            // unknown-callback sentinel:
+            //
+            // - `DynamicUnknownForm`: `tracked` or `inline` depending on a
+            //   value the syntax does not prove.
+            // - `until`: its predicate runs during the call (the effect's
+            //   first compute), again after it whenever a dependency changes
+            //   until one run is truthy, and not at all when `options.signal`
+            //   is already aborted (`@solidjs/signals@2.0.0-rc.9`
+            //   `dist/dev.js:2734`). No one word is that; `resolve`,
+            //   the same shape, is unanswered for the same reason.
             _ => None,
         }
     }
@@ -3167,8 +3282,52 @@ impl Dialect for Solid2 {
 
     /// 2.0 replaced `splitProps` with `omit`; `store/utils.d.ts` declares
     /// `omit(props: T, ...keys: K)`, the same props-plus-key-lists shape.
+    /// rc.9's predicate overload is the one argument this does not cover; see
+    /// [`Solid2::callback_runs_on_result_access`].
     fn splits_props(&self, primitive: Primitive) -> bool {
         primitive == Primitive::Omit
+    }
+
+    /// `@solidjs/signals@2.0.0-rc.9` adds
+    /// `omit(props: T, hidden: (key: keyof T & (string | symbol)) => boolean):
+    /// Partial<T>` (`dist/types/store/utils.d.ts:251`), and the runtime picks
+    /// that form by
+    /// `keys.length === 1 && typeof keys[0] === "function"` (`dist/dev.js:4380`,
+    /// the same test at `dist/prod/store/utils.js:982` and
+    /// `dist/observe/store/utils.js:984`; `solid-js` re-exports this `omit`,
+    /// server build included, `dist/server.js:2`). So only a call with exactly
+    /// two arguments can carry a predicate, and it is argument 1.
+    ///
+    /// When it runs, read from the same bytes:
+    ///
+    /// - **Wherever `Proxy` exists** (`SUPPORTS_PROXY = typeof Proxy ===
+    ///   "function"`, `dist/dev-shared.js:273`), `omit` only stores it:
+    ///   `new Proxy(new OmitView(source, kind, hidden), omitTraps)`
+    ///   (`dist/dev.js:4406`). `isHidden(view, key)` then calls it on every
+    ///   `get`, `has` and key enumeration of the returned view
+    ///   (`omitTraps`, `:4178-4241`; `isHidden`, `:3495-3498`), and on every
+    ///   walk of the view by `merge` and the spread helpers (`:3557-3703`,
+    ///   `:3826-3870`, `:3984`, `:4071`, `:4113-4128`). Nothing around those
+    ///   calls touches the listener, so the predicate's reads subscribe
+    ///   whatever computation is reading the view, and its writes run under
+    ///   that reader's owner.
+    /// - **Without `Proxy`**, it is called once per own property name during
+    ///   the `omit` call itself, in the caller's scope (`:4408-4427`).
+    ///
+    /// Neither is a schedule the `Execution` vocabulary can state, and the
+    /// first is the one every supported runtime takes. rc.3's `omit` has no
+    /// predicate form (`typeof keys[0]` is never read; the argument is only
+    /// `keys.includes(key)`'s list, rc.3 `dist/dev.js:9334-9369`), and its
+    /// declaration rejects a function there (TS2345). The answer differs only
+    /// where the types are erased; there the conservative reading is rc.9's,
+    /// because nothing in an untyped call says which runtime it will meet.
+    fn callback_runs_on_result_access(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> bool {
+        primitive == Primitive::Omit && argument == 1 && argument_count == 2
     }
 
     /// `createSignal` and `createOptimistic` both return
@@ -3308,6 +3467,7 @@ const NAMESPACE_SOLID_JS: &[&str] = &[
     "resolve",
     "runWithOwner",
     "snapshot",
+    "until",
     "untrack",
     "useContext",
 ];
@@ -3528,11 +3688,128 @@ mod tests {
                 "Show",
                 "snapshot",
                 "Switch",
+                "until",
                 "untrack",
                 "useContext",
                 "useHead",
             ]
         );
+    }
+
+    /// The `dynamic` call forms, pinned against `@solidjs/web@2.0.0-rc.9`'s
+    /// `if (options?.static)` (`dist/web.dev.js:2199`): only a proven literal
+    /// picks a form, a proven falsy or absent option keeps the default, and an
+    /// unproven one reaches the form that states nothing.
+    #[test]
+    fn dynamic_call_forms_follow_the_static_option_literal() {
+        use crate::OptionLiteral;
+        let form = |literal: OptionLiteral| {
+            Solid2.call_form(Primitive::Dynamic, &|argument, key| {
+                assert_eq!((argument, key), (1, "static"));
+                literal
+            })
+        };
+        assert_eq!(form(OptionLiteral::True), Primitive::DynamicStatic);
+        assert_eq!(form(OptionLiteral::False), Primitive::Dynamic);
+        assert_eq!(form(OptionLiteral::Absent), Primitive::Dynamic);
+        assert_eq!(form(OptionLiteral::Unknown), Primitive::DynamicUnknownForm);
+        // Nothing else has a form, and nothing else is asked about options.
+        assert_eq!(
+            Solid2.call_form(Primitive::Untrack, &|_, _| panic!("not asked")),
+            Primitive::Untrack
+        );
+        // A form spells as the export it is a call of, and is never a name.
+        for primitive in [Primitive::DynamicStatic, Primitive::DynamicUnknownForm] {
+            assert_eq!(Solid2.name_of(primitive), Some("dynamic"));
+        }
+        assert_eq!(Solid2.primitive("dynamic"), Some(Primitive::Dynamic));
+    }
+
+    /// The static form answers exactly as `untrack` does, because it *is*
+    /// `untrack(source)` at the call; the default keeps its rc.3 rows; the
+    /// unknown form states nothing a consumer could rely on.
+    #[test]
+    fn dynamic_forms_answer_their_own_runtime() {
+        let two: &dyn Dialect = &Solid2;
+        for primitive in [Primitive::DynamicStatic, Primitive::Untrack] {
+            assert_eq!(
+                two.callback_execution_at(primitive, 0, 2),
+                Some(Execution::Inline)
+            );
+            assert!(two.runs_callback_deferred(primitive));
+            assert!(two.runs_callback_synchronously(primitive));
+            assert!(two.callback_preserves_owner_write_context(primitive));
+            assert_eq!(
+                two.callback_owner_at(primitive, 0, 2),
+                Some(CallbackOwner::Inherits)
+            );
+            assert_eq!(
+                two.contract_callback_execution_at(primitive, 0, 2),
+                Some(Execution::Inline)
+            );
+        }
+        assert_eq!(
+            two.callback_execution_at(Primitive::Dynamic, 0, 1),
+            Some(Execution::Tracked)
+        );
+        assert_eq!(
+            two.callback_owner_at(Primitive::Dynamic, 0, 1),
+            Some(CallbackOwner::Creates)
+        );
+        assert_eq!(
+            two.contract_callback_execution_at(Primitive::Dynamic, 0, 1),
+            Some(Execution::Tracked)
+        );
+        let unknown = Primitive::DynamicUnknownForm;
+        assert_eq!(two.callback_execution_at(unknown, 0, 2), None);
+        assert_eq!(two.callback_owner_at(unknown, 0, 2), None);
+        assert_eq!(two.contract_callback_execution_at(unknown, 0, 2), None);
+        assert!(!two.runs_callback_deferred(unknown));
+    }
+
+    /// rc.9's `until` is `resolve`'s shape (`dist/dev.js:2717-2785`), so it
+    /// answers `resolve`'s rows, contract silence included.
+    #[test]
+    fn until_answers_as_resolve_does() {
+        let two: &dyn Dialect = &Solid2;
+        assert_eq!(two.primitive("until"), Some(Primitive::Until));
+        for primitive in [Primitive::Until, Primitive::Resolve] {
+            assert_eq!(two.callback_positions(primitive), &[0]);
+            assert_eq!(
+                two.callback_execution_at(primitive, 0, 2),
+                Some(Execution::Deferred)
+            );
+            assert!(two.runs_callback_deferred(primitive));
+            assert_eq!(
+                two.callback_owner_at(primitive, 0, 2),
+                Some(CallbackOwner::Creates)
+            );
+            assert_eq!(two.contract_callback_execution_at(primitive, 0, 2), None);
+        }
+        assert_eq!(
+            two.export_modules("until", crate::ExportPosition::Value),
+            vec!["solid-js"]
+        );
+        assert!(
+            two.namespace_import_primitives("solid-js")
+                .contains(&"until")
+        );
+    }
+
+    /// Only a two-argument `omit` can carry rc.9's predicate
+    /// (`keys.length === 1 && typeof keys[0] === "function"`,
+    /// `dist/dev.js:4380`), and only at argument 1.
+    #[test]
+    fn only_the_two_argument_omit_slot_runs_on_result_access() {
+        let two: &dyn Dialect = &Solid2;
+        assert!(two.callback_runs_on_result_access(Primitive::Omit, 1, 2));
+        assert!(!two.callback_runs_on_result_access(Primitive::Omit, 0, 2));
+        assert!(!two.callback_runs_on_result_access(Primitive::Omit, 1, 3));
+        assert!(!two.callback_runs_on_result_access(Primitive::Omit, 2, 3));
+        assert!(!two.callback_runs_on_result_access(Primitive::Merge, 1, 2));
+        // The split row itself is unchanged: the exception is the slot's.
+        assert!(two.splits_props(Primitive::Omit));
+        assert_eq!(two.callback_execution_at(Primitive::Omit, 1, 2), None);
     }
 
     #[test]

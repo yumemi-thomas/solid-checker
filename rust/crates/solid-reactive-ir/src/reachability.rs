@@ -8,8 +8,8 @@ use solid_facts::core::Span;
 use typefacts::Location;
 
 use super::{
-    EntitySymbols, FunctionNode, ProjectIndexes, SemanticLookup, SymbolId,
-    containing_function_indexed, function_indices_by_path, location, primitive_name,
+    EntitySymbols, FunctionNode, ProjectIndexes, SemanticLookup, SymbolId, call_primitive_name,
+    containing_function_indexed, function_indices_by_path, location,
 };
 use crate::cache::{
     CachedReachabilityFile, ReachabilityEdge, ReachabilityTarget, SourceDiscoveryTypeScriptDelta,
@@ -222,16 +222,9 @@ fn discover_reachability_file(
                 target: ReachabilityTarget::Symbol(symbol.clone()),
             });
         }
-        let primitive = primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            lookup.dialect,
-        )
-        .as_ref()
-        .and_then(super::PrimitiveName::primitive);
+        let primitive = call_primitive_name(file, call, entities, symbol_names, lookup.dialect)
+            .as_ref()
+            .and_then(super::PrimitiveName::primitive);
         if primitive.is_some()
             || (0..call.arguments.len()).any(|index| {
                 returned_callback_execution_at_call(file, call, index, lookup).is_some()

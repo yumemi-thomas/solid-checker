@@ -4,16 +4,17 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "26f53f52623aaabb36697faa985de9b2caa93ab31e94212c633f2297e9dc1a75",
+            "closureSha256": "17c7730c909e8358c7752ec339859f979c28cb9d7212bf599d4bf4604d93ded0",
             "path": "./index.js",
-            "sha256": "89557715fe7c44155523be0799825032224568f136deeb568acbded481646b81"
+            "sha256": "0043af3e27dffc06cd632487babf420aeef9c4f80e9f4fac076a3862855bc8c2"
           },
           "declarations": {
             "path": "./index.js",
-            "sha256": "89557715fe7c44155523be0799825032224568f136deeb568acbded481646b81"
+            "sha256": "0043af3e27dffc06cd632487babf420aeef9c4f80e9f4fac076a3862855bc8c2"
           },
           "exports": {
-            "withoutKeys": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217"
+            "withoutEitherKey": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
+            "withoutKeys": "summary-7e3edf80dbc6dd5addeed9d111476a59b620e7599583564165173372609d50aa"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -37,6 +38,43 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
+    "summary-7e3edf80dbc6dd5addeed9d111476a59b620e7599583564165173372609d50aa": {
+      "call": {
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "plain",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
     "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217": {
       "call": {
         "callbacks": [],

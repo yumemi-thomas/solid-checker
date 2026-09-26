@@ -15,8 +15,8 @@ use crate::indexes::{EntitySymbols, SemanticLookup};
 use crate::owners::{analysis_context, computation_is_async_with_contracts};
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
 use crate::{
-    ReactiveSourceKind, ReactiveWrite, StaticDefect, StaticDefectKind, StaticViolation, location,
-    primitive_name,
+    ReactiveSourceKind, ReactiveWrite, StaticDefect, StaticDefectKind, StaticViolation,
+    call_primitive_name, location,
 };
 
 pub(super) struct StaticDirectiveFileResult {
@@ -73,14 +73,9 @@ impl StaticApiContext<'_> {
         let allowed = allowed_callback_spans(file, self.lookup);
         let dialect = self.lookup.dialect;
         for call in &file.ast.calls {
-            let Some(primitive) = primitive_name(
-                file.path.as_str(),
-                call.callee,
-                call.static_callee(&file.source),
-                self.entities,
-                self.symbol_names,
-                dialect,
-            ) else {
+            let Some(primitive) =
+                call_primitive_name(file, call, self.entities, self.symbol_names, dialect)
+            else {
                 continue;
             };
             // `primitive` stays as the spelling to report; `kind` is what the
@@ -161,6 +156,30 @@ impl StaticApiContext<'_> {
                         "resolve() is called inside {scope}; resolve() reads the expression once and never tracks updates, and an active observer makes Solid throw \"Cannot call resolve inside a reactive scope\" here in dev"
                     ),
                     hint: "Call resolve() from imperative code — an event handler, onSettled, or an effect's apply function. To depend on a pending value inside a computation, read the accessor directly: tracked reads suspend and re-run on their own. A deliberate one-shot read can be wrapped in untrack(), which clears the observer the runtime guards on.".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                    uncertain: false,
+                });
+            }
+            // SC2005: until() in a tracked scope. `@solidjs/signals@2.0.0-rc.9`
+            // opens `until` with the same observer guard `resolve` has
+            // (`dist/dev.js:2718-2722`, `if (getObserver()) throw new
+            // Error("Cannot call until inside a reactive scope; …")`), and the
+            // production bundle drops it (`dist/prod/signals.js:530`, no
+            // guard), so the scopes, the dev throw and the proof are
+            // resolve's. `until` does not exist before rc.9, so nothing
+            // compiled against rc.3's typings reaches this arm.
+            if kind == Some(Primitive::Until)
+                && let Some(scope) = resolve_tracked_scope(file, call, &allowed, self)
+            {
+                result.violations.push(StaticViolation {
+                    id: "SC2005".into(),
+                    rule: "until-in-tracked-scope".into(),
+                    message: format!(
+                        "until() is called inside {scope}; an active observer makes Solid throw \"Cannot call until inside a reactive scope\" here in dev, and in production every run of the scope starts another root and effect that wait on the predicate"
+                    ),
+                    hint: "Await until() from imperative code — an action step (`yield until(...)`), an event handler, onSettled, or an effect's apply function. Inside a computation, read the condition directly: tracked reads re-run the computation when it changes.".into(),
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],

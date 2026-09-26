@@ -7,8 +7,8 @@ use solid_dialect::Dialect;
 use solid_facts::core::Span;
 
 use super::{
-    ExecutionRole, PrimitiveCreation, PrimitiveName, SemanticLookup, SymbolId, execution_role,
-    location, primitive_name,
+    ExecutionRole, PrimitiveCreation, PrimitiveName, SemanticLookup, SymbolId, call_primitive_name,
+    execution_role, location,
 };
 use crate::owners::containing_ast_function;
 use crate::pipeline::{AnalysisContext, ProgramDraft};
@@ -92,10 +92,9 @@ impl<'a, 'c> DirectiveCreationCollector<'a, 'c> {
             containing_ast_function(&file.ast, call.span)
                 .is_some_and(|owner| owner.span == function.span)
         }) {
-            if let Some(primitive) = primitive_name(
-                file.path.as_str(),
-                call.callee,
-                call.static_callee(&file.source),
+            if let Some(primitive) = call_primitive_name(
+                file,
+                call,
                 self.lookup.entities(),
                 self.symbol_names,
                 self.lookup.dialect,
@@ -199,15 +198,11 @@ pub(crate) fn discover_directive_creations(ctx: &AnalysisContext<'_>, draft: &mu
         for call in &file.ast.calls {
             let role = execution_role(&file.compiler, call.callee, &[]);
             if role == ExecutionRole::DirectiveApply
-                && let Some(primitive) = primitive_name(
-                    file.path.as_str(),
-                    call.callee,
-                    call.static_callee(&file.source),
-                    ctx.entities,
-                    ctx.symbol_names,
-                    ctx.dialect,
-                )
-                .filter(|primitive| creation_registers_work(ctx.dialect, file, call, primitive))
+                && let Some(primitive) =
+                    call_primitive_name(file, call, ctx.entities, ctx.symbol_names, ctx.dialect)
+                        .filter(|primitive| {
+                            creation_registers_work(ctx.dialect, file, call, primitive)
+                        })
             {
                 push_directive_creation(
                     &mut draft.directive_creations,

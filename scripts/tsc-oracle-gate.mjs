@@ -386,6 +386,17 @@ const EXEMPT = {
   // the audited rc.3, on which the notice cannot appear. Its pins are in
   // `dialects_process` and `dialect.rs`.
   "unaudited-solid-release": "the subject is which solid-js release is installed, not any expression in the project; no snippet can express it and tsc has nothing to say about it",
+  // Not an unexpressible subject -- an unprovisioned one. `until` first ships
+  // in solid-js 2.0.0-rc.9, and this oracle installs the audited rc.3
+  // (fixtures/tsc-oracle/packages.json), whose typings do not export it:
+  // every snippet is TS2305 at the import and the checker resolves no
+  // primitive, so no keystone case can exist here. The absolute rule was
+  // checked by hand instead: `fixtures/reactive-ir/rc9-until-scope/App.tsx`
+  // is `tsc --noEmit`-clean against the published rc.9 typings (strict,
+  // bundler resolution, `jsxImportSource: "@solidjs/web"`) while this rule
+  // reports its four tracked-scope calls. Replace this entry with a keystone
+  // case when the oracle provisions an rc.9 install.
+  "until-in-tracked-scope": "until() exists only from solid-js 2.0.0-rc.9; the oracle provisions the audited rc.3, where importing it is TS2305. The keystone is fixtures/reactive-ir/rc9-until-scope, tsc-clean against the published rc.9 typings",
 };
 
 const catalogRules = catalogEntries.map((rule) => rule.name);

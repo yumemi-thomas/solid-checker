@@ -23,6 +23,26 @@ An open `callbacks` domain is not a cosmetic difference: it is exactly what a
 consumer's open-claims gate reports, so every 2.0 package that split its props
 published a domain it had no reason to leave open.
 
+## rc.9 reopened the two-argument call, and `withoutEitherKey` keeps the pin
+
+`@solidjs/signals@2.0.0-rc.9` added `omit(props, hidden)`: a *single* function
+argument is a key predicate (`keys.length === 1 && typeof keys[0] ===
+"function"`, `dist/dev.js:4380`), called on every read of the returned view.
+So `withoutKeys`' `omit(props, keys)` — two arguments, `keys` untyped — is a
+call that invokes `keys` on rc.9 and never does on rc.3, and an untyped call
+does not say which runtime it will meet. The dialect answers with the
+conservative reading (`Dialect::callback_runs_on_result_access`), so since
+2026-09-26 `withoutKeys` leaves `callbacks` **open**.
+
+That is a precision loss on rc.3 bytes, taken deliberately: a contract closed
+over rc.3's runtime would be consumed unchanged by an rc.9 project, where it is
+false. The dialect has no prerelease input yet; when it does, this answer can
+be rc.9-and-later only and `withoutKeys` can close again.
+
+`withoutEitherKey` — `omit(props, first, second)`, three arguments — has no
+predicate form on any prerelease, so the suppression still closes its
+`callbacks`. It is the export that now carries this fixture's original claim.
+
 ## The `creates` column is a third asymmetry, and it is not fixed here
 
 `callbacks` is the claim under test. `creates` differs between the halves too,

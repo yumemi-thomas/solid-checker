@@ -79,13 +79,14 @@ const RC9_REVIEW_DOCUMENT: &str =
 static RC9_REVIEW: ReviewedRelease = ReviewedRelease {
     version: "2.0.0-rc.9",
     known_gaps: &[
-        "B2: `dynamic(source, { static: true })` calls its source once, untracked, during the \
-         call, and the vocabulary still models the source as tracked and owned, so a reactive \
-         read there is not reported",
-        "B3: `omit(props, predicate)` invokes its predicate, and every `omit` argument is still \
-         analyzed as a value, so the predicate carries no callback obligation",
-        "B4: `until(fn, options)` runs `fn` as a tracked computation and throws inside a reactive \
-         scope, and it is not modelled, so its callback carries no obligation",
+        "`omit(props, predicate)`: the predicate runs on every read of the returned view, and \
+         code inside it is not classified, so it is neither checked nor reported uncertifiable",
+        "rc.9's `solid-js` typings re-export `createErrorBoundary`, `createLoadingBoundary`, \
+         `createRevealOrder`, `sharedConfig` and `$DEVCOMP`, which its own declarations no longer \
+         declare, so under `skipLibCheck` those primitives are not resolved and their bodies are \
+         not analyzed as such",
+        "no negative row is granted for `@solidjs/signals@2.0.0-rc.9`, so certification closes \
+         fewer claim domains than on the audited release",
     ],
     review: RC9_REVIEW_DOCUMENT,
 };

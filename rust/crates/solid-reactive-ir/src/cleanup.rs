@@ -21,8 +21,8 @@ use solid_facts::core::Span;
 use typefacts::{ResolvedCallValidity, RuntimeValueDomain};
 
 use super::{
-    Fix, LeafOwnerOperation, PrimitiveName, SemanticLookup, SymbolId, TextEdit, location,
-    primitive_name,
+    Fix, LeafOwnerOperation, PrimitiveName, SemanticLookup, SymbolId, TextEdit,
+    call_primitive_name, location,
 };
 use crate::execution_role::direct_callback_contains;
 use crate::owners::{callback_owner_at_call, containing_ast_function};
@@ -91,14 +91,7 @@ pub(super) fn leaf_owner_operations_for_file(
         if crate::execution_role::discarded_region_contains(file, owner_call.span) {
             continue;
         }
-        let owner = primitive_name(
-            file.path.as_str(),
-            owner_call.callee,
-            owner_call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            dialect,
-        );
+        let owner = call_primitive_name(file, owner_call, entities, symbol_names, dialect);
         let Some(owner) = owner.as_ref() else {
             continue;
         };
@@ -232,14 +225,8 @@ pub(super) fn leaf_owner_operations_for_file(
             if !direct_callback_contains(callback_file, leaf_callback.span, call.span) {
                 continue;
             }
-            let primitive = primitive_name(
-                callback_file.path.as_str(),
-                call.callee,
-                call.static_callee(&callback_file.source),
-                entities,
-                symbol_names,
-                dialect,
-            );
+            let primitive =
+                call_primitive_name(callback_file, call, entities, symbol_names, dialect);
             let Some(primitive) = primitive else {
                 // Not a primitive: an exactly-resolved in-project helper
                 // called here runs its synchronous extent in this leaf
@@ -556,14 +543,7 @@ fn function_forbidden_operations(
         if nested {
             continue;
         }
-        let primitive = primitive_name(
-            helper_file.path.as_str(),
-            inner.callee,
-            inner.static_callee(&helper_file.source),
-            entities,
-            symbol_names,
-            dialect,
-        );
+        let primitive = call_primitive_name(helper_file, inner, entities, symbol_names, dialect);
         let Some(primitive) = primitive else {
             complete &= helper_forbidden_operations(
                 resolution,

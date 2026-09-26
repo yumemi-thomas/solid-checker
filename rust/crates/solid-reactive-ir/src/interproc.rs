@@ -27,10 +27,10 @@ use super::{
     ContractGenerationObligation, ContractGraph, ContractReturn, ContractSemantics, EntitySymbols,
     ExecutionRole, FunctionBoundary, FunctionLookup, ProjectIndexes, ReactiveRead,
     ReactiveSourceKind, SemanticLookup, StaticDefect, StaticDefectKind, SymbolId,
-    allowed_callback_spans, assigned_member_function_contains, containing_summary_function_indexed,
-    contract_callback_execution, contract_export_summaries, contract_export_summaries_incremental,
-    function_indices_by_path, function_lookup_for_path, functions_for_path,
-    items_by_containing_function, location, location_order, primitive_name,
+    allowed_callback_spans, assigned_member_function_contains, call_primitive_name,
+    containing_summary_function_indexed, contract_callback_execution, contract_export_summaries,
+    contract_export_summaries_incremental, function_indices_by_path, function_lookup_for_path,
+    functions_for_path, items_by_containing_function, location, location_order,
     propagate_returned_summary_deltas, propagate_summary_deltas, push_contract_callback,
     push_unique_summary_read, semantic_execution_role,
 };
@@ -2249,7 +2249,20 @@ fn discover_interprocedural_graph(
             // callability unknown. Asked of the dialect because 1.x's
             // `splitProps` is 2.0's `omit`, and naming only the 1.x spelling
             // raised this obligation about 2.0's key lists.
-            if primitive.is_some_and(|primitive| lookup.dialect.splits_props(primitive)) {
+            //
+            // Except where the split itself declares the argument a callback:
+            // rc.9's `omit(props, hidden)` calls `hidden` on every read of the
+            // view it returns. No execution word states that, so the argument
+            // falls through to the unknown-callback arm below instead of
+            // being published as a value the export never invokes.
+            if primitive.is_some_and(|primitive| {
+                lookup.dialect.splits_props(primitive)
+                    && !lookup.dialect.callback_runs_on_result_access(
+                        primitive,
+                        argument_index,
+                        call.arguments.len(),
+                    )
+            }) {
                 continue;
             }
             let resolved_call = lookup.resolved_callee_call(file, call.callee);
@@ -3955,10 +3968,9 @@ impl StructuredReturnDiscovery<'_, '_> {
         let handler = call.arguments.get(1)?.span;
         let reactive = file.ast.calls.iter().any(|nested| {
             handler.contains(nested.span)
-                && super::known_primitive(&primitive_name(
-                    file.path.as_str(),
-                    nested.callee,
-                    nested.static_callee(&file.source),
+                && super::known_primitive(&call_primitive_name(
+                    file,
+                    nested,
                     self.entities,
                     self.symbol_names,
                     self.lookup.dialect,
@@ -4037,10 +4049,9 @@ impl StructuredReturnDiscovery<'_, '_> {
             return None;
         }
         let symbol = self.entities.at(file.path.as_str(), call.callee);
-        let primitive = primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
+        let primitive = call_primitive_name(
+            file,
+            call,
             self.entities,
             self.symbol_names,
             self.lookup.dialect,

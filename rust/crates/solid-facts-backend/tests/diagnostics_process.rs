@@ -450,7 +450,7 @@ fn ssr_client_hole_distinguishes_proven_and_unresolved_server_rendering() {
 /// The wave-6 server-surface and resolve rules, pinned at their probed
 /// gates: SC7005's server-render + Loading-children dominance, SC7006's
 /// module-directive export shapes, SC7007's enableRichArguments silence, and
-/// SC2004's observer-keyed scope split.
+/// SC2004's and SC2005's observer-keyed scope split.
 #[test]
 fn server_surface_and_resolve_rules_pin_their_probed_gates() {
     if let Some(findings) = diagnostic_fixture("http-response-flush") {
@@ -532,6 +532,19 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
             "{findings:#?}"
         );
     }
+    if let Some(findings) = diagnostic_fixture("rc9-until-scope") {
+        // rc.9's `until` carries resolve's observer guard, so the same four
+        // tracked scopes throw and the same observer-free ones -- plus the
+        // action step rc.9 documents -- stay silent.
+        assert_rule_findings(&findings, "until-in-tracked-scope", 4);
+        assert!(
+            findings
+                .iter()
+                .all(|finding| finding["rule"] == "until-in-tracked-scope"
+                    && finding["kind"] == "violation"),
+            "{findings:#?}"
+        );
+    }
     if let Some(findings) = diagnostic_fixture("uncalled-accessor-v2") {
         // The positions TypeScript permits: a string-concatenation operand, a
         // logical-not operand, the two unary numeric coercions (`-count` and
@@ -572,6 +585,54 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
                 "{typed} is TypeScript's; reporting it duplicates a diagnostic: {findings:#?}"
             );
         }
+    }
+}
+
+/// rc.9's two new callback forms whose runtime the call shape selects.
+///
+/// `dynamic(source, { static: true })` is `untrack(source)` at the call, so it
+/// owns and writes exactly as `untrack` does; an unproven options value claims
+/// nothing. `omit(props, hidden)`'s predicate runs on reads of the returned
+/// view, so nothing written inside it is placed in the component body.
+#[test]
+fn rc9_call_forms_follow_the_runtime_they_select() {
+    let line = |finding: &serde_json::Value| finding["primaryLocation"]["line"].as_u64();
+    if let Some(findings) = diagnostic_fixture("rc9-dynamic-static") {
+        let owners = findings_for_rule(&findings, "missing-owner");
+        // StaticEffect, NamespaceStaticEffect, and the `untrack` reference.
+        assert_eq!(
+            owners
+                .iter()
+                .map(|finding| line(finding))
+                .collect::<Vec<_>>(),
+            [Some(20), Some(27), Some(33)],
+            "{findings:#?}"
+        );
+        let writes = findings_for_rule(&findings, "reactive-write-in-owned-scope");
+        // DefaultWrite, FalseWrite, DeferStreamWrite, BodyStaticWrite; the
+        // module-scope static write and both unknown-form writes are silent.
+        assert_eq!(
+            writes
+                .iter()
+                .map(|finding| line(finding))
+                .collect::<Vec<_>>(),
+            [Some(50), Some(57), Some(62), Some(71)],
+            "{findings:#?}"
+        );
+        assert_eq!(findings.len(), 7, "{findings:#?}");
+    }
+    if let Some(findings) = diagnostic_fixture("rc9-omit-predicate") {
+        // Only the control: the body read beside a predicate.
+        let reads = findings_for_rule(&findings, "strict-read-untracked");
+        assert_eq!(
+            reads
+                .iter()
+                .map(|finding| line(finding))
+                .collect::<Vec<_>>(),
+            [Some(46)],
+            "{findings:#?}"
+        );
+        assert_eq!(findings.len(), 1, "{findings:#?}");
     }
 }
 

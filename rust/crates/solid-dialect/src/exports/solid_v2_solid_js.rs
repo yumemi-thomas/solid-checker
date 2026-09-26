@@ -89,6 +89,10 @@ pub static VALUES: &[(&str, &[&str])] = &[
     ("ssrHandleError", &["solid-js"]),
     ("ssrScope", &["solid-js"]),
     ("storePath", &["solid-js"]),
+    // Added in `solid-js@2.0.0-rc.9` (`types/index.d.ts:1` re-exports it from
+    // `@solidjs/signals`); absent from the rc.3 surface this table was
+    // otherwise audited against.
+    ("until", &["solid-js"]),
     ("untrack", &["solid-js"]),
     ("useContext", &["solid-js"]),
 ];

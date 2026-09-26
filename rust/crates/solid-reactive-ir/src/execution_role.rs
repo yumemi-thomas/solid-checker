@@ -11,8 +11,8 @@ use solid_dialect::{Dialect, Execution, Primitive};
 use solid_facts::core::Span;
 
 use super::{
-    EntitySymbols, ExecutionRole, PrimitiveName, SemanticLookup, SymbolId, jsx_primitive_name,
-    known_primitive, location, primitive_name,
+    EntitySymbols, ExecutionRole, PrimitiveName, SemanticLookup, SymbolId, call_primitive_name,
+    jsx_primitive_name, known_primitive, location,
 };
 use crate::owners::{
     callback_execution_at_call, callback_owner_at_call, containing_ast_function,
@@ -498,6 +498,15 @@ fn semantic_execution_role_within(
     if discarded_region_contains(file, span) {
         return ExecutionRole::DiscardedRendering;
     }
+    // Also ahead of every semantic path, for the mirror-image reason: code
+    // inside a callback that runs on reads of a returned view (rc.9's `omit`
+    // predicate) executes wherever the view is read, which none of the paths
+    // below follow. Each of them would place it -- most often in the
+    // enclosing component body, the one place it is least likely to run --
+    // so the role is left unknown and projection claims nothing about it.
+    if result_access_callback_contains(file, span, lookup) {
+        return ExecutionRole::Unknown;
+    }
     if let Some(role) = context_provider_value_role(file, span, lookup) {
         return role;
     }
@@ -518,38 +527,24 @@ fn semantic_execution_role_within(
     }
     let dialect = lookup.dialect;
     if file.ast.arguments_containing(span).any(|(call, index)| {
-        primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            dialect,
-        )
-        .as_ref()
-        .and_then(PrimitiveName::primitive)
-        .and_then(|primitive| effect_apply_argument(dialect, primitive, call.arguments.len()))
+        call_primitive_name(file, call, entities, symbol_names, dialect)
+            .as_ref()
+            .and_then(PrimitiveName::primitive)
+            .and_then(|primitive| effect_apply_argument(dialect, primitive, call.arguments.len()))
             == Some(index)
             && direct_callback_contains(file, call.arguments[index].span, span)
     }) {
         return ExecutionRole::EffectApply;
     }
     if file.ast.arguments_containing(span).any(|(call, index)| {
-        primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            dialect,
-        )
-        .as_ref()
-        .and_then(PrimitiveName::primitive)
-        .is_some_and(|primitive| {
-            callback_execution_at_call(file, call, primitive, index, lookup).is_some()
-                && dialect.reports_untracked_reads_at(primitive, index, call.arguments.len())
-                && direct_callback_contains(file, call.arguments[index].span, span)
-        })
+        call_primitive_name(file, call, entities, symbol_names, dialect)
+            .as_ref()
+            .and_then(PrimitiveName::primitive)
+            .is_some_and(|primitive| {
+                callback_execution_at_call(file, call, primitive, index, lookup).is_some()
+                    && dialect.reports_untracked_reads_at(primitive, index, call.arguments.len())
+                    && direct_callback_contains(file, call.arguments[index].span, span)
+            })
     }) {
         return ExecutionRole::UntrackedCallback;
     }
@@ -573,22 +568,15 @@ fn semantic_execution_role_within(
             solid_facts::ast::ArgumentValueKind::Identifier
                 | solid_facts::ast::ArgumentValueKind::Function
                 | solid_facts::ast::ArgumentValueKind::AsyncFunction
-        ) && primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            dialect,
-        )
-        .as_ref()
-        .and_then(PrimitiveName::primitive)
-        .is_some_and(|primitive| {
-            callback_execution_at_call(file, call, primitive, index, lookup).is_some()
-                && dialect
-                    .callback_semantics_at(primitive, index, call.arguments.len())
-                    .tracks_reads
-        })
+        ) && call_primitive_name(file, call, entities, symbol_names, dialect)
+            .as_ref()
+            .and_then(PrimitiveName::primitive)
+            .is_some_and(|primitive| {
+                callback_execution_at_call(file, call, primitive, index, lookup).is_some()
+                    && dialect
+                        .callback_semantics_at(primitive, index, call.arguments.len())
+                        .tracks_reads
+            })
     }) {
         return ExecutionRole::TrackedJsx;
     }
@@ -612,6 +600,29 @@ fn semantic_execution_role_within(
         return ExecutionRole::ModuleInitialization;
     }
     ExecutionRole::Unknown
+}
+
+/// Whether `span` lies inside an argument the dialect says runs on reads of
+/// the call's returned object ([`Dialect::callback_runs_on_result_access`]).
+///
+/// Containment, not direct-callback identity: every function written inside
+/// such an argument runs, if at all, from inside it.
+fn result_access_callback_contains(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast.arguments_containing(span).any(|(call, index)| {
+        lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| {
+                lookup.dialect.callback_runs_on_result_access(
+                    primitive,
+                    index,
+                    call.arguments.len(),
+                )
+            })
+    })
 }
 
 /// Inline callbacks that do not clear the reactive listener inherit the
@@ -950,6 +961,11 @@ struct NamedCallbackRole {
     effect_apply: bool,
     tracked: bool,
     deferred: bool,
+    /// Named at a position whose callback runs when the call's returned
+    /// object is read ([`Dialect::callback_runs_on_result_access`]). That
+    /// time and scope are the reader's, which this index cannot see, so the
+    /// function's own role is unknown and outranks every arm above.
+    result_access: bool,
 }
 
 impl NamedCallbackRoles {
@@ -1121,6 +1137,14 @@ pub(super) fn named_callback_roles(
                 continue;
             }
             let primitive = direct_primitive.expect("one primitive kind is proven above");
+            if dialect.callback_runs_on_result_access(primitive, argument_index, count) {
+                for candidate in index.identity_at(file, entities, argument.span) {
+                    let entry = roles.entry(index.functions[*candidate]);
+                    entry.admitted = true;
+                    entry.result_access = true;
+                }
+                continue;
+            }
             let proven =
                 callback_execution_at_call(file, call, primitive, argument_index, lookup).is_some();
             let untracked = dialect.reports_untracked_reads_at(primitive, argument_index, count);
@@ -1230,6 +1254,9 @@ pub(super) fn named_callback_execution_role(
         return Some(ExecutionRole::DeferredCallback);
     }
     let role = roles.get(callback.span);
+    if role.result_access {
+        return Some(ExecutionRole::Unknown);
+    }
     if role.untracked_callback {
         return Some(ExecutionRole::UntrackedCallback);
     }

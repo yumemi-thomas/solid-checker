@@ -1,0 +1,45 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "until-in-tracked-scope",
+      "code": "SC2005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-until-scope/App.tsx",
+      "start": 771,
+      "end": 776,
+      "fixes": 0
+    },
+    {
+      "rule": "until-in-tracked-scope",
+      "code": "SC2005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-until-scope/App.tsx",
+      "start": 992,
+      "end": 997,
+      "fixes": 0
+    },
+    {
+      "rule": "until-in-tracked-scope",
+      "code": "SC2005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-until-scope/App.tsx",
+      "start": 1184,
+      "end": 1189,
+      "fixes": 0
+    },
+    {
+      "rule": "until-in-tracked-scope",
+      "code": "SC2005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-until-scope/App.tsx",
+      "start": 1346,
+      "end": 1351,
+      "fixes": 0
+    }
+  ]
+}

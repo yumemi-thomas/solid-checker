@@ -2347,6 +2347,95 @@ fn primitive_name(
     }
 }
 
+/// The primitive one concrete call denotes: [`primitive_name`] for its callee,
+/// then the dialect's [`solid_dialect::Dialect::call_form`] for its options.
+///
+/// Every classifier that holds a call asks this rather than resolving the
+/// callee alone, so a form the dialect distinguishes (2.0's
+/// `dynamic(source, { static: true })`) is the same form in every pass. The
+/// spelling stays the callee's: a form is a call of the export, not another
+/// name.
+fn call_primitive_name(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> Option<PrimitiveName> {
+    let name = primitive_name(
+        file.path.as_str(),
+        call.callee,
+        call.static_callee(&file.source),
+        entities,
+        symbol_names,
+        dialect,
+    )?;
+    let PrimitiveName::Known(primitive, spelling) = name else {
+        return Some(name);
+    };
+    let form = dialect.call_form(primitive, &|argument, key| {
+        call_option_literal(file, call, argument, key)
+    });
+    Some(PrimitiveName::Known(form, spelling))
+}
+
+/// What `call`'s syntax proves about the boolean option `key` in its
+/// `argument`-th argument. See [`solid_dialect::OptionLiteral`] for the four
+/// answers; everything not proven is `Unknown`.
+fn call_option_literal(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    argument: usize,
+    key: &str,
+) -> solid_dialect::OptionLiteral {
+    use solid_dialect::OptionLiteral;
+    use solid_facts::ast::{ArgumentValueKind, RuntimeValueKind};
+    // A spread anywhere up to the slot moves arguments into it at runtime.
+    if call
+        .arguments
+        .iter()
+        .take(argument.saturating_add(1))
+        .any(|candidate| candidate.spread)
+    {
+        return OptionLiteral::Unknown;
+    }
+    let Some(options) = call.arguments.get(argument) else {
+        return OptionLiteral::Absent;
+    };
+    if matches!(
+        options.value,
+        ArgumentValueKind::Undefined | ArgumentValueKind::Null
+    ) || options.runtime_value_kind == RuntimeValueKind::Nullish
+    {
+        return OptionLiteral::Absent;
+    }
+    if !options.exact_object_literal {
+        return OptionLiteral::Unknown;
+    }
+    let named = |span: Span| file.source_text(span) == Some(key);
+    // A later duplicate key wins at runtime, so only the last one decides.
+    let Some(last) = options
+        .property_names
+        .iter()
+        .copied()
+        .filter(|span| named(*span))
+        .max_by_key(|span| span.start)
+    else {
+        return OptionLiteral::Absent;
+    };
+    // `boolean_properties` records only unwrapped `key: true|false` literals,
+    // so a key it does not carry has a value the syntax does not prove.
+    match options
+        .boolean_properties
+        .iter()
+        .find(|property| property.name == last)
+    {
+        Some(property) if property.value => OptionLiteral::True,
+        Some(_) => OptionLiteral::False,
+        None => OptionLiteral::Unknown,
+    }
+}
+
 fn jsx_primitive_name(
     file: &solid_facts::FileFacts,
     element: &solid_facts::ast::JsxElementFact,

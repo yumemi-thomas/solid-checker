@@ -77,6 +77,7 @@
     "plain-js-string",
     "props-split-vocabulary",
     "published-export-entity",
+    "rc9-callback-forms",
     "reexport-value-sibling-callback",
     "retained-callback-parameter",
     "retained-value-callback",

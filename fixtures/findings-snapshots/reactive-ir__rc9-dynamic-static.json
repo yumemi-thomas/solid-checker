@@ -1,0 +1,75 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
+      "start": 964,
+      "end": 976,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
+      "start": 1242,
+      "end": 1254,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
+      "start": 1443,
+      "end": 1455,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
+      "start": 2067,
+      "end": 2079,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
+      "start": 2277,
+      "end": 2289,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
+      "start": 2381,
+      "end": 2393,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
+      "start": 2699,
+      "end": 2711,
+      "fixes": 0
+    }
+  ]
+}

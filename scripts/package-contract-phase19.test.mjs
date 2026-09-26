@@ -245,7 +245,12 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // 150 on 2026-09-26 adds package-open-claims-call-sites', the ninth
       // authorized fixture contract: open `callbacks` claims at call
       // arguments collapse to one finding per export for the project.
-      stableMainDocuments: 150,
+      //
+      // 151 on 2026-09-26 adds rc9-callback-forms' main document: the
+      // contract side of the three rc.9 callback forms (`dynamic`'s static
+      // option, `omit`'s predicate, `until`), each forwarded straight from a
+      // parameter.
+      stableMainDocuments: 151,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

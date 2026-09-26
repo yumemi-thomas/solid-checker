@@ -62,6 +62,12 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/shared-reactivity-v2/node_modules/**
 !fixtures/reactive-ir/namespace-import-v2/node_modules/
 !fixtures/reactive-ir/namespace-import-v2/node_modules/**
+# rc.9 dialect stubs: the three callback forms rc.9 added (dynamic's static
+# option, omit's predicate, until) are only valid against rc.9's typings.
+!fixtures/reactive-ir/rc9-*/node_modules/
+!fixtures/reactive-ir/rc9-*/node_modules/**
+!fixtures/package-contracts/rc9-callback-forms/node_modules/
+!fixtures/package-contracts/rc9-callback-forms/node_modules/**
 !fixtures/reactive-ir/solid2-precision/node_modules/
 !fixtures/reactive-ir/solid2-precision/node_modules/**
 !fixtures/reactive-ir/store-root-write-rc3/node_modules/

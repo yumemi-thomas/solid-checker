@@ -19,7 +19,7 @@ use crate::owners::{containing_ast_function, jsx_element_is_loading};
 use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::{
     ExecutionRole, RichArgumentTransport, StaticDefect, StaticDefectKind, StaticViolation,
-    location, primitive_name,
+    call_primitive_name, location,
 };
 
 /// The directive whose presence turns a function or module into server-build
@@ -49,16 +49,11 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
     for file in &ctx.facts.files {
         let mut allowed = None;
         for call in &file.ast.calls {
-            let Some(kind @ (Primitive::HttpStatus | Primitive::HttpHeader)) = primitive_name(
-                file.path.as_str(),
-                call.callee,
-                call.static_callee(&file.source),
-                ctx.entities,
-                ctx.symbol_names,
-                ctx.dialect,
-            )
-            .as_ref()
-            .and_then(crate::PrimitiveName::primitive) else {
+            let Some(kind @ (Primitive::HttpStatus | Primitive::HttpHeader)) =
+                call_primitive_name(file, call, ctx.entities, ctx.symbol_names, ctx.dialect)
+                    .as_ref()
+                    .and_then(crate::PrimitiveName::primitive)
+            else {
                 continue;
             };
             let server_rendering = *server_rendering.get_or_insert_with(|| {

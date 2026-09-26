@@ -5,8 +5,9 @@ use crate::cache::{CachedLateStages, same_compiler_semantics};
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_slice_results};
 use crate::{
     BuildTimings, ExecutionRole, Fix, FunctionBoundary, OwnerRequirement,
-    OwnerRequirementOperation, PrimitiveName, TextEdit, containing_function_indexed,
-    function_indices_by_path, jsx_primitive_name, known_primitive, location, primitive_name,
+    OwnerRequirementOperation, PrimitiveName, TextEdit, call_primitive_name,
+    containing_function_indexed, function_indices_by_path, jsx_primitive_name, known_primitive,
+    location,
 };
 
 use std::{
@@ -303,16 +304,7 @@ impl OwnerFileIndex {
             .ast
             .calls
             .iter()
-            .map(|call| {
-                primitive_name(
-                    file.path.as_str(),
-                    call.callee,
-                    call.static_callee(&file.source),
-                    entities,
-                    symbol_names,
-                    lookup.dialect,
-                )
-            })
+            .map(|call| call_primitive_name(file, call, entities, symbol_names, lookup.dialect))
             .collect::<Vec<_>>();
         let providing_regions = file
             .ast
@@ -1760,14 +1752,7 @@ pub(crate) fn containing_leaf_owner(
     file.ast
         .arguments_containing(span)
         .find_map(|(call, index)| {
-            let owner = primitive_name(
-                file.path.as_str(),
-                call.callee,
-                call.static_callee(&file.source),
-                entities,
-                symbol_names,
-                lookup.dialect,
-            )?;
+            let owner = call_primitive_name(file, call, entities, symbol_names, lookup.dialect)?;
             owner
                 .primitive()
                 .is_some_and(|primitive| {
@@ -2562,24 +2547,17 @@ pub(crate) fn read_escapes_synchronous_extent(
         {
             return false;
         }
-        primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            dialect,
-        )
-        .as_ref()
-        .and_then(PrimitiveName::primitive)
-        .is_some_and(|primitive| {
-            matches!(
-                dialect
-                    .callback_semantics_at(primitive, index, call.arguments.len())
-                    .execution,
-                Some(solid_dialect::Execution::Tracked | solid_dialect::Execution::Deferred)
-            )
-        })
+        call_primitive_name(file, call, entities, symbol_names, dialect)
+            .as_ref()
+            .and_then(PrimitiveName::primitive)
+            .is_some_and(|primitive| {
+                matches!(
+                    dialect
+                        .callback_semantics_at(primitive, index, call.arguments.len())
+                        .execution,
+                    Some(solid_dialect::Execution::Tracked | solid_dialect::Execution::Deferred)
+                )
+            })
     })
 }
 
@@ -2751,14 +2729,7 @@ pub(crate) fn analysis_context(
         .map(|(call, index)| (call, index, call.arguments[index].span))
         .min_by_key(|(_, _, argument)| argument.end - argument.start);
     if let Some((call, argument, _)) = callback
-        && let Some(primitive) = primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            dialect,
-        )
+        && let Some(primitive) = call_primitive_name(file, call, entities, symbol_names, dialect)
     {
         // Which phase of a primitive an argument is, asked of the dialect
         // rather than matched here. The pair this had hardcoded is 2.0's:

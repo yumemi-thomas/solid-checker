@@ -25,6 +25,7 @@ pub enum Rule {
     ReactiveWriteInOwnedScope,
     ActionCalledInOwnedScope,
     ResolveInReactiveScope,
+    UntilInTrackedScope,
     LeafOwnerForbiddenCall,
     MissingOwner,
     PendingAsyncUnsuspendableRead,
@@ -80,6 +81,7 @@ impl Rule {
         Self::ReactiveWriteInOwnedScope,
         Self::ActionCalledInOwnedScope,
         Self::ResolveInReactiveScope,
+        Self::UntilInTrackedScope,
         Self::LeafOwnerForbiddenCall,
         Self::MissingOwner,
         Self::PendingAsyncUnsuspendableRead,
@@ -131,6 +133,11 @@ impl Rule {
             // error; production has no guard and silently takes a one-shot
             // snapshot.
             Self::ResolveInReactiveScope => ("SC2004", "resolve-in-tracked-scope", "error", false),
+            // rc.9's `until` carries resolve's observer guard verbatim
+            // (`@solidjs/signals@2.0.0-rc.9` `dist/dev.js:2718-2722`) and the
+            // same dev-only throw, so it takes the next code in the family
+            // and the same severity.
+            Self::UntilInTrackedScope => ("SC2005", "until-in-tracked-scope", "error", false),
             Self::LeafOwnerForbiddenCall => ("SC3001", "leaf-owner-forbidden-call", "error", false),
             // Settled-cleanup findings override this family default to error:
             // the rc.0 dev runtime throws SETTLED_CLEANUP_UNOWNED, while the
@@ -289,6 +296,7 @@ mod tests {
     fn every_v2_static_violation_identity_resolves() {
         for (code, name) in [
             ("SC2004", "resolve-in-tracked-scope"),
+            ("SC2005", "until-in-tracked-scope"),
             ("SC7002", "sync-computation-received-async"),
             ("SC7005", "http-response-after-flush"),
             ("SC7006", "server-function-module-directive"),
@@ -344,6 +352,9 @@ mod tests {
         // bundle), mirrored as an error like the other owned/tracked-scope
         // throws.
         assert_eq!(Rule::ResolveInReactiveScope.metadata().severity, "error");
+        // until() carries the same dev throw ("Cannot call until inside a
+        // reactive scope", rc.9 signals dev bundle).
+        assert_eq!(Rule::UntilInTrackedScope.metadata().severity, "error");
         // The rich-argument transport throw is unconditional at the default
         // client (probed) — error; the post-flush header drop only occurs
         // when the boundary settles after the shell flush — warning.

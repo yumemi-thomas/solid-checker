@@ -11,8 +11,8 @@ use crate::owners::{
 use crate::pipeline::{parallel_file_chunk_results, parallel_file_results, parallel_slice_results};
 use crate::{
     BuildTimings, ContractCallback, ContractReturn, PrimitiveName, ReactiveSourceKind,
-    RuntimeEnvironment, RuntimeRendering, jsx_primitive_name, known_primitive, location,
-    primitive_name,
+    RuntimeEnvironment, RuntimeRendering, call_primitive_name, jsx_primitive_name, known_primitive,
+    location,
 };
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -227,10 +227,9 @@ fn effective_inner_call_return(
     {
         return effective_call_return(contracted, inner, context, depth);
     }
-    let primitive = primitive_name(
-        context.file.path.as_str(),
-        inner.callee,
-        inner.static_callee(&context.file.source),
+    let primitive = call_primitive_name(
+        context.file,
+        inner,
         context.entities,
         context.symbol_names,
         context.dialect,
@@ -767,14 +766,7 @@ pub(crate) fn discover_file_sources(
             );
             continue;
         }
-        let primitive = primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            lookup.dialect,
-        );
+        let primitive = call_primitive_name(file, call, entities, symbol_names, lookup.dialect);
         let resolved = known_primitive(&primitive);
         if resolved == Some(Primitive::Action) {
             if let Some(name) = binding.names.first() {
@@ -948,14 +940,7 @@ pub(crate) fn discover_file_sources(
             );
             continue;
         }
-        let primitive = primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            lookup.dialect,
-        );
+        let primitive = call_primitive_name(file, call, entities, symbol_names, lookup.dialect);
         let resolved = known_primitive(&primitive);
         // Same seam as above, and the same reason.
         if !resolved.is_some_and(|primitive| lookup.dialect.returns_reactive_tuple(primitive)) {
@@ -1786,16 +1771,11 @@ pub(crate) fn discover_sources(
                     }
                 }
             }
-            let Some(primitive) = primitive_name(
-                file.path.as_str(),
-                call.callee,
-                call.static_callee(&file.source),
-                entities,
-                symbol_names,
-                semantic_lookup.dialect,
-            )
-            .as_ref()
-            .and_then(PrimitiveName::primitive) else {
+            let Some(primitive) =
+                call_primitive_name(file, call, entities, symbol_names, semantic_lookup.dialect)
+                    .as_ref()
+                    .and_then(PrimitiveName::primitive)
+            else {
                 continue;
             };
             for (argument_index, argument) in call.arguments.iter().enumerate() {
@@ -1834,22 +1814,16 @@ pub(crate) fn discover_sources(
     }
     for file in &facts.files {
         for call in &file.ast.calls {
-            if !primitive_name(
-                file.path.as_str(),
-                call.callee,
-                call.static_callee(&file.source),
-                entities,
-                symbol_names,
-                semantic_lookup.dialect,
-            )
-            .as_ref()
-            .and_then(PrimitiveName::primitive)
-            .is_some_and(|primitive| {
-                matches!(
-                    primitive,
-                    Primitive::CreateEffect | Primitive::CreateRenderEffect
-                )
-            }) {
+            if !call_primitive_name(file, call, entities, symbol_names, semantic_lookup.dialect)
+                .as_ref()
+                .and_then(PrimitiveName::primitive)
+                .is_some_and(|primitive| {
+                    matches!(
+                        primitive,
+                        Primitive::CreateEffect | Primitive::CreateRenderEffect
+                    )
+                })
+            {
                 continue;
             }
             let Some(compute) = call.arguments.first().and_then(|argument| {
@@ -2041,10 +2015,9 @@ pub(crate) fn discover_sources(
                     .or_else(|| {
                         let initializer = binding.call_initializer?;
                         let call = file.ast.call_at(initializer)?;
-                        let primitive = primitive_name(
-                            file.path.as_str(),
-                            call.callee,
-                            call.static_callee(&file.source),
+                        let primitive = call_primitive_name(
+                            file,
+                            call,
                             entities,
                             symbol_names,
                             semantic_lookup.dialect,
