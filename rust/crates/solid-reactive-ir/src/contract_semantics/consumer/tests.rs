@@ -153,6 +153,30 @@ fn ordinary_analysis_excludes_core_authority_even_through_aliases() {
 }
 
 #[test]
+fn admission_refusals_explain_without_binding_and_key_the_cache() {
+    let note = "a project catalog entry exists for this package and was not admitted: why";
+    let bare = AcceptedContractIndex::default();
+    let explained = AcceptedContractIndex::default()
+        .with_admission_refusals([("pkg".to_owned(), note.to_owned())]);
+    assert_eq!(explained.admission_refusal("pkg"), Some(note));
+    assert_eq!(explained.admission_refusal("pkg/sub"), None);
+    assert!(explained.contract("/project/main.ts", "pkg").is_err());
+    // The note is part of the findings, so it is part of the identity a
+    // retained analysis is reused under.
+    assert_ne!(explained.cache_fingerprint(), bare.cache_fingerprint());
+    // Composition keeps it, and the first tier's note wins.
+    let composed = explained.clone().with_fallback(
+        AcceptedContractIndex::default()
+            .with_admission_refusals([("pkg".to_owned(), "other".to_owned())]),
+    );
+    assert_eq!(composed.admission_refusal("pkg"), Some(note));
+    // Core specifiers are never external requirements, so never explained.
+    let core = AcceptedContractIndex::default()
+        .with_admission_refusals([("solid-js".to_owned(), note.to_owned())]);
+    assert_eq!(core.external_packages().admission_refusal("solid-js"), None);
+}
+
+#[test]
 fn external_authority_and_similar_names_survive_core_filtering() {
     for package in [
         "pkg",

@@ -359,6 +359,162 @@ fn contract_status(project: &Path, trust: &Path, typefacts: &str) -> Result<Stri
     Ok(row["status"].as_str().unwrap_or_default().to_owned())
 }
 
+/// Ordinary analysis of `project`, as JSON, with the trust configuration when
+/// the project has a catalog.
+fn analysis(project: &Path, trust: Option<&Path>, typefacts: &str) -> serde_json::Value {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"));
+    command.args([
+        "--project",
+        &project.join("tsconfig.json").to_string_lossy(),
+        "--typefacts",
+        typefacts,
+        "--format",
+        "json",
+        "--no-bundled-contracts",
+    ]);
+    if let Some(trust) = trust {
+        command.args(["--receipt-trust-configuration", &trust.to_string_lossy()]);
+    }
+    let output = command.output().unwrap();
+    serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
+        panic!(
+            "analysis produced no snapshot ({error}): {}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+    })
+}
+
+/// The package's `packageSummaries` rows.
+fn summaries(snapshot: &serde_json::Value) -> Vec<&serde_json::Value> {
+    snapshot["packageSummaries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["name"] == PACKAGE)
+        .collect()
+}
+
+/// The acceptance-gate `SC9005` for the package: the import matched no
+/// accepted contract.
+fn acceptance_gate(snapshot: &serde_json::Value) -> Option<&serde_json::Value> {
+    snapshot["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|finding| {
+            finding["id"] == "SC9005"
+                && finding["analysisContext"]
+                    == "no receipt-accepted contract matches this exact import"
+                && finding["message"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .contains(PACKAGE)
+        })
+}
+
+/// The evidence messages of one finding.
+fn evidence(finding: &serde_json::Value) -> Vec<&str> {
+    finding["evidence"]
+        .as_array()
+        .map(|steps| {
+            steps
+                .iter()
+                .filter_map(|step| step["message"].as_str())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+const CATALOG_NOTE: &str = "a project catalog entry exists for this package and was not admitted: ";
+
+#[test]
+fn package_summaries_and_the_acceptance_gate_report_admission_not_presence() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let scratch = temporary_directory("project-catalog-summaries");
+    let certified = [dependency("1.0.0")];
+
+    // No catalog: nothing to summarize, and the acceptance gate says only
+    // what it always said.
+    let bare = scratch.join("bare");
+    consumer_tree(&bare, "1.0.0");
+    let snapshot = analysis(&bare, None, &typefacts);
+    assert!(summaries(&snapshot).is_empty(), "{snapshot}");
+    let bare_gate = acceptance_gate(&snapshot)
+        .unwrap_or_else(|| panic!("no acceptance gate without a catalog: {snapshot}"));
+    assert!(
+        evidence(bare_gate)
+            .iter()
+            .all(|step| !step.starts_with(CATALOG_NOTE)),
+        "{bare_gate}"
+    );
+    let bare_message = bare_gate["message"].as_str().unwrap().to_owned();
+
+    // Admitted: the one row is `accepted`, and no import reaches the gate.
+    let own = scratch.join("own");
+    consumer_tree(&own, "1.0.0");
+    let trust = certify(&own, Some(&certified));
+    let snapshot = analysis(&own, Some(&trust), &typefacts);
+    let rows = summaries(&snapshot);
+    assert_eq!(rows.len(), 1, "{snapshot}");
+    assert_eq!(rows[0]["evidence"], "accepted");
+    assert!(rows[0].get("detail").is_none(), "{}", rows[0]);
+    assert!(acceptance_gate(&snapshot).is_none(), "{snapshot}");
+
+    // Carried into a tree whose installed dependency differs: present in the
+    // catalog, refused by the environment, and both outputs say so.
+    let elsewhere = scratch.join("elsewhere");
+    copy_tree(&own, &elsewhere);
+    fs::write(
+        elsewhere
+            .join("node_modules")
+            .join(DEPENDENCY)
+            .join("package.json"),
+        serde_json::to_vec(&serde_json::json!({ "name": DEPENDENCY, "version": "2.0.0" })).unwrap(),
+    )
+    .unwrap();
+    write_lockfile(&elsewhere, "2.0.0");
+    let snapshot = analysis(&elsewhere, Some(&trust), &typefacts);
+    let rows = summaries(&snapshot);
+    assert_eq!(rows.len(), 1, "{snapshot}");
+    assert_eq!(rows[0]["evidence"], "refused", "{}", rows[0]);
+    let detail = rows[0]["detail"].as_str().unwrap();
+    assert!(
+        detail.starts_with(CATALOG_NOTE) && detail.contains("dependency environment differs"),
+        "{detail}"
+    );
+    let gate = acceptance_gate(&snapshot)
+        .unwrap_or_else(|| panic!("a refused entry leaves the import unanswered: {snapshot}"));
+    assert_eq!(
+        gate["message"], bare_message,
+        "the note is evidence; the message is the gate's own"
+    );
+    let notes = evidence(gate)
+        .into_iter()
+        .filter(|step| step.starts_with(CATALOG_NOTE))
+        .collect::<Vec<_>>();
+    assert_eq!(notes, [detail], "{gate}");
+
+    // A receipt that states no environment, in its own tree.
+    let unstated = scratch.join("unstated");
+    consumer_tree(&unstated, "1.0.0");
+    let trust = certify(&unstated, None);
+    let snapshot = analysis(&unstated, Some(&trust), &typefacts);
+    let rows = summaries(&snapshot);
+    assert_eq!(rows.len(), 1, "{snapshot}");
+    assert_eq!(rows[0]["evidence"], "refused", "{}", rows[0]);
+    let detail = rows[0]["detail"].as_str().unwrap();
+    assert!(
+        detail.starts_with(CATALOG_NOTE) && detail.contains("states no dependency environment"),
+        "{detail}"
+    );
+    let gate = acceptance_gate(&snapshot).unwrap_or_else(|| panic!("{snapshot}"));
+    assert_eq!(gate["message"], bare_message);
+    assert!(evidence(gate).contains(&detail), "{gate}");
+    let _ = fs::remove_dir_all(scratch);
+}
+
 #[test]
 fn a_project_catalog_applies_only_in_the_tree_whose_environment_it_certified() {
     let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {

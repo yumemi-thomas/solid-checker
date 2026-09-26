@@ -1021,6 +1021,20 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             {
                 finding.severity = "warning".into();
             }
+            // The acceptance gate at an import whose package *has* an
+            // acceptance -- a project catalog entry -- that was refused: say
+            // so, and why, as one more evidence step. The message stays the
+            // gate's own, so a project with no catalog reads exactly as before.
+            if let StaticDefectKind::PackageContractExportMissing {
+                admission_refusal: Some(refusal),
+                ..
+            } = &defect.kind
+            {
+                finding.evidence.push(EvidenceStep {
+                    message: refusal.clone(),
+                    location: None,
+                });
+            }
         }
         FindingSeed::AsyncRead(read) => {
             finding.related_locations = vec![read.declaration.clone()];
@@ -1164,12 +1178,70 @@ mod tests {
                 export: "access".into(),
                 reexported: false,
                 site,
+                admission_refusal: None,
             },
             location: location(at),
             analysis_context: context.into(),
             fixes: vec![],
             uncertain: false,
         }
+    }
+
+    #[test]
+    fn a_refused_catalog_entry_adds_one_evidence_step_to_the_acceptance_gate() {
+        let note = "a project catalog entry exists for this package and was not admitted: \
+                    its receipt states no dependency environment, so it is admitted nowhere";
+        let refused = |at: u64| {
+            let mut defect = contract_defect(
+                crate::contracts::UNACCEPTED_IMPORT_CONTEXT,
+                crate::ContractDefectSite::Import,
+                at,
+            );
+            let StaticDefectKind::PackageContractExportMissing {
+                admission_refusal, ..
+            } = &mut defect.kind
+            else {
+                unreachable!()
+            };
+            *admission_refusal = Some(note.into());
+            defect
+        };
+        let plain = contract_defect(
+            crate::contracts::UNACCEPTED_IMPORT_CONTEXT,
+            crate::ContractDefectSite::Import,
+            1,
+        );
+        let without = project_finding(FindingSeed::StaticDefect(&plain), &ErrorCatalog);
+        let with = project_finding(FindingSeed::StaticDefect(&refused(1)), &ErrorCatalog);
+        assert_eq!(
+            with.message, without.message,
+            "the message is the gate's own"
+        );
+        assert_eq!(with.severity, without.severity);
+        assert_eq!(
+            with.evidence[..without.evidence.len()],
+            without.evidence[..]
+        );
+        assert_eq!(
+            with.evidence[without.evidence.len()..]
+                .iter()
+                .map(|step| step.message.as_str())
+                .collect::<Vec<_>>(),
+            [note]
+        );
+        // Collapsed over a package's import sites, the note is stated once.
+        let collapsed =
+            collapse_unaccepted_contract_defects(&[refused(1), refused(2)], &ErrorCatalog);
+        assert_eq!(collapsed.len(), 1);
+        assert_eq!(
+            collapsed[0]
+                .evidence
+                .iter()
+                .filter(|step| step.message == note)
+                .count(),
+            1
+        );
+        assert_eq!(collapsed[0].related_locations.len(), 1);
     }
 
     #[test]

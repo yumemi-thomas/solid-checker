@@ -538,6 +538,13 @@ pub enum StaticDefectKind {
         /// infer it, because one `analysis_context` -- `unknown-contract-claims:
         /// callbacks` -- is emitted from both kinds of site.
         site: ContractDefectSite,
+        /// The acceptance gate only: why an acceptance that exists for this
+        /// package -- a project catalog entry -- was not admitted, as the
+        /// backend's admission rule states it. Projected as one extra evidence
+        /// step; it never changes the message, the severity or the collapse,
+        /// and it is `None` wherever no such acceptance exists.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        admission_refusal: Option<String>,
     },
     /// A package export has different certified summaries for different
     /// conditional runtime targets. The current project analysis has no

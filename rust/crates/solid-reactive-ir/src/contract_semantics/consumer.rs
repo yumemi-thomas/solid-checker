@@ -104,6 +104,14 @@ pub struct AcceptedContractIndex {
     /// does not derive identities.
     admitted: BTreeMap<String, AcceptedContract>,
     uncertifiable_imports: BTreeMap<(String, String), UncertifiableImportReason>,
+    /// Per imported specifier, why an acceptance that exists for its package
+    /// was not admitted -- one sentence the backend's admission rule wrote.
+    ///
+    /// Explanation only: it admits nothing, withholds nothing, and is read
+    /// solely to add a note to the acceptance gate at an import the index
+    /// already could not answer. It is part of the cache fingerprint because
+    /// that note is part of the findings.
+    admission_refusals: BTreeMap<String, String>,
     identity: Vec<AcceptedImportIdentity>,
 }
 
@@ -131,6 +139,10 @@ impl AcceptedContractIndex {
                 .uncertifiable_imports
                 .keys()
                 .all(|(_, specifier)| !core_specifier(specifier))
+            && self
+                .admission_refusals
+                .keys()
+                .all(|specifier| !core_specifier(specifier))
         {
             return std::borrow::Cow::Borrowed(self);
         }
@@ -153,6 +165,9 @@ impl AcceptedContractIndex {
         external
             .uncertifiable_imports
             .retain(|(_, specifier), _| !core_specifier(specifier));
+        external
+            .admission_refusals
+            .retain(|specifier, _| !core_specifier(specifier));
         std::borrow::Cow::Owned(external)
     }
 
@@ -185,6 +200,7 @@ impl AcceptedContractIndex {
             by_artifact,
             admitted: BTreeMap::new(),
             uncertifiable_imports: BTreeMap::new(),
+            admission_refusals: BTreeMap::new(),
             identity: Vec::new(),
         }
     }
@@ -237,6 +253,7 @@ impl AcceptedContractIndex {
             by_artifact,
             admitted: BTreeMap::new(),
             uncertifiable_imports: BTreeMap::new(),
+            admission_refusals: BTreeMap::new(),
             identity,
         })
     }
@@ -322,7 +339,31 @@ impl AcceptedContractIndex {
             .extend(fallback.uncertifiable_imports);
         self.uncertifiable_imports
             .retain(|key, _| !self.imports.contains_key(key));
+        for (specifier, refusal) in fallback.admission_refusals {
+            self.admission_refusals.entry(specifier).or_insert(refusal);
+        }
         self
+    }
+
+    /// Records, per imported specifier, why an acceptance that exists for its
+    /// package was not admitted. See `admission_refusals` on the struct: this
+    /// changes no binding, only what the acceptance gate says.
+    #[must_use]
+    pub fn with_admission_refusals(
+        mut self,
+        refusals: impl IntoIterator<Item = (String, String)>,
+    ) -> Self {
+        for (specifier, refusal) in refusals {
+            self.admission_refusals.entry(specifier).or_insert(refusal);
+        }
+        self
+    }
+
+    /// Why an acceptance for this specifier's package exists and was not
+    /// admitted, when the backend could say.
+    #[must_use]
+    pub fn admission_refusal(&self, specifier: &str) -> Option<&str> {
+        self.admission_refusals.get(specifier).map(String::as_str)
     }
 
     #[must_use]
@@ -335,7 +376,7 @@ impl AcceptedContractIndex {
     #[must_use]
     pub fn cache_fingerprint(&self) -> [u8; 32] {
         let mut hash = Sha256::new();
-        hash.update(b"solid-checker-accepted-contract-index-v3");
+        hash.update(b"solid-checker-accepted-contract-index-v4");
         hash.update((self.identity.len() as u64).to_be_bytes());
         for binding in &self.identity {
             hash_text(&mut hash, &binding.importer);
@@ -394,6 +435,11 @@ impl AcceptedContractIndex {
                 UncertifiableImportReason::Unspecified => 0,
                 UncertifiableImportReason::ObsoletePolicy1 => 1,
             }]);
+        }
+        hash.update((self.admission_refusals.len() as u64).to_be_bytes());
+        for (specifier, refusal) in &self.admission_refusals {
+            hash_text(&mut hash, specifier);
+            hash_text(&mut hash, refusal);
         }
         hash.finalize().into()
     }

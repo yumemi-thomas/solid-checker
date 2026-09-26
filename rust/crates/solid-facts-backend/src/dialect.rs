@@ -733,6 +733,7 @@ mod tests {
                 export: "sampleExport".into(),
                 reexported: false,
                 site: solid_reactive_ir::ContractDefectSite::Import,
+                admission_refusal: None,
             },
             StaticDefectKind::MissingEffectFunction,
             StaticDefectKind::ReactiveSourceUncaptured {

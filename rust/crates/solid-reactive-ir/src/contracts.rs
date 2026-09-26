@@ -1298,6 +1298,7 @@ fn push_runtime_identity_conflict(
             export: "<conflicting-contract-summaries>".into(),
             reexported: true,
             site: crate::ContractDefectSite::Argument,
+            admission_refusal: None,
         },
         location: location.clone(),
         analysis_context:
@@ -1561,6 +1562,7 @@ fn push_unknown_contract_claims(
             export: export.to_owned(),
             reexported,
             site: crate::ContractDefectSite::Import,
+            admission_refusal: None,
         },
         location,
         analysis_context: format!("unknown-contract-claims:{}", claims.join(",")),
@@ -1659,6 +1661,11 @@ fn resolve_contract_imports_inner(
                 if let Some(reason) =
                     accepted.uncertifiable_reason(file.path.as_str(), &import.module)
                 {
+                    // Only the acceptance gate carries the note: an obsolete
+                    // policy-1 receipt is its own, already specific answer.
+                    let refusal = (reason == UncertifiableImportReason::Unspecified)
+                        .then(|| accepted.admission_refusal(&import.module))
+                        .flatten();
                     push_missing_accepted_import(
                         &mut missing_exports,
                         file,
@@ -1666,6 +1673,7 @@ fn resolve_contract_imports_inner(
                         entities,
                         dialect,
                         reason,
+                        refusal,
                     );
                 }
                 continue;
@@ -1708,6 +1716,7 @@ fn resolve_contract_imports_inner(
                                         export: imported,
                                         reexported: false,
                                         site: crate::ContractDefectSite::Import,
+                                        admission_refusal: None,
                                     },
                                     location: location(file.path.shared(), member.property),
                                     analysis_context: String::new(),
@@ -1790,6 +1799,7 @@ fn resolve_contract_imports_inner(
                                 export: imported.to_owned(),
                                 reexported: false,
                                 site: crate::ContractDefectSite::Import,
+                                admission_refusal: None,
                             },
                             location: binding_location,
                             analysis_context: String::new(),
@@ -1863,6 +1873,7 @@ fn resolve_contract_imports_inner(
                                 export: imported.to_owned(),
                                 reexported: true,
                                 site: crate::ContractDefectSite::Import,
+                                admission_refusal: None,
                             },
                             location: specifier_location,
                             analysis_context: String::new(),
@@ -1923,6 +1934,7 @@ fn push_missing_accepted_import(
     entities: &EntitySymbols,
     dialect: &dyn Dialect,
     reason: UncertifiableImportReason,
+    refusal: Option<&str>,
 ) {
     for binding in &import.bindings {
         if binding.type_only || !binding.runtime_referenced {
@@ -1949,6 +1961,7 @@ fn push_missing_accepted_import(
                         export,
                         location(file.path.shared(), member.property),
                         reason,
+                        refusal,
                     );
                 }
             }
@@ -1966,6 +1979,7 @@ fn push_missing_accepted_import(
                 export,
                 location(file.path.shared(), import.span),
                 reason,
+                refusal,
             );
         }
     }
@@ -1989,6 +2003,7 @@ fn push_missing_accepted_export(
     export: &str,
     location: Location,
     reason: UncertifiableImportReason,
+    refusal: Option<&str>,
 ) {
     missing.push(StaticDefect {
         kind: StaticDefectKind::PackageContractExportMissing {
@@ -1996,6 +2011,7 @@ fn push_missing_accepted_export(
             export: export.into(),
             reexported: false,
             site: crate::ContractDefectSite::Import,
+            admission_refusal: refusal.map(str::to_owned),
         },
         location,
         analysis_context: match reason {

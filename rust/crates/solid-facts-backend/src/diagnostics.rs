@@ -90,7 +90,14 @@ pub struct PackageSummary {
     pub version: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub contract_hash: String,
+    /// `accepted` when an import this analysis read binds the contract;
+    /// `refused` when a project catalog holds an acceptance for the package
+    /// that no import was admitted to, with `detail` saying why. Presence in a
+    /// catalog is never enough for `accepted`.
     pub evidence: String,
+    /// Why a `refused` acceptance was not admitted. Empty for `accepted`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub detail: String,
     pub exports_analyzed: usize,
 }
 
@@ -239,7 +246,7 @@ impl DiagnosticSession {
         let metrics = analysis_metrics(facts, &program, contracts);
         let snapshot = snapshot_with_package_summaries(
             sources,
-            accepted_package_summaries(contracts),
+            accepted_package_summaries(facts, contracts),
             metrics,
             findings,
         );
@@ -441,47 +448,129 @@ fn snapshot_with_package_summaries(
     }
 }
 
-fn accepted_package_summaries(contracts: &AcceptedContractIndex) -> Vec<PackageSummary> {
+/// The value of [`PackageSummary::evidence`] for a contract an import binds.
+pub const PACKAGE_EVIDENCE_ACCEPTED: &str = "accepted";
+/// The value of [`PackageSummary::evidence`] for a project-catalog acceptance
+/// no import of this analysis was admitted to.
+pub const PACKAGE_EVIDENCE_REFUSED: &str = "refused";
+
+/// Said of a refused acceptance whose package the admission rule's steps 1-3
+/// did not refuse: the receipt, artifact and environment hold, and still no
+/// import this analysis read selected it.
+const NOT_SELECTED_BY_ANY_IMPORT: &str = "a project catalog entry exists for this package and \
+     was not admitted: no import this analysis read selected it (resolved file, export \
+     conditions or case agreement)";
+
+/// What the analysis read, and what it was offered and refused.
+///
+/// `accepted` is decided by binding, the way the analysis decides it: an
+/// import (or `export … from`) in a project file whose exact importer and
+/// specifier, or whose specifier admitted by artifact, selects a contract.
+/// Presence in the index is not that. A project catalog's entries are keyed on
+/// the certification importer `contract certify` writes beside the package,
+/// which is never a project file, so every one of them sits in the index
+/// whether or not this tree admitted it -- and listing the index said
+/// `accepted` of an acceptance whose receipt states no environment, and of one
+/// carried into a tree whose installs differ. Measured on kobalte core
+/// (phase22, 2026-09-26): `vite-plugin-solid`, and `@solid-primitives/form`
+/// under signals rc.6.
+///
+/// Every such catalog entry that nothing bound is reported `refused`, with
+/// the admission rule's own sentence when it names the package
+/// ([`admission_refusal_details`], carried on the index by specifier), and a
+/// plain statement that no import selected it otherwise.
+fn accepted_package_summaries(
+    facts: &ProjectFacts,
+    contracts: &AcceptedContractIndex,
+) -> Vec<PackageSummary> {
     let summary = |package: &solid_reactive_ir::contract_semantics::PackageIdentity,
-                   digest: &str| PackageSummary {
+                   digest: &str,
+                   evidence: &str,
+                   detail: &str| PackageSummary {
         name: package.name.clone(),
         version: package.version.clone(),
         contract_hash: digest.into(),
-        evidence: "accepted".into(),
+        evidence: evidence.into(),
+        detail: detail.into(),
         exports_analyzed: 0,
     };
-    let mut summaries = contracts
-        .semantic_identity()
+    let mut summaries = Vec::new();
+    for file in &facts.files {
+        let modules = file
+            .ast
+            .imports
+            .iter()
+            .filter(|import| !import.type_only)
+            .map(|import| import.module.as_str())
+            .chain(
+                file.ast
+                    .exports
+                    .iter()
+                    .filter(|export| !export.type_only)
+                    .filter_map(|export| export.module.as_deref()),
+            );
+        for module in modules {
+            if let Ok(contract) = contracts.contract(file.path.as_str(), module) {
+                summaries.push(summary(
+                    contract.package(),
+                    contract.semantic_identity().semantic_digest.as_str(),
+                    PACKAGE_EVIDENCE_ACCEPTED,
+                    "",
+                ));
+            }
+        }
+    }
+    let accepted = summaries
         .iter()
-        .map(|binding| {
-            summary(
-                &binding.semantics.package,
-                binding.semantics.semantic_digest.as_str(),
+        .map(|row| {
+            (
+                row.name.clone(),
+                row.version.clone(),
+                row.contract_hash.clone(),
             )
         })
-        // An acceptance admitted by artifact identity -- a project catalog
-        // certified from another file, or a contract compiled into this
-        // checker -- is one the analysis reads from. Reporting only the
-        // importer-keyed ones said a project that analysed against a bundled
-        // contract had accepted nothing.
-        .chain(contracts.admitted_contracts().map(|(_, contract)| {
-            summary(
-                contract.package(),
-                contract.semantic_identity().semantic_digest.as_str(),
-            )
-        }))
-        .collect::<Vec<_>>();
+        .collect::<std::collections::BTreeSet<_>>();
+    for binding in contracts.semantic_identity() {
+        let semantics = &binding.semantics;
+        let key = (
+            semantics.package.name.clone(),
+            semantics.package.version.clone(),
+            semantics.semantic_digest.as_str().to_owned(),
+        );
+        if accepted.contains(&key) {
+            continue;
+        }
+        summaries.push(summary(
+            &semantics.package,
+            semantics.semantic_digest.as_str(),
+            PACKAGE_EVIDENCE_REFUSED,
+            contracts
+                .admission_refusal(&binding.specifier)
+                .unwrap_or(NOT_SELECTED_BY_ANY_IMPORT),
+        ));
+    }
     summaries.sort_by(|left, right| {
-        (&left.name, &left.version, &left.contract_hash).cmp(&(
-            &right.name,
-            &right.version,
-            &right.contract_hash,
-        ))
+        (
+            &left.name,
+            &left.version,
+            &left.contract_hash,
+            &left.evidence,
+            &left.detail,
+        )
+            .cmp(&(
+                &right.name,
+                &right.version,
+                &right.contract_hash,
+                &right.evidence,
+                &right.detail,
+            ))
     });
     summaries.dedup_by(|left, right| {
         left.name == right.name
             && left.version == right.version
             && left.contract_hash == right.contract_hash
+            && left.evidence == right.evidence
+            && left.detail == right.detail
     });
     summaries
 }
@@ -1277,6 +1366,48 @@ pub fn project_accepted_contracts(
         let bundles = agreed_admissions(&contracts, bundles);
         if !bundles.is_empty() {
             contracts = contracts.with_admitted_artifacts(bundles);
+        }
+    }
+    // Why a project catalog's acceptance was not admitted, for the acceptance
+    // gate to say at the imports it leaves unanswered and for the package
+    // summary to report instead of `accepted`. These are the sentences
+    // `contract check` appends to a `missing` status, from the same replay of
+    // admission steps 1-3, for the project tier only: a compiled-in contract is
+    // not something this project asked for, and its refusals are `contract
+    // check`'s to explain. Explanation only -- nothing here binds or withholds.
+    if !catalogs.is_empty() {
+        let refusals = admission_refusal_details(directory, catalogs, false)?;
+        if !refusals.is_empty() {
+            let specifiers = facts
+                .files
+                .iter()
+                .flat_map(|file| {
+                    file.ast
+                        .imports
+                        .iter()
+                        .map(|import| import.module.as_str())
+                        .chain(
+                            file.ast
+                                .exports
+                                .iter()
+                                .filter_map(|export| export.module.as_deref()),
+                        )
+                })
+                .chain(
+                    contracts
+                        .semantic_identity()
+                        .iter()
+                        .map(|binding| binding.specifier.as_str()),
+                )
+                .collect::<std::collections::BTreeSet<_>>();
+            let notes = specifiers
+                .into_iter()
+                .filter_map(|specifier| {
+                    let refusal = refusals.get(&package_name_of_specifier(specifier)?)?;
+                    Some((specifier.to_owned(), refusal.clone()))
+                })
+                .collect::<Vec<_>>();
+            contracts = contracts.with_admission_refusals(notes);
         }
     }
     Ok(contracts)

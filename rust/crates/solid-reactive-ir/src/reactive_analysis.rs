@@ -331,6 +331,7 @@ mod tests {
                 export: "mapValue".into(),
                 reexported: false,
                 site: crate::ContractDefectSite::Argument,
+                admission_refusal: None,
             },
             location: location.clone(),
             analysis_context: "unbound-contract-claims:callback arguments".into(),
@@ -380,6 +381,7 @@ mod tests {
             export: "withValue".into(),
             reexported: false,
             site: crate::ContractDefectSite::Argument,
+            admission_refusal: None,
         };
         assert_eq!(
             generation.family(),
