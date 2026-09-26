@@ -101,3 +101,12 @@ none of its bundles is ever admitted: it supplies nothing, which is sound.
   - there is no process-level fixture pair yet (stub signals rc.0 and rc.6
     lockfiles) with a matching control, because the binary admits only
     compiled-in bundles.
+
+## Amendment (2026-09-26): ADR 0126
+
+An environment may now record, per entry, the lookup that reached it
+(`resolvedFrom`). For such an environment, admission replays each lookup from
+its importer instead of requiring every lookup from every located package to
+match, and two copies of one package under different importers apply. The
+all-lookups rule above still governs environments without edges, including
+every bundle in the tier this ADR regenerated.

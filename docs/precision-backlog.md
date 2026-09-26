@@ -2,7 +2,7 @@
 
 ## pnpm hoisting defeats environment admission in the certifying tree (2026-09-26)
 
-Status: **open, fix in progress**. Measured on kobalte core at 65d64399:
+Status: **fixed by ADR 0126** (47944c07): entries record who resolved them, admission replays each lookup from its importer, and certify checks its own admission. End to end in a copy of the kobalte tree, vite-plugin-solid is `certified`; coverage unchanged. Existing catalogs and the tier need re-certifying to gain edges. Original finding: Measured on kobalte core at 65d64399:
 `vite-plugin-solid@3.0.0-next.5` acquires a 12-entry environment and is then
 refused in the very tree it was certified in, with "merge-anything installed
 6.0.6, certified 5.1.7".
