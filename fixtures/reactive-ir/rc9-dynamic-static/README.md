@@ -43,5 +43,8 @@ What the cases pin:
 `@solidjs/signals` at `2.0.0-rc.9`). Against rc.3's typings every two-argument
 `dynamic` call is TS2554, so no rc.3-valid call changes form. The stub in
 `solid-js.d.ts` says which declarations are byte-faithful and which are
-reduced; `node_modules/solid-js/package.json` selects the 2.0 dialect at
-`2.0.0-rc.9`.
+reduced. `node_modules/` holds the `solid-js`, `@solidjs/signals` and
+`@solidjs/web` manifests at `2.0.0-rc.9`: the static form is answered from
+the resolved `@solidjs/web`, so without its manifest every option-bearing
+call would be the form that states nothing. The same source against the
+rc.3 and rc.7 webs is `release-triple-dynamic-rc3` and `-rc7`.

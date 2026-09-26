@@ -78,6 +78,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/solid2-contract-callback-variants-node/node_modules/**
 !fixtures/reactive-ir/ported-structure-v2/node_modules/
 !fixtures/reactive-ir/ported-structure-v2/node_modules/**
+!fixtures/reactive-ir/release-triple-*/node_modules/
+!fixtures/reactive-ir/release-triple-*/node_modules/**
 # Each of these stubs is the installed `solid-js@2.0.0-rc.3` the fixture's
 # imports resolve through. Without the exception the stub is untracked, and in
 # CI the fixture resolves no `solid-js` at all: dialect selection falls back to

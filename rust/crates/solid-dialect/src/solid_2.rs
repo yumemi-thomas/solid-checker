@@ -19,18 +19,20 @@ use crate::{
 
 mod releases;
 
-/// Solid 2.0, answering for one reviewed line of its prereleases.
+/// Solid 2.0, answering for one installation of its three archives.
 ///
-/// Every answer but two is the same on every release this vocabulary was read
-/// on, so the release is carried as data rather than as a second type: the
-/// `store_root` typing and `omit`'s predicate form are the two answers two
-/// prereleases disagree on (`releases.rs`). `Solid2` the value is the audited
-/// vocabulary ([`Solid2::AUDITED`]); [`Solid2::RC9`] is the one reviewed
-/// variant.
+/// Almost every answer is the same on every release this vocabulary was read
+/// on, so the releases are carried as data rather than as more types: one field
+/// per answer the reviewed releases disagree on, each decided by the resolved
+/// release of the package that declares it (`releases.rs`, which builds the
+/// value from the resolved `solid-js`, `@solidjs/signals` and `@solidjs/web`).
+/// `Solid2` the value is the audited vocabulary ([`Solid2::AUDITED`], the rc.3
+/// triple); [`Solid2::RC9`] is the rc.9 triple's.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Solid2 {
+    /// B1, from `@solidjs/signals`.
     store_root: releases::StoreRootTyping,
-    /// Whether this release's `omit` has the predicate form, a lone function
+    /// B3: whether this release's `omit` has the predicate form, a lone function
     /// argument the returned view invokes
     /// ([`Solid2::callback_runs_on_result_access`]).
     ///
@@ -50,11 +52,20 @@ pub struct Solid2 {
     ///
     /// TypeScript separates the two only where types exist (rc.3 rejects a
     /// function key with TS2345; rc.9 accepts it). In an untyped artifact
-    /// nothing in the call does, so the answer comes from the release:
-    /// `false` on [`Solid2::AUDITED`], `true` on [`Solid2::RC9`]. A release
-    /// analyzed under the audited vocabulary without having been compared
-    /// with it keeps `false`, under its `SC9014` notice.
+    /// nothing in the call does, so the answer comes from the release of the
+    /// package that implements `omit`, the resolved `@solidjs/signals`
+    /// (`solid-js` only re-exports it): `true` on rc.9 alone, since no
+    /// runtime before it tests `typeof keys[0]` (the rc.1-rc.8 review § 3.3).
+    /// A signals release nobody compared, or none resolved, keeps `false`,
+    /// under its `SC9014` notice.
     omit_predicate_form: bool,
+    /// B4: whether `until` is a name this installation exports, from
+    /// `solid-js` and `@solidjs/signals` together. `false` answers `None` for
+    /// the name everywhere the vocabulary is asked about it, so nothing reaches
+    /// the `until` rows or SC2005.
+    until: bool,
+    /// B2, from `@solidjs/web`.
+    dynamic_options: releases::DynamicOptions,
 }
 
 /// The audited Solid 2 vocabulary, spelled like the unit struct it used to be
@@ -126,11 +137,12 @@ const TABLE: &[(&str, Primitive)] = &[
     ("Show", Primitive::Show),
     ("snapshot", Primitive::Snapshot),
     ("Switch", Primitive::Switch),
-    // New in `2.0.0-rc.9`: `until<T>(fn: () => T, options?: UntilOptions):
-    // Promise<Truthy<T>>` (`@solidjs/signals` `dist/types/signals.d.ts:608`),
-    // re-exported from the `solid-js` root (`types/index.d.ts:1`). rc.3's
-    // typings do not export it (TS2305), so the row answers only for code
-    // compiled against a later prerelease.
+    // New in `2.0.0-rc.5`: `until<T>(fn: () => T, options?: UntilOptions):
+    // Promise<Truthy<T>>` (`@solidjs/signals` `dist/types/signals.d.ts:601`
+    // on rc.5, `:608` on rc.9), re-exported from the `solid-js` root
+    // (`types/index.d.ts:1`) from the same release. rc.3's typings do not
+    // export it (TS2305), so the row answers only where the installation has
+    // it (`Solid2::until`); everywhere else the name is unknown.
     ("until", Primitive::Until),
     ("untrack", Primitive::Untrack),
     ("useContext", Primitive::UseContext),
@@ -145,6 +157,10 @@ const TABLE: &[(&str, Primitive)] = &[
 pub(crate) fn names() -> Vec<&'static str> {
     TABLE.iter().map(|(name, _)| *name).collect()
 }
+
+/// The [`TABLE`] names only some installations export (`Solid2::exports`).
+#[cfg(test)]
+pub(crate) const RELEASE_GATED_NAMES: &[&str] = &["until"];
 
 /// The exact published archives this dialect's negative rows were read
 /// against. A test byte-checks every tuple, so a re-audit of different bytes
@@ -2663,7 +2679,7 @@ impl Dialect for Solid2 {
 
     fn primitive(&self, name: &str) -> Option<Primitive> {
         static INDEX: crate::NameIndex = crate::NameIndex::new();
-        lookup(&INDEX, &[TABLE], name)
+        lookup(&INDEX, &[TABLE], name).filter(|primitive| self.exports(*primitive))
     }
 
     /// The two `dynamic` call forms have no row of their own in [`TABLE`]: a
@@ -2672,6 +2688,7 @@ impl Dialect for Solid2 {
     fn name_of(&self, primitive: Primitive) -> Option<&'static str> {
         match primitive {
             Primitive::DynamicStatic | Primitive::DynamicUnknownForm => Some("dynamic"),
+            _ if !self.exports(primitive) => None,
             _ => reverse(TABLE, primitive),
         }
     }
@@ -2694,9 +2711,16 @@ impl Dialect for Solid2 {
     ///   contract, and claim a created owner, for a source the runtime may run
     ///   once, untracked, under the caller's owner.
     ///
-    /// rc.3 declares `dynamic(source)` with one parameter, so any call this
-    /// refines away from the default form is TS2554 against rc.3's own
-    /// typings: no rc.3-valid call changes form.
+    /// Answered from the resolved `@solidjs/web` (`Solid2::dynamic_options`),
+    /// because only rc.9's runtime reads the option. On rc.0-rc.8 every call
+    /// is the default form, whatever it passes: rc.0-rc.6 declare
+    /// `dynamic(source)` with one parameter (TS2554 on a second), and rc.7 and
+    /// rc.8 accept `DynamicOptions { deferStream }` (TS2353 on `static`) that
+    /// the client bundle never reads. Modelling rc.9's static form there would
+    /// state rc.9 behaviour -- no owner, an untracked source -- about a runtime
+    /// that creates the memo and its owner as always (the rc.1-rc.8 review
+    /// § 6). On a web release nobody read, an option-bearing call is
+    /// [`Primitive::DynamicUnknownForm`], which states nothing.
     fn call_form(
         &self,
         primitive: Primitive,
@@ -2706,10 +2730,14 @@ impl Dialect for Solid2 {
         if primitive != Primitive::Dynamic {
             return primitive;
         }
-        match option(1, "static") {
-            OptionLiteral::True => Primitive::DynamicStatic,
-            OptionLiteral::Unknown => Primitive::DynamicUnknownForm,
-            OptionLiteral::Absent | OptionLiteral::False => Primitive::Dynamic,
+        match (self.dynamic_options, option(1, "static")) {
+            (releases::DynamicOptions::Ignored, _)
+            | (_, OptionLiteral::Absent | OptionLiteral::False) => Primitive::Dynamic,
+            (releases::DynamicOptions::StaticForm, OptionLiteral::True) => Primitive::DynamicStatic,
+            (releases::DynamicOptions::StaticForm, OptionLiteral::Unknown)
+            | (releases::DynamicOptions::Unread, OptionLiteral::True | OptionLiteral::Unknown) => {
+                Primitive::DynamicUnknownForm
+            }
         }
     }
 
@@ -2850,15 +2878,35 @@ impl Dialect for Solid2 {
     /// properties is TS2540 and belongs to TypeScript. Nested records and props
     /// objects are not readonly and stay this checker's.
     ///
-    /// `rc.9` declares `Store<T> = T`: the write type-checks and the runtime
-    /// still drops it, so the rc.9 vocabulary answers `false` and SC2003 reports
-    /// it (`releases.rs`).
+    /// From `@solidjs/signals@2.0.0-rc.7` it declares `Store<T> = T`: the
+    /// write type-checks and the runtime still drops it, so a vocabulary built
+    /// from such a signals answers `false` and SC2003 reports it
+    /// (`releases.rs`).
     fn store_root_properties_are_readonly(&self) -> bool {
         self.store_root == releases::StoreRootTyping::Readonly
     }
 
-    fn review_release(&self, installed: &str) -> crate::ReleaseReview {
+    fn release_owners(&self) -> &'static [crate::ReleaseOwner] {
+        releases::OWNERS
+    }
+
+    fn audited_installation(&self) -> &'static [(&'static str, &'static str)] {
+        releases::AUDITED_INSTALLATION
+    }
+
+    fn review_installation(
+        &self,
+        installed: &[crate::InstalledRelease<'_>],
+    ) -> crate::InstallationReview {
         releases::review(installed)
+    }
+
+    fn variant_key(&self) -> Option<&'static str> {
+        self.key()
+    }
+
+    fn variants(&self) -> &'static [&'static dyn Dialect] {
+        &releases::OTHER_VARIANTS
     }
 
     /// Source: rc.0 store setters put the store into the Writing set for the
@@ -3621,13 +3669,14 @@ impl Dialect for Solid2 {
     /// Neither is a schedule the `Execution` vocabulary can state, and the
     /// first is the one every supported runtime takes.
     ///
-    /// Answered per release (`Solid2::omit_predicate_form`). rc.3's `omit` has
-    /// no predicate form: `typeof keys[0]` is never read and every build only
-    /// tests membership (`keys.includes(key)`, rc.3 `dist/dev.js:9334-9369`),
-    /// and its declaration rejects a function there (TS2345). So the audited
+    /// Answered from the resolved `@solidjs/signals`
+    /// (`Solid2::omit_predicate_form`). rc.3's `omit` has no predicate form:
+    /// `typeof keys[0]` is never read and every build only tests membership
+    /// (`keys.includes(key)`, rc.3 `dist/dev.js:9334-9369`), and its
+    /// declaration rejects a function there (TS2345). So the audited
     /// vocabulary answers `false` -- for typed code that is TypeScript's
     /// boundary, and for an untyped artifact it is what rc.3's bytes do -- and
-    /// only [`Solid2::RC9`] answers the predicate slot.
+    /// only a vocabulary built from signals rc.9 answers the predicate slot.
     fn callback_runs_on_result_access(
         &self,
         primitive: Primitive,
@@ -3686,6 +3735,9 @@ impl Dialect for Solid2 {
     /// the shape allows it — reports both, and importing it from either
     /// resolves.
     fn export_modules(&self, name: &str, position: crate::ExportPosition) -> Vec<&'static str> {
+        if name == "until" && !self.until {
+            return Vec::new();
+        }
         let mut found = crate::exports::modules(
             crate::exports::solid_v2_solid_js::VALUES,
             crate::exports::solid_v2_solid_js::TYPES,
@@ -4025,16 +4077,45 @@ mod tests {
     #[test]
     fn dynamic_call_forms_follow_the_static_option_literal() {
         use crate::OptionLiteral;
-        let form = |literal: OptionLiteral| {
-            Solid2.call_form(Primitive::Dynamic, &|argument, key| {
+        let form = |vocabulary: Solid2, literal: OptionLiteral| {
+            vocabulary.call_form(Primitive::Dynamic, &|argument, key| {
                 assert_eq!((argument, key), (1, "static"));
                 literal
             })
         };
-        assert_eq!(form(OptionLiteral::True), Primitive::DynamicStatic);
-        assert_eq!(form(OptionLiteral::False), Primitive::Dynamic);
-        assert_eq!(form(OptionLiteral::Absent), Primitive::Dynamic);
-        assert_eq!(form(OptionLiteral::Unknown), Primitive::DynamicUnknownForm);
+        let rc9 = Solid2::RC9;
+        assert_eq!(form(rc9, OptionLiteral::True), Primitive::DynamicStatic);
+        assert_eq!(form(rc9, OptionLiteral::False), Primitive::Dynamic);
+        assert_eq!(form(rc9, OptionLiteral::Absent), Primitive::Dynamic);
+        assert_eq!(
+            form(rc9, OptionLiteral::Unknown),
+            Primitive::DynamicUnknownForm
+        );
+        // rc.0-rc.8's web never reads the option: every call is the default,
+        // which is what those runtimes build.
+        for literal in [
+            OptionLiteral::True,
+            OptionLiteral::False,
+            OptionLiteral::Absent,
+            OptionLiteral::Unknown,
+        ] {
+            assert_eq!(form(Solid2, literal), Primitive::Dynamic);
+        }
+        // A web release nobody read: an option-bearing call states nothing.
+        let unread = Solid2 {
+            dynamic_options: releases::DynamicOptions::Unread,
+            ..Solid2
+        };
+        assert_eq!(
+            form(unread, OptionLiteral::True),
+            Primitive::DynamicUnknownForm
+        );
+        assert_eq!(
+            form(unread, OptionLiteral::Unknown),
+            Primitive::DynamicUnknownForm
+        );
+        assert_eq!(form(unread, OptionLiteral::False), Primitive::Dynamic);
+        assert_eq!(form(unread, OptionLiteral::Absent), Primitive::Dynamic);
         // Nothing else has a form, and nothing else is asked about options.
         assert_eq!(
             Solid2.call_form(Primitive::Untrack, &|_, _| panic!("not asked")),
@@ -4052,7 +4133,7 @@ mod tests {
     /// unknown form states nothing a consumer could rely on.
     #[test]
     fn dynamic_forms_answer_their_own_runtime() {
-        let two: &dyn Dialect = &Solid2;
+        let two: &dyn Dialect = &Solid2::RC9;
         for primitive in [Primitive::DynamicStatic, Primitive::Untrack] {
             assert_eq!(
                 two.callback_execution_at(primitive, 0, 2),
@@ -4090,11 +4171,22 @@ mod tests {
     }
 
     /// rc.9's `until` is `resolve`'s shape (`dist/dev.js:2717-2785`), so it
-    /// answers `resolve`'s rows, contract silence included.
+    /// answers `resolve`'s rows, contract silence included -- on an
+    /// installation that exports it. On the audited rc.3 triple the name is
+    /// not an export at all (TS2305), so the vocabulary does not know it.
     #[test]
     fn until_answers_as_resolve_does() {
-        let two: &dyn Dialect = &Solid2;
+        let audited: &dyn Dialect = &Solid2;
+        assert_eq!(audited.primitive("until"), None);
+        assert_eq!(audited.name_of(Primitive::Until), None);
+        assert!(
+            audited
+                .export_modules("until", crate::ExportPosition::Value)
+                .is_empty()
+        );
+        let two: &dyn Dialect = &Solid2::RC9;
         assert_eq!(two.primitive("until"), Some(Primitive::Until));
+        assert_eq!(two.name_of(Primitive::Until), Some("until"));
         for primitive in [Primitive::Until, Primitive::Resolve] {
             assert_eq!(two.callback_positions(primitive), &[0]);
             assert_eq!(
@@ -4173,23 +4265,34 @@ mod tests {
     /// `Solid.x`.
     #[test]
     fn every_modelled_export_resolves_through_its_namespace_module() {
-        for module in Solid2.modules() {
-            let mut expected = TABLE
-                .iter()
-                .filter_map(|(name, _)| {
-                    Solid2
-                        .export_modules(name, crate::ExportPosition::Value)
-                        .contains(module)
-                        .then_some(*name)
-                })
-                .collect::<Vec<_>>();
-            expected.sort_unstable();
-            let mut actual = Solid2.namespace_import_primitives(module).to_vec();
-            actual.sort_unstable();
-            assert_eq!(
-                actual, expected,
-                "namespace imports from {module} must retain every modelled runtime obligation"
-            );
+        // The namespace lists are static and name every release's exports; a
+        // name an installation lacks is then simply not a primitive there.
+        for vocabulary in [Solid2, Solid2::RC9] {
+            for module in vocabulary.modules() {
+                let mut expected = TABLE
+                    .iter()
+                    .filter_map(|(name, _)| {
+                        vocabulary
+                            .export_modules(name, crate::ExportPosition::Value)
+                            .contains(module)
+                            .then_some(*name)
+                    })
+                    .collect::<Vec<_>>();
+                expected.sort_unstable();
+                let mut actual = vocabulary
+                    .namespace_import_primitives(module)
+                    .iter()
+                    .copied()
+                    .filter(|name| {
+                        !RELEASE_GATED_NAMES.contains(name) || vocabulary.primitive(name).is_some()
+                    })
+                    .collect::<Vec<_>>();
+                actual.sort_unstable();
+                assert_eq!(
+                    actual, expected,
+                    "namespace imports from {module} must retain every modelled runtime obligation"
+                );
+            }
         }
     }
 

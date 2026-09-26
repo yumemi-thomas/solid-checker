@@ -86,6 +86,51 @@ function* stubDirectories(directory) {
   }
 }
 
+/**
+ * The Solid 2 packages beside a `solid-js` stub whose releases the installation
+ * review also reads (`resolved_releases` in dialect.rs): `@solidjs/signals`
+ * decides the store typing, `until` and `omit`'s predicate form, and
+ * `@solidjs/web` decides `dynamic`'s options. A stub of either that is present
+ * locally and absent in CI moves those answers only in CI, exactly as an
+ * untracked `solid-js` stub moves the dialect, so it is held to the same
+ * presence, parse and tracking checks. Absence is legitimate here -- a missing
+ * `@solidjs/signals` is a stated gap the notice reports, and a missing web is
+ * never asked about -- so only a directory that exists is checked.
+ */
+export const COMPANION_PACKAGES = ["@solidjs/signals", "@solidjs/web"];
+
+function companionStubProblems(projectRoot, solidStub, fixture, tracked) {
+  const problems = [];
+  const nodeModules = join(solidStub, "..");
+  for (const name of COMPANION_PACKAGES) {
+    const directory = join(nodeModules, ...name.split("/"));
+    if (!existsSync(directory)) continue;
+    const manifest = join(directory, "package.json");
+    const id = relative(projectRoot, manifest);
+    if (!existsSync(manifest)) {
+      problems.push(`${id}: missing -- the installation review reads ${name} as unresolved`);
+      continue;
+    }
+    let version;
+    try {
+      version = JSON.parse(readFileSync(manifest, "utf8")).version;
+    } catch (error) {
+      problems.push(`${id}: unparseable (${error.message})`);
+      continue;
+    }
+    if (typeof version !== "string" || version === "") {
+      problems.push(`${id}: no "version" -- the installation review reads ${name} as unresolved`);
+    }
+    if (!tracked.has(id)) {
+      problems.push(
+        `${id}: not tracked by git -- add '!${relative(projectRoot, fixture)}/node_modules/'` +
+          ` and its '/**' twin to .gitignore, or the stub is absent in CI`
+      );
+    }
+  }
+  return problems;
+}
+
 const trackedUnderFixtures = (projectRoot) =>
   new Set(
     execFileSync("git", ["ls-files", "-z", "fixtures"], {
@@ -152,6 +197,7 @@ export function dialectStubProblems({
               ` and its '/**' twin to .gitignore, or the stub is absent in CI`
           );
         }
+        problems.push(...companionStubProblems(projectRoot, stubDirectory, fixture, tracked));
       }
     }
   }

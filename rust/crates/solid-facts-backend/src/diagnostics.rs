@@ -342,44 +342,127 @@ pub fn unaudited_release_finding(notice: &dialect::ReleaseNotice) -> Finding {
         start_byte: 0,
         end_byte: 0,
     };
-    let installed = &notice.installed;
-    let (message, hint, mut evidence) = match notice.review {
-        solid_dialect::ReleaseReview::ReviewedWithGaps(reviewed) => (
-            format!(
-                "solid-js {installed} is installed; this build's Solid 2 vocabulary was audited on 2.0.0-rc.3 and reviewed against {} with {} known gaps still open, so the analysis ran and cannot certify the project",
-                reviewed.version,
-                reviewed.known_gaps.len()
-            ),
-            format!(
-                "Findings beside this notice stand; certification waits on the known gaps. Pin solid-js 2.0.0-rc.3, the audited release, to certify. The review is {}.",
-                reviewed.review
-            ),
-            reviewed
-                .known_gaps
+    let found = english_list(
+        &notice
+            .releases
+            .iter()
+            .map(|release| match &release.version {
+                Some(version) => format!("{} {version}", release.package),
+                None => format!("no {}", release.package),
+            })
+            .collect::<Vec<_>>(),
+    );
+    let audited = notice
+        .audited
+        .iter()
+        .map(|(package, _)| *package)
+        .collect::<Vec<_>>();
+    let audited_versions = notice
+        .audited
+        .iter()
+        .map(|(_, version)| *version)
+        .collect::<std::collections::BTreeSet<_>>();
+    let audited_release = match audited_versions.iter().collect::<Vec<_>>().as_slice() {
+        [single] => format!("{single}, the audited release of each"),
+        _ => english_list(
+            &notice
+                .audited
                 .iter()
-                .map(|gap| solid_reactive_ir::EvidenceStep {
-                    message: format!("known gap {gap}"),
-                    location: None,
-                })
+                .map(|(package, version)| format!("{package} {version}"))
                 .collect::<Vec<_>>(),
         ),
-        _ => (
-            format!(
-                "solid-js {installed} is installed; this build's Solid 2 vocabulary was audited on 2.0.0-rc.3 and has not been reviewed against {installed}, so the analysis ran under the audited vocabulary and cannot certify the project"
-            ),
-            "Findings beside this notice stand, but a release nobody compared can move what the vocabulary answers by name, as rc.9 did. Pin solid-js 2.0.0-rc.3, the audited release, to certify, or use a checker release that has reviewed this one."
-                .into(),
-            Vec::new(),
-        ),
     };
-    evidence.insert(
-        0,
-        solid_reactive_ir::EvidenceStep {
-            message: format!(
-                "the nearest node_modules/solid-js above the project resolves here, and names version {installed}"
-            ),
-            location: Some(location.clone()),
+    let mut reviews = notice
+        .gaps
+        .iter()
+        .filter_map(|gap| gap.review)
+        .collect::<Vec<_>>();
+    reviews.sort_unstable();
+    reviews.dedup();
+    let message = format!(
+        "{found} {} installed; this build's Solid 2 vocabulary was audited on {}, and {} in what it knows about this installation {} still open, so the analysis ran and cannot certify the project",
+        if notice.releases.len() == 1 {
+            "is"
+        } else {
+            "are"
         },
+        if audited.is_empty() {
+            "no installation".to_owned()
+        } else {
+            english_list(
+                &notice
+                    .audited
+                    .iter()
+                    .map(|(package, version)| format!("{package} {version}"))
+                    .collect::<Vec<_>>(),
+            )
+        },
+        match notice.gaps.len() {
+            1 => "1 gap".to_owned(),
+            count => format!("{count} gaps"),
+        },
+        if notice.gaps.len() == 1 { "is" } else { "are" },
+    );
+    let pin = if audited.is_empty() {
+        "Use a checker release that has reviewed this installation to certify.".to_owned()
+    } else {
+        format!(
+            "To certify, pin {} to {audited_release}, a transitive one with an overrides or resolutions entry, because a dependency's own range can admit later releases; this project resolves {found}.",
+            english_list(
+                &audited
+                    .iter()
+                    .map(|package| (*package).to_owned())
+                    .collect::<Vec<_>>()
+            )
+        )
+    };
+    let hint = if reviews.is_empty() {
+        format!("Findings beside this notice stand; certification waits on the gaps. {pin}")
+    } else {
+        format!(
+            "Findings beside this notice stand; certification waits on the gaps. {pin} The {} {}.",
+            if reviews.len() == 1 {
+                "review is"
+            } else {
+                "reviews are"
+            },
+            english_list(
+                &reviews
+                    .iter()
+                    .map(|review| (*review).to_owned())
+                    .collect::<Vec<_>>()
+            )
+        )
+    };
+    let mut evidence = notice
+        .releases
+        .iter()
+        .map(|release| solid_reactive_ir::EvidenceStep {
+            message: match &release.version {
+                Some(version) => format!(
+                    "{} resolves here, and names version {version}",
+                    release.package
+                ),
+                None => format!("{} does not resolve", release.package),
+            },
+            location: release
+                .manifest
+                .as_ref()
+                .map(|manifest| typefacts::Location {
+                    path: manifest.display().to_string().into(),
+                    start_byte: 0,
+                    end_byte: 0,
+                }),
+        })
+        .collect::<Vec<_>>();
+    evidence.extend(
+        notice
+            .gaps
+            .iter()
+            .map(|gap| solid_reactive_ir::EvidenceStep {
+                message: format!("known gap {}", gap.gap),
+                location: None,
+            }),
     );
     let metadata = solid_reactive_ir::RuleMetadata {
         code: dialect::UNAUDITED_RELEASE_CODE,
@@ -395,6 +478,15 @@ pub fn unaudited_release_finding(notice: &dialect::ReleaseNotice) -> Finding {
     finding.subject_kind = "project".into();
     finding.evidence = evidence;
     finding
+}
+
+/// `a`, `a and b`, `a, b and c`.
+fn english_list(items: &[String]) -> String {
+    match items {
+        [] => String::new(),
+        [only] => only.clone(),
+        [init @ .., last] => format!("{} and {last}", init.join(", ")),
+    }
 }
 
 /// The whole result for a project whose installed Solid runtime this build has

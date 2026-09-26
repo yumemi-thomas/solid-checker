@@ -29,5 +29,7 @@ ones, plus the action step rc.9's own `until` documentation shows
 
 `tsc --noEmit` is clean against this fixture's stubs and against the published
 rc.9 typings. Against rc.3's typings the import is TS2305, so the rule cannot
-fire on rc.3-valid code. `node_modules/solid-js/package.json` selects the 2.0
-dialect at `2.0.0-rc.9`.
+fire on rc.3-valid code. `node_modules/` holds the `solid-js` and
+`@solidjs/signals` manifests at `2.0.0-rc.9`: `until` is a vocabulary name
+only where both resolve to rc.5 or later (`release-triple-until-rc3` pins
+the rc.3 side).

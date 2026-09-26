@@ -69,18 +69,26 @@ is its callback, which JSX tags open a boundary. The reactive engine takes a
 ADR 0006 reopened so one engine could serve two dialects rather than one
 engine per branch.
 
-A vocabulary also judges the exact installed release of its major
-(`Dialect::review_release`). Detection asks that question once it has chosen
-the language. The answer can be audited (analyze), reviewed with gaps (analyze
-under the release variant the review names, plus an `SC9014` notice),
-unreviewed (analyze under the audited vocabulary, plus the notice), or refused
-(`SC9013`). A release variant, `dialect::RELEASE_VARIANTS`, is the same
-catalog with a vocabulary value that answers differently. Today that is
-`Solid2::RC9`, whose store root is not `Readonly` and whose `omit` accepts a
-predicate the returned view invokes. It has its own id, so
-caches and daemon sockets never mix the two. Shared code never classifies a
-release. The vocabulary does that, and the registry only keys a variant by the
-version string the review names. See `solid-dialect/src/solid_2/releases.rs`.
+A vocabulary also judges the installation it analyzes, not only the major
+(`Dialect::review_installation`). It names the packages whose releases decide
+its release-dependent answers and where each resolves from
+(`Dialect::release_owners`: for Solid 2, `solid-js` and `@solidjs/web` from the
+project, `@solidjs/signals` from the installed `solid-js`'s real directory,
+because `solid-js` re-exports it). Detection resolves those manifests once it
+has chosen the language and hands the versions over. The answer is either
+refused (`SC9013`) or a vocabulary plus a list of open gaps: empty is audited
+(analyze, say nothing), anything else analyzes and adds one `SC9014` notice
+naming each gap and the versions found. The vocabulary is built per answer from
+the package that owns it (the store typing and `omit`'s predicate from signals,
+`dynamic`'s options from web, `until` from `solid-js` and signals together), so
+a fresh install of `solid-js@2.0.0-rc.3` over signals rc.9 gets rc.9's store
+answer. Every distinct vocabulary other than the language's own is a release
+variant, `dialect::RELEASE_VARIANTS`: the same catalog under an id of its own,
+`solid-v2@<variant key>` (for the rc.9 triple
+`solid-v2@store-root-mutable+omit-predicate+until+dynamic-static`), so caches
+and daemon sockets never mix two. The registry is built from
+`Dialect::variants`, and shared code never classifies a release or names what a
+package owns. See `solid-dialect/src/solid_2/releases.rs`.
 
 **Compiler.** `solid_facts::compiler::CompilerFactsProvider` is the checker's
 whole view of a Solid JSX compiler: `AnalysisRequest` in, validated

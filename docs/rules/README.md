@@ -5,7 +5,7 @@ unprefixed rule names. The checker detects the installed `solid-js` major and
 **refuses** a project whose runtime it has no vocabulary for
 ([`unsupported-solid-runtime`](unsupported-solid-runtime.md)) rather than
 analyzing it under the wrong language; `--dialect solid-v2` is available for
-unusual layouts. A Solid 2 release the vocabulary was not audited on is
+unusual layouts. A Solid 2 installation the vocabulary was not audited on is
 analyzed with a notice
 ([`unaudited-solid-release`](unaudited-solid-release.md)). The Solid 1.x catalog was retired on 2026-09-16 — see
 [ADR 0110](../adr/0110-the-checker-analyzes-solid-2-only.md), and

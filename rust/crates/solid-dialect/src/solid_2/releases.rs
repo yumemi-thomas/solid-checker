@@ -1,98 +1,344 @@
-//! Which `solid-js` 2.x releases this vocabulary was read on, and what it
-//! answers differently for the one reviewed release that moved an answer.
+//! Which Solid 2 releases this vocabulary was read on, and what it answers for
+//! each installation of them.
 //!
-//! Detection selects the Solid 2 *language* from the installed major. This is
-//! the second question, asked of the exact installed version string. The
-//! classification, and why each row sits where it does:
+//! Detection selects the Solid 2 *language* from the installed `solid-js`
+//! major. This is the second question, and it is not about `solid-js` alone.
+//! Solid 2 ships as three archives, and each release-dependent answer belongs
+//! to the one that declares it:
 //!
-//! | installed `solid-js` | review | analysis |
+//! | answer | owner | resolved from |
 //! | --- | --- | --- |
-//! | `2.0.0-rc.3` | the audited release: every `AUDITED_ARCHIVES` rc.3 tuple, the tsc oracle's pin | proceeds, no notice |
-//! | `2.0.0-rc.0` | the release most vocabulary citations were read on (`callback_owners`, `onSettled`, the store typings); ADR 0005 names it the audited runtime for ownership, and the rc.0/rc.3 bodies the dialect cites are byte-identical (`docs/precision-backlog.md`, "rc.0 and rc.3 are the same bytes where the dialect cites them") | proceeds, no notice |
-//! | `2.0.0-rc.9` | reviewed with known gaps (the 2026-09-26 review) | proceeds under [`Solid2::RC9`], one uncertifiable notice |
-//! | `2.0.0-experimental.x` | refused: the pre-beta experiment, a different runtime | refused like `SC9013` |
-//! | anything else of major 2: `rc.1`, `rc.2`, `rc.4`-`rc.8`, `rc.10`+, betas, `2.0.0`, `2.x.y`, an alpha, a build-metadata or range spelling | not compared against this vocabulary | proceeds under the audited vocabulary, one uncertifiable notice |
+//! | B1: is a store root's own property `readonly` to TypeScript? | `@solidjs/signals` (`Store<T>`, `dist/types/store/store.d.ts:4`) | the installed `solid-js`, which re-exports `createStore` |
+//! | B4: is `until` an export? | `solid-js` (the root re-export, from rc.5) *and* `@solidjs/signals` (the declaration, from rc.5) | as above |
+//! | B2: does `dynamic(source, { static: true })` select a different runtime? | `@solidjs/web` (`if (options?.static)`, rc.9 only) | the project |
+//! | B3: does `omit`'s lone function argument run as a predicate? | `@solidjs/signals` (rc.9 only) | the installed `solid-js` |
 //!
-//! The unreviewed row is fail-visible rather than refused or silent, and on
-//! purpose. Silent is what the review found wrong: rc.9 changed four answers
-//! the vocabulary gives by name, and `--certify` reported `certified` for code
-//! rc.9 breaks. Refused would turn away every current Solid 2 project for
-//! differences that, on the one release measured, were three additive gaps and
-//! one typing change. What a release between rc.3 and rc.9 declares is not
-//! known: the `Store<T> = T` change is in the rc.7-era *source*, not in any
-//! published rc.4-rc.8 bytes anyone here read, so those releases keep the
-//! audited answers and the notice says they were not compared. The same holds
-//! above rc.9, where nothing has been read at all.
+//! Every `solid-js@2.0.0-rc.N` depends on `@solidjs/signals: ^2.0.0-rc.N`, a
+//! range, so a fresh install of the audited `solid-js@2.0.0-rc.3` resolves
+//! `@solidjs/signals@2.0.0-rc.9` today
+//! (`2026-09-26-solid-2-rc1-rc8-release-review.md` § 5). Reading only
+//! `solid-js` answered B1 as rc.3 does on bytes that declare rc.9's
+//! `Store<T> = T`, and the checker certified a store root write the runtime
+//! drops. So each answer is taken from the resolved release of its owner, and
+//! the variant is built from the resolved (`solid-js`, `@solidjs/signals`,
+//! `@solidjs/web`) triple.
+//!
+//! ## Releases, per package (the two 2026-09-26 reviews)
+//!
+//! | release | B1 store root | B2 `dynamic` options | B3 `omit` predicate | B4 `until` | open gaps |
+//! | --- | --- | --- | --- | --- | --- |
+//! | rc.0-rc.3 | `Readonly` | ignored | absent | absent | none: audited (rc.3), or equal to rc.0/rc.3 on every premise the dialect cites (rc.0, rc.1, rc.2) |
+//! | rc.4 | `Readonly` | ignored | absent | absent | `solid-js`: `registerPatch`, `registerRowOps`, `registerSlotPatch`; `@solidjs/web`: `installListDriver`, `driveList` (callback-taking, neither modelled nor excluded) |
+//! | rc.5, rc.6 | `Readonly` | ignored | absent | present | as rc.4 |
+//! | rc.7, rc.8 | `Mutable` | ignored (`DynamicOptions` is `deferStream` only, and no bundle reads it on the client) | absent | present | `@solidjs/signals`: no negative row |
+//! | rc.9 | `Mutable` | `static` selects `staticDynamic(untrack(source))` | present | present | `@solidjs/signals`: negative rows for five creates answers only; `solid-js`: re-exports its declarations do not declare |
+//! | anything else (rc.10+, betas, `2.0.0`, an inexact spelling) | `Readonly` (see below) | not modelled | absent | not modelled | the release is named as not compared |
+//! | not resolved | `Readonly` (see below) | as rc.3 (nothing can import `dynamic`) | absent | not modelled | named for `@solidjs/signals`; none for `@solidjs/web` |
+//!
+//! `2.0.0-experimental.x` of `solid-js` is refused, not analyzed.
+//!
+//! An installation whose three packages sit at different rows is judged per
+//! answer, each from its owner, and gets one more gap saying no review read the
+//! combination. rc.0-rc.3 count as one row for that purpose. An `@solidjs/web`
+//! that does not resolve at all adds no gap: nothing then imports `dynamic`,
+//! so the one answer it owns is never asked.
+//!
+//! ## The default for a release nobody read
+//!
+//! An `@solidjs/signals` that is unknown or does not resolve keeps the
+//! **`Readonly`** answer, so SC2003 stays silent on a store root write, and the
+//! notice says root writes are unchecked. The other answer would report the
+//! write, and that is not safe: every signals release before rc.7 declares
+//! `Store<T> = Readonly<T>`, and `tsc` reports TS2540 on exactly that write
+//! (the rc.1-rc.8 review § 2.3, rc.0-rc.6), so on an unknown *older* release
+//! (a beta, a hand-built tarball) the finding would duplicate TypeScript. On
+//! an unknown newer release silence misses a write the runtime drops, but the
+//! notice already keeps the project from certifying, so the miss is visible.
+//! Only one of the two defaults can break the absolute rule, so the default is
+//! the other one.
+//!
+//! `until` and the `dynamic` option forms are simply not modelled on an
+//! unknown owner: `until` is not a vocabulary name, and an option-bearing
+//! `dynamic` call is the form that states nothing.
 //!
 //! Matching is exact on the trimmed string. A range (`^2.0.0-rc.3`) or build
-//! metadata (`2.0.0-rc.3+local`) is not the release that was read; it lands in
-//! the unreviewed row, which still analyzes and only adds the notice.
+//! metadata (`2.0.0-rc.3+local`) is not the release that was read.
+
+use std::sync::LazyLock;
 
 use super::Solid2;
-use crate::{RefusedRelease, ReleaseReview, ReviewedRelease};
+use crate::{
+    Dialect, InstallationGap, InstallationReview, InstalledRelease, Primitive, RefusedRelease,
+    ReleaseOwner,
+};
+
+const SOLID_JS: &str = "solid-js";
+const SIGNALS: &str = "@solidjs/signals";
+const WEB: &str = "@solidjs/web";
+
+/// The three owners, in the order [`Solid2`]'s answers are read from them.
+pub(super) const OWNERS: &[ReleaseOwner] = &[
+    ReleaseOwner {
+        package: SOLID_JS,
+        resolved_from: None,
+    },
+    // `solid-js` re-exports the reactive core, so the declarations a
+    // project's `import { createStore } from "solid-js"` sees are the ones the
+    // installed `solid-js` resolves -- not whatever `@solidjs/signals` the
+    // project root would.
+    ReleaseOwner {
+        package: SIGNALS,
+        resolved_from: Some(SOLID_JS),
+    },
+    // `@solidjs/web` does not depend on signals, and a project imports it
+    // directly.
+    ReleaseOwner {
+        package: WEB,
+        resolved_from: None,
+    },
+];
+
+/// The audited triple, what SC9014 tells a user to pin.
+pub(super) const AUDITED_INSTALLATION: &[(&str, &str)] = &[
+    (SOLID_JS, "2.0.0-rc.3"),
+    (SIGNALS, "2.0.0-rc.3"),
+    (WEB, "2.0.0-rc.3"),
+];
 
 /// Whether a `createStore` root's own properties are declared `readonly`.
 ///
-/// The only answer two reviewed releases of this vocabulary disagree on:
-/// `@solidjs/signals@2.0.0-rc.3` declares `Store<T> = Readonly<T>`
-/// (`dist/types/store/store.d.ts:4`) and `2.0.0-rc.9` declares `Store<T> = T`
-/// (the same line). `tsc --noEmit` over the real published typings, one source
-/// file, `strict`: rc.3 reports `TS2540: Cannot assign to 'name' because it is
-/// a read-only property` on `profile.name = "Grace"` and rc.9 reports nothing
-/// (fixtures `store-root-write-rc3` and `store-root-write-rc9`). The runtime
-/// drops the write outside a setter on both (the review's probe H, dev and
-/// prod), so on rc.9 the write is this checker's and on rc.3 it is
+/// Answered from the resolved `@solidjs/signals`: rc.0-rc.6 declare
+/// `Store<T> = Readonly<T>` and rc.7-rc.9 `Store<T> = T`
+/// (`dist/types/store/store.d.ts:4` in each, the rc.1-rc.8 review § 3.1).
+/// `tsc --noEmit` over the real published typings, `strict`, reports
+/// `TS2540: Cannot assign to 'name' because it is a read-only property` on
+/// `profile.name = "Grace"` through rc.6 and nothing from rc.7. The runtime
+/// drops the write outside a setter on every release (probe H, dev and prod),
+/// so under `Mutable` the write is this checker's and under `Readonly` it is
 /// TypeScript's.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(super) enum StoreRootTyping {
-    /// `Store<T> = Readonly<T>`: a root property write is TS2540.
+    /// `Store<T> = Readonly<T>`: a root property write is TS2540. Also the
+    /// answer for a signals release nobody read (module docs).
     #[default]
     Readonly,
     /// `Store<T> = T`: a root property write type-checks.
     Mutable,
 }
 
-impl Solid2 {
-    /// The vocabulary as audited on `2.0.0-rc.3` (and read on `rc.0`). Every
-    /// release this module does not name a variant for is analyzed under it.
-    pub const AUDITED: Self = Self {
-        store_root: StoreRootTyping::Readonly,
-        omit_predicate_form: false,
-    };
+/// What `dynamic`'s second argument does on the resolved `@solidjs/web`.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) enum DynamicOptions {
+    /// rc.0-rc.8. rc.0-rc.6 declare `dynamic(source)` with one parameter, and
+    /// rc.7/rc.8 `dynamic(source, _options?: DynamicOptions)` with
+    /// `DynamicOptions { deferStream?: boolean }`, which the client bundle never
+    /// reads (`dist/web.dev.js:2042` on rc.7, `:2074` on rc.8). No bundle before
+    /// rc.9 contains `options?.static`, so every call is the default form,
+    /// whatever its options say.
+    #[default]
+    Ignored,
+    /// rc.9: `if (options?.static)` opens every build (`dist/web.dev.js:2199`),
+    /// so a literal `static: true` is `staticDynamic(untrack(source))`.
+    StaticForm,
+    /// A web release nobody read: an option-bearing call is the form that
+    /// states nothing.
+    Unread,
+}
 
-    /// The vocabulary for `solid-js@2.0.0-rc.9`: the audited answers, except
-    /// that a store root's own properties are writable as far as TypeScript is
-    /// concerned (B1 in the review). The review's other three items are
-    /// additive -- rc.3's own typings reject each rc.9 form -- so modelling them
-    /// needs no variant, and until they land they are `RC9_REVIEW`'s known
-    /// gaps.
+impl Solid2 {
+    /// The vocabulary as audited on `2.0.0-rc.3` (and read on `rc.0`): every
+    /// answer the rc.3 triple gives.
+    pub const AUDITED: Self = Self::from_index(0);
+
+    /// The vocabulary for the `2.0.0-rc.9` triple: a mutable store root (B1),
+    /// `dynamic`'s static form (B2), `omit`'s predicate form (B3) and `until`
+    /// (B4).
     pub const RC9: Self = Self {
         store_root: StoreRootTyping::Mutable,
         omit_predicate_form: true,
+        until: true,
+        dynamic_options: DynamicOptions::StaticForm,
     };
+
+    /// How many distinct vocabularies the answers above combine into: every
+    /// combination is reachable, because the three owners install
+    /// independently.
+    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3;
+
+    /// The vocabulary at one mixed-radix index, the audited one at `0`. A new
+    /// release-dependent answer adds one digit here and in
+    /// [`Solid2::index`], and one token in [`variant_key`].
+    const fn from_index(index: usize) -> Self {
+        Self {
+            store_root: if index % 2 == 1 {
+                StoreRootTyping::Mutable
+            } else {
+                StoreRootTyping::Readonly
+            },
+            omit_predicate_form: (index / 2) % 2 == 1,
+            until: (index / 4) % 2 == 1,
+            dynamic_options: match (index / 8) % 3 {
+                0 => DynamicOptions::Ignored,
+                1 => DynamicOptions::StaticForm,
+                _ => DynamicOptions::Unread,
+            },
+        }
+    }
+
+    const fn index(self) -> usize {
+        let store = match self.store_root {
+            StoreRootTyping::Readonly => 0,
+            StoreRootTyping::Mutable => 1,
+        };
+        let omit = if self.omit_predicate_form { 1 } else { 0 };
+        let until = if self.until { 1 } else { 0 };
+        let dynamic = match self.dynamic_options {
+            DynamicOptions::Ignored => 0,
+            DynamicOptions::StaticForm => 1,
+            DynamicOptions::Unread => 2,
+        };
+        store + 2 * omit + 4 * until + 8 * dynamic
+    }
+
+    /// The one `'static` value per vocabulary, which is what an analysis holds.
+    pub(super) fn interned(self) -> &'static Self {
+        &VARIANTS[self.index()]
+    }
+
+    pub(super) fn key(self) -> Option<&'static str> {
+        KEYS[self.index()].as_deref()
+    }
+
+    /// Whether this installation exports `primitive` at all. Only `until`
+    /// depends on the release; every other `TABLE` row is exported by
+    /// every release the reviews read.
+    pub(super) fn exports(self, primitive: Primitive) -> bool {
+        primitive != Primitive::Until || self.until
+    }
 }
 
-/// The review of `solid-js@2.0.0-rc.9` against this vocabulary.
-const RC9_REVIEW_DOCUMENT: &str =
-    "docs/package-contract-v2/audits/2026-09-26-solid-2-rc9-vocabulary-review.md";
-
-/// What the rc.9 review left open. B1 is not here: [`Solid2::RC9`] answers it.
-/// Each entry leaves this list when the dialect models it.
-static RC9_REVIEW: ReviewedRelease = ReviewedRelease {
-    version: "2.0.0-rc.9",
-    known_gaps: &[
-        "rc.9's `solid-js` typings re-export `createErrorBoundary`, `createLoadingBoundary`, \
-         `createRevealOrder`, `sharedConfig` and `$DEVCOMP`, which its own declarations no longer \
-         declare, so under `skipLibCheck` those primitives are not resolved and their bodies are \
-         not analyzed as such",
-        "no negative row is granted for `@solidjs/signals@2.0.0-rc.9`, so certification closes \
-         fewer claim domains than on the audited release",
-    ],
-    review: RC9_REVIEW_DOCUMENT,
+static VARIANTS: [Solid2; Solid2::VARIANT_COUNT] = {
+    let mut variants = [Solid2::AUDITED; Solid2::VARIANT_COUNT];
+    let mut index = 0;
+    while index < Solid2::VARIANT_COUNT {
+        variants[index] = Solid2::from_index(index);
+        index += 1;
+    }
+    variants
 };
 
+/// The key naming how a variant differs from the audited vocabulary, one
+/// token per answer it moves. `None` for the audited vocabulary itself.
+fn variant_key(vocabulary: Solid2) -> Option<String> {
+    let mut tokens = Vec::new();
+    if vocabulary.store_root == StoreRootTyping::Mutable {
+        tokens.push("store-root-mutable");
+    }
+    if vocabulary.omit_predicate_form {
+        tokens.push("omit-predicate");
+    }
+    if vocabulary.until {
+        tokens.push("until");
+    }
+    match vocabulary.dynamic_options {
+        DynamicOptions::Ignored => {}
+        DynamicOptions::StaticForm => tokens.push("dynamic-static"),
+        DynamicOptions::Unread => tokens.push("dynamic-options-unread"),
+    }
+    (!tokens.is_empty()).then(|| tokens.join("+"))
+}
+
+static KEYS: LazyLock<Vec<Option<String>>> = LazyLock::new(|| {
+    VARIANTS
+        .iter()
+        .map(|vocabulary| variant_key(*vocabulary))
+        .collect()
+});
+
+/// Every variant but the audited vocabulary, for [`Dialect::variants`].
+pub(super) static OTHER_VARIANTS: LazyLock<Vec<&'static dyn Dialect>> = LazyLock::new(|| {
+    VARIANTS[1..]
+        .iter()
+        .map(|vocabulary| vocabulary as &'static dyn Dialect)
+        .collect()
+});
+
+/// The review of the rc.9 triple.
+const RC9_REVIEW: &str =
+    "docs/package-contract-v2/audits/2026-09-26-solid-2-rc9-vocabulary-review.md";
+/// The review of rc.1, rc.2 and rc.4-rc.8, and of mixed installs (§ 5).
+const RC1_RC8_REVIEW: &str =
+    "docs/package-contract-v2/audits/2026-09-26-solid-2-rc1-rc8-release-review.md";
+
+/// The newest `2.0.0-rc.N` any review read.
+const NEWEST_READ: u8 = 9;
+
+/// A gap one reviewed release of one owner leaves open.
+struct KnownGap {
+    package: &'static str,
+    /// The `2.0.0-rc.N` releases it applies to, inclusive.
+    from: u8,
+    through: u8,
+    gap: &'static str,
+    review: &'static str,
+}
+
+/// Every open gap a review measured, by owner and release. A gap leaves this
+/// list when the dialect models it.
+const KNOWN_GAPS: &[KnownGap] = &[
+    // The rc.1-rc.8 review § 4.2: `<j4>/types/index.d.ts:1` re-exports them
+    // from signals, and rc.7 drops all three.
+    KnownGap {
+        package: SOLID_JS,
+        from: 4,
+        through: 6,
+        gap: "re-exports registerPatch, registerRowOps and registerSlotPatch, which take \
+              callbacks this vocabulary neither models nor excludes, so code inside one is not \
+              classified",
+        review: RC1_RC8_REVIEW,
+    },
+    KnownGap {
+        package: WEB,
+        from: 4,
+        through: 6,
+        gap: "exports installListDriver and driveList, which take callbacks this vocabulary \
+              neither models nor excludes, so code inside one is not classified",
+        review: RC1_RC8_REVIEW,
+    },
+    // The rc.1-rc.8 review § 0.2: rc.7 and rc.8 are "reviewed with one gap".
+    KnownGap {
+        package: SIGNALS,
+        from: 7,
+        through: 8,
+        gap: "has no negative row granted for it, so certification closes fewer claim domains \
+              than on the audited release",
+        review: RC1_RC8_REVIEW,
+    },
+    // The rc.9 review § 4.
+    KnownGap {
+        package: SOLID_JS,
+        from: 9,
+        through: 9,
+        gap: "re-exports createErrorBoundary, createLoadingBoundary, createRevealOrder, \
+              sharedConfig and $DEVCOMP, which its own declarations no longer declare, so under \
+              skipLibCheck those primitives are not resolved and their bodies are not analyzed \
+              as such",
+        review: RC9_REVIEW,
+    },
+    // 59643beb read five creates rows on rc.9's own bytes, and nothing else.
+    KnownGap {
+        package: SIGNALS,
+        from: 9,
+        through: 9,
+        gap: "has negative rows granted only for the creates domain of getOwner, onCleanup, \
+              untrack, runWithOwner and createRoot, so certification closes fewer claim domains \
+              than on the audited release",
+        review: RC9_REVIEW,
+    },
+];
+
 /// The pre-beta Solid 2 experiment. Measured on `2.0.0-experimental.1`
-/// (corvu's install, the review's § 8).
+/// (corvu's install, the rc.9 review's § 8).
 static PRE_BETA_EXPERIMENT: RefusedRelease = RefusedRelease {
     line: "2.0.0-experimental.x",
     reason: "it is the pre-beta Solid 2 experiment, which runs @solidjs/signals 0.x rather than \
@@ -100,117 +346,590 @@ static PRE_BETA_EXPERIMENT: RefusedRelease = RefusedRelease {
              error handler at argument 2 and its createMemo a seed value at argument 1, where the \
              vocabulary reads options, and its Suspense and ErrorBoundary are not the Loading and \
              Errored boundaries the rules recognise",
-    review: RC9_REVIEW_DOCUMENT,
+    review: RC9_REVIEW,
 };
 
-/// The classification in the module table.
-pub(super) fn review(installed: &str) -> ReleaseReview {
-    let installed = installed.trim();
-    match installed {
-        "2.0.0-rc.0" | "2.0.0-rc.3" => ReleaseReview::Audited,
-        "2.0.0-rc.9" => ReleaseReview::ReviewedWithGaps(&RC9_REVIEW),
-        _ => match installed.strip_prefix("2.0.0-") {
-            Some(prerelease)
-                if prerelease == "experimental" || prerelease.starts_with("experimental.") =>
-            {
-                ReleaseReview::Refused(&PRE_BETA_EXPERIMENT)
+/// One owner's resolved release, as far as the reviews go.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Release<'a> {
+    /// `2.0.0-rc.N`, exactly, with `N` a release some review read.
+    Read(u8),
+    /// A version string no review read, as spelled.
+    Unread(&'a str),
+    /// Nothing resolved.
+    Unresolved,
+}
+
+impl<'a> Release<'a> {
+    fn of(version: Option<&'a str>) -> Self {
+        let Some(version) = version else {
+            return Self::Unresolved;
+        };
+        version
+            .trim()
+            .strip_prefix("2.0.0-rc.")
+            .filter(|number| {
+                !number.is_empty()
+                    && number.bytes().all(|byte| byte.is_ascii_digit())
+                    && (*number == "0" || !number.starts_with('0'))
+            })
+            .and_then(|number| number.parse::<u8>().ok())
+            .filter(|number| *number <= NEWEST_READ)
+            .map_or(Self::Unread(version), Self::Read)
+    }
+
+    /// The row of the table this release reads as, for telling a mixed
+    /// installation apart: rc.0-rc.3 are one row.
+    fn row(self) -> Option<u8> {
+        match self {
+            Self::Read(number) => Some(number.max(3)),
+            Self::Unread(_) | Self::Unresolved => None,
+        }
+    }
+
+    fn spelled(self) -> String {
+        match self {
+            Self::Read(number) => format!("2.0.0-rc.{number}"),
+            Self::Unread(version) => version.trim().to_owned(),
+            Self::Unresolved => "(not resolved)".to_owned(),
+        }
+    }
+}
+
+fn is_pre_beta_experiment(version: &str) -> bool {
+    version
+        .trim()
+        .strip_prefix("2.0.0-")
+        .is_some_and(|prerelease| {
+            prerelease == "experimental" || prerelease.starts_with("experimental.")
+        })
+}
+
+/// The vocabulary for one resolved triple: each answer from its owner.
+fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>) -> Solid2 {
+    Solid2 {
+        // B1. An unread or unresolved signals keeps `Readonly` (module docs).
+        store_root: match signals {
+            Release::Read(number) if number >= 7 => StoreRootTyping::Mutable,
+            Release::Read(_) | Release::Unread(_) | Release::Unresolved => {
+                StoreRootTyping::Readonly
             }
-            _ => ReleaseReview::Unreviewed,
         },
+        // B4. `until` is imported from the `solid-js` root, which re-exports
+        // it from rc.5 (`<j5>/types/index.d.ts:1`), and declared by signals
+        // from rc.5 (`<s5>/dist/types/signals.d.ts:601`). Either side older,
+        // or unread, and the name is not one the vocabulary knows: on rc.3's
+        // `solid-js` the import is TS2305 even over signals rc.9.
+        until: matches!(
+            (solid_js, signals),
+            (Release::Read(root), Release::Read(core)) if root >= 5 && core >= 5
+        ),
+        // B2. No `@solidjs/web` at all leaves nothing to import `dynamic`
+        // from, so the answer is never asked; the audited one keeps the
+        // vocabulary the language's own.
+        dynamic_options: match web {
+            Release::Read(NEWEST_READ) => DynamicOptions::StaticForm,
+            Release::Read(_) | Release::Unresolved => DynamicOptions::Ignored,
+            Release::Unread(_) => DynamicOptions::Unread,
+        },
+        // B3. `omit` is `@solidjs/signals`'s (`solid-js` re-exports it), and
+        // only rc.9's runtime tests `typeof keys[0] === "function"`
+        // (`dist/dev.js:4380`; the rc.1-rc.8 review § 3.3 finds no earlier
+        // release that does). An unread or unresolved signals keeps `false`.
+        omit_predicate_form: matches!(signals, Release::Read(NEWEST_READ)),
+    }
+}
+
+/// Every gap in what the reviews know about one resolved triple.
+fn gaps_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>) -> Vec<InstallationGap> {
+    let mut gaps = Vec::new();
+    for (package, release) in [(SOLID_JS, solid_js), (SIGNALS, signals), (WEB, web)] {
+        match release {
+            Release::Read(number) => gaps.extend(
+                KNOWN_GAPS
+                    .iter()
+                    .filter(|known| {
+                        known.package == package && (known.from..=known.through).contains(&number)
+                    })
+                    .map(|known| InstallationGap {
+                        gap: format!("{package}@{} {}", release.spelled(), known.gap),
+                        review: Some(known.review),
+                    }),
+            ),
+            Release::Unread(_) => gaps.push(InstallationGap {
+                gap: format!(
+                    "{package} {} has not been compared against this vocabulary, so {}",
+                    release.spelled(),
+                    unread_consequence(package)
+                ),
+                review: None,
+            }),
+            Release::Unresolved => {
+                if let Some(consequence) = unresolved_consequence(package) {
+                    gaps.push(InstallationGap {
+                        gap: consequence.to_owned(),
+                        review: None,
+                    });
+                }
+            }
+        }
+    }
+    let mut rows = [solid_js, signals, web]
+        .into_iter()
+        .filter_map(Release::row)
+        .collect::<Vec<_>>();
+    rows.sort_unstable();
+    rows.dedup();
+    if rows.len() > 1 {
+        gaps.push(InstallationGap {
+            gap: format!(
+                "solid-js {}, @solidjs/signals {} and @solidjs/web {} are not one reviewed \
+                 release, and no review read this combination: each release-dependent answer is \
+                 taken from the package that declares it (the store typing from \
+                 @solidjs/signals, until from solid-js and @solidjs/signals together, dynamic's \
+                 options from @solidjs/web)",
+                solid_js.spelled(),
+                signals.spelled(),
+                web.spelled()
+            ),
+            review: Some(RC1_RC8_REVIEW),
+        });
+    }
+    gaps
+}
+
+/// What the vocabulary cannot answer when an owner's release was not read.
+fn unread_consequence(package: &str) -> &'static str {
+    match package {
+        SIGNALS => {
+            "the store typing it declares is unknown: a write to a store root's own property \
+             outside a setter is not reported, and until is not modelled"
+        }
+        WEB => {
+            "a dynamic call with options is not modelled, and every other export it declares is \
+             read as 2.0.0-rc.3 declares it"
+        }
+        _ => {
+            "until is not modelled, and every other export it declares is read as 2.0.0-rc.3 \
+             declares it"
+        }
+    }
+}
+
+/// What the vocabulary cannot answer when an owner did not resolve at all.
+/// `None` for `@solidjs/web`: without it nothing imports `dynamic`, the one
+/// answer it owns.
+fn unresolved_consequence(package: &str) -> Option<&'static str> {
+    match package {
+        SIGNALS => Some(
+            "@solidjs/signals does not resolve from the installed solid-js, so the store typing \
+             it declares is unknown: a write to a store root's own property outside a setter is \
+             not reported, and until is not modelled",
+        ),
+        WEB => None,
+        _ => Some(
+            "solid-js does not resolve, so no answer this vocabulary gives by release is known",
+        ),
+    }
+}
+
+/// The classification in the module table.
+pub(super) fn review(installed: &[InstalledRelease<'_>]) -> InstallationReview {
+    let version_of = |package: &str| {
+        installed
+            .iter()
+            .find(|release| release.package == package)
+            .and_then(|release| release.version)
+    };
+    if version_of(SOLID_JS).is_some_and(is_pre_beta_experiment) {
+        return InstallationReview::Refused(&PRE_BETA_EXPERIMENT);
+    }
+    let solid_js = Release::of(version_of(SOLID_JS));
+    let signals = Release::of(version_of(SIGNALS));
+    let web = Release::of(version_of(WEB));
+    InstallationReview::Analyzed {
+        vocabulary: Some(vocabulary_for(solid_js, signals, web).interned()),
+        gaps: gaps_for(solid_js, signals, web),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Dialect;
 
+    fn triple<'a>(
+        solid_js: Option<&'a str>,
+        signals: Option<&'a str>,
+        web: Option<&'a str>,
+    ) -> [InstalledRelease<'a>; 3] {
+        [
+            InstalledRelease {
+                package: SOLID_JS,
+                version: solid_js,
+            },
+            InstalledRelease {
+                package: SIGNALS,
+                version: signals,
+            },
+            InstalledRelease {
+                package: WEB,
+                version: web,
+            },
+        ]
+    }
+
+    fn same(release: &str) -> [InstalledRelease<'_>; 3] {
+        triple(Some(release), Some(release), Some(release))
+    }
+
+    /// The vocabulary and gaps an installation is analyzed with.
+    fn analyzed(installed: &[InstalledRelease<'_>]) -> (Solid2, Vec<InstallationGap>) {
+        match review(installed) {
+            InstallationReview::Analyzed {
+                vocabulary: Some(vocabulary),
+                gaps,
+            } => {
+                let variant = VARIANTS
+                    .iter()
+                    .find(|candidate| {
+                        std::ptr::addr_eq(
+                            *candidate as *const Solid2,
+                            vocabulary as *const dyn Dialect,
+                        )
+                    })
+                    .copied()
+                    .expect("the vocabulary is one of the interned variants");
+                (variant, gaps)
+            }
+            other => panic!("{installed:?} is analyzed: {other:?}"),
+        }
+    }
+
+    /// The classification table, one same-release triple per row.
     #[test]
-    fn releases_classify_by_what_was_read_on_their_bytes() {
-        for audited in ["2.0.0-rc.3", "2.0.0-rc.0", " 2.0.0-rc.3\n"] {
-            assert_eq!(review(audited), ReleaseReview::Audited, "{audited:?}");
+    fn every_reviewed_triple_answers_as_the_reviews_measured() {
+        // (release, store root, omit predicate, until, dynamic options, gap count)
+        let rows = [
+            (
+                "2.0.0-rc.0",
+                StoreRootTyping::Readonly,
+                false,
+                false,
+                DynamicOptions::Ignored,
+                0,
+            ),
+            (
+                "2.0.0-rc.1",
+                StoreRootTyping::Readonly,
+                false,
+                false,
+                DynamicOptions::Ignored,
+                0,
+            ),
+            (
+                "2.0.0-rc.2",
+                StoreRootTyping::Readonly,
+                false,
+                false,
+                DynamicOptions::Ignored,
+                0,
+            ),
+            (
+                "2.0.0-rc.3",
+                StoreRootTyping::Readonly,
+                false,
+                false,
+                DynamicOptions::Ignored,
+                0,
+            ),
+            (
+                "2.0.0-rc.4",
+                StoreRootTyping::Readonly,
+                false,
+                false,
+                DynamicOptions::Ignored,
+                2,
+            ),
+            (
+                "2.0.0-rc.5",
+                StoreRootTyping::Readonly,
+                false,
+                true,
+                DynamicOptions::Ignored,
+                2,
+            ),
+            (
+                "2.0.0-rc.6",
+                StoreRootTyping::Readonly,
+                false,
+                true,
+                DynamicOptions::Ignored,
+                2,
+            ),
+            (
+                "2.0.0-rc.7",
+                StoreRootTyping::Mutable,
+                false,
+                true,
+                DynamicOptions::Ignored,
+                1,
+            ),
+            (
+                "2.0.0-rc.8",
+                StoreRootTyping::Mutable,
+                false,
+                true,
+                DynamicOptions::Ignored,
+                1,
+            ),
+            (
+                "2.0.0-rc.9",
+                StoreRootTyping::Mutable,
+                true,
+                true,
+                DynamicOptions::StaticForm,
+                2,
+            ),
+        ];
+        for (release, store_root, omit_predicate_form, until, dynamic_options, gap_count) in rows {
+            let (vocabulary, gaps) = analyzed(&same(release));
+            assert_eq!(
+                (
+                    vocabulary.store_root,
+                    vocabulary.omit_predicate_form,
+                    vocabulary.until,
+                    vocabulary.dynamic_options
+                ),
+                (store_root, omit_predicate_form, until, dynamic_options),
+                "{release}"
+            );
+            assert_eq!(gaps.len(), gap_count, "{release}: {gaps:?}");
         }
         assert_eq!(
-            review("2.0.0-rc.9"),
-            ReleaseReview::ReviewedWithGaps(&RC9_REVIEW)
+            analyzed(&same("2.0.0-rc.3")).0.index(),
+            Solid2::AUDITED.index()
         );
+        assert_eq!(analyzed(&same("2.0.0-rc.9")).0.index(), Solid2::RC9.index());
+        // rc.4-rc.6 name all five patch-channel exports between them.
+        let names = analyzed(&same("2.0.0-rc.5"))
+            .1
+            .iter()
+            .map(|gap| gap.gap.clone())
+            .collect::<Vec<_>>()
+            .join(" ");
+        for export in [
+            "registerPatch",
+            "registerRowOps",
+            "registerSlotPatch",
+            "installListDriver",
+            "driveList",
+        ] {
+            assert!(names.contains(export), "{export}: {names}");
+        }
+    }
+
+    /// Defect 1 of the rc.1-rc.8 review § 5: a fresh install of the audited
+    /// `solid-js` resolves signals rc.9, whose store root is mutable.
+    #[test]
+    fn the_store_typing_follows_the_resolved_signals() {
+        let fresh = triple(Some("2.0.0-rc.3"), Some("2.0.0-rc.9"), Some("2.0.0-rc.3"));
+        let (vocabulary, gaps) = analyzed(&fresh);
+        assert_eq!(vocabulary.store_root, StoreRootTyping::Mutable);
+        // `omit` is signals' too, so its predicate form comes with rc.9.
+        assert!(vocabulary.omit_predicate_form);
+        // rc.3's root does not re-export until (TS2305 on that tree), and
+        // rc.3's web has no static option.
+        assert!(!vocabulary.until);
+        assert_eq!(vocabulary.dynamic_options, DynamicOptions::Ignored);
+        assert!(
+            gaps.iter()
+                .any(|gap| gap.gap.contains("not one reviewed release")),
+            "{gaps:?}"
+        );
+        // And the other way: rc.9's solid-js over an older signals.
+        let (vocabulary, _) = analyzed(&triple(
+            Some("2.0.0-rc.9"),
+            Some("2.0.0-rc.6"),
+            Some("2.0.0-rc.9"),
+        ));
+        assert_eq!(vocabulary.store_root, StoreRootTyping::Readonly);
+        assert!(vocabulary.until);
+        assert_eq!(vocabulary.dynamic_options, DynamicOptions::StaticForm);
+    }
+
+    /// Defect 2: B2 and B4 answer only where the owner has the feature.
+    #[test]
+    fn until_and_the_static_form_need_their_owners() {
+        for (solid_js, signals, until) in [
+            ("2.0.0-rc.4", "2.0.0-rc.9", false),
+            ("2.0.0-rc.5", "2.0.0-rc.4", false),
+            ("2.0.0-rc.5", "2.0.0-rc.5", true),
+            ("2.0.0-rc.9", "2.0.0-rc.10", false),
+        ] {
+            let (vocabulary, _) = analyzed(&triple(Some(solid_js), Some(signals), None));
+            assert_eq!(vocabulary.until, until, "{solid_js} over {signals}");
+        }
+        for (web, options) in [
+            ("2.0.0-rc.3", DynamicOptions::Ignored),
+            ("2.0.0-rc.7", DynamicOptions::Ignored),
+            ("2.0.0-rc.8", DynamicOptions::Ignored),
+            ("2.0.0-rc.9", DynamicOptions::StaticForm),
+            ("2.0.0-rc.10", DynamicOptions::Unread),
+        ] {
+            let (vocabulary, _) =
+                analyzed(&triple(Some("2.0.0-rc.9"), Some("2.0.0-rc.9"), Some(web)));
+            assert_eq!(vocabulary.dynamic_options, options, "{web}");
+        }
+    }
+
+    /// The conservative answers, each with a gap naming it.
+    #[test]
+    fn an_unknown_or_missing_owner_takes_the_conservative_answers() {
+        for signals in [
+            None,
+            Some("2.0.0-rc.10"),
+            Some("2.0.0-beta.2"),
+            Some("^2.0.0-rc.3"),
+        ] {
+            let (vocabulary, gaps) =
+                analyzed(&triple(Some("2.0.0-rc.9"), signals, Some("2.0.0-rc.9")));
+            assert_eq!(
+                vocabulary.store_root,
+                StoreRootTyping::Readonly,
+                "{signals:?}"
+            );
+            assert!(!vocabulary.until, "{signals:?}");
+            assert!(
+                gaps.iter()
+                    .any(|gap| gap.gap.contains("store root") && gap.review.is_none()),
+                "{signals:?}: {gaps:?}"
+            );
+        }
+        let (vocabulary, gaps) = analyzed(&triple(
+            Some("2.0.0-rc.3"),
+            Some("2.0.0-rc.3"),
+            Some("2.0.1"),
+        ));
+        assert_eq!(vocabulary.dynamic_options, DynamicOptions::Unread);
+        assert_eq!(gaps.len(), 1, "{gaps:?}");
+        // A web that does not resolve is not asked about, so it adds no gap;
+        // the rc.3 pair beside it is still audited.
+        let (vocabulary, gaps) = analyzed(&triple(Some("2.0.0-rc.3"), Some("2.0.0-rc.3"), None));
+        assert_eq!(vocabulary.index(), Solid2::AUDITED.index());
+        assert!(gaps.is_empty(), "{gaps:?}");
+        // An unknown solid-js keeps the audited answers it owns, with a gap.
+        let (vocabulary, gaps) = analyzed(&triple(
+            Some("2.0.0"),
+            Some("2.0.0-rc.3"),
+            Some("2.0.0-rc.3"),
+        ));
+        assert!(!vocabulary.until);
+        assert_eq!(gaps.len(), 1, "{gaps:?}");
+    }
+
+    #[test]
+    fn releases_read_only_their_exact_spelling() {
+        for (version, release) in [
+            ("2.0.0-rc.3", Release::Read(3)),
+            (" 2.0.0-rc.3\n", Release::Read(3)),
+            ("2.0.0-rc.0", Release::Read(0)),
+            ("2.0.0-rc.9", Release::Read(9)),
+            ("2.0.0-rc.10", Release::Unread("2.0.0-rc.10")),
+            ("2.0.0-rc.03", Release::Unread("2.0.0-rc.03")),
+            ("2.0.0-rc.3.1", Release::Unread("2.0.0-rc.3.1")),
+            ("2.0.0-rc.3+local", Release::Unread("2.0.0-rc.3+local")),
+            ("^2.0.0-rc.3", Release::Unread("^2.0.0-rc.3")),
+            ("v2.0.0-rc.3", Release::Unread("v2.0.0-rc.3")),
+            ("2.0.0", Release::Unread("2.0.0")),
+            ("2.0.0-beta.19", Release::Unread("2.0.0-beta.19")),
+        ] {
+            assert_eq!(Release::of(Some(version)), release, "{version:?}");
+        }
+        assert_eq!(Release::of(None), Release::Unresolved);
+    }
+
+    #[test]
+    fn the_pre_beta_experiment_is_refused_by_its_solid_js() {
         for refused in [
             "2.0.0-experimental.1",
             "2.0.0-experimental.0",
             "2.0.0-experimental",
         ] {
-            assert_eq!(
-                review(refused),
-                ReleaseReview::Refused(&PRE_BETA_EXPERIMENT),
-                "{refused:?}"
+            assert!(
+                matches!(
+                    review(&same(refused)),
+                    InstallationReview::Refused(refusal) if std::ptr::eq(refusal, &PRE_BETA_EXPERIMENT)
+                ),
+                "{refused}"
             );
         }
-        // Everything else of major 2 is fail-visible: analyzed, with the
-        // notice. That includes the releases on either side of rc.9, the
-        // betas, the stable line, spellings that are not one exact release,
-        // and an alpha, which nobody here has measured.
-        for unreviewed in [
-            "2.0.0-rc.1",
-            "2.0.0-rc.2",
-            "2.0.0-rc.4",
-            "2.0.0-rc.6",
-            "2.0.0-rc.8",
-            "2.0.0-rc.10",
-            "2.0.0-rc.90",
-            "2.0.0-rc.3.1",
-            "2.0.0-beta.19",
-            "2.0.0-alpha.0",
-            "2.0.0-next.1",
-            "2.0.0",
-            "2.0.1",
-            "2.1.0-rc.3",
-            "2.1.0-experimental.1",
-            "^2.0.0-rc.3",
-            "2.0.0-rc.3+local",
-            "v2.0.0-rc.3",
-        ] {
-            assert_eq!(
-                review(unreviewed),
-                ReleaseReview::Unreviewed,
-                "{unreviewed:?}"
-            );
-        }
+        assert!(matches!(
+            review(&triple(
+                Some("2.1.0-experimental.1"),
+                Some("2.0.0-rc.3"),
+                None
+            )),
+            InstallationReview::Analyzed { .. }
+        ));
     }
 
+    /// Every variant round-trips through its index, and no two share a key.
     #[test]
-    fn the_trait_answers_the_same_table_for_every_variant() {
-        for vocabulary in [Solid2::AUDITED, Solid2::RC9] {
-            assert_eq!(
-                vocabulary.review_release("2.0.0-rc.9"),
-                ReleaseReview::ReviewedWithGaps(&RC9_REVIEW)
+    fn every_variant_has_its_own_key() {
+        let mut keys = std::collections::BTreeSet::new();
+        for (index, vocabulary) in VARIANTS.iter().enumerate() {
+            assert_eq!(vocabulary.index(), index);
+            assert!(
+                keys.insert(vocabulary.key()),
+                "{index}: {:?}",
+                vocabulary.key()
             );
-            assert_eq!(
-                vocabulary.review_release("2.0.0-rc.3"),
-                ReleaseReview::Audited
-            );
+            assert_eq!(vocabulary.key().is_none(), index == 0);
         }
+        assert_eq!(OTHER_VARIANTS.len(), Solid2::VARIANT_COUNT - 1);
+        assert_eq!(
+            Solid2::RC9.key(),
+            Some("store-root-mutable+omit-predicate+until+dynamic-static")
+        );
     }
 
-    /// B1: the one answer the rc.9 variant moves, and the only one.
+    /// What the engine asks, through the trait, follows the variant; the
+    /// review does not depend on which variant is asked.
     #[test]
-    fn only_the_store_root_typing_differs_between_the_variants() {
+    fn the_trait_answers_from_the_variant() {
         assert!(Solid2::AUDITED.store_root_properties_are_readonly());
         assert!(!Solid2::RC9.store_root_properties_are_readonly());
         // The value the engine holds by name is the audited vocabulary.
         assert!(Solid2.store_root_properties_are_readonly());
         assert!(Solid2::default().store_root_properties_are_readonly());
+        assert_eq!(Solid2::default().index(), Solid2::AUDITED.index());
         assert!(Solid2::RC9.store_setter_callback_enables_proxy_writes());
+        for gated in super::super::RELEASE_GATED_NAMES {
+            assert_eq!(Solid2::AUDITED.primitive(gated), None, "{gated}");
+            assert!(Solid2::RC9.primitive(gated).is_some(), "{gated}");
+        }
+        let expected = Solid2::RC9.interned() as *const Solid2;
+        for vocabulary in &VARIANTS {
+            let InstallationReview::Analyzed {
+                vocabulary: Some(chosen),
+                ..
+            } = vocabulary.review_installation(&same("2.0.0-rc.9"))
+            else {
+                panic!("rc.9 is analyzed");
+            };
+            assert!(std::ptr::addr_eq(chosen as *const dyn Dialect, expected));
+        }
     }
 
     #[test]
-    fn every_review_names_a_document_that_exists_and_a_gap() {
+    fn every_review_names_a_document_that_exists() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        for document in [RC9_REVIEW.review, PRE_BETA_EXPERIMENT.review] {
+        for document in [RC9_REVIEW, RC1_RC8_REVIEW, PRE_BETA_EXPERIMENT.review] {
             assert!(root.join(document).is_file(), "{document} is missing");
         }
-        assert!(
-            !RC9_REVIEW.known_gaps.is_empty(),
-            "a review with no open gap is an audit; say so with ReleaseReview::Audited"
-        );
+        for known in KNOWN_GAPS {
+            assert!(known.from <= known.through && known.through <= NEWEST_READ);
+            assert!(OWNERS.iter().any(|owner| owner.package == known.package));
+        }
     }
 }

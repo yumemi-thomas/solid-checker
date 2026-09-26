@@ -14,9 +14,11 @@ store.ts(9,11): error TS2540: Cannot assign to 'name' because it is a read-only 
 store.ts(21,13): error TS2540: Cannot assign to 'name' because it is a read-only property.
 ```
 
-The same two errors come from this fixture's stub, because every declaration it
-carries is byte-faithful to the published one (see
-`node_modules/solid-js/index.d.ts` for what was reduced).
+The same two errors come from this fixture's stubs, because every declaration
+they carry is byte-faithful to the published one. As in the published
+packages, `solid-js` re-exports `createStore` from `@solidjs/signals`
+(`node_modules/solid-js/index.d.ts`), and the store typing is signals'
+(`node_modules/@solidjs/signals/index.d.ts`, which says what was reduced).
 
 Expected findings:
 
@@ -28,4 +30,7 @@ Expected findings:
 - Both writes inside `setProfile(...)`: **none**. The store's own setter
   write-enables its proxy (TS2540 still fires on line 21, which is the type's
   claim, not a defect this rule asserts).
-- No `SC9014`: rc.3 is the audited release.
+- No `SC9014`: `solid-js`, `@solidjs/signals` and `@solidjs/web` are all at
+  `2.0.0-rc.3`, the audited triple. The store answer follows the resolved
+  signals, not `solid-js`: `release-triple-store-fresh-rc3` is this source
+  over signals rc.9.

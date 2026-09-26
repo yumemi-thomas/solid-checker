@@ -60,4 +60,6 @@ published as a value the export never invokes, is pinned by
 checked for the original five cases. Against rc.3's typings every predicate
 call is TS2345, so no rc.3-valid typed call is affected, and the rc.3
 vocabulary does not answer the predicate slot at all.
-`node_modules/solid-js/package.json` selects the 2.0 dialect at `2.0.0-rc.9`.
+`node_modules/` holds the `solid-js` and `@solidjs/signals` manifests at
+`2.0.0-rc.9`: the predicate form is answered from the resolved signals,
+which implements `omit`.

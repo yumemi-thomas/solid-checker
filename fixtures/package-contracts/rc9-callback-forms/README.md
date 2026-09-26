@@ -41,3 +41,9 @@ use and say so in their headers. `tsc --noEmit` is clean on `index.ts` against
 the stubs and against the published rc.9 typings. Against rc.3's typings the
 `until` import is TS2305, both two-argument `dynamic` calls are TS2554, and the
 predicate `omit` is TS2345, so no rc.3-valid package forwards into any of them.
+
+`node_modules/@solidjs/signals/package.json` is a manifest only, at
+`2.0.0-rc.9`: the dialect answers `until` and the `omit` predicate from the
+`@solidjs/signals` the installed `solid-js` resolves, and without it both
+would take the conservative answer (not modelled). The declarations stay in
+the `solid-js` stub, which re-declares what rc.9 re-exports.

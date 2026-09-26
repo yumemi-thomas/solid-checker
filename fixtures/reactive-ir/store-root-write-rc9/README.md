@@ -9,8 +9,10 @@ type-checks and is still dropped at runtime, so SC2003 reports it.
 (`dist/types/store/store.d.ts:4`). `tsc --noEmit` (5.9.3, `strict`, bundler
 resolution) over `store.ts` against the **real published** `solid-js@2.0.0-rc.9`
 install, not this stub, reports nothing, and neither does this fixture's stub,
-which is byte-faithful to the published declarations (see
-`node_modules/solid-js/index.d.ts` for what was reduced). The runtime half is
+which is byte-faithful to the published declarations. As in the published
+packages, `solid-js` re-exports `createStore` from `@solidjs/signals`, and
+the store typing is signals' (`node_modules/@solidjs/signals/index.d.ts`,
+which says what was reduced). The runtime half is
 the review's probe H: the direct `store.a = 99` is dropped on rc.9, dev and prod.
 
 Expected findings:
@@ -23,7 +25,10 @@ Expected findings:
 - Both writes inside `setProfile(...)`: **none**. The store's own setter
   write-enables its proxy on rc.9 exactly as on rc.3 (the review's probe T).
 - **SC9014** `unaudited-solid-release` at `node_modules/solid-js/package.json`:
-  rc.9 is reviewed with gaps still open, so the analysis cannot certify.
+  the rc.9 triple is reviewed with gaps still open, so the analysis cannot
+  certify. All three packages are at `2.0.0-rc.9`: the store answer is the
+  resolved `@solidjs/signals`'s, so without its manifest the fixture would
+  take the conservative silent answer instead.
 
 The twin is `store-root-write-rc3`; the two differ only in the installed
 version and the declarations copied from it.

@@ -146,48 +146,88 @@ pub enum Classification {
     UnmodelledMajor(u32),
 }
 
-/// How a vocabulary stands against one installed release of the major it
-/// models.
+/// A package whose installed release decides some of a vocabulary's answers,
+/// and where a project's code resolves it from.
 ///
-/// [`Version::for_solid_js`] reads the major and nothing else, because a major
-/// is what selects a *language*. Within a major the published bytes still move
-/// between prereleases, and a vocabulary is only as good as the bytes it was
-/// read on. This is the second question: given the exact installed version
-/// string, did anyone read *these* bytes against this vocabulary, and what did
-/// they find? The answer is the dialect's, never shared code's, because only
-/// the dialect knows which releases it was written against
-/// ([`Dialect::review_release`]).
+/// [`Version::for_solid_js`] reads the `solid-js` major and nothing else,
+/// because a major is what selects a *language*. Within a major the published
+/// bytes still move between prereleases, and not only in `solid-js`: Solid 2
+/// splits its runtime across three archives, and the answer a rule rests on
+/// belongs to whichever of them declares it (the store typing to
+/// `@solidjs/signals`, `dynamic` to `@solidjs/web`). Each such package is named
+/// here so shared code can resolve it without knowing why it matters
+/// ([`Dialect::release_owners`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ReleaseReview {
-    /// A release the vocabulary was read on. Analysis proceeds and says
-    /// nothing about the release.
-    Audited,
-    /// A release reviewed against the vocabulary, with the gaps the review
-    /// found still open. Analysis proceeds, under the vocabulary the review
-    /// names for this release, and the result carries a project-level
-    /// uncertifiable notice naming the gaps.
-    ReviewedWithGaps(&'static ReviewedRelease),
-    /// A release of the right major nobody has compared against the
-    /// vocabulary. Analysis proceeds under the audited vocabulary, and the
-    /// result carries a project-level uncertifiable notice: fail-visible
-    /// rather than silently substituted, because the one reviewed prerelease
-    /// so far moved four vocabulary answers.
-    Unreviewed,
+pub struct ReleaseOwner {
+    /// The package name, exactly as a manifest spells it.
+    pub package: &'static str,
+    /// `None`: resolved from the project, the way the project's own import of
+    /// it resolves. `Some(owner)`: resolved from the installed directory of
+    /// another owner, the way *that* package's import of it resolves -- which
+    /// is where a re-export's declarations come from.
+    pub resolved_from: Option<&'static str>,
+}
+
+/// One [`ReleaseOwner`] as resolved for a project.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InstalledRelease<'a> {
+    /// The owner's package name.
+    pub package: &'a str,
+    /// The resolved manifest's `version` field exactly as spelled, or `None`
+    /// when no manifest carrying a version string resolved at all.
+    pub version: Option<&'a str>,
+}
+
+/// How a vocabulary stands against one project's installation of the packages
+/// it names ([`Dialect::review_installation`]).
+///
+/// The answer is the dialect's, never shared code's, because only the dialect
+/// knows which releases it was read on and which package owns which answer.
+#[derive(Clone)]
+pub enum InstallationReview {
+    /// Analysis proceeds.
+    Analyzed {
+        /// The vocabulary that answers for this installation, or `None` for
+        /// the language's own ([`Dialect::variant_key`] `None`).
+        vocabulary: Option<&'static dyn Dialect>,
+        /// Every open gap in what the dialect knows about the installation:
+        /// an owner at a release reviewed with gaps, an owner at a release
+        /// nobody compared, an owner that did not resolve, or owners at
+        /// releases no review read together. Empty means every owner resolved
+        /// to a release the vocabulary was read on, and analysis says nothing
+        /// about the installation; anything else makes the result
+        /// uncertifiable, with one project-level notice naming each gap.
+        gaps: Vec<InstallationGap>,
+    },
     /// A release whose runtime the vocabulary does not describe, even though
     /// its major matches. Refused exactly like an uncarried major.
     Refused(&'static RefusedRelease),
 }
 
-/// A reviewed release and the gaps its review left open.
-#[derive(Debug, Eq, PartialEq)]
-pub struct ReviewedRelease {
-    /// The exact `solid-js` version the review read.
-    pub version: &'static str,
-    /// Each open gap, as one sentence a user can act on. Empty would mean the
-    /// release is audited, which is [`ReleaseReview::Audited`]'s to say.
-    pub known_gaps: &'static [&'static str],
-    /// The review document, repository-relative.
-    pub review: &'static str,
+impl std::fmt::Debug for InstallationReview {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Analyzed { vocabulary, gaps } => formatter
+                .debug_struct("Analyzed")
+                .field(
+                    "vocabulary",
+                    &vocabulary.map(|vocabulary| vocabulary.variant_key()),
+                )
+                .field("gaps", gaps)
+                .finish(),
+            Self::Refused(refusal) => formatter.debug_tuple("Refused").field(refusal).finish(),
+        }
+    }
+}
+
+/// One open gap in what a vocabulary knows about an installation, as one
+/// sentence a user can act on, and the review that measured it, if any.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InstallationGap {
+    pub gap: String,
+    /// The review document, repository-relative. `None` for a gap no review
+    /// covers: an owner nobody compared, or one that did not resolve.
+    pub review: Option<&'static str>,
 }
 
 /// A release line refused within a modelled major, and why.
@@ -1443,15 +1483,60 @@ pub trait Dialect: Sync {
     /// Which version this adapter speaks.
     fn version(&self) -> Version;
 
-    /// How this vocabulary stands against an installed `solid-js` release of
-    /// its major, from the version string exactly as the manifest spells it.
+    /// The packages whose installed releases decide this vocabulary's
+    /// release-dependent answers, and where each resolves from. Shared code
+    /// resolves them and hands the result to
+    /// [`Dialect::review_installation`]; it never learns what each one owns.
     ///
-    /// The default is [`ReleaseReview::Unreviewed`]: a dialect that has not
-    /// said which releases it was read on has not been read on any, and the
-    /// fail-visible answer is a notice rather than silence.
-    fn review_release(&self, installed: &str) -> ReleaseReview {
+    /// The default is none: a dialect that names no owner has only the
+    /// `solid-js` detection read, and its review says so.
+    fn release_owners(&self) -> &'static [ReleaseOwner] {
+        &[]
+    }
+
+    /// The installation this vocabulary was audited on, as `(package,
+    /// version)` in [`Dialect::release_owners`] order: what a user pins to
+    /// certify. Empty for a dialect audited on none.
+    fn audited_installation(&self) -> &'static [(&'static str, &'static str)] {
+        &[]
+    }
+
+    /// How this vocabulary stands against one project's installation: one
+    /// [`InstalledRelease`] per [`Dialect::release_owners`] entry, in order,
+    /// each exactly as resolved.
+    ///
+    /// Asked of the language's own vocabulary, never of a variant, so a
+    /// variant never judges the installations that select it.
+    ///
+    /// The default analyzes under the language's vocabulary with one gap: a
+    /// dialect that has not said which releases it was read on has not been
+    /// read on any, and the fail-visible answer is a notice rather than
+    /// silence.
+    fn review_installation(&self, installed: &[InstalledRelease<'_>]) -> InstallationReview {
         let _ = installed;
-        ReleaseReview::Unreviewed
+        InstallationReview::Analyzed {
+            vocabulary: None,
+            gaps: vec![InstallationGap {
+                gap: "this vocabulary names no release it was read on".into(),
+                review: None,
+            }],
+        }
+    }
+
+    /// Which release variant of its language this vocabulary is: `None` for
+    /// the language's own vocabulary, and otherwise a stable key naming how
+    /// its answers differ from it. The key is part of every identity a result
+    /// is cached under, so two variants must never share one.
+    fn variant_key(&self) -> Option<&'static str> {
+        None
+    }
+
+    /// Every release variant [`Dialect::review_installation`] can answer
+    /// with, other than the language's own vocabulary. Listed so a variant
+    /// can be found again by its [`Dialect::variant_key`] alone, which is what
+    /// a daemon forwarding the selection it hashed has.
+    fn variants(&self) -> &'static [&'static dyn Dialect] {
+        &[]
     }
 
     /// Whether a binding spelling is a dialect convention that makes
@@ -1708,10 +1793,11 @@ pub trait Dialect: Sync {
     /// instead of assumed from the 2.0 answer.
     ///
     /// It is also the first answer that differs between two prereleases of
-    /// one major: `@solidjs/signals@2.0.0-rc.9` declares `Store<T> = T`, so
-    /// TS2540 is gone there while the runtime still drops the write. A
-    /// vocabulary therefore answers this for the release it was selected for
-    /// ([`Dialect::review_release`]), never for its major alone.
+    /// one major: `@solidjs/signals` declares `Store<T> = T` from `2.0.0-rc.7`,
+    /// so TS2540 is gone there while the runtime still drops the write. A
+    /// vocabulary therefore answers this for the installation it was selected
+    /// for ([`Dialect::review_installation`]), from the release of the package
+    /// that declares the type, never for its major alone.
     fn store_root_properties_are_readonly(&self) -> bool {
         false
     }
@@ -2544,8 +2630,20 @@ fn callback_exports_from_bundles(
 mod tests {
     use super::*;
 
+    /// Every vocabulary this build carries: each dialect, and each release
+    /// variant it can answer an installation with. The whole-table invariants
+    /// below hold for every one of them, not only for the audited vocabulary.
     fn dialects() -> &'static [&'static dyn Dialect] {
-        DIALECTS
+        static EVERY: std::sync::LazyLock<Vec<&'static dyn Dialect>> =
+            std::sync::LazyLock::new(|| {
+                DIALECTS
+                    .iter()
+                    .flat_map(|dialect| {
+                        std::iter::once(*dialect).chain(dialect.variants().iter().copied())
+                    })
+                    .collect()
+            });
+        &EVERY
     }
 
     /// The single archive some dialect audited as `name@version`, for tests
@@ -3079,11 +3177,21 @@ mod tests {
         assert!(!silent.store_root_properties_are_readonly());
         assert!(!silent.store_setter_callback_enables_proxy_writes());
         // No release is audited for a dialect that names none: the notice,
-        // not silence.
-        assert_eq!(
-            silent.review_release("2.0.0-rc.3"),
-            ReleaseReview::Unreviewed
-        );
+        // not silence, under the language's own vocabulary.
+        assert!(silent.release_owners().is_empty());
+        assert!(silent.audited_installation().is_empty());
+        let InstallationReview::Analyzed { vocabulary, gaps } =
+            silent.review_installation(&[InstalledRelease {
+                package: "solid-js",
+                version: Some("2.0.0-rc.3"),
+            }])
+        else {
+            panic!("a dialect that names no release refuses none");
+        };
+        assert!(vocabulary.is_none());
+        assert_eq!(gaps.len(), 1, "{gaps:?}");
+        assert_eq!(silent.variant_key(), None);
+        assert!(silent.variants().is_empty());
 
         // Surfaces this dialect has not claimed to model.
         assert!(!silent.models_server_functions());
@@ -3147,7 +3255,7 @@ mod tests {
 
     #[test]
     fn the_boundary_name_round_trips_through_the_boundary_kind() {
-        for &dialect in DIALECTS {
+        for &dialect in dialects() {
             let version = dialect.version();
             for boundary in [Boundary::Async, Boundary::Error] {
                 let name = dialect.boundary_name(boundary);
@@ -3173,7 +3281,7 @@ mod tests {
     /// a call it will never see.
     #[test]
     fn every_primitive_is_exported_from_a_module_the_dialect_owns() {
-        for &dialect in DIALECTS {
+        for &dialect in dialects() {
             let version = dialect.version();
             for name in dialect_names(dialect).iter().copied() {
                 let modules = dialect.export_modules(name, ExportPosition::Value);
@@ -3258,7 +3366,7 @@ mod tests {
     /// would read a function as an options object, or the reverse.
     #[test]
     fn no_primitive_takes_its_options_where_it_takes_a_callback() {
-        for &dialect in DIALECTS {
+        for &dialect in dialects() {
             let version = dialect.version();
             for name in dialect_names(dialect).iter().copied() {
                 let primitive = dialect.primitive(name).unwrap();
@@ -3304,7 +3412,7 @@ mod tests {
     /// inside `untrack` at module scope go unreported.
     #[test]
     fn creating_an_owner_and_inheriting_one_are_distinguished() {
-        for &dialect in DIALECTS {
+        for &dialect in dialects() {
             let version = dialect.version();
             assert_eq!(
                 dialect.callback_owners(Primitive::CreateRoot),
@@ -3343,7 +3451,7 @@ mod tests {
 
         // Both signatures accept Owner | null. A concrete call sharpens this
         // flat answer from its first argument.
-        for &dialect in DIALECTS {
+        for &dialect in dialects() {
             assert_eq!(
                 dialect.callback_owners(Primitive::RunWithOwner),
                 &[(1, CallbackOwner::Conditional)]
@@ -3364,7 +3472,7 @@ mod tests {
     /// to the table accomplishes nothing.
     #[test]
     fn every_name_in_the_vocabulary_is_recognisable_at_its_declaration() {
-        for &dialect in DIALECTS {
+        for &dialect in dialects() {
             let version = dialect.version();
             for name in dialect_names(dialect) {
                 assert!(
@@ -3431,7 +3539,7 @@ mod tests {
         // answers for its own vocabulary and is silent about the other's.
         assert!(!two.merges_props_reactivity(Primitive::MergeProps));
 
-        for &dialect in DIALECTS {
+        for &dialect in dialects() {
             let merging = dialect_names(dialect)
                 .iter()
                 .filter_map(|name| dialect.primitive(name))
@@ -3481,7 +3589,7 @@ mod tests {
         assert!(two.returns_store(Primitive::CreateProjection));
         assert!(!two.returns_reactive_tuple(Primitive::CreateProjection));
         // Every tuple row is a source factory; the converse does not hold.
-        for &dialect in DIALECTS {
+        for &dialect in dialects() {
             for name in dialect_names(dialect) {
                 let Some(primitive) = dialect.primitive(name) else {
                     continue;
@@ -3551,7 +3659,7 @@ mod tests {
         // createReaction allocates a computation the moment it is called, in
         // both runtimes, so it carries the same leaf-scope disposal
         // obligation as createEffect.
-        for &dialect in DIALECTS {
+        for &dialect in dialects() {
             let version = dialect.version();
             assert_eq!(
                 dialect.cleanup_rule(Primitive::CreateReaction),
@@ -3642,7 +3750,16 @@ mod tests {
             // `Version::V1` survives for classification only; no vocabulary
             // behind it means no name list, and `DIALECTS` never yields one.
             Version::V1 => Vec::new(),
-            Version::V2 => solid_2::names(),
+            // A name only some installations export (`until`) is listed for
+            // the vocabularies that export it; every other row is listed for
+            // all of them, so a row that fails to resolve still fails.
+            Version::V2 => solid_2::names()
+                .into_iter()
+                .filter(|name| {
+                    !solid_2::RELEASE_GATED_NAMES.contains(name)
+                        || dialect.primitive(name).is_some()
+                })
+                .collect(),
         }
     }
 

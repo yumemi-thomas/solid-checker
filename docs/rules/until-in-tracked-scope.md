@@ -7,8 +7,9 @@
 
 ## What it does
 
-Flags calls to `until` (imported from `solid-js` / `@solidjs/signals`, new in
-`2.0.0-rc.9`) whose call site provably runs under an active observer: directly
+Flags calls to `until` (imported from `solid-js`, exported from `2.0.0-rc.5`
+on; see "When it does not fire") whose call site provably runs under an active
+observer: directly
 inside a tracked, non-deferred callback (`createMemo`'s compute,
 `createEffect` / `createRenderEffect`'s compute function,
 `createTrackedEffect`, a boundary body) or inside a compiler-proven tracked JSX
@@ -89,8 +90,15 @@ step, an event handler, `onSettled`, an effect's apply function.
   of them, as for `resolve`.
 - **Helpers.** The proof is lexical: an `until()` inside a named helper that a
   memo happens to call is not claimed.
-- **Before rc.9.** `until` does not exist in `solid-js@2.0.0-rc.3`; importing it
-  is TS2305 there, so the rule has nothing to say about rc.3 code.
+- **Before rc.5.** `until` arrives in `@solidjs/signals@2.0.0-rc.5`, and the
+  `solid-js` root re-exports it from the same release. On an installation
+  where either is older, or either is a release nobody compared, `until` is not
+  a name the vocabulary knows, so the rule cannot fire: on rc.3 and rc.4 the
+  import is TS2305 and neither runtime has the export (the rc.1-rc.8 release
+  review § 6 measured the rule firing there before this gate;
+  `fixtures/reactive-ir/release-triple-until-rc3` pins it silent). A fresh
+  install of `solid-js@2.0.0-rc.3` over signals rc.9 is the same case, because
+  rc.3's root does not re-export `until`.
 
 ## Related
 

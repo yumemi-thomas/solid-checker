@@ -101,3 +101,37 @@ test("the major parse matches Version::for_solid_js", () => {
   assert.equal(solidMajor(""), null);
   assert.equal(solidMajor(undefined), null);
 });
+
+// The installation review also reads `@solidjs/signals` and `@solidjs/web`
+// beside a `solid-js` stub, so an untracked or versionless companion moves the
+// store, `until`, `omit` and `dynamic` answers only in CI. Absent is fine: the
+// notice states an unresolved signals, and web is not asked about.
+test("a companion stub beside solid-js is held to presence, parse and tracking", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-stub-check-"));
+  try {
+    const nodeModules = join(root, "fixtures/reactive-ir/subject/node_modules");
+    const solid = "fixtures/reactive-ir/subject/node_modules/solid-js/package.json";
+    const signals = "fixtures/reactive-ir/subject/node_modules/@solidjs/signals/package.json";
+    const web = "fixtures/reactive-ir/subject/node_modules/@solidjs/web/package.json";
+    mkdirSync(join(nodeModules, "solid-js"), { recursive: true });
+    writeFileSync(join(root, solid), JSON.stringify({ name: "solid-js", version: "2.0.0-rc.3" }));
+    const problems = (tracked) =>
+      dialectStubProblems({
+        projectRoot: root,
+        groups: ["reactive-ir"],
+        tracked: new Set(tracked),
+        majors: new Set([2]),
+      });
+    assert.deepEqual(problems([solid]), [], "no companion at all is not a problem");
+    mkdirSync(join(nodeModules, "@solidjs/signals"), { recursive: true });
+    writeFileSync(join(root, signals), JSON.stringify({ name: "@solidjs/signals" }));
+    mkdirSync(join(nodeModules, "@solidjs/web"), { recursive: true });
+    writeFileSync(join(root, web), JSON.stringify({ name: "@solidjs/web", version: "2.0.0-rc.3" }));
+    const found = problems([solid, signals]);
+    assert.equal(found.length, 2, found.join("\n"));
+    assert.match(found[0], /@solidjs\/signals\/package\.json: no "version"/);
+    assert.match(found[1], /@solidjs\/web\/package\.json: not tracked/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

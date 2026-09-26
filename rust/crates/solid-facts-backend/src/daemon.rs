@@ -886,10 +886,15 @@ fn contract_files(
         )?);
         paths.extend(solid_facts_backend::admission_input_paths(base));
     }
-    // The installed `solid-js` manifest decides the release notice (SC9014)
+    // The installed `solid-js` manifest, and the manifest of every other
+    // package the dialect names as owning a release-dependent answer
+    // (`@solidjs/signals`, `@solidjs/web`), decide the release notice (SC9014)
     // that `DiagnosticSession::analyze` re-reads on every run, so an install
-    // moving between an audited and an unaudited release must not keep
-    // serving the previous answer for a whole generation.
+    // moving any of them between an audited and an unaudited release must not
+    // keep serving the previous answer for a whole generation.
+    paths.extend(solid_facts_backend::dialect::release_manifests(
+        &state.project,
+    ));
     match solid_facts_backend::dialect::detect_detailed(&state.project) {
         solid_facts_backend::dialect::Detection::Installed { manifest, .. }
         | solid_facts_backend::dialect::Detection::Unsupported { manifest, .. }

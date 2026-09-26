@@ -378,7 +378,18 @@ const unitParts = (project) => () => [
   `project:${project.id}`,
   `wording:${KEEPS_WORDING.has(project.id)}`,
   hashTree(project.directory),
-  ancestorChainDigest(project.directory, "node_modules/solid-js/package.json")
+  ancestorChainDigest(project.directory, "node_modules/solid-js/package.json"),
+  // The installation review reads two more manifests the same way
+  // (`resolved_releases` in dialect.rs): `@solidjs/web` from the project, and
+  // `@solidjs/signals` from the installed `solid-js`'s directory, which for a
+  // stub-less project or an ancestor stub lies on this same chain -- either
+  // hoisted beside `solid-js` or nested under it.
+  ancestorChainDigest(project.directory, "node_modules/@solidjs/signals/package.json"),
+  ancestorChainDigest(
+    project.directory,
+    "node_modules/solid-js/node_modules/@solidjs/signals/package.json"
+  ),
+  ancestorChainDigest(project.directory, "node_modules/@solidjs/web/package.json")
 ];
 
 const computed = await mapPool(
