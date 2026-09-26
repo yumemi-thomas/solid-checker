@@ -1153,3 +1153,209 @@ fn the_nearest_catalog_answers_and_a_farther_one_is_the_fallback() {
     );
     let _ = fs::remove_dir_all(scratch);
 }
+
+/// An unhoisted monorepo, pnpm-workspace style without the store: the root
+/// `tsconfig.json` covers `packages/a` (`App.ts`, `Other.ts`) and
+/// `packages/b` (`Main.ts`), and each package installs its own copy of the
+/// package and its dependency under its own `node_modules`, with nothing at
+/// the root but the one lockfile governing both installs. `packages/a`'s copy
+/// is the certified bytes; `packages/b`'s has another tarball integrity.
+fn unhoisted_monorepo_tree(root: &Path) {
+    monorepo_tree(root);
+    fs::rename(
+        root.join("node_modules"),
+        root.join("packages/a/node_modules"),
+    )
+    .unwrap();
+    copy_tree(
+        &root.join("packages/a/node_modules"),
+        &root.join("packages/b/node_modules"),
+    );
+    fs::write(
+        root.join("package-lock.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "name": "mono",
+            "lockfileVersion": 3,
+            "packages": {
+                "": { "name": "mono" },
+                format!("packages/a/node_modules/{PACKAGE}"): {
+                    "version": "1.3.0", "integrity": INTEGRITY
+                },
+                format!("packages/a/node_modules/{DEPENDENCY}"): {
+                    "version": "1.0.0", "integrity": dependency("1.0.0").integrity
+                },
+                format!("packages/b/node_modules/{PACKAGE}"): {
+                    "version": "1.3.0", "integrity": "sha512-another-tarball"
+                },
+                format!("packages/b/node_modules/{DEPENDENCY}"): {
+                    "version": "1.0.0", "integrity": dependency("1.0.0").integrity
+                }
+            }
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+}
+
+/// `contract check` on `project`: every row for the package, as JSON.
+fn contract_rows(project: &Path, trust: &Path, typefacts: &str) -> Vec<serde_json::Value> {
+    let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .args([
+            "--project",
+            &project.join("tsconfig.json").to_string_lossy(),
+            "--typefacts",
+            typefacts,
+            "--check-contracts",
+            "--format",
+            "json",
+            "--receipt-trust-configuration",
+            &trust.to_string_lossy(),
+            "--no-bundled-contracts",
+        ])
+        .output()
+        .unwrap();
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
+            panic!(
+                "no contract report ({error}): {}",
+                String::from_utf8_lossy(&output.stderr)
+            )
+        });
+    report["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["name"] == PACKAGE)
+        .cloned()
+        .collect()
+}
+
+/// Admission from a monorepo root is evaluated from each importer's own
+/// install. The root catalog's acceptance names `packages/a`'s copy, so
+/// `packages/a`'s files are admitted from the root exactly as the lookup from
+/// their own directory finds that copy -- until this, the root's own lookup
+/// found no copy at all and refused every file with "no exact lockfile
+/// integrity". `packages/b`'s copy is other bytes, admitted independently and
+/// refused, and told why from its own install.
+#[test]
+fn a_monorepo_root_admits_each_importer_from_the_install_its_resolution_reaches() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let scratch = temporary_directory("importer-admission");
+    let certified = [dependency("1.0.0")];
+    let root = scratch.join("mono");
+    unhoisted_monorepo_tree(&root);
+    let trust = certify_into(
+        &root.join("packages/a"),
+        &root.join(".solid-checker"),
+        Some(&certified),
+    );
+
+    let (snapshot, _) = analysis_with_notice(&root, Some(&trust), &typefacts);
+    assert_eq!(
+        gated_files(&snapshot),
+        ["Main.ts"],
+        "only packages/b's copy differs from the certified artifact: {snapshot}"
+    );
+    let gate = acceptance_gate(&snapshot).unwrap();
+    let notes = evidence(gate)
+        .into_iter()
+        .filter(|step| step.starts_with(CATALOG_NOTE))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        notes,
+        [format!(
+            "{CATALOG_NOTE}the installed package's bytes or requested entrypoint are not the \
+             certified ones (its acceptance root is not reproduced)"
+        )],
+        "packages/b's refusal is replayed from its own install: {gate}"
+    );
+    let rows = summaries(&snapshot);
+    assert!(
+        rows.iter().any(|row| row["evidence"] == "accepted"),
+        "{snapshot}"
+    );
+
+    // `contract check` agrees, one row per install, each from its own.
+    let rows = contract_rows(&root, &trust, &typefacts);
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert_eq!(rows[0]["status"], "certified", "{}", rows[0]);
+    assert_eq!(
+        rows[0]["importers"],
+        serde_json::json!(["packages/a/src/App.ts", "packages/a/src/Other.ts"])
+    );
+    assert_eq!(rows[1]["status"], "missing", "{}", rows[1]);
+    assert_eq!(rows[1]["installedIntegrity"], "sha512-another-tarball");
+    assert_eq!(
+        rows[1]["importers"],
+        serde_json::json!(["packages/b/src/Main.ts"])
+    );
+    let detail = rows[1]["detail"].as_str().unwrap();
+    assert!(
+        detail.contains("acceptance root is not reproduced")
+            && !detail.contains("no exact lockfile integrity"),
+        "{detail}"
+    );
+
+    // The negative control: with `packages/a`'s copy repacked too, nothing is
+    // admitted anywhere -- the admission above was the install's, not the
+    // root's catalog applying by name.
+    let repacked = scratch.join("repacked");
+    copy_tree(&root, &repacked);
+    let lockfile = fs::read_to_string(repacked.join("package-lock.json"))
+        .unwrap()
+        .replace(INTEGRITY, "sha512-repacked-tarball");
+    fs::write(repacked.join("package-lock.json"), lockfile).unwrap();
+    let (snapshot, _) = analysis_with_notice(&repacked, Some(&trust), &typefacts);
+    assert_eq!(
+        gated_files(&snapshot),
+        ["App.ts"],
+        "the gate names a specifier once, at its first unanswered import: {snapshot}"
+    );
+    let rows = contract_rows(&repacked, &trust, &typefacts);
+    assert!(
+        rows.iter().all(|row| row["status"] == "missing"),
+        "{rows:?}"
+    );
+    let _ = fs::remove_dir_all(scratch);
+}
+
+/// The retained daemon's cached answer reads a sub-package's install when
+/// admission did: repacking `packages/a`'s copy in place -- no source file,
+/// and no lockfile or manifest the root's own lookup reads, changes -- must
+/// not keep serving the admitted answer.
+#[test]
+fn the_retained_daemon_rereads_the_sub_package_install_admission_read() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let daemon = [
+        ("SOLID_CHECKER_DAEMON", "1"),
+        ("SOLID_CHECKER_DAEMON_IDLE_SECS", "2"),
+    ];
+    let scratch = temporary_directory("importer-admission-daemon");
+    let certified = [dependency("1.0.0")];
+    let root = scratch.join("mono");
+    unhoisted_monorepo_tree(&root);
+    let trust = certify_into(
+        &root.join("packages/a"),
+        &root.join(".solid-checker"),
+        Some(&certified),
+    );
+    let (before, _) = analysis_in(&root, Some(&trust), &typefacts, &daemon);
+    assert_eq!(gated_files(&before), ["Main.ts"], "{before}");
+    // A patch release installed in place of `packages/a`'s copy: the manifest
+    // under `packages/a/node_modules` is the only file that moved.
+    let manifest = root
+        .join("packages/a/node_modules")
+        .join(PACKAGE)
+        .join("package.json");
+    let rewritten = fs::read_to_string(&manifest)
+        .unwrap()
+        .replace("\"1.3.0\"", "\"1.3.1\"");
+    fs::write(&manifest, rewritten).unwrap();
+    let (after, _) = analysis_in(&root, Some(&trust), &typefacts, &daemon);
+    assert_eq!(gated_files(&after), ["App.ts"], "{after}");
+    let _ = fs::remove_dir_all(scratch);
+}

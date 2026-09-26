@@ -910,3 +910,91 @@ fn scopes_survive_composition_and_key_the_cache_only_when_present() {
             .is_err()
     );
 }
+
+#[test]
+fn an_import_admitted_for_its_importers_answers_only_them() {
+    let mut contract = accepted();
+    contract.receipt.semantic_digest = digest('a');
+    let tier =
+        AcceptedContractIndex::from_artifact_acceptances([("artifact-a".to_owned(), contract)]);
+    let index = tier.clone().with_admitted_artifacts_for([(
+        "/mono/packages/a/src/App.ts".to_owned(),
+        "pkg".to_owned(),
+        "artifact-a".to_owned(),
+    )]);
+    assert_eq!(
+        answered_by(&index, "/mono/packages/a/src/App.ts"),
+        Some(digest('a'))
+    );
+    // Another file importing the same specifier reaches another install, and
+    // is answered by nothing this admitted.
+    assert_eq!(answered_by(&index, "/mono/packages/b/src/Main.ts"), None);
+    // An identity no acceptance carries admits nothing.
+    let unknown = tier.clone().with_admitted_artifacts_for([(
+        "/mono/packages/a/src/App.ts".to_owned(),
+        "pkg".to_owned(),
+        "artifact-unknown".to_owned(),
+    )]);
+    assert_eq!(answered_by(&unknown, "/mono/packages/a/src/App.ts"), None);
+    // Nothing admitted per importer, nothing hashed: the fingerprint an index
+    // without it always had.
+    assert_eq!(
+        tier.clone()
+            .with_admitted_artifacts_for(Vec::new())
+            .with_admission_refusals_for(Vec::new())
+            .cache_fingerprint(),
+        tier.cache_fingerprint()
+    );
+    assert_ne!(index.cache_fingerprint(), tier.cache_fingerprint());
+    // Core filtering reaches per-importer admissions.
+    let mut core = accepted();
+    core.package.name = "solid-js".into();
+    let core_index = AcceptedContractIndex::from_artifact_acceptances([("core".to_owned(), core)])
+        .with_admitted_artifacts_for([(
+            "/mono/packages/a/src/App.ts".to_owned(),
+            "solid-js".to_owned(),
+            "core".to_owned(),
+        )]);
+    assert!(
+        core_index
+            .contract("/mono/packages/a/src/App.ts", "solid-js")
+            .is_ok()
+    );
+    assert!(
+        core_index
+            .external_packages()
+            .contract("/mono/packages/a/src/App.ts", "solid-js")
+            .is_err()
+    );
+}
+
+#[test]
+fn a_per_importer_explanation_answers_before_the_specifier_keyed_one() {
+    let index = AcceptedContractIndex::default()
+        .with_admission_refusals([("pkg".to_owned(), "from the root's copy".to_owned())])
+        .with_admission_refusals_for([
+            (
+                ("/mono/packages/b/src/Main.ts".to_owned(), "pkg".to_owned()),
+                Some("from b's copy".to_owned()),
+            ),
+            (
+                ("/mono/packages/a/src/App.ts".to_owned(), "pkg".to_owned()),
+                None,
+            ),
+        ]);
+    assert_eq!(
+        index.admission_refusal_at("/mono/packages/b/src/Main.ts", "pkg"),
+        Some("from b's copy")
+    );
+    // An install that refused nothing says so; the root's sentence is about
+    // another copy.
+    assert_eq!(
+        index.admission_refusal_at("/mono/packages/a/src/App.ts", "pkg"),
+        None
+    );
+    assert_eq!(
+        index.admission_refusal_at("/mono/tools/main.ts", "pkg"),
+        Some("from the root's copy")
+    );
+    assert_eq!(index.admission_refusal("pkg"), Some("from the root's copy"));
+}

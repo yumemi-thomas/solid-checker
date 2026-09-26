@@ -167,9 +167,23 @@ package installed only under `packages/x/node_modules`. A package name that
 resolves to different installed artifacts from different importers gets one row
 per artifact, and a row whose artifact the name does not identify from the
 project directory lists its `importers` (project-relative files); a
-single-package project's rows never carry the field. A missing sweep
-can generate proposals for registry-installed packages that carry exact
-integrity:
+single-package project's rows never carry the field.
+
+Admission of an accepted contract by artifact -- a compiled-in contract or a
+project catalog entry certified from another file -- is decided per importer
+the same way. The installed identity (name, version, lockfile integrity) and
+the dependency-environment replay start from the copy the importing file's
+`node_modules` walk reaches, and the lockfile is the one found walking up from
+the directory that holds that copy: in a pnpm workspace, the root
+`pnpm-lock.yaml`. So a monorepo root admits `packages/x`'s imports exactly as
+`packages/x` analysed on its own does, two importers reaching different
+installs are admitted, or refused, independently, and a specifier whose
+importers reach more than one install is never admitted project-wide. A
+refusal is explained from the install that was refused. A project whose
+importers all reach its own installs is admitted exactly as before.
+
+A missing sweep can generate proposals for registry-installed packages that
+carry exact integrity:
 
 ```sh
 solid-checker contract generate --missing --project tsconfig.json

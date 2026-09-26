@@ -103,6 +103,14 @@ pub struct AcceptedContractIndex {
     /// by `with_admitted_artifacts`; empty otherwise, which is every path that
     /// does not derive identities.
     admitted: BTreeMap<String, AcceptedContract>,
+    /// Imports admitted by artifact for one importing file only, keyed by
+    /// `(importer, specifier)`: a specifier whose importers reach more than
+    /// one installed artifact -- a monorepo root analysing sub-packages that
+    /// each install their own copy -- is admitted per install, for the files
+    /// whose resolution reaches it, and never project-wide. Populated only by
+    /// `with_admitted_artifacts_for`; empty for every project whose importers
+    /// all reach the project directory's own install.
+    admitted_at: BTreeMap<(String, String), AcceptedContract>,
     uncertifiable_imports: BTreeMap<(String, String), UncertifiableImportReason>,
     /// Per imported specifier, why an acceptance that exists for its package
     /// was not admitted -- one sentence the backend's admission rule wrote.
@@ -112,6 +120,14 @@ pub struct AcceptedContractIndex {
     /// already could not answer. It is part of the cache fingerprint because
     /// that note is part of the findings.
     admission_refusals: BTreeMap<String, String>,
+    /// [`Self::admission_refusals`] for one importing file, keyed by
+    /// `(importer, specifier)`: the explanation replayed from the install that
+    /// file's resolution reaches, where that is not the project directory's.
+    /// Consulted before the specifier-keyed one, and `None` is an answer too:
+    /// that importer's install refused nothing, so the specifier-keyed
+    /// sentence -- replayed from another copy -- is not its explanation.
+    /// Empty for every project whose importers all reach its own installs.
+    admission_refusals_at: BTreeMap<(String, String), Option<String>>,
     identity: Vec<AcceptedImportIdentity>,
     /// Project catalogs that apply only to the files below one directory:
     /// the `.solid-checker/` of a directory strictly inside the analysed
@@ -204,7 +220,24 @@ impl AcceptedContractIndex {
         self.imports
             .get(&(importer.to_owned(), specifier.to_owned()))
             .and_then(|contracts| contracts.first())
+            .or_else(|| {
+                self.admitted_at
+                    .get(&(importer.to_owned(), specifier.to_owned()))
+            })
             .or_else(|| self.admitted.get(specifier))
+    }
+
+    /// This index's own explanation for one import, ignoring scopes: the one
+    /// replayed for this importer's own install first, then the
+    /// specifier-keyed one.
+    fn own_admission_refusal(&self, importer: &str, specifier: &str) -> Option<&str> {
+        match self
+            .admission_refusals_at
+            .get(&(importer.to_owned(), specifier.to_owned()))
+        {
+            Some(refusal) => refusal.as_deref(),
+            None => self.admission_refusal(specifier),
+        }
     }
 
     /// Every importer-keyed binding this index holds, its scopes' included,
@@ -238,8 +271,8 @@ impl AcceptedContractIndex {
     #[must_use]
     pub fn admission_refusal_at(&self, importer: &str, specifier: &str) -> Option<&str> {
         self.scopes_for(importer)
-            .find_map(|scope| scope.admission_refusal(specifier))
-            .or_else(|| self.admission_refusal(specifier))
+            .find_map(|scope| scope.own_admission_refusal(importer, specifier))
+            .or_else(|| self.own_admission_refusal(importer, specifier))
     }
 
     /// Ordinary analysis has one authority for Solid core: the built-in
@@ -269,6 +302,8 @@ impl AcceptedContractIndex {
                 .admission_refusals
                 .keys()
                 .all(|specifier| !core_specifier(specifier))
+            && self.admitted_at.is_empty()
+            && self.admission_refusals_at.is_empty()
             && self.scopes.is_empty()
         {
             return std::borrow::Cow::Borrowed(self);
@@ -301,6 +336,9 @@ impl AcceptedContractIndex {
         external
             .admitted
             .retain(|specifier, contract| !core_specifier(specifier) && external_package(contract));
+        external.admitted_at.retain(|(_, specifier), contract| {
+            !core_specifier(specifier) && external_package(contract)
+        });
         external.identity.retain(|identity| {
             external
                 .imports
@@ -312,6 +350,9 @@ impl AcceptedContractIndex {
         external
             .admission_refusals
             .retain(|specifier, _| !core_specifier(specifier));
+        external
+            .admission_refusals_at
+            .retain(|(_, specifier), _| !core_specifier(specifier));
         for scope in &mut external.scopes {
             scope.index.retain_external();
         }
@@ -345,8 +386,10 @@ impl AcceptedContractIndex {
             imports: BTreeMap::new(),
             by_artifact,
             admitted: BTreeMap::new(),
+            admitted_at: BTreeMap::new(),
             uncertifiable_imports: BTreeMap::new(),
             admission_refusals: BTreeMap::new(),
+            admission_refusals_at: BTreeMap::new(),
             identity: Vec::new(),
             scopes: Vec::new(),
         }
@@ -399,8 +442,10 @@ impl AcceptedContractIndex {
             imports,
             by_artifact,
             admitted: BTreeMap::new(),
+            admitted_at: BTreeMap::new(),
             uncertifiable_imports: BTreeMap::new(),
             admission_refusals: BTreeMap::new(),
+            admission_refusals_at: BTreeMap::new(),
             identity,
             scopes: Vec::new(),
         })
@@ -490,6 +535,9 @@ impl AcceptedContractIndex {
         for (specifier, refusal) in fallback.admission_refusals {
             self.admission_refusals.entry(specifier).or_insert(refusal);
         }
+        for (key, refusal) in fallback.admission_refusals_at {
+            self.admission_refusals_at.entry(key).or_insert(refusal);
+        }
         // A fallback's scopes stay scopes: folding them into this index's own
         // tiers would let a nested catalog answer files outside its directory.
         for scope in fallback.scopes {
@@ -508,6 +556,22 @@ impl AcceptedContractIndex {
     ) -> Self {
         for (specifier, refusal) in refusals {
             self.admission_refusals.entry(specifier).or_insert(refusal);
+        }
+        self
+    }
+
+    /// [`Self::with_admission_refusals`] for single importing files, keyed by
+    /// `(importer, specifier)`: the explanation replayed from the install that
+    /// file's own resolution reaches. It answers before the specifier-keyed
+    /// explanation, for that importer only; `None` says that install refused
+    /// nothing, and suppresses the specifier-keyed sentence for that importer.
+    #[must_use]
+    pub fn with_admission_refusals_for(
+        mut self,
+        refusals: impl IntoIterator<Item = ((String, String), Option<String>)>,
+    ) -> Self {
+        for (key, refusal) in refusals {
+            self.admission_refusals_at.entry(key).or_insert(refusal);
         }
         self
     }
@@ -593,6 +657,44 @@ impl AcceptedContractIndex {
         for (specifier, refusal) in &self.admission_refusals {
             hash_text(&mut hash, specifier);
             hash_text(&mut hash, refusal);
+        }
+        // Nothing is hashed for an index with no per-importer admission, so a
+        // project whose importers all reach its own installs keeps the
+        // fingerprint it always had.
+        if !self.admitted_at.is_empty() || !self.admission_refusals_at.is_empty() {
+            hash.update(b"admitted-at");
+            hash.update((self.admitted_at.len() as u64).to_be_bytes());
+            for ((importer, specifier), contract) in &self.admitted_at {
+                hash_text(&mut hash, importer);
+                hash_text(&mut hash, specifier);
+                let semantic = contract.semantic_identity();
+                hash_text(&mut hash, &semantic.package.name);
+                hash_text(&mut hash, &semantic.package.version);
+                hash_text(&mut hash, &semantic.package.integrity);
+                hash_text(&mut hash, &semantic.artifact_case);
+                hash_text(&mut hash, semantic.semantic_digest.as_str());
+                hash_text(&mut hash, semantic.closed_claims_root.as_str());
+                match &semantic.authentication {
+                    Some(authentication) => {
+                        hash.update([1]);
+                        hash_text(&mut hash, authentication.receipt_digest.as_str());
+                        hash_text(&mut hash, authentication.trust_store_digest.as_str());
+                    }
+                    None => hash.update([0]),
+                }
+            }
+            hash.update((self.admission_refusals_at.len() as u64).to_be_bytes());
+            for ((importer, specifier), refusal) in &self.admission_refusals_at {
+                hash_text(&mut hash, importer);
+                hash_text(&mut hash, specifier);
+                match refusal {
+                    Some(refusal) => {
+                        hash.update([1]);
+                        hash_text(&mut hash, refusal);
+                    }
+                    None => hash.update([0]),
+                }
+            }
         }
         // Nothing is hashed for an index without scopes, so a project with no
         // nested catalog keeps the fingerprint it always had.
@@ -720,6 +822,37 @@ impl AcceptedContractIndex {
             };
             self.admitted
                 .entry(specifier)
+                .or_insert_with(|| contract.clone());
+        }
+        self
+    }
+
+    /// [`Self::with_admitted_artifacts`] for single importing files: each entry
+    /// is `(importer, specifier, artifact identity)`, derived by the caller
+    /// from the install *that importer's* resolution reaches, and admits the
+    /// specifier for that importer only.
+    ///
+    /// This is how one specifier reaching different installed artifacts from
+    /// different files is admitted: a monorepo root whose sub-packages each
+    /// install their own copy has no project-wide artifact for it, so none of
+    /// them is admitted project-wide, and each file is answered by the install
+    /// its own `node_modules` walk finds. The caller must not also admit such a
+    /// specifier project-wide.
+    ///
+    /// Importer-keyed acceptances still win, and the first identity recorded
+    /// for an import is kept, exactly as for [`Self::with_admitted_artifacts`],
+    /// so tiers keep their precedence when called in order.
+    #[must_use]
+    pub fn with_admitted_artifacts_for(
+        mut self,
+        admitted: impl IntoIterator<Item = (String, String, String)>,
+    ) -> Self {
+        for (importer, specifier, identity) in admitted {
+            let Some(contract) = self.by_artifact.get(&identity).and_then(|it| it.first()) else {
+                continue;
+            };
+            self.admitted_at
+                .entry((importer, specifier))
                 .or_insert_with(|| contract.clone());
         }
         self

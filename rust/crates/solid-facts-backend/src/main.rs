@@ -3562,15 +3562,14 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                     // admits nothing, because conditions select the artifact and
                     // the analyzer has no facts of its own about them.
                     let contracts = match discovered_catalog.as_deref() {
-                        Some(path) => contracts.with_admitted_artifacts(
-                            solid_facts_backend::admitted_project_artifacts(
-                                std::slice::from_ref(&path.to_path_buf()),
-                                trust.as_ref(),
-                                &package_root,
-                                &request.runtime.selected_conditions(),
-                                &facts,
-                            )?,
-                        ),
+                        Some(path) => solid_facts_backend::admitted_project_artifacts(
+                            std::slice::from_ref(&path.to_path_buf()),
+                            trust.as_ref(),
+                            &package_root,
+                            &request.runtime.selected_conditions(),
+                            &facts,
+                        )?
+                        .admit_into(contracts),
                         None => contracts,
                     };
                     let contracts = if request.proposal_dependency_catalog.is_empty() {
@@ -3761,22 +3760,28 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         // Why a package with an acceptance on hand is still `missing`: the
         // same admission steps replayed, reported rather than decided. A
         // nested catalog's, replayed from its own directory, explain only
-        // what the project-wide tiers left unexplained.
-        let mut refusals = solid_facts_backend::admission_refusal_details(
-            directory,
-            &catalogs,
-            request.bundled_contracts,
-        )?;
-        for scope in &selection.nested {
-            for (package, refusal) in solid_facts_backend::admission_refusal_details(
-                &scope.directory,
-                &scope.admitted,
-                false,
-            )? {
-                refusals.entry(package).or_insert(refusal);
+        // what the project-wide tiers left unexplained. The project-wide tiers
+        // are replayed from the directory each row's admission was evaluated
+        // from: the project directory, or the install directory of an
+        // artifact only some importers reach.
+        let refusals = |from: &Path| {
+            let mut refusals = solid_facts_backend::admission_refusal_details(
+                from,
+                &catalogs,
+                request.bundled_contracts,
+            )?;
+            for scope in &selection.nested {
+                for (package, refusal) in solid_facts_backend::admission_refusal_details(
+                    &scope.directory,
+                    &scope.admitted,
+                    false,
+                )? {
+                    refusals.entry(package).or_insert(refusal);
+                }
             }
-        }
-        selection.extend_refusals(&mut refusals);
+            selection.extend_refusals(&mut refusals);
+            Ok(refusals)
+        };
         let statuses =
             accepted_package_contract_statuses(dialect, project, &facts, &contracts, &refusals)?;
         let actionable = statuses

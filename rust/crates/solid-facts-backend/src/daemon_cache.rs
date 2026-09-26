@@ -20,6 +20,11 @@ pub(crate) struct CachedAnswer {
     /// `contract_files` comparison re-reads each of them, the way `modules`
     /// names the packages whose contracts it re-reads.
     pub(crate) catalog_scopes: Vec<PathBuf>,
+    /// The `(install directory, module)` lookups artifact admission made for
+    /// imports some file reaches outside the project directory's own installs
+    /// (`importer_admission_inputs`): the `contract_files` comparison re-reads
+    /// each one's manifest and lockfiles.
+    pub(crate) install_lookups: Vec<(PathBuf, String)>,
     pub(crate) contract_files: Vec<ContractFile>,
     pub(crate) presets: Vec<String>,
     pub(crate) enable_rules: Vec<String>,
@@ -64,6 +69,7 @@ mod tests {
             explicit: vec!["explicit.json".into()],
             modules: vec!["solid-js".into()],
             catalog_scopes: vec![PathBuf::from("packages/a")],
+            install_lookups: vec![(PathBuf::from("packages/a"), "pkg".into())],
             contract_files: vec![(PathBuf::from("solid-reactivity.json"), [7; 32])],
             presets: vec!["preferences".into()],
             enable_rules: vec!["prefer-show".into()],

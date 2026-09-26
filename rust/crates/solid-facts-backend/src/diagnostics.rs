@@ -959,6 +959,10 @@ impl PackageContractStatus {
     }
 }
 
+/// Why acceptances for each package were not admitted, replayed from one
+/// directory; see [`accepted_package_contract_statuses`].
+pub type RefusalReplay<'a> = dyn Fn(&Path) -> Result<BTreeMap<String, String>, BackendError> + 'a;
+
 /// Reports external receipt coverage and the separately identified built-in
 /// runtime foundation. Built-in model selection is not artifact certification.
 /// Coverage is complete only when every exact imported specifier binds in the
@@ -970,18 +974,31 @@ impl PackageContractStatus {
 ///
 /// `refusals` names, per installed package, why an acceptance that exists for
 /// it in a project catalog or the compiled-in tier was not admitted
-/// ([`admission_refusal_details`]); it only adds to the detail of a status
-/// that is not `certified`, and never changes a status.
+/// ([`admission_refusal_details`]), replayed from the directory it is handed:
+/// the project directory for a row whose importers reach the project
+/// directory's own install, and the install directory of the row's artifact
+/// otherwise, because that is where its admission was replayed from. It only
+/// adds to the detail of a status that is not `certified`, and never changes
+/// a status.
 pub fn accepted_package_contract_statuses(
     dialect: &'static Dialect,
     project: &Path,
     facts: &ProjectFacts,
     contracts: &AcceptedContractIndex,
-    refusals: &BTreeMap<String, String>,
+    refusals: &RefusalReplay,
 ) -> Result<Vec<PackageContractStatus>, BackendError> {
     let project_directory = project
         .parent()
         .ok_or_else(|| BackendError::Contract("tsconfig has no parent".into()))?;
+    let mut replayed = BTreeMap::<PathBuf, BTreeMap<String, String>>::new();
+    let mut refusals_from = |directory: &Path| -> Result<BTreeMap<String, String>, BackendError> {
+        if let Some(refusals) = replayed.get(directory) {
+            return Ok(refusals.clone());
+        }
+        let answer = refusals(directory)?;
+        replayed.insert(directory.to_path_buf(), answer.clone());
+        Ok(answer)
+    };
     // Asking the vocabulary rather than matching the id. The list was the same
     // three names written out again, and the `_ => &[]` arm a third dialect
     // would have landed in reports "no package needs a contract" for exactly
@@ -1053,14 +1070,25 @@ pub fn accepted_package_contract_statuses(
             } else {
                 Vec::new()
             };
+            // Where this artifact's admission was evaluated from: the project
+            // directory when its importers reach the project directory's own
+            // install, which keeps a single-package project byte-identical,
+            // and otherwise the directory whose `node_modules` holds it, where
+            // the lockfile governing that copy is found.
+            let admission_directory = match &artifact.base {
+                Some(base) if artifact.key != project_artifact => base.as_path(),
+                _ => project_directory,
+            };
+            let refusals = refusals_from(admission_directory)?;
             let mut status = artifact_contract_status(
                 project_directory,
+                admission_directory,
                 &module,
                 installed.as_ref(),
                 resolved,
                 &artifact.importers,
                 contracts,
-                refusals,
+                &refusals,
             )?;
             status.importers = importers;
             statuses.push(status);
@@ -1079,6 +1107,8 @@ struct ImportedArtifact {
     key: Option<PathBuf>,
     /// The package directory as the first importer's lookup spells it.
     directory: Option<PathBuf>,
+    /// The directory whose `node_modules` holds `directory`.
+    base: Option<PathBuf>,
     importers: std::collections::BTreeSet<String>,
 }
 
@@ -1124,27 +1154,29 @@ fn imported_artifacts(
             }
         }
     }
-    let mut lookups = HashMap::<PathBuf, Option<PathBuf>>::new();
+    let mut lookups = HashMap::<PathBuf, Option<(PathBuf, PathBuf)>>::new();
     let mut artifacts = BTreeMap::<Option<PathBuf>, ImportedArtifact>::new();
     for importer in importers {
         let from = Path::new(&importer)
             .parent()
             .unwrap_or(project_directory)
             .to_path_buf();
-        let directory = match lookups.get(&from) {
-            Some(directory) => directory.clone(),
+        let install = match lookups.get(&from) {
+            Some(install) => install.clone(),
             None => {
-                let directory = discover_package_directory(&from, module)?;
-                lookups.insert(from, directory.clone());
-                directory
+                let install = discover_package_install(&from, module)?;
+                lookups.insert(from, install.clone());
+                install
             }
         };
+        let (base, directory) = install.unzip();
         let key = directory.as_deref().map(artifact_key);
         artifacts
             .entry(key.clone())
             .or_insert_with(|| ImportedArtifact {
                 key,
                 directory,
+                base,
                 importers: std::collections::BTreeSet::new(),
             })
             .importers
@@ -1163,9 +1195,12 @@ fn resolved_package_name(import: &solid_facts::AttestedImport) -> Option<&str> {
 }
 
 /// The status of one installed artifact of `module`, counted over the
-/// attested import rows of `importers` only.
+/// attested import rows of `importers` only. Its lockfile integrity is read
+/// from `admission_directory`, where its admission was evaluated from.
+#[allow(clippy::too_many_arguments)]
 fn artifact_contract_status(
     project_directory: &Path,
+    admission_directory: &Path,
     module: &str,
     installed: Option<&(PathBuf, PackageManifest)>,
     resolved: Option<&solid_facts::AttestedImportIndex>,
@@ -1176,7 +1211,7 @@ fn artifact_contract_status(
     let module = module.to_owned();
     let package_directory = installed.map(|(directory, _)| directory.as_path());
     let installed_integrity = package_directory
-        .map(|directory| installed_package_integrity(project_directory, directory))
+        .map(|directory| installed_package_integrity(admission_directory, directory))
         .transpose()?
         .flatten();
     let imports = resolved
@@ -1379,7 +1414,8 @@ struct PackageManifest {
 /// manifest; both cases yield `None`, which every caller reads as "there is no
 /// installed version to disagree with".
 /// The specifiers this project may import under an existing acceptance,
-/// because its own installed artifact is the one that acceptance names.
+/// because the installed artifact their importers reach is the one that
+/// acceptance names.
 ///
 /// Lives here rather than beside the catalog reader because the answer depends
 /// on the installed tree, which is this module's business: the package the
@@ -1388,14 +1424,28 @@ struct PackageManifest {
 /// (`installed_package_integrity` returns `None`), so a project with two
 /// versions of one dependency admits neither — which is the nested-install case
 /// the importer key used to guard.
+///
+/// Evaluated from each importer's own install ([`ImporterInstalls`]): a
+/// specifier every importer reaches at the project directory's own install is
+/// admitted project-wide, exactly as before; one that some importer reaches
+/// elsewhere is admitted per install, for the importers reaching it.
 pub fn admitted_project_artifacts(
     catalogs: &[PathBuf],
     trust: Option<&crate::contract_certification::Policy2TrustConfiguration>,
     project_directory: &Path,
     conditions: &std::collections::BTreeSet<String>,
     facts: &solid_facts::ProjectFacts,
-) -> Result<Vec<(String, String)>, BackendError> {
-    admitted_catalog_artifacts(catalogs, trust, project_directory, conditions, facts, None)
+) -> Result<ArtifactAdmissions, BackendError> {
+    let installs = importer_installs(project_directory, facts, None)?;
+    admitted_catalog_artifacts(
+        catalogs,
+        trust,
+        project_directory,
+        conditions,
+        facts,
+        None,
+        &installs,
+    )
 }
 
 /// [`admitted_project_artifacts`] with the resolved-file fact taken only from
@@ -1408,26 +1458,317 @@ fn admitted_catalog_artifacts(
     conditions: &std::collections::BTreeSet<String>,
     facts: &solid_facts::ProjectFacts,
     within: Option<&Path>,
-) -> Result<Vec<(String, String)>, BackendError> {
-    let installed = |specifier: &str| installed_artifact_identity(project_directory, specifier);
-    let resolved_target =
-        |specifier: &str| resolved_target_identity(project_directory, facts, specifier, within);
+    installs: &ImporterInstalls,
+) -> Result<ArtifactAdmissions, BackendError> {
     // The same environment check as the compiled-in tier (ADR 0123): a project
     // catalog certified in this tree reproduces it by construction, and one
     // carried into a tree whose installs differ does not.
-    let environment = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
-        installed_environment_matches(project_directory, specifier, environment)
-    };
-    crate::contract_interface::admitted_project_artifacts(
-        catalogs,
-        trust,
+    admitted_by_install(
         project_directory,
-        conditions,
-        &installed,
-        &resolved_target,
-        &environment,
+        facts,
+        within,
+        installs,
+        &|installed, resolved_target, environment| {
+            crate::contract_interface::admitted_project_artifacts(
+                catalogs,
+                trust,
+                project_directory,
+                conditions,
+                installed,
+                resolved_target,
+                environment,
+            )
+        },
     )
-    .map_err(|error| BackendError::Contract(error.to_string()))
+}
+
+/// Where the analysed files' imports reach an installed package other than
+/// the one the admission directory's own lookup finds.
+///
+/// Artifact admission asks whether *the installed copy an import resolves to*
+/// is the artifact an acceptance was proven about. It used to ask that of the
+/// copy the project directory's own `node_modules` walk finds, which is the
+/// right copy only when every importer finds that one too. A monorepo root
+/// analysing `packages/*`, whose dependencies are installed under each
+/// sub-package's `node_modules` and nowhere at the root, found none, and every
+/// acceptance was refused with "the installed package has no exact lockfile
+/// integrity" -- while the same files analysed from their sub-package were
+/// admitted (measured on kobalte, 2026-09-26).
+///
+/// A file's install is found from its own directory with the same walk
+/// [`imported_artifacts`] performs for `contract check`, and is identified by
+/// its canonical directory. A specifier none of whose importers reaches an
+/// install other than the directory's own is not recorded, so a
+/// single-package project has nothing here and is admitted byte-identically.
+/// A specifier some importer reaches elsewhere is *split*: nothing admits it
+/// project-wide, and each install context below admits it for the importers
+/// that reach it.
+#[derive(Debug, Default)]
+struct ImporterInstalls {
+    /// The bare specifiers some attested import reaches at an install other
+    /// than the admission directory's own.
+    split: std::collections::BTreeSet<String>,
+    /// Per install directory -- the directory whose `node_modules` holds the
+    /// copy, where its lookup, its lockfile walk and its environment replay
+    /// start -- each split specifier and the importers reaching it there.
+    /// Importers of a split specifier that reach the admission directory's own
+    /// copy (or none at all) are recorded under the admission directory.
+    contexts: BTreeMap<PathBuf, BTreeMap<String, std::collections::BTreeSet<String>>>,
+}
+
+impl ImporterInstalls {
+    /// The install directories other than `directory`, each with the modules
+    /// looked up there. A host caching an admission verdict hashes their
+    /// manifests and lockfiles.
+    fn elsewhere<'a>(&'a self, directory: &'a Path) -> impl Iterator<Item = (&'a Path, String)> {
+        self.contexts
+            .iter()
+            .filter(move |(base, _)| base.as_path() != directory)
+            .flat_map(|(base, specifiers)| {
+                specifiers
+                    .keys()
+                    .filter_map(|specifier| package_name_of_specifier(specifier))
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .map(move |module| (base.as_path(), module))
+            })
+    }
+}
+
+/// The installs artifact admission reads for the analysed files besides the
+/// ones `directory`'s own lookup finds: `(install directory, module)` for
+/// every import some file reaches at another install ([`ImporterInstalls`]),
+/// the project's and each nested catalog scope's, sorted. A host caching an
+/// admission verdict hashes the manifest `module` resolves to from there and
+/// [`admission_input_paths`] of the install directory, which is where that
+/// copy's identity, lockfile integrity and environment replay are read.
+/// Empty for a project whose importers all reach its own installs.
+pub fn importer_admission_inputs(
+    directory: &Path,
+    nested: &[NestedCatalogs],
+    facts: &solid_facts::ProjectFacts,
+) -> Result<Vec<(PathBuf, String)>, BackendError> {
+    let mut inputs = std::collections::BTreeSet::new();
+    let installs = importer_installs(directory, facts, None)?;
+    inputs.extend(
+        installs
+            .elsewhere(directory)
+            .map(|(base, module)| (base.to_path_buf(), module)),
+    );
+    for scope in nested {
+        let scope = scope.directory.as_path();
+        let installs = importer_installs(scope, facts, Some(scope))?;
+        inputs.extend(
+            installs
+                .elsewhere(scope)
+                .map(|(base, module)| (base.to_path_buf(), module)),
+        );
+    }
+    Ok(inputs.into_iter().collect())
+}
+
+/// A specifier naming an installed package, as opposed to a relative,
+/// absolute or `node:` one, which no `node_modules` walk answers.
+fn names_installed_package(specifier: &str) -> bool {
+    !specifier.starts_with('.') && !specifier.starts_with('/') && !specifier.starts_with("node:")
+}
+
+/// [`ImporterInstalls`] for the attested imports of the files `within` a
+/// directory (every file when `None`), relative to `directory`'s own lookup.
+fn importer_installs(
+    directory: &Path,
+    facts: &solid_facts::ProjectFacts,
+    within: Option<&Path>,
+) -> Result<ImporterInstalls, BackendError> {
+    use std::collections::hash_map::Entry;
+    type Reached = Option<(PathBuf, PathBuf)>;
+    let mut installs = ImporterInstalls::default();
+    let Some(attested) = facts.resolved_imports.as_ref() else {
+        return Ok(installs);
+    };
+    let mut lookups = HashMap::<(PathBuf, String), Reached>::new();
+    let mut rows = BTreeMap::<String, Vec<(String, Reached)>>::new();
+    for (importer, import) in attested.iter() {
+        let specifier = import.text.as_str();
+        if import.resolution == solid_facts::ImportResolution::Unresolved
+            || !names_installed_package(specifier)
+            || within.is_some_and(|within| !Path::new(importer).starts_with(within))
+        {
+            continue;
+        }
+        let Some(module) = package_name_of_specifier(specifier) else {
+            continue;
+        };
+        let from = Path::new(importer)
+            .parent()
+            .unwrap_or(directory)
+            .to_path_buf();
+        let reached = match lookups.entry((from, module)) {
+            Entry::Occupied(entry) => entry.get().clone(),
+            Entry::Vacant(entry) => {
+                let (from, module) = entry.key();
+                let reached = discover_package_install(from, module)?
+                    .map(|(base, package)| (base, artifact_key(&package)));
+                entry.insert(reached).clone()
+            }
+        };
+        rows.entry(specifier.to_owned())
+            .or_default()
+            .push((importer.to_owned(), reached));
+    }
+    let mut own = HashMap::<String, Option<PathBuf>>::new();
+    for (specifier, rows) in rows {
+        let Some(module) = package_name_of_specifier(&specifier) else {
+            continue;
+        };
+        let own_key = match own.entry(module) {
+            Entry::Occupied(entry) => entry.get().clone(),
+            Entry::Vacant(entry) => {
+                let key = discover_package_directory(directory, entry.key())?
+                    .map(|package| artifact_key(&package));
+                entry.insert(key).clone()
+            }
+        };
+        let elsewhere = |reached: &Reached| {
+            reached
+                .as_ref()
+                .filter(|(_, key)| own_key.as_ref() != Some(key))
+                .map(|(base, _)| base.clone())
+        };
+        if !rows.iter().any(|(_, reached)| elsewhere(reached).is_some()) {
+            continue;
+        }
+        installs.split.insert(specifier.clone());
+        for (importer, reached) in rows {
+            let base = elsewhere(&reached).unwrap_or_else(|| directory.to_path_buf());
+            installs
+                .contexts
+                .entry(base)
+                .or_default()
+                .entry(specifier.clone())
+                .or_default()
+                .insert(importer);
+        }
+    }
+    Ok(installs)
+}
+
+/// One tier's artifact admission (ADR 0123) over the installed-tree facts it
+/// is handed: [`crate::accepted_bundles::admitted_bundle_artifacts`] or
+/// [`crate::contract_interface::admitted_project_artifacts`].
+type TierAdmission<'a> = dyn Fn(
+        &crate::contract_interface::InstalledArtifactIdentity,
+        &crate::contract_interface::ResolvedTargetIdentity,
+        &crate::accepted_bundles::InstalledEnvironment,
+    ) -> Result<Vec<(String, String)>, crate::ContractFailure>
+    + 'a;
+
+/// The importers of each specifier in one install context.
+type ContextImporters = BTreeMap<String, std::collections::BTreeSet<String>>;
+
+/// What one tier admits by artifact: `(specifier, artifact identity)` pairs
+/// for the whole project, and per install context the pairs it admitted there
+/// with the importers they apply to ([`ImporterInstalls`]).
+#[derive(Debug, Default)]
+pub struct ArtifactAdmissions {
+    project_wide: Vec<(String, String)>,
+    installs: Vec<(Vec<(String, String)>, ContextImporters)>,
+}
+
+impl ArtifactAdmissions {
+    /// Folds these admissions into `contracts`: project-wide by specifier,
+    /// the rest by importer. Admitting nothing leaves the index unchanged.
+    #[must_use]
+    pub fn admit_into(self, contracts: AcceptedContractIndex) -> AcceptedContractIndex {
+        let mut contracts = contracts;
+        if !self.project_wide.is_empty() {
+            contracts = contracts.with_admitted_artifacts(self.project_wide);
+        }
+        let mut by_importer = Vec::new();
+        for (admitted, importers) in self.installs {
+            for (specifier, identity) in admitted {
+                for importer in importers.get(&specifier).into_iter().flatten() {
+                    by_importer.push((importer.clone(), specifier.clone(), identity.clone()));
+                }
+            }
+        }
+        if !by_importer.is_empty() {
+            contracts = contracts.with_admitted_artifacts_for(by_importer);
+        }
+        contracts
+    }
+
+    /// Whether nothing was admitted anywhere.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.project_wide.is_empty() && self.installs.is_empty()
+    }
+
+    /// [`agreed_admissions`] within each context: candidates for one
+    /// specifier are compared only with candidates from the same install.
+    fn agreed(self, contracts: &AcceptedContractIndex) -> Self {
+        Self {
+            project_wide: agreed_admissions(contracts, self.project_wide),
+            installs: self
+                .installs
+                .into_iter()
+                .map(|(admitted, importers)| (agreed_admissions(contracts, admitted), importers))
+                .collect(),
+        }
+    }
+}
+
+/// Runs one tier's admission from every install its importers reach: once
+/// from `directory` for the specifiers no importer reaches elsewhere, and once
+/// per install context for the split ones, each context's facts -- identity,
+/// lockfile integrity, environment replay and resolved file -- read from its
+/// own install directory and its own importers only.
+fn admitted_by_install(
+    directory: &Path,
+    facts: &solid_facts::ProjectFacts,
+    within: Option<&Path>,
+    installs: &ImporterInstalls,
+    tier: &TierAdmission,
+) -> Result<ArtifactAdmissions, BackendError> {
+    let contract = |error: crate::ContractFailure| BackendError::Contract(error.to_string());
+    let counted =
+        |importer: &str| within.is_none_or(|within| Path::new(importer).starts_with(within));
+    let installed = |specifier: &str| {
+        (!installs.split.contains(specifier))
+            .then(|| installed_artifact_identity(directory, specifier))
+            .flatten()
+    };
+    let resolved_target =
+        |specifier: &str| resolved_target_identity(directory, facts, specifier, &counted);
+    let environment = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
+        installed_environment_matches(directory, specifier, environment)
+    };
+    let mut admissions = ArtifactAdmissions {
+        project_wide: tier(&installed, &resolved_target, &environment).map_err(contract)?,
+        installs: Vec::new(),
+    };
+    for (base, specifiers) in &installs.contexts {
+        let installed = |specifier: &str| {
+            specifiers
+                .contains_key(specifier)
+                .then(|| installed_artifact_identity(base, specifier))
+                .flatten()
+        };
+        let resolved_target = |specifier: &str| {
+            let importers = specifiers.get(specifier)?;
+            resolved_target_identity(base, facts, specifier, &|importer| {
+                importers.contains(importer)
+            })
+        };
+        let environment = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
+            installed_environment_matches(base, specifier, environment)
+        };
+        let admitted = tier(&installed, &resolved_target, &environment).map_err(contract)?;
+        if !admitted.is_empty() {
+            admissions.installs.push((admitted, specifiers.clone()));
+        }
+    }
+    Ok(admissions)
 }
 
 /// The project catalogs one analysis may read, and the discovered ones it
@@ -1753,17 +2094,20 @@ pub fn project_accepted_contracts(
     // *within* one call to agree -- which a project's own catalog and a
     // contract compiled into this build have no reason to do, and no reason to
     // be asked to.
-    let project = admitted_catalog_artifacts(catalogs, trust, directory, conditions, facts, None)?;
-    let project = agreed_admissions(&contracts, project);
-    if !project.is_empty() {
-        contracts = contracts.with_admitted_artifacts(project);
-    }
+    //
+    // "This project's installed artifact" is the one each importer's own
+    // resolution reaches ([`ImporterInstalls`]); both tiers are asked from the
+    // same installs.
+    let installs = importer_installs(directory, facts, None)?;
+    let project = admitted_catalog_artifacts(
+        catalogs, trust, directory, conditions, facts, None, &installs,
+    )?
+    .agreed(&contracts);
+    contracts = project.admit_into(contracts);
     if bundled {
-        let bundles = admitted_bundled_artifacts(directory, conditions, facts)?;
-        let bundles = agreed_admissions(&contracts, bundles);
-        if !bundles.is_empty() {
-            contracts = contracts.with_admitted_artifacts(bundles);
-        }
+        let bundles =
+            bundled_admissions(directory, conditions, facts, &installs)?.agreed(&contracts);
+        contracts = bundles.admit_into(contracts);
     }
     // Why a project catalog's acceptance was not admitted, for the acceptance
     // gate to say at the imports it leaves unanswered and for the package
@@ -1773,10 +2117,7 @@ pub fn project_accepted_contracts(
     // not something this project asked for, and its refusals are `contract
     // check`'s to explain. Explanation only -- nothing here binds or withholds.
     if !catalogs.is_empty() {
-        let notes = refusal_notes(directory, catalogs, facts, &contracts, None)?;
-        if !notes.is_empty() {
-            contracts = contracts.with_admission_refusals(notes);
-        }
+        contracts = refusal_notes(directory, catalogs, facts, contracts, None, &installs)?;
     }
     // A catalog in a directory inside the project applies to that directory's
     // files, above every project-wide tier; see [`NestedCatalogs`]. Each is its
@@ -1819,6 +2160,7 @@ fn scoped_accepted_contracts(
 ) -> Result<AcceptedContractIndex, BackendError> {
     let directory = scope.directory.as_path();
     let mut contracts = read_catalogs(&scope.admitted, trust)?;
+    let installs = importer_installs(directory, facts, Some(directory))?;
     let admitted = admitted_catalog_artifacts(
         &scope.admitted,
         trust,
@@ -1826,38 +2168,66 @@ fn scoped_accepted_contracts(
         conditions,
         facts,
         Some(directory),
-    )?;
-    let admitted = agreed_admissions(&contracts, admitted);
-    if !admitted.is_empty() {
-        contracts = contracts.with_admitted_artifacts(admitted);
-    }
-    let notes = refusal_notes(
+        &installs,
+    )?
+    .agreed(&contracts);
+    contracts = admitted.admit_into(contracts);
+    refusal_notes(
         directory,
         &scope.admitted,
         facts,
-        &contracts,
+        contracts,
         Some(directory),
-    )?;
-    if !notes.is_empty() {
-        contracts = contracts.with_admission_refusals(notes);
-    }
-    Ok(contracts)
+        &installs,
+    )
 }
 
-/// The refusal sentence for each specifier the files `within` (every file
-/// when `None`) import or re-export, or that `contracts` binds by importer,
-/// whose package has an acceptance in `catalogs` that steps 1-3 of admission
-/// refused from `directory`.
+/// Adds to `contracts` the refusal sentence for each specifier the files
+/// `within` (every file when `None`) import or re-export, or that `contracts`
+/// binds by importer, whose package has an acceptance in `catalogs` that steps
+/// 1-3 of admission refused from `directory`.
+///
+/// A split specifier ([`ImporterInstalls`]) is also explained per importer,
+/// from the install that importer reaches, and a context whose replay refused
+/// nothing says so -- so the project directory's sentence, which is about
+/// another copy, is never the one an importer elsewhere is told.
 fn refusal_notes(
     directory: &Path,
     catalogs: &[PathBuf],
     facts: &solid_facts::ProjectFacts,
-    contracts: &AcceptedContractIndex,
+    contracts: AcceptedContractIndex,
     within: Option<&Path>,
-) -> Result<Vec<(String, String)>, BackendError> {
+    installs: &ImporterInstalls,
+) -> Result<AcceptedContractIndex, BackendError> {
     let refusals = admission_refusal_details(directory, catalogs, false)?;
+    let mut by_importer = Vec::new();
+    for (base, specifiers) in &installs.contexts {
+        let replayed;
+        let refusals = if base == directory {
+            &refusals
+        } else {
+            replayed = admission_refusal_details(base, catalogs, false)?;
+            &replayed
+        };
+        for (specifier, importers) in specifiers {
+            let refusal = package_name_of_specifier(specifier)
+                .and_then(|module| refusals.get(&module))
+                .cloned();
+            for importer in importers {
+                by_importer.push(((importer.clone(), specifier.clone()), refusal.clone()));
+            }
+        }
+    }
+    // Nothing to say anywhere: the index is left exactly as it was.
+    if by_importer.iter().all(|(_, refusal)| refusal.is_none()) {
+        by_importer.clear();
+    }
+    let mut contracts = contracts;
+    if !by_importer.is_empty() {
+        contracts = contracts.with_admission_refusals_for(by_importer);
+    }
     if refusals.is_empty() {
-        return Ok(Vec::new());
+        return Ok(contracts);
     }
     let specifiers = facts
         .files
@@ -1884,13 +2254,18 @@ fn refusal_notes(
                 .map(|binding| binding.specifier.as_str()),
         )
         .collect::<std::collections::BTreeSet<_>>();
-    Ok(specifiers
+    let notes = specifiers
         .into_iter()
         .filter_map(|specifier| {
             let refusal = refusals.get(&package_name_of_specifier(specifier)?)?;
             Some((specifier.to_owned(), refusal.clone()))
         })
-        .collect())
+        .collect::<Vec<_>>();
+    Ok(if notes.is_empty() {
+        contracts
+    } else {
+        contracts.with_admission_refusals(notes)
+    })
 }
 
 /// Keeps one acceptance per specifier, and only where every candidate for it
@@ -1998,20 +2373,32 @@ pub fn admitted_bundled_artifacts(
     project_directory: &Path,
     conditions: &std::collections::BTreeSet<String>,
     facts: &solid_facts::ProjectFacts,
-) -> Result<Vec<(String, String)>, BackendError> {
-    let installed = |specifier: &str| installed_artifact_identity(project_directory, specifier);
-    let resolved_target =
-        |specifier: &str| resolved_target_identity(project_directory, facts, specifier, None);
-    let environment = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
-        installed_environment_matches(project_directory, specifier, environment)
-    };
-    crate::accepted_bundles::admitted_bundle_artifacts(
-        conditions,
-        &installed,
-        &resolved_target,
-        &environment,
+) -> Result<ArtifactAdmissions, BackendError> {
+    let installs = importer_installs(project_directory, facts, None)?;
+    bundled_admissions(project_directory, conditions, facts, &installs)
+}
+
+/// [`admitted_bundled_artifacts`] over installs already grouped.
+fn bundled_admissions(
+    project_directory: &Path,
+    conditions: &std::collections::BTreeSet<String>,
+    facts: &solid_facts::ProjectFacts,
+    installs: &ImporterInstalls,
+) -> Result<ArtifactAdmissions, BackendError> {
+    admitted_by_install(
+        project_directory,
+        facts,
+        None,
+        installs,
+        &|installed, resolved_target, environment| {
+            crate::accepted_bundles::admitted_bundle_artifacts(
+                conditions,
+                installed,
+                resolved_target,
+                environment,
+            )
+        },
     )
-    .map_err(|error| BackendError::Contract(error.to_string()))
 }
 
 /// Whether the catalog `contract certify` just published under `catalog_root`
@@ -2242,11 +2629,15 @@ pub(crate) fn installed_artifact_identity(
 /// know. `None` whenever the project cannot state one exactly: an unresolved
 /// import, a specifier no importer reached, or two importers that disagree
 /// (a nested install), each of which admits nothing rather than picking.
+///
+/// Only the attested rows of the importers `counted` selects are read: a
+/// nested catalog's own files, or the files whose resolution reaches the
+/// install `project_directory` names ([`ImporterInstalls`]).
 fn resolved_target_identity(
     project_directory: &Path,
     facts: &solid_facts::ProjectFacts,
     specifier: &str,
-    within: Option<&Path>,
+    counted: &dyn Fn(&str) -> bool,
 ) -> Option<String> {
     let module = package_name_of_specifier(specifier)?;
     let (directory, _) = installed_package_manifest(project_directory, &module).ok()??;
@@ -2256,7 +2647,7 @@ fn resolved_target_identity(
     for (importer, import) in attested.iter() {
         if import.text.as_str() != specifier
             || import.resolution == solid_facts::ImportResolution::Unresolved
-            || within.is_some_and(|within| !Path::new(importer).starts_with(within))
+            || !counted(importer)
         {
             continue;
         }
@@ -2625,10 +3016,23 @@ fn discover_package_directory(
     directory: &Path,
     module: &str,
 ) -> Result<Option<PathBuf>, BackendError> {
+    Ok(discover_package_install(directory, module)?.map(|(_, package)| package))
+}
+
+/// [`discover_package_directory`] with the directory whose `node_modules`
+/// holds the package: `(install directory, package directory)`. The install
+/// directory is where the package manager put this copy, so the lockfile that
+/// governs it is found by walking up from there.
+fn discover_package_install(
+    directory: &Path,
+    module: &str,
+) -> Result<Option<(PathBuf, PathBuf)>, BackendError> {
     for ancestor in directory.ancestors() {
         let candidate = ancestor.join("node_modules").join(module);
         match fs::metadata(&candidate) {
-            Ok(metadata) if metadata.is_dir() => return Ok(Some(candidate)),
+            Ok(metadata) if metadata.is_dir() => {
+                return Ok(Some((ancestor.to_path_buf(), candidate)));
+            }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(error.into()),

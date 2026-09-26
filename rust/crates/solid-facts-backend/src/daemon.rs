@@ -729,6 +729,8 @@ fn answer(
     .into();
     let status: Arc<str> = analysis.snapshot.status.as_str().into();
     let modules = imported_package_roots(&facts);
+    let install_lookups =
+        solid_facts_backend::importer_admission_inputs(directory, &selection.nested, &facts)?;
     state.last = Some(CachedAnswer {
         generation: state.session.generation(),
         explicit: explicit_inputs(check),
@@ -736,10 +738,12 @@ fn answer(
             state,
             &modules,
             &catalog_scopes,
+            &install_lookups,
             &check.accepted_contract_catalog,
             &check.receipt_trust_configuration,
         )?,
         catalog_scopes,
+        install_lookups,
         notice: Arc::clone(&notice),
         presets: check.presets.clone(),
         enable_rules: check.enable_rules.clone(),
@@ -773,6 +777,7 @@ fn cached_answer(
         state,
         &cached.modules,
         &cached.catalog_scopes,
+        &cached.install_lookups,
         &check.accepted_contract_catalog,
         &check.receipt_trust_configuration,
     )?;
@@ -816,6 +821,7 @@ fn contract_files(
     state: &State,
     modules: &[String],
     catalog_scopes: &[PathBuf],
+    install_lookups: &[(PathBuf, String)],
     accepted_catalog: &str,
     receipt_trust_configuration: &str,
 ) -> Result<Vec<ContractFile>, Box<dyn Error>> {
@@ -867,6 +873,19 @@ fn contract_files(
     // at the same version keeps serving the previous verdict for a whole
     // generation.
     paths.extend(solid_facts_backend::admission_input_paths(directory));
+    // Admission is evaluated from each importer's own install, and an import
+    // some file reaches at a sub-package's `node_modules` reads that copy's
+    // manifest and the lockfiles above *its* install directory
+    // (`importer_admission_inputs`). A monorepo root whose dependencies are
+    // installed only there otherwise kept serving the previous verdict when a
+    // sub-package's install moved.
+    for (base, module) in install_lookups {
+        paths.extend(solid_facts_backend::discovered_contract_paths(
+            base,
+            std::slice::from_ref(module),
+        )?);
+        paths.extend(solid_facts_backend::admission_input_paths(base));
+    }
     // The installed `solid-js` manifest decides the release notice (SC9014)
     // that `DiagnosticSession::analyze` re-reads on every run, so an install
     // moving between an audited and an unaudited release must not keep

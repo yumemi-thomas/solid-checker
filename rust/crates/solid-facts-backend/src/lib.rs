@@ -169,14 +169,15 @@ pub use contract_workflow::{
     ContractWorkflowError, ProposalArtifacts, merge_plans, review as review_contract_document,
 };
 pub use diagnostics::{
-    DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, NestedCatalogs,
-    PackageContractStatus, PackageSummary, ProjectCatalogSelection, RequestedRuleEnablement,
-    Snapshot, SnapshotEvidence, SnapshotFinding, SnapshotFix, SnapshotTextEdit, SourceLocation,
-    UnauthenticatedCatalog, accepted_package_contract_statuses, admission_input_paths,
-    admission_refusal_details, admitted_bundled_artifacts, admitted_project_artifacts,
-    analysis_metrics, analyze_project_accepted_measured_with_enablement,
-    certified_catalog_self_admission, discovered_contract_paths, discovered_rule_options_path,
-    imported_package_roots, nested_catalog_candidates, project_accepted_contracts,
+    ArtifactAdmissions, DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics,
+    NestedCatalogs, PackageContractStatus, PackageSummary, ProjectCatalogSelection,
+    RequestedRuleEnablement, Snapshot, SnapshotEvidence, SnapshotFinding, SnapshotFix,
+    SnapshotTextEdit, SourceLocation, UnauthenticatedCatalog, accepted_package_contract_statuses,
+    admission_input_paths, admission_refusal_details, admitted_bundled_artifacts,
+    admitted_project_artifacts, analysis_metrics,
+    analyze_project_accepted_measured_with_enablement, certified_catalog_self_admission,
+    discovered_contract_paths, discovered_rule_options_path, imported_package_roots,
+    importer_admission_inputs, nested_catalog_candidates, project_accepted_contracts,
     select_project_catalogs, select_project_catalogs_in, semantic_demand_options_for_enablement,
     source_location, unsupported_runtime_snapshot,
 };
