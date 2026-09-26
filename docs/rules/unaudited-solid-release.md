@@ -44,10 +44,15 @@ differences that, on the one release measured, were three additive gaps and one
 typing change. Staying silent is the failure the review found. So the analysis
 runs, and the notice keeps the project from being certified.
 
-On rc.9, the one gap that needed a different vocabulary answer is closed: the
+On rc.9, the two answers that needed a different vocabulary are closed. The
 rc.9 store root is not `Readonly`, so a root property write is reported by
 [no-direct-mutation](no-direct-mutation.md) there, while on rc.3 it stays
-TypeScript's TS2540. The notice lists what is still open.
+TypeScript's TS2540. And rc.9's `omit(props, predicate)` invokes its
+predicate on every read of the returned view, so a predicate not proven inert
+is reported by [reactive-dispatch-unresolved](reactive-dispatch-unresolved.md)
+there, while rc.3's `omit` never invokes an argument and its key lists stay
+values. A release analyzed under the audited vocabulary keeps rc.3's answers
+for both. The notice lists what is still open.
 
 ## How to fix
 

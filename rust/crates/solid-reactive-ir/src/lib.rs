@@ -588,6 +588,16 @@ pub enum StaticDefectKind {
     ReactiveCallbackUnresolved {
         callee: String,
     },
+    /// A callback the dialect says runs when the call's **returned object is
+    /// read** ([`solid_dialect::Dialect::callback_runs_on_result_access`];
+    /// rc.9's `omit(props, hidden)` predicate) is not proven free of reactive
+    /// behaviour. It runs in whatever tracking scope and under whatever owner
+    /// the reader has, which the call site does not decide, so neither a
+    /// violation nor safety is provable. `analysis_context` names which proof
+    /// is missing (see `result_access_callbacks` in `static_rules`).
+    ResultAccessCallbackUnplaced {
+        callee: String,
+    },
     /// An exported structured return contains a shorthand value whose exact
     /// binding cannot be joined to the analyzed project. Omitting the property
     /// would make a possibly-reactive return look inert.
@@ -622,6 +632,23 @@ pub enum StaticDefectKind {
         transport: RichArgumentTransport,
     },
 }
+
+/// The named reasons a [`StaticDefectKind::ResultAccessCallbackUnplaced`]
+/// carries in its `analysis_context`: which proof of an inert predicate is
+/// missing.
+///
+/// The predicate's body performs a reactive operation the engine records (a
+/// read, write, action invocation or async read), or references a reactive
+/// source, setter, action or props binding.
+pub(crate) const RESULT_ACCESS_REACTIVE_OPERATION: &str =
+    "result-access-callback-reactive-operation";
+/// The predicate's body calls something that does not resolve to a
+/// standard-library declaration; whatever it does runs in the reader's scope.
+pub(crate) const RESULT_ACCESS_OPAQUE_CALL: &str = "result-access-callback-opaque-call";
+/// The value at the predicate position is potentially callable, but no body
+/// for it is inspectable at this call: an import, a call result, a member, a
+/// binding that is not a function literal.
+pub(crate) const RESULT_ACCESS_BODY_UNRESOLVED: &str = "result-access-callback-body-unresolved";
 
 /// How a server-function argument fails the default JSON transport.
 ///
@@ -739,6 +766,7 @@ impl StaticDefectKind {
             Self::ReactiveSourceUncaptured { .. } => StaticDefectFamily::ReactiveSourceUncaptured,
             Self::ReactiveDispatchUnresolved { .. }
             | Self::ReactiveCallbackUnresolved { .. }
+            | Self::ResultAccessCallbackUnplaced { .. }
             | Self::StructuredReturnUnresolved { .. } => {
                 StaticDefectFamily::ReactiveDispatchUnresolved
             }
@@ -773,6 +801,7 @@ impl StaticDefectKind {
             Self::ReactiveSourceUncaptured { .. } => "ReactiveSourceUncaptured",
             Self::ReactiveDispatchUnresolved { .. } => "ReactiveDispatchUnresolved",
             Self::ReactiveCallbackUnresolved { .. } => "ReactiveCallbackUnresolved",
+            Self::ResultAccessCallbackUnplaced { .. } => "ResultAccessCallbackUnplaced",
             Self::StructuredReturnUnresolved { .. } => "StructuredReturnUnresolved",
             Self::ReactiveHandlerRead { .. } => "ReactiveHandlerRead",
             Self::HandlerValueUnresolved { .. } => "HandlerValueUnresolved",
@@ -805,6 +834,7 @@ impl StaticDefectKind {
                 | Self::ReactiveSourceUncaptured { .. }
                 | Self::ReactiveDispatchUnresolved { .. }
                 | Self::ReactiveCallbackUnresolved { .. }
+                | Self::ResultAccessCallbackUnplaced { .. }
                 | Self::StructuredReturnUnresolved { .. }
         )
     }

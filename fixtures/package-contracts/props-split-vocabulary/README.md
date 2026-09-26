@@ -23,25 +23,34 @@ An open `callbacks` domain is not a cosmetic difference: it is exactly what a
 consumer's open-claims gate reports, so every 2.0 package that split its props
 published a domain it had no reason to leave open.
 
-## rc.9 reopened the two-argument call, and `withoutEitherKey` keeps the pin
+## rc.9's predicate form is answered per release
 
 `@solidjs/signals@2.0.0-rc.9` added `omit(props, hidden)`: a *single* function
 argument is a key predicate (`keys.length === 1 && typeof keys[0] ===
 "function"`, `dist/dev.js:4380`), called on every read of the returned view.
 So `withoutKeys`' `omit(props, keys)` — two arguments, `keys` untyped — is a
 call that invokes `keys` on rc.9 and never does on rc.3, and an untyped call
-does not say which runtime it will meet. The dialect answers with the
-conservative reading (`Dialect::callback_runs_on_result_access`), so since
-2026-09-26 `withoutKeys` leaves `callbacks` **open**.
+does not say which runtime it will meet.
 
-That is a precision loss on rc.3 bytes, taken deliberately: a contract closed
-over rc.3's runtime would be consumed unchanged by an rc.9 project, where it is
-false. The dialect has no prerelease input yet; when it does, this answer can
-be rc.9-and-later only and `withoutKeys` can close again.
+From 2026-09-26 the dialect answered rc.9's reading on every release, and
+`withoutKeys` left `callbacks` open. The answer is now the release's
+(`Dialect::callback_runs_on_result_access`, `Solid2::omit_predicate_form`):
+rc.3's `omit` only tests key membership and never invokes an argument
+(`dist/dev.js:9334-9369`, `dist/prod/store/utils.js:169-199`, both matching the
+audited `files.json`). The generator picks the vocabulary the way analysis
+does, from the nearest `node_modules/solid-js/package.json` above the package
+root it is given (`--contract-package-root`). This package's is `2.0.0-rc.3`,
+so it runs under the audited vocabulary and `withoutKeys` closes `callbacks`
+again, sharing `withoutEitherKey`'s summary.
+
+The trade the conservative answer avoided is back, and it is the owner's call:
+a contract closed over rc.3's runtime says nothing about which `solid-js`
+release its consumer installs, so an rc.9 project consuming it unchanged would
+take `callbacks: []` for an export that, on rc.9, can invoke `keys`.
 
 `withoutEitherKey` — `omit(props, first, second)`, three arguments — has no
-predicate form on any prerelease, so the suppression still closes its
-`callbacks`. It is the export that now carries this fixture's original claim.
+predicate form on any prerelease, so the suppression closes its `callbacks`
+under either vocabulary.
 
 ## The `creates` column is a third asymmetry, and it is not fixed here
 

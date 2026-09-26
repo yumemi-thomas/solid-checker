@@ -381,9 +381,9 @@ const _: () = assert!(!ALL.is_empty(), "a build must carry at least one dialect"
 /// installed release a vocabulary review names ([`solid_dialect::ReleaseReview`]).
 ///
 /// Not in [`ALL`]: a variant is not a language. It is the same catalog,
-/// compiler and runtime model with a vocabulary that answers one question
-/// differently for one reviewed release (B1 in the rc.9 review: the store
-/// root typing). It has an id of its own because the id keys every cache,
+/// compiler and runtime model with a vocabulary that answers some questions
+/// differently for one reviewed release (B1 and B3 in the rc.9 review: the
+/// store root typing, and `omit`'s predicate form). It has an id of its own because the id keys every cache,
 /// retained session and daemon socket, and a result computed under one
 /// vocabulary must never answer for the other; [`by_id`] resolves it so the
 /// daemon can forward the selection it hashed.
@@ -694,7 +694,8 @@ fn resolved_solid_version(
 static SOLID_V2: Dialect = SOLID_V2_AUDITED;
 
 /// `solid-js@2.0.0-rc.9`: the Solid 2 dialect with the rc.9 vocabulary, whose
-/// store root is not `Readonly` (B1). Everything else is the language's.
+/// store root is not `Readonly` (B1) and whose `omit` accepts a predicate
+/// (B3). Everything else is the language's.
 #[cfg(feature = "dialect-v2")]
 static SOLID_V2_RC9: Dialect = Dialect {
     id: "solid-v2@2.0.0-rc.9",
@@ -1568,6 +1569,18 @@ mod tests {
         // B1, as the two dialects detection selects answer it.
         assert!(SOLID_V2.vocabulary.store_root_properties_are_readonly());
         assert!(!SOLID_V2_RC9.vocabulary.store_root_properties_are_readonly());
+        // B3: only rc.9's `omit` can invoke its lone second argument.
+        let omit = solid_dialect::Primitive::Omit;
+        assert!(
+            !SOLID_V2
+                .vocabulary
+                .callback_runs_on_result_access(omit, 1, 2)
+        );
+        assert!(
+            SOLID_V2_RC9
+                .vocabulary
+                .callback_runs_on_result_access(omit, 1, 2)
+        );
     }
 
     /// The notice's identity is held here and published by the catalog; this

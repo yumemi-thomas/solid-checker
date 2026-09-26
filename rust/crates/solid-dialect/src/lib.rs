@@ -1883,9 +1883,12 @@ pub trait Dialect: Sync {
     /// the engine must treat such a callback as invoked at a time it cannot
     /// place — never as a value (which is what [`Dialect::splits_props`]
     /// would otherwise make it), and never as running where it is written.
+    /// The engine reports such a callback uncertifiable unless it proves the
+    /// body inert; it never reports a violation inside one.
     ///
-    /// The case that needs it is rc.9's `omit(props, hidden)` predicate; the
-    /// default is `false`.
+    /// The case that needs it is rc.9's `omit(props, hidden)` predicate, so
+    /// the answer is a release's, not a language's: a vocabulary answers it
+    /// only for releases whose runtime has the form. The default is `false`.
     fn callback_runs_on_result_access(
         &self,
         primitive: Primitive,

@@ -641,12 +641,21 @@ fn semantic_execution_role_within(
 /// the call's returned object ([`Dialect::callback_runs_on_result_access`]).
 ///
 /// Containment, not direct-callback identity: every function written inside
-/// such an argument runs, if at all, from inside it.
+/// such an argument runs, if at all, from inside it. An argument a project
+/// wrapper forwards into such a slot
+/// ([`SemanticLookup::result_access_forwarded_arguments`]) counts too.
 fn result_access_callback_contains(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
+    if lookup
+        .result_access_forwarded_arguments(file.path.as_str())
+        .iter()
+        .any(|forwarded| forwarded.argument.contains(span))
+    {
+        return true;
+    }
     file.ast.arguments_containing(span).any(|(call, index)| {
         lookup
             .primitive_at_call(file, call.span)

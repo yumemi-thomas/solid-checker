@@ -76,7 +76,8 @@ under the release variant the review names, plus an `SC9014` notice),
 unreviewed (analyze under the audited vocabulary, plus the notice), or refused
 (`SC9013`). A release variant, `dialect::RELEASE_VARIANTS`, is the same
 catalog with a vocabulary value that answers differently. Today that is
-`Solid2::RC9`, whose store root is not `Readonly`. It has its own id, so
+`Solid2::RC9`, whose store root is not `Readonly` and whose `omit` accepts a
+predicate the returned view invokes. It has its own id, so
 caches and daemon sockets never mix the two. Shared code never classifies a
 release. The vocabulary does that, and the registry only keys a variant by the
 version string the review names. See `solid-dialect/src/solid_2/releases.rs`.

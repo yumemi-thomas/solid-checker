@@ -57,6 +57,7 @@ impl Solid2 {
     /// release this module does not name a variant for is analyzed under it.
     pub const AUDITED: Self = Self {
         store_root: StoreRootTyping::Readonly,
+        omit_predicate_form: false,
     };
 
     /// The vocabulary for `solid-js@2.0.0-rc.9`: the audited answers, except
@@ -67,6 +68,7 @@ impl Solid2 {
     /// gaps.
     pub const RC9: Self = Self {
         store_root: StoreRootTyping::Mutable,
+        omit_predicate_form: true,
     };
 }
 
@@ -79,8 +81,6 @@ const RC9_REVIEW_DOCUMENT: &str =
 static RC9_REVIEW: ReviewedRelease = ReviewedRelease {
     version: "2.0.0-rc.9",
     known_gaps: &[
-        "`omit(props, predicate)`: the predicate runs on every read of the returned view, and \
-         code inside it is not classified, so it is neither checked nor reported uncertifiable",
         "rc.9's `solid-js` typings re-export `createErrorBoundary`, `createLoadingBoundary`, \
          `createRevealOrder`, `sharedConfig` and `$DEVCOMP`, which its own declarations no longer \
          declare, so under `skipLibCheck` those primitives are not resolved and their bodies are \

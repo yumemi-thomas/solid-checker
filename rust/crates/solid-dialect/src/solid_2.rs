@@ -21,14 +21,40 @@ mod releases;
 
 /// Solid 2.0, answering for one reviewed line of its prereleases.
 ///
-/// Every answer but one is the same on every release this vocabulary was read
+/// Every answer but two is the same on every release this vocabulary was read
 /// on, so the release is carried as data rather than as a second type: the
-/// `store_root` typing is the one answer two prereleases disagree on
-/// (`releases.rs`). `Solid2` the value is the audited vocabulary
-/// ([`Solid2::AUDITED`]); [`Solid2::RC9`] is the one reviewed variant.
+/// `store_root` typing and `omit`'s predicate form are the two answers two
+/// prereleases disagree on (`releases.rs`). `Solid2` the value is the audited
+/// vocabulary ([`Solid2::AUDITED`]); [`Solid2::RC9`] is the one reviewed
+/// variant.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Solid2 {
     store_root: releases::StoreRootTyping,
+    /// Whether this release's `omit` has the predicate form, a lone function
+    /// argument the returned view invokes
+    /// ([`Solid2::callback_runs_on_result_access`]).
+    ///
+    /// A runtime difference, not only a typing one:
+    ///
+    /// - `@solidjs/signals@2.0.0-rc.3`'s `omit(props, ...keys)` never invokes
+    ///   a key. Every build only tests membership, `keys.includes(property)`
+    ///   in the view's `get`/`has`/`keys` traps and in the non-`Proxy` copy,
+    ///   and `new Set(keys)` above four keys: `dist/dev.js:9334-9369` (sha256
+    ///   `cc68ed0f…1a79`), `dist/prod/store/utils.js:169-199`
+    ///   (`ff62f6f1…acb9`) and `dist/node.cjs:7816` (`bc0e35d3…5c1c`), each
+    ///   matching `benchmarks/package-contract-v2/phase0/rc3/solidjs-signals/files.json`.
+    ///   A function passed there is a key that matches no property.
+    /// - `2.0.0-rc.9` selects the predicate by
+    ///   `keys.length === 1 && typeof keys[0] === "function"`
+    ///   (`dist/dev.js:4380`) and calls it on every read of the view.
+    ///
+    /// TypeScript separates the two only where types exist (rc.3 rejects a
+    /// function key with TS2345; rc.9 accepts it). In an untyped artifact
+    /// nothing in the call does, so the answer comes from the release:
+    /// `false` on [`Solid2::AUDITED`], `true` on [`Solid2::RC9`]. A release
+    /// analyzed under the audited vocabulary without having been compared
+    /// with it keeps `false`, under its `SC9014` notice.
+    omit_predicate_form: bool,
 }
 
 /// The audited Solid 2 vocabulary, spelled like the unit struct it used to be
@@ -2619,8 +2645,10 @@ impl Dialect for Solid2 {
     /// Reviewed Solid 2 semantics in this module, not a package certificate.
     /// Revision 2 (2026-09-26) models the three rc.9 callback forms: `until`,
     /// `dynamic`'s option-selected call forms, and `omit`'s predicate.
+    /// Revision 3 (2026-09-26) answers the `omit` predicate per release
+    /// (rc.3 has none) and makes code inside an rc.9 predicate uncertifiable.
     fn runtime_model_identity(&self) -> &'static str {
-        "solid-v2/model-2"
+        "solid-v2/model-3"
     }
 
     /// [`AUDITED_ARCHIVES`] and [`NEGATIVE_ROWS`] — 75 archive-scoped rows:
@@ -3591,19 +3619,25 @@ impl Dialect for Solid2 {
     ///   the `omit` call itself, in the caller's scope (`:4408-4427`).
     ///
     /// Neither is a schedule the `Execution` vocabulary can state, and the
-    /// first is the one every supported runtime takes. rc.3's `omit` has no
-    /// predicate form (`typeof keys[0]` is never read; the argument is only
-    /// `keys.includes(key)`'s list, rc.3 `dist/dev.js:9334-9369`), and its
-    /// declaration rejects a function there (TS2345). The answer differs only
-    /// where the types are erased; there the conservative reading is rc.9's,
-    /// because nothing in an untyped call says which runtime it will meet.
+    /// first is the one every supported runtime takes.
+    ///
+    /// Answered per release (`Solid2::omit_predicate_form`). rc.3's `omit` has
+    /// no predicate form: `typeof keys[0]` is never read and every build only
+    /// tests membership (`keys.includes(key)`, rc.3 `dist/dev.js:9334-9369`),
+    /// and its declaration rejects a function there (TS2345). So the audited
+    /// vocabulary answers `false` -- for typed code that is TypeScript's
+    /// boundary, and for an untyped artifact it is what rc.3's bytes do -- and
+    /// only [`Solid2::RC9`] answers the predicate slot.
     fn callback_runs_on_result_access(
         &self,
         primitive: Primitive,
         argument: usize,
         argument_count: usize,
     ) -> bool {
-        primitive == Primitive::Omit && argument == 1 && argument_count == 2
+        self.omit_predicate_form
+            && primitive == Primitive::Omit
+            && argument == 1
+            && argument_count == 2
     }
 
     /// `createSignal` and `createOptimistic` both return
@@ -4086,10 +4120,23 @@ mod tests {
 
     /// Only a two-argument `omit` can carry rc.9's predicate
     /// (`keys.length === 1 && typeof keys[0] === "function"`,
-    /// `dist/dev.js:4380`), and only at argument 1.
+    /// `dist/dev.js:4380`), and only at argument 1. rc.3 has no predicate
+    /// form at all.
     #[test]
     fn only_the_two_argument_omit_slot_runs_on_result_access() {
-        let two: &dyn Dialect = &Solid2;
+        let audited: &dyn Dialect = &Solid2;
+        for argument_count in 0..4 {
+            for argument in 0..argument_count {
+                assert!(!audited.callback_runs_on_result_access(
+                    Primitive::Omit,
+                    argument,
+                    argument_count
+                ));
+            }
+        }
+        assert!(!Solid2::AUDITED.callback_runs_on_result_access(Primitive::Omit, 1, 2));
+        assert!(!Solid2::default().callback_runs_on_result_access(Primitive::Omit, 1, 2));
+        let two: &dyn Dialect = &Solid2::RC9;
         assert!(two.callback_runs_on_result_access(Primitive::Omit, 1, 2));
         assert!(!two.callback_runs_on_result_access(Primitive::Omit, 0, 2));
         assert!(!two.callback_runs_on_result_access(Primitive::Omit, 1, 3));

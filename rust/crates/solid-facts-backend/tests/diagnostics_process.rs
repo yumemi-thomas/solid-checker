@@ -600,7 +600,8 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
 /// `dynamic(source, { static: true })` is `untrack(source)` at the call, so it
 /// owns and writes exactly as `untrack` does; an unproven options value claims
 /// nothing. `omit(props, hidden)`'s predicate runs on reads of the returned
-/// view, so nothing written inside it is placed in the component body.
+/// view, so nothing written inside it is placed in the component body, and a
+/// predicate not proven inert is uncertifiable at the predicate argument.
 #[test]
 fn rc9_call_forms_follow_the_runtime_they_select() {
     let line = |finding: &serde_json::Value| finding["primaryLocation"]["line"].as_u64();
@@ -635,18 +636,64 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
         );
     }
     if let Some(findings) = diagnostic_fixture("rc9-omit-predicate") {
-        // Only the control: the body read beside a predicate.
+        // The only violation is the control: the body read beside a
+        // predicate. No predicate body is placed in a component.
         let reads = findings_for_rule(&findings, "strict-read-untracked");
         assert_eq!(
             reads
                 .iter()
                 .map(|finding| line(finding))
                 .collect::<Vec<_>>(),
-            [Some(46)],
+            [Some(48)],
             "{findings:#?}"
         );
-        // The control, plus the one project-scoped rc.9 notice (SC9014).
-        assert_eq!(findings.len(), 2, "{findings:#?}");
+        // Every predicate not proven inert, each at its argument and each
+        // uncertifiable, with the reason it is not proven: a reactive
+        // operation (inline read, inline write, named, const arrow, props,
+        // forwarded through `hideBy`), a call out of the predicate, or no
+        // inspectable body. The inert literal, the standard-library-only
+        // literal, the key list and the forwarded parameter itself are silent.
+        let predicates = findings_for_rule(&findings, "reactive-dispatch-unresolved");
+        fn context(finding: &serde_json::Value) -> Option<&str> {
+            finding["analysisContext"]
+                .as_str()
+                .map(|context| context.trim_start_matches("result-access-callback-"))
+        }
+        assert_eq!(
+            predicates
+                .iter()
+                .map(|finding| (line(finding), context(finding)))
+                .collect::<Vec<_>>(),
+            [
+                (Some(20), Some("reactive-operation")),
+                (Some(27), Some("reactive-operation")),
+                (Some(39), Some("reactive-operation")),
+                (Some(67), Some("reactive-operation")),
+                (Some(73), Some("reactive-operation")),
+                (Some(84), Some("opaque-call")),
+                (Some(91), Some("body-unresolved")),
+                (Some(107), Some("reactive-operation")),
+            ],
+            "{findings:#?}"
+        );
+        assert!(
+            predicates
+                .iter()
+                .all(|finding| finding["kind"] == "uncertifiable"),
+            "{findings:#?}"
+        );
+        // The exported wrapper's own open callback (its callers may be outside
+        // the project), the control, the eight predicates, and the one
+        // project-scoped rc.9 notice (SC9014).
+        assert_eq!(
+            findings_for_rule(&findings, "package-contract-incomplete")
+                .iter()
+                .map(|finding| line(finding))
+                .collect::<Vec<_>>(),
+            [Some(100)],
+            "{findings:#?}"
+        );
+        assert_eq!(findings.len(), 11, "{findings:#?}");
         assert_eq!(
             findings_for_rule(&findings, "unaudited-solid-release").len(),
             1,

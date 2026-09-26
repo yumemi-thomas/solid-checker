@@ -4714,6 +4714,12 @@ fn unresolved_claim_domains(kind: &solid_reactive_ir::StaticDefectKind) -> Unres
             owner_requirements: false,
             async_behavior: false,
         },
+        // rc.9's `omit` predicate runs whenever the returned view is read, in
+        // the reader's scope and ownership (or during the call without
+        // `Proxy`), and nothing proves it inert. What it can do there is
+        // everything code can do: read, write, create, invoke a callback it
+        // closed over, throw a pending read. No domain survives.
+        StaticDefectKind::ResultAccessCallbackUnplaced { .. } => UnresolvedClaimDomains::all(),
         // A missing or environment-dependent contract export says nothing at
         // all about the surface behind it, so every domain stays unknown.
         _ => UnresolvedClaimDomains::all(),

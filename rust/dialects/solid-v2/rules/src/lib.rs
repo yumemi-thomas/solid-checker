@@ -599,6 +599,7 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
             StaticDefectKind::MissingEffectFunction
                 | StaticDefectKind::ReactiveDispatchUnresolved { .. }
                 | StaticDefectKind::ReactiveCallbackUnresolved { .. }
+                | StaticDefectKind::ResultAccessCallbackUnplaced { .. }
                 | StaticDefectKind::StructuredReturnUnresolved { .. }
                 | StaticDefectKind::HandlerValueUnresolved { .. }
                 // The open transport proof names its own reason in the

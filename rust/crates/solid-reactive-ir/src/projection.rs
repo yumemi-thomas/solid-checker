@@ -223,6 +223,23 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             ),
             "Pass an exact synchronous function literal directly, or keep the callback body in the project in a form solid-checker can inspect.".into(),
         ),
+        StaticDefectKind::ResultAccessCallbackUnplaced { callee } => {
+            let reason = match defect.analysis_context.as_str() {
+                crate::RESULT_ACCESS_REACTIVE_OPERATION => {
+                    "reads or writes reactive state (a signal, store, prop, setter or action)"
+                }
+                crate::RESULT_ACCESS_OPAQUE_CALL => {
+                    "calls code outside the standard library, whose reactive behaviour would run in that scope"
+                }
+                _ => "has a body solid-checker cannot inspect at this call",
+            };
+            (
+                format!(
+                    "{callee} calls this predicate whenever the object it returns is read (a property get, an `in` test, a key enumeration, a spread or merge), in the reading computation's tracking scope and under its owner, or once per property during the call where Proxy is unavailable; the predicate {reason}, and the reader's scope is not known here, so whether it subscribes, goes stale, or writes in an owned scope cannot be certified"
+                ),
+                "Keep the predicate a pure function of its key, with no signal, store, props or setter access and no calls outside the standard library, or pass the hidden keys as a list instead of a predicate.".into(),
+            )
+        }
         StaticDefectKind::StructuredReturnUnresolved {
             function,
             property,
@@ -376,6 +393,9 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         }
         StaticDefectKind::ReactiveCallbackUnresolved { .. } => {
             "the built-in callback position is type-correct and synchronous, but the callback body's reactive reads are not available for proof"
+        }
+        StaticDefectKind::ResultAccessCallbackUnplaced { .. } => {
+            "the predicate runs on reads of the returned object, in the reader's tracking scope and ownership, which the call site does not determine"
         }
         StaticDefectKind::StructuredReturnUnresolved { .. } => {
             "the exported shorthand value is type-correct, but its exact runtime binding and reactive return behavior are not proven"

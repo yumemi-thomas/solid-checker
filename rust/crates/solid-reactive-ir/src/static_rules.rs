@@ -794,3 +794,221 @@ fn jsx_structure_within(file: &solid_facts::FileFacts, span: Span) -> bool {
             .iter()
             .any(|fragment| span.contains(*fragment))
 }
+
+/// SC9012 for a callback that runs when the call's returned object is read
+/// ([`solid_dialect::Dialect::callback_runs_on_result_access`]; rc.9's
+/// `omit(props, hidden)` predicate).
+///
+/// Code inside such a callback has no execution role: it runs wherever the
+/// returned view is read, in the reader's tracking scope and under the
+/// reader's owner (or once per property during the call where `Proxy` is
+/// unavailable), and the engine does not follow reads of a view back to the
+/// call that made it. So it can never be a violation -- the reader's scope is
+/// not knowable where the predicate is written -- and it cannot be certified
+/// either unless the predicate is proven inert. This rule is that proof, and
+/// reports the obligation wherever it fails.
+///
+/// Inert means an inspectable function body -- the literal written at the
+/// position, or a `function` declaration or `const` arrow in the same file the
+/// argument names exactly -- in which:
+///
+/// - the engine recorded no reactive read, write, action invocation or async
+///   read, and no identifier refers to an accessor, setter, action, reactive
+///   source or props binding ([`RESULT_ACCESS_REACTIVE_OPERATION`]); and
+/// - every call resolves to a standard-library declaration
+///   ([`RESULT_ACCESS_OPAQUE_CALL`]). A project helper, a package export or an
+///   unresolved callee may do anything in the reader's scope.
+///
+/// A value with no inspectable body reports
+/// [`RESULT_ACCESS_BODY_UNRESOLVED`], unless it is proven not to be a function
+/// at all (a key-list call that happens to have two arguments, such as
+/// `omit(props, "a")`). Two shapes are left to other passes and say so:
+///
+/// - a **parameter** forwarded into the position: its body is the caller's,
+///   and contract generation already opens the export's `callbacks` for it
+///   through the unknown-callback sentinel;
+/// - a **spread** argument, which TypeScript types as the key-list form.
+///
+/// [`RESULT_ACCESS_REACTIVE_OPERATION`]: crate::RESULT_ACCESS_REACTIVE_OPERATION
+/// [`RESULT_ACCESS_OPAQUE_CALL`]: crate::RESULT_ACCESS_OPAQUE_CALL
+/// [`RESULT_ACCESS_BODY_UNRESOLVED`]: crate::RESULT_ACCESS_BODY_UNRESOLVED
+pub(crate) fn result_access_callbacks(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
+    let lookup = ctx.semantic_lookup;
+    let mut obligations = Vec::new();
+    for file in &ctx.facts.files {
+        for call in &file.ast.calls {
+            let count = call.arguments.len();
+            let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+                continue;
+            };
+            for (index, argument) in call.arguments.iter().enumerate() {
+                if !ctx
+                    .dialect
+                    .callback_runs_on_result_access(primitive, index, count)
+                {
+                    continue;
+                }
+                let Some(reason) = result_access_obligation(ctx, draft, file, argument) else {
+                    continue;
+                };
+                let callee = call
+                    .static_callee(&file.source)
+                    .or_else(|| ctx.dialect.name_of(primitive))
+                    .unwrap_or("the call")
+                    .to_owned();
+                obligations.push(StaticDefect {
+                    kind: StaticDefectKind::ResultAccessCallbackUnplaced { callee },
+                    location: location(file.path.shared(), argument.span),
+                    analysis_context: reason.to_owned(),
+                    fixes: vec![],
+                    uncertain: false,
+                });
+            }
+        }
+        // The same slot one project wrapper away: the argument of an
+        // in-project call whose callee forwards that parameter into it.
+        for forwarded in lookup.result_access_forwarded_arguments(file.path.as_str()) {
+            let Some((call, argument)) = file.ast.calls.iter().find_map(|call| {
+                call.arguments
+                    .iter()
+                    .find(|argument| argument.span == forwarded.argument)
+                    .map(|argument| (call, argument))
+            }) else {
+                continue;
+            };
+            let Some(reason) = result_access_obligation(ctx, draft, file, argument) else {
+                continue;
+            };
+            let primitive = ctx
+                .dialect
+                .name_of(forwarded.primitive)
+                .unwrap_or("the call");
+            let callee = match call.static_callee(&file.source) {
+                Some(wrapper) => format!("{primitive} (through {wrapper})"),
+                None => primitive.to_owned(),
+            };
+            obligations.push(StaticDefect {
+                kind: StaticDefectKind::ResultAccessCallbackUnplaced { callee },
+                location: location(file.path.shared(), argument.span),
+                analysis_context: reason.to_owned(),
+                fixes: vec![],
+                uncertain: false,
+            });
+        }
+    }
+    for obligation in obligations {
+        draft.push_defect(obligation);
+    }
+}
+
+/// The named reason `argument` leaves its result-access callback
+/// uncertifiable, or `None` when it is proven inert, proven not a function,
+/// or owned by another pass (see [`result_access_callbacks`]).
+fn result_access_obligation(
+    ctx: &AnalysisContext<'_>,
+    draft: &ProgramDraft,
+    file: &solid_facts::FileFacts,
+    argument: &solid_facts::ast::ArgumentFact,
+) -> Option<&'static str> {
+    use solid_facts::ast::ArgumentValueKind;
+    if argument.spread {
+        return None;
+    }
+    let body = match argument.value {
+        ArgumentValueKind::Function | ArgumentValueKind::AsyncFunction => {
+            callback_argument_literal(file, argument.span)
+        }
+        ArgumentValueKind::Identifier => match argument.binding_declaration {
+            Some(declaration) if declared_as_parameter(file, declaration) => return None,
+            Some(declaration) => same_file_function(file, declaration),
+            None => None,
+        },
+        _ => None,
+    };
+    let Some(body) = body else {
+        let proven_value =
+            crate::runtime_semantics::literal_argument_is_not_callable(argument.runtime_value_kind)
+                || ctx
+                    .semantic_lookup
+                    .smallest_contained_callability(file.path.as_str(), argument.span)
+                    == Some(typefacts::Callability::NonCallable);
+        return (!proven_value).then_some(crate::RESULT_ACCESS_BODY_UNRESOLVED);
+    };
+    let region = body.span;
+    let path = file.path.as_str();
+    let inside = |location: &Location| {
+        &*location.path == path
+            && u32::try_from(location.start_byte).is_ok_and(|start| region.start <= start)
+            && u32::try_from(location.end_byte).is_ok_and(|end| end <= region.end)
+    };
+    let reactive_symbol = |symbol: &SymbolId| {
+        ctx.accessors.contains_key(symbol)
+            || ctx.setters.contains_key(symbol)
+            || ctx.actions.contains_key(symbol)
+            || ctx.prop_sources.contains_key(symbol)
+            || ctx.uncertain_prop_sources.contains(symbol)
+            || ctx.source_kinds.contains_key(symbol)
+    };
+    if draft.reads.iter().any(|read| inside(&read.location))
+        || draft.writes.iter().any(|write| inside(&write.location))
+        || draft
+            .action_invocations
+            .iter()
+            .any(|action| inside(&action.location))
+        || draft.async_reads.iter().any(|read| inside(&read.location))
+        || file.ast.identifiers_within(region).any(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && ctx
+                    .entities
+                    .at(path, identifier.span)
+                    .is_some_and(reactive_symbol)
+        })
+    {
+        return Some(crate::RESULT_ACCESS_REACTIVE_OPERATION);
+    }
+    let opaque_call = file.ast.calls_within(region).any(|call| {
+        !ctx.semantic_lookup
+            .resolved_callee_call(file, call.callee)
+            .and_then(|resolved| resolved.declaration.as_ref())
+            .is_some_and(|declaration| declaration.standard_library)
+    });
+    opaque_call.then_some(crate::RESULT_ACCESS_OPAQUE_CALL)
+}
+
+/// Whether the binding declared at `declaration` is a parameter of a function
+/// in this file.
+fn declared_as_parameter(file: &solid_facts::FileFacts, declaration: Span) -> bool {
+    file.ast.functions.iter().any(|function| {
+        function
+            .parameters
+            .iter()
+            .flat_map(|parameter| &parameter.names)
+            .chain(&function.rest_parameter_names)
+            .any(|name| name.span == declaration)
+    })
+}
+
+/// The function a same-file binding declared at `declaration` denotes: a
+/// `function` declaration of that name, or a `const` whose initializer is a
+/// function literal. Anything reassignable or indirect is not a body.
+fn same_file_function(
+    file: &solid_facts::FileFacts,
+    declaration: Span,
+) -> Option<&solid_facts::ast::FunctionFact> {
+    if let Some(function) = file.ast.functions.iter().find(|function| {
+        function.kind == solid_facts::ast::FunctionKind::Declaration
+            && function
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == declaration)
+    }) {
+        return Some(function);
+    }
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.initializer_function
+            && binding.names.len() == 1
+            && binding.names.iter().any(|name| name.span == declaration)
+    })?;
+    callback_argument_literal(file, binding.initializer?)
+}

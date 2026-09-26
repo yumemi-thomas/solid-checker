@@ -285,6 +285,16 @@ struct FunctionCallSite {
 
 type BindingsByReference = HashMap<String, HashMap<(u64, u64), BindingResolution>>;
 
+/// One argument a project wrapper forwards into a result-access slot
+/// ([`SemanticLookup::result_access_forwarded_arguments`]).
+#[derive(Clone, Copy, Debug)]
+pub(super) struct ResultAccessForwarded {
+    /// The argument at the wrapper's call site.
+    pub(super) argument: Span,
+    /// The primitive whose slot the wrapper forwards it into.
+    pub(super) primitive: solid_dialect::Primitive,
+}
+
 /// Lazy project-wide lookups that replace repeated whole-project scans.
 ///
 /// Every map is built at most once per build, on first use, in the exact
@@ -325,6 +335,7 @@ pub(super) struct SemanticLookup<'a> {
     returned_callback_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
     project_has_component_type: OnceLock<bool>,
     component_functions: OnceLock<HashSet<(&'a str, Span)>>,
+    result_access_forwarded: OnceLock<HashMap<&'a str, Vec<ResultAccessForwarded>>>,
     cross_file_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
 }
 
@@ -437,6 +448,7 @@ impl<'a> SemanticLookup<'a> {
             returned_callback_proof_digest: OnceLock::new(),
             project_has_component_type: OnceLock::new(),
             component_functions: OnceLock::new(),
+            result_access_forwarded: OnceLock::new(),
             cross_file_proof_digest: OnceLock::new(),
         }
     }
@@ -757,7 +769,120 @@ impl<'a> SemanticLookup<'a> {
                 hasher.update(b"returned-callbacks\0");
                 hasher.update(returned);
             }
+            // A wrapper in one file decides the role of a callback written in
+            // another. Hashed only when present, so a project with no such
+            // wrapper keeps the digest it had.
+            let forwarded = self.result_access_forwarded_index();
+            if !forwarded.is_empty() {
+                let mut paths = forwarded.keys().copied().collect::<Vec<_>>();
+                paths.sort_unstable();
+                hasher.update(b"result-access-forwarded\0");
+                for path in paths {
+                    hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(path.as_bytes());
+                    for entry in &forwarded[path] {
+                        hasher.update(entry.argument.start.to_le_bytes());
+                        hasher.update(entry.argument.end.to_le_bytes());
+                    }
+                }
+            }
             Some(hasher.finalize().into())
+        })
+    }
+
+    /// The arguments in `path` that a project function forwards, unchanged,
+    /// into a slot the dialect says runs when the call's returned object is
+    /// read ([`solid_dialect::Dialect::callback_runs_on_result_access`]).
+    ///
+    /// `function hideBy(props, hidden) { return omit(props, hidden); }` makes
+    /// the second argument of every in-project `hideBy(…)` call such a
+    /// callback: its code runs on reads of the view, wherever those happen,
+    /// exactly as if it were written at `omit`. One level of forwarding, by
+    /// exact parameter identity (a single-name parameter binding the
+    /// argument's declaration resolves to) and exact call-site resolution
+    /// ([`Self::function_call_sites`]); a wrapper of a wrapper, a parameter
+    /// renamed through a local, or a destructured parameter is not followed.
+    pub(super) fn result_access_forwarded_arguments(&self, path: &str) -> &[ResultAccessForwarded] {
+        self.result_access_forwarded_index()
+            .get(path)
+            .map_or(&[], Vec::as_slice)
+    }
+
+    fn result_access_forwarded_index(&self) -> &HashMap<&'a str, Vec<ResultAccessForwarded>> {
+        self.result_access_forwarded.get_or_init(|| {
+            let mut forwarded = HashMap::<&'a str, Vec<ResultAccessForwarded>>::new();
+            // Most dialect variants answer no slot at all; skip the walk.
+            let answered = self.project_primitives().iter().any(|primitive| {
+                (0..PROBED_ARGUMENTS).any(|count| {
+                    (0..count).any(|argument| {
+                        self.dialect
+                            .callback_runs_on_result_access(*primitive, argument, count)
+                    })
+                })
+            });
+            if !answered {
+                return forwarded;
+            }
+            let facts: &'a ProjectFacts = self.facts;
+            for file in &facts.files {
+                for call in &file.ast.calls {
+                    let Some(primitive) = self.primitive_at_call(file, call.span) else {
+                        continue;
+                    };
+                    let count = call.arguments.len();
+                    for (index, argument) in call.arguments.iter().enumerate() {
+                        if argument.spread
+                            || argument.value != solid_facts::ast::ArgumentValueKind::Identifier
+                            || !self
+                                .dialect
+                                .callback_runs_on_result_access(primitive, index, count)
+                        {
+                            continue;
+                        }
+                        let Some(declaration) = argument.binding_declaration else {
+                            continue;
+                        };
+                        for function in file.ast.functions_body_containing(call.span) {
+                            let Some(parameter) = function.parameters.iter().position(|binding| {
+                                binding.names.len() == 1 && binding.names[0].span == declaration
+                            }) else {
+                                continue;
+                            };
+                            for (caller, callee) in
+                                self.function_call_sites(file.path.as_str(), function.span)
+                            {
+                                let Some(site) =
+                                    caller.ast.calls.iter().find(|site| site.callee == callee)
+                                else {
+                                    continue;
+                                };
+                                // A spread up to the slot moves arguments into it.
+                                if site
+                                    .arguments
+                                    .iter()
+                                    .take(parameter.saturating_add(1))
+                                    .any(|candidate| candidate.spread)
+                                {
+                                    continue;
+                                }
+                                if let Some(forwarded_argument) = site.arguments.get(parameter) {
+                                    forwarded.entry(caller.path.as_str()).or_default().push(
+                                        ResultAccessForwarded {
+                                            argument: forwarded_argument.span,
+                                            primitive,
+                                        },
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            for entries in forwarded.values_mut() {
+                entries.sort_unstable_by_key(|entry| (entry.argument.start, entry.argument.end));
+                entries.dedup_by_key(|entry| entry.argument);
+            }
+            forwarded
         })
     }
 

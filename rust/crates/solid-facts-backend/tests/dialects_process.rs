@@ -834,11 +834,14 @@ fn a_reviewed_release_is_analyzed_with_one_notice_beside_the_findings() {
         .filter_map(|step| step["message"].as_str())
         .filter(|message| message.starts_with("known gap "))
         .collect::<Vec<_>>();
+    // B3 left the list when code inside an `omit` predicate became
+    // uncertifiable (SC9012): the two gaps still open are the typings'
+    // unresolvable re-exports and the missing rc.9 negative rows.
     assert!(
-        gaps.len() == 3
-            && gaps
-                .iter()
-                .any(|gap| gap.contains("omit(props, predicate)")),
+        gaps.len() == 2
+            && !gaps.iter().any(|gap| gap.contains("omit"))
+            && gaps.iter().any(|gap| gap.contains("skipLibCheck"))
+            && gaps.iter().any(|gap| gap.contains("negative row")),
         "every open gap is named: {gaps:?}"
     );
     let path = notice["primaryLocation"]["path"].as_str().unwrap();

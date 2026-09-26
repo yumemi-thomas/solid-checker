@@ -274,6 +274,9 @@ pub(crate) fn collect_project<'facts>(
         draft.push_defect(obligation.clone());
     }
     static_rules::component_returns_conditionally(ctx, draft);
+    // After every read, write and action table is merged: the rule's
+    // negative proof is that none of them lies inside the predicate.
+    static_rules::result_access_callbacks(ctx, draft);
     draft.contract_exports = interprocedural.exports.clone();
     draft.contract_generation_obligations =
         interprocedural.contract_generation_obligations.to_vec();
