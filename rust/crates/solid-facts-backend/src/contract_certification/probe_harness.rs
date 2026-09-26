@@ -1002,6 +1002,15 @@ fn launch_every_session(
                     claim_id: claim_id.to_owned(),
                 });
             }
+            Err(ProbeHarnessError::WorkerExited(detail)) => {
+                // As for a timeout: the group is dead, and the census must
+                // still hold before anything is concluded from the run.
+                workspace.verify_unchanged()?;
+                return Err(ProbeHarnessError::SessionExited {
+                    claim_id: claim_id.to_owned(),
+                    detail,
+                });
+            }
             Err(error) => return Err(error),
         };
         // § 31.3's pre-boot pool. The next worker boots *inside* this census
@@ -3670,8 +3679,23 @@ impl PrivateProbeWorkspace {
         }
 
         let remaining = deadline.saturating_duration_since(Instant::now());
-        let run_line = receive_line(&receiver, remaining)
-            .map_err(|error| worker.explain(error, &diagnostics))?;
+        let run_line = match receiver.recv_timeout(remaining) {
+            // The worker proved its startup frame and was handed this session,
+            // so a report channel that closes before the run frame arrives is
+            // the session's own run ending without an answer -- package code
+            // calling `process.exit`, a fatal signal, an error that escaped the
+            // worker's own failure path. Named apart from a launch failure so
+            // the transaction withholds this one gate's candidate rather than
+            // refusing the row; it is never a completed run.
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(ProbeHarnessError::WorkerExited(
+                    worker.exit_account(&diagnostics),
+                ));
+            }
+            received => {
+                receive_result(received).map_err(|error| worker.explain(error, &diagnostics))?
+            }
+        };
         // Nothing more is wanted from the worker, so its whole group dies here
         // rather than at the end of the function: an extra frame can then only
         // be one it had already written.
@@ -3797,6 +3821,22 @@ impl WorkerProcess {
             }
             other => other,
         }
+    }
+
+    /// Kills the group and says, in one bounded line, why a worker that was
+    /// handed a session stopped without answering: the first stderr line that
+    /// names an error (`[REACTIVITY_HALTED] ReferenceError: document is not
+    /// defined`), else the first nonempty one, else nothing.
+    ///
+    /// The text is package-controlled and is carried no further than a
+    /// withheld record's reason, exactly like the worker's own failure summary
+    /// (ADR 0036); nothing is decided from it.
+    fn exit_account(&mut self, diagnostics: &mpsc::Receiver<String>) -> String {
+        self.kill_group();
+        let tail = diagnostics
+            .recv_timeout(EXTRA_FRAME_GRACE)
+            .unwrap_or_default();
+        worker_exit_account(&tail)
     }
 
     fn kill_group(&mut self) {
@@ -4354,11 +4394,54 @@ fn node_architecture_name() -> &'static str {
     }
 }
 
+/// The bounded length of [`worker_exit_account`]'s summary, the worker's own
+/// `SUMMARY_LIMIT`.
+const WORKER_EXIT_SUMMARY_LIMIT: usize = 240;
+
+/// `the worker exited without answering`, plus the one stderr line that best
+/// says why. See [`WorkerProcess::exit_account`].
+pub(super) fn worker_exit_account(stderr: &str) -> String {
+    const EXITED: &str = "the worker exited without answering";
+    let lines = || {
+        stderr
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+    };
+    let Some(line) = lines()
+        .find(|line| line.contains("Error"))
+        .or_else(|| lines().next())
+    else {
+        return EXITED.to_owned();
+    };
+    let mut summary = line
+        .chars()
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .take(WORKER_EXIT_SUMMARY_LIMIT)
+        .collect::<String>();
+    if line.chars().count() > WORKER_EXIT_SUMMARY_LIMIT {
+        summary.push('\u{2026}');
+    }
+    format!("{EXITED}: {summary}")
+}
+
 fn receive_line(
     receiver: &mpsc::Receiver<std::io::Result<String>>,
     budget: Duration,
 ) -> Result<String, ProbeHarnessError> {
-    match receiver.recv_timeout(budget) {
+    receive_result(receiver.recv_timeout(budget))
+}
+
+fn receive_result(
+    received: Result<std::io::Result<String>, mpsc::RecvTimeoutError>,
+) -> Result<String, ProbeHarnessError> {
+    match received {
         Ok(Ok(line)) => Ok(line),
         Ok(Err(error)) => Err(ProbeHarnessError::Launch(format!(
             "could not read from the probe worker: {error}"
@@ -5390,6 +5473,19 @@ pub enum ProbeHarnessError {
     /// verdict is unaffected because launches are sequential.
     #[error("the probe worker for claim {claim_id} did not report within the policy budget")]
     SessionTimeout { claim_id: String },
+    /// A worker that proved its startup frame and was handed a session, then
+    /// closed its report channel without a run frame. Internal to one launch:
+    /// [`launch_every_session`] names the claim and turns it into
+    /// [`Self::SessionExited`]. The payload is [`worker_exit_account`]'s.
+    #[error("the probe worker was handed its session and {0}")]
+    WorkerExited(String),
+    /// ADR 0036 § 2, the timeout's twin: one session's worker ended without
+    /// reporting — package code touching a browser global from an effect
+    /// flush, `process.exit`, a fatal signal — so the run for `claim_id`
+    /// observed nothing. Withheld as a veto that did not complete, never read
+    /// as a pass, and every other session's verdict is unaffected.
+    #[error("the probe worker for claim {claim_id} did not complete: {detail}")]
+    SessionExited { claim_id: String, detail: String },
     #[error(transparent)]
     Probe(#[from] RuntimeProbeError),
     #[error(transparent)]

@@ -1026,8 +1026,9 @@ fn positive_fact_operation(subject: &PositiveFactSubject) -> Option<(&str, &str,
     }
 }
 
-/// ADR 0036 § 2: the candidate whose mandatory veto ended in an error or a
-/// timeout. A contradiction is not this — it refuses the row — and so is every
+/// ADR 0036 § 2: the candidate whose mandatory veto ended in an error, a
+/// timeout, or a worker that exited without answering after it was handed the
+/// session. A contradiction is not this — it refuses the row — and so is every
 /// other probe error.
 pub(super) fn incomplete_gate_withholding(
     plan: &CertificationPlan,
@@ -1074,6 +1075,22 @@ pub(super) fn incomplete_gate_withholding(
                 gate,
                 " (the worker did not report within the policy budget)".to_owned(),
             ));
+        }
+        // The worker ended without a run frame after it was handed this
+        // gate's session. Nothing was observed, so it withholds exactly as a
+        // timeout does and never passes the gate.
+        Policy2FinalizationError::ProbeHarness(ProbeHarnessError::SessionExited {
+            claim_id,
+            detail,
+        }) => {
+            let Some(gate) = schedule
+                .gates()
+                .iter()
+                .find(|gate| gate.semantic_claim_id() == claim_id)
+            else {
+                return Vec::new();
+            };
+            incomplete.push((gate, format!(" ({detail})")));
         }
         _ => return Vec::new(),
     }
@@ -12865,6 +12882,222 @@ export const value = phantom;
         }
     }
 
+    /// Phase 22's kobalte finding: `@solid-primitives/interaction`'s
+    /// `ariaHideOutside` read `document` from an effect a `@solidjs/signals`
+    /// flush ran on a microtask, the `ReferenceError` escaped the worker's
+    /// `try`, Node exited with nothing on the report descriptor, and the whole
+    /// certification was refused at witness acquisition.
+    ///
+    /// Both ways a session can end without a clean run must withhold exactly
+    /// the gate's own candidate, name why, and leave the sibling's certified
+    /// closure in place:
+    ///
+    /// - the uncaught error is the run's recorded error outcome (the worker's
+    ///   `uncaughtException` path), so the gate is `IncompleteGate`;
+    /// - a worker that dies with no chance to report (`SIGKILL`, after every
+    ///   event a passing run carries was emitted) is `SessionExited`, never a
+    ///   completed run and never a launch failure of the harness.
+    #[test]
+    fn a_probe_worker_that_crashes_withholds_only_its_own_gate() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let pins = super::probe_harness::configured_pin_digests();
+        assert!(
+            pins.is_some()
+                || std::env::var("SOLID_CHECKER_EXPECT_PROBE_PINS").as_deref() != Ok("1"),
+            "run this tracer through make test-probe-harness with compiled-in pins"
+        );
+        let Some((_, node_pin)) = pins else {
+            return;
+        };
+        let Some((node, node_digest)) = tracer_node() else {
+            return;
+        };
+        assert_eq!(node_digest, node_pin, "the tracer must use the pinned Node");
+        let repository = repository_root();
+        let fixture = repository.join("fixtures/package-contracts/probe-source-disposition");
+        let package = fixture.join("effect-reads-document");
+        let name = "probe-effect-reads-document";
+        let manifest = std::fs::read(package.join("package.json")).unwrap();
+        let runtime = std::fs::read(package.join("index.js")).unwrap();
+        let declarations = std::fs::read(package.join("index.d.ts")).unwrap();
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let root = format!("/project/node_modules/{name}");
+        let plan = plan_for_test_package_closing(
+            &archive,
+            name,
+            "1.0.0",
+            &root,
+            &manifest,
+            &["import"],
+            &["hideOutside", "noop"].map(|export| {
+                (
+                    export,
+                    ("index.js", runtime.as_slice()),
+                    ("index.d.ts", declarations.as_slice()),
+                    root.as_str(),
+                )
+            }),
+            &[
+                ("hideOutside", ClaimDomain::Creates),
+                ("noop", ClaimDomain::Creates),
+            ],
+            &|_| ValueShape::Callable,
+        );
+        plan.acquire_and_verify_export_value_type_facts(&pin)
+            .expect("both creates censuses pass, so only the vetoes decide");
+        let schedule = plan.probe_gate_schedule().unwrap();
+        assert_eq!(schedule.gates().len(), 2);
+        let gate_for = |export: &str| {
+            schedule
+                .gates()
+                .iter()
+                .find(|gate| gate.subject().export == export)
+                .unwrap_or_else(|| panic!("{export} has a scheduled gate"))
+        };
+        let (crashing, control) = (gate_for("hideOutside"), gate_for("noop"));
+
+        for (label, recipe, account) in [
+            (
+                "uncaught-effect-error",
+                "effect-reads-document.mjs",
+                "the worker threw: ReferenceError: document is not defined",
+            ),
+            (
+                "killed-worker",
+                "worker-killed.mjs",
+                "the worker exited without answering",
+            ),
+        ] {
+            let scratch = TracerScratch::new(label);
+            let corpus = tracer_corpus_from(
+                &fixture,
+                scratch.path(),
+                label,
+                &[
+                    (crashing.semantic_claim_id(), recipe),
+                    (
+                        control.semantic_claim_id(),
+                        "effect-reads-document-noop.mjs",
+                    ),
+                ],
+            );
+            let configuration =
+                super::ProbeHarnessConfiguration::new(&repository, &node, corpus).unwrap();
+
+            // The veto alone: the crash is recorded as what it is, and the
+            // gate it belongs to never passes.
+            match super::probe_harness::run_probe_gates(&plan, &schedule, &configuration, &pin, &[])
+            {
+                Ok((evaluation, _)) => {
+                    assert_eq!(label, "uncaught-effect-error");
+                    assert!(
+                        evaluation.claim_material().iter().any(|material| material
+                            .observations
+                            .iter()
+                            .any(|observation| matches!(
+                                observation.outcome,
+                                crate::ProbeOutcome::Error { .. }
+                            ))),
+                        "{label}: the uncaught effect error is a recorded run error"
+                    );
+                    let outcomes = schedule.outcomes_from_evaluation(&evaluation).unwrap();
+                    assert!(
+                        matches!(
+                            schedule.inspect_outcomes(outcomes),
+                            Err(super::ProbeGateError::IncompleteGate(id)) if id == crashing.id()
+                        ),
+                        "{label}: the crashing gate is incomplete, never passed"
+                    );
+                }
+                Err(super::probe_harness::ProbeHarnessError::SessionExited {
+                    claim_id,
+                    detail,
+                }) => {
+                    assert_eq!(label, "killed-worker", "{detail}");
+                    assert_eq!(claim_id, crashing.semantic_claim_id());
+                }
+                Err(error) => panic!("{label}: a crashed session is not a refusal: {error}"),
+            }
+
+            // The whole transaction: the crashing gate's candidate is withheld
+            // by name and reason, and the control still certifies.
+            let finalized = tracer_certify(&plan, &pin, &configuration).unwrap_or_else(|error| {
+                panic!("{label}: a crashed veto withholds, it does not refuse: {error}")
+            });
+            let withheld = finalized.withheld_closures();
+            assert_eq!(withheld.len(), 1, "{label}: {withheld:?}");
+            let record = &withheld[0];
+            assert_eq!(record.export, "hideOutside");
+            assert_eq!(record.domain, "creates");
+            assert_eq!(record.semantic_claim_id, crashing.semantic_claim_id());
+            assert!(
+                record.reason.starts_with(&format!(
+                    "{}{}",
+                    super::WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX,
+                    crashing.id()
+                )) && record.reason.contains(account),
+                "{label}: {}",
+                record.reason
+            );
+            assert!(
+                !creates_is_closed_in(finalized.canonical_main(), "hideOutside"),
+                "{label}: a claim whose veto did not complete is never certified"
+            );
+            assert!(
+                creates_is_closed_in(finalized.canonical_main(), "noop"),
+                "{label}: the sibling whose veto ran clean still certifies"
+            );
+            assert_ne!(
+                finalized.bindings().probe_gate_root,
+                super::finalization::empty_probe_gate_root(&plan),
+                "{label}: the control's veto ran and is bound"
+            );
+        }
+    }
+
+    #[test]
+    fn a_probe_worker_exit_account_names_the_error_line_and_is_bounded() {
+        use super::probe_harness::worker_exit_account;
+        assert_eq!(
+            worker_exit_account(""),
+            "the worker exited without answering"
+        );
+        assert_eq!(
+            worker_exit_account(
+                "[REACTIVITY_HALTED] ReferenceError: document is not defined\n    at \
+                 ariaHideOutside (file:///x.js:64:42)\nnode:internal/process/task_queues:103"
+            ),
+            "the worker exited without answering: [REACTIVITY_HALTED] ReferenceError: document \
+             is not defined"
+        );
+        // Node's own uncaught report leads with the source location; the
+        // error line is the account.
+        assert_eq!(
+            worker_exit_account(
+                "file:///x.js:4\n  return document.body;\n  ^\n\nReferenceError: document is \
+                 not defined\n    at hideOutside"
+            ),
+            "the worker exited without answering: ReferenceError: document is not defined"
+        );
+        assert_eq!(
+            worker_exit_account("\n  killed\u{7}\n"),
+            "the worker exited without answering: killed "
+        );
+        let long = worker_exit_account(&format!("TypeError: {}", "x".repeat(1000)));
+        assert!(long.ends_with('\u{2026}'));
+        assert!(long.chars().count() < 300, "{long}");
+    }
+
     /// ADR 0030: extensionless relative TypeScript imports are replayed from
     /// the authenticated native closure, never guessed by Node's resolver.
     #[test]
@@ -14862,6 +15095,47 @@ export const value = phantom;
         let records = super::incomplete_gate_withholding(&plan, &single);
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].semantic_claim_id, gates[1].semantic_claim_id());
+
+        // A worker that died after it was handed a session withholds that
+        // session's gate alone, with the worker's account, like a timeout.
+        let exited = super::Policy2FinalizationError::ProbeHarness(
+            super::probe_harness::ProbeHarnessError::SessionExited {
+                claim_id: gates[0].semantic_claim_id().to_owned(),
+                detail: "the worker exited without answering: ReferenceError: document is not \
+                         defined"
+                    .to_owned(),
+            },
+        );
+        let records = super::incomplete_gate_withholding(&plan, &exited);
+        assert_eq!(records.len(), 1, "{records:?}");
+        assert_eq!(records[0].semantic_claim_id, gates[0].semantic_claim_id());
+        assert_eq!(
+            records[0].reason,
+            format!(
+                "{}{} (the worker exited without answering: ReferenceError: document is not \
+                 defined)",
+                super::WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX,
+                gates[0].id()
+            )
+        );
+        let stranger = super::Policy2FinalizationError::ProbeHarness(
+            super::probe_harness::ProbeHarnessError::SessionExited {
+                claim_id: "sha256:not-a-claim".to_owned(),
+                detail: String::new(),
+            },
+        );
+        assert!(
+            super::incomplete_gate_withholding(&plan, &stranger).is_empty(),
+            "an exited session no gate names withholds nothing, so the error stands"
+        );
+        // A worker that never proved its startup frame is a launch failure of
+        // the harness, not of a session, and still refuses.
+        let launch = super::Policy2FinalizationError::ProbeHarness(
+            super::probe_harness::ProbeHarnessError::Launch(
+                "the probe worker exited without answering".to_owned(),
+            ),
+        );
+        assert!(super::incomplete_gate_withholding(&plan, &launch).is_empty());
     }
 
     /// ADR 0103's safety property: **the producer proving an identity is not

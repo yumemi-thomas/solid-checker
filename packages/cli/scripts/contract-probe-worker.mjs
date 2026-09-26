@@ -111,6 +111,14 @@ const ownKeys = Object.keys;
 const stringSlice = String.prototype.slice;
 const stringIndexOf = String.prototype.indexOf;
 const stringEndsWith = String.prototype.endsWith;
+// The failure path for an error nothing in the session's own call chain
+// catches: an effect a package scheduled on a microtask or a timer that throws
+// while the harness is draining (`@solid-primitives/interaction`'s
+// `ariaHideOutside` reading `document` under Node, from a `@solidjs/signals`
+// flush). Captured here for the same reason as everything above.
+const processObject = process;
+const addProcessListener = process.on;
+const exitProcess = process.exit;
 
 // Nothing after this line may add a property to an intrinsic prototype, and
 // nothing here needs to. A package top level that tries — the
@@ -314,6 +322,50 @@ if (!execution && Array.isArray(requestedJsxFreeEsm) && requestedJsxFreeEsm.leng
     }
   });
 }
+function failedOutcome(error) {
+  const failed = createFrameRecord();
+  failed.kind = "error";
+  failed.details = digest(
+    error instanceof ErrorConstructor ? (error.stack ?? error.message) : asString(error)
+  );
+  failed.summary = summarizeFailure(error);
+  return failed;
+}
+
+// Exactly one run frame per session, whichever path reaches it first.
+let reported = false;
+function reportRun(outcome) {
+  if (reported) return;
+  reported = true;
+  const run = createFrameRecord();
+  run.session = sessionId;
+  run.environment = environment;
+  run.isolation = isolation;
+  if (resolution) run.resolution = resolution;
+  if (execution) run.execution = execution;
+  run.drainedMicrotasks = harness.drainedMicrotasks();
+  run.drainedMacrotasks = harness.drainedMacrotasks();
+  run.outcome = outcome;
+  report(run);
+}
+
+// An error thrown from a job the session scheduled -- a microtask flush, a
+// timer -- escapes the `try` below, and Node's default is to print it and exit
+// with nothing on the report descriptor. Reported instead as the run's error
+// outcome, which Rust classifies as a veto that did not complete: the gate's
+// candidate is withheld with this summary and never certified. The process
+// then exits at once, so nothing the session left pending can run and the
+// frame is the only one written. Rust's own answer to a worker that dies
+// anyway (a package removing this listener, `process.exit`, a signal) is the
+// same withholding, with the worker's stderr as the account.
+apply(addProcessListener, processObject, [
+  "uncaughtException",
+  error => {
+    if (!reported) reportRun(failedOutcome(error));
+    apply(exitProcess, processObject, [1]);
+  }
+]);
+
 let outcome;
 try {
   if (execution) {
@@ -435,20 +487,6 @@ try {
     }
   }
 } catch (error) {
-  outcome = createFrameRecord();
-  outcome.kind = "error";
-  outcome.details = digest(
-    error instanceof ErrorConstructor ? (error.stack ?? error.message) : asString(error)
-  );
-  outcome.summary = summarizeFailure(error);
+  outcome = failedOutcome(error);
 }
-const run = createFrameRecord();
-run.session = sessionId;
-run.environment = environment;
-run.isolation = isolation;
-if (resolution) run.resolution = resolution;
-if (execution) run.execution = execution;
-run.drainedMicrotasks = harness.drainedMicrotasks();
-run.drainedMacrotasks = harness.drainedMacrotasks();
-run.outcome = outcome;
-report(run);
+reportRun(outcome);

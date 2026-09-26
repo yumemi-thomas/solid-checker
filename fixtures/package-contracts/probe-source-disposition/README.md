@@ -12,6 +12,7 @@ pinned producer's census before running the real pinned Node/harness.
 | `probe-typescript-source-only`, ordinary consumer | `index.ts` | census passes; Node load fails; `IncompleteGate` names the scheduled gate; closure refuses |
 | `probe-typescript-source-only`, controlled consumer | `index.ts` | `node-strip-import-free-esm-v1`: the typed identity function completes census, exact erasure, derived veto, scoped receipt authentication and recipe replay; ordinary consumers refuse the receipt |
 | `probe-published-javascript` | `index.js` | census passes; recipe completes; closure certifies with a nonempty gate root |
+| `probe-effect-reads-document` (`effect-reads-document/`), `hideOutside` + `noop` | `index.js` | both censuses pass; `effect-reads-document.mjs` runs `hideOutside` from a microtask, whose `ReferenceError: document is not defined` escapes the recipe and is the run's recorded error (`IncompleteGate`); `worker-killed.mjs` sends the worker `SIGKILL` after emitting a passing transcript (`SessionExited`). Either way only `hideOutside`'s `creates` is withheld (`veto did not complete: gate …`), and `noop` certifies |
 | `probe-browser-source-only` (`browser-only/`), Node relative-graph profile | `index.ts` → `./dom` | census passes; the recipe's `document` reference is a recorded run error; `IncompleteGate` — no fake globals |
 | `probe-browser-source-only`, controlled browser consumer | `index.ts` → `./dom` | `chromium-headless-shell-cdp-pipe-esm-v1` (ADR 0033): pinned Node reproduces both derived modules, the pinned headless shell executes exactly the served URL map, one `animation-frames` drain turn elapses, the scoped receipt (version 6) authenticates and the recipe replays; bundle-pin, missing-browser, derived-output, unmapped-request and derived-contradiction controls each refuse |
 
@@ -32,6 +33,18 @@ The positive
 arm verifies receipt authentication and the closed claim in the canonical main.
 The normal compiled-in pins are used; missing pins fail loudly under the
 Makefile's `SOLID_CHECKER_EXPECT_PROBE_PINS=1`.
+
+`effect-reads-document/` is the reduction of phase 22's kobalte finding
+(`docs/package-contract-v2/phase22/2026-09-26-project-side-certification-on-kobalte-core.md`),
+exercised by
+`contract_certification::tests::a_probe_worker_that_crashes_withholds_only_its_own_gate`.
+`@solid-primitives/interaction@1.0.0-next.4`'s `ariaHideOutside` read
+`document` from an effect a `@solidjs/signals` flush ran on a microtask; the
+error was uncaught, the worker exited with no run frame, and the whole
+certification was refused. The recipe stands in for the signals scheduler with
+`queueMicrotask`, so the fixture needs no Solid dependency. The killed-worker
+arm is the backstop for a worker that dies without any failure path running:
+it must be read as a veto that did not complete, never as a clean run.
 
 `browser-only/` is ADR 0033's tracer input, exercised by
 `the_probe_controlled_browser_profile_executes_a_dom_dependent_graph_over_a_cdp_pipe`
