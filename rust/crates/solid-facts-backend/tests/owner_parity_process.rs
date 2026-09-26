@@ -85,3 +85,69 @@ fn arrow_bound_functions_get_the_same_owner_analysis_in_both_passes() {
     let hook_effect = requirement("createEffect(() => 3");
     assert!(hook_effect.report && hook_effect.uncertain);
 }
+
+/// A render-effect apply inside a `createRoot` callback: both passes withhold
+/// the lexical root answer for it, and only for it.
+///
+/// The fresh pass decides the root shortcut per call against the propagated
+/// context; the incremental pass records the region in a per-file fragment and
+/// decides at emission, once contexts exist. A fragment that still skipped
+/// region-contained calls would silently drop the apply's cleanup in a session.
+#[test]
+fn a_root_contained_render_effect_apply_gets_the_same_owner_analysis_in_both_passes() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let fixture = fixture("owner-render-apply-root-parity");
+    let project = fixture.join("tsconfig.json").canonicalize().unwrap();
+    let project_id = project.to_string_lossy().into_owned();
+    let app = fixture.join("App.ts");
+    let source = fs::read_to_string(&app).unwrap();
+
+    let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
+    let mut session = NativeIncrementalSession::open(
+        dialect::default_dialect(),
+        project_id,
+        vec![source_file(&app)],
+        typescript,
+    )
+    .unwrap();
+    let facts = session.analyze().unwrap();
+
+    let fresh = solid_reactive_ir::build(&facts, dialect::default_dialect().vocabulary).unwrap();
+    let (retained, _) = solid_reactive_ir::IncrementalBuilder::default()
+        .build(&facts, dialect::default_dialect().vocabulary)
+        .unwrap();
+
+    assert_eq!(
+        fresh.missing_owners, retained.missing_owners,
+        "fresh and incremental owner analysis diverged"
+    );
+    assert_eq!(retained, fresh, "programs diverged beyond owners");
+
+    // Not vacuous: the `onCleanup` callee before each marker comment.
+    let cleanup_at = |marker: &str| {
+        let comment = source.find(marker).expect(marker);
+        u64::try_from(source[..comment].rfind("onCleanup").expect(marker)).unwrap()
+    };
+    let requirement = |marker: &str| {
+        let start = cleanup_at(marker);
+        fresh
+            .missing_owners
+            .iter()
+            .find(|requirement| requirement.location.start_byte == start)
+    };
+    let render_apply = requirement("// render apply").expect("render-apply cleanup");
+    assert!(
+        render_apply.report && render_apply.uncertain && render_apply.later_run_unowned,
+        "a root-contained render-effect apply is uncertifiable for its later runs"
+    );
+    assert!(
+        requirement("// root body").is_none(),
+        "the root body is answered by the root"
+    );
+    assert!(
+        requirement("// effect apply").is_none(),
+        "a root-contained createEffect apply keeps the lexical root answer"
+    );
+}

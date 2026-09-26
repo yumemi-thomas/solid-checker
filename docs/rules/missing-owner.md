@@ -21,8 +21,15 @@ happens before `createRenderEffect` returns, under the caller's owner, and only
 its later runs come from the flush with no owner. An operation in that callback
 is therefore owned on the first run whenever the call site is owned, and is
 reported as uncertifiable, because whether a later run happens depends on its
-compute's sources changing. Under an unowned call site every run is unowned,
-and the operation stays a proven violation.
+compute's sources changing. That holds under a `createRoot` callback, or any
+other owner-creating callback, as much as under a component body: the root owns
+the first run only. Under an unowned call site every run is unowned, and the
+operation stays a proven violation.
+
+One approximation remains: any other operation written lexically inside an
+owner-creating callback is treated as owned by it, even in a nested detached
+callback. A `createEffect` apply or an event handler inside a `createRoot`
+callback is therefore not reported, although neither runs under the root.
 
 The proven `onSettled` cleanup variant has **error** severity because Solid 2.0
 throws `SETTLED_CLEANUP_UNOWNED` in development and silently drops the cleanup

@@ -47,8 +47,18 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
-      "start": 1546,
-      "end": 1561,
+      "start": 1232,
+      "end": 1241,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 1441,
+      "end": 1456,
       "fixes": 0
     },
     {
@@ -57,8 +67,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
-      "start": 1777,
-      "end": 1786,
+      "start": 1672,
+      "end": 1681,
       "fixes": 0
     },
     {
@@ -67,8 +77,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
-      "start": 2927,
-      "end": 2945,
+      "start": 2822,
+      "end": 2840,
       "fixes": 0
     },
     {
@@ -77,8 +87,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
-      "start": 3177,
-      "end": 3188,
+      "start": 3072,
+      "end": 3083,
       "fixes": 0
     },
     {
@@ -87,8 +97,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
-      "start": 3647,
-      "end": 3655,
+      "start": 3542,
+      "end": 3550,
       "fixes": 0
     },
     {
@@ -97,8 +107,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
-      "start": 3816,
-      "end": 3827,
+      "start": 3711,
+      "end": 3722,
       "fixes": 0
     },
     {
@@ -107,8 +117,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
-      "start": 4311,
-      "end": 4319,
+      "start": 4206,
+      "end": 4214,
       "fixes": 0
     }
   ]

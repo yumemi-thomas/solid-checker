@@ -509,6 +509,10 @@ pub(crate) struct OwnerRequirementCandidate {
     /// span, published as a [`LeafGateDecision`] once the graph settles so
     /// the leaf-operation table can be resolved against real ownership.
     pub(crate) settled_gate: Option<Span>,
+    /// The operation sits lexically inside an owner-providing region. Whether
+    /// that region answers it depends on the propagated owner context, which a
+    /// per-file fragment does not have yet; see [`root_owned_at`].
+    pub(crate) inside_providing_region: bool,
 }
 
 /// Whether a call-site-gated leaf owner (`onSettled`) actually materializes
@@ -782,9 +786,12 @@ pub(crate) fn find_missing_owners(
                 file.path.as_str(),
                 call.span,
             );
-            let root_owned = inside_owner_providing_region(
-                &owner_file_indexes[file_index].providing_regions,
-                call.span,
+            let root_owned = root_owned_at(
+                inside_owner_providing_region(
+                    &owner_file_indexes[file_index].providing_regions,
+                    call.span,
+                ),
+                context,
             );
             if !root_owned
                 && let Some(symbol) = lookup.callee_symbol(file, call.callee)
@@ -1007,9 +1014,12 @@ pub(crate) fn find_missing_owners(
                 file.path.as_str(),
                 element.span,
             );
-            if inside_owner_providing_region(
-                &owner_file_indexes[file_index].providing_regions,
-                element.span,
+            if root_owned_at(
+                inside_owner_providing_region(
+                    &owner_file_indexes[file_index].providing_regions,
+                    element.span,
+                ),
+                context,
             ) {
                 continue;
             }
@@ -1130,9 +1140,9 @@ pub(crate) fn discover_owner_file(
                 });
             }
         }
-        if inside_owner_providing_region(&providing_regions, call.span) {
-            continue;
-        }
+        // Not skipped here: whether the region answers the operation needs the
+        // propagated context, so the emission pass decides (`root_owned_at`).
+        let inside_providing_region = inside_owner_providing_region(&providing_regions, call.span);
         if let Some(symbol) = lookup.callee_symbol(file, call.callee)
             && let Some(contract_requirements) = lookup.contract_owner_requirements(symbol)
         {
@@ -1152,6 +1162,7 @@ pub(crate) fn discover_owner_file(
                     runtime_uncertain: false,
                     settled_target: None,
                     settled_gate: None,
+                    inside_providing_region,
                 });
             }
         }
@@ -1208,6 +1219,7 @@ pub(crate) fn discover_owner_file(
                 runtime_uncertain,
                 settled_target,
                 settled_gate,
+                inside_providing_region,
             });
         }
     }
@@ -1230,7 +1242,6 @@ pub(crate) fn discover_owner_file(
         if boundary
             .as_deref()
             .is_some_and(|tag| dialect.is_async_boundary(tag))
-            && !inside_owner_providing_region(&providing_regions, element.span)
         {
             requirements.push(OwnerRequirementCandidate {
                 operation: "boundary",
@@ -1241,6 +1252,10 @@ pub(crate) fn discover_owner_file(
                 runtime_uncertain: false,
                 settled_target: None,
                 settled_gate: None,
+                inside_providing_region: inside_owner_providing_region(
+                    &providing_regions,
+                    element.span,
+                ),
             });
         }
     }
@@ -1376,13 +1391,18 @@ pub(crate) fn find_missing_owners_incremental(
             continue;
         };
         for candidate in &fragment.requirements {
+            let owner_index = candidate.owner.and_then(|span| {
+                nodes_by_span
+                    .get(file.path.as_str())
+                    .and_then(|nodes| nodes.get(&span))
+                    .copied()
+            });
+            let context = owner_index.map_or(OWNER_CONTEXT_UNOWNED, |index| contexts[index]);
+            // The batch pass skips these before recording a settled gate too.
+            if root_owned_at(candidate.inside_providing_region, context) {
+                continue;
+            }
             if let Some(gate) = candidate.settled_gate {
-                let owner_index = candidate.owner.and_then(|span| {
-                    nodes_by_span
-                        .get(file.path.as_str())
-                        .and_then(|nodes| nodes.get(&span))
-                        .copied()
-                });
                 settled_gates.insert(
                     (
                         file.path.to_string(),
@@ -1435,13 +1455,6 @@ pub(crate) fn find_missing_owners_incremental(
                     CleanupReturnProof::Unresolved => continue,
                 }
             }
-            let owner_index = candidate.owner.and_then(|span| {
-                nodes_by_span
-                    .get(file.path.as_str())
-                    .and_then(|nodes| nodes.get(&span))
-                    .copied()
-            });
-            let context = owner_index.map_or(OWNER_CONTEXT_UNOWNED, |index| contexts[index]);
             let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
             let component_uncertain = !proven_unowned
                 && (context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0
@@ -1531,6 +1544,29 @@ pub(crate) fn inside_owner_providing_region(providing_regions: &[Span], span: Sp
     providing_regions
         .iter()
         .any(|argument| argument.contains(span))
+}
+
+/// Whether an operation lexically inside an owner-providing region is answered
+/// by that region's owner, given the owner context of the function containing
+/// it. Both owner passes, every operation kind, ask this one question.
+///
+/// The region's owner is current only for code that runs in the region's
+/// synchronous extent. A `createRenderEffect` apply
+/// ([`solid_dialect::CallbackOwner::InheritsFirstRun`]) leaves that extent on
+/// every run after its first: `@solidjs/signals` 2.0.0-rc.3 and rc.9 (dev and
+/// prod client builds) run the later apply from the flush with `getOwner() ===
+/// null`, so an `onCleanup` there under a `createRoot` never runs on dispose
+/// and raises `NO_OWNER_CLEANUP`, and a render effect created there raises
+/// `NO_OWNER_EFFECT` -- while the first run's cleanup registers on the root.
+/// So a context carrying [`OWNER_CONTEXT_LATER_RUN_UNOWNED`] is not answered
+/// by the region; the operation is judged on the owner graph, where the
+/// later-run bit makes it uncertifiable exactly as under a component body.
+///
+/// Every other detached callback nested in a region (a `createEffect` apply,
+/// an event handler) is still answered by the region: a pre-existing
+/// approximation this does not widen.
+pub(crate) const fn root_owned_at(inside_providing_region: bool, context: u8) -> bool {
+    inside_providing_region && context & OWNER_CONTEXT_LATER_RUN_UNOWNED == 0
 }
 
 pub(crate) fn owner_callback_index(

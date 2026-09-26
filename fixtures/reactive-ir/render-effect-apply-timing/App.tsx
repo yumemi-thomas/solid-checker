@@ -46,9 +46,8 @@ export function RenderApplyEffect() {
 }
 
 // A root owns the first run exactly as a component does, and a later run is
-// detached. Silent today, not uncertifiable: the owner pass treats every call
-// lexically inside a `createRoot` callback as root-owned, nested callbacks
-// included. That approximation predates this fixture (see README.md).
+// detached: uncertifiable, as in a component body. The root-contained shapes
+// are `render-effect-apply-root`'s claim.
 createRoot(() => {
   createRenderEffect(
     () => count(),

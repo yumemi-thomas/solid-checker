@@ -21,7 +21,7 @@ What that means for each rule here:
 | --- | --- | --- |
 | cleanup or effect in a render-effect apply, module scope | `SC4001` violation | no run has an owner |
 | cleanup or effect in a render-effect apply, component body (named and namespace import) | `SC4001` uncertifiable | the first run is owned; only a later run, which needs a compute source to change, is detached |
-| cleanup in a render-effect apply inside `createRoot` | none | pre-existing approximation: everything lexically inside a `createRoot` callback is treated as root-owned |
+| cleanup in a render-effect apply inside `createRoot` | `SC4001` uncertifiable | as in a component body; the root-contained shapes are `render-effect-apply-root`'s claim |
 | cleanup in a `createEffect` apply, component body | `SC4001` violation | the apply is always queued, so always detached |
 | cleanup in a render-effect compute | none | owned by the render effect |
 | write in a render-effect apply, component body | none | the first run throws `REACTIVE_WRITE_IN_OWNED_SCOPE` (dev) only if it runs during the call, which needs the compute to settle synchronously on its first pass; that is not proven, so the write is left unclassified rather than reported or certified |

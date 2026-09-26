@@ -994,6 +994,9 @@ struct NamedCallbackRole {
     admitted: bool,
     untracked_callback: bool,
     effect_apply: bool,
+    /// Which effect primitive names this function at its apply position, for
+    /// the read-context wording only.
+    effect_apply_primitive: EffectApplyPrimitive,
     tracked: bool,
     deferred: bool,
     /// Named at a position whose callback runs when the call's returned
@@ -1001,6 +1004,34 @@ struct NamedCallbackRole {
     /// time and scope are the reader's, which this index cannot see, so the
     /// function's own role is unknown and outranks every arm above.
     result_access: bool,
+}
+
+/// The effect primitive(s) whose apply position names a function.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum EffectApplyPrimitive {
+    #[default]
+    None,
+    One(Primitive),
+    /// Named by the apply positions of two different primitives: the wording
+    /// names neither.
+    Several,
+}
+
+impl EffectApplyPrimitive {
+    fn with(self, primitive: Primitive) -> Self {
+        match self {
+            Self::None => Self::One(primitive),
+            Self::One(existing) if existing == primitive => self,
+            Self::One(_) | Self::Several => Self::Several,
+        }
+    }
+
+    const fn single(self) -> Option<Primitive> {
+        match self {
+            Self::One(primitive) => Some(primitive),
+            Self::None | Self::Several => None,
+        }
+    }
 }
 
 impl NamedCallbackRoles {
@@ -1198,6 +1229,9 @@ pub(super) fn named_callback_roles(
                 entry.admitted |= proven && (untracked || effect_apply || tracked || deferred);
                 entry.untracked_callback |= proven && untracked;
                 entry.effect_apply |= effect_apply;
+                if effect_apply {
+                    entry.effect_apply_primitive = entry.effect_apply_primitive.with(primitive);
+                }
             }
             // The tracked and deferred arms have always demanded that the whole
             // argument *be* the function, never that an options object mention
@@ -1371,14 +1405,20 @@ pub(super) fn read_analysis_context(
     file: &solid_facts::FileFacts,
     span: Span,
     execution: ExecutionRole,
-    dialect: &dyn solid_dialect::Dialect,
+    lookup: &SemanticLookup<'_>,
 ) -> String {
     if execution == ExecutionRole::EffectApply {
-        // The role is shared; the name of the primitive that owns the apply
-        // slot is not. A dialect whose vocabulary has no such primitive still
-        // gets a true sentence -- this is read context in a message, not a
-        // premise of any proof -- but it does not get 2.0's spelling.
-        match dialect.name_of(solid_dialect::Primitive::CreateEffect) {
+        // The role is shared by every effect primitive's apply position; the
+        // name of the primitive whose apply this is is not. It used to be
+        // `createEffect` unconditionally, which misnamed every read in a
+        // `createRenderEffect` apply. Where the primitive is not one exact
+        // answer -- a named function passed as the apply of two different
+        // primitives -- or the dialect has no spelling for it, the sentence
+        // stays true without naming one: this is read context in a message,
+        // not a premise of any proof.
+        match effect_apply_primitive(file, span, lookup)
+            .and_then(|primitive| lookup.dialect.name_of(primitive))
+        {
             Some(name) => format!("{name} apply callback"),
             None => "effect apply callback".into(),
         }
@@ -1386,6 +1426,37 @@ pub(super) fn read_analysis_context(
         let context = enclosing_function_label(file, span);
         format_read_context(&context, file.ast.any_conditional_test_containing(span))
     }
+}
+
+/// The effect primitive whose apply callback `span` runs in, mirroring the two
+/// ways [`semantic_execution_role_within`] reaches `EffectApply`: a named
+/// function passed at an apply position, then the innermost inline apply
+/// argument containing the span (inline wrappers such as `batch` inside it
+/// inherit that apply's role).
+fn effect_apply_primitive(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Primitive> {
+    let roles = lookup.named_callback_roles(file);
+    if let Some(callback) = file
+        .ast
+        .functions_body_containing(span)
+        .find(|function| roles.get(function.span).admitted)
+        && containing_ast_function(&file.ast, span).is_some_and(|owner| owner.span == callback.span)
+        && roles.get(callback.span).effect_apply
+    {
+        return roles.get(callback.span).effect_apply_primitive.single();
+    }
+    file.ast
+        .arguments_containing(span)
+        .filter_map(|(call, index)| {
+            let primitive = lookup.primitive_at_call(file, call.span)?;
+            (effect_apply_argument(lookup.dialect, primitive, call.arguments.len()) == Some(index))
+                .then(|| (call.arguments[index].span, primitive))
+        })
+        .min_by_key(|(argument, _)| argument.end - argument.start)
+        .map(|(_, primitive)| primitive)
 }
 
 fn format_read_context(context: &str, in_conditional_test: bool) -> String {

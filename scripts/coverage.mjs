@@ -146,7 +146,11 @@ const KEEPS_WORDING = new Set([
   // a `<For>` rewrite and a fix, and everything else is told which component to
   // reach for instead. That second message named `<Index />` until 2026-09-16
   // -- a component Solid 2.0 does not export -- and nothing pinned it.
-  "reactive-ir/ported-structure-v2"
+  "reactive-ir/ported-structure-v2",
+  // SC1001's read context named `createEffect` for every effect apply until
+  // 2026-09-26, `createRenderEffect`'s included; only the text can say which
+  // primitive a read's apply belongs to.
+  "reactive-ir/render-effect-apply-root"
 ]);
 
 /**
