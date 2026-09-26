@@ -1,5 +1,34 @@
 # Precision backlog
 
+## The tier re-certified with resolution edges (2026-09-26)
+
+Status: **shipped**. The census and the kobalte delivery run were re-certified
+at b3075a38 and bundled: 206 bundles over 31 packages, 171 of them edged (ADR
+0126). The census was unchanged (clean 533), and `make verify` passed (303 s).
+
+Against the previous tier:
+
+- **Gained:** `@solid-primitives/interaction@1.0.0-next.4` in kobalte's
+  environment. Its probe crash now withholds one claim instead of the whole
+  package (5d3b644c).
+- **Lost, correctly:**
+  - `@solid-primitives/keyed@3.0.0-next.2` (all three environments). Keyed
+    imports `@solid-primitives/utils` at runtime but declares it only as a
+    devDependency, so it is not installed beside keyed; acquisition says
+    "not installed above …/keyed/dist/index.js" and the receipt states no
+    environment (43db0f05). The previous tier came from a run before that
+    fail-closed fix, and its keyed environment silently omitted utils.
+  - `@solid-primitives/storage@5.0.0-next.4` `./tauri`: the bundler refused it
+    because its receipt states no dependency environment. Its audit reason was
+    not read.
+
+Kobalte re-sweep with the new tier (release binary, 28 s): only
+`packages/core` moved.
+
+- "No accepted contract" `SC9005`: 5 -> 4 (interaction is now in the tier).
+- Its `SC9011` at `calendar-root.tsx:242` became an open-claims `SC9005`.
+- No violation moved.
+
 ## pnpm hoisting defeats environment admission in the certifying tree (2026-09-26)
 
 Status: **fixed by ADR 0126** (47944c07): entries record who resolved them, admission replays each lookup from its importer, and certify checks its own admission. End to end in a copy of the kobalte tree, vite-plugin-solid is `certified`; coverage unchanged. Existing catalogs and the tier need re-certifying to gain edges. Original finding: Measured on kobalte core at 65d64399:
