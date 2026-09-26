@@ -82,10 +82,10 @@ pub use policy2_receipt::{
     PublishedPolicy2Catalog, RECEIPT_WITNESS_FAMILIES, ReceiptIssuerKind, ReceiptPublicationError,
     authenticate_policy2_receipt, canonicalize_policy2_main, decode_policy2_trust_configuration,
     encode_policy2_trust_configuration, issue_builtin_policy2_receipt, issue_policy2_receipt,
-    policy2_artifact_acceptance_root, policy2_artifact_acceptance_root_for_identity,
-    policy2_dependency_environment_root, policy2_main_closed_claims_root,
-    policy2_main_semantic_digest, policy2_policy_digest, policy2_resolved_import_root,
-    policy2_trust_configuration_for_issuer, publish_policy2_catalog,
+    policy2_ambiguous_empty_dependency_environment_root, policy2_artifact_acceptance_root,
+    policy2_artifact_acceptance_root_for_identity, policy2_dependency_environment_root,
+    policy2_main_closed_claims_root, policy2_main_semantic_digest, policy2_policy_digest,
+    policy2_resolved_import_root, policy2_trust_configuration_for_issuer, publish_policy2_catalog,
     validate_dependency_environment,
 };
 pub use probe_gates::{ProbeGate, ProbeGateError, ProbeGateSchedule, VerifiedProbeGateBatch};
@@ -196,9 +196,35 @@ impl CertificationPlanningTransaction {
     ) -> Result<CertificationPlan, CertificationPlanningError> {
         let mut plan =
             self.plan_contract_document(document, import_request, resolved_import, artifact)?;
+        let requested = sources
+            .iter()
+            .map(|source| source.claimed_package_name().to_owned())
+            .collect::<std::collections::BTreeSet<_>>();
         let authenticated = dependencies::retain_authenticated_source_packages(self, sources);
         plan.certification_sources =
             type_facts::retain_collision_free_source_packages(&plan, authenticated);
+        // A source dropped here is a package the witness program then cannot
+        // resolve, so the environment the census admits is not the one the
+        // closure reaches. The certified package's own name is not an
+        // environment member, so a withheld self-copy states nothing.
+        let retained = plan
+            .certification_sources
+            .iter()
+            .map(|source| source.snapshot.package_name())
+            .collect::<std::collections::BTreeSet<_>>();
+        let dropped = requested
+            .iter()
+            .filter(|name| {
+                !retained.contains(name.as_str()) && name.as_str() != plan.snapshot.package_name()
+            })
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        if !dropped.is_empty() {
+            plan.mark_dependency_environment_not_acquired(format!(
+                "declaration source package(s) {} did not authenticate against their lock selection",
+                dropped.join(", ")
+            ));
+        }
         Ok(plan)
     }
 
@@ -368,9 +394,34 @@ pub struct CertificationPlan {
     /// with a nonempty closure. Never authority: it only chooses which plan
     /// claim a corpus entry is copied and launched for.
     case_byte_identity: Option<solid_reactive_ir::contract_semantics::Digest>,
+    /// Why this plan's dependency environment could not be acquired, when it
+    /// could not. A receipt issued from such a plan states **no**
+    /// `dependencyEnvironmentRoot`, so no consumer admits it by artifact
+    /// (ADR 0125): an empty environment must mean "the proof read no other
+    /// package", never "acquisition did not run or did not understand the
+    /// lockfile".
+    dependency_environment_not_acquired: Option<String>,
 }
 
 impl CertificationPlan {
+    /// Records that acquisition could not identify every package this plan's
+    /// declaration closure reaches by `{name, version, integrity}` -- an
+    /// unsupported or missing lockfile, a package the lock does not select, a
+    /// source that did not authenticate. The receipt this plan issues then
+    /// states no dependency environment. Only ever weakens a plan: there is no
+    /// way to clear it, and the first reason is kept.
+    pub fn mark_dependency_environment_not_acquired(&mut self, reason: impl Into<String>) {
+        if self.dependency_environment_not_acquired.is_none() {
+            self.dependency_environment_not_acquired = Some(reason.into());
+        }
+    }
+
+    /// Why this plan's dependency environment was not acquired, if it was not.
+    #[must_use]
+    pub fn dependency_environment_not_acquired(&self) -> Option<&str> {
+        self.dependency_environment_not_acquired.as_deref()
+    }
+
     /// A probe recipe's second address for one subject of this plan: `None`
     /// unless this plan knows its case byte identity and the subject is of
     /// the selected artifact case, or when the subject carries no address.
@@ -1404,6 +1455,7 @@ fn plan_certification_with_dependencies(
         resolved_import: request.resolved_import,
         certification_sources: Vec::new(),
         case_byte_identity,
+        dependency_environment_not_acquired: None,
     })
 }
 
@@ -2055,6 +2107,7 @@ impl CertificationPlan {
             resolved_import: self.resolved_import.clone(),
             certification_sources: self.certification_sources.clone(),
             case_byte_identity: self.case_byte_identity.clone(),
+            dependency_environment_not_acquired: self.dependency_environment_not_acquired.clone(),
         })
     }
 }
@@ -11514,6 +11567,52 @@ export const value = phantom;
             .map_err(|error| error.to_string())
     }
 
+    /// A declaration source that does not authenticate is withheld, which is
+    /// fail-closed for the proof but not for the environment: the census then
+    /// admits fewer roots than the closure reaches, so the plan records that
+    /// its environment was not acquired and its receipt states none.
+    #[test]
+    fn a_withheld_declaration_source_marks_the_environment_not_acquired() {
+        let plan_with = |sources: Vec<PublishedGraphSourceRequest>| {
+            let (document, import_request, resolved, archive) =
+                callable_through_external_declaration_root();
+            CertificationPlanningTransaction::new()
+                .plan_contract_document_with_sources(
+                    &document,
+                    import_request,
+                    resolved,
+                    UntrustedArtifactEnvelope::Published(archive),
+                    sources,
+                )
+                .unwrap()
+        };
+        assert_eq!(
+            plan_with(vec![callable_source("/project/node_modules/source-types")])
+                .dependency_environment_not_acquired(),
+            None,
+            "every source authenticated"
+        );
+        assert_eq!(
+            plan_with(Vec::new()).dependency_environment_not_acquired(),
+            None,
+            "a plan the adapter supplied nothing for is not marked here; the adapter says why"
+        );
+        let withheld = plan_with(vec![external_declaration_source(
+            "3.0.0",
+            b"export type Callback = () => boolean;\n",
+            "/project/node_modules/source-types",
+            Some(SUBSTITUTED_INTEGRITY),
+        )]);
+        let reason = withheld
+            .dependency_environment_not_acquired()
+            .expect("a withheld source leaves the environment unacquired");
+        assert!(reason.contains("source-types"), "{reason}");
+        // Marking only weakens, and the first reason is kept.
+        let mut marked = withheld.clone();
+        marked.mark_dependency_environment_not_acquired("a later reason");
+        assert_eq!(marked.dependency_environment_not_acquired(), Some(reason));
+    }
+
     #[test]
     fn root_certification_withholds_every_copy_of_a_name_one_copy_could_not_authenticate() {
         let Some(pin) = pinned_producer_for_test() else {
@@ -20509,6 +20608,34 @@ export const value = phantom;
                 .dependency_environment_root
                 .is_empty()
         );
+    }
+
+    /// A node whose environment was not acquired states none, and neither does
+    /// any parent composing it: the parent's environment is the union over what
+    /// the graph planned, and a gap anywhere below is a gap in it. Both
+    /// receipts still authenticate; no consumer admits them by artifact.
+    #[test]
+    fn a_graph_node_without_an_acquired_environment_states_none_up_the_graph() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let (root, leaf) = two_node_published_graph(false, false, false);
+        let leaf = leaf.with_dependency_environment_not_acquired("fixture: leaf not acquired");
+        let graph = plan_published_contract_graph(root, [leaf]).unwrap();
+        let issuer = ConfiguredReceiptIssuer::persistent_local("phase21-graph", [19; 32]).unwrap();
+        let finalized = graph.certify_value_only(&pin, &issuer, 9, None).unwrap();
+        for node in finalized.nodes() {
+            let contract = node.finalized();
+            assert!(
+                contract.bindings().dependency_environment_root.is_empty(),
+                "no environment root is signed"
+            );
+            assert!(contract.authenticated().dependency_environment().is_none());
+            let reason = contract
+                .dependency_environment_not_acquired()
+                .expect("the reason travels with the receipt");
+            assert!(reason.contains("fixture: leaf not acquired"), "{reason}");
+        }
     }
 
     #[test]

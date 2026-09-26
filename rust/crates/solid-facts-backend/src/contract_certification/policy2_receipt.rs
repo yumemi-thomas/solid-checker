@@ -193,8 +193,39 @@ pub fn validate_dependency_environment(
 /// first -- so a caller cannot produce two roots for one environment. An empty
 /// environment has its own root: "this proof read no other package" is a
 /// statement, distinct from a receipt that states nothing.
+///
+/// **The empty environment is framed under its own domain**, not as the `v1`
+/// frame with a zero count. Certifiers before 2026-09-26 wrote that `v1` empty
+/// root whenever dependency-source acquisition produced nothing -- including
+/// under an npm lockfile it could not read, and whenever a package the closure
+/// reached could not be identified -- so it never meant "read no other
+/// package". It is retired as ambiguous ([`policy2_ambiguous_empty_dependency_environment_root`]):
+/// a receipt binding it states no environment a consumer can rely on, and is
+/// refused by artifact everywhere. Non-empty environments keep the `v1` frame,
+/// so every receipt that names its entries verifies exactly as before.
 #[must_use]
 pub fn policy2_dependency_environment_root(entries: &[DependencyEnvironmentEntry]) -> String {
+    if entries.is_empty() {
+        let mut bytes = Vec::new();
+        frame(
+            &mut bytes,
+            b"solid-checker:policy2-dependency-environment:acquired-empty:v2",
+        );
+        return digest_bytes(&bytes);
+    }
+    policy2_dependency_environment_root_v1(entries)
+}
+
+/// The retired `v1` root of the empty environment: what certifiers before
+/// 2026-09-26 bound both for a package that read no other package and for one
+/// whose environment was never acquired. A receipt binding it is read as
+/// stating no environment.
+#[must_use]
+pub fn policy2_ambiguous_empty_dependency_environment_root() -> String {
+    policy2_dependency_environment_root_v1(&[])
+}
+
+fn policy2_dependency_environment_root_v1(entries: &[DependencyEnvironmentEntry]) -> String {
     let mut canonical = entries.to_vec();
     canonical.sort();
     canonical.dedup();

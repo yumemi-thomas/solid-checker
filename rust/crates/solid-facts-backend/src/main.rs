@@ -221,6 +221,15 @@ struct ContractCertificationPlanningRequest {
     /// harness triple.
     #[serde(default)]
     probe_recipe_corpus: String,
+    /// Why the adapter could not identify every package this planning's
+    /// declaration closure reaches by `{name, version, integrity}`: an
+    /// unsupported or missing lockfile, a package the lock does not select, one
+    /// that is not installed or that the registry would not serve. Present
+    /// only when it could not. The receipt then states no dependency
+    /// environment, so no consumer admits it by artifact (ADR 0125). A caller
+    /// can only weaken a plan with this, never strengthen one.
+    #[serde(default)]
+    dependency_environment_not_acquired: Option<String>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -776,18 +785,33 @@ fn certification_plan_from_request_in(
     // Root-path sources are evidence supply only, so one that cannot even be
     // assembled from its local bytes is dropped for the same reason Rust drops
     // one that will not authenticate: see `plan_contract_document_with_sources`.
+    let mut unassembled = Vec::new();
     let sources = request
         .source_dependencies
         .into_iter()
-        .filter_map(|source| certification_source_request(source).ok())
+        .filter_map(|source| {
+            let name = source.package_name.clone();
+            certification_source_request(source)
+                .map_err(|error| unassembled.push(format!("{name} ({error})")))
+                .ok()
+        })
         .collect();
-    let plan = transaction.plan_contract_document_with_sources(
+    let mut plan = transaction.plan_contract_document_with_sources(
         &proposal,
         import_request,
         request.resolution,
         solid_facts_backend::UntrustedArtifactEnvelope::Published(archive),
         sources,
     )?;
+    if let Some(reason) = request.dependency_environment_not_acquired {
+        plan.mark_dependency_environment_not_acquired(reason);
+    }
+    if !unassembled.is_empty() {
+        plan.mark_dependency_environment_not_acquired(format!(
+            "declaration source package(s) could not be assembled from their local bytes: {}",
+            unassembled.join(", ")
+        ));
+    }
     Ok((plan, proposal))
 }
 
@@ -869,16 +893,18 @@ fn certification_graph_node_from_request(
         .into_iter()
         .map(certification_source_request)
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(
-        solid_facts_backend::PublishedGraphNodeRequest::from_document_with_sources(
-            &proposal,
-            import_request,
-            planning.resolution,
-            archive,
-            lock,
-            sources,
-        )?,
-    )
+    let node = solid_facts_backend::PublishedGraphNodeRequest::from_document_with_sources(
+        &proposal,
+        import_request,
+        planning.resolution,
+        archive,
+        lock,
+        sources,
+    )?;
+    Ok(match planning.dependency_environment_not_acquired {
+        Some(reason) => node.with_dependency_environment_not_acquired(reason),
+        None => node,
+    })
 }
 
 fn certification_graph_from_request(
@@ -1142,6 +1168,7 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
     report_closure_candidates(None, &plan);
     report_recipe_addresses(None, &plan);
     report_certified_closures(None, &finalized);
+    report_dependency_environment(None, &finalized);
     report_withheld_closures(None, &finalized)?;
     let trust_bytes =
         solid_facts_backend::encode_policy2_trust_configuration(finalized.trust_configuration())
@@ -1227,6 +1254,32 @@ const RECIPE_ADDRESS_MARKER: &str = "solid-checker:recipe-addresses=";
 /// document. A closure present in the candidates and absent here, with no
 /// withheld record, is lost outside every mechanism meant to account for it.
 const CERTIFIED_CLOSURE_MARKER: &str = "solid-checker:certified-closures=";
+
+/// One line per finalized receipt: whether it states a dependency environment,
+/// and why not when it does not. The adapter prints the refusal to admit such
+/// a catalog plainly, since the receipt still authenticates and nothing else
+/// about the run would say so.
+const DEPENDENCY_ENVIRONMENT_MARKER: &str = "solid-checker:dependency-environment=";
+
+fn report_dependency_environment(
+    node: Option<&solid_facts_backend::CanonicalDependencyNodeIdentity>,
+    finalized: &solid_facts_backend::FinalizedPolicy2Contract,
+) {
+    let mut record = match (
+        finalized.authenticated().dependency_environment(),
+        finalized.dependency_environment_not_acquired(),
+    ) {
+        (Some(entries), _) => serde_json::json!({ "stated": true, "entries": entries.len() }),
+        (None, reason) => serde_json::json!({
+            "stated": false,
+            "reason": reason.unwrap_or("the receipt states no dependency environment"),
+        }),
+    };
+    if let (Some(object), Some(node)) = (record.as_object_mut(), closure_record_node(node)) {
+        object.insert("node".into(), node);
+    }
+    println!("{DEPENDENCY_ENVIRONMENT_MARKER}{record}");
+}
 
 /// The node a graph-lane record belongs to, so a per-row census can attribute
 /// a closure to the package that carries it. `None` on the value-only lane,
@@ -1457,6 +1510,18 @@ fn execute_contract_case_set_certification(
             plans.push((plan, selected_id, resolved_import_root, importer, specifier));
         }
     }
+    // The cases share one witness program built from the union of their
+    // sources, so a package one case's closure could not name is missing from
+    // every case's program: none of them read the environment it would state.
+    if let Some(reason) = plans
+        .iter()
+        .find_map(|(plan, ..)| plan.dependency_environment_not_acquired())
+        .map(str::to_owned)
+    {
+        for (plan, ..) in &mut plans {
+            plan.mark_dependency_environment_not_acquired(reason.clone());
+        }
+    }
 
     let proposal = proposal.ok_or("a policy-2 case set has no proposal")?;
     let review: ContractReviewForCaseSet =
@@ -1518,6 +1583,7 @@ fn execute_contract_case_set_certification(
         report_closure_candidates(None, &plan);
         report_recipe_addresses(None, &plan);
         report_certified_closures(None, &finalized);
+        report_dependency_environment(None, &finalized);
         report_withheld_closures(None, &finalized)?;
         let current_trust = solid_facts_backend::encode_policy2_trust_configuration(
             finalized.trust_configuration(),
@@ -1670,6 +1736,7 @@ fn execute_contract_graph_certification(
             report_recipe_addresses(Some(node.identity()), node_plan);
         }
         report_certified_closures(Some(node.identity()), node.finalized());
+        report_dependency_environment(Some(node.identity()), node.finalized());
         let current = solid_facts_backend::encode_policy2_trust_configuration(
             node.finalized().trust_configuration(),
         )?;
@@ -1906,6 +1973,7 @@ fn execute_contract_graph_case_set_certification(
             report_closure_candidates(Some(node.identity()), node_plan);
             report_recipe_addresses(Some(node.identity()), node_plan);
             report_certified_closures(Some(node.identity()), node.finalized());
+            report_dependency_environment(Some(node.identity()), node.finalized());
             let node_root = if node.identity() == graph.root_identity() {
                 case_root.clone()
             } else {

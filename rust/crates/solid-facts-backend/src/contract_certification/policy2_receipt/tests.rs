@@ -1471,3 +1471,45 @@ fn a_project_catalog_is_admitted_by_artifact_only_in_its_certified_environment()
     assert_eq!(reach(&catalog, &[]), (0, false));
     fs::remove_dir_all(root).unwrap();
 }
+
+/// The empty environment has its own root, and it is not the retired `v1`
+/// empty root: a certifier before 2026-09-26 wrote that one even when it had
+/// acquired nothing, so a receipt binding it is read as stating no environment
+/// rather than as "read no other package".
+#[test]
+fn the_acquired_empty_environment_is_not_the_ambiguous_v1_empty_root() {
+    let acquired = policy2_dependency_environment_root(&[]);
+    let ambiguous = policy2_ambiguous_empty_dependency_environment_root();
+    assert_ne!(acquired, ambiguous);
+    // A non-empty environment keeps the `v1` frame, so every receipt that
+    // names its entries (the whole compiled-in tier) verifies as before.
+    let entries = [environment_entry(
+        "@solidjs/signals",
+        "2.0.0-rc.6",
+        "sha512-a",
+    )];
+    assert_eq!(
+        policy2_dependency_environment_root(&entries),
+        policy2_dependency_environment_root_v1(&entries)
+    );
+
+    let main = canonical_main(MAIN);
+    let mut bindings = bindings(&main);
+    bindings.dependency_environment_root = ambiguous;
+    assert_eq!(
+        crate::contract_interface::verified_dependency_environment(&bindings, Some(&[])).unwrap(),
+        None,
+        "the ambiguous empty root states no environment"
+    );
+    assert!(
+        crate::contract_interface::verified_dependency_environment(&bindings, Some(&entries))
+            .is_err(),
+        "and entries beside it are an environment nobody signed"
+    );
+    bindings.dependency_environment_root = acquired;
+    assert_eq!(
+        crate::contract_interface::verified_dependency_environment(&bindings, Some(&[])).unwrap(),
+        Some(Vec::new()),
+        "the acquired empty root is a genuine empty environment"
+    );
+}

@@ -278,7 +278,11 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
         // dependency environment from the imported package's location the way
         // the native side does. Only a bundle whose proof read no other
         // package can be shown to apply; every other one is refused, which is
-        // the import behaving exactly as if no bundle existed.
+        // the import behaving exactly as if no bundle existed. "Read no other
+        // package" is exactly what an empty environment means now: the loader
+        // reads the retired ambiguous empty root -- what a certifier before
+        // 2026-09-26 wrote even when it had acquired nothing -- as no
+        // environment at all, so it never reaches this closure.
         let environment =
             |_: &str, environment: &[solid_facts_backend::DependencyEnvironmentEntry]| {
                 environment.is_empty()

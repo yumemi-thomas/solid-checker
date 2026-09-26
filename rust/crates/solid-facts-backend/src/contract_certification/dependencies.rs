@@ -66,6 +66,11 @@ impl PublishedGraphSourceRequest {
             installed_package_root: installed_package_root.into(),
         }
     }
+
+    /// The package name this request's lock selection claims.
+    pub(crate) fn claimed_package_name(&self) -> &str {
+        &self.lock_selection.package_name
+    }
 }
 
 #[derive(Clone)]
@@ -508,6 +513,92 @@ impl PublishedGraphLockSelection {
         )
     }
 
+    /// Replays an exact npm lock selection from a `lockfileVersion` 2 or 3
+    /// `packages` map.
+    ///
+    /// Keyed by install path, like Bun's: the locator is the `packages` key
+    /// (`node_modules/a/node_modules/b`), and the entry it names must install
+    /// exactly `package_name` at `package_version` from a registry tarball. The
+    /// twin of `createNpmLockSelectionIndex` in `published-contract-graph.mjs`,
+    /// and the authority: a link, a workspace member, a `file:` or git entry
+    /// (no `https:` `resolved`), an alias (`name` differing from the path) and
+    /// an entry without `integrity` are all refused, because none of them binds
+    /// registry bytes to the name a consumer's tree will show.
+    ///
+    /// Version 1 has only the name-keyed `dependencies` tree, which cannot say
+    /// which installed copy an entry describes under hoisting, and is refused.
+    pub fn from_npm_lock(
+        lockfile: &[u8],
+        locator: impl Into<String>,
+        package_name: impl Into<String>,
+        package_version: impl Into<String>,
+    ) -> Result<Self, super::ArtifactSnapshotError> {
+        if lockfile.len() > 8 * 1024 * 1024 {
+            return Err(super::ArtifactSnapshotError::ResourceLimit(
+                "lockfile bytes exceed graph policy limit".into(),
+            ));
+        }
+        let locator = locator.into();
+        let package_name = package_name.into();
+        let package_version = package_version.into();
+        let refuse = |message: String| super::ArtifactSnapshotError::InvalidProvenance(message);
+        let document: serde_json::Value = serde_json::from_slice(lockfile)
+            .map_err(|error| refuse(format!("npm lockfile cannot be decoded: {error}")))?;
+        match document
+            .get("lockfileVersion")
+            .and_then(serde_json::Value::as_u64)
+        {
+            Some(2 | 3) => {}
+            other => {
+                return Err(refuse(format!(
+                    "npm lockfileVersion {other:?} is not 2 or 3; only the path-keyed packages \
+                     map identifies an installed copy exactly"
+                )));
+            }
+        }
+        let exact = format!("{package_name}@{package_version}");
+        if npm_lock_path_name(&locator) != Some(package_name.as_str()) {
+            return Err(refuse(format!(
+                "npm lock locator {locator:?} does not install {package_name}"
+            )));
+        }
+        let entry = document
+            .get("packages")
+            .and_then(serde_json::Value::as_object)
+            .and_then(|packages| packages.get(&locator))
+            .and_then(serde_json::Value::as_object)
+            .ok_or_else(|| refuse(format!("npm lockfile has no entry {locator:?} for {exact}")))?;
+        let text = |field: &str| entry.get(field).and_then(serde_json::Value::as_str);
+        if entry.get("link").and_then(serde_json::Value::as_bool) == Some(true) {
+            return Err(refuse(format!("npm lock entry {locator:?} is a link")));
+        }
+        if text("version") != Some(package_version.as_str()) {
+            return Err(refuse(format!(
+                "npm lock entry {locator:?} does not select {exact}"
+            )));
+        }
+        if entry.contains_key("name") && text("name") != Some(package_name.as_str()) {
+            return Err(refuse(format!(
+                "npm lock entry {locator:?} is an alias for another package"
+            )));
+        }
+        if !text("resolved").is_some_and(|resolved| resolved.starts_with("https://")) {
+            return Err(refuse(format!(
+                "npm lock entry {locator:?} does not resolve to a registry tarball"
+            )));
+        }
+        let integrity = text("integrity")
+            .ok_or_else(|| refuse(format!("npm lock entry {locator:?} has no integrity")))?;
+        Self::new(
+            "npm",
+            format!("sha256:{:x}", Sha256::digest(lockfile)),
+            locator,
+            package_name,
+            package_version,
+            integrity,
+        )
+    }
+
     /// Replays an exact Yarn **classic** (v1) lock selection.
     ///
     /// Keyed by `name@version` rather than by an install path, like the pnpm
@@ -588,6 +679,9 @@ impl PublishedGraphLockSelection {
             Some("pnpm-lock.yaml") => {
                 Self::from_pnpm_lock(lockfile, locator, package_name, package_version)
             }
+            Some("package-lock.json") => {
+                Self::from_npm_lock(lockfile, locator, package_name, package_version)
+            }
             other => Err(super::ArtifactSnapshotError::InvalidProvenance(format!(
                 "{} names no lockfile format this certifier reads",
                 other.unwrap_or("<unnamed path>")
@@ -623,6 +717,26 @@ impl PublishedGraphLockSelection {
         super::validate_integrity_shape(&value.integrity)?;
         Ok(value)
     }
+}
+
+/// The package name an npm `packages` key installs: its last
+/// `node_modules/<name>` segment, scoped names keeping both parts. `None` for
+/// the root key (`""`), a workspace path, and anything else that is not an
+/// installed copy.
+fn npm_lock_path_name(locator: &str) -> Option<&str> {
+    let marker = "node_modules/";
+    let at = locator.rfind(marker)?;
+    if at > 0 && !locator[..at].ends_with('/') {
+        return None;
+    }
+    let name = &locator[at + marker.len()..];
+    let parts = name.split('/').collect::<Vec<_>>();
+    let expected = if name.starts_with('@') { 2 } else { 1 };
+    (parts.len() == expected
+        && parts
+            .iter()
+            .all(|part| !part.is_empty() && *part != "." && *part != ".."))
+    .then_some(name)
 }
 
 /// Refuses anything that is not a Yarn classic lockfile.
@@ -842,9 +956,22 @@ pub struct PublishedGraphNodeRequest {
     archive: PublishedArchive,
     lock_selection: PublishedGraphLockSelection,
     source_dependencies: Vec<PublishedGraphSourceRequest>,
+    /// See [`CertificationPlan::mark_dependency_environment_not_acquired`].
+    dependency_environment_not_acquired: Option<String>,
 }
 
 impl PublishedGraphNodeRequest {
+    /// Declares that acquisition could not identify every package this node's
+    /// closure reaches; the node's receipt, and every parent composing it,
+    /// then states no dependency environment. Only ever weakens the node.
+    #[must_use]
+    pub fn with_dependency_environment_not_acquired(mut self, reason: impl Into<String>) -> Self {
+        if self.dependency_environment_not_acquired.is_none() {
+            self.dependency_environment_not_acquired = Some(reason.into());
+        }
+        self
+    }
+
     /// Normalizes an open proposal document inside Rust before it can enter
     /// the graph transaction. The proposal remains comparison material;
     /// snapshot replay owns every artifact identity.
@@ -905,6 +1032,7 @@ impl PublishedGraphNodeRequest {
             archive,
             lock_selection,
             source_dependencies: source_dependencies.into_iter().collect(),
+            dependency_environment_not_acquired: None,
         }
     }
 }
@@ -1089,11 +1217,22 @@ impl PublishedContractGraphPlan {
     /// rows closed it. The dependency's receipt carries only a root, so the
     /// union is taken over what the graph planned, which contains every root
     /// any node's Type Facts census could have admitted.
+    ///
+    /// The second value is why the environment was not acquired, when any
+    /// reachable node's own plan says it was not: the parent inherits that
+    /// premise exactly as it inherits the entries, so a gap anywhere below it
+    /// is a gap in its environment too.
     fn dependency_environment(
         &self,
         node: &PlannedGraphNode,
-    ) -> Result<BTreeSet<super::DependencyEnvironmentEntry>, DependencyReceiptCompositionError>
-    {
+    ) -> Result<
+        (BTreeSet<super::DependencyEnvironmentEntry>, Option<String>),
+        DependencyReceiptCompositionError,
+    > {
+        let mut not_acquired = node
+            .plan
+            .dependency_environment_not_acquired()
+            .map(str::to_owned);
         let mut environment = node
             .source_dependencies
             .iter()
@@ -1114,6 +1253,19 @@ impl PublishedContractGraphPlan {
                         dependency: identity.digest().into(),
                     },
                 )?;
+            if not_acquired.is_none() {
+                not_acquired =
+                    dependency
+                        .plan
+                        .dependency_environment_not_acquired()
+                        .map(|reason| {
+                            format!(
+                                "dependency {}@{}: {reason}",
+                                dependency.plan.snapshot.package_name(),
+                                dependency.plan.snapshot.package_version()
+                            )
+                        });
+            }
             environment.insert(dependency.plan.snapshot.dependency_environment_entry());
             environment.extend(
                 dependency
@@ -1126,7 +1278,7 @@ impl PublishedContractGraphPlan {
         // A graph can reach another copy of the node's own package; the node's
         // own bytes are its artifact identity, never its environment.
         environment.remove(&node.plan.snapshot.dependency_environment_entry());
-        Ok(environment)
+        Ok((environment, not_acquired))
     }
 
     /// Authenticates every dependency-composition demand for one planned
@@ -1191,7 +1343,7 @@ impl PublishedContractGraphPlan {
                 ))
             })
             .collect::<Result<BTreeMap<_, _>, DependencyReceiptCompositionError>>()?;
-        let environment = self.dependency_environment(node)?;
+        let (environment, environment_not_acquired) = self.dependency_environment(node)?;
         VerifiedDependencyComposition::authenticate(
             &node.plan,
             &node.dependencies,
@@ -1203,6 +1355,7 @@ impl PublishedContractGraphPlan {
             revocation_epoch,
             type_facts,
             environment,
+            environment_not_acquired,
         )
     }
 
@@ -2833,14 +2986,18 @@ fn plan_graph_node(
         archive,
         lock_selection,
         source_dependencies,
+        dependency_environment_not_acquired,
     } = request;
     let registry_origin = archive.registry_origin.clone();
-    let plan = super::plan_certification_with_dependencies(
+    let mut plan = super::plan_certification_with_dependencies(
         transaction,
         certification,
         UntrustedArtifactEnvelope::Published(archive),
         dependencies,
     )?;
+    if let Some(reason) = dependency_environment_not_acquired {
+        plan.mark_dependency_environment_not_acquired(reason);
+    }
     for (field, locked, replayed) in [
         (
             "package name",
@@ -3498,6 +3655,9 @@ pub struct VerifiedDependencyComposition {
     factory_requirements_root: Option<String>,
     /// See [`PublishedContractGraphPlan::dependency_environment`].
     dependency_environment: BTreeSet<super::DependencyEnvironmentEntry>,
+    /// Why that environment was not acquired, when some reachable node's was
+    /// not; the receipt then states none.
+    environment_not_acquired: Option<String>,
 }
 
 impl VerifiedDependencyComposition {
@@ -3516,6 +3676,7 @@ impl VerifiedDependencyComposition {
         revocation_epoch: u64,
         type_facts: Option<&super::type_facts::VerifiedTypeFactsEvidence>,
         dependency_environment: BTreeSet<super::DependencyEnvironmentEntry>,
+        environment_not_acquired: Option<String>,
     ) -> Result<Self, DependencyReceiptCompositionError> {
         if expected_dependencies.len() != receipts.len() {
             return Err(DependencyReceiptCompositionError::ReceiptCensus {
@@ -3834,12 +3995,18 @@ impl VerifiedDependencyComposition {
             factory_requirements_root: type_facts
                 .and_then(super::type_facts::VerifiedTypeFactsEvidence::factory_requirements_root),
             dependency_environment,
+            environment_not_acquired,
         })
     }
 
     /// The environment this composition relies on, canonically ordered.
     pub(super) fn dependency_environment(&self) -> &BTreeSet<super::DependencyEnvironmentEntry> {
         &self.dependency_environment
+    }
+
+    /// Why this composition's environment was not acquired, if it was not.
+    pub(super) fn environment_not_acquired(&self) -> Option<&str> {
+        self.environment_not_acquired.as_deref()
     }
 
     pub(super) fn verify_plan(
@@ -4472,6 +4639,151 @@ mod tests {
     }
 
     const PNPM_INTEGRITY: &str = "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+
+    fn npm_lock(version: u64, packages: &serde_json::Value) -> Vec<u8> {
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "name": "consumer",
+            "lockfileVersion": version,
+            "requires": true,
+            "packages": packages,
+        }))
+        .unwrap()
+    }
+
+    fn npm_entry(version: &str) -> serde_json::Value {
+        serde_json::json!({
+            "version": version,
+            "resolved": format!("https://registry.npmjs.org/@corvu/utils/-/utils-{version}.tgz"),
+            "integrity": PNPM_INTEGRITY,
+        })
+    }
+
+    /// npm lockfile v2/v3: the locator is the install-path key, and the entry it
+    /// names must install exactly this name and version from a registry
+    /// tarball. The dispatch goes by file name, like the other two.
+    #[test]
+    fn npm_selection_reads_the_path_keyed_packages_map() {
+        let packages = serde_json::json!({
+            "": { "name": "consumer", "dependencies": { "@corvu/utils": "0.3.2" } },
+            "node_modules/@corvu/utils": npm_entry("0.3.2"),
+            "node_modules/other/node_modules/@corvu/utils": npm_entry("0.4.0"),
+        });
+        for version in [2, 3] {
+            let lock = npm_lock(version, &packages);
+            let selection = PublishedGraphLockSelection::from_lockfile(
+                std::path::Path::new("/project/package-lock.json"),
+                &lock,
+                "node_modules/@corvu/utils",
+                "@corvu/utils",
+                "0.3.2",
+            )
+            .unwrap();
+            assert_eq!(selection.package_manager, "npm");
+            assert_eq!(selection.integrity, PNPM_INTEGRITY);
+            assert_eq!(selection.locator, "node_modules/@corvu/utils");
+            assert_eq!(
+                selection.lockfile_digest,
+                format!("sha256:{:x}", Sha256::digest(&lock))
+            );
+            // The nested copy is selected by its own path, never by name.
+            assert_eq!(
+                PublishedGraphLockSelection::from_npm_lock(
+                    &lock,
+                    "node_modules/other/node_modules/@corvu/utils",
+                    "@corvu/utils",
+                    "0.4.0",
+                )
+                .unwrap()
+                .locator,
+                "node_modules/other/node_modules/@corvu/utils"
+            );
+            for (locator, name, version) in [
+                ("node_modules/@corvu/utils", "@corvu/utils", "0.4.0"),
+                ("node_modules/@corvu/utils", "other", "0.3.2"),
+                ("node_modules/missing", "missing", "1.0.0"),
+                ("", "consumer", "0.0.0"),
+            ] {
+                assert!(
+                    PublishedGraphLockSelection::from_npm_lock(&lock, locator, name, version)
+                        .is_err(),
+                    "{locator} must not select {name}@{version}"
+                );
+            }
+        }
+    }
+
+    /// Everything that does not bind registry bytes to the name a consumer's
+    /// tree shows is refused: a link, a workspace path, an alias, a `file:` or
+    /// git resolution, a missing integrity, and lockfile version 1.
+    #[test]
+    fn npm_selection_refuses_entries_that_bind_no_registry_bytes() {
+        let refused = |entry: serde_json::Value| {
+            let lock = npm_lock(
+                3,
+                &serde_json::json!({ "node_modules/@corvu/utils": entry }),
+            );
+            PublishedGraphLockSelection::from_npm_lock(
+                &lock,
+                "node_modules/@corvu/utils",
+                "@corvu/utils",
+                "0.3.2",
+            )
+            .expect_err("the entry binds no registry bytes")
+            .to_string()
+        };
+        let mut link = npm_entry("0.3.2");
+        link["link"] = true.into();
+        assert!(refused(link).contains("is a link"));
+        let mut alias = npm_entry("0.3.2");
+        alias["name"] = "@corvu/other".into();
+        assert!(refused(alias).contains("alias"));
+        let mut local = npm_entry("0.3.2");
+        local["resolved"] = "file:../utils".into();
+        assert!(refused(local).contains("registry tarball"));
+        let mut unsigned = npm_entry("0.3.2");
+        unsigned.as_object_mut().unwrap().remove("integrity");
+        assert!(refused(unsigned).contains("no integrity"));
+
+        let v1 = npm_lock(
+            1,
+            &serde_json::json!({ "node_modules/@corvu/utils": npm_entry("0.3.2") }),
+        );
+        assert!(
+            PublishedGraphLockSelection::from_npm_lock(
+                &v1,
+                "node_modules/@corvu/utils",
+                "@corvu/utils",
+                "0.3.2",
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("not 2 or 3")
+        );
+        let workspace = npm_lock(
+            3,
+            &serde_json::json!({ "packages/utils": npm_entry("0.3.2") }),
+        );
+        assert!(
+            PublishedGraphLockSelection::from_npm_lock(
+                &workspace,
+                "packages/utils",
+                "@corvu/utils",
+                "0.3.2",
+            )
+            .is_err()
+        );
+        // An unsupported format is still refused by name rather than sniffed.
+        assert!(
+            PublishedGraphLockSelection::from_lockfile(
+                std::path::Path::new("/project/npm-shrinkwrap.json"),
+                &npm_lock(3, &serde_json::json!({})),
+                "node_modules/@corvu/utils",
+                "@corvu/utils",
+                "0.3.2",
+            )
+            .is_err()
+        );
+    }
 
     fn pnpm_lock(body: &str) -> String {
         format!(

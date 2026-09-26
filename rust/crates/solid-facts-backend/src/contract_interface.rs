@@ -313,9 +313,12 @@ struct AcceptedCatalogEntry {
 /// entry list beside a receipt that binds no root is refused rather than read:
 /// it would be an environment nobody signed.
 ///
-/// `Ok(None)` means the receipt states no environment, or states one whose
-/// entries were not published; a caller that applies acceptances by
-/// environment must refuse both.
+/// `Ok(None)` means the receipt states no environment, states one whose
+/// entries were not published, or binds the retired ambiguous empty root
+/// ([`crate::contract_certification::policy2_ambiguous_empty_dependency_environment_root`]:
+/// an older certifier's "nothing was acquired", which it could not tell apart
+/// from "nothing was read"). A caller that applies acceptances by environment
+/// must refuse all three.
 pub(crate) fn verified_dependency_environment(
     bindings: &Policy2ReceiptBindings,
     entries: Option<&[DependencyEnvironmentEntry]>,
@@ -323,6 +326,12 @@ pub(crate) fn verified_dependency_environment(
     let mismatch = || ContractFailure::ReceiptMismatch {
         field: "dependencyEnvironment",
     };
+    if bindings.dependency_environment_root == ambiguous_empty_environment_root() {
+        return match entries {
+            None | Some([]) => Ok(None),
+            Some(_) => Err(mismatch()),
+        };
+    }
     match (bindings.dependency_environment_root.is_empty(), entries) {
         (_, None) => Ok(None),
         (true, Some(_)) => Err(mismatch()),
@@ -335,6 +344,14 @@ pub(crate) fn verified_dependency_environment(
             Ok(Some(entries.to_vec()))
         }
     }
+}
+
+/// See [`verified_dependency_environment`]; computed once.
+pub(crate) fn ambiguous_empty_environment_root() -> &'static str {
+    static ROOT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    ROOT.get_or_init(
+        crate::contract_certification::policy2_ambiguous_empty_dependency_environment_root,
+    )
 }
 
 #[derive(Deserialize)]

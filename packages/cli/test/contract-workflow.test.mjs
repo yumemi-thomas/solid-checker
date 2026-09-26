@@ -79,6 +79,9 @@ import {
   buildPublishedGraphExecutionRequest,
   CertificationRefusal,
   acquireRootCompilerSources,
+  acquireRootCompilerSourcesWithEnvironment,
+  dependencyEnvironmentFromNativeOutput,
+  dependencyEnvironmentNotAcquiredMessage,
   cascadeGraphNodeRefusals,
   graphCasesWithoutRefusedNodes,
   retainedCaseFloorRefusal,
@@ -2905,6 +2908,147 @@ test("root certification withholds a name whose published bytes it could not acq
   } finally {
     rmSync(project, { recursive: true, force: true });
   }
+});
+
+// The root install above, with its Bun lockfile replaced by `lockfiles`
+// (file name -> body), or by none.
+function writeRootSourceInstallWith(project, lockfiles) {
+  writeRootSourceInstall(project, { lockedNames: [] });
+  rmSync(join(project, "bun.lock"));
+  for (const [name, body] of Object.entries(lockfiles)) {
+    writeFileSync(join(project, name), body);
+  }
+}
+
+function npmLockfile(version, names) {
+  return `${JSON.stringify({
+    name: "consumer",
+    lockfileVersion: version,
+    requires: true,
+    packages: Object.fromEntries([
+      ["", { name: "consumer" }],
+      ...names.map(name => [`node_modules/${name}`, {
+        version: "1.0.0",
+        resolved: `https://registry.npmjs.org/${name}/-/${name}-1.0.0.tgz`,
+        integrity: `sha512-${name}`
+      }])
+    ])
+  }, null, 2)}\n`;
+}
+
+async function rootEnvironment(project, served = ["alpha", "beta"]) {
+  const scratch = join(project, "scratch");
+  mkdirSync(scratch, { recursive: true });
+  const archive = new TextEncoder().encode("not a real tarball").buffer;
+  const { sourcesByInput, environmentNotAcquired } =
+    await acquireRootCompilerSourcesWithEnvironment({
+      options: {
+        packageRoot: join(project, "node_modules/root-package"),
+        registryOrigin: "https://registry.npmjs.org",
+        integrity: "sha512-root-package"
+      },
+      generated: rootSourceGenerated(project),
+      scratch,
+      fetch_: registryStub(Object.fromEntries(served.map(name => [name, { archive }])))
+    });
+  return {
+    names: sourcesByInput[0].map(source => source.packageName).sort(),
+    managers: sourcesByInput[0].map(source => source.lockfile.split("/").pop()),
+    environmentNotAcquired
+  };
+}
+
+test("an npm lockfile v3 tree names its declaration sources and acquires its environment", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-env-npm-"));
+  try {
+    writeRootSourceInstallWith(project, { "package-lock.json": npmLockfile(3, ["alpha", "beta"]) });
+    const result = await rootEnvironment(project);
+    assert.deepEqual(result.names, ["alpha", "beta"]);
+    assert.deepEqual(result.managers, ["package-lock.json", "package-lock.json"]);
+    assert.equal(result.environmentNotAcquired, null);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("an npm tree the reader does not support states no environment rather than an empty one", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-env-npm1-"));
+  try {
+    // Before 2026-09-26 every one of these returned no sources and no reason,
+    // and the receipt stated the empty environment consumers admit anywhere.
+    writeRootSourceInstallWith(project, { "package-lock.json": npmLockfile(1, ["alpha", "beta"]) });
+    const v1 = await rootEnvironment(project);
+    assert.deepEqual(v1.names, []);
+    assert.match(v1.environmentNotAcquired, /lockfileVersion 1 is not 2 or 3/);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("an unknown lockfile or none at all leaves the environment unacquired, by name", async () => {
+  for (const [label, lockfiles, reason] of [
+    ["yarn", { "yarn.lock": "# yarn lockfile v1\n" }, /yarn\.lock is not a lockfile format this certifier reads/],
+    ["none", {}, /no exact lockfile exists above .*expected one of bun\.lock, pnpm-lock\.yaml, package-lock\.json/]
+  ]) {
+    const project = mkdtempSync(join(tmpdir(), `solid-checker-root-env-${label}-`));
+    try {
+      writeRootSourceInstallWith(project, lockfiles);
+      const result = await rootEnvironment(project);
+      assert.deepEqual(result.names, [], label);
+      assert.match(result.environmentNotAcquired ?? "", reason, label);
+    } finally {
+      rmSync(project, { recursive: true, force: true });
+    }
+  }
+});
+
+test("a name the lock does not select, or the registry will not serve, leaves the environment unacquired", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-env-withheld-"));
+  try {
+    writeRootSourceInstallWith(project, { "package-lock.json": npmLockfile(3, ["alpha"]) });
+    const unlocked = await rootEnvironment(project);
+    assert.deepEqual(unlocked.names, ["alpha"]);
+    assert.match(unlocked.environmentNotAcquired, /^beta could not be identified by name, version and integrity/);
+    writeFileSync(join(project, "package-lock.json"), npmLockfile(3, ["alpha", "beta"]));
+    const unserved = await rootEnvironment(project, ["alpha"]);
+    assert.deepEqual(unserved.names, ["alpha"]);
+    assert.match(unserved.environmentNotAcquired, /^beta could not be identified .*published archive could not be acquired/);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("a genuinely dependency-free package acquires the empty environment with no lockfile", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-env-free-"));
+  try {
+    writeRootSourceInstallWith(project, {});
+    writeFileSync(
+      join(project, "node_modules/root-package/types/index.d.ts"),
+      "export declare const value: () => void;\n"
+    );
+    const result = await rootEnvironment(project);
+    assert.deepEqual(result.names, []);
+    assert.equal(result.environmentNotAcquired, null, "reaching no package is a statement");
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("the native dependency-environment lines are read, and a receipt stating none is said plainly", () => {
+  assert.equal(dependencyEnvironmentFromNativeOutput("nothing here\n"), null);
+  const stdout = [
+    'solid-checker:dependency-environment={"stated":true,"entries":2}',
+    'solid-checker:dependency-environment={"stated":false,"reason":"beta is reached by the closure but is not installed"}',
+    "solid-checker:dependency-environment=not json"
+  ].join("\n");
+  assert.deepEqual(dependencyEnvironmentFromNativeOutput(stdout), {
+    receipts: 2,
+    notAcquired: [{ reason: "beta is reached by the closure but is not installed" }]
+  });
+  assert.equal(
+    dependencyEnvironmentNotAcquiredMessage("no exact lockfile exists"),
+    "solid-checker: dependency environment not acquired: no exact lockfile exists; this catalog will not be admitted"
+  );
 });
 
 // The three cases of the `dependency-target-not-exported` policy. Each writes

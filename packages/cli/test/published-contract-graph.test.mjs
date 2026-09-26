@@ -4,6 +4,7 @@ import { test } from "vitest";
 import {
   bunLockLocatorForInstalledPackage,
   createBunLockSelectionIndex,
+  createNpmLockSelectionIndex,
   createPnpmLockSelectionIndex,
   PublishedGraphAcquisitionRefusal,
   discoverInstalledPublishedGraph,
@@ -430,4 +431,66 @@ test("the pnpm reader selects no package without a registry integrity", () => {
       ),
     refusal("missing-lock-selection")
   );
+});
+
+// npm lockfile v2/v3, mirroring `npm_selection_*` in `dependencies.rs`: the
+// locator is the install-path key, and only an entry that installs this exact
+// name and version from a registry tarball with an integrity is selectable.
+const npmLock = (version, packages) =>
+  JSON.stringify({ name: "consumer", lockfileVersion: version, requires: true, packages });
+
+const npmEntry = (version, extra = {}) => ({
+  version,
+  resolved: `https://registry.npmjs.org/@corvu/utils/-/utils-${version}.tgz`,
+  integrity: PNPM_INTEGRITY,
+  ...extra
+});
+
+test("exact npm selection reads the install-path key as the locator", () => {
+  const index = createNpmLockSelectionIndex(npmLock(3, {
+    "": { name: "consumer" },
+    "node_modules/@corvu/utils": npmEntry("0.3.2"),
+    "node_modules/other/node_modules/@corvu/utils": npmEntry("0.4.0"),
+    "node_modules/linked": { resolved: "packages/linked", link: true },
+    "node_modules/aliased": npmEntry("0.3.2", { name: "@corvu/utils" }),
+    "node_modules/local": npmEntry("1.0.0", { resolved: "file:../local" })
+  }));
+  const select = (packageRoot, packageName, packageVersion) => exactLockSelection({
+    index,
+    packageManager: "npm",
+    lockfilePath: "/w/package-lock.json",
+    packageRoot,
+    packageName,
+    packageVersion
+  });
+  assert.deepEqual(
+    select("/w/node_modules/@corvu/utils", "@corvu/utils", "0.3.2"),
+    { locator: "node_modules/@corvu/utils", integrity: PNPM_INTEGRITY }
+  );
+  assert.deepEqual(
+    select("/w/node_modules/other/node_modules/@corvu/utils", "@corvu/utils", "0.4.0"),
+    { locator: "node_modules/other/node_modules/@corvu/utils", integrity: PNPM_INTEGRITY }
+  );
+  assert.throws(
+    () => select("/w/node_modules/@corvu/utils", "@corvu/utils", "0.4.0"),
+    refusal("missing-lock-selection")
+  );
+  for (const [root, name, version] of [
+    ["/w/node_modules/aliased", "@corvu/utils", "0.3.2"],
+    ["/w/node_modules/local", "local", "1.0.0"]
+  ]) {
+    assert.throws(() => select(root, name, version), refusal("missing-lock-selection"), root);
+  }
+  assert.throws(
+    () => select("/w/packages/linked", "linked", "1.0.0"),
+    refusal("installed-lock-layout")
+  );
+});
+
+test("npm lockfile version 1 and non-JSON bytes are refused, not read", () => {
+  assert.throws(
+    () => createNpmLockSelectionIndex(npmLock(1, {})),
+    refusal("unsupported-lock-version")
+  );
+  assert.throws(() => createNpmLockSelectionIndex("{"), refusal("unsupported-lock-syntax"));
 });

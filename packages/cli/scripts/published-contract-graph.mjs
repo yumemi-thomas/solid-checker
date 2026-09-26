@@ -62,8 +62,24 @@ const bunLockSelectionRecords = new WeakMap();
 // rather than sniffed.
 export const SUPPORTED_LOCKFILES = Object.freeze([
   Object.freeze({ fileName: "bun.lock", packageManager: "bun" }),
-  Object.freeze({ fileName: "pnpm-lock.yaml", packageManager: "pnpm" })
+  Object.freeze({ fileName: "pnpm-lock.yaml", packageManager: "pnpm" }),
+  Object.freeze({ fileName: "package-lock.json", packageManager: "npm" })
 ]);
+
+// Lockfiles a package manager writes that this adapter deliberately does not
+// read. They are named only so a refusal can say what it found: a tree installed
+// by one of these has no exact lock selection here, and certification states no
+// dependency environment rather than an empty one.
+export const UNSUPPORTED_LOCKFILES = Object.freeze([
+  "npm-shrinkwrap.json",
+  "yarn.lock",
+  "bun.lockb"
+]);
+
+// Only npm `packages`-map lockfiles are read: `lockfileVersion` 2 and 3. Version
+// 1 has only the name-keyed `dependencies` tree, which cannot say *which*
+// installed copy an entry describes under hoisting.
+const NPM_LOCKFILE_VERSIONS = new Set([2, 3]);
 
 // Only pnpm lockfile major 9 is read, and the restriction is load-bearing rather
 // than conservative packaging. The selection argument below rests on `packages:`
@@ -340,10 +356,81 @@ export function createPnpmLockSelectionIndex(lockfile) {
   return index;
 }
 
+/**
+ * Indexes untrusted npm lock bytes (`lockfileVersion` 2 or 3) into the same
+ * exact-selection shape the Bun index produces.
+ *
+ * npm's `packages` map is keyed by install path relative to the lockfile
+ * (`node_modules/a/node_modules/b`), exactly Bun's disambiguation problem, so
+ * the locator is that key and `lockLocatorForInstalledPackage` derives it from
+ * the installed root the same way. An entry is selected only when it names a
+ * registry tarball: a link, a workspace member, a `file:` or git dependency has
+ * no registry integrity, and an alias (`"name"` differing from the path) would
+ * put one package's bytes under another's name. Each is left unselected, which
+ * is the fail-closed direction -- the caller cannot name it.
+ */
+export function createNpmLockSelectionIndex(lockfile) {
+  let document;
+  try {
+    document = JSON.parse(lockfile);
+  } catch (error) {
+    throw new PublishedGraphAcquisitionRefusal(
+      "unsupported-lock-syntax",
+      `npm lockfile is not JSON: ${error.message}`
+    );
+  }
+  if (!NPM_LOCKFILE_VERSIONS.has(document?.lockfileVersion)) {
+    throw new PublishedGraphAcquisitionRefusal(
+      "unsupported-lock-version",
+      `npm lockfileVersion ${JSON.stringify(document?.lockfileVersion)} is not 2 or 3; ` +
+        "only the path-keyed packages map identifies an installed copy exactly"
+    );
+  }
+  if (!document.packages || typeof document.packages !== "object") {
+    throw new PublishedGraphAcquisitionRefusal(
+      "missing-lock-selection",
+      "npm lockfile has no packages map"
+    );
+  }
+  const recordsByIdentity = new Map();
+  for (const [locator, record] of Object.entries(document.packages)) {
+    const name = npmLockPathName(locator);
+    if (!name || !record || typeof record !== "object" || record.link === true) continue;
+    if (typeof record.version !== "string") continue;
+    if (record.name !== undefined && record.name !== name) continue;
+    if (typeof record.resolved !== "string" || !/^https:\/\//.test(record.resolved)) continue;
+    const indexed = Object.freeze({
+      locator,
+      integrity: typeof record.integrity === "string" ? record.integrity : undefined
+    });
+    const identity = `${name}@${record.version}`;
+    const records = recordsByIdentity.get(identity);
+    if (records) records.push(indexed);
+    else recordsByIdentity.set(identity, [indexed]);
+  }
+  const index = Object.freeze({});
+  bunLockSelectionRecords.set(index, recordsByIdentity);
+  return index;
+}
+
+/** The package name an npm `packages` key installs, or null for the root and
+ * for any key that does not end in a `node_modules/<name>` segment. */
+export function npmLockPathName(locator) {
+  const marker = "node_modules/";
+  const at = locator.lastIndexOf(marker);
+  if (at < 0 || (at > 0 && locator[at - 1] !== "/")) return null;
+  const name = locator.slice(at + marker.length);
+  const parts = name.split("/");
+  if (name.startsWith("@") ? parts.length !== 2 : parts.length !== 1) return null;
+  if (parts.some(part => !part || part === "." || part === "..")) return null;
+  return name;
+}
+
 /** Indexes lock bytes for the named package manager. */
 export function createLockSelectionIndex(lockfile, packageManager) {
   if (packageManager === "bun") return createBunLockSelectionIndex(lockfile);
   if (packageManager === "pnpm") return createPnpmLockSelectionIndex(lockfile);
+  if (packageManager === "npm") return createNpmLockSelectionIndex(lockfile);
   throw new PublishedGraphAcquisitionRefusal(
     "unsupported-package-manager",
     `no exact lock reader for ${packageManager}`
@@ -398,6 +485,20 @@ export function bunLockLocatorForInstalledPackage(bunLockPath, packageRoot) {
   return locator;
 }
 
+/** The npm `packages` key for one installed package: its path relative to the
+ * lockfile's directory, which must descend through `node_modules`. */
+export function npmLockLocatorForInstalledPackage(npmLockPath, packageRoot) {
+  const installed = relative(dirname(resolve(npmLockPath)), resolve(packageRoot));
+  const locator = installed.split(sep).join("/");
+  if (!locator || locator.startsWith("../") || npmLockPathName(locator) === null) {
+    throw new PublishedGraphAcquisitionRefusal(
+      "installed-lock-layout",
+      `${packageRoot} is not under the npm lockfile's node_modules tree`
+    );
+  }
+  return locator;
+}
+
 /**
  * The exact lock key for one installed package, per package manager.
  *
@@ -418,6 +519,9 @@ export function lockLocatorForInstalledPackage({
   }
   if (packageManager === "pnpm") {
     return `${packageName}@${packageVersion}`;
+  }
+  if (packageManager === "npm") {
+    return npmLockLocatorForInstalledPackage(lockfilePath, packageRoot);
   }
   throw new PublishedGraphAcquisitionRefusal(
     "unsupported-package-manager",

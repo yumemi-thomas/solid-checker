@@ -71,7 +71,8 @@ import {
   createLockSelectionIndex,
   exactLockSelection,
   publishedGraphRequestKey,
-  SUPPORTED_LOCKFILES
+  SUPPORTED_LOCKFILES,
+  UNSUPPORTED_LOCKFILES
 } from "./published-contract-graph.mjs";
 
 export const contractCertifyHelp = `Usage:
@@ -666,6 +667,14 @@ async function acquirePublishedArtifact({
   });
 }
 
+/// A planning that says its dependency environment was not acquired, when it
+/// was not; the planning unchanged otherwise. The field is written only when it
+/// carries a reason, so a request that acquired everything is byte-identical to
+/// one from before the field existed.
+export function withEnvironmentNotAcquired(planning, reason) {
+  return reason ? { ...planning, dependencyEnvironmentNotAcquired: reason } : planning;
+}
+
 function certificationPlannings(generated, artifactSnapshot, options = null) {
   return generated.certificationInputs.map(input => ({
     schemaVersion: 1,
@@ -696,6 +705,44 @@ function certificationPlannings(generated, artifactSnapshot, options = null) {
 /// record and is left alone. Audit material only: the accepted contract itself
 /// already says the withheld domains are open.
 export const WITHHELD_CLOSURE_MARKER = "solid-checker:withheld-closure=";
+
+/// Whether each receipt the transaction issued states a dependency
+/// environment: one `solid-checker:dependency-environment=<json>` line per
+/// receipt (`main.rs`'s `report_dependency_environment`). Returns the receipts
+/// that state none, with the reason, or `null` when every receipt states one
+/// (or the native side reported nothing, as an older build does).
+export const DEPENDENCY_ENVIRONMENT_MARKER = "solid-checker:dependency-environment=";
+
+/// The line `contract certify` prints when a receipt states no dependency
+/// environment. The publication still succeeded and the receipt still
+/// authenticates, which is exactly why it has to be said: nothing else about
+/// the run would tell the user that no consumer will ever apply it.
+export function dependencyEnvironmentNotAcquiredMessage(reason) {
+  return `solid-checker: dependency environment not acquired: ${reason}; this catalog will not be admitted`;
+}
+
+export function dependencyEnvironmentFromNativeOutput(stdout) {
+  const records = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(DEPENDENCY_ENVIRONMENT_MARKER)) continue;
+    try {
+      const record = JSON.parse(trimmed.slice(DEPENDENCY_ENVIRONMENT_MARKER.length));
+      if (record && typeof record === "object") records.push(record);
+    } catch {
+      // Malformed is not a record.
+    }
+  }
+  if (!records.length) return null;
+  const unstated = records.filter(record => record.stated !== true);
+  return {
+    receipts: records.length,
+    notAcquired: unstated.map(record => ({
+      reason: typeof record.reason === "string" ? record.reason : "not stated",
+      ...(record.node ? { node: record.node } : {})
+    }))
+  };
+}
 
 /// The rung below it: one operation the transaction withdrew from the document
 /// it published, because a positive fact the operation states could not be
@@ -998,6 +1045,21 @@ function findLockfile(packageRoot) {
       });
     }
     if (found.length === 1) return found[0];
+    // A lockfile this adapter does not read, with none it does beside it, is
+    // the one that installed this tree. Walking past it to an ancestor's
+    // lockfile would read a selection for some other install.
+    const unsupported = UNSUPPORTED_LOCKFILES.filter(fileName =>
+      existsSync(join(directory, fileName))
+    );
+    if (unsupported.length) {
+      throw new CertificationRefusal({
+        stage: "artifact-acquisition",
+        owner: "package-manager",
+        reason:
+          `${join(directory, unsupported[0])} is not a lockfile format this certifier reads; ` +
+          `expected one of ${SUPPORTED_LOCKFILES.map(entry => entry.fileName).join(", ")}`
+      });
+    }
     const parent = dirname(directory);
     if (parent === directory) break;
     directory = parent;
@@ -1033,7 +1095,12 @@ function createCompilerSourceCollector({
   scratch,
   resolutionSession,
   scratchPrefix,
-  onUnnameable = null
+  onUnnameable = null,
+  // Called with the package name of a dependency the closure reaches but that
+  // is not installed (an absent optional peer). Nothing is supplied for it,
+  // which is fail-closed for the proof; the caller decides what it means for
+  // the stated environment.
+  onUnlocated = null
 }) {
   const sourceArtifacts = new Map();
   const compilerSourceClosures = new Map();
@@ -1181,7 +1248,12 @@ function createCompilerSourceCollector({
       if (onUnnameable) {
         try {
           const child = locateExternalFrom(closure.packageRoot, dependency);
-          if (!child) continue;
+          if (!child) {
+            if (!dependency.specifier.startsWith("node:")) {
+              onUnlocated?.(packageNameOfSpecifier(dependency.specifier));
+            }
+            continue;
+          }
           transitive.push(
             ...await collectCompilerSources(
               child,
@@ -1190,13 +1262,18 @@ function createCompilerSourceCollector({
               nextVisiting
             )
           );
-        } catch {
-          onUnnameable(packageNameOfSpecifier(dependency.specifier));
+        } catch (error) {
+          onUnnameable(packageNameOfSpecifier(dependency.specifier), error);
         }
         continue;
       }
       const child = locateExternalFrom(closure.packageRoot, dependency);
-      if (!child) continue;
+      if (!child) {
+        if (!dependency.specifier.startsWith("node:")) {
+          onUnlocated?.(packageNameOfSpecifier(dependency.specifier));
+        }
+        continue;
+      }
       transitive.push(
         ...await collectCompilerSources(
           child,
@@ -1699,7 +1776,7 @@ export function mergeProposalDependencies(dependencies, outputRoot) {
 
 function graphNodeExecutionInput(state) {
   return {
-    planning: state.planning,
+    planning: withEnvironmentNotAcquired(state.planning, state.environmentNotAcquired),
     lockfile: state.node.lockfilePath,
     lockLocator: state.node.lockLocator,
     sourceDependencies: (state.sourceDependencies ?? []).map(source => ({
@@ -1838,6 +1915,7 @@ async function executePreparedPublishedGraphs({
   return {
     authority: "native-certification-complete",
     catalogRoot,
+    dependencyEnvironment: dependencyEnvironmentFromNativeOutput(child.stdout),
     withheldClosures: withheldClosuresFromNativeOutput(child.stdout),
     withheldOperations: withheldOperationsFromNativeOutput(child.stdout),
     closureCandidates: closureCandidatesFromNativeOutput(child.stdout),
@@ -2272,6 +2350,7 @@ export async function preparePublishedGraphCases({
   const pendingByKey = new Map();
   const publishedArtifacts = new Map();
   const graphResolutionSession = new ArtifactResolutionSession();
+  let graphEnvironmentNotAcquired = null;
   let nextNodeIndex = 0;
   const publishedArtifactKey = (nodeManifest, integrity) => JSON.stringify([
     options.registryOrigin,
@@ -2313,7 +2392,14 @@ export async function preparePublishedGraphCases({
     lockIndex,
     scratch,
     resolutionSession: graphResolutionSession,
-    scratchPrefix: "graph"
+    scratchPrefix: "graph",
+    // The collector is shared by every node, so a transitive gap cannot be
+    // attributed to one; it marks the whole graph, which is the conservative
+    // side -- every node's environment then goes unstated.
+    onUnlocated: name => {
+      graphEnvironmentNotAcquired ??=
+        `${name} is reached by a graph node's closure but is not installed`;
+    }
   });
 
   const prepareArtifactCase = async (artifactCase, caseIndex) => {
@@ -2430,9 +2516,17 @@ export async function preparePublishedGraphCases({
         directDependencies.map(dependency => resolve(dependency.state.node.packageRoot))
       );
       const ownSourceDependencies = [];
+      let environmentNotAcquired = null;
       for (const dependency of resolved.externalDependencies) {
         const located = locateExternalFrom(node.packageRoot, dependency);
-        if (!located) continue;
+        if (!located) {
+          if (!dependency.specifier.startsWith("node:")) {
+            environmentNotAcquired ??=
+              `${packageNameOfSpecifier(dependency.specifier)} is reached by the closure ` +
+              "but is not installed";
+          }
+          continue;
+        }
         ownSourceDependencies.push(
           ...await collectCompilerSources(located, conditions, semanticRoots)
         );
@@ -2455,6 +2549,7 @@ export async function preparePublishedGraphCases({
         planning: null,
         demandPlan: null,
         sourceDependencies,
+        environmentNotAcquired,
         scratch: nodeScratch
       };
       byKey.set(node.key, preparedState);
@@ -2786,6 +2881,11 @@ export async function preparePublishedGraphCases({
       if (nodeRefusals.has(state.node.key)) pendingGeneration.delete(state);
     }
   }
+  if (graphEnvironmentNotAcquired) {
+    for (const state of byKey.values()) {
+      state.environmentNotAcquired ??= graphEnvironmentNotAcquired;
+    }
+  }
   const surviving = graphCasesWithoutRefusedNodes({ prepared, byKey, nodeRefusals });
   caseRefusals.push(...surviving.refusals);
   preparedCases.push(...surviving.cases);
@@ -2809,11 +2909,15 @@ export async function preparePublishedGraphCases({
     if (lock.integrity !== options.integrity) {
       throw new Error("retained proposal lock integrity disagrees with its archive");
     }
-    const sourceDependenciesByInput = await acquireRootCompilerSources({
+    const {
+      sourcesByInput: sourceDependenciesByInput,
+      environmentNotAcquired: retainedEnvironmentNotAcquired
+    } = await acquireRootCompilerSourcesWithEnvironment({
       options, generated, scratch, fetch_
     });
     retainedRoots = retainedProposalGraphCases({
-      plannings: certificationPlannings(generated, rootArtifactSnapshot, options),
+      plannings: certificationPlannings(generated, rootArtifactSnapshot, options)
+        .map(planning => withEnvironmentNotAcquired(planning, retainedEnvironmentNotAcquired)),
       sourceDependenciesByInput, coordinates: retainedProposalCases,
       lockfile: resolve(lockfilePath), lockLocator: lock.locator
     });
@@ -2901,16 +3005,83 @@ export async function preparePublishedGraphCases({
 /// could not authenticate must not reach any of them.
 ///
 /// Returns one array of acquired sources per certification input, positionally.
-export async function acquireRootCompilerSources({ options, generated, scratch, fetch_ }) {
+export async function acquireRootCompilerSources(args) {
+  return (await acquireRootCompilerSourcesWithEnvironment(args)).sourcesByInput;
+}
+
+/// [`acquireRootCompilerSources`], plus whether the dependency environment the
+/// certification will state was acquired at all.
+///
+/// Withholding a name is fail-closed for the *proof* -- the reference resolves
+/// to `any` and the demands that needed it stay open -- but it is not
+/// fail-closed for the *environment*. The receipt states the roots the census
+/// admitted, and a withheld name is by construction not among them, so the
+/// environment would read "the proof read no such package" in a tree where
+/// installing it changes the answer. An npm tree made that the common case:
+/// with no lockfile this reader understood, every name was withheld and every
+/// receipt stated the empty environment, which consumers admit anywhere.
+///
+/// So `environmentNotAcquired` names the first reason any package the closure
+/// reaches could not be identified by `{name, version, integrity}`, and the
+/// native certifier then states no environment root. It is `null` only when
+/// every external package the closure reaches was named -- which includes the
+/// genuinely dependency-free package, whose closure reaches none and which
+/// needs no lockfile at all.
+export async function acquireRootCompilerSourcesWithEnvironment({
+  options, generated, scratch, fetch_
+}) {
   const empty = generated.certificationInputs.map(() => []);
+  const reasons = [];
+  const notAcquired = reason => {
+    if (!reasons.includes(reason)) reasons.push(reason);
+  };
+  const external = dependency => !dependency.specifier.startsWith("node:");
+  // Resolved before any lockfile is read: whether the closure reaches another
+  // package at all is a fact about the artifact, and it is the whole question
+  // for a package that reaches none.
+  const perInputResolution = [];
+  for (const input of generated.certificationInputs) {
+    const conditions = [...new Set([...(input.conditions ?? []), "import"])].sort();
+    try {
+      perInputResolution.push({
+        input,
+        conditions,
+        resolved: resolvePackageArtifactClosure({
+          importer: input.resolution.importer,
+          specifier: input.resolution.specifier,
+          packageRoot: input.resolution.packageRoot ?? options.packageRoot,
+          conditions,
+          resolutionKind: "import",
+          integrity: options.integrity
+        }, null)
+      });
+    } catch (error) {
+      perInputResolution.push({ input, conditions, resolved: null });
+      notAcquired(
+        `the closure of ${input.resolution.specifier} could not be resolved: ` +
+          `${error instanceof Error ? error.message : error}`
+      );
+    }
+  }
+  const reachesExternal = perInputResolution.some(
+    ({ resolved }) => resolved?.externalDependencies.some(external)
+  );
+  const result = sourcesByInput => ({
+    sourcesByInput,
+    environmentNotAcquired: reasons.length ? reasons[0] : null
+  });
+  if (!reachesExternal) return result(empty);
   let lockfilePath;
   let lockPackageManager;
   try {
     ({ path: lockfilePath, packageManager: lockPackageManager } = findLockfile(
       options.packageRoot
     ));
-  } catch {
-    return empty;
+  } catch (error) {
+    notAcquired(
+      error instanceof CertificationRefusal ? error.reason : String(error?.message ?? error)
+    );
+    return result(empty);
   }
   let lockIndex;
   try {
@@ -2918,14 +3089,22 @@ export async function acquireRootCompilerSources({ options, generated, scratch, 
       readFileSync(lockfilePath, "utf8"),
       lockPackageManager
     );
-  } catch {
-    return empty;
+  } catch (error) {
+    notAcquired(
+      `${lockfilePath} could not be read as a ${lockPackageManager} lockfile: ` +
+        `${error instanceof Error ? error.message : error}`
+    );
+    return result(empty);
   }
   // Recovery invokes this repeatedly in one transaction. Each collector starts
   // its source index at zero, so sharing a directory turns EEXIST into a false
   // unavailable-source disposition and can remove authenticated dependencies.
   const sourceScratch = mkdtempSync(join(scratch, "root-sources-"));
   const withheldNames = new Set();
+  const withhold = (name, reason) => {
+    withheldNames.add(name);
+    notAcquired(`${name} could not be identified by name, version and integrity: ${reason}`);
+  };
   const collector = createCompilerSourceCollector({
     lockfilePath,
     lockPackageManager,
@@ -2933,22 +3112,13 @@ export async function acquireRootCompilerSources({ options, generated, scratch, 
     scratch: sourceScratch,
     resolutionSession: new ArtifactResolutionSession(),
     scratchPrefix: "root",
-    onUnnameable: name => withheldNames.add(name)
+    onUnnameable: (name, error) =>
+      withhold(name, error instanceof Error ? error.message : String(error ?? "unnameable")),
+    onUnlocated: name => notAcquired(`${name} is reached by the closure but is not installed`)
   });
   const perInput = [];
-  for (const input of generated.certificationInputs) {
-    const conditions = [...new Set([...(input.conditions ?? []), "import"])].sort();
-    let resolved;
-    try {
-      resolved = resolvePackageArtifactClosure({
-        importer: input.resolution.importer,
-        specifier: input.resolution.specifier,
-        packageRoot: input.resolution.packageRoot ?? options.packageRoot,
-        conditions,
-        resolutionKind: "import",
-        integrity: options.integrity
-      }, null);
-    } catch {
+  for (const { input, conditions, resolved } of perInputResolution) {
+    if (!resolved) {
       perInput.push([]);
       continue;
     }
@@ -2956,7 +3126,15 @@ export async function acquireRootCompilerSources({ options, generated, scratch, 
     for (const dependency of resolved.externalDependencies) {
       try {
         const located = collector.locateExternalFrom(resolved.packageRoot, dependency);
-        if (!located) continue;
+        if (!located) {
+          if (external(dependency)) {
+            notAcquired(
+              `${packageNameOfSpecifier(dependency.specifier)} is reached by the closure ` +
+                "but is not installed"
+            );
+          }
+          continue;
+        }
         refuseCaseImportingUnexportedTarget({
           entrypoint: input.entrypoint ?? ".",
           conditions,
@@ -2970,7 +3148,10 @@ export async function acquireRootCompilerSources({ options, generated, scratch, 
         // authenticated and its declarations must still reach every case that
         // does resolve, which is the repair this loop's own catch exists for.
         if (error instanceof CertificationRefusal) throw error;
-        withheldNames.add(packageNameOfSpecifier(dependency.specifier));
+        withhold(
+          packageNameOfSpecifier(dependency.specifier),
+          error instanceof Error ? error.message : String(error)
+        );
       }
     }
     perInput.push(canonicalCompilerSources(found));
@@ -3002,16 +3183,21 @@ export async function acquireRootCompilerSources({ options, generated, scratch, 
           lockLocator: source.lockLocator,
           installedPackageRoot: source.installedPackageRoot
         });
-      } catch {
-        withheldNames.add(source.packageName);
+      } catch (error) {
+        withhold(
+          source.packageName,
+          `its published archive could not be acquired (${
+            error instanceof Error ? error.message : error
+          })`
+        );
       }
     }
   );
-  return perInput.map(sources =>
+  return result(perInput.map(sources =>
     sources
       .map(source => acquiredByKey.get(source.key))
       .filter(acquired => acquired && !withheldNames.has(acquired.packageName))
-  );
+  ));
 }
 
 /// The probe-harness paths the native transaction needs, or nothing.
@@ -3103,7 +3289,10 @@ async function executeNativeCertification({
   // run side by side, and two of them writing the same path would hand one
   // verifier the other's planning.
   const requestPath = join(scratch, `certification-execution-${++nativeExecutionSequence}.json`);
-  const sourceDependenciesByInput = await acquireRootCompilerSources({
+  const {
+    sourcesByInput: sourceDependenciesByInput,
+    environmentNotAcquired
+  } = await acquireRootCompilerSourcesWithEnvironment({
     options,
     generated,
     scratch,
@@ -3111,6 +3300,9 @@ async function executeNativeCertification({
   });
   const plannings = generated.certificationInputs.map((input, index) => ({
       schemaVersion: 1,
+      ...(environmentNotAcquired
+        ? { dependencyEnvironmentNotAcquired: environmentNotAcquired }
+        : {}),
       proposal: generated.output,
       resolution: input.resolution,
       exportConditions: [...new Set([...input.conditions, "import"])].sort(),
@@ -3150,6 +3342,7 @@ async function executeNativeCertification({
   return {
     authority: "native-certification-complete",
     catalogRoot,
+    dependencyEnvironment: dependencyEnvironmentFromNativeOutput(child.stdout),
     withheldClosures: withheldClosuresFromNativeOutput(child.stdout),
     withheldOperations: withheldOperationsFromNativeOutput(child.stdout),
     closureCandidates: closureCandidatesFromNativeOutput(child.stdout),
@@ -3587,7 +3780,8 @@ function writeSuccessAudit(
   closureCandidates = null,
   certifiedClosures = null,
   probeCorpus = null,
-  recipeAddresses = []
+  recipeAddresses = [],
+  dependencyEnvironment = null
 ) {
   if (!path) return;
   const output = resolve(path);
@@ -3598,6 +3792,9 @@ function writeSuccessAudit(
     authoritative: false,
     replayable: false,
     status: "certified",
+    // Written only when a receipt states no dependency environment: it then
+    // authenticates, and no consumer admits it by artifact (ADR 0125).
+    ...(dependencyEnvironment?.notAcquired?.length ? { dependencyEnvironment } : {}),
     package: { name: manifest.name, version: manifest.version },
     stage: "catalog-publication",
     ordinaryAnalysis: { receiptAuthenticated: true, exactCaseSelected: true },
@@ -3754,6 +3951,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
   let closureCandidates = null;
   let certifiedClosures = null;
   let recipeAddresses = [];
+  let dependencyEnvironment = null;
   const stageDurationsMs = {};
   let certified = false;
   const measure = async (stage, operation) => {
@@ -3921,6 +4119,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
           closureCandidates = witnesses?.closureCandidates ?? null;
           certifiedClosures = witnesses?.certifiedClosures ?? null;
           recipeAddresses = Array.isArray(witnesses?.recipeAddresses) ? witnesses.recipeAddresses : [];
+          dependencyEnvironment = witnesses?.dependencyEnvironment ?? null;
           return { authority: "rust", witnesses };
         })
       },
@@ -3988,9 +4187,14 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       closureCandidates,
       certifiedClosures,
       options.probeRecipeCorpus ? resolve(options.probeRecipeCorpus) : null,
-      recipeAddresses
+      recipeAddresses,
+      dependencyEnvironment
     );
     certified = true;
+    const notAcquired = dependencyEnvironment?.notAcquired?.[0];
+    if (notAcquired) {
+      process.stderr.write(`${dependencyEnvironmentNotAcquiredMessage(notAcquired.reason)}\n`);
+    }
   } catch (error) {
     const refusal =
       error instanceof CertificationRefusal

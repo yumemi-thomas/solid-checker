@@ -29,9 +29,20 @@ pub struct FinalizedPolicy2Contract {
     /// the receipt binds nothing about them.
     withheld_closures: Vec<super::WithheldClosure>,
     withheld_operations: Vec<super::WithheldOperation>,
+    /// Why the receipt states no dependency environment, when it states none
+    /// because acquisition could not identify one ([`dependency_environment`]).
+    dependency_environment_not_acquired: Option<String>,
 }
 
 impl FinalizedPolicy2Contract {
+    /// Why this receipt states no dependency environment, if acquisition could
+    /// not identify one. Such a receipt authenticates, and no consumer admits
+    /// it by artifact (ADR 0125).
+    #[must_use]
+    pub fn dependency_environment_not_acquired(&self) -> Option<&str> {
+        self.dependency_environment_not_acquired.as_deref()
+    }
+
     #[must_use]
     pub fn canonical_main(&self) -> &[u8] {
         &self.canonical_main
@@ -266,8 +277,15 @@ pub(super) fn finalize_value_only_with_dependencies(
         }
     };
     let authenticated =
-        authenticate_policy2_receipt(&canonical_main, &receipt, &bindings, provenance)?
-            .with_dependency_environment(dependency_environment(type_facts, dependencies))?;
+        authenticate_policy2_receipt(&canonical_main, &receipt, &bindings, provenance)?;
+    let (authenticated, dependency_environment_not_acquired) =
+        match dependency_environment(plan, type_facts, dependencies) {
+            Ok(environment) => (
+                authenticated.with_dependency_environment(environment)?,
+                None,
+            ),
+            Err(reason) => (authenticated, Some(reason)),
+        };
     Ok(FinalizedPolicy2Contract {
         canonical_main,
         receipt,
@@ -276,6 +294,7 @@ pub(super) fn finalize_value_only_with_dependencies(
         trust_configuration,
         withheld_closures: Vec::new(),
         withheld_operations: Vec::new(),
+        dependency_environment_not_acquired,
     })
 }
 
@@ -488,9 +507,13 @@ pub(super) fn prepare_value_only(
         closed_claims_root,
         verifier_source_digest: pin.source_manifest_sha256().to_owned(),
         verifier_build_digest: verifier_build_digest.clone(),
-        dependency_environment_root: super::policy2_dependency_environment_root(
-            &dependency_environment(type_facts, dependencies),
-        ),
+        // Empty -- "states no environment" -- when acquisition could not
+        // identify one, so no consumer admits the receipt by artifact.
+        dependency_environment_root: dependency_environment(plan, type_facts, dependencies)
+            .map_or_else(
+                |_| String::new(),
+                |environment| super::policy2_dependency_environment_root(&environment),
+            ),
     };
     Ok((canonical_main, bindings))
 }
@@ -504,10 +527,25 @@ pub(super) fn prepare_value_only(
 /// consumer must reproduce before the contract may be applied to its tree. A
 /// certification that read no other package states the empty environment,
 /// which is a statement, not an absence.
-fn dependency_environment(
+///
+/// `Err` carries why the environment was **not acquired** -- this plan's own
+/// declaration closure, or a dependency node's, named a package acquisition
+/// could not identify by `{name, version, integrity}`. The census then admitted
+/// fewer roots than the closure reaches, so the set it did admit is not the
+/// environment the proof is true in, and the receipt states none.
+pub(super) fn dependency_environment(
+    plan: &CertificationPlan,
     type_facts: Option<&VerifiedTypeFactsEvidence>,
     dependencies: Option<&VerifiedDependencyComposition>,
-) -> Vec<super::DependencyEnvironmentEntry> {
+) -> Result<Vec<super::DependencyEnvironmentEntry>, String> {
+    if let Some(reason) = plan.dependency_environment_not_acquired() {
+        return Err(reason.to_owned());
+    }
+    if let Some(reason) =
+        dependencies.and_then(VerifiedDependencyComposition::environment_not_acquired)
+    {
+        return Err(reason.to_owned());
+    }
     let mut environment = std::collections::BTreeSet::new();
     if let Some(type_facts) = type_facts {
         environment.extend(type_facts.dependency_environment().iter().cloned());
@@ -515,7 +553,7 @@ fn dependency_environment(
     if let Some(dependencies) = dependencies {
         environment.extend(dependencies.dependency_environment().iter().cloned());
     }
-    environment.into_iter().collect()
+    Ok(environment.into_iter().collect())
 }
 
 impl From<super::RecipeGatingError> for Policy2FinalizationError {
