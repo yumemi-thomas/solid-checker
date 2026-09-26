@@ -1655,14 +1655,25 @@ pub struct PublishedPolicy2Catalog {
     pub main_path: PathBuf,
     pub receipt_path: PathBuf,
     pub catalog_path: PathBuf,
+    /// Entries of the catalog that was already there, kept unchanged.
+    pub retained_entries: usize,
+    /// Entries of that catalog this publication replaced: the ones for the
+    /// same import or the same artifact identity.
+    pub replaced_entries: usize,
 }
 
+/// The project catalog: every accepted contract the project holds, one entry
+/// per artifact (per import). Version 2 has always been an array; until
+/// 2026-09-26 the writer only ever put one entry in it and replaced the file
+/// on each publication, so a second `contract certify` lost the first
+/// package. Readers never depended on the length, so accumulating entries is
+/// not a format change.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CatalogDocument<'a> {
+struct CatalogDocument {
     format: &'static str,
     catalog_version: u16,
-    contracts: [CatalogEntry<'a>; 1],
+    contracts: Vec<serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -1704,6 +1715,16 @@ enum CatalogStatus {
 /// atomic catalog-pointer rename. Existing objects are reused only after an
 /// exact content check; a crash can leave unreachable blobs but never a
 /// pointer to a partial pair.
+///
+/// **A publication merges.** An existing `accepted-contracts.json` under `root`
+/// keeps every entry for another artifact; only an entry for the same import
+/// (`importer`, `specifier`) or the same artifact identity (signed
+/// `artifactAcceptanceRoot` and `dependencyEnvironmentRoot`) is replaced. The
+/// existing entries must all authenticate under `trust` -- the configuration
+/// this publication ships, which is the one a consumer will read the merged
+/// catalog with -- or the merge is refused and names them: dropping one would
+/// lose a contract silently, and keeping it would make the whole catalog
+/// unreadable.
 pub fn publish_policy2_catalog(
     root: &Path,
     canonical_main: &[u8],
@@ -1711,6 +1732,7 @@ pub fn publish_policy2_catalog(
     authenticated: &AuthenticatedPolicy2Receipt,
     resolved_import: &ResolvedImport,
     export_conditions: &[String],
+    trust: &Policy2TrustConfiguration,
 ) -> Result<PublishedPolicy2Catalog, ReceiptPublicationError> {
     let (_, normalized) = validate_canonical_main(canonical_main)
         .map_err(|error| ReceiptPublicationError::Unauthenticated(error.to_string()))?;
@@ -1738,6 +1760,18 @@ pub fn publish_policy2_catalog(
             ));
         }
     };
+    // Read before any object is stored, so a refused merge writes nothing.
+    let catalog_path = root.join("accepted-contracts.json");
+    let existing = if catalog_path.is_file() {
+        crate::contract_interface::catalog_entries_for_merge(&catalog_path, trust).map_err(
+            |reason| ReceiptPublicationError::MergeRefused {
+                catalog: catalog_path.display().to_string(),
+                reason,
+            },
+        )?
+    } else {
+        Vec::new()
+    };
     fs::create_dir_all(root).map_err(publication_io)?;
     let objects = root.join("objects");
     fs::create_dir_all(&objects).map_err(publication_io)?;
@@ -1760,24 +1794,47 @@ pub fn publish_policy2_catalog(
     };
     let main_relative = format!("{object_prefix}/{main_name}");
     let receipt_relative = format!("{object_prefix}/{receipt_name}");
+    let entry = serde_json::to_value(CatalogEntry {
+        document: &main_relative,
+        document_digest: &main_digest,
+        receipt: &receipt_relative,
+        receipt_digest: &receipt_digest,
+        bindings: &authenticated.bindings,
+        status,
+        import: resolved_import,
+        export_conditions,
+        dependency_environment: authenticated.dependency_environment(),
+    })
+    .map_err(|error| ReceiptPublicationError::Io(error.to_string()))?;
+    let import_key = (
+        resolved_import.importer.clone(),
+        resolved_import.specifier.clone(),
+    );
+    let artifact_identity =
+        (!authenticated.bindings.artifact_acceptance_root.is_empty()).then(|| {
+            (
+                authenticated.bindings.artifact_acceptance_root.clone(),
+                authenticated.bindings.dependency_environment_root.clone(),
+            )
+        });
+    let existing_count = existing.len();
+    let mut contracts = existing
+        .into_iter()
+        .filter(|kept| {
+            kept.import_key != import_key
+                && (artifact_identity.is_none() || kept.artifact_identity != artifact_identity)
+        })
+        .map(|kept| kept.raw)
+        .collect::<Vec<_>>();
+    let retained_entries = contracts.len();
+    contracts.push(entry);
     let mut pointer = serde_json::to_vec(&CatalogDocument {
         format: "solid-checker-accepted-contract-catalog",
         catalog_version: 2,
-        contracts: [CatalogEntry {
-            document: &main_relative,
-            document_digest: &main_digest,
-            receipt: &receipt_relative,
-            receipt_digest: &receipt_digest,
-            bindings: &authenticated.bindings,
-            status,
-            import: resolved_import,
-            export_conditions,
-            dependency_environment: authenticated.dependency_environment(),
-        }],
+        contracts,
     })
     .map_err(|error| ReceiptPublicationError::Io(error.to_string()))?;
     pointer.push(b'\n');
-    let catalog_path = root.join("accepted-contracts.json");
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| ReceiptPublicationError::Io(error.to_string()))?
@@ -1796,6 +1853,8 @@ pub fn publish_policy2_catalog(
         main_path,
         receipt_path,
         catalog_path,
+        retained_entries,
+        replaced_entries: existing_count - retained_entries,
     })
 }
 
@@ -1846,6 +1905,11 @@ pub enum ReceiptPublicationError {
     ContentAddressCollision,
     #[error("policy-2 publication lacks an authenticated exact receipt: {0}")]
     Unauthenticated(String),
+    #[error(
+        "the existing accepted-contract catalog {catalog} cannot be merged into: {reason}; \
+         re-certify those packages with the same issuer configuration, or move the catalog aside"
+    )]
+    MergeRefused { catalog: String, reason: String },
 }
 
 #[cfg(test)]

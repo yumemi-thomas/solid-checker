@@ -1129,6 +1129,8 @@ fn publication_commits_one_pointer_after_both_content_objects() {
         },
     )
     .unwrap();
+    let configuration =
+        Policy2TrustConfiguration::new(trust.clone(), Some(issuer.scope().into())).unwrap();
     let resolved = resolved_import();
     let root = std::env::temp_dir().join(format!(
         "solid-checker-policy2-publication-{}-{}",
@@ -1147,7 +1149,8 @@ fn publication_commits_one_pointer_after_both_content_objects() {
             &changed_receipt,
             &authenticated,
             &resolved,
-            CONDITIONS
+            CONDITIONS,
+            &configuration
         ),
         Err(ReceiptPublicationError::Unauthenticated(_))
     ));
@@ -1167,7 +1170,8 @@ fn publication_commits_one_pointer_after_both_content_objects() {
             &receipt,
             &authenticated,
             &resolved,
-            CONDITIONS
+            CONDITIONS,
+            &configuration
         ),
         Err(ReceiptPublicationError::Unauthenticated(_))
     ));
@@ -1179,6 +1183,7 @@ fn publication_commits_one_pointer_after_both_content_objects() {
         &authenticated,
         &resolved,
         CONDITIONS,
+        &configuration,
     )
     .unwrap();
     assert_eq!(fs::read(&published.main_path).unwrap(), main);
@@ -1246,6 +1251,7 @@ fn normal_catalog_discovery_authenticates_the_published_policy2_entry() {
         },
     )
     .unwrap();
+    let configuration = Policy2TrustConfiguration::new(trust, Some(issuer.scope().into())).unwrap();
     let published = publish_policy2_catalog(
         &root.join(".solid-checker"),
         &main,
@@ -1253,9 +1259,9 @@ fn normal_catalog_discovery_authenticates_the_published_policy2_entry() {
         &authenticated,
         &resolved,
         std::slice::from_ref(&"import".to_owned()),
+        &configuration,
     )
     .unwrap();
-    let configuration = Policy2TrustConfiguration::new(trust, Some(issuer.scope().into())).unwrap();
     let accepted = crate::contract_interface::read_accepted_contract_catalog_with_trust(
         &published.catalog_path,
         Some(&configuration),
@@ -1377,6 +1383,7 @@ fn a_project_catalog_is_admitted_by_artifact_only_in_its_certified_environment()
             &authenticated,
             &resolved,
             &conditions,
+            &configuration,
         )
         .unwrap()
         .catalog_path
@@ -1512,4 +1519,162 @@ fn the_acquired_empty_environment_is_not_the_ambiguous_v1_empty_root() {
         Some(Vec::new()),
         "the acquired empty root is a genuine empty environment"
     );
+}
+
+/// `contract certify` accumulates: a second publication keeps every entry for
+/// another import or artifact, replaces only the one for the same import or the
+/// same artifact identity, and refuses -- naming it -- to merge into a catalog
+/// whose existing entries do not authenticate.
+#[test]
+fn publication_merges_into_the_existing_project_catalog() {
+    let root = std::env::temp_dir().join(format!(
+        "solid-checker-policy2-merge-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let resolved = materialized_resolved_import(&root);
+    let main = canonical_main(MAIN);
+    let normalized = contract_document::decode(&main)
+        .unwrap()
+        .normalize()
+        .unwrap();
+    let issuer = local_issuer(47);
+    let template = bindings(&main);
+    let trust = trust_store(&issuer, &template, None);
+    let configuration =
+        Policy2TrustConfiguration::new(trust.clone(), Some(issuer.scope().into())).unwrap();
+    let directory = root.join(".solid-checker");
+    // One acceptance of the fixture package, imported from `file`, stating
+    // `acceptance` as its artifact root (empty: none).
+    let publish = |file: &str, acceptance: &str| {
+        let importer = root.canonicalize().unwrap().join(file);
+        fs::create_dir_all(importer.parent().unwrap()).unwrap();
+        fs::write(&importer, b"fixture").unwrap();
+        let mut resolved = resolved.clone();
+        resolved.importer = importer.to_string_lossy().into_owned();
+        let mut bindings = template.clone();
+        bindings.importer = resolved.importer.clone();
+        bindings.specifier = resolved.specifier.clone();
+        bindings.resolved_import_root = policy2_resolved_import_root(&resolved).unwrap();
+        bindings.artifact_acceptance_root = acceptance.to_owned();
+        bindings.dependency_environment_root = policy2_dependency_environment_root(&[]);
+        bindings.closed_claims_root =
+            solid_reactive_ir::contract_semantics::proof::policy2_closed_claims_root(
+                &normalized,
+                &normalized.artifact_cases()[0].id,
+            )
+            .unwrap()
+            .as_str()
+            .into();
+        let receipt = issue_policy2_receipt(&main, &bindings, &issuer).unwrap();
+        let authenticated = authenticate_policy2_receipt(
+            &main,
+            &receipt,
+            &bindings,
+            Policy2ReceiptProvenance::PersistentLocal {
+                trust_store: &trust,
+                scope: issuer.scope(),
+            },
+        )
+        .unwrap()
+        .with_dependency_environment(Vec::new())
+        .unwrap();
+        publish_policy2_catalog(
+            &directory,
+            &main,
+            &receipt,
+            &authenticated,
+            &resolved,
+            CONDITIONS,
+            &configuration,
+        )
+        .map(|published| (published, resolved.importer.clone()))
+    };
+    let importers = |path: &Path| -> Vec<String> {
+        let catalog: serde_json::Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        catalog["contracts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| entry["import"]["importer"].as_str().unwrap().to_owned())
+            .collect()
+    };
+
+    // Certify A, then B: both are kept, and both authenticate.
+    let (first, a) = publish("src/A.tsx", "").unwrap();
+    assert_eq!((first.retained_entries, first.replaced_entries), (0, 0));
+    let (second, b) = publish("src/B.tsx", "").unwrap();
+    assert_eq!((second.retained_entries, second.replaced_entries), (1, 0));
+    assert_eq!(importers(&second.catalog_path), [a.clone(), b.clone()]);
+    let index = crate::contract_interface::read_accepted_contract_catalog_with_trust(
+        &second.catalog_path,
+        Some(&configuration),
+    )
+    .unwrap();
+    for importer in [&a, &b] {
+        assert!(
+            index
+                .resolve_name(importer, &resolved.specifier, "createDebounce")
+                .is_ok(),
+            "{importer} is admitted after the second publication"
+        );
+    }
+
+    // Re-certify A: A is replaced, B is kept.
+    let (third, _) = publish("src/A.tsx", "").unwrap();
+    assert_eq!((third.retained_entries, third.replaced_entries), (1, 1));
+    assert_eq!(importers(&third.catalog_path), [b.clone(), a.clone()]);
+
+    // The same artifact identity from another import replaces too: two
+    // acceptances of one artifact in one environment are one statement.
+    let identity = policy2_artifact_acceptance_root(&resolved, CONDITIONS).unwrap();
+    let (fourth, c) = publish("src/C.tsx", &identity).unwrap();
+    assert_eq!((fourth.retained_entries, fourth.replaced_entries), (2, 0));
+    let (fifth, d) = publish("src/D.tsx", &identity).unwrap();
+    assert_eq!((fifth.retained_entries, fifth.replaced_entries), (2, 1));
+    assert_eq!(importers(&fifth.catalog_path), [b.clone(), a.clone(), d]);
+    assert!(!importers(&fifth.catalog_path).contains(&c));
+
+    // A corrupted existing entry refuses the merge, names the entry, and
+    // leaves the catalog exactly as it was.
+    let mut catalog: serde_json::Value =
+        serde_json::from_slice(&fs::read(&fifth.catalog_path).unwrap()).unwrap();
+    catalog["contracts"][1]["documentDigest"] = digest_bytes(b"not the document").into();
+    let corrupted = serde_json::to_vec(&catalog).unwrap();
+    fs::write(&fifth.catalog_path, &corrupted).unwrap();
+    let Err(ReceiptPublicationError::MergeRefused { reason, .. }) = publish("src/E.tsx", "") else {
+        panic!("a merge over an entry that does not authenticate must be refused");
+    };
+    assert!(reason.contains("entry 1"), "{reason}");
+    assert!(reason.contains(&a), "{reason}");
+    assert_eq!(fs::read(&fifth.catalog_path).unwrap(), corrupted);
+
+    // So does an existing catalog another issuer signed: the new trust
+    // configuration could not read it.
+    fs::write(
+        &fifth.catalog_path,
+        serde_json::to_vec(&{
+            let mut clean = catalog.clone();
+            clean["contracts"][1]["documentDigest"] = digest_bytes(&main).into();
+            clean
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    let other = local_issuer(48);
+    let other_configuration = Policy2TrustConfiguration::new(
+        trust_store(&other, &template, None),
+        Some(other.scope().into()),
+    )
+    .unwrap();
+    let Err(error) =
+        crate::contract_interface::catalog_merge_keys(&fifth.catalog_path, &other_configuration)
+    else {
+        panic!("another issuer's catalog does not authenticate under this trust");
+    };
+    assert!(error.contains("3 of its entries"), "{error}");
+    fs::remove_dir_all(root).unwrap();
 }

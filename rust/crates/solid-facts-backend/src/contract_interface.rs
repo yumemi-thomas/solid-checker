@@ -699,69 +699,176 @@ pub fn authenticated_catalog_entries(
     trust: &Policy2TrustConfiguration,
 ) -> Result<Vec<AuthenticatedCatalogEntry>, ContractFailure> {
     let (catalog, base) = decode_accepted_contract_catalog(path)?;
-    let mut entries = Vec::with_capacity(catalog.contracts.len());
-    for mut entry in catalog.contracts {
-        let provenance = match entry.status {
-            AcceptedCatalogStatus::ObsoletePolicy1 => {
-                return Err(ContractFailure::ReceiptAuthenticationRequired);
-            }
-            AcceptedCatalogStatus::Policy2PersistentLocal => {
-                Policy2ReceiptProvenance::PersistentLocal {
-                    trust_store: trust.trust_store(),
-                    scope: trust
-                        .persistent_local_scope()
-                        .ok_or(ContractFailure::ReceiptAuthenticationRequired)?,
-                }
-            }
-            AcceptedCatalogStatus::Policy2Portable => Policy2ReceiptProvenance::Portable {
+    catalog
+        .contracts
+        .into_iter()
+        .map(|entry| authenticate_catalog_entry(&base, entry, trust))
+        .collect()
+}
+
+/// One catalog entry through the ordinary loader, so a bundle candidate or a
+/// merge survivor is exactly what this project would have accepted from the
+/// catalog on disk.
+fn authenticate_catalog_entry(
+    base: &Path,
+    mut entry: AcceptedCatalogEntry,
+    trust: &Policy2TrustConfiguration,
+) -> Result<AuthenticatedCatalogEntry, ContractFailure> {
+    let provenance = match entry.status {
+        AcceptedCatalogStatus::ObsoletePolicy1 => {
+            return Err(ContractFailure::ReceiptAuthenticationRequired);
+        }
+        AcceptedCatalogStatus::Policy2PersistentLocal => {
+            Policy2ReceiptProvenance::PersistentLocal {
                 trust_store: trust.trust_store(),
-            },
-        };
-        let document = read_boundary_file(
-            &catalog_member_path(&base, &entry.document)?,
-            MAX_CONTRACT_DOCUMENT_BYTES,
-            "contract",
-            false,
-        )?;
-        let receipt_path = entry
-            .receipt
-            .as_deref()
-            .ok_or_else(|| catalog_field("policy-2 entry has no receipt path"))
-            .and_then(|path| catalog_member_path(&base, path))?;
-        let receipt = read_boundary_file(&receipt_path, MAX_RECEIPT_BYTES, "receipt", true)?;
-        let bindings = entry
-            .bindings
-            .clone()
-            .ok_or_else(|| catalog_field("policy-2 entry has no receipt bindings"))?;
-        verify_catalog_digest(
-            &document,
-            entry.document_digest.as_deref(),
-            "documentDigest",
-        )?;
-        verify_catalog_digest(&receipt, entry.receipt_digest.as_deref(), "receiptDigest")?;
-        rebase_catalog_import(&base, &mut entry.import)?;
-        // The ordinary loader, so a bundle candidate is exactly what this
-        // project would have accepted from the catalog on disk.
-        load_authenticated_policy2_contract(
-            &document,
-            &receipt,
-            &entry.import,
-            &bindings,
-            provenance,
-        )?;
-        let dependency_environment =
-            verified_dependency_environment(&bindings, entry.dependency_environment.as_deref())?;
-        entries.push(AuthenticatedCatalogEntry {
-            canonical_main: canonicalize_policy2_main(&document).map_err(authentication_error)?,
-            bindings,
-            dependency_environment,
-            import: entry.import,
-            export_conditions: entry
-                .export_conditions
-                .unwrap_or_else(|| vec!["import".to_owned()]),
-        });
+                scope: trust
+                    .persistent_local_scope()
+                    .ok_or(ContractFailure::ReceiptAuthenticationRequired)?,
+            }
+        }
+        AcceptedCatalogStatus::Policy2Portable => Policy2ReceiptProvenance::Portable {
+            trust_store: trust.trust_store(),
+        },
+    };
+    let document = read_boundary_file(
+        &catalog_member_path(base, &entry.document)?,
+        MAX_CONTRACT_DOCUMENT_BYTES,
+        "contract",
+        false,
+    )?;
+    let receipt_path = entry
+        .receipt
+        .as_deref()
+        .ok_or_else(|| catalog_field("policy-2 entry has no receipt path"))
+        .and_then(|path| catalog_member_path(base, path))?;
+    let receipt = read_boundary_file(&receipt_path, MAX_RECEIPT_BYTES, "receipt", true)?;
+    let bindings = entry
+        .bindings
+        .clone()
+        .ok_or_else(|| catalog_field("policy-2 entry has no receipt bindings"))?;
+    verify_catalog_digest(
+        &document,
+        entry.document_digest.as_deref(),
+        "documentDigest",
+    )?;
+    verify_catalog_digest(&receipt, entry.receipt_digest.as_deref(), "receiptDigest")?;
+    rebase_catalog_import(base, &mut entry.import)?;
+    load_authenticated_policy2_contract(&document, &receipt, &entry.import, &bindings, provenance)?;
+    let dependency_environment =
+        verified_dependency_environment(&bindings, entry.dependency_environment.as_deref())?;
+    Ok(AuthenticatedCatalogEntry {
+        canonical_main: canonicalize_policy2_main(&document).map_err(authentication_error)?,
+        bindings,
+        dependency_environment,
+        import: entry.import,
+        export_conditions: entry
+            .export_conditions
+            .unwrap_or_else(|| vec!["import".to_owned()]),
+    })
+}
+
+/// One entry of an existing project catalog that a new publication keeps, in
+/// the exact JSON it was published as, with the two keys a publication
+/// replaces by.
+pub(crate) struct RetainedCatalogEntry {
+    pub(crate) raw: serde_json::Value,
+    /// `(importer, specifier)`, rebased to absolute paths: the index key two
+    /// entries may not share (`AcceptedContractIndex::new` refuses it).
+    pub(crate) import_key: (String, String),
+    /// `(artifactAcceptanceRoot, dependencyEnvironmentRoot)` as signed, when
+    /// the receipt states an acceptance root: the artifact identity.
+    pub(crate) artifact_identity: Option<(String, String)>,
+}
+
+/// The two keys one authenticated catalog entry occupies, for a publisher
+/// deciding what a new publication replaces (see
+/// [`crate::contract_certification::publish_policy2_catalog`]).
+#[doc(hidden)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CatalogMergeKey {
+    pub importer: String,
+    pub specifier: String,
+    /// `(artifactAcceptanceRoot, dependencyEnvironmentRoot)` as signed, when
+    /// the receipt states an acceptance root.
+    pub artifact_identity: Option<(String, String)>,
+}
+
+/// [`catalog_entries_for_merge`] for a publisher outside this crate (the
+/// case-set pointer, which the CLI binary owns): the keys only.
+#[doc(hidden)]
+pub fn catalog_merge_keys(
+    path: &Path,
+    trust: &Policy2TrustConfiguration,
+) -> Result<Vec<CatalogMergeKey>, String> {
+    Ok(catalog_entries_for_merge(path, trust)?
+        .into_iter()
+        .map(|entry| CatalogMergeKey {
+            importer: entry.import_key.0,
+            specifier: entry.import_key.1,
+            artifact_identity: entry.artifact_identity,
+        })
+        .collect())
+}
+
+/// Reads the catalog a new publication is about to merge into, and refuses
+/// the merge -- naming every entry that failed -- unless every entry
+/// authenticates under `trust`, the trust configuration the new publication
+/// ships.
+///
+/// Dropping an entry that does not authenticate would lose a contract without
+/// a word; keeping it would publish a catalog whose one trust configuration
+/// cannot read it, and that fails the *whole* catalog for every consumer. So
+/// neither: the caller refuses and says which entries are in the way.
+pub(crate) fn catalog_entries_for_merge(
+    path: &Path,
+    trust: &Policy2TrustConfiguration,
+) -> Result<Vec<RetainedCatalogEntry>, String> {
+    // One read, decoded twice: the typed reader authenticates, and the raw
+    // entries are what the merged catalog carries forward unchanged.
+    let bytes = read_boundary_file(path, MAX_CATALOG_BYTES, "accepted contract catalog", false)
+        .map_err(|error| error.to_string())?;
+    let (catalog, base) =
+        decode_accepted_contract_catalog_bytes(path, &bytes).map_err(|error| error.to_string())?;
+    let raw = serde_json::from_slice::<serde_json::Value>(&bytes)
+        .ok()
+        .and_then(|document| {
+            document
+                .get("contracts")
+                .and_then(serde_json::Value::as_array)
+                .cloned()
+        })
+        .filter(|raw| raw.len() == catalog.contracts.len())
+        .ok_or_else(|| "its contracts array cannot be re-read".to_owned())?;
+    let mut retained = Vec::with_capacity(raw.len());
+    let mut refused = Vec::new();
+    for (index, (entry, raw)) in catalog.contracts.into_iter().zip(raw).enumerate() {
+        let label = format!(
+            "entry {index} ({} imported from {})",
+            entry.import.specifier, entry.import.importer
+        );
+        match authenticate_catalog_entry(&base, entry, trust) {
+            Ok(entry) => retained.push(RetainedCatalogEntry {
+                raw,
+                import_key: (entry.import.importer, entry.import.specifier),
+                artifact_identity: (!entry.bindings.artifact_acceptance_root.is_empty()).then_some(
+                    (
+                        entry.bindings.artifact_acceptance_root,
+                        entry.bindings.dependency_environment_root,
+                    ),
+                ),
+            }),
+            Err(error) => refused.push(format!("{label}: {error}")),
+        }
     }
-    Ok(entries)
+    if refused.is_empty() {
+        Ok(retained)
+    } else {
+        Err(format!(
+            "{} of its entries do not authenticate under the new trust configuration: {}",
+            refused.len(),
+            refused.join("; ")
+        ))
+    }
 }
 
 /// The receipt's importer-free artifact identity, but only when this
@@ -926,6 +1033,71 @@ pub fn admitted_project_artifacts(
         installed_integrity,
         resolved_target,
         installed_environment,
+    ))
+}
+
+/// Why each project-catalog acceptance by artifact was or was not admitted
+/// by steps 1-3 of the admission rule ([`crate::accepted_bundles::
+/// admission_refusals`]), for `contract check` to say why a package with a
+/// catalog entry is still `missing`. Diagnostic only: it admits nothing, and
+/// unlike [`admitted_project_artifacts`] it keeps entries that state no
+/// environment, because that is one of the answers it exists to give.
+pub fn project_admission_refusals(
+    catalogs: &[PathBuf],
+    installed_integrity: &InstalledArtifactIdentity,
+    installed_difference: &crate::accepted_bundles::InstalledEnvironmentDifference,
+) -> Result<Vec<(String, Option<crate::accepted_bundles::AdmissionRefusal>)>, ContractFailure> {
+    let mut candidates = Vec::new();
+    for path in catalogs {
+        let (catalog, _) = decode_accepted_contract_catalog(path)?;
+        for entry in catalog.contracts {
+            if !matches!(
+                entry.status,
+                AcceptedCatalogStatus::Policy2PersistentLocal
+                    | AcceptedCatalogStatus::Policy2Portable
+            ) {
+                continue;
+            }
+            let Some(bindings) = entry
+                .bindings
+                .as_ref()
+                .filter(|bindings| !bindings.artifact_acceptance_root.is_empty())
+            else {
+                continue;
+            };
+            let environment =
+                verified_dependency_environment(bindings, entry.dependency_environment.as_deref())?;
+            let (runtime_target, declaration_target) =
+                package_relative_targets(&entry.import).unwrap_or_default();
+            candidates.push((
+                ProjectCandidate {
+                    identity: String::new(),
+                    specifier: entry.import.specifier.clone(),
+                    requested_entrypoint: entry.import.requested_entrypoint.clone(),
+                    acceptance_root: bindings.artifact_acceptance_root.clone(),
+                    conditions: entry
+                        .export_conditions
+                        .clone()
+                        .unwrap_or_else(|| vec!["import".to_owned()]),
+                    runtime_target,
+                    declaration_target,
+                    environment: environment.clone().unwrap_or_default(),
+                },
+                environment.is_some(),
+                entry.import.package_version.clone(),
+            ));
+        }
+    }
+    Ok(crate::accepted_bundles::admission_refusals(
+        candidates.iter().map(|(candidate, stated, version)| {
+            let mut acceptance = candidate.acceptance();
+            if !stated {
+                acceptance.environment = None;
+            }
+            (acceptance, version.as_str())
+        }),
+        installed_integrity,
+        installed_difference,
     ))
 }
 
@@ -1157,9 +1329,28 @@ pub fn discovered_catalog_paths(directory: &Path) -> Result<Vec<PathBuf>, Contra
         false,
     )?;
     let pointer: CaseSetPointerDocument = decode_case_set_json(&pointer_bytes)?;
-    if pointer.format != "solid-checker-accepted-contract-case-set-pointer"
-        || pointer.case_set_version != 1
-    {
+    // Version 1 names one case set; version 2 names every case set the
+    // project holds, one per package, so a second certification no longer
+    // replaces the first.
+    let references = match (
+        pointer.case_set_version,
+        pointer.document,
+        pointer.document_digest,
+    ) {
+        (1, Some(document), Some(document_digest)) if pointer.case_sets.is_empty() => {
+            vec![CaseSetReference {
+                document,
+                document_digest,
+            }]
+        }
+        (2, None, None) if pointer.case_sets.len() >= 2 => pointer.case_sets,
+        _ => {
+            return Err(catalog_field(
+                "accepted contract case-set pointer has an unsupported format",
+            ));
+        }
+    };
+    if pointer.format != "solid-checker-accepted-contract-case-set-pointer" {
         return Err(catalog_field(
             "accepted contract case-set pointer has an unsupported format",
         ));
@@ -1167,7 +1358,19 @@ pub fn discovered_catalog_paths(directory: &Path) -> Result<Vec<PathBuf>, Contra
     let pointer_base = pointer_path
         .parent()
         .ok_or_else(|| catalog_field("accepted contract case-set pointer has no directory"))?;
-    let document_path = catalog_member_path(pointer_base, &pointer.document)?;
+    for reference in &references {
+        paths.extend(case_set_catalog_paths(pointer_base, reference)?);
+    }
+    Ok(paths)
+}
+
+/// The case catalogs one digest-verified case-set document names.
+fn case_set_catalog_paths(
+    pointer_base: &Path,
+    reference: &CaseSetReference,
+) -> Result<Vec<PathBuf>, ContractFailure> {
+    let mut paths = Vec::new();
+    let document_path = catalog_member_path(pointer_base, &reference.document)?;
     let document_bytes = read_boundary_file(
         &document_path,
         MAX_CATALOG_BYTES,
@@ -1176,7 +1379,7 @@ pub fn discovered_catalog_paths(directory: &Path) -> Result<Vec<PathBuf>, Contra
     )?;
     verify_catalog_digest(
         &document_bytes,
-        Some(pointer.document_digest.as_str()),
+        Some(reference.document_digest.as_str()),
         "caseSetDocumentDigest",
     )?;
     let document: CaseSetDocument = decode_case_set_json(&document_bytes)?;
@@ -1221,6 +1424,17 @@ fn decode_case_set_json<T: serde::de::DeserializeOwned>(
 struct CaseSetPointerDocument {
     format: String,
     case_set_version: u16,
+    #[serde(default)]
+    document: Option<String>,
+    #[serde(default)]
+    document_digest: Option<String>,
+    #[serde(default)]
+    case_sets: Vec<CaseSetReference>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CaseSetReference {
     document: String,
     document_digest: String,
 }
@@ -1287,8 +1501,15 @@ fn decode_accepted_contract_catalog(
     path: &Path,
 ) -> Result<(AcceptedCatalogDocument, PathBuf), ContractFailure> {
     let bytes = read_boundary_file(path, MAX_CATALOG_BYTES, "accepted contract catalog", false)?;
+    decode_accepted_contract_catalog_bytes(path, &bytes)
+}
+
+fn decode_accepted_contract_catalog_bytes(
+    path: &Path,
+    bytes: &[u8],
+) -> Result<(AcceptedCatalogDocument, PathBuf), ContractFailure> {
     let catalog: AcceptedCatalogDocument = crate::bounded_json::decode(
-        &bytes,
+        bytes,
         crate::bounded_json::Limits {
             bytes: MAX_CATALOG_BYTES,
             depth: MAX_BOUNDARY_DEPTH,
@@ -1711,6 +1932,70 @@ mod tests {
         for path in &found {
             assert!(path.is_file(), "{path:?} is a real catalog");
         }
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    /// Pointer version 2 names every case set the project holds, so a second
+    /// package's case set no longer replaces the first; version 1 still reads.
+    #[test]
+    fn discovery_reads_every_case_set_a_version_2_pointer_names() {
+        let project = published_case_set("pointer-v2", 2);
+        let catalog_root = project.join(".solid-checker");
+        let pointer_path = catalog_root.join("accepted-contract-case-set.json");
+        let v1: serde_json::Value =
+            serde_json::from_slice(&fs::read(&pointer_path).unwrap()).unwrap();
+        let document = v1["document"].as_str().unwrap().to_owned();
+        let digest = v1["documentDigest"].as_str().unwrap().to_owned();
+        // A second case set: the same verified bytes under another key.
+        let first = catalog_root.join(&document);
+        let second_dir = catalog_root.join("case-sets/second");
+        fs::create_dir_all(&second_dir).unwrap();
+        fs::copy(&first, second_dir.join("accepted-contract-case-set.json")).unwrap();
+        let cases = first.parent().unwrap().join("cases");
+        for case in fs::read_dir(&cases).unwrap() {
+            let case = case.unwrap();
+            let target = second_dir.join("cases").join(case.file_name());
+            fs::create_dir_all(&target).unwrap();
+            fs::copy(
+                case.path().join("accepted-contracts.json"),
+                target.join("accepted-contracts.json"),
+            )
+            .unwrap();
+        }
+        let write = |value: serde_json::Value| {
+            fs::write(&pointer_path, serde_json::to_vec(&value).unwrap()).unwrap();
+        };
+        write(serde_json::json!({
+            "format": "solid-checker-accepted-contract-case-set-pointer",
+            "caseSetVersion": 2,
+            "caseSets": [
+                { "document": document, "documentDigest": digest },
+                { "document": "case-sets/second/accepted-contract-case-set.json", "documentDigest": digest },
+            ],
+        }));
+        let found = discovered_catalog_paths(&project).expect("a version-2 pointer resolves");
+        assert_eq!(
+            found.len(),
+            4,
+            "both case sets' catalogs are discovered: {found:?}"
+        );
+        // Version 2 with one case set is not a spelling this writer produces.
+        write(serde_json::json!({
+            "format": "solid-checker-accepted-contract-case-set-pointer",
+            "caseSetVersion": 2,
+            "caseSets": [{ "document": document, "documentDigest": digest }],
+        }));
+        assert!(discovered_catalog_paths(&project).is_err());
+        // A tampered member is refused, whichever set names it.
+        write(serde_json::json!({
+            "format": "solid-checker-accepted-contract-case-set-pointer",
+            "caseSetVersion": 2,
+            "caseSets": [
+                { "document": document, "documentDigest": digest },
+                { "document": "case-sets/second/accepted-contract-case-set.json", "documentDigest": sha256_digest(b"other") },
+            ],
+        }));
+        assert!(discovered_catalog_paths(&project).is_err());
         let _ = fs::remove_dir_all(&project);
     }
 

@@ -3351,6 +3351,51 @@ async function executeNativeCertification({
   };
 }
 
+/// Whether the catalog root already publishes an acceptance for `packageName`,
+/// in its plain catalog or any case set its pointer names.
+///
+/// Conservative in the direction the recovery guards need: anything it cannot
+/// read -- an unparsable file, a pointer version it does not know, no package
+/// name to ask about -- answers `true`, as the bare directory check it replaces
+/// did for every existing root. Only a root whose every published entry is
+/// readable and names another package answers `false`.
+export function publicationHoldsPackage(catalogRoot, packageName) {
+  if (!existsSync(catalogRoot)) return false;
+  if (typeof packageName !== "string" || !packageName) return true;
+  const readJson = path => JSON.parse(readFileSync(path, "utf8"));
+  const catalogHolds = path => {
+    const catalog = readJson(path);
+    if (!Array.isArray(catalog?.contracts)) throw new Error("unreadable catalog");
+    return catalog.contracts.some(entry => entry?.import?.packageName !== undefined
+      ? entry.import.packageName === packageName
+      : true);
+  };
+  try {
+    const plain = join(catalogRoot, "accepted-contracts.json");
+    if (existsSync(plain) && catalogHolds(plain)) return true;
+    const pointerPath = join(catalogRoot, "accepted-contract-case-set.json");
+    if (!existsSync(pointerPath)) return false;
+    const pointer = readJson(pointerPath);
+    const documents = pointer?.caseSetVersion === 1 ? [pointer.document]
+      : pointer?.caseSetVersion === 2 && Array.isArray(pointer.caseSets)
+        ? pointer.caseSets.map(reference => reference?.document)
+        : null;
+    if (!documents || documents.some(document => typeof document !== "string")) return true;
+    for (const document of documents) {
+      const documentPath = join(catalogRoot, document);
+      const caseSet = readJson(documentPath);
+      if (!Array.isArray(caseSet?.cases)) return true;
+      for (const entry of caseSet.cases) {
+        if (typeof entry?.catalog !== "string") return true;
+        if (catalogHolds(join(dirname(documentPath), entry.catalog))) return true;
+      }
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 export async function executeNativeOrGraphCertification({
   options,
   generated,
@@ -3366,7 +3411,10 @@ export async function executeNativeOrGraphCertification({
   // A refused native attempt can itself create this directory. Capture the
   // protection before either lane runs, never reinterpret that later directory
   // as a pre-existing publication or discard a publication that was here.
-  const existingPublication = existsSync(catalogRoot);
+  // Since catalogs accumulate (one entry per package), "a publication exists"
+  // means one for *this* package: a recovery subset can only replace this
+  // package's entries, never another's.
+  const existingPublication = publicationHoldsPackage(catalogRoot, artifactSnapshot?.package);
   const certifyGenerated = async (recovery, destination = options, publicationExists = existingPublication, trialPrefix = "independent-case-trial") => {
     if (recovery) {
       let round = 0;

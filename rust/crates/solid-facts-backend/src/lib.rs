@@ -5,7 +5,10 @@
 compile_error!("solid-facts-backend requires at least one dialect feature");
 
 mod accepted_bundles;
-pub use accepted_bundles::{admitted_bundle_artifacts, compiled_in_accepted_contracts};
+pub use accepted_bundles::{
+    AdmissionRefusal, admitted_bundle_artifacts, bundle_admission_refusals,
+    compiled_in_accepted_contracts,
+};
 
 mod artifact_resolution;
 mod bounded_json;
@@ -148,17 +151,18 @@ pub use contract_certification::{
 pub use contract_document::SidecarDigests;
 pub use contract_interface::{
     AcceptedContractSource, AcceptedDependencyEdge, AffectedClaimDomain, ArtifactResolutionFailure,
-    ArtifactResolver, ArtifactResolverChain, BundledEvidenceStore, ClosureEntry, ClosureFileRole,
-    ClosureHazard, ClosureHazardKind, ClosureInput, ClosureManifest, ClosurePackageIdentity,
-    ContractFailure, EvidenceKey, EvidenceStore, EvidenceStoreFailure, HostResolutionAdapter,
-    ImportRequest, LocalEvidenceStore, ReceiptStore, ResolutionAuthority, ResolutionTrace,
-    ResolutionTraceStep, ResolvedExportBinding, ResolvedExportTarget, ResolvedFile, ResolvedImport,
-    StandaloneResolutionAdapter, TypeFactsResolutionAdapter, accepted_contract_catalog_members,
-    discovered_catalog_paths, load_accepted_contract, load_accepted_contract_index,
-    load_authenticated_policy2_contract, load_authenticated_policy2_embedded_contract,
-    load_external_contract_index, read_accepted_contract_catalog,
-    read_accepted_contract_catalog_with_trust, read_external_contract_catalog_with_trust,
-    read_policy2_trust_configuration, read_proposal_dependency_catalog_for_generation,
+    ArtifactResolver, ArtifactResolverChain, BundledEvidenceStore, CatalogMergeKey, ClosureEntry,
+    ClosureFileRole, ClosureHazard, ClosureHazardKind, ClosureInput, ClosureManifest,
+    ClosurePackageIdentity, ContractFailure, EvidenceKey, EvidenceStore, EvidenceStoreFailure,
+    HostResolutionAdapter, ImportRequest, LocalEvidenceStore, ReceiptStore, ResolutionAuthority,
+    ResolutionTrace, ResolutionTraceStep, ResolvedExportBinding, ResolvedExportTarget,
+    ResolvedFile, ResolvedImport, StandaloneResolutionAdapter, TypeFactsResolutionAdapter,
+    accepted_contract_catalog_members, catalog_merge_keys, discovered_catalog_paths,
+    load_accepted_contract, load_accepted_contract_index, load_authenticated_policy2_contract,
+    load_authenticated_policy2_embedded_contract, load_external_contract_index,
+    read_accepted_contract_catalog, read_accepted_contract_catalog_with_trust,
+    read_external_contract_catalog_with_trust, read_policy2_trust_configuration,
+    read_proposal_dependency_catalog_for_generation,
 };
 pub use contract_workflow::{
     ContractWorkflowError, ProposalArtifacts, merge_plans, review as review_contract_document,
@@ -167,8 +171,9 @@ pub use diagnostics::{
     DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, PackageContractStatus,
     PackageSummary, RequestedRuleEnablement, Snapshot, SnapshotEvidence, SnapshotFinding,
     SnapshotFix, SnapshotTextEdit, SourceLocation, accepted_package_contract_statuses,
-    admission_input_paths, admitted_bundled_artifacts, admitted_project_artifacts,
-    analysis_metrics, analyze_project_accepted_measured_with_enablement, discovered_contract_paths,
+    admission_input_paths, admission_refusal_details, admitted_bundled_artifacts,
+    admitted_project_artifacts, analysis_metrics,
+    analyze_project_accepted_measured_with_enablement, discovered_contract_paths,
     discovered_rule_options_path, imported_package_roots, project_accepted_contracts,
     semantic_demand_options_for_enablement, source_location, unsupported_runtime_snapshot,
 };

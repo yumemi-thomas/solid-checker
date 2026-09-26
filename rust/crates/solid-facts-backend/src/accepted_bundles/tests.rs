@@ -864,3 +864,132 @@ fn a_consumer_tree_gets_only_the_certification_of_its_own_environment() {
     assert!(admit().is_empty());
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+/// The diagnostic twin of `environment_is_installed` names the first entry
+/// that differs, with the installed version beside the certified one, and
+/// agrees with it on every tree.
+#[test]
+fn an_environment_difference_names_the_first_differing_package() {
+    let certified = entry("@solidjs/signals", "2.0.0-rc.6", "sha512-rc6");
+    let differs = |tree: &Tree, version_of: Option<&str>| {
+        let found = environment_difference(
+            std::slice::from_ref(&certified),
+            "root",
+            |from: &&str, name: &str| Ok(tree.resolves.get(&(*from, name)).copied()),
+            |at: &&str| tree.identities.get(at).cloned(),
+            |_: &&str| version_of.map(str::to_owned),
+        );
+        assert_eq!(
+            found.is_none(),
+            tree.installs(std::slice::from_ref(&certified)),
+            "the two readings agree"
+        );
+        found.map(|difference| difference.to_string())
+    };
+    assert_eq!(differs(&flat_tree(certified.clone()), None), None);
+    assert_eq!(
+        differs(
+            &flat_tree(entry("@solidjs/signals", "2.0.0-rc.0", "sha512-rc0")),
+            None
+        )
+        .as_deref(),
+        Some("@solidjs/signals installed 2.0.0-rc.0, certified 2.0.0-rc.6")
+    );
+    assert_eq!(
+        differs(
+            &flat_tree(entry("@solidjs/signals", "2.0.0-rc.6", "sha512-other")),
+            None
+        )
+        .as_deref(),
+        Some(
+            "@solidjs/signals 2.0.0-rc.6 installed with integrity sha512-other, certified with sha512-rc6"
+        )
+    );
+    let unidentified = Tree {
+        resolves: BTreeMap::from([(("root", "@solidjs/signals"), "signals")]),
+        identities: BTreeMap::new(),
+    };
+    assert_eq!(
+        differs(&unidentified, Some("2.0.0-rc.3")).as_deref(),
+        Some("@solidjs/signals installed 2.0.0-rc.3, certified 2.0.0-rc.6")
+    );
+    let absent = Tree {
+        resolves: BTreeMap::new(),
+        identities: BTreeMap::new(),
+    };
+    assert_eq!(
+        differs(&absent, None).as_deref(),
+        Some("@solidjs/signals not installed, certified 2.0.0-rc.6")
+    );
+}
+
+/// `missing` says why: the admission steps replayed, first failure reported.
+#[test]
+fn admission_refusals_name_the_step_that_failed() {
+    let certified = [entry("@solidjs/signals", "2.0.0-rc.6", "sha512-rc6")];
+    let bundle = loaded_in(&certified);
+    let stated = || ArtifactAcceptance {
+        specifier: &bundle.specifier,
+        requested_entrypoint: &bundle.requested_entrypoint,
+        export_conditions: &bundle.export_conditions,
+        runtime_target: &bundle.runtime_target,
+        declaration_target: &bundle.declaration_target,
+        acceptance_root: &bundle.acceptance_root,
+        environment: bundle.environment.as_deref(),
+        identity: &bundle.identity,
+    };
+    let installed = |version: &'static str| {
+        move |_: &str| {
+            Some((
+                "plain-package".to_owned(),
+                version.to_owned(),
+                "sha512-published-integrity".to_owned(),
+            ))
+        }
+    };
+    let same = |_: &str, _: &[DependencyEnvironmentEntry]| None;
+    let rc0 = |_: &str, _: &[DependencyEnvironmentEntry]| {
+        Some("@solidjs/signals installed 2.0.0-rc.0, certified 2.0.0-rc.6".to_owned())
+    };
+    let refusal = |acceptance,
+                   installed: &InstalledArtifactIdentity,
+                   difference: &InstalledEnvironmentDifference| {
+        admission_refusals([(acceptance, "1.0.0")], installed, difference)
+            .pop()
+            .unwrap()
+            .1
+    };
+    assert_eq!(refusal(stated(), &installed("1.0.0"), &same), None);
+    assert_eq!(
+        refusal(stated(), &installed("1.0.0"), &rc0),
+        Some(AdmissionRefusal::EnvironmentDiffers(
+            "@solidjs/signals installed 2.0.0-rc.0, certified 2.0.0-rc.6".into()
+        ))
+    );
+    let wrong_version = refusal(stated(), &installed("1.0.1"), &rc0).unwrap();
+    assert!(
+        matches!(
+            wrong_version,
+            AdmissionRefusal::AcceptanceRootNotReproduced { .. }
+        ),
+        "the artifact step is checked before the environment"
+    );
+    assert_eq!(
+        wrong_version.to_string(),
+        "the installed package is 1.0.1, not the certified 1.0.0"
+    );
+    let mut unstated = stated();
+    unstated.environment = None;
+    assert_eq!(
+        refusal(unstated, &installed("1.0.1"), &rc0),
+        Some(AdmissionRefusal::NoEnvironmentStated)
+    );
+    assert_eq!(
+        refusal(stated(), &|_: &str| None, &same).map(|refusal| refusal.to_string()),
+        Some(
+            "the installed package has no exact lockfile integrity, so its acceptance root \
+             cannot be reproduced"
+                .into()
+        )
+    );
+}

@@ -290,6 +290,7 @@ fn certify(project: &Path, environment: Option<&[DependencyEnvironmentEntry]>) -
         &authenticated,
         &resolved,
         &conditions,
+        &trust,
     )
     .unwrap();
     // Certification states the entries beside the receipt, which signs only

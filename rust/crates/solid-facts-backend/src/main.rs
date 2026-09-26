@@ -692,6 +692,9 @@ struct Policy2CaseSetDocument {
     cases: Vec<Policy2CaseSetEntry>,
 }
 
+/// Version 1 of the case-set pointer: exactly one case set. Still what a
+/// project holding one case set is written as, so a checker that reads only
+/// version 1 keeps reading it.
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Policy2CaseSetPointer {
@@ -700,6 +703,26 @@ struct Policy2CaseSetPointer {
     document: String,
     document_digest: String,
 }
+
+/// Version 2: every case set the project holds, one per package, so that a
+/// second `contract certify` publishing a case set no longer replaces the
+/// first. Written only when there are at least two.
+#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Policy2CaseSetPointerV2 {
+    format: String,
+    case_set_version: u16,
+    case_sets: Vec<Policy2CaseSetReference>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Policy2CaseSetReference {
+    document: String,
+    document_digest: String,
+}
+
+const POLICY2_CASE_SET_POINTER_FORMAT: &str = "solid-checker-accepted-contract-case-set-pointer";
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct Policy2CaseCoordinate {
@@ -1173,6 +1196,17 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
     let trust_bytes =
         solid_facts_backend::encode_policy2_trust_configuration(finalized.trust_configuration())
             .map_err(|error| format!("policy-2 trust encoding failed: {error}"))?;
+    // The catalog first: publication merges into an existing catalog only
+    // when every entry already there authenticates under this trust
+    // configuration, and a refused merge must leave the trust file the
+    // existing catalog was published with in place.
+    plan.publish_finalized_policy2(Path::new(&request.catalog_root), &finalized)
+        .map_err(|error| {
+            format!(
+                "accepted-contract catalog publication failed at {}: {error}",
+                request.catalog_root
+            )
+        })?;
     write_atomic_file(Path::new(&request.trust_configuration_output), &trust_bytes).map_err(
         |error| {
             format!(
@@ -1181,13 +1215,6 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
             )
         },
     )?;
-    plan.publish_finalized_policy2(Path::new(&request.catalog_root), &finalized)
-        .map_err(|error| {
-            format!(
-                "accepted-contract catalog publication failed at {}: {error}",
-                request.catalog_root
-            )
-        })?;
 
     let current_executable = std::env::current_exe().map_err(|error| {
         format!("could not locate checker for fresh-process verification: {error}")
@@ -1679,26 +1706,16 @@ fn execute_contract_case_set_certification(
         serde_json::json!({ "root": "final" }),
     );
 
-    write_atomic_file(
+    let trust_bytes = trust_bytes
+        .as_deref()
+        .ok_or("case-set finalization produced no trust configuration")?;
+    publish_policy2_case_set_pointer(
+        catalog_root,
+        &final_root,
+        &case_set_digest,
+        trust_bytes,
         Path::new(&request.trust_configuration_output),
-        trust_bytes
-            .as_deref()
-            .ok_or("case-set finalization produced no trust configuration")?,
-    )?;
-    let pointer = Policy2CaseSetPointer {
-        format: "solid-checker-accepted-contract-case-set-pointer".into(),
-        case_set_version: 1,
-        document: format!("case-sets/{case_set_key}/accepted-contract-case-set.json"),
-        document_digest: case_set_digest,
-    };
-    let mut pointer_bytes = serde_json::to_vec(&pointer)?;
-    pointer_bytes.push(b'\n');
-    write_atomic_file(
-        &catalog_root.join("accepted-contract-case-set.json"),
-        &pointer_bytes,
-    )?;
-    verify_policy2_case_set_pointer(catalog_root)?;
-    Ok(())
+    )
 }
 
 fn execute_contract_graph_certification(
@@ -1823,13 +1840,15 @@ fn execute_contract_graph_certification(
         &final_root.join("root"),
         &final_root.join("policy2-trust.json"),
     )?;
-    write_atomic_file(Path::new(&request.trust_configuration_output), &trust_bytes)?;
     let root_plan = graph
         .plan(graph.root_identity())
         .ok_or("published graph lost its root plan")?;
+    // Catalog before trust, as on the single-case path: a refused merge must
+    // not replace the trust file the existing catalog is read with.
     root_plan
         .publish_finalized_policy2(catalog_root, finalized.root())
         .map_err(|error| format!("published graph root publication failed: {error}"))?;
+    write_atomic_file(Path::new(&request.trust_configuration_output), &trust_bytes)?;
     verify_policy2_case_set_in_fresh_process(
         request_path,
         catalog_root,
@@ -2034,26 +2053,16 @@ fn execute_contract_graph_case_set_certification(
         &final_root.join("policy2-trust.json"),
     )?;
 
-    write_atomic_file(
+    let trust_bytes = trust_bytes
+        .as_deref()
+        .ok_or("published graph case set produced no trust configuration")?;
+    publish_policy2_case_set_pointer(
+        catalog_root,
+        &final_root,
+        &case_set_digest,
+        trust_bytes,
         Path::new(&request.trust_configuration_output),
-        trust_bytes
-            .as_deref()
-            .ok_or("published graph case set produced no trust configuration")?,
-    )?;
-    let pointer = Policy2CaseSetPointer {
-        format: "solid-checker-accepted-contract-case-set-pointer".into(),
-        case_set_version: 1,
-        document: format!("case-sets/{case_set_key}/accepted-contract-case-set.json"),
-        document_digest: case_set_digest,
-    };
-    let mut pointer_bytes = serde_json::to_vec(&pointer)?;
-    pointer_bytes.push(b'\n');
-    write_atomic_file(
-        &catalog_root.join("accepted-contract-case-set.json"),
-        &pointer_bytes,
-    )?;
-    verify_policy2_case_set_pointer(catalog_root)?;
-    Ok(())
+    )
 }
 
 fn canonical_policy2_case_set(
@@ -2170,20 +2179,70 @@ fn verify_policy2_case_set_in_fresh_process(
     Ok(())
 }
 
-fn verify_policy2_case_set_pointer(catalog_root: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let pointer_bytes = fs::read(catalog_root.join("accepted-contract-case-set.json"))?;
-    let pointer: Policy2CaseSetPointer = serde_json::from_slice(&pointer_bytes)?;
-    if pointer.format != "solid-checker-accepted-contract-case-set-pointer"
-        || pointer.case_set_version != 1
-        || !is_canonical_sha256(&pointer.document_digest)
+/// Every case set the pointer under `catalog_root` names, from either pointer
+/// version, or none when there is no pointer.
+fn read_policy2_case_set_references(
+    catalog_root: &Path,
+) -> Result<Vec<Policy2CaseSetReference>, Box<dyn std::error::Error>> {
+    let pointer_path = catalog_root.join("accepted-contract-case-set.json");
+    let pointer_bytes = match fs::read(&pointer_path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error.into()),
+    };
+    let version = serde_json::from_slice::<serde_json::Value>(&pointer_bytes)?
+        .get("caseSetVersion")
+        .and_then(serde_json::Value::as_u64);
+    let references = match version {
+        Some(1) => {
+            let pointer: Policy2CaseSetPointer = serde_json::from_slice(&pointer_bytes)?;
+            if pointer.format != POLICY2_CASE_SET_POINTER_FORMAT {
+                return Err("unsupported policy-2 case-set pointer".into());
+            }
+            vec![Policy2CaseSetReference {
+                document: pointer.document,
+                document_digest: pointer.document_digest,
+            }]
+        }
+        Some(2) => {
+            let pointer: Policy2CaseSetPointerV2 = serde_json::from_slice(&pointer_bytes)?;
+            if pointer.format != POLICY2_CASE_SET_POINTER_FORMAT || pointer.case_sets.len() < 2 {
+                return Err("unsupported policy-2 case-set pointer".into());
+            }
+            pointer.case_sets
+        }
+        _ => return Err("unsupported policy-2 case-set pointer version".into()),
+    };
+    if references
+        .iter()
+        .any(|reference| !is_canonical_sha256(&reference.document_digest))
     {
-        return Err("unsupported policy-2 case-set pointer".into());
+        return Err("policy-2 case-set pointer names a noncanonical digest".into());
     }
-    let document_path = safe_case_set_member(catalog_root, &pointer.document)?;
-    let document_bytes = fs::read(document_path)?;
+    Ok(references)
+}
+
+fn verify_policy2_case_set_pointer(catalog_root: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let references = read_policy2_case_set_references(catalog_root)?;
+    if references.is_empty() {
+        return Err("policy-2 case-set pointer is missing".into());
+    }
+    for reference in references {
+        policy2_case_set_document(catalog_root, &reference)?;
+    }
+    Ok(())
+}
+
+/// One referenced case-set document, digest-checked and canonical.
+fn policy2_case_set_document(
+    catalog_root: &Path,
+    reference: &Policy2CaseSetReference,
+) -> Result<(PathBuf, Policy2CaseSetDocument), Box<dyn std::error::Error>> {
+    let document_path = safe_case_set_member(catalog_root, &reference.document)?;
+    let document_bytes = fs::read(&document_path)?;
     verify_sha256_digest(
         &document_bytes,
-        &pointer.document_digest,
+        &reference.document_digest,
         "policy-2 case-set pointer document",
     )?;
     let document: Policy2CaseSetDocument = serde_json::from_slice(&document_bytes)?;
@@ -2192,10 +2251,138 @@ fn verify_policy2_case_set_pointer(catalog_root: &Path) -> Result<(), Box<dyn st
     {
         return Err("policy-2 case-set pointer selects an unsupported document".into());
     }
-    let (canonical_bytes, canonical_digest) = canonical_policy2_case_set(document.cases)?;
-    if canonical_bytes != document_bytes || canonical_digest != pointer.document_digest {
+    let (canonical_bytes, canonical_digest) = canonical_policy2_case_set(document.cases.clone())?;
+    if canonical_bytes != document_bytes || canonical_digest != reference.document_digest {
         return Err("policy-2 case-set pointer selects a noncanonical document".into());
     }
+    let base = document_path
+        .parent()
+        .ok_or("policy-2 case-set document has no directory")?
+        .to_path_buf();
+    Ok((base, document))
+}
+
+/// The keys a case set's cases occupy, read through the ordinary catalog
+/// reader under `trust`, so an existing case set that does not authenticate
+/// refuses the merge instead of being dropped.
+fn policy2_case_set_merge_keys(
+    catalog_root: &Path,
+    reference: &Policy2CaseSetReference,
+    trust: &solid_facts_backend::Policy2TrustConfiguration,
+) -> Result<Vec<solid_facts_backend::CatalogMergeKey>, String> {
+    let (base, document) = policy2_case_set_document(catalog_root, reference)
+        .map_err(|error| format!("case set {}: {error}", reference.document))?;
+    let mut keys = Vec::new();
+    for case in &document.cases {
+        let path = safe_case_set_member(&base, &case.catalog)
+            .map_err(|error| format!("case set {}: {error}", reference.document))?;
+        keys.extend(
+            solid_facts_backend::catalog_merge_keys(&path, trust)
+                .map_err(|error| format!("case set {}: {error}", reference.document))?,
+        );
+    }
+    Ok(keys)
+}
+
+/// Whether an existing case set is replaced by a new one: some case of it is
+/// for the same import or the same artifact identity as a case of the new one.
+fn case_set_superseded(
+    existing: &[solid_facts_backend::CatalogMergeKey],
+    new: &[solid_facts_backend::CatalogMergeKey],
+) -> bool {
+    existing.iter().any(|key| {
+        new.iter().any(|new| {
+            (key.importer == new.importer && key.specifier == new.specifier)
+                || (key.artifact_identity.is_some()
+                    && key.artifact_identity == new.artifact_identity)
+        })
+    })
+}
+
+/// Commits a newly published case set to the project's case-set pointer,
+/// merging with the case sets already there.
+///
+/// Every existing case set is kept unless one of its cases is for the same
+/// import or the same artifact identity as a case of the new one, in which
+/// case the new one replaces it. Every existing case set must authenticate
+/// under the new trust configuration first, or nothing is written and the
+/// refusal names each one. One case set is written as pointer version 1, so a
+/// project that certified one package reads exactly as before; two or more
+/// need version 2.
+///
+/// The trust file is written only after the merge is decided, so a refused
+/// merge leaves the configuration the existing case sets are read with.
+fn publish_policy2_case_set_pointer(
+    catalog_root: &Path,
+    final_root: &Path,
+    document_digest: &str,
+    trust_bytes: &[u8],
+    trust_output: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let trust = solid_facts_backend::decode_policy2_trust_configuration(trust_bytes)
+        .map_err(|error| format!("policy-2 trust configuration cannot be re-read: {error}"))?;
+    let case_set_key = document_digest
+        .strip_prefix("sha256:")
+        .ok_or("case-set digest is not canonical sha256")?;
+    let new_reference = Policy2CaseSetReference {
+        document: format!("case-sets/{case_set_key}/accepted-contract-case-set.json"),
+        document_digest: document_digest.to_owned(),
+    };
+    let new_keys = policy2_case_set_merge_keys(catalog_root, &new_reference, &trust)?;
+    if safe_case_set_member(catalog_root, &new_reference.document)?
+        != final_root.join("accepted-contract-case-set.json")
+    {
+        return Err("published case set is not where its pointer would name it".into());
+    }
+    let mut kept = Vec::new();
+    let mut refused = Vec::new();
+    for reference in read_policy2_case_set_references(catalog_root)? {
+        if reference == new_reference {
+            continue;
+        }
+        match policy2_case_set_merge_keys(catalog_root, &reference, &trust) {
+            Ok(keys) => {
+                if !case_set_superseded(&keys, &new_keys) {
+                    kept.push(reference);
+                }
+            }
+            Err(error) => refused.push(error),
+        }
+    }
+    if !refused.is_empty() {
+        return Err(format!(
+            "the existing accepted-contract case sets under {} cannot be merged into: {} of them \
+             do not authenticate under the new trust configuration: {}; re-certify those packages \
+             with the same issuer configuration, or move the case-set pointer aside",
+            catalog_root.display(),
+            refused.len(),
+            refused.join("; ")
+        )
+        .into());
+    }
+    kept.push(new_reference);
+    kept.sort();
+    let mut pointer_bytes = if let [only] = kept.as_slice() {
+        serde_json::to_vec(&Policy2CaseSetPointer {
+            format: POLICY2_CASE_SET_POINTER_FORMAT.into(),
+            case_set_version: 1,
+            document: only.document.clone(),
+            document_digest: only.document_digest.clone(),
+        })?
+    } else {
+        serde_json::to_vec(&Policy2CaseSetPointerV2 {
+            format: POLICY2_CASE_SET_POINTER_FORMAT.into(),
+            case_set_version: 2,
+            case_sets: kept,
+        })?
+    };
+    pointer_bytes.push(b'\n');
+    write_atomic_file(trust_output, trust_bytes)?;
+    write_atomic_file(
+        &catalog_root.join("accepted-contract-case-set.json"),
+        &pointer_bytes,
+    )?;
+    verify_policy2_case_set_pointer(catalog_root)?;
     Ok(())
 }
 
@@ -3393,7 +3580,15 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             requirements,
         )?;
         let _ = &catalog;
-        let statuses = accepted_package_contract_statuses(dialect, project, &facts, &contracts)?;
+        // Why a package with an acceptance on hand is still `missing`: the
+        // same admission steps replayed, reported rather than decided.
+        let refusals = solid_facts_backend::admission_refusal_details(
+            directory,
+            &catalogs,
+            request.bundled_contracts,
+        )?;
+        let statuses =
+            accepted_package_contract_statuses(dialect, project, &facts, &contracts, &refusals)?;
         let actionable = statuses
             .iter()
             .filter(|status| status.needs_action())
@@ -9540,5 +9735,91 @@ fn main() {
             };
             std::process::exit(exit_code);
         }
+    }
+}
+
+#[cfg(test)]
+mod case_set_pointer_merge_tests {
+    use super::*;
+
+    fn key(importer: &str, identity: Option<(&str, &str)>) -> solid_facts_backend::CatalogMergeKey {
+        solid_facts_backend::CatalogMergeKey {
+            importer: importer.into(),
+            specifier: "pkg".into(),
+            artifact_identity: identity
+                .map(|(root, environment)| (root.into(), environment.into())),
+        }
+    }
+
+    /// A case set is replaced by one for the same import or the same artifact
+    /// in the same environment, and kept for anything else.
+    #[test]
+    fn a_case_set_is_superseded_only_by_its_own_import_or_artifact() {
+        let existing = [key("/p/a.mjs", Some(("root-a", "env-1")))];
+        assert!(case_set_superseded(&existing, &[key("/p/a.mjs", None)]));
+        assert!(case_set_superseded(
+            &existing,
+            &[key("/p/other.mjs", Some(("root-a", "env-1")))]
+        ));
+        assert!(!case_set_superseded(
+            &existing,
+            &[key("/p/other.mjs", Some(("root-a", "env-2")))]
+        ));
+        assert!(!case_set_superseded(
+            &existing,
+            &[key("/p/b.mjs", Some(("root-b", "env-1")))]
+        ));
+        assert!(!case_set_superseded(
+            &[key("/p/a.mjs", None)],
+            &[key("/p/b.mjs", None)]
+        ));
+    }
+
+    /// Both pointer versions read; one case set is still written as version 1.
+    #[test]
+    fn case_set_pointer_references_read_both_versions() {
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-case-set-pointer-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        assert!(read_policy2_case_set_references(&root).unwrap().is_empty());
+        let digest = format!("sha256:{}", "a".repeat(64));
+        let pointer = root.join("accepted-contract-case-set.json");
+        fs::write(
+            &pointer,
+            serde_json::to_vec(&serde_json::json!({
+                "format": POLICY2_CASE_SET_POINTER_FORMAT,
+                "caseSetVersion": 1,
+                "document": "case-sets/a/accepted-contract-case-set.json",
+                "documentDigest": digest,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(read_policy2_case_set_references(&root).unwrap().len(), 1);
+        let reference = serde_json::json!({
+            "document": "case-sets/a/accepted-contract-case-set.json",
+            "documentDigest": digest,
+        });
+        for (sets, readable) in [(2, true), (1, false)] {
+            fs::write(
+                &pointer,
+                serde_json::to_vec(&serde_json::json!({
+                    "format": POLICY2_CASE_SET_POINTER_FORMAT,
+                    "caseSetVersion": 2,
+                    "caseSets": vec![reference.clone(); sets],
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                read_policy2_case_set_references(&root).is_ok(),
+                readable,
+                "{sets} case sets"
+            );
+        }
+        let _ = fs::remove_dir_all(&root);
     }
 }

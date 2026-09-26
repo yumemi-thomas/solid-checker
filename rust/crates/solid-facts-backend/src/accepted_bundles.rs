@@ -130,6 +130,8 @@ struct BundleEntry {
 
 struct LoadedBundle {
     specifier: String,
+    /// The certified version, so a refusal report can name it.
+    package_version: String,
     requested_entrypoint: String,
     export_conditions: Vec<String>,
     runtime_target: String,
@@ -299,6 +301,7 @@ fn load_bundle(
         verified_dependency_environment(&entry.bindings, entry.dependency_environment.as_deref())?;
     Ok(LoadedBundle {
         specifier: entry.specifier.clone(),
+        package_version: entry.package_version.clone(),
         requested_entrypoint: entry.requested_entrypoint.clone(),
         export_conditions: entry.export_conditions.clone(),
         runtime_target: entry.runtime_target.clone(),
@@ -386,12 +389,30 @@ pub(crate) fn environment_is_installed<L: Clone + Ord>(
     resolve: impl Fn(&L, &str) -> Result<Option<L>, ()>,
     identity: impl Fn(&L) -> Option<DependencyEnvironmentEntry>,
 ) -> bool {
+    environment_difference(environment, root, resolve, identity, |_| None).is_none()
+}
+
+/// The first way an installed tree fails to reproduce `environment`, by the
+/// rule [`environment_is_installed`] states; `None` when it reproduces it.
+///
+/// `version_of(at)` is the manifest version of the package at `at` when it can
+/// be read even though its full identity cannot, so a report can name the
+/// installed version beside the certified one. It never decides anything.
+pub(crate) fn environment_difference<L: Clone + Ord>(
+    environment: &[DependencyEnvironmentEntry],
+    root: L,
+    resolve: impl Fn(&L, &str) -> Result<Option<L>, ()>,
+    identity: impl Fn(&L) -> Option<DependencyEnvironmentEntry>,
+    version_of: impl Fn(&L) -> Option<String>,
+) -> Option<EnvironmentDifference> {
     let mut names = BTreeSet::new();
-    if !environment
+    if let Some(entry) = environment
         .iter()
-        .all(|entry| names.insert(entry.name.as_str()))
+        .find(|entry| !names.insert(entry.name.as_str()))
     {
-        return false;
+        return Some(EnvironmentDifference::DuplicateName {
+            name: entry.name.clone(),
+        });
     }
     let mut located = BTreeSet::from([root.clone()]);
     let mut pending = vec![root];
@@ -401,10 +422,22 @@ pub(crate) fn environment_is_installed<L: Clone + Ord>(
             let at = match resolve(&from, &entry.name) {
                 Ok(Some(at)) => at,
                 Ok(None) => continue,
-                Err(()) => return false,
+                Err(()) => {
+                    return Some(EnvironmentDifference::Unresolvable {
+                        name: entry.name.clone(),
+                    });
+                }
             };
-            if identity(&at).as_ref() != Some(entry) {
-                return false;
+            let installed = identity(&at);
+            if installed.as_ref() != Some(entry) {
+                return Some(EnvironmentDifference::Differs {
+                    installed_version: installed
+                        .as_ref()
+                        .map(|installed| installed.version.clone())
+                        .or_else(|| version_of(&at)),
+                    installed,
+                    certified: entry.clone(),
+                });
             }
             found.insert(entry.name.as_str());
             if located.insert(at.clone()) {
@@ -412,7 +445,77 @@ pub(crate) fn environment_is_installed<L: Clone + Ord>(
             }
         }
     }
-    found.len() == names.len()
+    environment
+        .iter()
+        .find(|entry| !found.contains(entry.name.as_str()))
+        .map(|entry| EnvironmentDifference::NotInstalled {
+            certified: entry.clone(),
+        })
+}
+
+/// Why an installed tree does not reproduce a certified environment: the
+/// first entry that differs, for a report that has to name it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum EnvironmentDifference {
+    /// The certified environment names one package twice, which no tree can
+    /// reproduce under the "every resolution" rule.
+    DuplicateName { name: String },
+    /// The tree cannot state exactly which copy of this package resolves.
+    Unresolvable { name: String },
+    /// A copy resolves, and it is not the certified one.
+    Differs {
+        /// Its full identity, when the tree states one.
+        installed: Option<DependencyEnvironmentEntry>,
+        /// Its manifest version, when readable.
+        installed_version: Option<String>,
+        certified: DependencyEnvironmentEntry,
+    },
+    /// Nothing resolves this certified package from anywhere the rule looks.
+    NotInstalled {
+        certified: DependencyEnvironmentEntry,
+    },
+}
+
+impl std::fmt::Display for EnvironmentDifference {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DuplicateName { name } => {
+                write!(formatter, "the certified environment names {name} twice")
+            }
+            Self::Unresolvable { name } => write!(
+                formatter,
+                "{name}: this tree cannot state exactly which installed copy resolves"
+            ),
+            Self::Differs {
+                installed: Some(installed),
+                certified,
+                ..
+            } if installed.version == certified.version => write!(
+                formatter,
+                "{} {} installed with integrity {}, certified with {}",
+                certified.name, certified.version, installed.integrity, certified.integrity
+            ),
+            Self::Differs {
+                installed_version: Some(version),
+                certified,
+                ..
+            } => write!(
+                formatter,
+                "{} installed {version}, certified {}",
+                certified.name, certified.version
+            ),
+            Self::Differs { certified, .. } => write!(
+                formatter,
+                "{} installed with no exact version and lockfile integrity, certified {}",
+                certified.name, certified.version
+            ),
+            Self::NotInstalled { certified } => write!(
+                formatter,
+                "{} not installed, certified {}",
+                certified.name, certified.version
+            ),
+        }
+    }
 }
 
 /// Which specifiers this project may import under a compiled-in acceptance.
@@ -460,6 +563,140 @@ fn admitted_from(
         resolved_target,
         installed_environment,
     )
+}
+
+/// Why [`admit_by_artifact`] did not admit an acceptance, in the order its
+/// steps are checked. A report states it so `missing` is not the whole answer
+/// when an acceptance for the installed package does exist.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AdmissionRefusal {
+    /// Step 1: the receipt states no dependency environment -- issued before
+    /// ADR 0123, by a certifier that could not acquire one, or binding the
+    /// retired ambiguous empty root.
+    NoEnvironmentStated,
+    /// Step 2: this project's installed identity does not reproduce the signed
+    /// acceptance root. `installed` is `(version, integrity)` when the project
+    /// states them; `None` when it cannot (no exact lockfile integrity).
+    AcceptanceRootNotReproduced {
+        installed: Option<(String, String)>,
+        certified_version: String,
+    },
+    /// Step 3: the installed tree differs from the certified environment; the
+    /// text names the first differing package.
+    EnvironmentDiffers(String),
+}
+
+impl std::fmt::Display for AdmissionRefusal {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoEnvironmentStated => formatter.write_str(
+                "its receipt states no dependency environment, so it is admitted nowhere",
+            ),
+            Self::AcceptanceRootNotReproduced {
+                installed: Some((version, _)),
+                certified_version,
+            } if version != certified_version => write!(
+                formatter,
+                "the installed package is {version}, not the certified {certified_version}"
+            ),
+            Self::AcceptanceRootNotReproduced {
+                installed: Some(_), ..
+            } => formatter.write_str(
+                "the installed package's bytes or requested entrypoint are not the certified ones \
+                 (its acceptance root is not reproduced)",
+            ),
+            Self::AcceptanceRootNotReproduced {
+                installed: None, ..
+            } => formatter.write_str(
+                "the installed package has no exact lockfile integrity, so its acceptance root \
+                 cannot be reproduced",
+            ),
+            Self::EnvironmentDiffers(difference) => {
+                write!(
+                    formatter,
+                    "its dependency environment differs: {difference}"
+                )
+            }
+        }
+    }
+}
+
+/// The first way this tree differs from a certified environment, rendered, or
+/// `None` when it reproduces it. The diagnostic twin of
+/// [`InstalledEnvironment`]; it never decides admission.
+pub type InstalledEnvironmentDifference<'a> =
+    dyn Fn(&str, &[DependencyEnvironmentEntry]) -> Option<String> + 'a;
+
+/// Steps 1-3 of [`admit_by_artifact`] for each acceptance, reporting the first
+/// that fails: `Some(refusal)`, or `None` when the acceptance passes all three
+/// and admission then turns only on the resolved file and case selection.
+///
+/// Diagnostic only, and deliberately a replay of the same checks rather than a
+/// second rule: nothing admits from it.
+pub(crate) fn admission_refusals<'a>(
+    acceptances: impl IntoIterator<Item = (ArtifactAcceptance<'a>, &'a str)>,
+    installed_integrity: &InstalledArtifactIdentity,
+    installed_difference: &InstalledEnvironmentDifference,
+) -> Vec<(String, Option<AdmissionRefusal>)> {
+    acceptances
+        .into_iter()
+        .map(|(acceptance, certified_version)| {
+            let refusal = (|| {
+                let Some(environment) = acceptance.environment else {
+                    return Some(AdmissionRefusal::NoEnvironmentStated);
+                };
+                let Some((name, version, integrity)) = installed_integrity(acceptance.specifier)
+                else {
+                    return Some(AdmissionRefusal::AcceptanceRootNotReproduced {
+                        installed: None,
+                        certified_version: certified_version.to_owned(),
+                    });
+                };
+                if policy2_artifact_acceptance_root_for_identity(
+                    &name,
+                    &version,
+                    &integrity,
+                    acceptance.requested_entrypoint,
+                    acceptance.export_conditions,
+                ) != acceptance.acceptance_root
+                {
+                    return Some(AdmissionRefusal::AcceptanceRootNotReproduced {
+                        installed: Some((version, integrity)),
+                        certified_version: certified_version.to_owned(),
+                    });
+                }
+                installed_difference(acceptance.specifier, environment)
+                    .map(AdmissionRefusal::EnvironmentDiffers)
+            })();
+            (acceptance.specifier.to_owned(), refusal)
+        })
+        .collect()
+}
+
+/// [`admission_refusals`] over the compiled-in tier.
+pub fn bundle_admission_refusals(
+    installed_integrity: &InstalledArtifactIdentity,
+    installed_difference: &InstalledEnvironmentDifference,
+) -> Result<Vec<(String, Option<AdmissionRefusal>)>, ContractFailure> {
+    Ok(admission_refusals(
+        bundles()?.iter().map(|bundle| {
+            (
+                ArtifactAcceptance {
+                    specifier: &bundle.specifier,
+                    requested_entrypoint: &bundle.requested_entrypoint,
+                    export_conditions: &bundle.export_conditions,
+                    runtime_target: &bundle.runtime_target,
+                    declaration_target: &bundle.declaration_target,
+                    acceptance_root: &bundle.acceptance_root,
+                    environment: bundle.environment.as_deref(),
+                    identity: &bundle.identity,
+                },
+                bundle.package_version.as_str(),
+            )
+        }),
+        installed_integrity,
+        installed_difference,
+    ))
 }
 
 /// One acceptance a consumer could reach by artifact rather than by importer,

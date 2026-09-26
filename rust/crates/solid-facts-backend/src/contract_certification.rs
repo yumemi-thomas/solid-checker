@@ -832,6 +832,7 @@ impl CertificationPlan {
             finalized.authenticated(),
             &self.resolved_import,
             &self.import_request.export_conditions,
+            finalized.trust_configuration(),
         )
     }
 

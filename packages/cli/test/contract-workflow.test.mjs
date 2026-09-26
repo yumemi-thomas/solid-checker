@@ -82,6 +82,7 @@ import {
   acquireRootCompilerSourcesWithEnvironment,
   dependencyEnvironmentFromNativeOutput,
   dependencyEnvironmentNotAcquiredMessage,
+  publicationHoldsPackage,
   cascadeGraphNodeRefusals,
   graphCasesWithoutRefusedNodes,
   retainedCaseFloorRefusal,
@@ -3031,6 +3032,43 @@ test("a genuinely dependency-free package acquires the empty environment with no
     assert.equal(result.environmentNotAcquired, null, "reaching no package is a statement");
   } finally {
     rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("an accumulating catalog protects only the package it already publishes", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-publication-holds-"));
+  try {
+    const catalogRoot = join(root, ".solid-checker");
+    assert.equal(publicationHoldsPackage(catalogRoot, "a"), false, "no directory, no publication");
+    mkdirSync(catalogRoot);
+    assert.equal(publicationHoldsPackage(catalogRoot, "a"), false, "an empty root publishes nothing");
+    const catalog = packages => JSON.stringify({
+      format: "solid-checker-accepted-contract-catalog",
+      catalogVersion: 2,
+      contracts: packages.map(packageName => ({ import: { packageName } }))
+    });
+    writeFileSync(join(catalogRoot, "accepted-contracts.json"), catalog(["a"]));
+    assert.equal(publicationHoldsPackage(catalogRoot, "a"), true);
+    assert.equal(publicationHoldsPackage(catalogRoot, "b"), false, "another package's entry does not");
+    const caseSet = join(catalogRoot, "case-sets/k");
+    mkdirSync(join(caseSet, "cases/c"), { recursive: true });
+    writeFileSync(join(caseSet, "cases/c/accepted-contracts.json"), catalog(["b"]));
+    writeFileSync(join(caseSet, "accepted-contract-case-set.json"), JSON.stringify({
+      cases: [{ catalog: "cases/c/accepted-contracts.json" }]
+    }));
+    for (const pointer of [
+      { caseSetVersion: 1, document: "case-sets/k/accepted-contract-case-set.json" },
+      { caseSetVersion: 2, caseSets: [{ document: "case-sets/k/accepted-contract-case-set.json" }] }
+    ]) {
+      writeFileSync(join(catalogRoot, "accepted-contract-case-set.json"), JSON.stringify(pointer));
+      assert.equal(publicationHoldsPackage(catalogRoot, "b"), true, "a case set is read too");
+      assert.equal(publicationHoldsPackage(catalogRoot, "c"), false);
+    }
+    writeFileSync(join(catalogRoot, "accepted-contract-case-set.json"), "{");
+    assert.equal(publicationHoldsPackage(catalogRoot, "c"), true, "unreadable answers conservatively");
+    assert.equal(publicationHoldsPackage(catalogRoot, undefined), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

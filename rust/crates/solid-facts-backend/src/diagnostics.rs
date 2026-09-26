@@ -760,11 +760,17 @@ impl PackageContractStatus {
 /// runtime foundation. Built-in model selection is not artifact certification.
 /// Coverage is complete only when every exact imported specifier binds in the
 /// already receipt-validated normalized index.
+///
+/// `refusals` names, per installed package, why an acceptance that exists for
+/// it in a project catalog or the compiled-in tier was not admitted
+/// ([`admission_refusal_details`]); it only adds to the detail of a status
+/// that is not `certified`, and never changes a status.
 pub fn accepted_package_contract_statuses(
     dialect: &'static Dialect,
     project: &Path,
     facts: &ProjectFacts,
     contracts: &AcceptedContractIndex,
+    refusals: &BTreeMap<String, String>,
 ) -> Result<Vec<PackageContractStatus>, BackendError> {
     let project_directory = project
         .parent()
@@ -843,18 +849,22 @@ pub fn accepted_package_contract_statuses(
         } else {
             let status = if bound == 0 { "missing" } else { "unbound" };
             let detail = if imports.is_empty() {
-                Some("exact import identity facts are unavailable".into())
+                "exact import identity facts are unavailable".to_owned()
             } else if bound == 0 {
-                Some(format!(
+                format!(
                     "none of the {} exact imported artifact case(s) has a matching receipt",
                     imports.len()
-                ))
+                )
             } else {
-                Some(format!(
+                format!(
                     "{bound} of {} exact imported artifact case(s) have matching receipts",
                     imports.len()
-                ))
+                )
             };
+            let detail = Some(match refusals.get(&module) {
+                Some(refusal) => format!("{detail}; {refusal}"),
+                None => detail,
+            });
             let root = package_directory.map_or_else(
                 || format!("node_modules/{module}"),
                 |path| {
@@ -873,7 +883,7 @@ pub fn accepted_package_contract_statuses(
                 },
                 |integrity| {
                     Some(format!(
-                        "solid-checker contract generate --package-root {root} --integrity {integrity} --output .solid-checker/contracts/{module}/solid-reactivity.json, then verify the proposal and add its receipt to .solid-checker/accepted-contracts.json"
+                        "solid-checker contract certify --package-root {root} --integrity {integrity} --catalog .solid-checker/accepted-contracts.json --issuer-configuration <issuer.json> --trust-configuration-output <trust.json>, run from this project; it adds the package to the project catalog, which `solid-checker contract check --receipt-trust-configuration <trust.json>` then reads"
                     ))
                 },
             );
@@ -890,6 +900,73 @@ pub fn accepted_package_contract_statuses(
     }
     statuses.sort_by(|left, right| left.name.cmp(&right.name));
     Ok(statuses)
+}
+
+/// Why an acceptance that exists for an installed package was not admitted by
+/// artifact, one sentence per package, for `contract check` to append to a
+/// status that is not `certified`.
+///
+/// Every acceptance is replayed through steps 1-3 of the one admission rule
+/// ([`crate::accepted_bundles::admission_refusals`]); a package is named only
+/// when *every* acceptance for it failed one of those steps, because otherwise
+/// the refusal lies in the resolved file or case selection, which this does not
+/// explain. Project catalogs are consulted before the compiled-in tier, and
+/// within a tier the most specific refusal wins: an environment that differs
+/// (the artifact matched) over a receipt that states none, over an artifact
+/// that is not the certified one.
+pub fn admission_refusal_details(
+    project_directory: &Path,
+    catalogs: &[PathBuf],
+    bundled: bool,
+) -> Result<BTreeMap<String, String>, BackendError> {
+    use crate::accepted_bundles::AdmissionRefusal;
+    let installed = |specifier: &str| installed_artifact_identity(project_directory, specifier);
+    let difference = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
+        installed_environment_difference(project_directory, specifier, environment)
+    };
+    let contract = |error: crate::ContractFailure| BackendError::Contract(error.to_string());
+    let mut tiers = vec![(
+        "a project catalog entry",
+        crate::contract_interface::project_admission_refusals(catalogs, &installed, &difference)
+            .map_err(contract)?,
+    )];
+    if bundled {
+        tiers.push((
+            "a compiled-in contract",
+            crate::accepted_bundles::bundle_admission_refusals(&installed, &difference)
+                .map_err(contract)?,
+        ));
+    }
+    let rank = |refusal: &AdmissionRefusal| match refusal {
+        AdmissionRefusal::EnvironmentDiffers(_) => 0,
+        AdmissionRefusal::NoEnvironmentStated => 1,
+        AdmissionRefusal::AcceptanceRootNotReproduced { .. } => 2,
+    };
+    let mut details = BTreeMap::new();
+    for (tier, refusals) in tiers {
+        let mut by_package = BTreeMap::<String, Vec<Option<AdmissionRefusal>>>::new();
+        for (specifier, refusal) in refusals {
+            if let Some(module) = package_name_of_specifier(&specifier) {
+                by_package.entry(module).or_default().push(refusal);
+            }
+        }
+        for (module, refusals) in by_package {
+            if details.contains_key(&module) || refusals.iter().any(Option::is_none) {
+                continue;
+            }
+            if let Some(refusal) = refusals
+                .iter()
+                .flatten()
+                .min_by_key(|refusal| rank(refusal))
+            {
+                details.insert(
+                    module,
+                    format!("{tier} exists for this package and was not admitted: {refusal}"),
+                );
+            }
+        }
+    }
+    Ok(details)
 }
 
 /// Reporting-only classification. An alias counts as core only when every
@@ -1214,6 +1291,49 @@ pub(crate) fn installed_environment_matches(
         |from, name| node_package_lookup(from, name),
         |at| installed_environment_identity(&project, at),
     )
+}
+
+/// The first way this tree differs from `environment`, rendered, by the same
+/// walk [`installed_environment_matches`] takes; `None` when it reproduces it.
+/// Diagnostic only.
+fn installed_environment_difference(
+    project_directory: &Path,
+    specifier: &str,
+    environment: &[crate::DependencyEnvironmentEntry],
+) -> Option<String> {
+    if environment.is_empty() {
+        return None;
+    }
+    let unlocatable = || {
+        Some(format!(
+            "{specifier} is not installed where this tree can say"
+        ))
+    };
+    let Some(module) = package_name_of_specifier(specifier) else {
+        return unlocatable();
+    };
+    let Ok(Some(directory)) = discover_package_directory(project_directory, &module) else {
+        return unlocatable();
+    };
+    let (Ok(root), Ok(project)) = (
+        fs::canonicalize(&directory),
+        fs::canonicalize(project_directory),
+    ) else {
+        return unlocatable();
+    };
+    crate::accepted_bundles::environment_difference(
+        environment,
+        root,
+        |from, name| node_package_lookup(from, name),
+        |at| installed_environment_identity(&project, at),
+        |at| {
+            serde_json::from_slice::<PackageManifest>(&fs::read(at.join("package.json")).ok()?)
+                .ok()
+                .map(|manifest| manifest.version)
+                .filter(|version| !version.is_empty())
+        },
+    )
+    .map(|difference| difference.to_string())
 }
 
 /// Node's lookup of the bare package `name` from the package installed at

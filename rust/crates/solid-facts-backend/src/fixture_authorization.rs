@@ -313,6 +313,7 @@ pub fn authorize_fixture_contract(
         resolved,
         // The same set `artifact_acceptance_root` was computed over above.
         std::slice::from_ref(&"import".to_owned()),
+        &trust,
     )
     .map_err(|error| FixtureAuthorizationError::Refused(format!("{error}")))?;
 
