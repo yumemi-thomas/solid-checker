@@ -26,10 +26,20 @@ other owner-creating callback, as much as under a component body: the root owns
 the first run only. Under an unowned call site every run is unowned, and the
 operation stays a proven violation.
 
-One approximation remains: any other operation written lexically inside an
-owner-creating callback is treated as owned by it, even in a nested detached
-callback. A `createEffect` apply or an event handler inside a `createRoot`
-callback is therefore not reported, although neither runs under the root.
+An owner-creating callback owns only what runs in its synchronous extent. A
+callback written inside it that runs with no owner on every run -- a
+`createEffect` apply, an event handler, a `createReaction` invalidation, a
+`runWithOwner(null, fn)` callback -- is not owned by it, so an operation there
+inside a `createRoot` callback is the same proven violation it is inside a
+component, and an `onSettled` there is out-of-band. A root created inside such
+a callback, or a compiled JSX child, which the render effect the compiler
+generates for it owns, answers for what it contains.
+
+One approximation remains: a nested callback the owner graph gives no owner
+edge at all, such as a `setTimeout` callback or a callback handed to a function
+the analysis does not model, is still treated as owned by the owner-creating
+callback it is written in. A `setTimeout` callback runs with no owner, so that
+is a false negative.
 
 The proven `onSettled` cleanup variant has **error** severity because Solid 2.0
 throws `SETTLED_CLEANUP_UNOWNED` in development and silently drops the cleanup

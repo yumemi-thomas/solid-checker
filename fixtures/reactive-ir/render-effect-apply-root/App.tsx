@@ -96,16 +96,27 @@ createRoot(() => {
   registerHere();
 });
 
-// Not this fixture's claim, and deliberately unchanged: a `createEffect` apply
-// has no owner on any run, so this cleanup never runs either, but every call
-// lexically inside a root outside a render-effect apply is still treated as
-// root-owned (see README.md).
+// The contrast: a `createEffect` apply has no owner on any run, first
+// included, so this cleanup never runs. The root does not answer it, and the
+// owner graph proves it unowned: a violation, not uncertifiable.
 createRoot(() => {
   createEffect(
     () => count(),
     () => {
       onCleanup(() => {});
     },
+  );
+});
+
+// Control: an owned position of the same `createEffect` inside the root, its
+// compute, stays silent.
+createRoot(() => {
+  createEffect(
+    () => {
+      onCleanup(() => {});
+      return count();
+    },
+    () => {},
   );
 });
 
