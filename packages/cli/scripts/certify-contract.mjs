@@ -53,6 +53,7 @@ import {
   ArtifactResolutionError,
   ArtifactResolutionSession,
   locateExternalDependencyPackageRoot,
+  nodeBuiltinSpecifier,
   resolvePackageArtifactClosure
 } from "./artifact-resolution.mjs";
 export { locateExternalDependencyPackageRoot } from "./artifact-resolution.mjs";
@@ -156,6 +157,15 @@ Environment:
   SOLID_CHECKER_REGISTRY_CONCURRENCY <N>
                           Parallel registry acquisitions per certification
                           (default 8)
+
+Exit status:
+  0  Certified, published, and admissible: the receipt states the dependency
+     environment a consumer tree must reproduce.
+  1  Certified and published, but not admitted anywhere: the dependency
+     environment was not acquired, so the receipt states none and no project
+     applies the entry. The last line on stderr says why. Certify again once
+     the reason is repaired (for example, a lockfile the certifier reads).
+  2  Refused or failed; nothing was published.
 `;
 
 export const contractCertificationStages = Object.freeze([
@@ -713,12 +723,51 @@ export const WITHHELD_CLOSURE_MARKER = "solid-checker:withheld-closure=";
 /// (or the native side reported nothing, as an older build does).
 export const DEPENDENCY_ENVIRONMENT_MARKER = "solid-checker:dependency-environment=";
 
-/// The line `contract certify` prints when a receipt states no dependency
+/// The exit status of a `contract certify` that published an entry no project
+/// will admit: its receipt authenticates but states no dependency environment.
+///
+/// Neither of the two statuses the command already had is true of it. `0` says
+/// "certified", and a CI step chained on `&&` then ships a catalog entry that
+/// reaches no project file. `2` says "refused", and nothing was refused: the
+/// catalog *was* replaced, the receipt is valid, and a caller reading `2` would
+/// look for a refusal audit that does not exist. `1` is what the rest of this
+/// CLI already means by "ran to completion, and the result needs action" --
+/// `contract check`, `--certify` and `contract generate --missing` all exit `1`
+/// in exactly that sense -- so it is the one status that says this.
+export const CERTIFIED_NOT_ADMITTED_EXIT_CODE = 1;
+
+/// The line `contract certify` prints last when a receipt states no dependency
 /// environment. The publication still succeeded and the receipt still
 /// authenticates, which is exactly why it has to be said: nothing else about
-/// the run would tell the user that no consumer will ever apply it.
-export function dependencyEnvironmentNotAcquiredMessage(reason) {
-  return `solid-checker: dependency environment not acquired: ${reason}; this catalog will not be admitted`;
+/// the run would tell the user that no consumer will ever apply it. It names
+/// the entry, not the catalog, because the catalog accumulates: every other
+/// entry in it is admitted or not on its own receipt.
+export function dependencyEnvironmentNotAcquiredMessage(reason, subject = "") {
+  return `solid-checker: ${subject ? `${subject} ` : ""}certified but not admitted: ` +
+    `dependency environment not acquired: ${reason}; its receipt states no environment, ` +
+    `so no project will apply this entry (exit ${CERTIFIED_NOT_ADMITTED_EXIT_CODE})`;
+}
+
+/// What one successful `contract certify` amounts to, from the
+/// dependency-environment lines its native transaction reported: whether the
+/// published entry is admitted, the exit status that says so, and the line to
+/// print last (`null` when there is nothing to say -- an admitted entry
+/// prints nothing, as before).
+export function certificationOutcome(manifest, dependencyEnvironment) {
+  const notAcquired = dependencyEnvironment?.notAcquired?.[0] ?? null;
+  if (!notAcquired) {
+    return Object.freeze({ status: "certified", admitted: true, exitCode: 0, message: null });
+  }
+  return Object.freeze({
+    status: "certified-not-admitted",
+    admitted: false,
+    exitCode: CERTIFIED_NOT_ADMITTED_EXIT_CODE,
+    dependencyEnvironmentNotAcquired: notAcquired.reason,
+    message: dependencyEnvironmentNotAcquiredMessage(
+      notAcquired.reason,
+      manifest?.name && manifest?.version ? `${manifest.name}@${manifest.version}` : ""
+    )
+  });
 }
 
 export function dependencyEnvironmentFromNativeOutput(stdout) {
@@ -1106,7 +1155,7 @@ function createCompilerSourceCollector({
   const compilerSourceClosures = new Map();
   let nextSourceIndex = 0;
   const locateExternalFrom = (ownerRoot, dependency) => {
-    if (dependency.specifier.startsWith("node:")) return null;
+    if (nodeBuiltinSpecifier(dependency.specifier)) return null;
     const dependencyName = packageNameOfSpecifier(dependency.specifier);
     const dependencyImporter = resolve(
       ownerRoot,
@@ -1249,7 +1298,7 @@ function createCompilerSourceCollector({
         try {
           const child = locateExternalFrom(closure.packageRoot, dependency);
           if (!child) {
-            if (!dependency.specifier.startsWith("node:")) {
+            if (!nodeBuiltinSpecifier(dependency.specifier)) {
               onUnlocated?.(packageNameOfSpecifier(dependency.specifier));
             }
             continue;
@@ -1269,7 +1318,7 @@ function createCompilerSourceCollector({
       }
       const child = locateExternalFrom(closure.packageRoot, dependency);
       if (!child) {
-        if (!dependency.specifier.startsWith("node:")) {
+        if (!nodeBuiltinSpecifier(dependency.specifier)) {
           onUnlocated?.(packageNameOfSpecifier(dependency.specifier));
         }
         continue;
@@ -2461,7 +2510,7 @@ export async function preparePublishedGraphCases({
       const directDependencies = [];
       const locatedDependencies = new Map();
       const addSemanticDependency = async dependency => {
-        if (dependency.specifier.startsWith("node:")) {
+        if (nodeBuiltinSpecifier(dependency.specifier)) {
           throw new Error(
             `runtime-library-policy-required: ${dependency.specifier} is not a package receipt`
           );
@@ -2520,7 +2569,7 @@ export async function preparePublishedGraphCases({
       for (const dependency of resolved.externalDependencies) {
         const located = locateExternalFrom(node.packageRoot, dependency);
         if (!located) {
-          if (!dependency.specifier.startsWith("node:")) {
+          if (!nodeBuiltinSpecifier(dependency.specifier)) {
             environmentNotAcquired ??=
               `${packageNameOfSpecifier(dependency.specifier)} is reached by the closure ` +
               "but is not installed";
@@ -3035,7 +3084,7 @@ export async function acquireRootCompilerSourcesWithEnvironment({
   const notAcquired = reason => {
     if (!reasons.includes(reason)) reasons.push(reason);
   };
-  const external = dependency => !dependency.specifier.startsWith("node:");
+  const external = dependency => !nodeBuiltinSpecifier(dependency.specifier);
   // Resolved before any lockfile is read: whether the closure reaches another
   // package at all is a fact about the artifact, and it is the whole question
   // for a package that reaches none.
@@ -4002,6 +4051,9 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
   let dependencyEnvironment = null;
   const stageDurationsMs = {};
   let certified = false;
+  // Returned to the caller, which owns the exit status: `bin/solid-checker.mjs`
+  // and the benchmark worker both map it through `outcome.exitCode`.
+  let outcome = null;
   const measure = async (stage, operation) => {
     const started = process.hrtime.bigint();
     try {
@@ -4239,10 +4291,8 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       dependencyEnvironment
     );
     certified = true;
-    const notAcquired = dependencyEnvironment?.notAcquired?.[0];
-    if (notAcquired) {
-      process.stderr.write(`${dependencyEnvironmentNotAcquiredMessage(notAcquired.reason)}\n`);
-    }
+    outcome = certificationOutcome(manifest, dependencyEnvironment);
+    if (outcome.message) process.stderr.write(`${outcome.message}\n`);
   } catch (error) {
     const refusal =
       error instanceof CertificationRefusal
@@ -4273,4 +4323,5 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       rmSync(certificationImporterPath, { force: true });
     }
   }
+  return outcome;
 }

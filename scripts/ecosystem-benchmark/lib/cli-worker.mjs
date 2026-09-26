@@ -58,7 +58,8 @@ async function serve(request) {
     if (request.kind === "generate") {
       await generatePackageContract(request.args);
     } else if (request.kind === "certify") {
-      await certifyContract(request.args);
+      // Mirrors the dispatcher: a published entry no project admits exits 1.
+      status = (await certifyContract(request.args))?.exitCode ?? 0;
     } else {
       throw new Error(`unknown contract command ${request.kind}`);
     }

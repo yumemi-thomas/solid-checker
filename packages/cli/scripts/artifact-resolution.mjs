@@ -833,6 +833,49 @@ export function coreRuntimeSpecifier(specifier) {
   );
 }
 
+/// Every core module Node loads under a bare name: Node's own
+/// `module.builtinModules` less the `node:`-only entries (`node:sea`,
+/// `node:sqlite`, `node:test`, `node:test/reporters`), which a bare name never
+/// reaches. Transcribed from Node 24 rather than read at run time, because this
+/// CLI also runs under Bun, whose `builtinModules` and `isBuiltin` answer for
+/// Bun: they add `bun`, `bun:*`, `ws`, `undici` and others that under Node are
+/// ordinary npm packages. The set is closed: since Node 18 a new core module is
+/// `node:`-only, so no later Node adds a bare name, and every name here already
+/// resolves bare on Node 20, the oldest release `engines` admits. The test
+/// suite compares it with the `node` on PATH.
+export const NODE_BARE_BUILTIN_MODULES = new Set([
+  "_http_agent", "_http_client", "_http_common", "_http_incoming", "_http_outgoing",
+  "_http_server", "_stream_duplex", "_stream_passthrough", "_stream_readable",
+  "_stream_transform", "_stream_wrap", "_stream_writable", "_tls_common", "_tls_wrap",
+  "assert", "assert/strict", "async_hooks", "buffer", "child_process", "cluster",
+  "console", "constants", "crypto", "dgram", "diagnostics_channel", "dns",
+  "dns/promises", "domain", "events", "fs", "fs/promises", "http", "http2", "https",
+  "inspector", "inspector/promises", "module", "net", "os", "path", "path/posix",
+  "path/win32", "perf_hooks", "process", "punycode", "querystring", "readline",
+  "readline/promises", "repl", "stream", "stream/consumers", "stream/promises",
+  "stream/web", "string_decoder", "sys", "timers", "timers/promises", "tls",
+  "trace_events", "tty", "url", "util", "util/types", "v8", "vm", "wasi",
+  "worker_threads", "zlib"
+]);
+
+/// Whether a module specifier names a Node built-in, and therefore names no
+/// package: nothing is installed for it, nothing can be locked, and no
+/// dependency environment entry can describe it.
+///
+/// This is Node's own rule, exactly. A `node:`-prefixed specifier is always the
+/// core module (or, for a name Node does not have, an error -- never a
+/// package). A bare specifier is the core module exactly when it is a member of
+/// `NODE_BARE_BUILTIN_MODULES`, and then it is the core module **even when a
+/// package of that name is installed**: Node's loaders consult the core-module
+/// table before any `node_modules` lookup, so `require("assert")` and
+/// `import "assert"` load the built-in beside an installed userland `assert`.
+/// Membership is exact, not a prefix: `assert/` (Node's documented spelling for
+/// the userland package), `fs/extra` and `test` all reach `node_modules`, so
+/// they are package specifiers like any other.
+export function nodeBuiltinSpecifier(specifier) {
+  return specifier.startsWith("node:") || NODE_BARE_BUILTIN_MODULES.has(specifier);
+}
+
 const HAZARD_DEBUG = new Map([
   ["nonliteral-dynamic-loading", "NonliteralDynamicLoading"],
   ["eval", "Eval"],

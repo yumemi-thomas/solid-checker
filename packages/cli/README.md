@@ -58,7 +58,14 @@ dependency environment its receipt signs (`dependencyEnvironmentRoot`): the
 same package bytes, and every other package the certification read, at the
 same version and lockfile integrity. Certify in the tree you analyze; a
 catalog copied into a tree whose installs differ, or one whose receipt states
-no environment, reaches no project file. The receipt's
+no environment, reaches no project file. `contract certify` exits `0` when the
+entry it published states its environment, `1` when it published an entry
+whose environment was not acquired (the last stderr line names the entry and
+the reason; no project will admit it until it is certified again), and `2`
+when it refused and published nothing. Node built-ins (`node:fs`, and bare
+core names such as `assert` or `fs/promises`) are not packages and never make
+an environment unacquired; as in Node, a bare core name is the built-in even
+where a userland package of that name is installed. The receipt's
 `artifactAcceptanceRoot` is signed, so a receipt issued before it was signed
 is refused with a message to certify again.
 

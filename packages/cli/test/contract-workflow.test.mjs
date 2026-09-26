@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -73,6 +74,8 @@ import {
 } from "../scripts/contract-probe-harness.mjs";
 import {
   ArtifactResolutionError,
+  NODE_BARE_BUILTIN_MODULES,
+  nodeBuiltinSpecifier,
   resolvePackageArtifactClosure
 } from "../scripts/artifact-resolution.mjs";
 import {
@@ -80,6 +83,8 @@ import {
   CertificationRefusal,
   acquireRootCompilerSources,
   acquireRootCompilerSourcesWithEnvironment,
+  CERTIFIED_NOT_ADMITTED_EXIT_CODE,
+  certificationOutcome,
   dependencyEnvironmentFromNativeOutput,
   dependencyEnvironmentNotAcquiredMessage,
   publicationHoldsPackage,
@@ -3035,6 +3040,127 @@ test("a genuinely dependency-free package acquires the empty environment with no
   }
 });
 
+test("a Node built-in names no package, exactly as Node decides it", () => {
+  for (const specifier of [
+    "assert", "fs", "fs/promises", "assert/strict", "stream/web", "node:fs",
+    "node:fs/promises", "node:test", "node:sqlite", "node:not-a-module"
+  ]) {
+    assert.equal(nodeBuiltinSpecifier(specifier), true, specifier);
+  }
+  // Each of these reaches `node_modules` under Node: `assert/` is Node's own
+  // documented spelling for the userland package, `test` and `sqlite` exist
+  // only behind `node:`, and `ws`/`undici`/`bun` are what Bun's
+  // `builtinModules` would wrongly add.
+  for (const specifier of [
+    "assert/", "fs/extra", "test", "sqlite", "sea", "ws", "undici", "bun", "bun:ffi",
+    "@types/node", "alpha", "Fs"
+  ]) {
+    assert.equal(nodeBuiltinSpecifier(specifier), false, specifier);
+  }
+});
+
+test("the bare built-in table is the builtinModules of the node on PATH", context => {
+  const node = spawnSync(
+    "node",
+    ["-p", 'JSON.stringify(require("node:module").builtinModules)'],
+    { encoding: "utf8" }
+  );
+  if (node.error || node.status !== 0) {
+    context.skip("no node on PATH");
+    return;
+  }
+  const expected = JSON.parse(node.stdout)
+    .filter(name => !name.startsWith("node:"))
+    .sort();
+  assert.deepEqual([...NODE_BARE_BUILTIN_MODULES].sort(), expected);
+});
+
+// The npm-v3 root install above with `alpha` and `beta` locked, the root's and
+// alpha's typings replaced, and optionally a userland package named like a
+// Node built-in installed and locked beside them.
+function writeBuiltinInstall(project, { rootImports, alphaImports = [], userland = [] }) {
+  writeRootSourceInstallWith(project, {
+    "package-lock.json": npmLockfile(3, ["alpha", "beta", ...userland])
+  });
+  const imports = specifiers =>
+    specifiers.map(specifier => `import ${JSON.stringify(specifier)};\n`).join("");
+  writeFileSync(
+    join(project, "node_modules/root-package/types/index.d.ts"),
+    `${imports(rootImports)}import type { T as A } from "alpha";\n` +
+      `import type { T as B } from "beta";\nexport declare const value: A | B;\n`
+  );
+  writeFileSync(
+    join(project, "node_modules/alpha/types/index.d.ts"),
+    `${imports(alphaImports)}export type T = () => void;\n`
+  );
+  for (const name of userland) {
+    mkdirSync(join(project, "node_modules", name, "types"), { recursive: true });
+    mkdirSync(join(project, "node_modules", name, "dist"), { recursive: true });
+    writeFileSync(
+      join(project, "node_modules", name, "package.json"),
+      `{"name":"${name}","version":"1.0.0","exports":{".":{"types":"./types/index.d.ts","import":"./dist/index.js"}}}\n`
+    );
+    writeFileSync(join(project, "node_modules", name, "types/index.d.ts"), "export {};\n");
+    writeFileSync(join(project, "node_modules", name, "dist/index.js"), "export {};\n");
+  }
+}
+
+test("a closure that requires Node built-ins still acquires its environment", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-env-builtin-"));
+  try {
+    // vite-plugin-solid@3.0.0-next.5 on 2026-09-26: babel's
+    // `@babel/helper-module-imports` requires "assert", two packages below the
+    // root. That was "assert is not installed above ...", an environment not
+    // acquired, and a receipt no project admits. Both depths are covered here.
+    writeBuiltinInstall(project, {
+      rootImports: ["node:fs", "fs/promises"],
+      alphaImports: ["assert", "node:path", "fs/promises"]
+    });
+    const result = await rootEnvironment(project, ["alpha", "beta"]);
+    assert.deepEqual(result.names, ["alpha", "beta"], "a built-in adds no environment entry");
+    assert.equal(result.environmentNotAcquired, null);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("a bare built-in is the built-in even beside an installed userland package of that name", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-env-userland-"));
+  try {
+    // Node consults its core-module table before `node_modules`, so an
+    // installed, locked, served `assert` is not what `import "assert"` reads.
+    writeBuiltinInstall(project, {
+      rootImports: ["assert"],
+      alphaImports: ["assert"],
+      userland: ["assert"]
+    });
+    const builtin = await rootEnvironment(project, ["alpha", "beta", "assert"]);
+    assert.deepEqual(builtin.names, ["alpha", "beta"]);
+    assert.equal(builtin.environmentNotAcquired, null);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("a package that is genuinely missing still leaves the environment unacquired", async () => {
+  for (const [label, install, reason] of [
+    ["root", { rootImports: ["assert", "gamma"] }, /^gamma could not be identified .*gamma is not installed above/],
+    ["transitive", { rootImports: ["assert"], alphaImports: ["assert", "gamma"] }, /^gamma could not be identified .*gamma is not installed above/],
+    // Membership is exact: `assert/` is the userland spelling, and with no
+    // userland `assert` installed it names a package that is not there.
+    ["userland spelling", { rootImports: ["assert/"] }, /^assert could not be identified/]
+  ]) {
+    const project = mkdtempSync(join(tmpdir(), "solid-checker-root-env-missing-"));
+    try {
+      writeBuiltinInstall(project, install);
+      const result = await rootEnvironment(project);
+      assert.match(result.environmentNotAcquired ?? "", reason, label);
+    } finally {
+      rmSync(project, { recursive: true, force: true });
+    }
+  }
+});
+
 test("an accumulating catalog protects only the package it already publishes", () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-publication-holds-"));
   try {
@@ -3085,8 +3211,56 @@ test("the native dependency-environment lines are read, and a receipt stating no
   });
   assert.equal(
     dependencyEnvironmentNotAcquiredMessage("no exact lockfile exists"),
-    "solid-checker: dependency environment not acquired: no exact lockfile exists; this catalog will not be admitted"
+    "solid-checker: certified but not admitted: dependency environment not acquired: " +
+      "no exact lockfile exists; its receipt states no environment, so no project will apply " +
+      "this entry (exit 1)"
   );
+});
+
+test("a certification that states no environment exits 1 and says, last, that its entry is not admitted", () => {
+  const manifest = { name: "vite-plugin-solid", version: "3.0.0-next.5" };
+  // Neither "certified" (0) nor "refused" (2): the entry was published and
+  // authenticates, and no project will apply it.
+  assert.equal(CERTIFIED_NOT_ADMITTED_EXIT_CODE, 1);
+  const stated = certificationOutcome(manifest, { receipts: 1, notAcquired: [] });
+  assert.deepEqual(stated, { status: "certified", admitted: true, exitCode: 0, message: null });
+  assert.deepEqual(certificationOutcome(manifest, null), stated, "an older build reports nothing");
+  const unstated = certificationOutcome(manifest, {
+    receipts: 2,
+    notAcquired: [
+      { reason: "gamma is reached by the closure but is not installed" },
+      { reason: "a later reason" }
+    ]
+  });
+  assert.equal(unstated.status, "certified-not-admitted");
+  assert.equal(unstated.admitted, false);
+  assert.equal(unstated.exitCode, 1);
+  assert.equal(
+    unstated.dependencyEnvironmentNotAcquired,
+    "gamma is reached by the closure but is not installed"
+  );
+  assert.equal(
+    unstated.message,
+    "solid-checker: vite-plugin-solid@3.0.0-next.5 certified but not admitted: dependency " +
+      "environment not acquired: gamma is reached by the closure but is not installed; its " +
+      "receipt states no environment, so no project will apply this entry (exit 1)"
+  );
+});
+
+test("the dispatcher and the benchmark worker take certify's exit status from its outcome", () => {
+  const dispatcher = readFileSync(
+    fileURLToPath(new URL("../bin/solid-checker.mjs", import.meta.url)),
+    "utf8"
+  );
+  assert.match(dispatcher, /const outcome = await certifyContract\(process\.argv\.slice\(4\)\);/);
+  assert.match(dispatcher, /if \(outcome\?\.exitCode\) process\.exitCode = outcome\.exitCode;/);
+  const worker = readFileSync(
+    fileURLToPath(
+      new URL("../../../scripts/ecosystem-benchmark/lib/cli-worker.mjs", import.meta.url)
+    ),
+    "utf8"
+  );
+  assert.match(worker, /status = \(await certifyContract\(request\.args\)\)\?\.exitCode \?\? 0;/);
 });
 
 // The three cases of the `dependency-target-not-exported` policy. Each writes

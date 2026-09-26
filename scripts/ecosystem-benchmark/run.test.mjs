@@ -127,6 +127,22 @@ test("certified and refused attempts retain per-export producer explanations", (
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
+test("a certification published without an environment exits 1 and still reads as the publication it is", () => {
+  const directory = mkdtempSync(join(tmpdir(), "not-admitted-audit-"));
+  try {
+    const path = join(directory, "audit.json");
+    writeFileSync(path, JSON.stringify({
+      status: "certified",
+      dependencyEnvironment: { receipts: 1, notAcquired: [{ reason: "gamma is not installed" }] }
+    }));
+    assert.equal(readCertificationAttempt({ status: 1 }, path, 10).status, "certified");
+    // Exit 1 is that outcome only beside a certified audit; anything else is
+    // not a publication.
+    rmSync(path);
+    assert.equal(readCertificationAttempt({ status: 1 }, path, 10).status, "infrastructure-failure");
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 test("a Solid 2 probe pinned to solid-js alone is completed with the same-version @solidjs/web", () => {
   const solidReleases = {
     "solid-js": { v1: ["1.9.14"], v2: ["2.0.0-rc.0", "2.0.0-rc.3"] },

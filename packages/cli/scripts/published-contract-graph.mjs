@@ -10,6 +10,7 @@ import { dirname, relative, resolve, sep } from "node:path";
 import {
   ArtifactResolutionError,
   findPackageRoot,
+  nodeBuiltinSpecifier,
   resolvePackageArtifactClosure
 } from "./artifact-resolution.mjs";
 
@@ -698,7 +699,7 @@ export function discoverInstalledPublishedGraph(
         );
       }
       const dependencyName = packageNameFromSpecifier(dependency.specifier);
-      if (!dependencyName || dependency.specifier.startsWith("node:")) {
+      if (!dependencyName || nodeBuiltinSpecifier(dependency.specifier)) {
         throw new PublishedGraphAcquisitionRefusal(
           "unsupported-external-specifier",
           dependency.specifier

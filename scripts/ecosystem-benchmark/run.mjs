@@ -69,6 +69,7 @@ import {
 import { loadAuditedArchives } from "./lib/dialect-authority.mjs";
 import { buildReport, evaluateThresholds, renderMarkdown } from "./lib/report.mjs";
 import {
+  CERTIFIED_NOT_ADMITTED_EXIT_CODE,
   certificationImporterPathFor,
   partialProposalHasDependencyFrontier
 } from "../../packages/cli/scripts/certify-contract.mjs";
@@ -918,7 +919,14 @@ export function readCertificationAttempt(
     declaredWildcard,
     requestedEntrypoints
   });
-  if (result.status === 0) {
+  // A publication whose receipt states no dependency environment exits
+  // `CERTIFIED_NOT_ADMITTED_EXIT_CODE`, and it is still the publication it was
+  // when that exited 0: the audit says `certified` and carries
+  // `dependencyEnvironment`, so the row classifies it exactly as before.
+  const published =
+    result.status === 0 ||
+    (result.status === CERTIFIED_NOT_ADMITTED_EXIT_CODE && audit?.status === "certified");
+  if (published) {
     return {
       attempted: true,
       status: "certified",
