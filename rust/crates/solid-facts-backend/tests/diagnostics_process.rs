@@ -537,8 +537,13 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // tracked scopes throw and the same observer-free ones -- plus the
         // action step rc.9 documents -- stay silent.
         assert_rule_findings(&findings, "until-in-tracked-scope", 4);
-        // Beside them, the one project-scoped rc.9 notice (SC9014).
-        assert_rule_findings(&findings, "unaudited-solid-release", 1);
+        // Beside them, the one project-scoped rc.9 notice (SC9014), which is
+        // located at the solid-js manifest rather than at source.
+        assert_eq!(
+            findings_for_rule(&findings, "unaudited-solid-release").len(),
+            1,
+            "{findings:#?}"
+        );
         assert!(
             findings.iter().all(|finding| {
                 (finding["rule"] == "until-in-tracked-scope" && finding["kind"] == "violation")
