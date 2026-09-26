@@ -1067,6 +1067,156 @@ pub fn admitted_project_artifacts(
     .map_err(|error| BackendError::Contract(error.to_string()))
 }
 
+/// The project catalogs one analysis may read, and the discovered ones it
+/// withheld because nothing was configured to authenticate them.
+#[derive(Clone, Debug, Default)]
+pub struct ProjectCatalogSelection {
+    /// The catalogs to read, in discovery order.
+    pub admitted: Vec<PathBuf>,
+    /// Discovered catalogs holding policy-2 entries, withheld because no
+    /// `--receipt-trust-configuration` was supplied.
+    pub unauthenticated: Vec<UnauthenticatedCatalog>,
+}
+
+/// A discovered project catalog that was not read for want of trust.
+#[derive(Clone, Debug)]
+pub struct UnauthenticatedCatalog {
+    pub path: PathBuf,
+    /// The packages its policy-2 entries accept.
+    pub packages: Vec<String>,
+}
+
+impl UnauthenticatedCatalog {
+    /// The sentence `contract check` appends to such a package's status.
+    fn refusal(&self) -> String {
+        format!(
+            "a project catalog entry exists for this package and was not read: {} needs --receipt-trust-configuration <trust.json> to authenticate its policy-2 receipt",
+            self.path.display()
+        )
+    }
+}
+
+impl ProjectCatalogSelection {
+    /// Whether any catalog was found or named at all, admitted or not.
+    pub fn is_empty(&self) -> bool {
+        self.admitted.is_empty() && self.unauthenticated.is_empty()
+    }
+
+    /// The one non-fatal notice an analysis prints when it withheld catalogs,
+    /// naming every withheld path, the packages they accept, and the remedy.
+    pub fn notice(&self) -> Option<String> {
+        if self.unauthenticated.is_empty() {
+            return None;
+        }
+        let paths = self
+            .unauthenticated
+            .iter()
+            .map(|catalog| catalog.path.display().to_string())
+            .collect::<Vec<_>>();
+        let mut packages = self
+            .unauthenticated
+            .iter()
+            .flat_map(|catalog| catalog.packages.iter().cloned())
+            .collect::<Vec<_>>();
+        packages.sort();
+        packages.dedup();
+        let (noun, verb) = if paths.len() == 1 {
+            ("catalog", "was")
+        } else {
+            ("catalogs", "were")
+        };
+        Some(format!(
+            "solid-checker: note: project {noun} {} {verb} not read: policy-2 receipts need a trusted issuer and no trust configuration was supplied, so the contracts for {} are not admitted and the analysis proceeds as if the {noun} {verb} absent; pass --receipt-trust-configuration <trust.json> (the file `contract certify --trust-configuration-output` wrote) to admit them",
+            paths.join(", "),
+            packages.join(", ")
+        ))
+    }
+
+    /// `contract check`'s explanation for each package a withheld catalog
+    /// accepts. It replaces a compiled-in tier's refusal for the same package:
+    /// project catalogs take precedence over that tier, so the withheld one is
+    /// what would have answered.
+    pub fn extend_refusals(&self, refusals: &mut BTreeMap<String, String>) {
+        for catalog in &self.unauthenticated {
+            for package in &catalog.packages {
+                refusals.insert(package.clone(), catalog.refusal());
+            }
+        }
+    }
+}
+
+/// Selects the project catalogs an analysis reads.
+///
+/// `explicit` is `--accepted-contracts`; empty means discovery under
+/// `directory`. `trust_supplied` is whether `--receipt-trust-configuration`
+/// was given; the configuration itself is read and validated by the caller,
+/// so a named but missing or undecodable trust file still fails there.
+///
+/// A policy-2 entry can only be admitted by authenticating its receipt against
+/// separately configured trust, and a project cannot nominate its own issuer.
+/// So a discovered catalog holding one is unreadable without that
+/// configuration, and it used to take the whole analysis down with it: exit 2
+/// and no findings at all, on every run after the first `contract certify`
+/// that forgot `--receipt-trust-configuration`. Measured on `@kobalte/core`
+/// (docs/package-contract-v2/phase22/2026-09-26-project-side-certification-on-kobalte-core.md).
+///
+/// Such a catalog is now withheld whole, exactly as if it were absent: every
+/// import it would have covered falls back to the compiled-in tier or to the
+/// acceptance-gate obligation, and the caller reports
+/// [`ProjectCatalogSelection::notice`]. Nothing is admitted on the way, so this
+/// can only lose acceptances, never add one.
+///
+/// A catalog the user *named* is different. `--accepted-contracts <path>` is a
+/// request for that catalog's contracts, and answering it silently without
+/// them would report a run that did not do what was asked; it stays a hard
+/// error, now naming the path and the remedy.
+pub fn select_project_catalogs(
+    directory: &Path,
+    explicit: &str,
+    trust_supplied: bool,
+) -> Result<ProjectCatalogSelection, BackendError> {
+    let contract = |error: crate::ContractFailure| BackendError::Contract(error.to_string());
+    if !explicit.is_empty() {
+        let path = PathBuf::from(explicit);
+        if !trust_supplied {
+            let packages = crate::contract_interface::catalog_packages_needing_receipt_trust(&path)
+                .map_err(contract)?;
+            if !packages.is_empty() {
+                return Err(BackendError::Contract(format!(
+                    "--accepted-contracts {}: {}; pass --receipt-trust-configuration <trust.json> naming the issuer that certified it",
+                    path.display(),
+                    crate::ContractFailure::ReceiptAuthenticationRequired
+                )));
+            }
+        }
+        return Ok(ProjectCatalogSelection {
+            admitted: vec![path],
+            unauthenticated: Vec::new(),
+        });
+    }
+    let discovered =
+        crate::contract_interface::discovered_catalog_paths(directory).map_err(contract)?;
+    if trust_supplied {
+        return Ok(ProjectCatalogSelection {
+            admitted: discovered,
+            unauthenticated: Vec::new(),
+        });
+    }
+    let mut selection = ProjectCatalogSelection::default();
+    for path in discovered {
+        let packages = crate::contract_interface::catalog_packages_needing_receipt_trust(&path)
+            .map_err(contract)?;
+        if packages.is_empty() {
+            selection.admitted.push(path);
+        } else {
+            selection
+                .unauthenticated
+                .push(UnauthenticatedCatalog { path, packages });
+        }
+    }
+    Ok(selection)
+}
+
 /// The accepted-contract index ordinary analysis reads, from every tier this
 /// project can reach.
 ///
@@ -2594,5 +2744,95 @@ mod tests {
         assert!(super::discover_rule_options(&directory).is_err());
 
         std::fs::remove_dir_all(&directory).ok();
+    }
+
+    /// A discovered catalog that needs trust nobody supplied is withheld and
+    /// explained, never fatal; one the user named still refuses; and a catalog
+    /// that needs no trust is read exactly as before. The process-level half,
+    /// with a real signed receipt, is
+    /// `an_authorized_catalog_is_not_admitted_without_the_trust_configuration`.
+    #[test]
+    fn a_catalog_needing_absent_trust_is_withheld_only_when_discovered() {
+        let fixture = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../fixtures/reactive-ir/package-return-consumer/.solid-checker/accepted-contracts.json"
+        ))
+        .unwrap();
+        assert!(fixture.contains(r#""status": "obsolete-policy1""#));
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-withheld-catalog-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let project = |name: &str, catalog: &str| {
+            let directory = root.join(name);
+            std::fs::create_dir_all(directory.join(".solid-checker")).unwrap();
+            std::fs::write(
+                directory.join(".solid-checker/accepted-contracts.json"),
+                catalog,
+            )
+            .unwrap();
+            directory
+        };
+        let signed = project(
+            "signed",
+            &fixture.replace(
+                r#""status": "obsolete-policy1""#,
+                r#""status": "policy2-portable""#,
+            ),
+        );
+        let catalog = signed.join(".solid-checker/accepted-contracts.json");
+
+        let withheld = super::select_project_catalogs(&signed, "", false).unwrap();
+        assert!(withheld.admitted.is_empty());
+        assert!(
+            !withheld.is_empty(),
+            "a withheld catalog still counts as found"
+        );
+        assert_eq!(withheld.unauthenticated.len(), 1);
+        assert_eq!(withheld.unauthenticated[0].path, catalog);
+        assert_eq!(withheld.unauthenticated[0].packages, ["reactive-package"]);
+        let notice = withheld.notice().unwrap();
+        assert!(notice.contains(&catalog.display().to_string()), "{notice}");
+        assert!(notice.contains("reactive-package"), "{notice}");
+        assert!(
+            notice.contains("--receipt-trust-configuration <trust.json>"),
+            "{notice}"
+        );
+        // It replaces a compiled-in tier's refusal: the project tier answers first.
+        let mut refusals = std::collections::BTreeMap::from([(
+            "reactive-package".to_owned(),
+            "a compiled-in contract exists for this package and was not admitted".to_owned(),
+        )]);
+        withheld.extend_refusals(&mut refusals);
+        assert!(refusals["reactive-package"].contains("was not read"));
+        assert!(refusals["reactive-package"].contains(&catalog.display().to_string()));
+
+        let trusted = super::select_project_catalogs(&signed, "", true).unwrap();
+        assert_eq!(trusted.admitted, std::slice::from_ref(&catalog));
+        assert!(trusted.unauthenticated.is_empty() && trusted.notice().is_none());
+
+        let explicit = catalog.to_string_lossy().into_owned();
+        let refusal = super::select_project_catalogs(&root, &explicit, false)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            refusal.contains("authenticated issuer provenance"),
+            "{refusal}"
+        );
+        assert!(refusal.contains(&explicit), "{refusal}");
+        let named = super::select_project_catalogs(&root, &explicit, true).unwrap();
+        assert_eq!(named.admitted, std::slice::from_ref(&catalog));
+
+        // Obsolete policy-1 entries need no trust to be read as uncertifiable,
+        // so nothing about such a catalog changes.
+        let obsolete = project("obsolete", &fixture);
+        let unchanged = super::select_project_catalogs(&obsolete, "", false).unwrap();
+        assert_eq!(unchanged.admitted.len(), 1);
+        assert!(unchanged.notice().is_none());
+        let explicit = obsolete.join(".solid-checker/accepted-contracts.json");
+        assert!(super::select_project_catalogs(&root, &explicit.to_string_lossy(), false).is_ok());
+
+        std::fs::remove_dir_all(&root).ok();
     }
 }

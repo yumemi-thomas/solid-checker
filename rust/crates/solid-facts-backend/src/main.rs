@@ -3550,17 +3550,23 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         // certification publishes a case set for a package with more than one
         // artifact case, and opening only the older spelling is what left a
         // freshly certified contract unread. See `discovered_catalog_paths`.
-        let catalogs = if request.accepted_contract_catalog.is_empty() {
-            solid_facts_backend::discovered_catalog_paths(directory)?
-        } else {
-            vec![PathBuf::from(&request.accepted_contract_catalog)]
-        };
-        let catalog = catalogs.first().cloned();
+        // A discovered catalog that needs trust nobody supplied is withheld,
+        // not fatal: see `select_project_catalogs`.
         let trust = (!request.receipt_trust_configuration.is_empty())
             .then(|| {
                 read_policy2_trust_configuration(Path::new(&request.receipt_trust_configuration))
             })
             .transpose()?;
+        let selection = solid_facts_backend::select_project_catalogs(
+            directory,
+            &request.accepted_contract_catalog,
+            trust.is_some(),
+        )?;
+        if let Some(notice) = selection.notice() {
+            eprintln!("{notice}");
+        }
+        let catalogs = selection.admitted.clone();
+        let catalog = catalogs.first().cloned();
         // Every tier, in the one order they are folded in. The *selected*
         // condition set, not the raw `--runtime-condition` list:
         // `selected_conditions` folds in `--runtime-target`, `--runtime-build`
@@ -3582,11 +3588,12 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         let _ = &catalog;
         // Why a package with an acceptance on hand is still `missing`: the
         // same admission steps replayed, reported rather than decided.
-        let refusals = solid_facts_backend::admission_refusal_details(
+        let mut refusals = solid_facts_backend::admission_refusal_details(
             directory,
             &catalogs,
             request.bundled_contracts,
         )?;
+        selection.extend_refusals(&mut refusals);
         let statuses =
             accepted_package_contract_statuses(dialect, project, &facts, &contracts, &refusals)?;
         let actionable = statuses
@@ -3656,17 +3663,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         // and discovery used to open only `accepted-contracts.json` — so a
         // certified, signed, trusted contract was written and never read. See
         // `discovered_catalog_paths`.
-        let discovered_catalogs = if request.accepted_contract_catalog.is_empty() {
-            let project = Path::new(&facts.project_id);
-            let directory = if project.is_dir() {
-                project
-            } else {
-                project.parent().unwrap_or_else(|| Path::new("."))
-            };
-            solid_facts_backend::discovered_catalog_paths(directory)?
-        } else {
-            vec![PathBuf::from(&request.accepted_contract_catalog)]
-        };
         let project = Path::new(&facts.project_id);
         let directory = if project.is_dir() {
             project
@@ -3679,6 +3675,18 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 read_policy2_trust_configuration(Path::new(&request.receipt_trust_configuration))
             })
             .transpose()?;
+        // A discovered catalog that needs trust nobody supplied is withheld,
+        // not fatal: the analysis proceeds as if it were absent and says so
+        // once. See `select_project_catalogs`.
+        let selection = solid_facts_backend::select_project_catalogs(
+            directory,
+            &request.accepted_contract_catalog,
+            trust.is_some(),
+        )?;
+        if let Some(notice) = selection.notice() {
+            eprintln!("{notice}");
+        }
+        let discovered_catalogs = selection.admitted.clone();
         // Every tier, in the one order they are folded in. The *selected*
         // condition set, not the raw `--runtime-condition` list:
         // `selected_conditions` folds in `--runtime-target`, `--runtime-build`
@@ -3703,7 +3711,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             if request.emit_contract.is_empty() && request.emit_contract_batch.is_empty() {
                 return Err("--proposal-dependencies is private to contract emission".into());
             }
-            if !discovered_catalogs.is_empty() || trust.is_some() {
+            // Every catalog found, withheld ones included: this refusal is
+            // about mixing the two sources, and was never conditional on trust.
+            if !selection.is_empty() || trust.is_some() {
                 return Err(
                     "--proposal-dependencies cannot be combined with accepted-contract receipt authority"
                         .into(),
@@ -4364,7 +4374,8 @@ fn print_help() {
            --accepted-contracts <PATH>  Load a host-acquired catalog of stable-v1\n\
                                         documents, proof receipts, and exact resolved imports\n\
            --receipt-trust-configuration <PATH>\n\
-                                        Load policy-2 issuer trust selected outside the project\n\
+                                        Load policy-2 issuer trust selected outside the project;\n\
+                                        without it a discovered policy-2 catalog is not read\n\
            --preset <NAME>              Enable a catalog preset (repeatable)\n\
            --enable-rule <NAME>         Explicitly enable one rule (repeatable)\n\
            --runtime-target <browser|node>\n\

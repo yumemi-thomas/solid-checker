@@ -1364,6 +1364,36 @@ pub fn discovered_catalog_paths(directory: &Path) -> Result<Vec<PathBuf>, Contra
     Ok(paths)
 }
 
+/// The packages whose entries in the catalog at `path` ordinary analysis can
+/// only admit by authenticating a policy-2 receipt, sorted and deduplicated.
+///
+/// Empty means the catalog is readable with no trust configuration at all:
+/// every entry is an obsolete policy-1 marker, or a core-runtime entry that
+/// [`read_external_contract_catalog_with_trust`] withholds before it would ask
+/// for trust. The same two exclusions, so this answers exactly whether that
+/// reader would refuse for want of trust.
+pub fn catalog_packages_needing_receipt_trust(path: &Path) -> Result<Vec<String>, ContractFailure> {
+    let (catalog, _) = decode_accepted_contract_catalog(path)?;
+    let mut packages = catalog
+        .contracts
+        .into_iter()
+        .filter(|entry| {
+            matches!(
+                entry.status,
+                AcceptedCatalogStatus::Policy2PersistentLocal
+                    | AcceptedCatalogStatus::Policy2Portable
+            ) && !solid_dialect::core_runtime_contract_reference(
+                &entry.import.package_name,
+                &entry.import.specifier,
+            )
+        })
+        .map(|entry| entry.import.package_name)
+        .collect::<Vec<_>>();
+    packages.sort();
+    packages.dedup();
+    Ok(packages)
+}
+
 /// The case catalogs one digest-verified case-set document names.
 fn case_set_catalog_paths(
     pointer_base: &Path,

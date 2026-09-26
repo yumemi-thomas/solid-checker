@@ -655,9 +655,17 @@ fn answer(
     // importing a bundled `@solid-primitives/keyed@1.5.3`: the release binary
     // answered "no receipt-accepted contract matches this exact import" with
     // the daemon on and read the contract with it off.
+    // Withheld catalogs are reported by the client, which prints to the
+    // user's terminal; this process's stderr goes nowhere. See `check`.
+    let catalogs = solid_facts_backend::select_project_catalogs(
+        directory,
+        &check.accepted_contract_catalog,
+        trust.is_some(),
+    )?
+    .admitted;
     let contracts = solid_facts_backend::project_accepted_contracts(
         directory,
-        &discovered_catalogs(directory, &check.accepted_contract_catalog)?,
+        &catalogs,
         trust.as_ref(),
         check.bundled_contracts,
         &check.runtime.selected_conditions(),
@@ -855,6 +863,7 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     if !header.ok {
         return Err(header.error.into());
     }
+    report_withheld_catalogs(request);
     if request.format == "json" {
         // The daemon caches the canonical JSON emission. Stream it directly:
         // parsing and serializing the multi-megabyte snapshot again made the
@@ -884,6 +893,30 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
         u64::try_from(body.len()).unwrap_or(u64::MAX),
     );
     Ok(emission.exit_code)
+}
+
+/// The client's copy of the one-shot notice for catalogs withheld for want of
+/// trust. The daemon made the same selection from the same two inputs — the
+/// project's catalogs and whether trust was named — but its stderr is not the
+/// user's terminal, so the notice has to be printed here. It is printed only
+/// after a successful answer, so a daemon failure that falls back to one-shot
+/// does not print it twice. A selection error is left to the analysis, which
+/// already answered.
+fn report_withheld_catalogs(request: &Request) {
+    let project = Path::new(&request.project_id);
+    let directory = if project.is_dir() {
+        project
+    } else {
+        project.parent().unwrap_or_else(|| Path::new("."))
+    };
+    if let Ok(selection) = solid_facts_backend::select_project_catalogs(
+        directory,
+        &request.accepted_contract_catalog,
+        !request.receipt_trust_configuration.is_empty(),
+    ) && let Some(notice) = selection.notice()
+    {
+        eprintln!("{notice}");
+    }
 }
 
 fn report_timings(header: &CheckHeader, elapsed: Duration, received_bytes: u64) {

@@ -114,18 +114,62 @@ fn mint_and_analyze(
     label: &str,
     reopen: Option<&str>,
 ) -> Result<Vec<serde_json::Value>, String> {
-    mint_and_analyze_with_trust(fixture, label, reopen, true)
+    let minted = mint_fixture(fixture, label, reopen)?;
+    let output = analyze_minted(&minted, &minted.trust_arguments(), &[]);
+    if !output.status.success() {
+        return Err(format!(
+            "analysis refused: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+
+    Ok(decode_findings(&output.stdout))
 }
 
-/// As above, with the choice of whether to hand the checker the trust
-/// configuration. Withholding it is not a degenerate case — it is the control
-/// that makes a fixed fixture signing key sound.
-fn mint_and_analyze_with_trust(
-    fixture: &str,
-    label: &str,
-    reopen: Option<&str>,
-    supply_trust: bool,
-) -> Result<Vec<serde_json::Value>, String> {
+/// A fixture copy whose catalog carries a freshly minted policy-2 receipt, and
+/// the trust configuration that authenticates it, written outside the project.
+struct MintedFixture {
+    project: PathBuf,
+    trust: PathBuf,
+    typefacts: String,
+}
+
+impl MintedFixture {
+    fn catalog(&self) -> PathBuf {
+        self.project.join(".solid-checker/accepted-contracts.json")
+    }
+
+    /// The out-of-band trust, as the checker takes it.
+    fn trust_arguments(&self) -> Vec<String> {
+        vec![
+            "--receipt-trust-configuration".to_owned(),
+            self.trust.to_string_lossy().into_owned(),
+        ]
+    }
+}
+
+/// Runs the checker over a minted fixture with `extra` arguments and `envs`.
+fn analyze_minted(
+    minted: &MintedFixture,
+    extra: &[String],
+    envs: &[(&str, &str)],
+) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .args([
+            "--project",
+            &minted.project.join("tsconfig.json").to_string_lossy(),
+            "--typefacts",
+            &minted.typefacts,
+            "--format",
+            "json",
+        ])
+        .args(extra)
+        .envs(envs.iter().copied())
+        .output()
+        .unwrap()
+}
+
+fn mint_fixture(fixture: &str, label: &str, reopen: Option<&str>) -> Result<MintedFixture, String> {
     let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("caller guards on the producer");
 
     let scratch = temporary_directory(label);
@@ -205,30 +249,11 @@ fn mint_and_analyze_with_trust(
     let trust_path = scratch.join("fixture-trust.json");
     fs::write(&trust_path, &authorization.trust_configuration).unwrap();
 
-    let mut arguments = vec![
-        "--project".to_owned(),
-        project.join("tsconfig.json").to_string_lossy().into_owned(),
-        "--typefacts".to_owned(),
+    Ok(MintedFixture {
+        project,
+        trust: trust_path,
         typefacts,
-        "--format".to_owned(),
-        "json".to_owned(),
-    ];
-    if supply_trust {
-        arguments.push("--receipt-trust-configuration".to_owned());
-        arguments.push(trust_path.to_string_lossy().into_owned());
-    }
-    let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
-        .args(&arguments)
-        .output()
-        .unwrap();
-    if !output.status.success() {
-        return Err(format!(
-            "analysis refused: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        ));
-    }
-
-    Ok(decode_findings(&output.stdout))
+    })
 }
 
 /// The property that makes a fixed fixture signing key sound rather than a
@@ -240,20 +265,134 @@ fn mint_and_analyze_with_trust(
 /// snapshot downstream of an authorized fixture would be worthless. It is also
 /// the reason `fixtures/reactive-ir/package-merged-props-consumer` can be
 /// committed at all.
+///
+/// Not accepting it used to mean refusing the whole analysis: exit 2 and no
+/// findings, on every run of a project that had certified anything and not
+/// passed `--receipt-trust-configuration` (measured on `@kobalte/core`,
+/// docs/package-contract-v2/phase22/2026-09-26-project-side-certification-on-kobalte-core.md).
+/// A *discovered* catalog is now withheld whole instead: findings identical to
+/// the same tree with no catalog at all, plus one notice naming the catalog
+/// and the remedy. A catalog the user *named* still refuses, and so does a
+/// named trust file that cannot be read.
 #[test]
-fn an_authorized_catalog_is_refused_without_the_trust_configuration() {
+fn an_authorized_catalog_is_not_admitted_without_the_trust_configuration() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
-    let refusal = mint_and_analyze_with_trust(FIXTURE, "unauthorized-trust", None, false)
-        .expect_err("a policy-2 catalog with no trusted issuer must not be accepted");
+    let minted = mint_fixture(FIXTURE, "unauthorized-trust", None).expect("the fixture mints");
+    let catalog = minted.catalog().to_string_lossy().into_owned();
+    let stderr =
+        |output: &std::process::Output| String::from_utf8_lossy(&output.stderr).into_owned();
+    let notice = |text: &str| {
+        text.lines()
+            .filter(|line| line.starts_with("solid-checker: note: project catalog"))
+            .count()
+    };
+
+    // Discovered, no trust: analyzed, catalog withheld, one notice.
+    let withheld = analyze_minted(&minted, &[], &[]);
+    assert_eq!(withheld.status.code(), Some(0), "{}", stderr(&withheld));
+    let withheld_stderr = stderr(&withheld);
+    assert_eq!(notice(&withheld_stderr), 1, "{withheld_stderr}");
     assert!(
-        refusal.contains("authenticated issuer provenance"),
+        withheld_stderr.contains(&catalog)
+            && withheld_stderr.contains("--receipt-trust-configuration <trust.json>"),
+        "the notice names the catalog and the remedy: {withheld_stderr}"
+    );
+    let withheld_findings = decode_findings(&withheld.stdout);
+
+    // The control: the same tree, the same receipt, the trust supplied. The
+    // catalog is admitted, which the findings show, and nothing is noted.
+    let trusted = analyze_minted(&minted, &minted.trust_arguments(), &[]);
+    assert_eq!(trusted.status.code(), Some(0), "{}", stderr(&trusted));
+    assert_eq!(notice(&stderr(&trusted)), 0);
+    let trusted_findings = decode_findings(&trusted.stdout);
+    assert_ne!(
+        trusted_findings, withheld_findings,
+        "the fixture's findings must depend on the catalog, or withholding it proves nothing"
+    );
+
+    // Named, no trust: the user asked for this catalog, so it still refuses,
+    // now naming the path and the remedy.
+    let named = vec!["--accepted-contracts".to_owned(), catalog.clone()];
+    let refused = analyze_minted(&minted, &named, &[]);
+    assert_eq!(refused.status.code(), Some(2));
+    let refusal = stderr(&refused);
+    assert!(
+        refusal.contains("authenticated issuer provenance")
+            && refusal.contains(&catalog)
+            && refusal.contains("--receipt-trust-configuration"),
         "refused for the wrong reason: {refusal}"
     );
-    // The control: the same tree, the same receipt, the trust supplied.
-    mint_and_analyze_with_trust(FIXTURE, "authorized-trust", None, true)
-        .expect("the same catalog is accepted once the issuer is trusted");
+    assert!(refused.stdout.is_empty(), "a refusal emits no snapshot");
+    // Named with trust: admitted exactly as discovery admits it.
+    let named_trusted = analyze_minted(
+        &minted,
+        &[named.clone(), minted.trust_arguments()].concat(),
+        &[],
+    );
+    assert_eq!(
+        named_trusted.status.code(),
+        Some(0),
+        "{}",
+        stderr(&named_trusted)
+    );
+    assert_eq!(decode_findings(&named_trusted.stdout), trusted_findings);
+
+    // A trust file that was named and cannot be read is a configuration
+    // error, not an absence: it refuses rather than quietly withholding.
+    let broken = minted.project.parent().unwrap().join("broken-trust.json");
+    fs::write(&broken, b"{}").unwrap();
+    let broken_trust = vec![
+        "--receipt-trust-configuration".to_owned(),
+        broken.to_string_lossy().into_owned(),
+    ];
+    assert_eq!(
+        analyze_minted(&minted, &broken_trust, &[]).status.code(),
+        Some(2)
+    );
+    let missing_trust = vec![
+        "--receipt-trust-configuration".to_owned(),
+        minted
+            .project
+            .parent()
+            .unwrap()
+            .join("absent.json")
+            .to_string_lossy()
+            .into_owned(),
+    ];
+    assert_eq!(
+        analyze_minted(&minted, &missing_trust, &[]).status.code(),
+        Some(2)
+    );
+
+    // `contract check` reports instead of refusing. This fixture's report
+    // lists no package, so the per-package explanation is pinned by the unit
+    // test beside `select_project_catalogs` instead.
+    let check = analyze_minted(&minted, &["--check-contracts".to_owned()], &[]);
+    assert_ne!(check.status.code(), Some(2), "{}", stderr(&check));
+    assert_eq!(notice(&stderr(&check)), 1);
+    let report: serde_json::Value = serde_json::from_slice(&check.stdout).unwrap();
+    assert!(report["packages"].is_array(), "{report}");
+
+    // The release default: the retained daemon answers, and the client prints
+    // the notice its daemon cannot.
+    let daemon = [
+        ("SOLID_CHECKER_DAEMON", "1"),
+        ("SOLID_CHECKER_DAEMON_IDLE_SECS", "1"),
+    ];
+    let retained = analyze_minted(&minted, &[], &daemon);
+    assert_eq!(retained.status.code(), Some(0), "{}", stderr(&retained));
+    assert_eq!(notice(&stderr(&retained)), 1, "{}", stderr(&retained));
+    assert_eq!(decode_findings(&retained.stdout), withheld_findings);
+
+    // Last, because it removes the catalog: the same tree with none at all
+    // reports exactly what the withheld run did, and notes nothing.
+    fs::remove_file(minted.catalog()).unwrap();
+    let absent = analyze_minted(&minted, &[], &[]);
+    assert_eq!(absent.status.code(), Some(0), "{}", stderr(&absent));
+    assert_eq!(notice(&stderr(&absent)), 0);
+    assert_eq!(decode_findings(&absent.stdout), withheld_findings);
 }
 
 /// Separates two things a contract's `reads` claim carries, because
