@@ -33,7 +33,9 @@ is not a rule.
   `rust/target/release` and of every `rust/target/debug` entry except
   `incremental`, plus `bin/solid-typefacts{,.buildinfo}` and
   `packages/cli/probe-harness.buildinfo`; symlink the `node_modules`
-  directories. The lead merges the worktree's commits.
+  directories. The lead merges the worktree's commits. An agent spawned with
+  worktree isolation starts from `main`, not from the lead's branch: its first
+  step is `git switch -c <branch> <the lead's exact commit>`.
 - Sweeps and census-style measurements use the release binary
   (`make build-checker-release`, about 45 s incremental): the debug binary
   inflates certification about 19x and a consumer sweep from seconds to
