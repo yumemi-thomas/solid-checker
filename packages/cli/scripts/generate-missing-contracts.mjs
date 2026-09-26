@@ -105,6 +105,23 @@ export function contractReportPackages(report) {
   );
 }
 
+// Why the sweep will not generate for a report row, or `undefined` when it
+// will. The sweep writes one name-keyed contract per package under the project
+// directory, from the install that directory's own lookup finds. A row that
+// names its `importers` is one whose artifact that lookup does not identify:
+// the package is installed as more than one artifact across the analysed files,
+// or only where a sub-package's `node_modules` holds it (a monorepo analysed
+// from its root). Generating from the project directory's install there would
+// describe a different artifact than the one those files import, or none.
+export function sweepRefusal(entry) {
+  if (!Array.isArray(entry?.importers) || entry.importers.length === 0) return undefined;
+  return (
+    `${entry.name}: the name does not identify this row's installed artifact from the project ` +
+    `directory (imported by ${entry.importers.join(", ")}); a name-keyed contract here would not describe it. ` +
+    "Run the sweep from the project that owns those files"
+  );
+}
+
 function installedPackageRoot(directory, name) {
   let current = directory;
   for (;;) {
@@ -157,6 +174,8 @@ export async function generateMissingContracts(arguments_) {
   const failed = [];
   for (const entry of missing) {
     try {
+      const refusal = sweepRefusal(entry);
+      if (refusal) throw new Error(refusal);
       const packageRoot = installedPackageRoot(directory, entry.name);
       if (!packageRoot) throw new Error(`no installed package at node_modules/${entry.name}`);
       if (!entry.installedIntegrity) {

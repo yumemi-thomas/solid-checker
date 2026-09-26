@@ -930,6 +930,15 @@ pub struct PackageContractStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub remedy: Option<String>,
     pub contract_path: String,
+    /// The analysed files whose imports of this package resolve to this row's
+    /// installed artifact, relative to the project directory. Present only
+    /// when the name alone does not identify the artifact: the package is
+    /// installed as more than one artifact across the importing files (one row
+    /// each), or its importers find it somewhere other than the project
+    /// directory's own lookup -- a sub-package's `node_modules` in a monorepo
+    /// analysed from its root. A single-package project never carries it.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub importers: Vec<String>,
 }
 
 impl PackageContractStatus {
@@ -954,6 +963,10 @@ impl PackageContractStatus {
 /// runtime foundation. Built-in model selection is not artifact certification.
 /// Coverage is complete only when every exact imported specifier binds in the
 /// already receipt-validated normalized index.
+///
+/// An external package has one row per installed artifact its importers
+/// resolve to, each looked up from the importing files ([`imported_artifacts`])
+/// and counted over those files' import rows only.
 ///
 /// `refusals` names, per installed package, why an acceptance that exists for
 /// it in a project catalog or the compiled-in tier was not admitted
@@ -1003,97 +1016,239 @@ pub fn accepted_package_contract_statuses(
                 }),
                 remedy: (!modeled).then(|| "select a compatible Solid dialect and runtime; a core package contract cannot extend the built-in model".into()),
                 contract_path: String::new(),
+                importers: Vec::new(),
             });
             continue;
         }
-        let installed = installed_package_manifest(project_directory, &module)?;
-        let manifest = installed.as_ref().map(|(_, manifest)| manifest);
-        if !first_party.contains(&module.as_str()) && !manifest.is_some_and(manifest_uses_solid) {
-            continue;
-        }
-        let package_directory = installed.as_ref().map(|(directory, _)| directory.as_path());
-        let installed_integrity = package_directory
-            .map(|directory| installed_package_integrity(project_directory, directory))
-            .transpose()?
-            .flatten();
-        let imports = resolved
-            .into_iter()
-            .flat_map(|imports| imports.iter())
-            .filter(|(_, import)| {
-                import
-                    .resolver_package_name
-                    .as_deref()
-                    .or(import.package_name.as_deref())
-                    == Some(module.as_str())
-            })
-            .collect::<Vec<_>>();
-        let bound = imports
-            .iter()
-            .filter(|(importer, import)| contracts.contract(importer, &import.text).is_ok())
-            .count();
-        let (status, detail, remedy, contract_path) = if !imports.is_empty()
-            && bound == imports.len()
-        {
-            (
-                "certified".into(),
-                None,
-                None,
-                "receipt-issued stable-v1 index".into(),
-            )
-        } else {
-            let status = if bound == 0 { "missing" } else { "unbound" };
-            let detail = if imports.is_empty() {
-                "exact import identity facts are unavailable".to_owned()
-            } else if bound == 0 {
-                format!(
-                    "none of the {} exact imported artifact case(s) has a matching receipt",
-                    imports.len()
-                )
+        let artifacts = imported_artifacts(project_directory, facts, &module)?;
+        // The artifact the project directory's own lookup finds. A row whose
+        // importers find exactly that one is the row this report always
+        // printed, so it names no importers and a single-package project reads
+        // byte-identically.
+        let project_artifact = discover_package_directory(project_directory, &module)?
+            .map(|directory| artifact_key(&directory));
+        let split = artifacts.len() > 1;
+        for artifact in artifacts {
+            let installed = artifact
+                .directory
+                .as_deref()
+                .map(read_installed_manifest)
+                .transpose()?
+                .flatten();
+            let manifest = installed.as_ref().map(|(_, manifest)| manifest);
+            if !first_party.contains(&module.as_str()) && !manifest.is_some_and(manifest_uses_solid)
+            {
+                continue;
+            }
+            let importers = if split || artifact.key != project_artifact {
+                artifact
+                    .importers
+                    .iter()
+                    .map(|importer| {
+                        Path::new(importer)
+                            .strip_prefix(project_directory)
+                            .map_or_else(|_| importer.clone(), |path| path.display().to_string())
+                    })
+                    .collect()
             } else {
-                format!(
-                    "{bound} of {} exact imported artifact case(s) have matching receipts",
-                    imports.len()
-                )
+                Vec::new()
             };
-            let detail = Some(match refusals.get(&module) {
-                Some(refusal) => format!("{detail}; {refusal}"),
-                None => detail,
-            });
-            let root = package_directory.map_or_else(
-                || format!("node_modules/{module}"),
-                |path| {
-                    path.strip_prefix(project_directory)
-                        .unwrap_or(path)
-                        .display()
-                        .to_string()
-                },
-            );
-            let remedy = installed_integrity.as_ref().map_or_else(
-                || {
-                    Some(
-                        "the package manager supplied no exact registry integrity; linked or local packages remain uncertifiable"
-                            .into(),
-                    )
-                },
-                |integrity| {
-                    Some(format!(
-                        "solid-checker contract certify --package-root {root} --integrity {integrity} --catalog .solid-checker/accepted-contracts.json --issuer-configuration <issuer.json> --trust-configuration-output <trust.json>, run from this project; it adds the package to the project catalog, which `solid-checker contract check --receipt-trust-configuration <trust.json>` then reads"
-                    ))
-                },
-            );
-            (status.into(), detail, remedy, String::new())
-        };
-        statuses.push(PackageContractStatus {
-            name: module,
-            status,
-            installed_integrity,
-            detail,
-            remedy,
-            contract_path,
-        });
+            let mut status = artifact_contract_status(
+                project_directory,
+                &module,
+                installed.as_ref(),
+                resolved,
+                &artifact.importers,
+                contracts,
+                refusals,
+            )?;
+            status.importers = importers;
+            statuses.push(status);
+        }
     }
+    // Stable: the rows of one name keep their artifact order.
     statuses.sort_by(|left, right| left.name.cmp(&right.name));
     Ok(statuses)
+}
+
+/// One installed artifact of a package name, with the analysed files whose
+/// imports find it.
+struct ImportedArtifact {
+    /// [`artifact_key`] of `directory`; `None` when no importer finds the
+    /// package installed at all.
+    key: Option<PathBuf>,
+    /// The package directory as the first importer's lookup spells it.
+    directory: Option<PathBuf>,
+    importers: std::collections::BTreeSet<String>,
+}
+
+/// What identifies an installed artifact across lookup spellings: two
+/// sub-packages' `node_modules/<name>` links into one package-manager store
+/// directory are one artifact.
+fn artifact_key(directory: &Path) -> PathBuf {
+    fs::canonicalize(directory).unwrap_or_else(|_| directory.to_path_buf())
+}
+
+/// The installed artifacts `module` resolves to from the analysed files that
+/// import it, each looked up from the importing file's own location -- the
+/// `node_modules` walk the analysis's resolution performs per file, not one
+/// lookup from the project directory. A monorepo root analyses sub-packages
+/// whose dependencies are installed under their own `node_modules` and nowhere
+/// at the root; looking only from the project directory left those packages
+/// out of `contract check` while the analysis raised obligations for them.
+///
+/// The importers are the files that name the package in an import and the
+/// files an attested import row resolves into the package (an aliased
+/// specifier), which is every file whose rows the status counts. Sorted by
+/// artifact key, so the output is deterministic.
+fn imported_artifacts(
+    project_directory: &Path,
+    facts: &ProjectFacts,
+    module: &str,
+) -> Result<Vec<ImportedArtifact>, BackendError> {
+    let mut importers = std::collections::BTreeSet::new();
+    for file in &facts.files {
+        if file
+            .ast
+            .imports
+            .iter()
+            .any(|import| package_root(&import.module) == module)
+        {
+            importers.insert(file.path.to_string());
+        }
+    }
+    if let Some(resolved) = &facts.resolved_imports {
+        for (importer, import) in resolved.iter() {
+            if resolved_package_name(import) == Some(module) {
+                importers.insert(importer.to_owned());
+            }
+        }
+    }
+    let mut lookups = HashMap::<PathBuf, Option<PathBuf>>::new();
+    let mut artifacts = BTreeMap::<Option<PathBuf>, ImportedArtifact>::new();
+    for importer in importers {
+        let from = Path::new(&importer)
+            .parent()
+            .unwrap_or(project_directory)
+            .to_path_buf();
+        let directory = match lookups.get(&from) {
+            Some(directory) => directory.clone(),
+            None => {
+                let directory = discover_package_directory(&from, module)?;
+                lookups.insert(from, directory.clone());
+                directory
+            }
+        };
+        let key = directory.as_deref().map(artifact_key);
+        artifacts
+            .entry(key.clone())
+            .or_insert_with(|| ImportedArtifact {
+                key,
+                directory,
+                importers: std::collections::BTreeSet::new(),
+            })
+            .importers
+            .insert(importer);
+    }
+    Ok(artifacts.into_values().collect())
+}
+
+/// The package an attested import resolved into, as `contract check` and the
+/// obligation discovery both name it: the resolver's own identity first.
+fn resolved_package_name(import: &solid_facts::AttestedImport) -> Option<&str> {
+    import
+        .resolver_package_name
+        .as_deref()
+        .or(import.package_name.as_deref())
+}
+
+/// The status of one installed artifact of `module`, counted over the
+/// attested import rows of `importers` only.
+fn artifact_contract_status(
+    project_directory: &Path,
+    module: &str,
+    installed: Option<&(PathBuf, PackageManifest)>,
+    resolved: Option<&solid_facts::AttestedImportIndex>,
+    importers: &std::collections::BTreeSet<String>,
+    contracts: &AcceptedContractIndex,
+    refusals: &BTreeMap<String, String>,
+) -> Result<PackageContractStatus, BackendError> {
+    let module = module.to_owned();
+    let package_directory = installed.map(|(directory, _)| directory.as_path());
+    let installed_integrity = package_directory
+        .map(|directory| installed_package_integrity(project_directory, directory))
+        .transpose()?
+        .flatten();
+    let imports = resolved
+        .into_iter()
+        .flat_map(|imports| imports.iter())
+        .filter(|(importer, import)| {
+            resolved_package_name(import) == Some(module.as_str()) && importers.contains(*importer)
+        })
+        .collect::<Vec<_>>();
+    let bound = imports
+        .iter()
+        .filter(|(importer, import)| contracts.contract(importer, &import.text).is_ok())
+        .count();
+    let (status, detail, remedy, contract_path) = if !imports.is_empty() && bound == imports.len() {
+        (
+            "certified".into(),
+            None,
+            None,
+            "receipt-issued stable-v1 index".into(),
+        )
+    } else {
+        let status = if bound == 0 { "missing" } else { "unbound" };
+        let detail = if imports.is_empty() {
+            "exact import identity facts are unavailable".to_owned()
+        } else if bound == 0 {
+            format!(
+                "none of the {} exact imported artifact case(s) has a matching receipt",
+                imports.len()
+            )
+        } else {
+            format!(
+                "{bound} of {} exact imported artifact case(s) have matching receipts",
+                imports.len()
+            )
+        };
+        let detail = Some(match refusals.get(&module) {
+            Some(refusal) => format!("{detail}; {refusal}"),
+            None => detail,
+        });
+        let root = package_directory.map_or_else(
+            || format!("node_modules/{module}"),
+            |path| {
+                path.strip_prefix(project_directory)
+                    .unwrap_or(path)
+                    .display()
+                    .to_string()
+            },
+        );
+        let remedy = installed_integrity.as_ref().map_or_else(
+            || {
+                Some(
+                    "the package manager supplied no exact registry integrity; linked or local packages remain uncertifiable"
+                        .into(),
+                )
+            },
+            |integrity| {
+                Some(format!(
+                    "solid-checker contract certify --package-root {root} --integrity {integrity} --catalog .solid-checker/accepted-contracts.json --issuer-configuration <issuer.json> --trust-configuration-output <trust.json>, run from this project; it adds the package to the project catalog, which `solid-checker contract check --receipt-trust-configuration <trust.json>` then reads"
+                ))
+            },
+        );
+        (status.into(), detail, remedy, String::new())
+    };
+    Ok(PackageContractStatus {
+        name: module,
+        status,
+        installed_integrity,
+        detail,
+        remedy,
+        contract_path,
+        importers: Vec::new(),
+    })
 }
 
 /// Why an acceptance that exists for an installed package was not admitted by
@@ -2140,8 +2295,19 @@ fn installed_package_manifest(
     let Some(directory) = discover_package_directory(project_directory, module)? else {
         return Ok(None);
     };
+    read_installed_manifest(&directory)
+}
+
+/// An installed package directory with its parsed manifest, or `None` when the
+/// directory has no `package.json`.
+fn read_installed_manifest(
+    directory: &Path,
+) -> Result<Option<(PathBuf, PackageManifest)>, BackendError> {
     match fs::read(directory.join("package.json")) {
-        Ok(data) => Ok(Some((directory, serde_json::from_slice(&data)?))),
+        Ok(data) => Ok(Some((
+            directory.to_path_buf(),
+            serde_json::from_slice(&data)?,
+        ))),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error.into()),
     }

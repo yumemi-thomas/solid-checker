@@ -7,7 +7,11 @@ mod contract_closure_process;
 #[path = "project_catalog_environment_process.rs"]
 mod project_catalog_environment_process;
 
-use std::{env, fs, path::PathBuf, process::Command};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use support::{decode_findings, temporary_directory};
 
@@ -124,6 +128,151 @@ fn an_installed_core_alias_does_not_require_a_package_contract() {
     assert_eq!(output.status.code(), Some(1));
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(report["packages"][0]["status"], "missing");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+/// A Solid package `name@version` installed under `directory/node_modules`.
+fn install_solid_package(directory: &Path, name: &str, version: &str) {
+    let package = directory.join("node_modules").join(name);
+    fs::create_dir_all(&package).unwrap();
+    fs::write(
+        package.join("package.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "name": name,
+            "version": version,
+            "types": "index.d.ts",
+            "peerDependencies": { "solid-js": "*" },
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        package.join("index.d.ts"),
+        "export declare function widget(): number;\n",
+    )
+    .unwrap();
+}
+
+/// `contract check` as JSON for `tsconfig`, and its exit code.
+fn contract_check_json(tsconfig: &Path, typefacts: &str) -> (Option<i32>, serde_json::Value) {
+    let output = checker()
+        .args([
+            "--project",
+            &tsconfig.to_string_lossy(),
+            "--typefacts",
+            typefacts,
+            "--dialect",
+            "solid-v2",
+            "--check-contracts",
+            "--format",
+            "json",
+            "--no-bundled-contracts",
+        ])
+        .output()
+        .unwrap();
+    let report = serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
+        panic!(
+            "no contract report ({error}): {}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+    });
+    (output.status.code(), report)
+}
+
+/// A monorepo root whose tsconfig covers two sub-packages, each with its own
+/// install of one Solid package at a different version and nothing at the
+/// root (an unhoisted workspace). `contract check` from the root lists a row per
+/// installed artifact, each looked up from its importing files as the analysis
+/// resolves them, each naming its importers and carrying its own integrity.
+/// Run from one sub-package, the same package reads as it always did: one row,
+/// no importers.
+#[test]
+fn contract_check_from_a_monorepo_root_lists_each_sub_package_install() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    const PACKAGE: &str = "solid-widgets";
+    let directory = temporary_directory("contract-check-monorepo");
+    let mut lock_packages = serde_json::Map::new();
+    for (member, version) in [("a", "1.0.0"), ("b", "2.0.0")] {
+        let member_root = directory.join("packages").join(member);
+        install_solid_package(&member_root, PACKAGE, version);
+        fs::create_dir_all(member_root.join("src")).unwrap();
+        fs::write(
+            member_root.join("src/index.ts"),
+            format!("import {{ widget }} from \"{PACKAGE}\";\nexport const {member} = widget();\n"),
+        )
+        .unwrap();
+        fs::write(
+            member_root.join("tsconfig.json"),
+            r#"{"compilerOptions":{"module":"ESNext","moduleResolution":"Bundler","strict":true,"noEmit":true},"include":["src"]}"#,
+        )
+        .unwrap();
+        lock_packages.insert(
+            format!("packages/{member}/node_modules/{PACKAGE}"),
+            serde_json::json!({ "version": version, "integrity": format!("sha512-{member}") }),
+        );
+    }
+    fs::write(
+        directory.join("package-lock.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "lockfileVersion": 3,
+            "packages": lock_packages,
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        directory.join("tsconfig.json"),
+        r#"{"compilerOptions":{"module":"ESNext","moduleResolution":"Bundler","strict":true,"noEmit":true},"include":["packages/a/src","packages/b/src"]}"#,
+    )
+    .unwrap();
+
+    let (code, report) = contract_check_json(&directory.join("tsconfig.json"), &typefacts);
+    assert_eq!(code, Some(1), "{report}");
+    let rows = report["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["name"] == PACKAGE)
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 2, "one row per installed artifact: {report}");
+    assert_eq!(report["missing"], 2);
+    for (row, member) in rows.iter().zip(["a", "b"]) {
+        assert_eq!(row["status"], "missing");
+        assert_eq!(row["installedIntegrity"], format!("sha512-{member}"));
+        assert_eq!(
+            row["importers"],
+            serde_json::json!([format!("packages/{member}/src/index.ts")])
+        );
+        assert_eq!(
+            row["detail"],
+            "none of the 1 exact imported artifact case(s) has a matching receipt"
+        );
+        assert!(
+            row["remedy"].as_str().unwrap().contains(&format!(
+                "--package-root packages/{member}/node_modules/{PACKAGE} --integrity sha512-{member} "
+            )),
+            "{row}"
+        );
+    }
+
+    // One sub-package on its own is a single-package project: its one
+    // artifact is the one its own directory finds, so no importers are named.
+    let (code, report) =
+        contract_check_json(&directory.join("packages/a/tsconfig.json"), &typefacts);
+    assert_eq!(code, Some(1), "{report}");
+    let rows = report["packages"].as_array().unwrap();
+    assert_eq!(rows.len(), 1, "{report}");
+    assert_eq!(rows[0]["name"], PACKAGE);
+    assert!(rows[0].get("importers").is_none(), "{report}");
+    assert!(
+        rows[0]["remedy"]
+            .as_str()
+            .unwrap()
+            .contains(&format!("--package-root node_modules/{PACKAGE} ")),
+        "{report}"
+    );
     fs::remove_dir_all(directory).unwrap();
 }
 

@@ -160,7 +160,14 @@ paths, and local experimental state. Review never closes a claim or issues a
 receipt.
 
 Use `solid-checker contract check --project tsconfig.json` to report bundled,
-accepted, unverified, stale, unbound, and missing package state. A missing sweep
+accepted, unverified, stale, unbound, and missing package state. Its rows are
+the packages the analysed files import, each looked up from the importing
+file's own location, as the analysis resolves it: a monorepo root lists a
+package installed only under `packages/x/node_modules`. A package name that
+resolves to different installed artifacts from different importers gets one row
+per artifact, and a row whose artifact the name does not identify from the
+project directory lists its `importers` (project-relative files); a
+single-package project's rows never carry the field. A missing sweep
 can generate proposals for registry-installed packages that carry exact
 integrity:
 
@@ -170,7 +177,9 @@ solid-checker contract generate --missing --project tsconfig.json
 
 Linked/local packages without registry integrity remain explicitly
 uncertifiable; the sweep does not invent an identity or overwrite an existing
-proposal under review.
+proposal under review. It also refuses a row that lists `importers`: its
+name-keyed output under the project directory could not describe that
+artifact, so run it from the project that owns those files.
 
 ## Runtime probes
 

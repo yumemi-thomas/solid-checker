@@ -3810,6 +3810,25 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                         "{}: {} ({})",
                         status.name, status.status, status.contract_path
                     );
+                    // Only when the name alone does not say which installed
+                    // artifact this row is; see `PackageContractStatus::importers`.
+                    if !status.importers.is_empty() {
+                        const SHOWN: usize = 5;
+                        let mut listed = status
+                            .importers
+                            .iter()
+                            .take(SHOWN)
+                            .map(String::as_str)
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        if status.importers.len() > SHOWN {
+                            listed.push_str(&format!(
+                                ", and {} more",
+                                status.importers.len() - SHOWN
+                            ));
+                        }
+                        println!("  imported by {} file(s): {listed}", status.importers.len());
+                    }
                     if let Some(detail) = &status.detail {
                         println!("  {detail}");
                     }

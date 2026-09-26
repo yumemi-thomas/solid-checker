@@ -4535,6 +4535,25 @@ test("the contract sweep refuses a document that is not a contract report", asyn
   }
 });
 
+test("the contract sweep refuses a row whose artifact the project directory does not resolve", async () => {
+  const { sweepRefusal } = await import("../scripts/generate-missing-contracts.mjs");
+
+  // The row a single-package project reports: its name identifies the install.
+  assert.equal(sweepRefusal({ name: "solid-widgets", status: "missing" }), undefined);
+  assert.equal(sweepRefusal({ name: "solid-widgets", status: "missing", importers: [] }), undefined);
+
+  // A monorepo root: the package is installed per sub-package, so each row
+  // names its importers, and a name-keyed contract at the root describes
+  // neither artifact.
+  const refusal = sweepRefusal({
+    name: "solid-widgets",
+    status: "missing",
+    importers: ["packages/a/src/index.ts"]
+  });
+  assert.match(refusal, /^solid-widgets: the name does not identify this row's installed artifact/);
+  assert.match(refusal, /packages\/a\/src\/index\.ts/);
+});
+
 test("root source acquisition records who resolved each source, by importer and name", async () => {
   const project = mkdtempSync(join(tmpdir(), "solid-checker-root-source-edges-"));
   try {
