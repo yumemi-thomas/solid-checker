@@ -780,3 +780,133 @@ fn one_artifact_identity_naming_two_contracts_is_dropped_not_preferred() {
     assert!(index.contract("/a.ts", "pkg").is_ok());
     assert!(index.contract("/b.ts", "pkg").is_ok());
 }
+
+/// An index holding one contract for `pkg`, admitted by artifact: what a
+/// project catalog contributes once its acceptance reproduced in the tree.
+fn admitted_index(semantic: char) -> AcceptedContractIndex {
+    let mut contract = accepted();
+    contract.receipt.semantic_digest = digest(semantic);
+    AcceptedContractIndex::from_artifact_acceptances([(format!("artifact-{semantic}"), contract)])
+        .with_admitted_artifacts([("pkg".to_owned(), format!("artifact-{semantic}"))])
+}
+
+fn answered_by(index: &AcceptedContractIndex, importer: &str) -> Option<Digest> {
+    index
+        .contract(importer, "pkg")
+        .ok()
+        .map(|contract| contract.semantic_identity().semantic_digest)
+}
+
+#[test]
+fn a_scoped_catalog_answers_only_below_its_directory_and_the_nearest_wins() {
+    let index = admitted_index('e')
+        .with_scoped("/mono/packages", admitted_index('f'))
+        .with_scoped("/mono/packages/a", admitted_index('9'));
+    // The nearest scope answers, whichever order the scopes were added in.
+    assert_eq!(
+        answered_by(&index, "/mono/packages/a/src/App.ts"),
+        Some(digest('9'))
+    );
+    let reordered = admitted_index('e')
+        .with_scoped("/mono/packages/a", admitted_index('9'))
+        .with_scoped("/mono/packages", admitted_index('f'));
+    assert_eq!(reordered.cache_fingerprint(), index.cache_fingerprint());
+    assert_eq!(
+        answered_by(&reordered, "/mono/packages/a/src/App.ts"),
+        Some(digest('9'))
+    );
+    // A sibling package sees the farther scope, and never `a`'s.
+    assert_eq!(
+        answered_by(&index, "/mono/packages/b/src/Main.ts"),
+        Some(digest('f'))
+    );
+    // A directory whose name merely begins with `a` is not inside it.
+    assert_eq!(
+        answered_by(&index, "/mono/packages/ab/src/Main.ts"),
+        Some(digest('f'))
+    );
+    // Outside every scope, the project-wide tier answers alone.
+    assert_eq!(
+        answered_by(&index, "/mono/tools/main.ts"),
+        Some(digest('e'))
+    );
+    let unscoped =
+        AcceptedContractIndex::default().with_scoped("/mono/packages/a", admitted_index('9'));
+    assert_eq!(answered_by(&unscoped, "/mono/packages/b/src/Main.ts"), None);
+    assert_eq!(
+        answered_by(&unscoped, "/mono/packages/a/src/App.ts"),
+        Some(digest('9'))
+    );
+}
+
+#[test]
+fn a_farther_catalog_answers_what_a_nearer_one_does_not() {
+    let note = "a project catalog entry exists for this package and was not admitted: nearer";
+    // The nearer catalog holds an acceptance for `pkg` it did not admit, and
+    // says why; the farther one admitted it.
+    let nearer = AcceptedContractIndex::default()
+        .with_admission_refusals([("pkg".to_owned(), note.to_owned())]);
+    let index = AcceptedContractIndex::default()
+        .with_admission_refusals([("pkg".to_owned(), "project-wide".to_owned())])
+        .with_scoped("/mono/packages", admitted_index('f'))
+        .with_scoped("/mono/packages/a", nearer);
+    assert_eq!(
+        answered_by(&index, "/mono/packages/a/src/App.ts"),
+        Some(digest('f'))
+    );
+    // An explanation, like an answer, is the nearest one's.
+    assert_eq!(
+        index.admission_refusal_at("/mono/packages/a/src/App.ts", "pkg"),
+        Some(note)
+    );
+    assert_eq!(
+        index.admission_refusal_at("/mono/tools/main.ts", "pkg"),
+        Some("project-wide")
+    );
+    assert_eq!(index.admission_refusal("pkg"), Some("project-wide"));
+}
+
+#[test]
+fn scopes_survive_composition_and_key_the_cache_only_when_present() {
+    let plain = admitted_index('e');
+    // No scope, no change: the fingerprint an unscoped index always had.
+    assert_eq!(
+        plain
+            .clone()
+            .with_fallback(AcceptedContractIndex::default())
+            .cache_fingerprint(),
+        plain.cache_fingerprint()
+    );
+    let scoped =
+        AcceptedContractIndex::default().with_scoped("/mono/packages/a", admitted_index('9'));
+    assert_ne!(
+        scoped.cache_fingerprint(),
+        AcceptedContractIndex::default().cache_fingerprint()
+    );
+    // A scope carried in a fallback stays a scope: it does not become an
+    // answer for files outside its directory.
+    let composed = AcceptedContractIndex::default().with_fallback(scoped.clone());
+    assert_eq!(
+        answered_by(&composed, "/mono/packages/a/src/App.ts"),
+        Some(digest('9'))
+    );
+    assert_eq!(answered_by(&composed, "/mono/tools/main.ts"), None);
+    assert_eq!(composed.cache_fingerprint(), scoped.cache_fingerprint());
+    // Core filtering reaches into scopes.
+    let mut core = accepted();
+    core.package.name = "solid-js".into();
+    let core_scope = AcceptedContractIndex::from_artifact_acceptances([("core".to_owned(), core)])
+        .with_admitted_artifacts([("solid-js".to_owned(), "core".to_owned())]);
+    let index = AcceptedContractIndex::default().with_scoped("/mono/packages/a", core_scope);
+    assert!(
+        index
+            .contract("/mono/packages/a/src/App.ts", "solid-js")
+            .is_ok()
+    );
+    assert!(
+        index
+            .external_packages()
+            .contract("/mono/packages/a/src/App.ts", "solid-js")
+            .is_err()
+    );
+}

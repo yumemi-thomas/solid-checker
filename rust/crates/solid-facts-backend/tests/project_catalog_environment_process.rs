@@ -229,6 +229,18 @@ fn resolved_import(project: &Path) -> ResolvedImport {
 /// returns the trust configuration's path, written beside -- not inside --
 /// the project.
 fn certify(project: &Path, environment: Option<&[DependencyEnvironmentEntry]>) -> PathBuf {
+    certify_into(project, &project.join(".solid-checker"), environment)
+}
+
+/// [`certify`] for the package installed in `project`, publishing the catalog
+/// into `catalog_root` -- the `.solid-checker/` of any directory, which is
+/// what a package of a monorepo certified from its own directory holds. The
+/// trust configuration is written beside the catalog's directory.
+fn certify_into(
+    project: &Path,
+    catalog_root: &Path,
+    environment: Option<&[DependencyEnvironmentEntry]>,
+) -> PathBuf {
     let document = fs::read(
         repository_root().join("pkg/contracts/bundled/solid-v1/debounce-root-default.json"),
     )
@@ -290,7 +302,7 @@ fn certify(project: &Path, environment: Option<&[DependencyEnvironmentEntry]>) -
     )
     .unwrap();
     let published = publish_policy2_catalog(
-        &project.join(".solid-checker"),
+        catalog_root,
         &main,
         &receipt,
         &authenticated,
@@ -314,7 +326,10 @@ fn certify(project: &Path, environment: Option<&[DependencyEnvironmentEntry]>) -
         )
         .unwrap();
     }
-    let trust_path = project.with_extension("trust.json");
+    let trust_path = catalog_root
+        .parent()
+        .unwrap_or(project)
+        .with_extension("trust.json");
     fs::write(
         &trust_path,
         encode_policy2_trust_configuration(&trust).unwrap(),
@@ -847,6 +862,294 @@ fn a_pnpm_certification_with_resolution_edges_is_admitted_in_its_own_tree() {
             "its dependency environment differs: environment-dependency resolved from \
              @solid-primitives/debounce@1.3.0 installed 2.0.0, certified 1.0.0"
         )
+    );
+    let _ = fs::remove_dir_all(scratch);
+}
+
+/// A monorepo whose packages share one hoisted install, npm-workspaces style:
+/// the package, its dependency and the lockfile at the root, and two packages
+/// importing it -- `packages/a` (`App.ts`, `Other.ts`) and `packages/b`
+/// (`Main.ts`). The root `tsconfig.json` covers both packages' sources, and
+/// each package has its own.
+fn monorepo_tree(root: &Path) {
+    consumer_tree(root, "1.0.0");
+    fs::remove_dir_all(root.join("src")).unwrap();
+    let options = r#""compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"Bundler","strict":true,"noEmit":true,"skipLibCheck":true}"#;
+    fs::write(
+        root.join("tsconfig.json"),
+        format!(r#"{{{options},"include":["packages/a/src","packages/b/src"]}}"#),
+    )
+    .unwrap();
+    for (package, files) in [
+        ("a", &[("App.ts", "save"), ("Other.ts", "search")][..]),
+        ("b", &[("Main.ts", "submit")][..]),
+    ] {
+        let directory = root.join("packages").join(package);
+        fs::create_dir_all(directory.join("src")).unwrap();
+        fs::write(
+            directory.join("tsconfig.json"),
+            format!(r#"{{{options},"include":["src"]}}"#),
+        )
+        .unwrap();
+        for (file, name) in files {
+            fs::write(
+                directory.join("src").join(file),
+                format!(
+                    "import {{ createDebounce }} from \"{PACKAGE}\";\n\nexport const {name} = createDebounce((value: string) => value.length, 100);\n"
+                ),
+            )
+            .unwrap();
+        }
+    }
+}
+
+/// Ordinary analysis of the project whose `tsconfig.json` is in `project`, and
+/// what it printed to stderr.
+fn analysis_with_notice(
+    project: &Path,
+    trust: Option<&Path>,
+    typefacts: &str,
+) -> (serde_json::Value, String) {
+    analysis_in(project, trust, typefacts, &[])
+}
+
+/// [`analysis_with_notice`] with `environment` set -- the retained daemon's
+/// switches, for one.
+fn analysis_in(
+    project: &Path,
+    trust: Option<&Path>,
+    typefacts: &str,
+    environment: &[(&str, &str)],
+) -> (serde_json::Value, String) {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"));
+    command.envs(environment.iter().copied());
+    command.args([
+        "--project",
+        &project.join("tsconfig.json").to_string_lossy(),
+        "--typefacts",
+        typefacts,
+        "--format",
+        "json",
+        "--no-bundled-contracts",
+    ]);
+    if let Some(trust) = trust {
+        command.args(["--receipt-trust-configuration", &trust.to_string_lossy()]);
+    }
+    let output = command.output().unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    let snapshot = serde_json::from_slice(&output.stdout)
+        .unwrap_or_else(|error| panic!("analysis produced no snapshot ({error}): {stderr}"));
+    (snapshot, stderr)
+}
+
+/// The files, by name, at which the package's import reaches the acceptance
+/// gate.
+fn gated_files(snapshot: &serde_json::Value) -> Vec<String> {
+    let mut files = snapshot["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|finding| {
+            finding["id"] == "SC9005"
+                && finding["analysisContext"]
+                    == "no receipt-accepted contract matches this exact import"
+                && finding["message"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .contains(PACKAGE)
+        })
+        .map(|finding| {
+            Path::new(finding["primaryLocation"]["path"].as_str().unwrap())
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect::<Vec<_>>();
+    files.sort();
+    files
+}
+
+/// Every finding in `packages/a`'s files, spelled independently of which
+/// project analysed them.
+fn package_a_findings(snapshot: &serde_json::Value) -> Vec<String> {
+    let mut findings = snapshot["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|finding| {
+            let path = finding["primaryLocation"]["path"].as_str()?;
+            let name = Path::new(path).file_name()?.to_string_lossy().into_owned();
+            ["App.ts", "Other.ts"].contains(&name.as_str()).then(|| {
+                format!(
+                    "{name}:{}:{} {} {}",
+                    finding["primaryLocation"]["startByte"],
+                    finding["primaryLocation"]["endByte"],
+                    finding["id"],
+                    finding["message"]
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    findings.sort();
+    findings
+}
+
+#[test]
+fn a_package_catalog_applies_to_its_files_from_the_monorepo_root_and_not_to_a_sibling() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let scratch = temporary_directory("nested-catalog");
+    let certified = [dependency("1.0.0")];
+    let root = scratch.join("mono");
+    monorepo_tree(&root);
+    let package_a = root.join("packages/a");
+    let trust = certify_into(&root, &package_a.join(".solid-checker"), Some(&certified));
+
+    // From the package's own directory: its own catalog, as it always was.
+    let (own, _) = analysis_with_notice(&package_a, Some(&trust), &typefacts);
+    assert!(gated_files(&own).is_empty(), "{own}");
+    let rows = summaries(&own);
+    assert_eq!(rows.len(), 1, "{own}");
+    assert_eq!(rows[0]["evidence"], "accepted");
+    assert_eq!(
+        contract_status(&package_a, &trust, &typefacts).as_deref(),
+        Ok("certified")
+    );
+
+    // From the monorepo root: the same files are admitted by the package's
+    // catalog, found beside them rather than beside the root tsconfig, and
+    // answered exactly as the package's own analysis answers them.
+    let (from_root, _) = analysis_with_notice(&root, Some(&trust), &typefacts);
+    assert_eq!(
+        gated_files(&from_root),
+        ["Main.ts"],
+        "the sibling package's file has no catalog of its own and the root has none: {from_root}"
+    );
+    assert_eq!(package_a_findings(&from_root), package_a_findings(&own));
+    let rows = summaries(&from_root);
+    assert!(
+        rows.iter().any(|row| row["evidence"] == "accepted"),
+        "{from_root}"
+    );
+    // `contract check` counts per importer, from the same index: two of the
+    // three importers bind, and the sibling's does not.
+    assert_eq!(
+        contract_status(&root, &trust, &typefacts).as_deref(),
+        Ok("unbound")
+    );
+    assert_eq!(
+        contract_status(&root.join("packages/b"), &trust, &typefacts).as_deref(),
+        Ok("missing"),
+        "a catalog in a sibling package does not apply to this package's files"
+    );
+
+    // Without trust the nested catalog is withheld like the project's own:
+    // named in the one notice, and the analysis is the no-catalog one.
+    let (withheld, stderr) = analysis_with_notice(&root, None, &typefacts);
+    let catalog = package_a.join(".solid-checker/accepted-contracts.json");
+    assert!(
+        stderr.contains(&catalog.display().to_string()) && stderr.contains(PACKAGE),
+        "{stderr}"
+    );
+    // The gate names a specifier once, at its first unanswered import, and
+    // with the catalog withheld that is `packages/a`'s again.
+    assert_eq!(gated_files(&withheld), ["App.ts"]);
+    let _ = fs::remove_dir_all(scratch);
+}
+
+/// The release default is the retained daemon, whose cached answer has to be
+/// invalidated by a nested catalog appearing -- in a directory that is
+/// neither the project's nor a source file's, so no directory stamp it holds
+/// moves -- and whose client prints a notice only the daemon can compute.
+#[test]
+fn the_retained_daemon_sees_a_package_catalog_appear_and_names_it_when_withheld() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let daemon = [
+        ("SOLID_CHECKER_DAEMON", "1"),
+        ("SOLID_CHECKER_DAEMON_IDLE_SECS", "2"),
+    ];
+    let scratch = temporary_directory("nested-catalog-daemon");
+    let certified = [dependency("1.0.0")];
+    let root = scratch.join("mono");
+    monorepo_tree(&root);
+    // The issuer is fixed, so a certification published anywhere else writes
+    // the trust configuration this tree's will need, before it has a catalog.
+    let trust = certify_into(
+        &root,
+        &scratch.join("elsewhere/.solid-checker"),
+        Some(&certified),
+    );
+    let (before, _) = analysis_in(&root, Some(&trust), &typefacts, &daemon);
+    assert_eq!(gated_files(&before), ["App.ts"], "{before}");
+    certify_into(
+        &root,
+        &root.join("packages/a/.solid-checker"),
+        Some(&certified),
+    );
+    let (after, _) = analysis_in(&root, Some(&trust), &typefacts, &daemon);
+    assert_eq!(gated_files(&after), ["Main.ts"], "{after}");
+    let (withheld, stderr) = analysis_in(&root, None, &typefacts, &daemon);
+    let catalog = root.join("packages/a/.solid-checker/accepted-contracts.json");
+    assert!(stderr.contains(&catalog.display().to_string()), "{stderr}");
+    assert_eq!(stderr.matches("was not read").count(), 1, "{stderr}");
+    assert_eq!(gated_files(&withheld), ["App.ts"]);
+    let _ = fs::remove_dir_all(scratch);
+}
+
+#[test]
+fn the_nearest_catalog_answers_and_a_farther_one_is_the_fallback() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let scratch = temporary_directory("nested-catalog-nearest");
+    let installed = [dependency("1.0.0")];
+    let elsewhere = [dependency("2.0.0")];
+
+    // Nearest admitted, farther refused: `packages/a`'s files take the
+    // nearest answer, and `packages/b`'s -- below the farther catalog only --
+    // are refused with the farther catalog's own reason.
+    let root = scratch.join("nearest");
+    monorepo_tree(&root);
+    let trust = certify_into(
+        &root,
+        &root.join("packages/a/.solid-checker"),
+        Some(&installed),
+    );
+    certify_into(
+        &root,
+        &root.join("packages/.solid-checker"),
+        Some(&elsewhere),
+    );
+    let (snapshot, _) = analysis_with_notice(&root, Some(&trust), &typefacts);
+    assert_eq!(gated_files(&snapshot), ["Main.ts"], "{snapshot}");
+    let gate = acceptance_gate(&snapshot).unwrap();
+    assert!(
+        evidence(gate)
+            .iter()
+            .any(|step| step.starts_with(CATALOG_NOTE)
+                && step.contains("dependency environment differs")),
+        "{gate}"
+    );
+
+    // Nearest refused, farther admitted: the farther catalog answers what the
+    // nearest does not, for both packages.
+    let root = scratch.join("fallback");
+    monorepo_tree(&root);
+    let trust = certify_into(&root, &root.join("packages/a/.solid-checker"), None);
+    certify_into(
+        &root,
+        &root.join("packages/.solid-checker"),
+        Some(&installed),
+    );
+    let (snapshot, _) = analysis_with_notice(&root, Some(&trust), &typefacts);
+    assert!(gated_files(&snapshot).is_empty(), "{snapshot}");
+    assert_eq!(
+        contract_status(&root, &trust, &typefacts).as_deref(),
+        Ok("certified")
     );
     let _ = fs::remove_dir_all(scratch);
 }

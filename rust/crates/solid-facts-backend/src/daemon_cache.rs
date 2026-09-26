@@ -15,12 +15,20 @@ pub(crate) struct CachedAnswer {
     pub(crate) generation: u64,
     pub(crate) explicit: Vec<String>,
     pub(crate) modules: Vec<String>,
+    /// The directories whose catalogs could apply to an analysed file when
+    /// this answer was computed (`nested_catalog_candidates`): the
+    /// `contract_files` comparison re-reads each of them, the way `modules`
+    /// names the packages whose contracts it re-reads.
+    pub(crate) catalog_scopes: Vec<PathBuf>,
     pub(crate) contract_files: Vec<ContractFile>,
     pub(crate) presets: Vec<String>,
     pub(crate) enable_rules: Vec<String>,
     pub(crate) runtime: RuntimeEnvironment,
     pub(crate) status: Arc<str>,
     pub(crate) body: Arc<[u8]>,
+    /// The withheld-catalog notice the answer was computed with. It is a
+    /// function of the same inputs as the snapshot, so it is reused with it.
+    pub(crate) notice: Arc<str>,
 }
 
 impl CachedAnswer {
@@ -55,12 +63,14 @@ mod tests {
             generation: 3,
             explicit: vec!["explicit.json".into()],
             modules: vec!["solid-js".into()],
+            catalog_scopes: vec![PathBuf::from("packages/a")],
             contract_files: vec![(PathBuf::from("solid-reactivity.json"), [7; 32])],
             presets: vec!["preferences".into()],
             enable_rules: vec!["prefer-show".into()],
             runtime: RuntimeEnvironment::default(),
             status: Arc::from("certified"),
             body: Arc::from(&b"snapshot"[..]),
+            notice: Arc::from(""),
         }
     }
 

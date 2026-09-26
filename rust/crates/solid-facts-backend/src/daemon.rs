@@ -82,6 +82,14 @@ struct CheckHeader {
     analysis_ns: u64,
     #[serde(default)]
     response_bytes: u64,
+    /// The one notice the analysis would print for the catalogs it withheld
+    /// for want of trust, empty when it withheld none. The daemon selects the
+    /// catalogs, nested ones included, from the analysed files -- which the
+    /// client does not have -- so it answers the notice too. Absent from a
+    /// daemon that predates it, and then the client selects the project's own
+    /// catalogs itself, as it always did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    notice: Option<String>,
 }
 
 struct Answer {
@@ -90,6 +98,7 @@ struct Answer {
     cache_hit: bool,
     generation: u64,
     analysis_ns: u64,
+    notice: Arc<str>,
 }
 
 pub fn enabled() -> bool {
@@ -555,6 +564,7 @@ fn handle(state: &mut State, request: &Request, stream: UnixStream) -> Result<()
                 generation: answer.generation,
                 analysis_ns: answer.analysis_ns,
                 response_bytes: u64::try_from(answer.body.len()).unwrap_or(u64::MAX),
+                notice: Some(answer.notice.to_string()),
             })?;
             stream.write_all(&header)?;
             stream.write_all(b"\n")?;
@@ -589,6 +599,7 @@ fn respond_error(stream: &mut UnixStream, message: &str) -> Result<(), Box<dyn E
         generation: 0,
         analysis_ns: 0,
         response_bytes: 0,
+        notice: None,
     })?;
     stream.write_all(&header)?;
     stream.write_all(b"\n")?;
@@ -615,6 +626,10 @@ fn answer(
         return Ok(Answer {
             status: cached.0,
             body: cached.1,
+            notice: state
+                .last
+                .as_ref()
+                .map_or_else(|| Arc::from(""), |last| Arc::clone(&last.notice)),
             cache_hit: true,
             generation: state.session.generation(),
             analysis_ns: u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
@@ -656,16 +671,23 @@ fn answer(
     // answered "no receipt-accepted contract matches this exact import" with
     // the daemon on and read the contract with it off.
     // Withheld catalogs are reported by the client, which prints to the
-    // user's terminal; this process's stderr goes nowhere. See `check`.
-    let catalogs = solid_facts_backend::select_project_catalogs(
+    // user's terminal; this process's stderr goes nowhere. So the notice is
+    // answered with the snapshot. See `check`.
+    let catalog_scopes = solid_facts_backend::nested_catalog_candidates(
         directory,
+        facts.files.iter().map(|file| file.path.as_str()),
+    );
+    let selection = solid_facts_backend::select_project_catalogs_in(
+        directory,
+        &catalog_scopes,
         &check.accepted_contract_catalog,
         trust.is_some(),
-    )?
-    .admitted;
+    )?;
+    let notice: Arc<str> = selection.notice().unwrap_or_default().into();
     let contracts = solid_facts_backend::project_accepted_contracts(
         directory,
-        &catalogs,
+        &selection.admitted,
+        &selection.nested,
         trust.as_ref(),
         check.bundled_contracts,
         &check.runtime.selected_conditions(),
@@ -704,9 +726,12 @@ fn answer(
         contract_files: contract_files(
             state,
             &modules,
+            &catalog_scopes,
             &check.accepted_contract_catalog,
             &check.receipt_trust_configuration,
         )?,
+        catalog_scopes,
+        notice: Arc::clone(&notice),
         presets: check.presets.clone(),
         enable_rules: check.enable_rules.clone(),
         runtime: check.runtime.clone(),
@@ -721,6 +746,7 @@ fn answer(
         cache_hit: false,
         generation: state.session.generation(),
         analysis_ns: u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
+        notice,
     })
 }
 
@@ -737,6 +763,7 @@ fn cached_answer(
     let current = contract_files(
         state,
         &cached.modules,
+        &cached.catalog_scopes,
         &check.accepted_contract_catalog,
         &check.receipt_trust_configuration,
     )?;
@@ -779,6 +806,7 @@ fn explicit_inputs(check: &CheckRequest) -> Vec<String> {
 fn contract_files(
     state: &State,
     modules: &[String],
+    catalog_scopes: &[PathBuf],
     accepted_catalog: &str,
     receipt_trust_configuration: &str,
 ) -> Result<Vec<ContractFile>, Box<dyn Error>> {
@@ -798,6 +826,31 @@ fn contract_files(
     for catalog in discovered_catalogs(directory, accepted_catalog)? {
         paths.extend(accepted_contract_catalog_members(&catalog)?);
         paths.push(catalog);
+    }
+    // Every directory whose catalog could apply to an analysed file, the
+    // project's own included. Both catalog spellings are inputs whether or not
+    // they exist, so a catalog written into a `.solid-checker/` that was
+    // already there -- which changes no directory stamp -- is a change; and a
+    // nested catalog's admission reads the lockfiles above its own directory.
+    // An explicit catalog replaces discovery, and then none of these apply.
+    if accepted_catalog.is_empty() {
+        for scope in std::iter::once(directory).chain(catalog_scopes.iter().map(PathBuf::as_path)) {
+            let root = scope.join(".solid-checker");
+            paths.push(root.join("accepted-contracts.json"));
+            paths.push(root.join("accepted-contract-case-set.json"));
+            if scope == directory {
+                continue;
+            }
+            let catalogs = solid_facts_backend::discovered_catalog_paths(scope)?;
+            if catalogs.is_empty() {
+                continue;
+            }
+            for catalog in catalogs {
+                paths.extend(accepted_contract_catalog_members(&catalog)?);
+                paths.push(catalog);
+            }
+            paths.extend(solid_facts_backend::admission_input_paths(scope));
+        }
     }
     // Artifact admission recomputes an acceptance root from the *installed*
     // tarball integrity, which lives in whichever lockfile the project's
@@ -863,7 +916,11 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     if !header.ok {
         return Err(header.error.into());
     }
-    report_withheld_catalogs(request);
+    match &header.notice {
+        Some(notice) if !notice.is_empty() => eprintln!("{notice}"),
+        Some(_) => {}
+        None => report_withheld_catalogs(request),
+    }
     if request.format == "json" {
         // The daemon caches the canonical JSON emission. Stream it directly:
         // parsing and serializing the multi-megabyte snapshot again made the
@@ -1173,6 +1230,7 @@ mod tests {
                 generation: 7,
                 analysis_ns: 11,
                 response_bytes: 13,
+                notice: None,
             },
             Duration::from_nanos(17),
             13,

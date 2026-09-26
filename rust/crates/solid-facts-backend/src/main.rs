@@ -3719,8 +3719,15 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 read_policy2_trust_configuration(Path::new(&request.receipt_trust_configuration))
             })
             .transpose()?;
-        let selection = solid_facts_backend::select_project_catalogs(
+        // The catalogs of the directories between each analysed file and the
+        // project, too: a monorepo root analyses a package's files, and that
+        // package's own catalog applies to them. See `NestedCatalogs`.
+        let selection = solid_facts_backend::select_project_catalogs_in(
             directory,
+            &solid_facts_backend::nested_catalog_candidates(
+                directory,
+                facts.files.iter().map(|file| file.path.as_str()),
+            ),
             &request.accepted_contract_catalog,
             trust.is_some(),
         )?;
@@ -3741,6 +3748,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         let contracts = solid_facts_backend::project_accepted_contracts(
             directory,
             &catalogs,
+            &selection.nested,
             trust.as_ref(),
             request.bundled_contracts,
             &request.runtime.selected_conditions(),
@@ -3749,12 +3757,23 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         )?;
         let _ = &catalog;
         // Why a package with an acceptance on hand is still `missing`: the
-        // same admission steps replayed, reported rather than decided.
+        // same admission steps replayed, reported rather than decided. A
+        // nested catalog's, replayed from its own directory, explain only
+        // what the project-wide tiers left unexplained.
         let mut refusals = solid_facts_backend::admission_refusal_details(
             directory,
             &catalogs,
             request.bundled_contracts,
         )?;
+        for scope in &selection.nested {
+            for (package, refusal) in solid_facts_backend::admission_refusal_details(
+                &scope.directory,
+                &scope.admitted,
+                false,
+            )? {
+                refusals.entry(package).or_insert(refusal);
+            }
+        }
         selection.extend_refusals(&mut refusals);
         let statuses =
             accepted_package_contract_statuses(dialect, project, &facts, &contracts, &refusals)?;
@@ -3840,8 +3859,15 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         // A discovered catalog that needs trust nobody supplied is withheld,
         // not fatal: the analysis proceeds as if it were absent and says so
         // once. See `select_project_catalogs`.
-        let selection = solid_facts_backend::select_project_catalogs(
+        // The catalogs of the directories between each analysed file and the
+        // project are read as well, each for its own files only. See
+        // `NestedCatalogs`.
+        let selection = solid_facts_backend::select_project_catalogs_in(
             directory,
+            &solid_facts_backend::nested_catalog_candidates(
+                directory,
+                facts.files.iter().map(|file| file.path.as_str()),
+            ),
             &request.accepted_contract_catalog,
             trust.is_some(),
         )?;
@@ -3861,6 +3887,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         let contracts = solid_facts_backend::project_accepted_contracts(
             directory,
             &discovered_catalogs,
+            &selection.nested,
             trust.as_ref(),
             request.bundled_contracts,
             &request.runtime.selected_conditions(),

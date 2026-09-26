@@ -530,7 +530,7 @@ fn accepted_package_summaries(
             )
         })
         .collect::<std::collections::BTreeSet<_>>();
-    for binding in contracts.semantic_identity() {
+    for (binding, refusal) in contracts.all_semantic_identities() {
         let semantics = &binding.semantics;
         let key = (
             semantics.package.name.clone(),
@@ -544,9 +544,7 @@ fn accepted_package_summaries(
             &semantics.package,
             semantics.semantic_digest.as_str(),
             PACKAGE_EVIDENCE_REFUSED,
-            contracts
-                .admission_refusal(&binding.specifier)
-                .unwrap_or(NOT_SELECTED_BY_ANY_IMPORT),
+            refusal.unwrap_or(NOT_SELECTED_BY_ANY_IMPORT),
         ));
     }
     summaries.sort_by(|left, right| {
@@ -1135,9 +1133,23 @@ pub fn admitted_project_artifacts(
     conditions: &std::collections::BTreeSet<String>,
     facts: &solid_facts::ProjectFacts,
 ) -> Result<Vec<(String, String)>, BackendError> {
+    admitted_catalog_artifacts(catalogs, trust, project_directory, conditions, facts, None)
+}
+
+/// [`admitted_project_artifacts`] with the resolved-file fact taken only from
+/// the importers `within` a directory -- a nested catalog's, whose admission
+/// speaks for those files alone. `None` is every importer.
+fn admitted_catalog_artifacts(
+    catalogs: &[PathBuf],
+    trust: Option<&crate::contract_certification::Policy2TrustConfiguration>,
+    project_directory: &Path,
+    conditions: &std::collections::BTreeSet<String>,
+    facts: &solid_facts::ProjectFacts,
+    within: Option<&Path>,
+) -> Result<Vec<(String, String)>, BackendError> {
     let installed = |specifier: &str| installed_artifact_identity(project_directory, specifier);
     let resolved_target =
-        |specifier: &str| resolved_target_identity(project_directory, facts, specifier);
+        |specifier: &str| resolved_target_identity(project_directory, facts, specifier, within);
     // The same environment check as the compiled-in tier (ADR 0123): a project
     // catalog certified in this tree reproduces it by construction, and one
     // carried into a tree whose installs differ does not.
@@ -1163,8 +1175,37 @@ pub struct ProjectCatalogSelection {
     /// The catalogs to read, in discovery order.
     pub admitted: Vec<PathBuf>,
     /// Discovered catalogs holding policy-2 entries, withheld because no
-    /// `--receipt-trust-configuration` was supplied.
+    /// `--receipt-trust-configuration` was supplied -- the project's own and
+    /// every nested one.
     pub unauthenticated: Vec<UnauthenticatedCatalog>,
+    /// The catalogs of directories inside the project, each applying to that
+    /// directory's files only. Always empty for an explicit
+    /// `--accepted-contracts`, which names the whole local tier.
+    pub nested: Vec<NestedCatalogs>,
+}
+
+/// The catalogs found in one directory strictly inside the analysed project:
+/// its `.solid-checker/`, read for the analysed files below that directory.
+///
+/// A file's applicable project catalogs are those of its ancestor directories
+/// up to and including the analysed project's: a monorepo's root
+/// `tsconfig.json` analyses `packages/core/src/**` exactly as
+/// `packages/core/tsconfig.json` does, and until this it never saw
+/// `packages/core/.solid-checker/` (measured on kobalte:
+/// docs/package-contract-v2/phase22/2026-09-26-project-side-certification-on-kobalte-core.md,
+/// defect 5). The nearest catalog answers per specifier and a farther one is
+/// the fallback, so the project's own catalog -- the farthest -- answers what
+/// no nested one does, and a project with no nested catalog is analysed
+/// exactly as before.
+///
+/// Nothing is trusted for being found: a nested catalog's acceptances go
+/// through the same authentication and the same admission as the project's,
+/// replayed from this directory.
+#[derive(Clone, Debug)]
+pub struct NestedCatalogs {
+    pub directory: PathBuf,
+    /// The catalogs to read, in discovery order.
+    pub admitted: Vec<PathBuf>,
 }
 
 /// A discovered project catalog that was not read for want of trust.
@@ -1188,7 +1229,7 @@ impl UnauthenticatedCatalog {
 impl ProjectCatalogSelection {
     /// Whether any catalog was found or named at all, admitted or not.
     pub fn is_empty(&self) -> bool {
-        self.admitted.is_empty() && self.unauthenticated.is_empty()
+        self.admitted.is_empty() && self.unauthenticated.is_empty() && self.nested.is_empty()
     }
 
     /// The one non-fatal notice an analysis prints when it withheld catalogs,
@@ -1281,29 +1322,125 @@ pub fn select_project_catalogs(
         return Ok(ProjectCatalogSelection {
             admitted: vec![path],
             unauthenticated: Vec::new(),
-        });
-    }
-    let discovered =
-        crate::contract_interface::discovered_catalog_paths(directory).map_err(contract)?;
-    if trust_supplied {
-        return Ok(ProjectCatalogSelection {
-            admitted: discovered,
-            unauthenticated: Vec::new(),
+            nested: Vec::new(),
         });
     }
     let mut selection = ProjectCatalogSelection::default();
+    selection.admitted = selected_in(directory, trust_supplied, &mut selection.unauthenticated)?;
+    Ok(selection)
+}
+
+/// [`select_project_catalogs`], and the catalogs of every directory in
+/// `candidates` -- from [`nested_catalog_candidates`] -- each selected by the
+/// same trust rule. A withheld nested catalog is named in the one notice with
+/// the project's own. An explicit `--accepted-contracts` still names the whole
+/// local tier: no nested catalog is read beside it.
+pub fn select_project_catalogs_in(
+    directory: &Path,
+    candidates: &[PathBuf],
+    explicit: &str,
+    trust_supplied: bool,
+) -> Result<ProjectCatalogSelection, BackendError> {
+    let mut selection = select_project_catalogs(directory, explicit, trust_supplied)?;
+    if !explicit.is_empty() {
+        return Ok(selection);
+    }
+    for candidate in candidates {
+        if !candidate.join(".solid-checker").is_dir() {
+            continue;
+        }
+        let admitted = selected_in(candidate, trust_supplied, &mut selection.unauthenticated)?;
+        if !admitted.is_empty() {
+            selection.nested.push(NestedCatalogs {
+                directory: candidate.clone(),
+                admitted,
+            });
+        }
+    }
+    Ok(selection)
+}
+
+/// The catalogs discovered in `directory`'s `.solid-checker/` that this run can
+/// read, pushing each one it cannot onto `withheld`.
+fn selected_in(
+    directory: &Path,
+    trust_supplied: bool,
+    withheld: &mut Vec<UnauthenticatedCatalog>,
+) -> Result<Vec<PathBuf>, BackendError> {
+    let contract = |error: crate::ContractFailure| BackendError::Contract(error.to_string());
+    let discovered =
+        crate::contract_interface::discovered_catalog_paths(directory).map_err(contract)?;
+    if trust_supplied {
+        return Ok(discovered);
+    }
+    let mut admitted = Vec::new();
     for path in discovered {
         let packages = crate::contract_interface::catalog_packages_needing_receipt_trust(&path)
             .map_err(contract)?;
         if packages.is_empty() {
-            selection.admitted.push(path);
+            admitted.push(path);
         } else {
-            selection
-                .unauthenticated
-                .push(UnauthenticatedCatalog { path, packages });
+            withheld.push(UnauthenticatedCatalog { path, packages });
         }
     }
-    Ok(selection)
+    Ok(admitted)
+}
+
+/// The directories whose `.solid-checker/` may hold a catalog for one of
+/// `files`: every ancestor directory of an analysed file strictly inside
+/// `project_directory`, sorted, whether or not it holds a catalog. The project
+/// directory itself is not one -- its catalog is the project's own -- and
+/// neither is a directory at or below a `node_modules`, which holds installed
+/// packages rather than this project's sources. A file outside the project
+/// directory contributes nothing, so the project's own catalog is the only one
+/// that applies to it.
+///
+/// Every candidate is returned, not only the ones that hold a catalog today: a
+/// host that caches an answer has to treat a catalog appearing in any of them
+/// as a change.
+#[must_use]
+pub fn nested_catalog_candidates<'a>(
+    project_directory: &Path,
+    files: impl IntoIterator<Item = &'a str>,
+) -> Vec<PathBuf> {
+    // The project directory as the host spelled it, and as an absolute and a
+    // real path: file paths come from the compiler, which may have resolved
+    // either. A candidate keeps the file's own spelling, because that is what
+    // an importer is compared with.
+    let mut spellings = vec![project_directory.to_path_buf()];
+    spellings.extend(std::path::absolute(project_directory).ok());
+    spellings.extend(fs::canonicalize(project_directory).ok());
+    let mut candidates = std::collections::BTreeSet::new();
+    for file in files {
+        let Some(parent) = Path::new(file).parent() else {
+            continue;
+        };
+        let Some(project) = spellings
+            .iter()
+            .find(|spelling| parent.starts_with(spelling))
+        else {
+            continue;
+        };
+        for ancestor in parent.ancestors() {
+            if ancestor == project {
+                break;
+            }
+            let Ok(relative) = ancestor.strip_prefix(project) else {
+                break;
+            };
+            if relative
+                .components()
+                .any(|component| component.as_os_str() == "node_modules")
+            {
+                continue;
+            }
+            if !candidates.insert(ancestor.to_path_buf()) {
+                // Every ancestor above this one was inserted with it.
+                break;
+            }
+        }
+    }
+    candidates.into_iter().collect()
 }
 
 /// The accepted-contract index ordinary analysis reads, from every tier this
@@ -1320,23 +1457,21 @@ pub fn select_project_catalogs(
 /// Callers still resolve `catalogs` and `trust` themselves, because how a
 /// catalog is *selected* genuinely differs between them (an explicit `--catalog`
 /// overrides discovery; the emission path supplies neither). What must not
-/// differ is what happens afterwards.
+/// differ is what happens afterwards. `nested` is the selection's
+/// [`NestedCatalogs`], each folded in above every project-wide tier for its
+/// own directory's files.
+#[allow(clippy::too_many_arguments)]
 pub fn project_accepted_contracts(
     directory: &Path,
     catalogs: &[PathBuf],
+    nested: &[NestedCatalogs],
     trust: Option<&crate::contract_certification::Policy2TrustConfiguration>,
     bundled: bool,
     conditions: &std::collections::BTreeSet<String>,
     facts: &solid_facts::ProjectFacts,
     requirements: AcceptedContractIndex,
 ) -> Result<AcceptedContractIndex, BackendError> {
-    let mut contracts = AcceptedContractIndex::default();
-    for path in catalogs {
-        contracts =
-            crate::contract_interface::read_external_contract_catalog_with_trust(path, trust)
-                .map_err(|error| BackendError::Contract(error.to_string()))?
-                .with_fallback(contracts);
-    }
+    let mut contracts = read_catalogs(catalogs, trust)?;
     if bundled {
         contracts = contracts.with_fallback(
             crate::accepted_bundles::compiled_in_accepted_contracts()
@@ -1356,7 +1491,7 @@ pub fn project_accepted_contracts(
     // *within* one call to agree -- which a project's own catalog and a
     // contract compiled into this build have no reason to do, and no reason to
     // be asked to.
-    let project = admitted_project_artifacts(catalogs, trust, directory, conditions, facts)?;
+    let project = admitted_catalog_artifacts(catalogs, trust, directory, conditions, facts, None)?;
     let project = agreed_admissions(&contracts, project);
     if !project.is_empty() {
         contracts = contracts.with_admitted_artifacts(project);
@@ -1376,41 +1511,124 @@ pub fn project_accepted_contracts(
     // not something this project asked for, and its refusals are `contract
     // check`'s to explain. Explanation only -- nothing here binds or withholds.
     if !catalogs.is_empty() {
-        let refusals = admission_refusal_details(directory, catalogs, false)?;
-        if !refusals.is_empty() {
-            let specifiers = facts
-                .files
-                .iter()
-                .flat_map(|file| {
-                    file.ast
-                        .imports
-                        .iter()
-                        .map(|import| import.module.as_str())
-                        .chain(
-                            file.ast
-                                .exports
-                                .iter()
-                                .filter_map(|export| export.module.as_deref()),
-                        )
-                })
-                .chain(
-                    contracts
-                        .semantic_identity()
-                        .iter()
-                        .map(|binding| binding.specifier.as_str()),
-                )
-                .collect::<std::collections::BTreeSet<_>>();
-            let notes = specifiers
-                .into_iter()
-                .filter_map(|specifier| {
-                    let refusal = refusals.get(&package_name_of_specifier(specifier)?)?;
-                    Some((specifier.to_owned(), refusal.clone()))
-                })
-                .collect::<Vec<_>>();
+        let notes = refusal_notes(directory, catalogs, facts, &contracts, None)?;
+        if !notes.is_empty() {
             contracts = contracts.with_admission_refusals(notes);
         }
     }
+    // A catalog in a directory inside the project applies to that directory's
+    // files, above every project-wide tier; see [`NestedCatalogs`]. Each is its
+    // own tier with its own admission, replayed from its own directory: that is
+    // where Node starts looking for the package when one of those files
+    // imports it, so it is the installed tree the acceptance has to reproduce.
+    for scope in nested {
+        contracts = contracts.with_scoped(
+            scope.directory.to_string_lossy().into_owned(),
+            scoped_accepted_contracts(scope, trust, conditions, facts)?,
+        );
+    }
     Ok(contracts)
+}
+
+/// Every catalog read and folded in the one order the project tier uses.
+fn read_catalogs(
+    catalogs: &[PathBuf],
+    trust: Option<&crate::contract_certification::Policy2TrustConfiguration>,
+) -> Result<AcceptedContractIndex, BackendError> {
+    let mut contracts = AcceptedContractIndex::default();
+    for path in catalogs {
+        contracts =
+            crate::contract_interface::read_external_contract_catalog_with_trust(path, trust)
+                .map_err(|error| BackendError::Contract(error.to_string()))?
+                .with_fallback(contracts);
+    }
+    Ok(contracts)
+}
+
+/// One nested directory's tier: its catalogs, what they admit by artifact for
+/// the files below it, and why they refused the rest. It holds no compiled-in
+/// contract and no missing-evidence marker -- those are project-wide, and the
+/// index consults them after every scope.
+fn scoped_accepted_contracts(
+    scope: &NestedCatalogs,
+    trust: Option<&crate::contract_certification::Policy2TrustConfiguration>,
+    conditions: &std::collections::BTreeSet<String>,
+    facts: &solid_facts::ProjectFacts,
+) -> Result<AcceptedContractIndex, BackendError> {
+    let directory = scope.directory.as_path();
+    let mut contracts = read_catalogs(&scope.admitted, trust)?;
+    let admitted = admitted_catalog_artifacts(
+        &scope.admitted,
+        trust,
+        directory,
+        conditions,
+        facts,
+        Some(directory),
+    )?;
+    let admitted = agreed_admissions(&contracts, admitted);
+    if !admitted.is_empty() {
+        contracts = contracts.with_admitted_artifacts(admitted);
+    }
+    let notes = refusal_notes(
+        directory,
+        &scope.admitted,
+        facts,
+        &contracts,
+        Some(directory),
+    )?;
+    if !notes.is_empty() {
+        contracts = contracts.with_admission_refusals(notes);
+    }
+    Ok(contracts)
+}
+
+/// The refusal sentence for each specifier the files `within` (every file
+/// when `None`) import or re-export, or that `contracts` binds by importer,
+/// whose package has an acceptance in `catalogs` that steps 1-3 of admission
+/// refused from `directory`.
+fn refusal_notes(
+    directory: &Path,
+    catalogs: &[PathBuf],
+    facts: &solid_facts::ProjectFacts,
+    contracts: &AcceptedContractIndex,
+    within: Option<&Path>,
+) -> Result<Vec<(String, String)>, BackendError> {
+    let refusals = admission_refusal_details(directory, catalogs, false)?;
+    if refusals.is_empty() {
+        return Ok(Vec::new());
+    }
+    let specifiers = facts
+        .files
+        .iter()
+        .filter(|file| {
+            within.is_none_or(|within| Path::new(file.path.as_str()).starts_with(within))
+        })
+        .flat_map(|file| {
+            file.ast
+                .imports
+                .iter()
+                .map(|import| import.module.as_str())
+                .chain(
+                    file.ast
+                        .exports
+                        .iter()
+                        .filter_map(|export| export.module.as_deref()),
+                )
+        })
+        .chain(
+            contracts
+                .semantic_identity()
+                .iter()
+                .map(|binding| binding.specifier.as_str()),
+        )
+        .collect::<std::collections::BTreeSet<_>>();
+    Ok(specifiers
+        .into_iter()
+        .filter_map(|specifier| {
+            let refusal = refusals.get(&package_name_of_specifier(specifier)?)?;
+            Some((specifier.to_owned(), refusal.clone()))
+        })
+        .collect())
 }
 
 /// Keeps one acceptance per specifier, and only where every candidate for it
@@ -1521,7 +1739,7 @@ pub fn admitted_bundled_artifacts(
 ) -> Result<Vec<(String, String)>, BackendError> {
     let installed = |specifier: &str| installed_artifact_identity(project_directory, specifier);
     let resolved_target =
-        |specifier: &str| resolved_target_identity(project_directory, facts, specifier);
+        |specifier: &str| resolved_target_identity(project_directory, facts, specifier, None);
     let environment = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
         installed_environment_matches(project_directory, specifier, environment)
     };
@@ -1766,15 +1984,17 @@ fn resolved_target_identity(
     project_directory: &Path,
     facts: &solid_facts::ProjectFacts,
     specifier: &str,
+    within: Option<&Path>,
 ) -> Option<String> {
     let module = package_name_of_specifier(specifier)?;
     let (directory, _) = installed_package_manifest(project_directory, &module).ok()??;
     let root = fs::canonicalize(&directory).ok()?;
     let attested = facts.resolved_imports.as_ref()?;
     let mut selected: Option<String> = None;
-    for (_, import) in attested.iter() {
+    for (importer, import) in attested.iter() {
         if import.text.as_str() != specifier
             || import.resolution == solid_facts::ImportResolution::Unresolved
+            || within.is_some_and(|within| !Path::new(importer).starts_with(within))
         {
             continue;
         }
@@ -3021,5 +3241,42 @@ mod tests {
         assert!(super::select_project_catalogs(&root, &explicit.to_string_lossy(), false).is_ok());
 
         std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn nested_catalog_candidates_are_the_directories_between_a_file_and_the_project() {
+        let candidates = super::nested_catalog_candidates(
+            Path::new("/mono"),
+            [
+                "/mono/packages/a/src/App.ts",
+                "/mono/packages/a/src/deep/Other.ts",
+                "/mono/packages/b/Main.ts",
+                // The project's own directory is not a candidate: its catalog
+                // is the project's.
+                "/mono/index.ts",
+                // Installed packages are not this project's sources.
+                "/mono/node_modules/pkg/index.d.ts",
+                "/mono/packages/a/node_modules/pkg/index.d.ts",
+                // Outside the project nothing is nested in it.
+                "/elsewhere/src/main.ts",
+                "/monorepo/src/main.ts",
+            ],
+        );
+        assert_eq!(
+            candidates,
+            [
+                "/mono/packages",
+                "/mono/packages/a",
+                "/mono/packages/a/src",
+                "/mono/packages/a/src/deep",
+                "/mono/packages/b",
+            ]
+            .map(std::path::PathBuf::from)
+        );
+        assert!(
+            super::nested_catalog_candidates(Path::new("/mono"), ["/mono/src/App.ts"])
+                .into_iter()
+                .eq([std::path::PathBuf::from("/mono/src")])
+        );
     }
 }

@@ -113,9 +113,135 @@ pub struct AcceptedContractIndex {
     /// that note is part of the findings.
     admission_refusals: BTreeMap<String, String>,
     identity: Vec<AcceptedImportIdentity>,
+    /// Project catalogs that apply only to the files below one directory:
+    /// the `.solid-checker/` of a directory strictly inside the analysed
+    /// project, which the project's own catalog does not contain. Deepest
+    /// directory first, so the nearest catalog answers a file's import before
+    /// a farther one, and every scope answers before this index's own tiers,
+    /// which apply project-wide. Empty for every project with no nested
+    /// catalog, and then every query answers exactly as it did without it.
+    scopes: Vec<ScopedAcceptances>,
+}
+
+/// One nested directory's acceptances. `index` is a complete index of its own
+/// -- its catalogs' importer-keyed entries, what those catalogs admitted by
+/// artifact in the tree below `directory`, and why they refused -- consulted
+/// only for importers inside `directory`.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct ScopedAcceptances {
+    directory: String,
+    index: AcceptedContractIndex,
+}
+
+impl ScopedAcceptances {
+    fn covers(&self, importer: &str) -> bool {
+        std::path::Path::new(importer).starts_with(&self.directory)
+    }
+
+    /// Deepest first, then by spelling so the order is a function of the set.
+    fn order(&self) -> (std::cmp::Reverse<usize>, &str) {
+        (
+            std::cmp::Reverse(std::path::Path::new(&self.directory).components().count()),
+            self.directory.as_str(),
+        )
+    }
 }
 
 impl AcceptedContractIndex {
+    /// Adds the acceptances of the project catalogs found in `directory`'s
+    /// `.solid-checker/`, applying to the files below `directory` only.
+    ///
+    /// For an importer inside several scoped directories, the deepest one
+    /// that answers wins, per specifier, and a farther one -- up to this
+    /// index's own, project-wide tiers -- answers only what the nearer ones
+    /// do not. An importer outside `directory` never sees `scoped`: a
+    /// catalog certified in one package of a monorepo says nothing about a
+    /// sibling package's files, whose own installed tree was not checked.
+    ///
+    /// `scoped` carries its own admissions; nothing here admits anything. A
+    /// second call for the same directory folds the new acceptances in below
+    /// the ones already held for it.
+    #[must_use]
+    pub fn with_scoped(mut self, directory: impl Into<String>, mut scoped: Self) -> Self {
+        let directory = directory.into();
+        // A scope's own scopes narrow it further; one outside it would widen
+        // it, and is not a scope of this one.
+        let nested = std::mem::take(&mut scoped.scopes)
+            .into_iter()
+            .filter(|scope| std::path::Path::new(&scope.directory).starts_with(&directory))
+            .collect::<Vec<_>>();
+        match self
+            .scopes
+            .iter_mut()
+            .find(|scope| scope.directory == directory)
+        {
+            Some(existing) => {
+                existing.index = std::mem::take(&mut existing.index).with_fallback(scoped);
+            }
+            None => self.scopes.push(ScopedAcceptances {
+                directory,
+                index: scoped,
+            }),
+        }
+        for scope in nested {
+            self = self.with_scoped(scope.directory, scope.index);
+        }
+        self.scopes
+            .sort_by(|left, right| left.order().cmp(&right.order()));
+        self
+    }
+
+    /// The scoped indexes that apply to `importer`, nearest first.
+    fn scopes_for<'a>(&'a self, importer: &str) -> impl Iterator<Item = &'a Self> {
+        self.scopes
+            .iter()
+            .filter(move |scope| scope.covers(importer))
+            .map(|scope| &scope.index)
+    }
+
+    /// This index's own answer for one import, ignoring scopes.
+    fn own_contract(&self, importer: &str, specifier: &str) -> Option<&AcceptedContract> {
+        self.imports
+            .get(&(importer.to_owned(), specifier.to_owned()))
+            .and_then(|contracts| contracts.first())
+            .or_else(|| self.admitted.get(specifier))
+    }
+
+    /// Every importer-keyed binding this index holds, its scopes' included,
+    /// deepest scope first and the project-wide tier last, each with the
+    /// refusal its own tier recorded for the binding's specifier. A report that
+    /// enumerates what acceptances a project holds has to see a nested
+    /// catalog's too; [`Self::semantic_identity`] is the project-wide tier's.
+    ///
+    /// The refusal is the binding's own tier's, not the one a lookup at the
+    /// binding's importer would find: a catalog entry's importer is the file
+    /// certification wrote beside the package, which need not lie inside the
+    /// directory whose catalog holds it.
+    pub fn all_semantic_identities(
+        &self,
+    ) -> impl Iterator<Item = (&AcceptedImportIdentity, Option<&str>)> {
+        self.scopes
+            .iter()
+            .map(|scope| &scope.index)
+            .chain(std::iter::once(self))
+            .flat_map(|index| {
+                index
+                    .identity
+                    .iter()
+                    .map(move |binding| (binding, index.admission_refusal(&binding.specifier)))
+            })
+    }
+
+    /// Why an acceptance for this specifier's package exists and was not
+    /// admitted, as the nearest catalog that applies to `importer` explains
+    /// it, and otherwise as the project-wide tier does.
+    #[must_use]
+    pub fn admission_refusal_at(&self, importer: &str, specifier: &str) -> Option<&str> {
+        self.scopes_for(importer)
+            .find_map(|scope| scope.admission_refusal(specifier))
+            .or_else(|| self.admission_refusal(specifier))
+    }
+
     /// Ordinary analysis has one authority for Solid core: the built-in
     /// dialect. Independent certification may still retain core contracts in
     /// this general index, but they cannot supplement the runtime model.
@@ -143,10 +269,28 @@ impl AcceptedContractIndex {
                 .admission_refusals
                 .keys()
                 .all(|specifier| !core_specifier(specifier))
+            && self.scopes.is_empty()
         {
             return std::borrow::Cow::Borrowed(self);
         }
         let mut external = self.clone();
+        external.retain_external();
+        std::borrow::Cow::Owned(external)
+    }
+
+    /// [`Self::external_packages`] in place, with no shortcut: every tier,
+    /// every scope.
+    fn retain_external(&mut self) {
+        fn core_specifier(specifier: &str) -> bool {
+            solid_dialect::core_runtime_contract_reference("", specifier)
+        }
+        let retain = |key: &(String, String), contracts: &[AcceptedContract]| {
+            !core_specifier(&key.1)
+                && contracts.iter().all(|contract| {
+                    !solid_dialect::primitive_defining_package(&contract.package().name)
+                })
+        };
+        let external = self;
         external.imports.retain(|key, values| retain(key, values));
         let external_package = |contract: &AcceptedContract| {
             !solid_dialect::primitive_defining_package(&contract.package().name)
@@ -168,7 +312,9 @@ impl AcceptedContractIndex {
         external
             .admission_refusals
             .retain(|specifier, _| !core_specifier(specifier));
-        std::borrow::Cow::Owned(external)
+        for scope in &mut external.scopes {
+            scope.index.retain_external();
+        }
     }
 
     /// Acceptances a project never imported by name: each one is reachable
@@ -202,6 +348,7 @@ impl AcceptedContractIndex {
             uncertifiable_imports: BTreeMap::new(),
             admission_refusals: BTreeMap::new(),
             identity: Vec::new(),
+            scopes: Vec::new(),
         }
     }
 
@@ -255,6 +402,7 @@ impl AcceptedContractIndex {
             uncertifiable_imports: BTreeMap::new(),
             admission_refusals: BTreeMap::new(),
             identity,
+            scopes: Vec::new(),
         })
     }
 
@@ -275,8 +423,7 @@ impl AcceptedContractIndex {
 
     #[must_use]
     pub fn is_uncertifiable(&self, importer: &str, specifier: &str) -> bool {
-        self.uncertifiable_imports
-            .contains_key(&(importer.to_owned(), specifier.to_owned()))
+        self.uncertifiable_reason(importer, specifier).is_some()
     }
 
     #[must_use]
@@ -285,9 +432,10 @@ impl AcceptedContractIndex {
         importer: &str,
         specifier: &str,
     ) -> Option<UncertifiableImportReason> {
-        self.uncertifiable_imports
-            .get(&(importer.to_owned(), specifier.to_owned()))
-            .copied()
+        let key = (importer.to_owned(), specifier.to_owned());
+        self.scopes_for(importer)
+            .chain(std::iter::once(self))
+            .find_map(|index| index.uncertifiable_imports.get(&key).copied())
     }
 
     #[must_use]
@@ -341,6 +489,11 @@ impl AcceptedContractIndex {
             .retain(|key, _| !self.imports.contains_key(key));
         for (specifier, refusal) in fallback.admission_refusals {
             self.admission_refusals.entry(specifier).or_insert(refusal);
+        }
+        // A fallback's scopes stay scopes: folding them into this index's own
+        // tiers would let a nested catalog answer files outside its directory.
+        for scope in fallback.scopes {
+            self = self.with_scoped(scope.directory, scope.index);
         }
         self
     }
@@ -441,6 +594,16 @@ impl AcceptedContractIndex {
             hash_text(&mut hash, specifier);
             hash_text(&mut hash, refusal);
         }
+        // Nothing is hashed for an index without scopes, so a project with no
+        // nested catalog keeps the fingerprint it always had.
+        if !self.scopes.is_empty() {
+            hash.update(b"scopes");
+            hash.update((self.scopes.len() as u64).to_be_bytes());
+            for scope in &self.scopes {
+                hash_text(&mut hash, &scope.directory);
+                hash.update(scope.index.cache_fingerprint());
+            }
+        }
         hash.finalize().into()
     }
 
@@ -450,10 +613,16 @@ impl AcceptedContractIndex {
         specifier: &str,
         identity: &ExportIdentity,
     ) -> Result<AcceptedContractUse<'a>, SemanticQueryError> {
+        let key = (importer.to_owned(), specifier.to_owned());
         let contract = self
-            .imports
-            .get(&(importer.to_owned(), specifier.to_owned()))
-            .and_then(|contracts| contracts.first())
+            .scopes_for(importer)
+            .chain(std::iter::once(self))
+            .find_map(|index| {
+                index
+                    .imports
+                    .get(&key)
+                    .and_then(|contracts| contracts.first())
+            })
             .ok_or_else(|| SemanticQueryError::MissingImport {
                 importer: importer.into(),
                 specifier: specifier.into(),
@@ -494,10 +663,9 @@ impl AcceptedContractIndex {
         importer: &str,
         specifier: &str,
     ) -> Result<&AcceptedContract, SemanticQueryError> {
-        self.imports
-            .get(&(importer.to_owned(), specifier.to_owned()))
-            .and_then(|contracts| contracts.first())
-            .or_else(|| self.admitted.get(specifier))
+        self.scopes_for(importer)
+            .find_map(|scope| scope.own_contract(importer, specifier))
+            .or_else(|| self.own_contract(importer, specifier))
             .ok_or_else(|| SemanticQueryError::MissingImport {
                 importer: importer.into(),
                 specifier: specifier.into(),

@@ -1664,7 +1664,7 @@ fn resolve_contract_imports_inner(
                     // Only the acceptance gate carries the note: an obsolete
                     // policy-1 receipt is its own, already specific answer.
                     let refusal = (reason == UncertifiableImportReason::Unspecified)
-                        .then(|| accepted.admission_refusal(&import.module))
+                        .then(|| accepted.admission_refusal_at(file.path.as_str(), &import.module))
                         .flatten();
                     push_missing_accepted_import(
                         &mut missing_exports,
