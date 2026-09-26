@@ -87,6 +87,8 @@ import {
   certificationOutcome,
   dependencyEnvironmentFromNativeOutput,
   dependencyEnvironmentNotAcquiredMessage,
+  selfAdmissionFromNativeOutput,
+  selfAdmissionRefusedMessage,
   publicationHoldsPackage,
   cascadeGraphNodeRefusals,
   graphCasesWithoutRefusedNodes,
@@ -2017,6 +2019,7 @@ test("published graph execution transports exact lock bytes and no caller receip
     lockfile: "/project/bun.lock",
     lockLocator: "types-only@3.0.0",
     installedPackageRoot: "/project/node_modules/types-only",
+    resolvedFrom: [{ importerPackageRoot: "/project/node_modules/root", specifier: "types-only" }],
     callerDigest: "sha256:not-authority"
   }]);
   const execution = buildPublishedGraphExecutionRequest({
@@ -2036,8 +2039,11 @@ test("published graph execution transports exact lock bytes and no caller receip
     archive: "/scratch/types-only.tgz",
     lockfile: "/project/bun.lock",
     lockLocator: "types-only@3.0.0",
-    installedPackageRoot: "/project/node_modules/types-only"
+    installedPackageRoot: "/project/node_modules/types-only",
+    // Who resolved it, for the receipt's resolution edges.
+    resolvedFrom: [{ importerPackageRoot: "/project/node_modules/root", specifier: "types-only" }]
   }]);
+  assert.deepEqual(execution.graph.root.resolvedFrom, []);
   assert.deepEqual(execution.graph.dependencies.map(node => node.lockLocator), ["leaf@2.0.0"]);
   assert.equal(JSON.stringify(execution).includes("acceptedContractDigest"), false);
   assert.equal(JSON.stringify(execution).includes("callerDigest"), false);
@@ -4422,4 +4428,98 @@ test("the contract sweep refuses a document that is not a contract report", asyn
       `an empty answer must not be read out of ${JSON.stringify(shape)}`
     );
   }
+});
+
+test("root source acquisition records who resolved each source, by importer and name", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-source-edges-"));
+  try {
+    writeRootSourceInstall(project, { lockedNames: ["alpha", "beta"] });
+    // `root-package` reaches only `alpha`; `alpha`'s own typings reach `beta`.
+    writeFileSync(
+      join(project, "node_modules/root-package/types/index.d.ts"),
+      `import type { T as A } from "alpha";\nexport declare const value: A;\n`
+    );
+    writeFileSync(
+      join(project, "node_modules/alpha/types/index.d.ts"),
+      `import type { T as B } from "beta";\nexport type T = B;\n`
+    );
+    const scratch = join(project, "scratch");
+    mkdirSync(scratch, { recursive: true });
+    const archive = new TextEncoder().encode("not a real tarball").buffer;
+    const [emitted] = await acquireRootCompilerSources({
+      options: {
+        packageRoot: join(project, "node_modules/root-package"),
+        registryOrigin: "https://registry.npmjs.org",
+        integrity: "sha512-root-package"
+      },
+      generated: rootSourceGenerated(project),
+      scratch,
+      fetch_: registryStub({ alpha: { archive }, beta: { archive } })
+    });
+    const real = name => realpathSync(join(project, "node_modules", name));
+    assert.deepEqual(
+      Object.fromEntries(emitted.map(source => [source.packageName, source.resolvedFrom])),
+      {
+        alpha: [{ importerPackageRoot: real("root-package"), specifier: "alpha" }],
+        beta: [{ importerPackageRoot: real("alpha"), specifier: "beta" }]
+      },
+      "each source names the package that looked it up, not every package that could see it"
+    );
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("a certification its own tree would not admit exits 1 and says why, last", () => {
+  const manifest = { name: "vite-plugin-solid", version: "3.0.0-next.5" };
+  assert.equal(selfAdmissionFromNativeOutput("nothing here\n"), null);
+  const refusal =
+    "its dependency environment differs: merge-anything resolved from " +
+    "vite-plugin-solid@3.0.0-next.5 installed 6.0.6, certified 5.1.7";
+  const stdout = [
+    'solid-checker:self-admission={"package":"vite-plugin-solid","specifier":"vite-plugin-solid","admitted":true}',
+    `solid-checker:self-admission=${JSON.stringify({
+      package: "vite-plugin-solid",
+      specifier: "vite-plugin-solid/vite",
+      admitted: false,
+      reason: refusal
+    })}`,
+    "solid-checker:self-admission=not json"
+  ].join("\n");
+  const selfAdmission = selfAdmissionFromNativeOutput(stdout);
+  assert.deepEqual(selfAdmission, {
+    entries: 2,
+    refused: [{ reason: refusal, specifier: "vite-plugin-solid/vite" }]
+  });
+  const stated = { receipts: 1, notAcquired: [] };
+  const outcome = certificationOutcome(manifest, stated, selfAdmission);
+  assert.equal(outcome.status, "certified-not-admitted");
+  assert.equal(outcome.admitted, false);
+  assert.equal(outcome.exitCode, CERTIFIED_NOT_ADMITTED_EXIT_CODE);
+  assert.equal(outcome.selfAdmissionRefused, refusal);
+  assert.equal(
+    outcome.message,
+    "solid-checker: vite-plugin-solid@3.0.0-next.5 certified but not admitted: " +
+      `${refusal}; the tree it was certified in does not admit this entry, so no project ` +
+      "that installs the same tree will apply it (exit 1)"
+  );
+  assert.equal(outcome.message, selfAdmissionRefusedMessage(refusal, "vite-plugin-solid@3.0.0-next.5"));
+  // Admitted everywhere, or reported by no line at all (an older build):
+  // exit 0, nothing said.
+  const admitted = selfAdmissionFromNativeOutput(stdout.split("\n")[0]);
+  assert.deepEqual(certificationOutcome(manifest, stated, admitted), {
+    status: "certified",
+    admitted: true,
+    exitCode: 0,
+    message: null
+  });
+  assert.equal(certificationOutcome(manifest, stated, null).exitCode, 0);
+  // An environment that was not acquired is the more specific answer.
+  const unacquired = certificationOutcome(
+    manifest,
+    { receipts: 1, notAcquired: [{ reason: "gamma is not installed" }] },
+    selfAdmission
+  );
+  assert.equal(unacquired.dependencyEnvironmentNotAcquired, "gamma is not installed");
+  assert.equal(unacquired.exitCode, 1);
 });

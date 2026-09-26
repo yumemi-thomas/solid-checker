@@ -355,6 +355,10 @@ struct ContractCertificationGraphNodeRequest {
     lock_locator: String,
     #[serde(default)]
     source_dependencies: Vec<ContractCertificationSourceRequest>,
+    /// Lookups declaration sources made that reached this node's package; see
+    /// `ContractCertificationSourceRequest::resolved_from`.
+    #[serde(default)]
+    resolved_from: Vec<ContractCertificationSourceEdgeRequest>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -373,6 +377,8 @@ struct ContractCertificationGraphCaseSetNodeRequest {
     lock_locator: String,
     #[serde(default)]
     source_dependencies: Vec<ContractCertificationSourceRequest>,
+    #[serde(default)]
+    resolved_from: Vec<ContractCertificationSourceEdgeRequest>,
 }
 
 impl ContractCertificationGraphCaseSetNodeRequest {
@@ -382,6 +388,7 @@ impl ContractCertificationGraphCaseSetNodeRequest {
             lockfile: self.lockfile,
             lock_locator: self.lock_locator,
             source_dependencies: self.source_dependencies,
+            resolved_from: self.resolved_from,
         }
     }
 }
@@ -404,6 +411,19 @@ struct ContractCertificationSourceRequest {
     lockfile: String,
     lock_locator: String,
     installed_package_root: String,
+    /// The lookups the adapter's closure walk made that reached this installed
+    /// copy: from which package root, by which bare name. They become the
+    /// resolution edges of the receipt's dependency environment. Absent from
+    /// an older adapter, whose environments are then stated without edges.
+    #[serde(default)]
+    resolved_from: Vec<ContractCertificationSourceEdgeRequest>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ContractCertificationSourceEdgeRequest {
+    importer_package_root: String,
+    specifier: String,
 }
 
 #[derive(Deserialize)]
@@ -863,7 +883,17 @@ fn certification_source_request(
         archive,
         lock,
         source.installed_package_root,
-    ))
+    )
+    .with_resolved_from(source.resolved_from.into_iter().map(source_resolution_edge)))
+}
+
+fn source_resolution_edge(
+    edge: ContractCertificationSourceEdgeRequest,
+) -> solid_facts_backend::SourceResolutionEdge {
+    solid_facts_backend::SourceResolutionEdge {
+        importer_package_root: edge.importer_package_root,
+        specifier: edge.specifier,
+    }
 }
 
 fn certification_graph_node_from_request(
@@ -874,6 +904,7 @@ fn certification_graph_node_from_request(
         lockfile,
         lock_locator,
         source_dependencies,
+        resolved_from,
     } = request;
     if planning.schema_version != 1 {
         return Err(format!(
@@ -923,7 +954,8 @@ fn certification_graph_node_from_request(
         archive,
         lock,
         sources,
-    )?;
+    )?
+    .with_resolved_from(resolved_from.into_iter().map(source_resolution_edge));
     Ok(match planning.dependency_environment_not_acquired {
         Some(reason) => node.with_dependency_environment_not_acquired(reason),
         None => node,
@@ -997,8 +1029,6 @@ fn write_contract_certification_plan(
 }
 
 fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
-
     let request: ContractCertificationExecutionRequest =
         serde_json::from_slice(&fs::read(request_path).map_err(|error| {
             format!(
@@ -1006,6 +1036,132 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
                 request_path.display()
             )
         })?)?;
+    // What the self-admission check needs, taken before the request is
+    // consumed: the published catalog root and the certified package. A
+    // controlled execution publishes no catalog, so it has none.
+    let self_admission = request
+        .execution_profile
+        .is_none()
+        .then(|| {
+            root_planning_of(&request).map(|planning| {
+                (
+                    PathBuf::from(&request.catalog_root),
+                    planning.resolution.package_name.clone(),
+                    PathBuf::from(
+                        planning
+                            .resolution
+                            .package_real_root
+                            .as_deref()
+                            .unwrap_or(&planning.resolution.package_root),
+                    ),
+                )
+            })
+        })
+        .flatten();
+    execute_parsed_contract_certification(request_path, request)?;
+    if let Some((catalog_root, package_name, package_root)) = self_admission {
+        let issued = ISSUED_RECEIPTS
+            .lock()
+            .map(|issued| issued.clone())
+            .unwrap_or_default();
+        report_self_admission(&catalog_root, &package_name, &package_root, &issued);
+    }
+    Ok(())
+}
+
+/// The `(artifactAcceptanceRoot, dependencyEnvironmentRoot)` of every receipt
+/// this process finalized, recorded where each one is reported
+/// ([`report_dependency_environment`]), so the self-admission check answers for
+/// this certification's entries and not for ones an earlier run left in the
+/// same catalog.
+static ISSUED_RECEIPTS: std::sync::Mutex<BTreeSet<(String, String)>> =
+    std::sync::Mutex::new(BTreeSet::new());
+
+/// The planning of the package a certification request is about: its one
+/// planning, its first case, or the root of its (first) graph.
+fn root_planning_of(
+    request: &ContractCertificationExecutionRequest,
+) -> Option<&ContractCertificationPlanningRequest> {
+    request
+        .planning
+        .as_ref()
+        .or_else(|| request.plannings.first())
+        .or_else(|| request.graph.as_ref().map(|graph| &graph.root.planning))
+        .or_else(|| request.graphs.first().map(|graph| &graph.root.planning))
+        .or_else(|| {
+            let case_set = request.graph_case_set.as_ref()?;
+            let root = &case_set.cases.first()?.root;
+            case_set
+                .nodes
+                .iter()
+                .find(|node| &node.key == root)
+                .map(|node| &node.planning)
+        })
+}
+
+/// One line per catalog entry of the certified package: whether the tree it
+/// was certified in admits it (`certified_catalog_self_admission`), and why
+/// not when it does not. The adapter turns a refusal into exit 1 with the
+/// reason, because a certification its own tree refuses is one no project can
+/// use. A check that cannot run says so on the same line rather than passing.
+fn report_self_admission(
+    catalog_root: &Path,
+    package_name: &str,
+    package_root: &Path,
+    issued: &BTreeSet<(String, String)>,
+) {
+    match solid_facts_backend::certified_catalog_self_admission(
+        catalog_root,
+        package_name,
+        package_root,
+        issued,
+    ) {
+        Ok(entries) if entries.is_empty() => println!(
+            "{SELF_ADMISSION_MARKER}{}",
+            serde_json::json!({
+                "package": package_name,
+                "admitted": false,
+                "reason": "the published catalog holds no entry for the certified package",
+            })
+        ),
+        Ok(entries) => {
+            for (specifier, refusal) in entries {
+                let record = match refusal {
+                    None => serde_json::json!({
+                        "package": package_name,
+                        "specifier": specifier,
+                        "admitted": true,
+                    }),
+                    Some(refusal) => serde_json::json!({
+                        "package": package_name,
+                        "specifier": specifier,
+                        "admitted": false,
+                        "reason": refusal.to_string(),
+                    }),
+                };
+                println!("{SELF_ADMISSION_MARKER}{record}");
+            }
+        }
+        Err(error) => println!(
+            "{SELF_ADMISSION_MARKER}{}",
+            serde_json::json!({
+                "package": package_name,
+                "admitted": false,
+                "reason": format!("admission could not be evaluated: {error}"),
+            })
+        ),
+    }
+}
+
+/// See [`report_self_admission`].
+const SELF_ADMISSION_MARKER: &str = "solid-checker:self-admission=";
+
+fn execute_parsed_contract_certification(
+    request_path: &Path,
+    request: ContractCertificationExecutionRequest,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+
     let single_shape = request.planning.is_some()
         && request.plannings.is_empty()
         && request.graph.is_none()
@@ -1292,6 +1448,12 @@ fn report_dependency_environment(
     node: Option<&solid_facts_backend::CanonicalDependencyNodeIdentity>,
     finalized: &solid_facts_backend::FinalizedPolicy2Contract,
 ) {
+    if let Ok(mut issued) = ISSUED_RECEIPTS.lock() {
+        issued.insert((
+            finalized.bindings().artifact_acceptance_root.clone(),
+            finalized.bindings().dependency_environment_root.clone(),
+        ));
+    }
     let mut record = match (
         finalized.authenticated().dependency_environment(),
         finalized.dependency_environment_not_acquired(),

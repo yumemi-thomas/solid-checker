@@ -161,10 +161,11 @@ Environment:
 Exit status:
   0  Certified, published, and admissible: the receipt states the dependency
      environment a consumer tree must reproduce.
-  1  Certified and published, but not admitted anywhere: the dependency
-     environment was not acquired, so the receipt states none and no project
-     applies the entry. The last line on stderr says why. Certify again once
-     the reason is repaired (for example, a lockfile the certifier reads).
+  1  Certified and published, but not admitted: the dependency environment
+     was not acquired, so the receipt states none and no project applies the
+     entry; or the tree it was certified in does not itself admit the entry.
+     The last line on stderr says why. Certify again once the reason is
+     repaired (for example, a lockfile the certifier reads).
   2  Refused or failed; nothing was published.
 `;
 
@@ -748,14 +749,40 @@ export function dependencyEnvironmentNotAcquiredMessage(reason, subject = "") {
     `so no project will apply this entry (exit ${CERTIFIED_NOT_ADMITTED_EXIT_CODE})`;
 }
 
+/// The line `contract certify` prints last when the tree it certified in would
+/// not admit the entry it just published (`solid-checker:self-admission=`
+/// lines, `main.rs`'s `report_self_admission`): the admission rule itself was
+/// asked, and `reason` is its answer.
+export function selfAdmissionRefusedMessage(reason, subject = "") {
+  return `solid-checker: ${subject ? `${subject} ` : ""}certified but not admitted: ${reason}; ` +
+    `the tree it was certified in does not admit this entry, so no project that installs ` +
+    `the same tree will apply it (exit ${CERTIFIED_NOT_ADMITTED_EXIT_CODE})`;
+}
+
 /// What one successful `contract certify` amounts to, from the
-/// dependency-environment lines its native transaction reported: whether the
-/// published entry is admitted, the exit status that says so, and the line to
-/// print last (`null` when there is nothing to say -- an admitted entry
-/// prints nothing, as before).
-export function certificationOutcome(manifest, dependencyEnvironment) {
+/// dependency-environment and self-admission lines its native transaction
+/// reported: whether the published entry is admitted, the exit status that says
+/// so, and the line to print last (`null` when there is nothing to say -- an
+/// admitted entry prints nothing, as before).
+///
+/// An environment that was not acquired is the more specific answer and wins;
+/// otherwise the first entry the certifying tree refuses decides. A native
+/// build that reports no self-admission lines (an older one) is not treated as
+/// a refusal.
+export function certificationOutcome(manifest, dependencyEnvironment, selfAdmission = null) {
+  const subject = manifest?.name && manifest?.version ? `${manifest.name}@${manifest.version}` : "";
   const notAcquired = dependencyEnvironment?.notAcquired?.[0] ?? null;
   if (!notAcquired) {
+    const refused = selfAdmission?.refused?.[0] ?? null;
+    if (refused) {
+      return Object.freeze({
+        status: "certified-not-admitted",
+        admitted: false,
+        exitCode: CERTIFIED_NOT_ADMITTED_EXIT_CODE,
+        selfAdmissionRefused: refused.reason,
+        message: selfAdmissionRefusedMessage(refused.reason, subject)
+      });
+    }
     return Object.freeze({ status: "certified", admitted: true, exitCode: 0, message: null });
   }
   return Object.freeze({
@@ -768,6 +795,36 @@ export function certificationOutcome(manifest, dependencyEnvironment) {
       manifest?.name && manifest?.version ? `${manifest.name}@${manifest.version}` : ""
     )
   });
+}
+
+/// The certifying tree's own admission of each entry the transaction published:
+/// one `solid-checker:self-admission=<json>` line per entry. Returns the
+/// entries it refuses, with the reason, or `null` when the native side
+/// reported nothing (an older build, or a controlled execution).
+export const SELF_ADMISSION_MARKER = "solid-checker:self-admission=";
+
+export function selfAdmissionFromNativeOutput(stdout) {
+  const records = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(SELF_ADMISSION_MARKER)) continue;
+    try {
+      const record = JSON.parse(trimmed.slice(SELF_ADMISSION_MARKER.length));
+      if (record && typeof record === "object") records.push(record);
+    } catch {
+      // Malformed is not a record.
+    }
+  }
+  if (!records.length) return null;
+  return {
+    entries: records.length,
+    refused: records
+      .filter(record => record.admitted !== true)
+      .map(record => ({
+        reason: typeof record.reason === "string" ? record.reason : "not admitted",
+        ...(record.specifier ? { specifier: record.specifier } : {})
+      }))
+  };
 }
 
 export function dependencyEnvironmentFromNativeOutput(stdout) {
@@ -1153,6 +1210,35 @@ function createCompilerSourceCollector({
 }) {
   const sourceArtifacts = new Map();
   const compilerSourceClosures = new Map();
+  // Who resolved what: for each installed source root, every lookup the walk
+  // made that reached it -- the importer's package root and the bare name
+  // looked up. The receipt's dependency environment states these as its
+  // resolution edges, and admission replays exactly them from each importer's
+  // own installed location instead of demanding that every located package
+  // see one copy of every name, which no pnpm tree does.
+  const resolutionsByRoot = new Map();
+  const canonicalPackageRoot = root => {
+    try {
+      return realpathSync(resolve(root));
+    } catch {
+      return resolve(root);
+    }
+  };
+  const recordResolution = (installedRoot, located) => {
+    if (!located.importerPackageRoot) return;
+    const importerPackageRoot = canonicalPackageRoot(located.importerPackageRoot);
+    const specifier = packageNameOfSpecifier(located.specifier);
+    const key = canonicalPackageRoot(installedRoot);
+    let edges = resolutionsByRoot.get(key);
+    if (!edges) resolutionsByRoot.set(key, (edges = new Map()));
+    edges.set(JSON.stringify([importerPackageRoot, specifier]), { importerPackageRoot, specifier });
+  };
+  const resolvedFromOf = installedRoot =>
+    [...(resolutionsByRoot.get(canonicalPackageRoot(installedRoot))?.values() ?? [])].sort(
+      (left, right) =>
+        left.importerPackageRoot.localeCompare(right.importerPackageRoot) ||
+        left.specifier.localeCompare(right.specifier)
+    );
   let nextSourceIndex = 0;
   const locateExternalFrom = (ownerRoot, dependency) => {
     if (nodeBuiltinSpecifier(dependency.specifier)) return null;
@@ -1179,6 +1265,7 @@ function createCompilerSourceCollector({
     });
     return {
       ...dependency,
+      importerPackageRoot: ownerRoot,
       dependencyImporter,
       dependencyRoot,
       dependencyManifest,
@@ -1192,6 +1279,11 @@ function createCompilerSourceCollector({
     visiting = new Set()
   ) => {
     const installedRoot = resolve(located.dependencyRoot);
+    // Before anything returns: a second importer reaching an already-walked
+    // copy is a second edge, even though the walk below it is not repeated,
+    // and a lookup that reaches a graph node's package (a semantic root) is
+    // an edge of that node, reported on its own request.
+    recordResolution(installedRoot, located);
     if (semanticRoots.has(installedRoot)) return [];
     const memoKey = JSON.stringify([
       installedRoot,
@@ -1337,6 +1429,7 @@ function createCompilerSourceCollector({
   return {
     locateExternalFrom,
     collectCompilerSources,
+    resolvedFromOf,
     // Exposed so the artifact-case policy replays a dependency edge through
     // the same memoized resolver the collector uses, instead of a second one
     // that could disagree with it.
@@ -1828,6 +1921,7 @@ function graphNodeExecutionInput(state) {
     planning: withEnvironmentNotAcquired(state.planning, state.environmentNotAcquired),
     lockfile: state.node.lockfilePath,
     lockLocator: state.node.lockLocator,
+    resolvedFrom: state.resolvedFrom ?? [],
     sourceDependencies: (state.sourceDependencies ?? []).map(source => ({
       packageName: source.packageName,
       packageVersion: source.packageVersion,
@@ -1836,7 +1930,8 @@ function graphNodeExecutionInput(state) {
       archive: source.archive,
       lockfile: source.lockfile,
       lockLocator: source.lockLocator,
-      installedPackageRoot: source.installedPackageRoot
+      installedPackageRoot: source.installedPackageRoot,
+      resolvedFrom: source.resolvedFrom ?? []
     }))
   };
 }
@@ -1965,6 +2060,7 @@ async function executePreparedPublishedGraphs({
     authority: "native-certification-complete",
     catalogRoot,
     dependencyEnvironment: dependencyEnvironmentFromNativeOutput(child.stdout),
+    selfAdmission: selfAdmissionFromNativeOutput(child.stdout),
     withheldClosures: withheldClosuresFromNativeOutput(child.stdout),
     withheldOperations: withheldOperationsFromNativeOutput(child.stdout),
     closureCandidates: closureCandidatesFromNativeOutput(child.stdout),
@@ -2433,6 +2529,7 @@ export async function preparePublishedGraphCases({
   const {
     locateExternalFrom,
     collectCompilerSources,
+    resolvedFromOf,
     sourceArtifacts,
     compilerSourceClosureCount
   } = createCompilerSourceCollector({
@@ -2752,11 +2849,15 @@ export async function preparePublishedGraphCases({
         archive: artifact.archivePath,
         lockfile: unit.source.lockfile,
         lockLocator: unit.source.lockLocator,
-        installedPackageRoot: unit.source.installedPackageRoot
+        installedPackageRoot: unit.source.installedPackageRoot,
+        resolvedFrom: resolvedFromOf(unit.source.installedPackageRoot)
       });
     }
   );
   for (const state of byKey.values()) {
+    // Every closure walk is complete by now, so this is every lookup a
+    // declaration source made that reached this node's package.
+    state.resolvedFrom = resolvedFromOf(state.node.packageRoot);
     if (nodeRefusals.has(state.node.key)) continue;
     const acquiredSources = [];
     let unacquired = null;
@@ -3230,7 +3331,8 @@ export async function acquireRootCompilerSourcesWithEnvironment({
           archive: artifact.archivePath,
           lockfile: source.lockfile,
           lockLocator: source.lockLocator,
-          installedPackageRoot: source.installedPackageRoot
+          installedPackageRoot: source.installedPackageRoot,
+          resolvedFrom: collector.resolvedFromOf(source.installedPackageRoot)
         });
       } catch (error) {
         withhold(
@@ -3392,6 +3494,7 @@ async function executeNativeCertification({
     authority: "native-certification-complete",
     catalogRoot,
     dependencyEnvironment: dependencyEnvironmentFromNativeOutput(child.stdout),
+    selfAdmission: selfAdmissionFromNativeOutput(child.stdout),
     withheldClosures: withheldClosuresFromNativeOutput(child.stdout),
     withheldOperations: withheldOperationsFromNativeOutput(child.stdout),
     closureCandidates: closureCandidatesFromNativeOutput(child.stdout),
@@ -3878,7 +3981,8 @@ function writeSuccessAudit(
   certifiedClosures = null,
   probeCorpus = null,
   recipeAddresses = [],
-  dependencyEnvironment = null
+  dependencyEnvironment = null,
+  selfAdmission = null
 ) {
   if (!path) return;
   const output = resolve(path);
@@ -3892,6 +3996,10 @@ function writeSuccessAudit(
     // Written only when a receipt states no dependency environment: it then
     // authenticates, and no consumer admits it by artifact (ADR 0125).
     ...(dependencyEnvironment?.notAcquired?.length ? { dependencyEnvironment } : {}),
+    // Written only when the certifying tree refuses an entry it just
+    // published: the receipt authenticates and states an environment, and the
+    // admission rule still says no.
+    ...(selfAdmission?.refused?.length ? { selfAdmission } : {}),
     package: { name: manifest.name, version: manifest.version },
     stage: "catalog-publication",
     ordinaryAnalysis: { receiptAuthenticated: true, exactCaseSelected: true },
@@ -4049,6 +4157,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
   let certifiedClosures = null;
   let recipeAddresses = [];
   let dependencyEnvironment = null;
+  let selfAdmission = null;
   const stageDurationsMs = {};
   let certified = false;
   // Returned to the caller, which owns the exit status: `bin/solid-checker.mjs`
@@ -4220,6 +4329,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
           certifiedClosures = witnesses?.certifiedClosures ?? null;
           recipeAddresses = Array.isArray(witnesses?.recipeAddresses) ? witnesses.recipeAddresses : [];
           dependencyEnvironment = witnesses?.dependencyEnvironment ?? null;
+          selfAdmission = witnesses?.selfAdmission ?? null;
           return { authority: "rust", witnesses };
         })
       },
@@ -4288,10 +4398,11 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       certifiedClosures,
       options.probeRecipeCorpus ? resolve(options.probeRecipeCorpus) : null,
       recipeAddresses,
-      dependencyEnvironment
+      dependencyEnvironment,
+      selfAdmission
     );
     certified = true;
-    outcome = certificationOutcome(manifest, dependencyEnvironment);
+    outcome = certificationOutcome(manifest, dependencyEnvironment, selfAdmission);
     if (outcome.message) process.stderr.write(`${outcome.message}\n`);
   } catch (error) {
     const refusal =

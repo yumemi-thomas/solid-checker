@@ -1534,6 +1534,64 @@ pub fn admitted_bundled_artifacts(
     .map_err(|error| BackendError::Contract(error.to_string()))
 }
 
+/// Whether the catalog `contract certify` just published under `catalog_root`
+/// is admitted in the tree it was certified in: steps 1-3 of the one admission
+/// rule ([`crate::accepted_bundles::admission_refusals`]) for every entry of
+/// `package_name`, one `(specifier, refusal)` per entry, `None` when admitted.
+///
+/// A certification that its own tree would refuse is a certification no
+/// project can use, and until this check it exited 0 without a word: measured,
+/// `vite-plugin-solid@3.0.0-next.5` certified in kobalte core and was refused in
+/// the same tree. Asking the admission rule itself, rather than re-deriving
+/// what it would say, is what keeps the two from drifting apart again.
+///
+/// The tree is the catalog's project -- the parent of a `.solid-checker/`
+/// catalog root -- when that project installs the package, and otherwise the
+/// package's own installed location, from which Node finds the package itself.
+/// Step 4 (the file a project resolved, and case selection) needs a project's
+/// resolved imports, which a certification has none of; it is not replayed.
+///
+/// `issued` names the receipts this certification issued, by their signed
+/// `(artifactAcceptanceRoot, dependencyEnvironmentRoot)`: a catalog merges, and
+/// an entry an earlier certification left for the same package is not this
+/// certification's to answer for.
+pub fn certified_catalog_self_admission(
+    catalog_root: &Path,
+    package_name: &str,
+    package_root: &Path,
+    issued: &std::collections::BTreeSet<(String, String)>,
+) -> Result<Vec<(String, Option<crate::AdmissionRefusal>)>, BackendError> {
+    let catalog_project = catalog_root
+        .file_name()
+        .is_some_and(|name| name == ".solid-checker")
+        .then(|| catalog_root.parent())
+        .flatten();
+    let project = catalog_project
+        .filter(|project| installed_artifact_identity(project, package_name).is_some())
+        .unwrap_or(package_root);
+    let installed = |specifier: &str| installed_artifact_identity(project, specifier);
+    let difference = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
+        installed_environment_difference(project, specifier, environment)
+    };
+    let catalogs = crate::contract_interface::catalog_paths_in(catalog_root)
+        .map_err(|error| BackendError::Contract(error.to_string()))?;
+    Ok(crate::contract_interface::project_admission_refusals_where(
+        &catalogs,
+        &installed,
+        &difference,
+        |bindings| {
+            issued.contains(&(
+                bindings.artifact_acceptance_root.clone(),
+                bindings.dependency_environment_root.clone(),
+            ))
+        },
+    )
+    .map_err(|error| BackendError::Contract(error.to_string()))?
+    .into_iter()
+    .filter(|(specifier, _)| package_name_of_specifier(specifier).as_deref() == Some(package_name))
+    .collect())
+}
+
 /// Whether this project's installed tree, resolved from the installed copy of
 /// the package `specifier` names, is the dependency environment an acceptance
 /// -- a compiled-in bundle or a project catalog entry -- was proven in.
@@ -1681,11 +1739,11 @@ fn installed_environment_identity(
         return None;
     }
     let integrity = installed_package_integrity(project_directory, directory).ok()??;
-    Some(crate::DependencyEnvironmentEntry {
+    Some(crate::DependencyEnvironmentEntry::package(
         name,
-        version: manifest.version,
+        manifest.version,
         integrity,
-    })
+    ))
 }
 
 pub(crate) fn installed_artifact_identity(
@@ -2719,10 +2777,8 @@ mod tests {
             r#"{"name":"@solidjs/signals","version":"2.0.0-rc.6"}"#,
         );
         write("package-lock.json", &lock("sha512-signals-rc6", None));
-        let signals = |version: &str, integrity: &str| crate::DependencyEnvironmentEntry {
-            name: "@solidjs/signals".into(),
-            version: version.into(),
-            integrity: integrity.into(),
+        let signals = |version: &str, integrity: &str| {
+            crate::DependencyEnvironmentEntry::package("@solidjs/signals", version, integrity)
         };
         let head = [signals("2.0.0-rc.6", "sha512-signals-rc6")];
         let matches = |environment: &[crate::DependencyEnvironmentEntry]| {
@@ -2743,11 +2799,11 @@ mod tests {
             "a different dependency integrity refuses"
         );
         assert!(
-            !matches(&[crate::DependencyEnvironmentEntry {
-                name: "@solidjs/web".into(),
-                version: "2.0.0-rc.6".into(),
-                integrity: "sha512-web".into(),
-            }]),
+            !matches(&[crate::DependencyEnvironmentEntry::package(
+                "@solidjs/web",
+                "2.0.0-rc.6",
+                "sha512-web",
+            )]),
             "a dependency that is not installed refuses"
         );
 

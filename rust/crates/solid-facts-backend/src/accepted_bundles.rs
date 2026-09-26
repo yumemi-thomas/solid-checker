@@ -48,7 +48,7 @@
 //! a bundle whose root does not reproduce is not admitted.
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     sync::OnceLock,
 };
 
@@ -58,7 +58,8 @@ use solid_reactive_ir::contract_semantics::AcceptedContractIndex;
 
 use crate::{
     contract_certification::{
-        BuiltInReceiptEntry, DependencyEnvironmentEntry, Policy2ReceiptBindings,
+        BuiltInReceiptEntry, DependencyEnvironmentEntry, EnvironmentImporter,
+        Policy2ReceiptBindings, dependency_environment_states_edges,
         policy2_artifact_acceptance_root_for_identity, policy2_dependency_environment_root,
     },
     contract_interface::{
@@ -370,16 +371,34 @@ pub type InstalledEnvironment<'a> = dyn Fn(&str, &[DependencyEnvironmentEntry]) 
 /// exactly. `identity(at)` is the name, manifest version and lockfile integrity
 /// of the package installed at `at`, or `None` when those are not all stated.
 ///
-/// The rule, and why it is this strict:
+/// **An environment that states its resolution edges** (the `edges:v3` root)
+/// is replayed edge by edge. Each entry names the package that looked it up and
+/// the bare name it looked up; the lookup is repeated from that importer's own
+/// installed location -- `root` for the certified package, and for any other
+/// importer every location an earlier edge reached it at -- and must reach
+/// exactly that entry's name, manifest version and lockfile integrity.
+///
+/// - What the certification never looked up is not asked. A package elsewhere
+///   in the tree that sees another, hoisted version of the same name is not a
+///   premise of the proof: in a pnpm tree `.pnpm/node_modules` hoists some
+///   version of nearly everything into every package's view, and a rule that
+///   read those lookups would refuse the tree the certification ran in.
+/// - One name may appear under two importers at two versions, because each
+///   edge is its own lookup.
+/// - Missing, unresolvable or different refuses, as does an entry whose
+///   importer is never reached.
+///
+/// **An environment stated without edges** (the `v1` root, which every receipt
+/// issued before edges were recorded binds) cannot say which package read each
+/// entry, so it keeps the strict rule, which is sound for it:
 ///
 /// - Every entry must be found from at least one located package: the root, or
 ///   a package an earlier entry resolved to. An entry nothing reaches is a
 ///   premise this tree cannot supply.
 /// - **Every** resolution of an entry's name, from **every** located package,
-///   must reach exactly that entry's identity. The certification states which
-///   packages it read, not which package read each one, so a nested copy under
-///   one dependency that differs from the hoisted one another dependency sees
-///   is exactly the swap this cannot tell apart from the certified tree. It is
+///   must reach exactly that entry's identity. A nested copy under one
+///   dependency that differs from the hoisted one another dependency sees is
+///   exactly the swap this cannot tell apart from the certified tree. It is
 ///   refused rather than guessed.
 /// - Two entries with the same name -- two copies of one package in the
 ///   certified environment -- can therefore never both hold, and refuse.
@@ -405,6 +424,9 @@ pub(crate) fn environment_difference<L: Clone + Ord>(
     identity: impl Fn(&L) -> Option<DependencyEnvironmentEntry>,
     version_of: impl Fn(&L) -> Option<String>,
 ) -> Option<EnvironmentDifference> {
+    if dependency_environment_states_edges(environment) {
+        return edge_environment_difference(environment, root, resolve, identity, version_of);
+    }
     let mut names = BTreeSet::new();
     if let Some(entry) = environment
         .iter()
@@ -425,11 +447,15 @@ pub(crate) fn environment_difference<L: Clone + Ord>(
                 Err(()) => {
                     return Some(EnvironmentDifference::Unresolvable {
                         name: entry.name.clone(),
+                        from: None,
                     });
                 }
             };
             let installed = identity(&at);
-            if installed.as_ref() != Some(entry) {
+            if !installed
+                .as_ref()
+                .is_some_and(|installed| installed.same_package(entry))
+            {
                 return Some(EnvironmentDifference::Differs {
                     installed_version: installed
                         .as_ref()
@@ -437,6 +463,7 @@ pub(crate) fn environment_difference<L: Clone + Ord>(
                         .or_else(|| version_of(&at)),
                     installed,
                     certified: entry.clone(),
+                    from: None,
                 });
             }
             found.insert(entry.name.as_str());
@@ -450,18 +477,114 @@ pub(crate) fn environment_difference<L: Clone + Ord>(
         .find(|entry| !found.contains(entry.name.as_str()))
         .map(|entry| EnvironmentDifference::NotInstalled {
             certified: entry.clone(),
+            from: None,
+        })
+}
+
+/// The edge-rooted rule [`environment_is_installed`] states for an environment
+/// that records who resolved what. Breadth-first from the certified package,
+/// so the first failing edge reported is the one nearest the root.
+fn edge_environment_difference<L: Clone + Ord>(
+    environment: &[DependencyEnvironmentEntry],
+    root: L,
+    resolve: impl Fn(&L, &str) -> Result<Option<L>, ()>,
+    identity: impl Fn(&L) -> Option<DependencyEnvironmentEntry>,
+    version_of: impl Fn(&L) -> Option<String>,
+) -> Option<EnvironmentDifference> {
+    let certified_label = identity(&root).map_or_else(
+        || "the certified package".to_owned(),
+        |certified| format!("{}@{}", certified.name, certified.version),
+    );
+    let label = |importer: &EnvironmentImporter| match importer {
+        EnvironmentImporter::Certified => certified_label.clone(),
+        EnvironmentImporter::Package(package) => format!("{}@{}", package.name, package.version),
+    };
+    let mut located = BTreeMap::<EnvironmentImporter, BTreeSet<L>>::new();
+    located
+        .entry(EnvironmentImporter::Certified)
+        .or_default()
+        .insert(root.clone());
+    // Each importer's edges, in canonical order, so every location is asked
+    // only the lookups made from it.
+    let mut by_importer = BTreeMap::<&EnvironmentImporter, Vec<usize>>::new();
+    for (index, entry) in environment.iter().enumerate() {
+        if let Some(edge) = &entry.resolved_from {
+            by_importer.entry(&edge.importer).or_default().push(index);
+        }
+    }
+    let mut queue = VecDeque::from([(EnvironmentImporter::Certified, root)]);
+    let mut reached = vec![false; environment.len()];
+    while let Some((importer, from)) = queue.pop_front() {
+        for &index in by_importer.get(&importer).map_or(&[][..], Vec::as_slice) {
+            let entry = &environment[index];
+            let Some(edge) = &entry.resolved_from else {
+                continue;
+            };
+            let at = match resolve(&from, &edge.specifier) {
+                Ok(Some(at)) => at,
+                Ok(None) => {
+                    return Some(EnvironmentDifference::NotInstalled {
+                        certified: entry.clone(),
+                        from: Some(label(&importer)),
+                    });
+                }
+                Err(()) => {
+                    return Some(EnvironmentDifference::Unresolvable {
+                        name: edge.specifier.clone(),
+                        from: Some(label(&importer)),
+                    });
+                }
+            };
+            let installed = identity(&at);
+            if !installed
+                .as_ref()
+                .is_some_and(|installed| installed.same_package(entry))
+            {
+                return Some(EnvironmentDifference::Differs {
+                    installed_version: installed
+                        .as_ref()
+                        .map(|installed| installed.version.clone())
+                        .or_else(|| version_of(&at)),
+                    installed,
+                    certified: entry.clone(),
+                    from: Some(label(&importer)),
+                });
+            }
+            reached[index] = true;
+            let key = entry.as_importer();
+            if located.entry(key.clone()).or_default().insert(at.clone()) {
+                queue.push_back((key, at));
+            }
+        }
+    }
+    // Validation refuses an environment whose edges are not rooted, so this is
+    // reached only for an entry whose importer this tree never located.
+    environment
+        .iter()
+        .zip(reached)
+        .find(|(_, reached)| !reached)
+        .map(|(entry, _)| EnvironmentDifference::NotInstalled {
+            certified: entry.clone(),
+            from: entry
+                .resolved_from
+                .as_ref()
+                .map(|edge| label(&edge.importer)),
         })
 }
 
 /// Why an installed tree does not reproduce a certified environment: the
 /// first entry that differs, for a report that has to name it.
+///
+/// `from` names the importer whose lookup failed (`name@version`) when the
+/// environment states edges; `None` under the strict rule, which has no edge
+/// to name.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum EnvironmentDifference {
     /// The certified environment names one package twice, which no tree can
     /// reproduce under the "every resolution" rule.
     DuplicateName { name: String },
     /// The tree cannot state exactly which copy of this package resolves.
-    Unresolvable { name: String },
+    Unresolvable { name: String, from: Option<String> },
     /// A copy resolves, and it is not the certified one.
     Differs {
         /// Its full identity, when the tree states one.
@@ -469,50 +592,71 @@ pub(crate) enum EnvironmentDifference {
         /// Its manifest version, when readable.
         installed_version: Option<String>,
         certified: DependencyEnvironmentEntry,
+        from: Option<String>,
     },
     /// Nothing resolves this certified package from anywhere the rule looks.
     NotInstalled {
         certified: DependencyEnvironmentEntry,
+        from: Option<String>,
     },
 }
 
 impl std::fmt::Display for EnvironmentDifference {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let via = |from: &Option<String>| {
+            from.as_ref()
+                .map_or_else(String::new, |from| format!(" resolved from {from}"))
+        };
         match self {
             Self::DuplicateName { name } => {
                 write!(formatter, "the certified environment names {name} twice")
             }
-            Self::Unresolvable { name } => write!(
+            Self::Unresolvable { name, from } => write!(
                 formatter,
-                "{name}: this tree cannot state exactly which installed copy resolves"
+                "{name}{}: this tree cannot state exactly which installed copy resolves",
+                via(from)
             ),
             Self::Differs {
                 installed: Some(installed),
                 certified,
+                from,
                 ..
             } if installed.version == certified.version => write!(
                 formatter,
-                "{} {} installed with integrity {}, certified with {}",
-                certified.name, certified.version, installed.integrity, certified.integrity
+                "{}{} {} installed with integrity {}, certified with {}",
+                certified.name,
+                via(from),
+                certified.version,
+                installed.integrity,
+                certified.integrity
             ),
             Self::Differs {
                 installed_version: Some(version),
                 certified,
+                from,
                 ..
             } => write!(
                 formatter,
-                "{} installed {version}, certified {}",
-                certified.name, certified.version
+                "{}{} installed {version}, certified {}",
+                certified.name,
+                via(from),
+                certified.version
             ),
-            Self::Differs { certified, .. } => write!(
+            Self::Differs {
+                certified, from, ..
+            } => write!(
                 formatter,
-                "{} installed with no exact version and lockfile integrity, certified {}",
-                certified.name, certified.version
+                "{}{} installed with no exact version and lockfile integrity, certified {}",
+                certified.name,
+                via(from),
+                certified.version
             ),
-            Self::NotInstalled { certified } => write!(
+            Self::NotInstalled { certified, from } => write!(
                 formatter,
-                "{} not installed, certified {}",
-                certified.name, certified.version
+                "{}{} not installed, certified {}",
+                certified.name,
+                via(from),
+                certified.version
             ),
         }
     }

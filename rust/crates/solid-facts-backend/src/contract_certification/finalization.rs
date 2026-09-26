@@ -553,7 +553,26 @@ pub(super) fn dependency_environment(
     if let Some(dependencies) = dependencies {
         environment.extend(dependencies.dependency_environment().iter().cloned());
     }
-    Ok(environment.into_iter().collect())
+    // Who resolved what (`environment_edges`): the root lane's declaration
+    // sources carry the lookups the adapter recorded, and a graph lane's
+    // composition adds each reachable node's sources and the graph's own
+    // parent-to-dependency edges. When some entry has no lookup from the
+    // certified package or another entry the environment is stated without
+    // edges, and admission reads it by the strict all-lookups rule instead.
+    let mut located = plan
+        .certification_sources
+        .iter()
+        .map(super::dependencies::VerifiedGraphSourcePackage::located_environment_package)
+        .collect::<Vec<_>>();
+    if let Some(dependencies) = dependencies {
+        located.extend(dependencies.environment_packages().iter().cloned());
+    }
+    let mut certified_roots = vec![plan.resolved_import.package_root.clone()];
+    certified_roots.extend(plan.resolved_import.package_real_root.clone());
+    Ok(
+        super::environment_edges::environment_with_edges(&certified_roots, &environment, &located)
+            .unwrap_or_else(|| environment.into_iter().collect()),
+    )
 }
 
 impl From<super::RecipeGatingError> for Policy2FinalizationError {

@@ -131,6 +131,30 @@ describe("certifications of one artifact in different environments", () => {
     assert.equal(bundleKey(floor), bundleKey(entry(signals("2.0.0-rc.0"), closing, "c")));
   });
 
+  // An environment that records who resolved what is keyed by those edges
+  // too: they are part of what its root signs and of what admission replays,
+  // and it is read by a different rule than the same packages stated without
+  // edges, so neither may stand in for the other.
+  test("resolution edges are part of the key", () => {
+    const edged = (importer, specifier = "@solidjs/signals") => [
+      {
+        ...signals("2.0.0-rc.6")[0],
+        resolvedFrom: { importer, specifier }
+      }
+    ];
+    const fromRoot = entry(edged("certified"), open, "a");
+    const strict = entry(signals("2.0.0-rc.6"), open, "b");
+    const fromOther = entry(
+      edged({ package: { name: "other", version: "1.0.0", integrity: "sha512-other" } }),
+      open,
+      "c"
+    );
+    const bySpecifier = entry(edged("certified", "signals-alias"), open, "d");
+    const keys = [fromRoot, strict, fromOther, bySpecifier].map(bundleKey);
+    assert.equal(new Set(keys).size, 4, keys.join("\n"));
+    assert.equal(bundleKey(fromRoot), bundleKey(entry(edged("certified"), closing, "e")));
+  });
+
   test("a floor and a head certification are two bundles, and neither refines the other", () => {
     const floor = entry(signals("2.0.0-rc.0"), open, "a");
     const head = entry(signals("2.0.0-rc.6"), closing, "b");

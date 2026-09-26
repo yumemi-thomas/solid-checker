@@ -24194,11 +24194,11 @@ mod tests {
             dependency_environment_of_roots(&[root(&dependency, true), own], &certified)
                 .into_iter()
                 .collect::<Vec<_>>(),
-            vec![super::super::DependencyEnvironmentEntry {
-                name: "@solidjs/signals".into(),
-                version: "2.0.0-rc.3".into(),
-                integrity: SIGNALS_INTEGRITY.into(),
-            }]
+            vec![super::super::DependencyEnvironmentEntry::package(
+                "@solidjs/signals",
+                "2.0.0-rc.3",
+                SIGNALS_INTEGRITY,
+            )]
         );
 
         // Identity: the coordinate alone is never enough.

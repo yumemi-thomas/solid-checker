@@ -17,11 +17,7 @@ fn stand_in(index: u16) -> String {
 }
 
 fn entry(name: &str, version: &str, integrity: &str) -> DependencyEnvironmentEntry {
-    DependencyEnvironmentEntry {
-        name: name.into(),
-        version: version.into(),
-        integrity: integrity.into(),
-    }
+    DependencyEnvironmentEntry::package(name, version, integrity)
 }
 
 /// The floor and head rows of the ecosystem corpus in miniature: the same
@@ -991,5 +987,180 @@ fn admission_refusals_name_the_step_that_failed() {
              cannot be reproduced"
                 .into()
         )
+    );
+}
+
+/// A pnpm tree, as measured in kobalte core: the certified
+/// `vite-plugin-solid` resolves its own `merge-anything@5.1.7` from its store
+/// directory, while `.pnpm/node_modules` hoists 6.0.6, which every other store
+/// package sees -- `solid-refresh` among them, though it never looks
+/// `merge-anything` up for the certification.
+fn pnpm_tree() -> Tree {
+    Tree {
+        resolves: BTreeMap::from([
+            (("root", "merge-anything"), "vps/merge-anything"),
+            (("root", "solid-refresh"), "sr"),
+            (("vps/merge-anything", "is-what"), "ma/is-what"),
+            // Hoisted: what every other store package sees.
+            (("sr", "merge-anything"), "hoisted/merge-anything"),
+            (("sr", "is-what"), "hoisted/is-what"),
+            (("ma/is-what", "merge-anything"), "hoisted/merge-anything"),
+        ]),
+        identities: BTreeMap::from([
+            (
+                "root",
+                entry("vite-plugin-solid", "3.0.0-next.5", "sha512-vps"),
+            ),
+            ("vps/merge-anything", merge_anything("5.1.7")),
+            ("hoisted/merge-anything", merge_anything("6.0.6")),
+            ("sr", entry("solid-refresh", "0.8.0-next.7", "sha512-sr")),
+            ("ma/is-what", entry("is-what", "4.1.8", "sha512-iw4")),
+            ("hoisted/is-what", entry("is-what", "5.0.0", "sha512-iw5")),
+        ]),
+    }
+}
+
+fn merge_anything(version: &str) -> DependencyEnvironmentEntry {
+    entry("merge-anything", version, &format!("sha512-ma-{version}"))
+}
+
+/// The environment the certification in [`pnpm_tree`] read, with the lookup
+/// that reached each entry.
+fn pnpm_environment() -> Vec<DependencyEnvironmentEntry> {
+    let merge = merge_anything("5.1.7");
+    let mut environment = vec![
+        entry("is-what", "4.1.8", "sha512-iw4").resolved_from(merge.as_importer(), "is-what"),
+        merge.resolved_from(EnvironmentImporter::Certified, "merge-anything"),
+        entry("solid-refresh", "0.8.0-next.7", "sha512-sr")
+            .resolved_from(EnvironmentImporter::Certified, "solid-refresh"),
+    ];
+    environment.sort();
+    environment
+}
+
+impl Tree {
+    fn difference(&self, environment: &[DependencyEnvironmentEntry]) -> Option<String> {
+        let found = environment_difference(
+            environment,
+            "root",
+            |from: &&str, name: &str| Ok(self.resolves.get(&(*from, name)).copied()),
+            |at: &&str| self.identities.get(at).cloned(),
+            |_: &&str| None,
+        );
+        assert_eq!(
+            found.is_none(),
+            self.installs(environment),
+            "the two readings agree"
+        );
+        found.map(|difference| difference.to_string())
+    }
+}
+
+#[test]
+fn a_hoisted_different_version_elsewhere_in_the_tree_is_irrelevant_to_edges() {
+    let tree = pnpm_tree();
+    let environment = pnpm_environment();
+    crate::contract_certification::validate_dependency_environment(&environment)
+        .expect("a canonical, rooted edge-bearing environment");
+    assert_eq!(tree.difference(&environment), None);
+    // The same packages stated without edges keep the strict rule, and the
+    // strict rule refuses the very tree the certification ran in -- the
+    // measured defect.
+    let strict = {
+        let mut strict = environment
+            .iter()
+            .map(DependencyEnvironmentEntry::without_edge)
+            .collect::<Vec<_>>();
+        strict.sort();
+        strict
+    };
+    assert_eq!(
+        tree.difference(&strict).as_deref(),
+        Some("is-what installed 5.0.0, certified 4.1.8")
+    );
+}
+
+#[test]
+fn the_importers_own_resolution_differing_refuses_and_names_the_edge() {
+    let mut tree = pnpm_tree();
+    tree.resolves
+        .insert(("root", "merge-anything"), "hoisted/merge-anything");
+    assert_eq!(
+        tree.difference(&pnpm_environment()).as_deref(),
+        Some(
+            "merge-anything resolved from vite-plugin-solid@3.0.0-next.5 installed 6.0.6, certified 5.1.7"
+        )
+    );
+    // A transitive importer's own lookup is checked from its own location.
+    let mut tree = pnpm_tree();
+    tree.resolves
+        .insert(("vps/merge-anything", "is-what"), "hoisted/is-what");
+    assert_eq!(
+        tree.difference(&pnpm_environment()).as_deref(),
+        Some("is-what resolved from merge-anything@5.1.7 installed 5.0.0, certified 4.1.8")
+    );
+}
+
+#[test]
+fn a_missing_or_unresolvable_edge_target_refuses() {
+    let mut tree = pnpm_tree();
+    tree.resolves.remove(&("vps/merge-anything", "is-what"));
+    assert_eq!(
+        tree.difference(&pnpm_environment()).as_deref(),
+        Some("is-what resolved from merge-anything@5.1.7 not installed, certified 4.1.8")
+    );
+    let tree = pnpm_tree();
+    assert!(!environment_is_installed(
+        &pnpm_environment(),
+        "root",
+        |from: &&str, name: &str| {
+            if *from == "vps/merge-anything" {
+                Err(())
+            } else {
+                Ok(tree.resolves.get(&(*from, name)).copied())
+            }
+        },
+        |at: &&str| tree.identities.get(at).cloned(),
+    ));
+}
+
+#[test]
+fn two_importers_resolving_two_versions_of_one_name_are_admitted_when_both_match() {
+    let tree = pnpm_tree();
+    let solid_refresh = entry("solid-refresh", "0.8.0-next.7", "sha512-sr");
+    let mut environment = pnpm_environment();
+    // solid-refresh really did look merge-anything up, and read the hoisted
+    // 6.0.6; vite-plugin-solid read its own 5.1.7. Both are premises now.
+    environment
+        .push(merge_anything("6.0.6").resolved_from(solid_refresh.as_importer(), "merge-anything"));
+    environment.sort();
+    crate::contract_certification::validate_dependency_environment(&environment)
+        .expect("two copies of one name are expressible with edges");
+    assert_eq!(tree.difference(&environment), None);
+
+    // And each copy is still checked from its own importer.
+    let mut swapped = pnpm_tree();
+    swapped
+        .resolves
+        .insert(("sr", "merge-anything"), "vps/merge-anything");
+    assert_eq!(
+        swapped.difference(&environment).as_deref(),
+        Some(
+            "merge-anything resolved from solid-refresh@0.8.0-next.7 installed 5.1.7, certified 6.0.6"
+        )
+    );
+}
+
+#[test]
+fn an_edge_bearing_environment_is_keyed_apart_from_the_same_packages_without_edges() {
+    let edged = pnpm_environment();
+    let mut strict = edged
+        .iter()
+        .map(DependencyEnvironmentEntry::without_edge)
+        .collect::<Vec<_>>();
+    strict.sort();
+    assert_ne!(
+        environment_acceptance_identity("sha256:artifact", &edged),
+        environment_acceptance_identity("sha256:artifact", &strict)
     );
 }

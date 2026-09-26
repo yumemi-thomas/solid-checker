@@ -51,6 +51,11 @@ pub struct PublishedGraphSourceRequest {
     archive: PublishedArchive,
     lock_selection: PublishedGraphLockSelection,
     installed_package_root: String,
+    /// The lookups the adapter's closure walk made that reached this
+    /// installed copy. Not part of the source's identity: they decide only
+    /// which resolution edges its dependency-environment entry states, and an
+    /// edge whose importer the environment does not contain is dropped.
+    resolved_from: Vec<super::SourceResolutionEdge>,
 }
 
 impl PublishedGraphSourceRequest {
@@ -64,7 +69,20 @@ impl PublishedGraphSourceRequest {
             archive,
             lock_selection,
             installed_package_root: installed_package_root.into(),
+            resolved_from: Vec::new(),
         }
+    }
+
+    /// This request, with the lookups that reached its installed copy.
+    #[must_use]
+    pub fn with_resolved_from(
+        mut self,
+        edges: impl IntoIterator<Item = super::SourceResolutionEdge>,
+    ) -> Self {
+        self.resolved_from = edges.into_iter().collect();
+        self.resolved_from.sort();
+        self.resolved_from.dedup();
+        self
     }
 
     /// The package name this request's lock selection claims.
@@ -78,6 +96,21 @@ pub(super) struct VerifiedGraphSourcePackage {
     pub(super) identity: String,
     pub(super) installed_package_root: String,
     pub(super) snapshot: super::ArtifactSnapshot,
+    /// See [`PublishedGraphSourceRequest`]'s field of the same name.
+    pub(super) resolved_from: Vec<super::SourceResolutionEdge>,
+}
+
+impl VerifiedGraphSourcePackage {
+    /// This source as a package a dependency environment's edges can reach.
+    pub(super) fn located_environment_package(
+        &self,
+    ) -> super::environment_edges::LocatedEnvironmentPackage {
+        super::environment_edges::LocatedEnvironmentPackage {
+            entry: self.snapshot.dependency_environment_entry(),
+            roots: vec![self.installed_package_root.clone()],
+            resolved_from: self.resolved_from.clone(),
+        }
+    }
 }
 
 /// Rejects the YAML features the pnpm reader does not implement.
@@ -958,9 +991,27 @@ pub struct PublishedGraphNodeRequest {
     source_dependencies: Vec<PublishedGraphSourceRequest>,
     /// See [`CertificationPlan::mark_dependency_environment_not_acquired`].
     dependency_environment_not_acquired: Option<String>,
+    /// Lookups a declaration source's closure walk made that reached this
+    /// node's installed package. The graph's own parent-to-dependency edges are
+    /// derived from the graph; these are the others, and a parent's
+    /// environment states them as resolution edges too.
+    resolved_from: Vec<super::SourceResolutionEdge>,
 }
 
 impl PublishedGraphNodeRequest {
+    /// This node, with the lookups declaration sources made that reached its
+    /// installed package.
+    #[must_use]
+    pub fn with_resolved_from(
+        mut self,
+        edges: impl IntoIterator<Item = super::SourceResolutionEdge>,
+    ) -> Self {
+        self.resolved_from = edges.into_iter().collect();
+        self.resolved_from.sort();
+        self.resolved_from.dedup();
+        self
+    }
+
     /// Declares that acquisition could not identify every package this node's
     /// closure reaches; the node's receipt, and every parent composing it,
     /// then states no dependency environment. Only ever weakens the node.
@@ -1033,6 +1084,7 @@ impl PublishedGraphNodeRequest {
             lock_selection,
             source_dependencies: source_dependencies.into_iter().collect(),
             dependency_environment_not_acquired: None,
+            resolved_from: Vec::new(),
         }
     }
 }
@@ -1107,12 +1159,31 @@ impl CanonicalDependencyNodeIdentity {
     }
 }
 
+/// What [`PublishedContractGraphPlan::dependency_environment`] answers for one
+/// node: the environment's entries, the located packages its resolution edges
+/// are derived from, and why it was not acquired when it was not.
+struct GraphDependencyEnvironment {
+    entries: BTreeSet<super::DependencyEnvironmentEntry>,
+    located: Vec<super::environment_edges::LocatedEnvironmentPackage>,
+    not_acquired: Option<String>,
+}
+
+/// Where a planned node's package is installed: the path it was resolved at
+/// and, when different, its real path.
+fn planned_package_roots(node: &PlannedGraphNode) -> Vec<String> {
+    let mut roots = vec![node.plan.resolved_import.package_root.clone()];
+    roots.extend(node.plan.resolved_import.package_real_root.clone());
+    roots
+}
+
 #[derive(Clone)]
 struct PlannedGraphNode {
     identity: CanonicalDependencyNodeIdentity,
     plan: CertificationPlan,
     dependencies: Vec<CanonicalDependencyNodeIdentity>,
     source_dependencies: Vec<VerifiedGraphSourcePackage>,
+    /// See [`PublishedGraphNodeRequest`]'s field of the same name.
+    resolved_from: Vec<super::SourceResolutionEdge>,
     /// What recipe-gated planning withheld from this node's plan; empty until
     /// [`PublishedContractGraphPlan::recipe_gated`] derives the gated graph.
     withheld: Vec<super::WithheldClosure>,
@@ -1225,10 +1296,7 @@ impl PublishedContractGraphPlan {
     fn dependency_environment(
         &self,
         node: &PlannedGraphNode,
-    ) -> Result<
-        (BTreeSet<super::DependencyEnvironmentEntry>, Option<String>),
-        DependencyReceiptCompositionError,
-    > {
+    ) -> Result<GraphDependencyEnvironment, DependencyReceiptCompositionError> {
         let mut not_acquired = node
             .plan
             .dependency_environment_not_acquired()
@@ -1238,12 +1306,23 @@ impl PublishedContractGraphPlan {
             .iter()
             .map(|source| source.snapshot.dependency_environment_entry())
             .collect::<BTreeSet<_>>();
+        // Every package the edges can start from or reach, each with the
+        // lookups that reached it: the node's own sources, and for every
+        // reachable dependency node the graph edge from each parent that
+        // imports it, plus that node's own sources.
+        let mut located = node
+            .source_dependencies
+            .iter()
+            .map(VerifiedGraphSourcePackage::located_environment_package)
+            .collect::<Vec<_>>();
+        let mut parents = BTreeMap::<String, Vec<super::SourceResolutionEdge>>::new();
         let mut reachable = BTreeSet::new();
-        let mut pending = node.dependencies.clone();
-        while let Some(identity) = pending.pop() {
-            if !reachable.insert(identity.clone()) {
-                continue;
-            }
+        let mut pending = node
+            .dependencies
+            .iter()
+            .map(|dependency| (node, dependency.clone()))
+            .collect::<Vec<_>>();
+        while let Some((parent, identity)) = pending.pop() {
             let dependency = self
                 .nodes
                 .iter()
@@ -1253,6 +1332,21 @@ impl PublishedContractGraphPlan {
                         dependency: identity.digest().into(),
                     },
                 )?;
+            let specifier = super::environment_edges::package_name_of_specifier(
+                &dependency.plan.import_request.specifier,
+            );
+            parents
+                .entry(identity.digest().to_owned())
+                .or_default()
+                .extend(planned_package_roots(parent).into_iter().map(|root| {
+                    super::SourceResolutionEdge {
+                        importer_package_root: root,
+                        specifier: specifier.clone(),
+                    }
+                }));
+            if !reachable.insert(identity.clone()) {
+                continue;
+            }
             if not_acquired.is_none() {
                 not_acquired =
                     dependency
@@ -1273,12 +1367,43 @@ impl PublishedContractGraphPlan {
                     .iter()
                     .map(|source| source.snapshot.dependency_environment_entry()),
             );
-            pending.extend(dependency.dependencies.iter().cloned());
+            located.extend(
+                dependency
+                    .source_dependencies
+                    .iter()
+                    .map(VerifiedGraphSourcePackage::located_environment_package),
+            );
+            pending.extend(
+                dependency
+                    .dependencies
+                    .iter()
+                    .map(|child| (dependency, child.clone())),
+            );
+        }
+        for identity in &reachable {
+            let Some(dependency) = self
+                .nodes
+                .iter()
+                .find(|candidate| &candidate.identity == identity)
+            else {
+                continue;
+            };
+            let mut resolved_from = parents.remove(identity.digest()).unwrap_or_default();
+            resolved_from.extend(dependency.resolved_from.iter().cloned());
+            located.push(super::environment_edges::LocatedEnvironmentPackage {
+                entry: dependency.plan.snapshot.dependency_environment_entry(),
+                roots: planned_package_roots(dependency),
+                resolved_from,
+            });
         }
         // A graph can reach another copy of the node's own package; the node's
         // own bytes are its artifact identity, never its environment.
         environment.remove(&node.plan.snapshot.dependency_environment_entry());
-        Ok((environment, not_acquired))
+        Ok(GraphDependencyEnvironment {
+            entries: environment,
+            located,
+            not_acquired,
+        })
     }
 
     /// Authenticates every dependency-composition demand for one planned
@@ -1343,7 +1468,11 @@ impl PublishedContractGraphPlan {
                 ))
             })
             .collect::<Result<BTreeMap<_, _>, DependencyReceiptCompositionError>>()?;
-        let (environment, environment_not_acquired) = self.dependency_environment(node)?;
+        let GraphDependencyEnvironment {
+            entries: environment,
+            located: environment_packages,
+            not_acquired: environment_not_acquired,
+        } = self.dependency_environment(node)?;
         VerifiedDependencyComposition::authenticate(
             &node.plan,
             &node.dependencies,
@@ -1355,6 +1484,7 @@ impl PublishedContractGraphPlan {
             revocation_epoch,
             type_facts,
             environment,
+            environment_packages,
             environment_not_acquired,
         )
     }
@@ -1470,6 +1600,7 @@ impl PublishedContractGraphPlan {
                     plan,
                     dependencies: node.dependencies.clone(),
                     source_dependencies: node.source_dependencies.clone(),
+                    resolved_from: node.resolved_from.clone(),
                     withheld,
                     withheld_operations: withheld_operations
                         .get(digest)
@@ -2987,6 +3118,7 @@ fn plan_graph_node(
         lock_selection,
         source_dependencies,
         dependency_environment_not_acquired,
+        resolved_from,
     } = request;
     let registry_origin = archive.registry_origin.clone();
     let mut plan = super::plan_certification_with_dependencies(
@@ -3076,6 +3208,7 @@ fn plan_graph_node(
         plan,
         dependencies: Vec::new(),
         source_dependencies,
+        resolved_from,
         withheld: Vec::new(),
         withheld_operations: Vec::new(),
         accepted_candidate,
@@ -3183,6 +3316,7 @@ fn plan_graph_source_package(
         archive,
         lock_selection,
         installed_package_root,
+        resolved_from,
     } = request;
     let registry_origin = archive.registry_origin.clone();
     let snapshot = transaction.published_snapshot(archive)?;
@@ -3244,6 +3378,7 @@ fn plan_graph_source_package(
         identity: format!("sha256:{:x}", hash.finalize()),
         installed_package_root,
         snapshot,
+        resolved_from,
     })
 }
 
@@ -3655,6 +3790,8 @@ pub struct VerifiedDependencyComposition {
     factory_requirements_root: Option<String>,
     /// See [`PublishedContractGraphPlan::dependency_environment`].
     dependency_environment: BTreeSet<super::DependencyEnvironmentEntry>,
+    /// The packages that environment's resolution edges are derived from.
+    environment_packages: Vec<super::environment_edges::LocatedEnvironmentPackage>,
     /// Why that environment was not acquired, when some reachable node's was
     /// not; the receipt then states none.
     environment_not_acquired: Option<String>,
@@ -3676,6 +3813,7 @@ impl VerifiedDependencyComposition {
         revocation_epoch: u64,
         type_facts: Option<&super::type_facts::VerifiedTypeFactsEvidence>,
         dependency_environment: BTreeSet<super::DependencyEnvironmentEntry>,
+        environment_packages: Vec<super::environment_edges::LocatedEnvironmentPackage>,
         environment_not_acquired: Option<String>,
     ) -> Result<Self, DependencyReceiptCompositionError> {
         if expected_dependencies.len() != receipts.len() {
@@ -3995,6 +4133,7 @@ impl VerifiedDependencyComposition {
             factory_requirements_root: type_facts
                 .and_then(super::type_facts::VerifiedTypeFactsEvidence::factory_requirements_root),
             dependency_environment,
+            environment_packages,
             environment_not_acquired,
         })
     }
@@ -4002,6 +4141,14 @@ impl VerifiedDependencyComposition {
     /// The environment this composition relies on, canonically ordered.
     pub(super) fn dependency_environment(&self) -> &BTreeSet<super::DependencyEnvironmentEntry> {
         &self.dependency_environment
+    }
+
+    /// The located packages that environment's resolution edges are derived
+    /// from.
+    pub(super) fn environment_packages(
+        &self,
+    ) -> &[super::environment_edges::LocatedEnvironmentPackage] {
+        &self.environment_packages
     }
 
     /// Why this composition's environment was not acquired, if it was not.

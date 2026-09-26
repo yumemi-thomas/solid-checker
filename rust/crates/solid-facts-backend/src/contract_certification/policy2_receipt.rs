@@ -146,12 +146,131 @@ pub struct Policy2ReceiptBindings {
 /// copy -- the directory name, the manifest version and the lockfile's
 /// registry integrity -- and nothing else. The integrity fixes every byte; name
 /// and version make a mismatch name itself.
+///
+/// **An entry may also state the resolution edge that reached it**
+/// (`resolvedFrom`): which package looked it up, and by which bare name. An
+/// environment states edges on every entry or on none. Without edges it cannot
+/// say which package read each one, so admission has to demand that every
+/// lookup of each name, from every located package, reaches that one entry
+/// (`accepted_bundles::environment_is_installed`) -- which a pnpm tree, whose
+/// `.pnpm/node_modules` hoists other versions into every package's view, never
+/// satisfies. With edges, admission replays exactly the certified lookups from
+/// each importer's own installed location, and one package name may then
+/// appear twice, reached by two importers at two versions.
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DependencyEnvironmentEntry {
     pub name: String,
     pub version: String,
     pub integrity: String,
+    /// The lookup that reached this package when the certification ran.
+    /// `None` in an environment stated without edges (the
+    /// `policy2-dependency-environment:v1` root) and in an installed identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_from: Option<DependencyEnvironmentEdge>,
+}
+
+impl DependencyEnvironmentEntry {
+    /// The entry without a resolution edge: the three facts an installed copy
+    /// states about itself.
+    #[must_use]
+    pub fn package(
+        name: impl Into<String>,
+        version: impl Into<String>,
+        integrity: impl Into<String>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            version: version.into(),
+            integrity: integrity.into(),
+            resolved_from: None,
+        }
+    }
+
+    /// This entry, reached by `specifier` from `importer`.
+    #[must_use]
+    pub fn resolved_from(
+        mut self,
+        importer: EnvironmentImporter,
+        specifier: impl Into<String>,
+    ) -> Self {
+        self.resolved_from = Some(DependencyEnvironmentEdge {
+            importer,
+            specifier: specifier.into(),
+        });
+        self
+    }
+
+    /// Whether `other` is the same installed package: name, manifest version
+    /// and lockfile integrity, whatever edge either one states.
+    #[must_use]
+    pub fn same_package(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.version == other.version
+            && self.integrity == other.integrity
+    }
+
+    /// This entry without its edge.
+    #[must_use]
+    pub fn without_edge(&self) -> Self {
+        Self::package(&self.name, &self.version, &self.integrity)
+    }
+
+    /// This entry's package identity as the importer of another entry.
+    #[must_use]
+    pub fn as_importer(&self) -> EnvironmentImporter {
+        EnvironmentImporter::Package(EnvironmentPackage {
+            name: self.name.clone(),
+            version: self.version.clone(),
+            integrity: self.integrity.clone(),
+        })
+    }
+}
+
+/// How one environment entry was reached: `specifier`, the bare package name
+/// Node looked up, from the installed location of `importer`.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DependencyEnvironmentEdge {
+    pub importer: EnvironmentImporter,
+    pub specifier: String,
+}
+
+/// The package a resolution edge starts from: the certified package itself,
+/// or another entry of the same environment, named by its package identity.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub enum EnvironmentImporter {
+    Certified,
+    Package(EnvironmentPackage),
+}
+
+/// A package identity inside an environment edge.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EnvironmentPackage {
+    pub name: String,
+    pub version: String,
+    pub integrity: String,
+}
+
+impl EnvironmentPackage {
+    /// Whether `entry` is this package.
+    #[must_use]
+    pub fn is(&self, entry: &DependencyEnvironmentEntry) -> bool {
+        self.name == entry.name
+            && self.version == entry.version
+            && self.integrity == entry.integrity
+    }
+}
+
+/// Whether an environment states its resolution edges. Validation guarantees
+/// that all entries agree, so the first decides.
+#[must_use]
+pub fn dependency_environment_states_edges(entries: &[DependencyEnvironmentEntry]) -> bool {
+    entries
+        .first()
+        .is_some_and(|entry| entry.resolved_from.is_some())
 }
 
 /// The upper bound on one certification's stated environment. Generous: the
@@ -171,11 +290,26 @@ pub fn validate_dependency_environment(
     if entries.len() > MAX_DEPENDENCY_ENVIRONMENT_ENTRIES {
         return Err(invalid());
     }
+    let printable = |value: &str| {
+        !value.is_empty()
+            && value.len() <= MAX_STRING_BYTES
+            && !value.bytes().any(|byte| byte.is_ascii_control())
+    };
     for entry in entries {
-        for value in [&entry.name, &entry.version, &entry.integrity] {
-            if value.is_empty()
-                || value.len() > MAX_STRING_BYTES
-                || value.bytes().any(|byte| byte.is_ascii_control())
+        if ![&entry.name, &entry.version, &entry.integrity]
+            .into_iter()
+            .all(|value| printable(value))
+        {
+            return Err(invalid());
+        }
+        if let Some(edge) = &entry.resolved_from {
+            if !printable(&edge.specifier) {
+                return Err(invalid());
+            }
+            if let EnvironmentImporter::Package(importer) = &edge.importer
+                && ![&importer.name, &importer.version, &importer.integrity]
+                    .into_iter()
+                    .all(|value| printable(value))
             {
                 return Err(invalid());
             }
@@ -184,7 +318,51 @@ pub fn validate_dependency_environment(
     if entries.windows(2).any(|pair| pair[0] >= pair[1]) {
         return Err(invalid());
     }
+    // Edges on every entry or on none: one environment is read by one rule.
+    let edged = dependency_environment_states_edges(entries);
+    if entries
+        .iter()
+        .any(|entry| entry.resolved_from.is_some() != edged)
+    {
+        return Err(invalid());
+    }
+    if edged && !environment_edges_are_rooted(entries) {
+        return Err(invalid());
+    }
     Ok(())
+}
+
+/// Whether every entry of an edge-bearing environment is reachable from the
+/// certified package through edges whose importers the environment itself
+/// contains. An importer the environment does not contain has no installed
+/// location a consumer could resolve from, so its edge would be a lookup
+/// nobody can replay.
+///
+/// Linear in the edges (a breadth-first walk over an importer index), because
+/// the entries are read from a catalog before anything about them is trusted.
+pub(crate) fn environment_edges_are_rooted(entries: &[DependencyEnvironmentEntry]) -> bool {
+    let mut by_importer = BTreeMap::<&EnvironmentImporter, Vec<usize>>::new();
+    for (index, entry) in entries.iter().enumerate() {
+        let Some(edge) = &entry.resolved_from else {
+            return false;
+        };
+        by_importer.entry(&edge.importer).or_default().push(index);
+    }
+    let mut reached = vec![false; entries.len()];
+    let mut seen = std::collections::BTreeSet::from([EnvironmentImporter::Certified]);
+    let mut pending = vec![EnvironmentImporter::Certified];
+    while let Some(importer) = pending.pop() {
+        for &index in by_importer.get(&importer).map_or(&[][..], Vec::as_slice) {
+            if std::mem::replace(&mut reached[index], true) {
+                continue;
+            }
+            let next = entries[index].as_importer();
+            if seen.insert(next.clone()) {
+                pending.push(next);
+            }
+        }
+    }
+    reached.into_iter().all(|reached| reached)
 }
 
 /// The root a receipt binds for its stated dependency environment.
@@ -203,8 +381,17 @@ pub fn validate_dependency_environment(
 /// a receipt binding it states no environment a consumer can rely on, and is
 /// refused by artifact everywhere. Non-empty environments keep the `v1` frame,
 /// so every receipt that names its entries verifies exactly as before.
+///
+/// **An environment that states its resolution edges is framed under a third
+/// domain, `edges:v3`**, which hashes each entry's edge beside its identity. It
+/// can never collide with a `v1` root, so a receipt binding one is read by the
+/// edge-rooted admission rule and a receipt binding the other by the strict
+/// all-lookups rule, and neither can be re-read as the other.
 #[must_use]
 pub fn policy2_dependency_environment_root(entries: &[DependencyEnvironmentEntry]) -> String {
+    if dependency_environment_states_edges(entries) {
+        return policy2_dependency_environment_root_edges_v3(entries);
+    }
     if entries.is_empty() {
         let mut bytes = Vec::new();
         frame(
@@ -223,6 +410,43 @@ pub fn policy2_dependency_environment_root(entries: &[DependencyEnvironmentEntry
 #[must_use]
 pub fn policy2_ambiguous_empty_dependency_environment_root() -> String {
     policy2_dependency_environment_root_v1(&[])
+}
+
+/// The `edges:v3` frame: every entry's identity and the lookup that reached
+/// it. The importer is tagged, so "the certified package" can never be spelled
+/// as some entry's identity.
+fn policy2_dependency_environment_root_edges_v3(entries: &[DependencyEnvironmentEntry]) -> String {
+    let mut canonical = entries.to_vec();
+    canonical.sort();
+    canonical.dedup();
+    let mut bytes = Vec::new();
+    frame(
+        &mut bytes,
+        b"solid-checker:policy2-dependency-environment:edges:v3",
+    );
+    number(&mut bytes, canonical.len() as u64);
+    for entry in &canonical {
+        frame(&mut bytes, entry.name.as_bytes());
+        frame(&mut bytes, entry.version.as_bytes());
+        frame(&mut bytes, entry.integrity.as_bytes());
+        match &entry.resolved_from {
+            None => frame(&mut bytes, b"edge:none"),
+            Some(edge) => {
+                frame(&mut bytes, b"edge");
+                frame(&mut bytes, edge.specifier.as_bytes());
+                match &edge.importer {
+                    EnvironmentImporter::Certified => frame(&mut bytes, b"importer:certified"),
+                    EnvironmentImporter::Package(importer) => {
+                        frame(&mut bytes, b"importer:package");
+                        frame(&mut bytes, importer.name.as_bytes());
+                        frame(&mut bytes, importer.version.as_bytes());
+                        frame(&mut bytes, importer.integrity.as_bytes());
+                    }
+                }
+            }
+        }
+    }
+    digest_bytes(&bytes)
 }
 
 fn policy2_dependency_environment_root_v1(entries: &[DependencyEnvironmentEntry]) -> String {

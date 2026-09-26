@@ -188,7 +188,26 @@ export function environmentOf(entry) {
       `${entry.packageName}@${entry.packageVersion} ${entry.requestedEntrypoint} states no dependency environment`
     );
   }
-  return environment.map(({ name, version, integrity }) => `${name}@${version}#${integrity}`).join(",");
+  return environment.map(environmentEntryKey).join(",");
+}
+
+/**
+ * One environment entry, spelled out: its package identity and, when the
+ * environment states its resolution edges (`resolvedFrom`, ADR 0123's
+ * `edges:v3` root), who resolved it by which name. The edges are part of what
+ * the root signs and of what admission replays, so two certifications that
+ * read the same packages through different lookups are two bundles, never
+ * one; and an edge-bearing environment never shares a key with the same
+ * packages stated without edges, which admission reads by a different rule.
+ */
+function environmentEntryKey({ name, version, integrity, resolvedFrom }) {
+  const identity = `${name}@${version}#${integrity}`;
+  if (!resolvedFrom) return identity;
+  const importer = resolvedFrom.importer === "certified"
+    ? "certified"
+    : `${resolvedFrom.importer.package.name}@${resolvedFrom.importer.package.version}#${
+      resolvedFrom.importer.package.integrity}`;
+  return `${identity}<-${resolvedFrom.specifier}@${importer}`;
 }
 
 /**

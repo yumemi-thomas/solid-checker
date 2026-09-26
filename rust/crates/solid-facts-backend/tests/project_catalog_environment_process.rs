@@ -25,9 +25,10 @@ use std::{
 
 use solid_facts_backend::{
     ClosureManifest, ClosurePackageIdentity, ConfiguredReceiptIssuer, DependencyEnvironmentEntry,
-    Policy2ReceiptBindings, Policy2ReceiptProvenance, RECEIPT_WITNESS_FAMILIES,
-    ResolutionAuthority, ResolutionTrace, ResolvedExportBinding, ResolvedExportTarget,
-    ResolvedFile, ResolvedImport, authenticate_policy2_receipt, canonicalize_policy2_main,
+    EnvironmentImporter, Policy2ReceiptBindings, Policy2ReceiptProvenance,
+    RECEIPT_WITNESS_FAMILIES, ResolutionAuthority, ResolutionTrace, ResolvedExportBinding,
+    ResolvedExportTarget, ResolvedFile, ResolvedImport, authenticate_policy2_receipt,
+    canonicalize_policy2_main, certified_catalog_self_admission,
     encode_policy2_trust_configuration, issue_policy2_receipt, policy2_artifact_acceptance_root,
     policy2_dependency_environment_root, policy2_main_closed_claims_root,
     policy2_main_semantic_digest, policy2_resolved_import_root,
@@ -54,6 +55,7 @@ fn dependency(version: &str) -> DependencyEnvironmentEntry {
         name: DEPENDENCY.into(),
         version: version.into(),
         integrity: format!("sha512-{DEPENDENCY}-{version}"),
+        resolved_from: None,
     }
 }
 
@@ -145,8 +147,13 @@ fn write_lockfile(project: &Path, dependency_version: &str) {
 /// `policy2_receipt`'s own tests certify the bundled debounce document against,
 /// at this tree's absolute paths.
 fn resolved_import(project: &Path) -> ResolvedImport {
-    let project = project.canonicalize().unwrap();
-    let package_root = project.join("node_modules").join(PACKAGE);
+    // The real path, as `contract certify` resolves it: in a pnpm tree the
+    // package's store directory, and in a flat tree the same directory.
+    let package_root = project
+        .join("node_modules")
+        .join(PACKAGE)
+        .canonicalize()
+        .unwrap();
     let path = |relative: &str| package_root.join(relative).to_string_lossy().into_owned();
     let runtime = ResolvedFile {
         path: path("dist/index.js"),
@@ -176,8 +183,10 @@ fn resolved_import(project: &Path) -> ResolvedImport {
     };
     ResolvedImport {
         specifier: PACKAGE.into(),
-        importer: project
-            .join("node_modules/@solid-primitives/.solid-checker-certification.mjs")
+        importer: package_root
+            .parent()
+            .unwrap()
+            .join(".solid-checker-certification.mjs")
             .to_string_lossy()
             .into_owned(),
         requested_entrypoint: ".".into(),
@@ -607,6 +616,244 @@ fn a_project_catalog_applies_only_in_the_tree_whose_environment_it_certified() {
     assert_eq!(
         contract_status(&unstated, &trust, &typefacts).as_deref(),
         Ok("missing")
+    );
+    let _ = fs::remove_dir_all(scratch);
+}
+
+/// The other package the pnpm-shaped certification read. It never looks
+/// [`DEPENDENCY`] up, but from its store directory Node would find the hoisted
+/// copy.
+const OTHER: &str = "other-dependency";
+
+/// Lockfile integrities in the registry's own shape, so the pnpm reader
+/// accepts them.
+fn pnpm_integrity(name: &str, version: &str) -> &'static str {
+    match (name, version) {
+        (DEPENDENCY, "1.0.0") => {
+            "sha512-bIWK3pjL6X8xzYeLy7IulQPzWiu9X+STXDJcTdVDwxuRkVpkRxnSxKUnO4zxbNgl+aFNfX2njYMJtmXe1FZLbQ=="
+        }
+        (DEPENDENCY, "2.0.0") => {
+            "sha512-wHGd0HR8SA/seGdNKeXB4t7C1NSq7gfSl7et6Ur/C6Y7ZvEY4+uCqlpgHxCvbEc3LsAKsfp2u8IlWX+GuGnoXQ=="
+        }
+        (OTHER, "1.0.0") => {
+            "sha512-HOE9tF7p7QFJGb7HlR+JuopihXGxn4JRrH7j7NW6Dn8wQf388tajhdpShsKoKk5Pa14dAs6qSXuDDWFj8mm9CA=="
+        }
+        _ => unreachable!("no such stub package"),
+    }
+}
+
+/// A pnpm-shaped consumer, the shape measured in kobalte core: the package
+/// lives in its store directory beside the two dependencies it resolves
+/// (`environment-dependency@1.0.0` and `other-dependency@1.0.0`), while
+/// `.pnpm/node_modules` hoists `environment-dependency@2.0.0`, which is what
+/// `other-dependency` sees from its own store directory.
+#[cfg(unix)]
+fn pnpm_consumer_tree(project: &Path) {
+    use std::os::unix::fs::symlink;
+    consumer_tree(project, "1.0.0");
+    // Rebuild node_modules in pnpm's layout from the flat tree just written.
+    let flat = project.join("node_modules");
+    let staged = project.join("flat-node-modules");
+    fs::rename(&flat, &staged).unwrap();
+    let store = flat.join(".pnpm");
+    let package_store = store.join("@solid-primitives+debounce@1.3.0/node_modules");
+    fs::create_dir_all(package_store.join("@solid-primitives")).unwrap();
+    fs::rename(staged.join(PACKAGE), package_store.join(PACKAGE)).unwrap();
+    let stub = |name: &str, version: &str| {
+        let root = store
+            .join(format!("{name}@{version}"))
+            .join("node_modules")
+            .join(name);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("package.json"),
+            serde_json::to_vec(&serde_json::json!({ "name": name, "version": version })).unwrap(),
+        )
+        .unwrap();
+        root
+    };
+    let dependency_one = stub(DEPENDENCY, "1.0.0");
+    let dependency_two = stub(DEPENDENCY, "2.0.0");
+    let other = stub(OTHER, "1.0.0");
+    symlink(&dependency_one, package_store.join(DEPENDENCY)).unwrap();
+    symlink(&other, package_store.join(OTHER)).unwrap();
+    fs::create_dir_all(store.join("node_modules")).unwrap();
+    symlink(&dependency_two, store.join("node_modules").join(DEPENDENCY)).unwrap();
+    fs::create_dir_all(flat.join("@solid-primitives")).unwrap();
+    symlink(package_store.join(PACKAGE), flat.join(PACKAGE)).unwrap();
+    // `contract certify` writes its importer beside the package's real root.
+    fs::rename(
+        staged.join("@solid-primitives/.solid-checker-certification.mjs"),
+        package_store.join("@solid-primitives/.solid-checker-certification.mjs"),
+    )
+    .unwrap();
+    fs::remove_dir_all(&staged).unwrap();
+    fs::remove_file(project.join("package-lock.json")).unwrap();
+    let entry = |name: &str, version: &str, integrity: &str| {
+        format!("  '{name}@{version}':\n    resolution: {{integrity: {integrity}}}\n")
+    };
+    fs::write(
+        project.join("pnpm-lock.yaml"),
+        format!(
+            "lockfileVersion: '9.0'\n\nsettings:\n  autoInstallPeers: true\n\npackages:\n\n{}\n{}\n{}\n{}",
+            entry(PACKAGE, "1.3.0", INTEGRITY),
+            entry(DEPENDENCY, "1.0.0", pnpm_integrity(DEPENDENCY, "1.0.0")),
+            entry(DEPENDENCY, "2.0.0", pnpm_integrity(DEPENDENCY, "2.0.0")),
+            entry(OTHER, "1.0.0", pnpm_integrity(OTHER, "1.0.0")),
+        ),
+    )
+    .unwrap();
+}
+
+/// The environment the certification in [`pnpm_consumer_tree`] read: with
+/// the lookup that reached each entry, or -- the form every receipt issued
+/// before edges were recorded has -- without.
+fn pnpm_environment(edges: bool) -> Vec<DependencyEnvironmentEntry> {
+    let entry = |name: &str| {
+        let entry =
+            DependencyEnvironmentEntry::package(name, "1.0.0", pnpm_integrity(name, "1.0.0"));
+        if edges {
+            entry.resolved_from(EnvironmentImporter::Certified, name)
+        } else {
+            entry
+        }
+    };
+    let mut environment = vec![entry(DEPENDENCY), entry(OTHER)];
+    environment.sort();
+    environment
+}
+
+/// The measured defect and its repair, through the real binary: a
+/// certification made in a pnpm tree is admitted in that tree when its
+/// environment records who resolved what, although another package there sees
+/// a different, hoisted version of a name the certification read. Stated
+/// without edges, the same packages are read by the strict all-lookups rule,
+/// which refuses the very tree the certification ran in -- and the
+/// self-admission check `contract certify` now runs says so.
+#[cfg(unix)]
+#[test]
+fn a_pnpm_certification_with_resolution_edges_is_admitted_in_its_own_tree() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let scratch = temporary_directory("project-catalog-pnpm-edges");
+    let issued = |project: &Path, environment: &[DependencyEnvironmentEntry]| {
+        let catalog: serde_json::Value = serde_json::from_slice(
+            &fs::read(project.join(".solid-checker/accepted-contracts.json")).unwrap(),
+        )
+        .unwrap();
+        let bindings = &catalog["contracts"][0]["bindings"];
+        assert_eq!(
+            bindings["dependencyEnvironmentRoot"],
+            policy2_dependency_environment_root(environment)
+        );
+        std::collections::BTreeSet::from([(
+            bindings["artifactAcceptanceRoot"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
+            bindings["dependencyEnvironmentRoot"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
+        )])
+    };
+
+    let edged = scratch.join("edged");
+    pnpm_consumer_tree(&edged);
+    let environment = pnpm_environment(true);
+    let trust = certify(&edged, Some(&environment));
+    assert_eq!(
+        contract_status(&edged, &trust, &typefacts).as_deref(),
+        Ok("certified"),
+        "an edge-bearing certification is admitted in the pnpm tree it was made in"
+    );
+    let real_root = edged
+        .join("node_modules")
+        .join(PACKAGE)
+        .canonicalize()
+        .unwrap();
+    assert_eq!(
+        certified_catalog_self_admission(
+            &edged.join(".solid-checker"),
+            PACKAGE,
+            &real_root,
+            &issued(&edged, &environment),
+        )
+        .unwrap(),
+        [(PACKAGE.to_owned(), None)],
+        "and the certifier's own admission check agrees"
+    );
+
+    // The same packages stated without edges: refused in the same tree,
+    // naming the hoisted copy another package sees.
+    let strict = scratch.join("strict");
+    pnpm_consumer_tree(&strict);
+    let environment = pnpm_environment(false);
+    let trust = certify(&strict, Some(&environment));
+    assert_eq!(
+        contract_status(&strict, &trust, &typefacts).as_deref(),
+        Ok("missing")
+    );
+    let real_root = strict
+        .join("node_modules")
+        .join(PACKAGE)
+        .canonicalize()
+        .unwrap();
+    let refusals = certified_catalog_self_admission(
+        &strict.join(".solid-checker"),
+        PACKAGE,
+        &real_root,
+        &issued(&strict, &environment),
+    )
+    .unwrap();
+    assert_eq!(refusals.len(), 1);
+    assert_eq!(
+        refusals[0].1.as_ref().map(ToString::to_string).as_deref(),
+        Some(
+            "its dependency environment differs: environment-dependency installed 2.0.0, \
+             certified 1.0.0"
+        )
+    );
+
+    // An edge whose importer's own lookup differs is still refused, with the
+    // edge named: the package's own copy repointed at the hoisted version.
+    let repointed = scratch.join("repointed");
+    pnpm_consumer_tree(&repointed);
+    let environment = pnpm_environment(true);
+    let trust = certify(&repointed, Some(&environment));
+    let package_store =
+        repointed.join("node_modules/.pnpm/@solid-primitives+debounce@1.3.0/node_modules");
+    fs::remove_file(package_store.join(DEPENDENCY)).unwrap();
+    std::os::unix::fs::symlink(
+        repointed.join(format!(
+            "node_modules/.pnpm/{DEPENDENCY}@2.0.0/node_modules/{DEPENDENCY}"
+        )),
+        package_store.join(DEPENDENCY),
+    )
+    .unwrap();
+    assert_eq!(
+        contract_status(&repointed, &trust, &typefacts).as_deref(),
+        Ok("missing")
+    );
+    let real_root = repointed
+        .join("node_modules")
+        .join(PACKAGE)
+        .canonicalize()
+        .unwrap();
+    let refusals = certified_catalog_self_admission(
+        &repointed.join(".solid-checker"),
+        PACKAGE,
+        &real_root,
+        &issued(&repointed, &environment),
+    )
+    .unwrap();
+    assert_eq!(
+        refusals[0].1.as_ref().map(ToString::to_string).as_deref(),
+        Some(
+            "its dependency environment differs: environment-dependency resolved from \
+             @solid-primitives/debounce@1.3.0 installed 2.0.0, certified 1.0.0"
+        )
     );
     let _ = fs::remove_dir_all(scratch);
 }

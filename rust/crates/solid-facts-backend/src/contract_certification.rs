@@ -40,6 +40,7 @@ const DECLARATION_MEMBER_SUFFIXES: [&str; 3] = [".d.ts", ".d.mts", ".d.cts"];
 mod compiler_facts;
 mod controlled_execution;
 mod dependencies;
+mod environment_edges;
 mod export_bindings;
 mod finalization;
 mod module_closure;
@@ -71,17 +72,20 @@ pub use dependencies::{
     VerifiedDependencyComposition, certify_published_contract_graph_case_set,
     plan_published_contract_graph,
 };
+pub use environment_edges::SourceResolutionEdge;
 pub use export_bindings::SnapshotVerifiedExports;
 pub use finalization::{FinalizedPolicy2Contract, Policy2FinalizationError};
 pub use module_closure::SnapshotVerifiedClosure;
 #[doc(hidden)]
 pub use policy2_receipt::{
     AuthenticatedPolicy2Receipt, BuiltInReceiptEntry, ConfiguredReceiptIssuer,
-    DependencyEnvironmentEntry, Policy2ReceiptBindings, Policy2ReceiptError,
-    Policy2ReceiptProvenance, Policy2TrustConfiguration, Policy2TrustEntry, Policy2TrustStore,
-    PublishedPolicy2Catalog, RECEIPT_WITNESS_FAMILIES, ReceiptIssuerKind, ReceiptPublicationError,
+    DependencyEnvironmentEdge, DependencyEnvironmentEntry, EnvironmentImporter, EnvironmentPackage,
+    Policy2ReceiptBindings, Policy2ReceiptError, Policy2ReceiptProvenance,
+    Policy2TrustConfiguration, Policy2TrustEntry, Policy2TrustStore, PublishedPolicy2Catalog,
+    RECEIPT_WITNESS_FAMILIES, ReceiptIssuerKind, ReceiptPublicationError,
     authenticate_policy2_receipt, canonicalize_policy2_main, decode_policy2_trust_configuration,
-    encode_policy2_trust_configuration, issue_builtin_policy2_receipt, issue_policy2_receipt,
+    dependency_environment_states_edges, encode_policy2_trust_configuration,
+    issue_builtin_policy2_receipt, issue_policy2_receipt,
     policy2_ambiguous_empty_dependency_environment_root, policy2_artifact_acceptance_root,
     policy2_artifact_acceptance_root_for_identity, policy2_dependency_environment_root,
     policy2_main_closed_claims_root, policy2_main_semantic_digest, policy2_policy_digest,
@@ -2982,11 +2986,11 @@ impl ArtifactSnapshot {
     /// environment: the three facts a consumer can recompute about its own
     /// installed copy.
     pub(crate) fn dependency_environment_entry(&self) -> DependencyEnvironmentEntry {
-        DependencyEnvironmentEntry {
-            name: self.package_name.clone(),
-            version: self.package_version.clone(),
-            integrity: self.package_integrity.clone(),
-        }
+        DependencyEnvironmentEntry::package(
+            self.package_name.clone(),
+            self.package_version.clone(),
+            self.package_integrity.clone(),
+        )
     }
 
     /// Re-resolves the exact import from snapshot-owned manifest and file
@@ -20839,11 +20843,13 @@ export const value = phantom;
             .dependency_environment()
             .expect("finalization attaches the environment it bound");
         assert!(
-            root_environment.contains(&DependencyEnvironmentEntry {
-                name: leaf.identity().package_name.clone(),
-                version: leaf.identity().package_version.clone(),
-                integrity: leaf.identity().integrity.clone(),
-            }),
+            root_environment.iter().any(|entry| entry.same_package(
+                &DependencyEnvironmentEntry::package(
+                    leaf.identity().package_name.clone(),
+                    leaf.identity().package_version.clone(),
+                    leaf.identity().integrity.clone(),
+                )
+            )),
             "{root_environment:?}"
         );
         assert_eq!(
@@ -20864,18 +20870,26 @@ export const value = phantom;
             .iter()
             .find(|node| node.identity() == graph.root_identity())
             .unwrap();
-        let entry_of =
-            |identity: &super::CanonicalDependencyNodeIdentity| DependencyEnvironmentEntry {
-                name: identity.package_name.clone(),
-                version: identity.package_version.clone(),
-                integrity: identity.integrity.clone(),
-            };
+        let entry_of = |identity: &super::CanonicalDependencyNodeIdentity| {
+            DependencyEnvironmentEntry::package(
+                identity.package_name.clone(),
+                identity.package_version.clone(),
+                identity.integrity.clone(),
+            )
+        };
         assert_eq!(
-            leaf_environment,
+            leaf_environment
+                .iter()
+                .map(DependencyEnvironmentEntry::without_edge)
+                .collect::<Vec<_>>(),
             [entry_of(root_node.identity())],
             "{leaf_environment:?}"
         );
-        assert!(!root_environment.contains(&entry_of(root_node.identity())));
+        assert!(
+            !root_environment
+                .iter()
+                .any(|entry| entry.same_package(&entry_of(root_node.identity())))
+        );
         assert!(
             !leaf
                 .finalized()

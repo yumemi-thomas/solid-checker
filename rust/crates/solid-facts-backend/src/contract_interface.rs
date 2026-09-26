@@ -1047,6 +1047,20 @@ pub fn project_admission_refusals(
     installed_integrity: &InstalledArtifactIdentity,
     installed_difference: &crate::accepted_bundles::InstalledEnvironmentDifference,
 ) -> Result<Vec<(String, Option<crate::accepted_bundles::AdmissionRefusal>)>, ContractFailure> {
+    project_admission_refusals_where(catalogs, installed_integrity, installed_difference, |_| {
+        true
+    })
+}
+
+/// [`project_admission_refusals`] over only the entries whose signed bindings
+/// `keep` selects -- the receipts one certification just issued, when a catalog
+/// also holds entries earlier certifications left in it.
+pub(crate) fn project_admission_refusals_where(
+    catalogs: &[PathBuf],
+    installed_integrity: &InstalledArtifactIdentity,
+    installed_difference: &crate::accepted_bundles::InstalledEnvironmentDifference,
+    keep: impl Fn(&Policy2ReceiptBindings) -> bool,
+) -> Result<Vec<(String, Option<crate::accepted_bundles::AdmissionRefusal>)>, ContractFailure> {
     let mut candidates = Vec::new();
     for path in catalogs {
         let (catalog, _) = decode_accepted_contract_catalog(path)?;
@@ -1062,6 +1076,7 @@ pub fn project_admission_refusals(
                 .bindings
                 .as_ref()
                 .filter(|bindings| !bindings.artifact_acceptance_root.is_empty())
+                .filter(|bindings| keep(bindings))
             else {
                 continue;
             };
@@ -1313,12 +1328,19 @@ pub type ResolvedTargetIdentity<'a> = dyn Fn(&str) -> Option<String> + 'a;
 /// dependencies, so the exclusive reading loses a contract per certification
 /// after the first.
 pub fn discovered_catalog_paths(directory: &Path) -> Result<Vec<PathBuf>, ContractFailure> {
+    catalog_paths_in(&directory.join(".solid-checker"))
+}
+
+/// [`discovered_catalog_paths`] for a catalog root named directly -- the
+/// directory `contract certify --catalog` published into, which need not be a
+/// project's `.solid-checker/`.
+pub fn catalog_paths_in(catalog_root: &Path) -> Result<Vec<PathBuf>, ContractFailure> {
     let mut paths = Vec::new();
-    let catalog = directory.join(".solid-checker/accepted-contracts.json");
+    let catalog = catalog_root.join("accepted-contracts.json");
     if catalog.is_file() {
         paths.push(catalog);
     }
-    let pointer_path = directory.join(".solid-checker/accepted-contract-case-set.json");
+    let pointer_path = catalog_root.join("accepted-contract-case-set.json");
     if !pointer_path.is_file() {
         return Ok(paths);
     }

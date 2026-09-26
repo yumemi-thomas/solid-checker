@@ -437,11 +437,7 @@ fn every_mutable_certification_root_is_rechecked() {
 }
 
 fn environment_entry(name: &str, version: &str, integrity: &str) -> DependencyEnvironmentEntry {
-    DependencyEnvironmentEntry {
-        name: name.into(),
-        version: version.into(),
-        integrity: integrity.into(),
-    }
+    DependencyEnvironmentEntry::package(name, version, integrity)
 }
 
 #[test]
@@ -1677,4 +1673,115 @@ fn publication_merges_into_the_existing_project_catalog() {
     };
     assert!(error.contains("3 of its entries"), "{error}");
     fs::remove_dir_all(root).unwrap();
+}
+
+/// An environment that states who resolved what is framed under its own
+/// domain (`edges:v3`), so it is never re-read as the same packages stated
+/// without edges, and every edge is part of what the root signs.
+#[test]
+fn an_edge_bearing_environment_has_its_own_root_domain() {
+    let merge = environment_entry("merge-anything", "5.1.7", "sha512-ma");
+    let is_what = environment_entry("is-what", "4.1.8", "sha512-iw");
+    let edged = [
+        is_what
+            .clone()
+            .resolved_from(merge.as_importer(), "is-what"),
+        merge
+            .clone()
+            .resolved_from(EnvironmentImporter::Certified, "merge-anything"),
+    ];
+    let strict = [is_what.clone(), merge.clone()];
+    assert!(validate_dependency_environment(&edged).is_ok());
+    assert!(dependency_environment_states_edges(&edged));
+    assert!(!dependency_environment_states_edges(&strict));
+
+    // Not the v1 root of the same packages: the two are read by different
+    // admission rules, and a receipt binding one cannot pass as the other.
+    assert_ne!(
+        policy2_dependency_environment_root(&edged),
+        policy2_dependency_environment_root(&strict)
+    );
+    // The strict form keeps its v1 frame byte for byte, so the compiled-in
+    // tier (all stated without edges) verifies exactly as before.
+    assert_eq!(
+        policy2_dependency_environment_root(&strict),
+        policy2_dependency_environment_root_v1(&strict)
+    );
+
+    // Every edge field is signed: the specifier, and which importer.
+    let respecified = [
+        is_what
+            .clone()
+            .resolved_from(merge.as_importer(), "is-what-alias"),
+        edged[1].clone(),
+    ];
+    assert_ne!(
+        policy2_dependency_environment_root(&edged),
+        policy2_dependency_environment_root(&respecified)
+    );
+    let from_root = {
+        let mut entries = [
+            is_what
+                .clone()
+                .resolved_from(EnvironmentImporter::Certified, "is-what"),
+            edged[1].clone(),
+        ];
+        entries.sort();
+        entries
+    };
+    assert!(validate_dependency_environment(&from_root).is_ok());
+    assert_ne!(
+        policy2_dependency_environment_root(&edged),
+        policy2_dependency_environment_root(&from_root)
+    );
+
+    // Edges on every entry or on none.
+    let mixed = [is_what.clone(), edged[1].clone()];
+    assert!(validate_dependency_environment(&mixed).is_err());
+    // An importer the environment does not contain is an edge nobody can
+    // replay.
+    let unrooted = [
+        is_what.clone().resolved_from(
+            environment_entry("elsewhere", "1.0.0", "sha512-e").as_importer(),
+            "is-what",
+        ),
+        edged[1].clone(),
+    ];
+    assert!(validate_dependency_environment(&unrooted).is_err());
+    // Two copies of one name are expressible once edges tell them apart.
+    let two_copies = {
+        let mut entries = vec![
+            edged[0].clone(),
+            edged[1].clone(),
+            environment_entry("merge-anything", "6.0.6", "sha512-ma6")
+                .resolved_from(is_what.as_importer(), "merge-anything"),
+        ];
+        entries.sort();
+        entries
+    };
+    assert!(validate_dependency_environment(&two_copies).is_ok());
+
+    // The wire shape: the importer is tagged, and the strict form carries no
+    // edge field at all, so every existing entry re-encodes to its old bytes.
+    assert_eq!(
+        serde_json::to_value(&edged[1]).unwrap(),
+        serde_json::json!({
+            "name": "merge-anything",
+            "version": "5.1.7",
+            "integrity": "sha512-ma",
+            "resolvedFrom": { "importer": "certified", "specifier": "merge-anything" },
+        })
+    );
+    assert_eq!(
+        serde_json::to_value(&edged[0]).unwrap()["resolvedFrom"]["importer"],
+        serde_json::json!({
+            "package": { "name": "merge-anything", "version": "5.1.7", "integrity": "sha512-ma" }
+        })
+    );
+    assert!(
+        serde_json::to_value(&merge)
+            .unwrap()
+            .get("resolvedFrom")
+            .is_none()
+    );
 }
