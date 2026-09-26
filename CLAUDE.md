@@ -24,9 +24,20 @@ is not a rule.
 ## Tool mapping
 
 - Where AGENTS.md says `apply_patch`, use the Edit/Write tools.
-- Run only one Cargo build/test/clippy process at a time; parallel Cargo
-  commands contend for the build lock. Do not parallelize them across
-  subagents either.
+- Run only one Cargo build/test/clippy process at a time **per target
+  directory**; parallel Cargo commands on one `rust/target` contend for its
+  build lock. Parallel subagents that build therefore each work in their own
+  git worktree with their own `rust/target`, never in the shared checkout.
+  Seed a new worktree's target with an APFS clone of the main one, leaving out
+  `debug/incremental` (116 GB, and Cargo rebuilds it): `cp -cR` of
+  `rust/target/release` and of every `rust/target/debug` entry except
+  `incremental`, plus `bin/solid-typefacts{,.buildinfo}` and
+  `packages/cli/probe-harness.buildinfo`; symlink the `node_modules`
+  directories. The lead merges the worktree's commits.
+- Sweeps and census-style measurements use the release binary
+  (`make build-checker-release`, about 45 s incremental): the debug binary
+  inflates certification about 19x and a consumer sweep from seconds to
+  minutes.
 
 ## Skills
 
