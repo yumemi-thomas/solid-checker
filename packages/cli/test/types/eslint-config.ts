@@ -1,4 +1,4 @@
-import type { Linter } from "eslint";
+import type { Linter, Rule } from "eslint";
 import solidChecker, { type SolidCheckerSettings } from "solid-checker/eslint";
 
 const settings: SolidCheckerSettings = {
@@ -18,8 +18,13 @@ const config: Linter.Config[] = [
   solidChecker.configs.v2,
   {
     settings: { solidChecker: settings },
-    rules: { "solid-checker/strict-read-untracked": "warn" }
+    rules: {
+      "solid-checker/strict-read-untracked": "warn",
+      "solid-checker/contract-note": "off"
+    }
   }
 ];
+
+export const noteRule: Rule.RuleModule = solidChecker.rules["contract-note"];
 
 export default config;

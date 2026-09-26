@@ -20,55 +20,6 @@ const snapshotCache = new Map();
  */
 const snapshotNotices = new WeakMap();
 
-/**
- * Per-file registry of every solid-checker rule enabled for the current lint
- * pass, so exactly one of them reports each run note (see `reportNotices`).
- * Registered in `create`, released in `Program:exit`, like `ownedRules`.
- *
- * One difference: a rule that throws in `Program` (a failed analysis) ends
- * the pass with no `Program:exit`, and a registration left behind would make
- * a later pass pick a reporter that is no longer enabled -- silently losing
- * the note. Every create of a pass precedes every `Program` of it, so an
- * entry whose `Program` already ran when a rule is created belongs to an
- * earlier pass, and the file's registry is discarded before registering.
- */
-const noticeReporters = new Map();
-
-function registerNoticeReporter(filename, key, isCertification) {
-  let reporters = noticeReporters.get(filename);
-  if (reporters && [...reporters.values()].some(entry => entry.visited)) {
-    reporters = undefined;
-  }
-  if (!reporters) {
-    reporters = new Map();
-    noticeReporters.set(filename, reporters);
-  }
-  reporters.set(key, { isCertification, visited: false });
-}
-
-function releaseNoticeReporter(filename, key) {
-  const reporters = noticeReporters.get(filename);
-  if (!reporters) return;
-  reporters.delete(key);
-  if (reporters.size === 0) noticeReporters.delete(filename);
-}
-
-/**
- * Whether the rule registered as `key` is the one that reports run notes for
- * this file: `certification` when it is enabled, otherwise the enabled
- * per-rule rule whose key sorts first. Deterministic, and exactly one per
- * file whichever configs enabled which rules.
- */
-function reportsNotices(filename, key) {
-  const reporters = noticeReporters.get(filename);
-  const own = reporters?.get(key);
-  if (!own) return false;
-  own.visited = true;
-  const keys = [...reporters.keys()].sort();
-  const chosen = keys.find(candidate => reporters.get(candidate).isCertification) ?? keys[0];
-  return chosen === key;
-}
-
 const NOTE_PREFIX = "solid-checker: note: ";
 
 function stderrNotices(stderr) {
@@ -452,8 +403,7 @@ function projectFindings(context, program, findings) {
 }
 
 /**
- * Report the snapshot's run notes on this file, if this rule is the file's
- * designated reporter.
+ * Report the snapshot's run notes on this file.
  *
  * A note is about the run, not about a file, so it is reported the way a
  * project-scoped finding is: on every linted file, at the file's origin. Once
@@ -464,9 +414,9 @@ function projectFindings(context, program, findings) {
  * warning channel its formatters or editors display; `process.emitWarning`
  * reaches only a terminal, which is the invisibility this replaces.
  */
-function reportNotices(context, program, snapshot, reporter) {
+function reportNotices(context, program, snapshot) {
   const notices = snapshotNotices.get(snapshot);
-  if (!notices || !reporter) return;
+  if (!notices) return;
   const sourceCode = context.sourceCode ?? context.getSourceCode();
   const origin = sourceCode.getLocFromIndex(0);
   for (const notice of notices) {
@@ -488,19 +438,12 @@ const certification = {
     },
     fixable: "code",
     schema: adapterSchema,
-    messages: { finding: "{{message}}", notice: "{{message}}" }
+    messages: { finding: "{{message}}" }
   },
   create(context) {
-    const filename = contextFilename(context);
-    const key = context.id ?? "certification";
-    registerNoticeReporter(filename, key, true);
     return {
       Program(program) {
-        // Asked before the analysis, so the registration is marked visited
-        // for this pass even when loading the snapshot throws.
-        const reporter = reportsNotices(filename, key);
         const snapshot = loadSnapshot(context);
-        reportNotices(context, program, snapshot, reporter);
         // Skip findings a per-rule rule registered for during this pass:
         // that rule reports them at its own severity, so certification
         // reporting them again would duplicate every one of its findings.
@@ -509,9 +452,42 @@ const certification = {
           finding => !owned?.has(finding.rule)
         );
         projectFindings(context, program, findings);
-      },
-      "Program:exit"() {
-        releaseNoticeReporter(filename, key);
+      }
+    };
+  }
+};
+
+/**
+ * The run's notes, and nothing else, as their own rule.
+ *
+ * A note never fails a lint by itself: it names a configuration the run fell
+ * back from, not a defect, so every shipped config enables this rule at
+ * `warn`, and a project that sets it to `off` has chosen not to see notes.
+ * It is its own rule rather than a message of `certification` or of a
+ * per-rule rule because a message takes its rule's severity, and those are
+ * errors under `recommended`.
+ *
+ * It loads the snapshot every other rule of the pass loads (the cache key
+ * reads only the settings, the options, and the per-file registry, all fixed
+ * before the first `Program`), so enabling it spawns no second analysis. It
+ * keeps no state across passes, so a pass that ended in a thrown analysis
+ * cannot cost a later pass its note.
+ */
+const contractNote = {
+  meta: {
+    type: "suggestion",
+    docs: {
+      description:
+        "Report solid-checker run notes, such as a project contract catalog withheld for want of receipt trust",
+      recommended: true
+    },
+    schema: adapterSchema,
+    messages: { notice: "{{message}}" }
+  },
+  create(context) {
+    return {
+      Program(program) {
+        reportNotices(context, program, loadSnapshot(context));
       }
     };
   }
@@ -542,19 +518,13 @@ function reportingRule(entry, catalog) {
       },
       fixable: "code",
       schema: adapterSchema,
-      messages: { finding: "{{message}}", notice: "{{message}}" }
+      messages: { finding: "{{message}}" }
     },
     create(context) {
       const filename = contextFilename(context);
       registerOwnedRule(filename, entry.name);
-      // The ESLint rule id, not the catalog name: a deprecated key and its
-      // replacement share `entry.name`, and both enabled must still yield one
-      // note reporter.
-      const key = context.id ?? entry.name;
-      registerNoticeReporter(filename, key, false);
       return {
         Program(program) {
-          const reporter = reportsNotices(filename, key);
           // A namespaced compatibility rule analyzes with its manifest's
           // dialect unless the config already chose one. The default,
           // unprefixed surface leaves selection to project detection.
@@ -563,7 +533,6 @@ function reportingRule(entry, catalog) {
               ? contextWithDialect(context, catalog.dialect)
               : context;
           const snapshot = loadSnapshot(forced);
-          reportNotices(context, program, snapshot, reporter);
           const findings = (snapshot.findings ?? []).filter(
             finding => finding.rule === entry.name
           );
@@ -572,7 +541,6 @@ function reportingRule(entry, catalog) {
         },
         "Program:exit"() {
           releaseOwnedRule(filename, entry.name);
-          releaseNoticeReporter(filename, key);
         }
       };
     }
@@ -622,7 +590,7 @@ const manifestEntriesByRule = new Map(
 
 const plugin = {
   meta: { name: "solid-checker", version: packageVersion },
-  rules: { certification },
+  rules: { certification, "contract-note": contractNote },
   configs: {}
 };
 
@@ -641,6 +609,9 @@ const DEPRECATED_RULE_KEYS = [
 
 for (const catalog of Object.values(manifests)) {
   for (const entry of catalog.rules) {
+    if (Object.hasOwn(plugin.rules, entry.name)) {
+      throw new Error(`catalog rule ${entry.name} collides with an adapter rule`);
+    }
     plugin.rules[entry.name] = reportingRule(entry, catalog);
   }
 }
@@ -664,7 +635,10 @@ for (const [oldName, currentName] of DEPRECATED_RULE_KEYS) {
 
 plugin.configs.recommended = {
   plugins: { "solid-checker": plugin },
-  rules: { "solid-checker/certification": "error" }
+  rules: {
+    "solid-checker/certification": "error",
+    "solid-checker/contract-note": "warn"
+  }
 };
 for (const catalog of Object.values(manifests)) {
   plugin.configs[catalog.config] = {
@@ -675,6 +649,9 @@ for (const catalog of Object.values(manifests)) {
       // the per-file registry above makes certification skip every finding a
       // per-rule rule owns, so both orders report each finding exactly once.
       "solid-checker/certification": "off",
+      // Every shipped config enables the note rule at `warn`, so no listing
+      // order can make a note fail a lint.
+      "solid-checker/contract-note": "warn",
       ...Object.fromEntries(
         catalog.rules.filter(entry => entry.defaultEnabled).map(entry => [
           `solid-checker/${entry.name}`,
@@ -689,12 +666,15 @@ for (const catalog of Object.values(manifests)) {
   plugin.configs[`preferences-${catalog.config}`] = {
     plugins: { "solid-checker": plugin },
     settings: { solidChecker: { preset: ["preferences"] } },
-    rules: Object.fromEntries(
-      preferenceRules.map(entry => [
-        `solid-checker/${entry.name}`,
-        entry.severity === "error" ? "error" : "warn"
-      ])
-    )
+    rules: {
+      "solid-checker/contract-note": "warn",
+      ...Object.fromEntries(
+        preferenceRules.map(entry => [
+          `solid-checker/${entry.name}`,
+          entry.severity === "error" ? "error" : "warn"
+        ])
+      )
+    }
   };
 }
 
@@ -708,7 +688,6 @@ module.exports._testing = {
   manifests,
   manifestEntriesByRule,
   deprecatedRuleKeys: DEPRECATED_RULE_KEYS,
-  noticeReporters,
   ownedRules,
   snapshotCache
 };

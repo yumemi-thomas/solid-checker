@@ -169,7 +169,8 @@ To report project findings through Oxlint, load the bundled JavaScript adapter:
 {
   "jsPlugins": ["solid-checker/eslint"],
   "rules": {
-    "solid-checker/certification": "error"
+    "solid-checker/certification": "error",
+    "solid-checker/contract-note": "warn"
   }
 }
 ```
@@ -211,9 +212,10 @@ Without trust, a *discovered* policy-2 catalog is withheld rather than fatal:
 the analysis proceeds as if it were absent, so its imports fall back to the
 compiled-in tier or report `SC9005`. The checker's note saying so (a
 `solid-checker: note:` line on stderr) is reported in ESLint as a
-`[solid-checker note]` message at line 1 of every linted file, through
-`certification` when it is enabled and otherwise through one enabled per-rule
-rule, so it takes that rule's severity. Every file, not the first one linted,
+`[solid-checker note]` message at line 1 of every linted file, by its own rule,
+`solid-checker/contract-note`, and by no other. Every shipped config enables it
+at `warn`, so a note never fails a lint by itself; set it to `off` to hide the
+notes, or to `error` to fail on them. Every file, not the first one linted,
 because the note is about the run, the same reason a project-scoped finding is
 reported on every file: an editor lints only the open file, and ESLint gives a
 plugin no project-level message or warning channel that its formatters and
@@ -228,12 +230,13 @@ only one that ships. The `v1/`-prefixed names went with the 1.x catalog — see
 its 2.0 identity. All rules of one dialect share a single cached analysis run,
 so enabling an entire catalog still spawns the checker once per project.
 
-The plugin ships two flat configs. `configs.recommended` enables only
+The plugin ships two flat configs. `configs.recommended` enables
 `solid-checker/certification`, which reports every finding through one rule.
 `configs.v2` enables its catalog's rules at each rule's native severity and
-turns `certification` off. The configs compose in either
+turns `certification` off. Both, and `configs["preferences-v2"]`, also enable
+`solid-checker/contract-note` at `warn`. The configs compose in either
 order: each finding reports exactly once, per rule. Even when a listing such
-as `[configs.v1, configs.recommended]` re-enables `certification` (flat
+as `[configs.v2, configs.recommended]` re-enables `certification` (flat
 config resolves each rule from the later entry), certification skips every
 finding an enabled per-rule rule owns for the linted file and reports only
 the rest.

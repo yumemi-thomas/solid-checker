@@ -38,7 +38,8 @@ export interface SolidCheckerSettings {
    * Policy-2 issuer trust (`--receipt-trust-configuration`), the file
    * `contract certify --trust-configuration-output` wrote. Without it a
    * discovered policy-2 catalog is not read, and one named by
-   * `acceptedContracts` fails the analysis. A relative path resolves against
+   * `acceptedContracts` fails the analysis. The withheld catalog is reported
+   * by the `contract-note` rule. A relative path resolves against
    * `cwd`; its bytes are part of the analysis cache identity.
    */
   receiptTrustConfiguration?: string;
@@ -57,6 +58,12 @@ export interface SolidCheckerPlugin extends ESLint.Plugin {
   };
   rules: Record<string, Rule.RuleModule> & {
     certification: Rule.RuleModule;
+    /**
+     * The run's `solid-checker: note:` lines, such as a project catalog
+     * withheld for want of receipt trust, at line 1 of every linted file.
+     * `warn` in every shipped config; `off` hides the notes.
+     */
+    "contract-note": Rule.RuleModule;
   };
   configs: Record<string, Linter.Config> & {
     recommended: Linter.Config;
