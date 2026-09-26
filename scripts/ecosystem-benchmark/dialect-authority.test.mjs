@@ -56,6 +56,7 @@ test("the checked-in pins load and name the archives the Rust tables audit", () 
     [
       "@solidjs/signals@2.0.0-rc.3",
       "@solidjs/signals@2.0.0-rc.6",
+      "@solidjs/signals@2.0.0-rc.9",
       "@solidjs/web@2.0.0-rc.3",
       "solid-js@2.0.0-rc.3"
     ]
@@ -63,8 +64,9 @@ test("the checked-in pins load and name the archives the Rust tables audit", () 
   // 74 every-condition rows and, since 2026-09-25, one scoped to the browser
   // host target: `solid-js@2.0.0-rc.3` `createSignal` `creates`. The count is
   // what the report prints; the scope lives in the Rust table alone, which is
-  // the only place a row is ever read as authority.
-  assert.equal(solid2.negativeRowCount, 75);
+  // the only place a row is ever read as authority. Since 2026-09-26, five
+  // more every-condition rows on `@solidjs/signals@2.0.0-rc.9`.
+  assert.equal(solid2.negativeRowCount, 80);
 });
 
 test("a pin file that parses but pins nothing is refused, not read as full coverage", () => {

@@ -760,7 +760,8 @@ pub enum AuditedCitation {
         /// manifest of the row's own archive,
         /// `benchmarks/package-contract-v2/phase0/<release>/<archive>/files.json`
         /// (`rc3/` for the `2.0.0-rc.3` archives, `rc6/` for
-        /// `@solidjs/signals@2.0.0-rc.6`).
+        /// `@solidjs/signals@2.0.0-rc.6`, `rc9/` for
+        /// `@solidjs/signals@2.0.0-rc.9`).
         file_sha256: &'static str,
         /// First byte of the cited definition in that file.
         start_byte: usize,
@@ -1175,7 +1176,8 @@ pub fn host_target_row(
 /// Within one authority the same holds between archives: a row names its
 /// archive's version as well as its name ([`NegativeClaimRow::version`]), so
 /// `@solidjs/signals@2.0.0-rc.3`'s rows say nothing about
-/// `@solidjs/signals@2.0.0-rc.6`'s bytes, which carry their own.
+/// `@solidjs/signals@2.0.0-rc.6`'s bytes, which carry their own, and rc.6's
+/// say nothing about rc.9's.
 #[must_use]
 pub fn primitive_performs_no_operation(
     archive: &AuditedArchive,
@@ -4108,6 +4110,86 @@ mod tests {
         }
     }
 
+    /// `@solidjs/signals@2.0.0-rc.9` answers from exactly the five `creates`
+    /// rows read on its own bytes (2026-09-26), and from nothing rc.6 carries
+    /// beyond them.
+    ///
+    /// `createSignal` `creates` and `createMemo` `reads` are the controls:
+    /// rc.6 grants both, and rc.9's audit did not read either (their closures,
+    /// `computed` and `recompute`, were rewritten), so rc.9 must stay silent.
+    #[test]
+    fn rc9_signals_answers_only_its_five_creates_rows() {
+        let rc6 = audited_archive("@solidjs/signals", "2.0.0-rc.6");
+        let rc9 = audited_archive("@solidjs/signals", "2.0.0-rc.9");
+        let granted = [
+            "createRoot",
+            "getOwner",
+            "onCleanup",
+            "runWithOwner",
+            "untrack",
+        ];
+        for export in granted {
+            assert!(
+                primitive_performs_no_operation(&rc9, export, CallClaimDomain::Creates),
+                "rc.9 {export} creates"
+            );
+            // A `creates` row says nothing about another domain.
+            assert!(
+                !primitive_performs_no_operation(&rc9, export, CallClaimDomain::Reads),
+                "rc.9 {export} reads was never read"
+            );
+        }
+        for (export, domain) in [
+            ("createSignal", CallClaimDomain::Creates),
+            ("createMemo", CallClaimDomain::Creates),
+            ("createMemo", CallClaimDomain::Reads),
+            ("flush", CallClaimDomain::Creates),
+            ("snapshot", CallClaimDomain::Creates),
+        ] {
+            assert!(
+                primitive_performs_no_operation(&rc6, export, domain),
+                "rc.6 {export} {domain:?}"
+            );
+            assert!(
+                !primitive_performs_no_operation(&rc9, export, domain),
+                "rc.6's {export} {domain:?} row must not answer for rc.9"
+            );
+        }
+
+        // rc.9's coordinate over rc.6's bytes, or with another integrity, is
+        // not rc.9.
+        for (why, archive) in [
+            (
+                "rc.9's coordinate with rc.6's integrity and manifest",
+                AuditedArchive {
+                    version: rc9.version,
+                    ..rc6
+                },
+            ),
+            (
+                "rc.9 with rc.6's integrity",
+                AuditedArchive {
+                    integrity: rc6.integrity,
+                    ..rc9
+                },
+            ),
+            (
+                "rc.9 with rc.6's manifest digest",
+                AuditedArchive {
+                    manifest_sha256: rc6.manifest_sha256,
+                    ..rc9
+                },
+            ),
+        ] {
+            for export in granted {
+                assert!(
+                    !primitive_performs_no_operation(&archive, export, CallClaimDomain::Creates),
+                    "{why} must deny nothing ({export})"
+                );
+            }
+        }
+    }
+
     /// The export has to be a canonical dialect spelling, not merely a key the
     /// audited document happens to close.
     ///
@@ -4135,22 +4217,27 @@ mod tests {
     /// The identity tuples a caller must bind before consulting the table.
     #[test]
     fn audited_archives_are_looked_up_by_name_and_carry_all_four_fields() {
-        // Two `@solidjs/signals` archives, each read on its own bytes: rc.3,
-        // and rc.6 (the one the ecosystem installs, 2026-09-25 re-audit).
+        // Three `@solidjs/signals` archives, each read on its own bytes: rc.3,
+        // rc.6 (the one the ecosystem installs, 2026-09-25 re-audit), and
+        // rc.9 (solid-primitives' `next`, five rows, 2026-09-26).
         let signals = audited_archives("@solidjs/signals");
         assert_eq!(
             signals
                 .iter()
                 .map(|archive| archive.version)
                 .collect::<Vec<_>>(),
-            ["2.0.0-rc.3", "2.0.0-rc.6"]
+            ["2.0.0-rc.3", "2.0.0-rc.6", "2.0.0-rc.9"]
         );
         for archive in &signals {
             assert!(archive.integrity.starts_with("sha512-"));
             assert_eq!(archive.manifest_sha256.len(), 64);
         }
-        assert_ne!(signals[0].integrity, signals[1].integrity);
-        assert_ne!(signals[0].manifest_sha256, signals[1].manifest_sha256);
+        for (index, left) in signals.iter().enumerate() {
+            for right in &signals[index + 1..] {
+                assert_ne!(left.integrity, right.integrity);
+                assert_ne!(left.manifest_sha256, right.manifest_sha256);
+            }
+        }
         assert!(audited_archives("").is_empty());
         assert!(audited_archives("@solidjs/router").is_empty());
         // One archive named `solid-js` is audited now that the 1.x dialect,

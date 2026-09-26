@@ -24033,6 +24033,7 @@ mod tests {
     const WEB_INTEGRITY: &str = "sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg==";
     const SOLID_JS_INTEGRITY: &str = "sha512-pmW6bRoTvfp/rN4jN7JmLvSaoIpFt7wm0Hi3j508S/smuJqUbRg3dQEjOPTkAwHW+McYnXrMG7cJ4AMNpLevtQ==";
     const SIGNALS_RC6_INTEGRITY: &str = "sha512-lPqwZNLPq1Z9CBvgXkMvi1ZFr5OHUiFNz1X40+yehszDWEbJkneZx7BGKIe9eMT/AN1NSL+PMjOiMyZaqVB2xw==";
+    const SIGNALS_RC9_INTEGRITY: &str = "sha512-o3pqiTgpH5NR2DstiKrt9s/6+0YOFtv+MfvLONwLsS247I+EWMMyTu9BkRcgd35UR5Pa1DM16lI1/5uaIMY6Gw==";
 
     /// A call whose callee resolves into `@solidjs/signals`' installed tree.
     fn signals_call(export: &str, overrides: serde_json::Value) -> typefacts::ImplementationCall {
@@ -24492,6 +24493,219 @@ mod tests {
             .map(|archive| archive.name),
             Err(AuditedArchiveDisagreement::Manifest)
         );
+    }
+
+    /// `@solidjs/signals@2.0.0-rc.9` binds on the five `creates` rows read on
+    /// its own bytes (2026-09-26 audit), and on nothing rc.6 carries beyond
+    /// them.
+    ///
+    /// The five terminate for an exact rc.9 snapshot with the rc.9 coordinate
+    /// in the witness. `createSignal` `creates` and `createMemo` `reads` are
+    /// the controls: rc.6 grants both and the same call terminates there, but
+    /// rc.9's audit read neither, so rc.9 stays silent. Gate 8 still binds all
+    /// four fields. And the pinned rc.9 manifest selects, under each condition
+    /// its `exports` map knows, exactly one of the three builds the audit read
+    /// (`dist/prod/index.js`, `dist/dev.js`, `dist/observe/index.js`) — rc.9
+    /// has no `require` arm, so a `require` consumer lands on the `default`
+    /// build too.
+    #[test]
+    fn census_dialect_axiom_binds_rc9_signals_on_its_own_rows() {
+        let rc9_manifest = audited_phase0_manifest("rc9", "solidjs-signals");
+        let rc6_manifest = audited_phase0_manifest("rc6", "solidjs-signals");
+        let certified = archive_snapshot(
+            "consumer",
+            "1.0.0",
+            "sha512-consumer",
+            b"{\"name\":\"consumer\"}",
+            "/snapshot/consumer",
+        );
+        let terminator = |snapshot: &super::super::ArtifactSnapshot,
+                          export: &str,
+                          domain: solid_dialect::CallClaimDomain| {
+            let roots = vec![SnapshotSourceRoot {
+                path: "/project/node_modules/@solidjs/signals/".to_owned(),
+                evidence_prefix: "/node_modules/@solidjs/signals/".to_owned(),
+                snapshot,
+                dependency: true,
+            }];
+            census_dialect_axiom_for_callee(
+                &signals_call(export, json!({})),
+                domain,
+                ReachabilityFloor::MayExecute,
+                &certified,
+                &roots,
+            )
+        };
+        let rc9 = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.9",
+            SIGNALS_RC9_INTEGRITY,
+            &rc9_manifest,
+            "/snapshot/signals-rc9",
+        );
+        let rc6 = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.6",
+            SIGNALS_RC6_INTEGRITY,
+            &rc6_manifest,
+            "/snapshot/signals-rc6",
+        );
+
+        let granted = [
+            "createRoot",
+            "getOwner",
+            "onCleanup",
+            "runWithOwner",
+            "untrack",
+        ];
+        for export in granted {
+            assert_eq!(
+                terminator(&rc9, export, solid_dialect::CallClaimDomain::Creates)
+                    .unwrap_or_else(|| panic!("rc.9 denies {export}'s creates"))
+                    .witness_site,
+                format!(
+                    "census-dialect-axiom:@solidjs/signals@2.0.0-rc.9#sha512-o3pqiTgpH5NR2Dst:{export}:creates"
+                )
+            );
+            assert!(
+                terminator(&rc9, export, solid_dialect::CallClaimDomain::Reads).is_none(),
+                "rc.9 {export} reads was never read"
+            );
+        }
+
+        // An rc.6 row does not answer for rc.9 bytes.
+        for (export, domain) in [
+            ("createSignal", solid_dialect::CallClaimDomain::Creates),
+            ("createMemo", solid_dialect::CallClaimDomain::Reads),
+        ] {
+            assert!(
+                terminator(&rc6, export, domain).is_some(),
+                "rc.6 carries {export} {domain:?}"
+            );
+            assert!(
+                terminator(&rc9, export, domain).is_none(),
+                "rc.9's audit did not read {export} {domain:?}; rc.6's row must not stand in"
+            );
+        }
+
+        // Gate 8: rc.9's coordinate is not rc.9's bytes.
+        for (why, snapshot) in [
+            (
+                "rc.9's coordinate over rc.6's integrity",
+                archive_snapshot(
+                    "@solidjs/signals",
+                    "2.0.0-rc.9",
+                    SIGNALS_RC6_INTEGRITY,
+                    &rc9_manifest,
+                    "/snapshot/rc9-rc6-integrity",
+                ),
+            ),
+            (
+                "rc.9's coordinate and integrity over rc.6's manifest",
+                archive_snapshot(
+                    "@solidjs/signals",
+                    "2.0.0-rc.9",
+                    SIGNALS_RC9_INTEGRITY,
+                    &rc6_manifest,
+                    "/snapshot/rc9-rc6-manifest",
+                ),
+            ),
+            (
+                "rc.6's coordinate over rc.9's bytes",
+                archive_snapshot(
+                    "@solidjs/signals",
+                    "2.0.0-rc.6",
+                    SIGNALS_RC9_INTEGRITY,
+                    &rc9_manifest,
+                    "/snapshot/rc6-rc9-bytes",
+                ),
+            ),
+        ] {
+            for export in granted {
+                assert!(
+                    terminator(&snapshot, export, solid_dialect::CallClaimDomain::Creates)
+                        .is_none(),
+                    "{why} must not receive {export}'s terminator"
+                );
+            }
+        }
+        assert_eq!(
+            audited_archive_for_snapshot(&archive_snapshot(
+                "@solidjs/signals",
+                "2.0.0-rc.9",
+                SIGNALS_RC9_INTEGRITY,
+                &rc6_manifest,
+                "/snapshot/rc9-rc6-manifest",
+            ))
+            .map(|archive| archive.name),
+            Err(AuditedArchiveDisagreement::Manifest)
+        );
+        assert_eq!(
+            audited_archive_for_snapshot(&archive_snapshot(
+                "@solidjs/signals",
+                "2.0.0-rc.9",
+                SIGNALS_RC6_INTEGRITY,
+                &rc9_manifest,
+                "/snapshot/rc9-rc6-integrity",
+            ))
+            .map(|archive| archive.name),
+            Err(AuditedArchiveDisagreement::Integrity)
+        );
+
+        // The builds the audit read are the ones rc.9's `.` entry selects.
+        let files = [
+            "package.json",
+            "dist/prod/index.js",
+            "dist/dev.js",
+            "dist/observe/index.js",
+        ]
+        .into_iter()
+        .map(|path| {
+            (
+                path.to_owned(),
+                std::sync::Arc::<[u8]>::from(if path == "package.json" {
+                    rc9_manifest.as_slice()
+                } else {
+                    &b"export {};"[..]
+                }),
+            )
+        })
+        .collect();
+        let tree = super::super::ArtifactSnapshot {
+            package_name: "@solidjs/signals".into(),
+            package_version: "2.0.0-rc.9".into(),
+            package_integrity: SIGNALS_RC9_INTEGRITY.into(),
+            files: std::sync::Arc::new(files),
+            directories: std::sync::Arc::new(std::collections::BTreeSet::new()),
+            root: "/snapshot/signals-rc9-conditions".into(),
+            provenance_root: "/snapshot/signals-rc9-conditions".into(),
+        };
+        let manifest: super::super::SnapshotPackageManifest =
+            serde_json::from_slice(&rc9_manifest).unwrap();
+        for (requested, file) in [
+            (&["import"][..], "dist/prod/index.js"),
+            (&["browser", "import"], "dist/prod/index.js"),
+            (&["import", "node"], "dist/prod/index.js"),
+            (&["browser", "require"], "dist/prod/index.js"),
+            (&["development", "import"], "dist/dev.js"),
+            (&["import", "test"], "dist/dev.js"),
+            (&["import", "observe"], "dist/observe/index.js"),
+        ] {
+            assert_eq!(
+                super::super::resolve_snapshot_export(
+                    &tree,
+                    &manifest,
+                    ".",
+                    &requested.iter().copied().collect(),
+                    super::super::ResolutionAxis::Runtime,
+                )
+                .map(|selected| selected.path)
+                .map_err(|error| error.to_string())
+                .as_deref(),
+                Ok(file),
+                "@solidjs/signals rc.9 {requested:?}"
+            );
+        }
     }
 
     /// Gate 7: the artifact under certification may not itself be an audited

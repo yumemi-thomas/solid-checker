@@ -137,12 +137,19 @@ pub(crate) fn names() -> Vec<&'static str> {
 ///   check it. It is not load-bearing for soundness: the census gate compares
 ///   it against the certifier's own authenticated snapshot, so a wrong value
 ///   can only stop the rows from binding, never bind them to other bytes.
+/// - `@solidjs/signals@2.0.0-rc.9` is checked the same way, against
+///   `benchmarks/package-contract-v2/phase0/rc9/solidjs-signals/`. Its
+///   integrity *was* re-derived: the 2026-09-26 audit ([`RC9_SIGNALS_AUDIT`])
+///   downloaded the registry tarball, its SRI SHA-512 equals the tuple's (and
+///   the solid-primitives lockfile's), and its extracted tree is byte-identical
+///   to the install the audit read (`phase0/rc9/solidjs-signals/tarball.json`).
 ///
 /// `manifest_sha256` is the digest of the archive's own `package.json`, which
 /// a caller re-derives from the authenticated snapshot (`sha256` of
 /// `snapshot.read("package.json")`) rather than reading from a manifest a
 /// resolver reported. All three rc.3 digests were confirmed against the
-/// installed rc.3 trees, and rc.6's against the installed rc.6 tree.
+/// installed rc.3 trees, rc.6's against the installed rc.6 tree, and rc.9's
+/// against both its installed tree and its registry tarball.
 ///
 /// `solid-js@2.0.0-rc.3` is listed even though its audited document covers
 /// only ten exports: the archive was read, and "read and found nothing to
@@ -150,7 +157,8 @@ pub(crate) fn names() -> Vec<&'static str> {
 ///
 /// Listing an archive extends no row to it. Rows are archive-scoped
 /// ([`NegativeClaimRow::version`]), so rc.6 answers only from the rows read on
-/// rc.6's bytes, and rc.3's rows keep answering for rc.3 alone.
+/// rc.6's bytes, rc.9 only from the five read on rc.9's, and rc.3's rows keep
+/// answering for rc.3 alone.
 const AUDITED_ARCHIVES: &[AuditedArchive] = &[
     AuditedArchive {
         name: "@solidjs/signals",
@@ -163,6 +171,12 @@ const AUDITED_ARCHIVES: &[AuditedArchive] = &[
         version: "2.0.0-rc.6",
         integrity: "sha512-lPqwZNLPq1Z9CBvgXkMvi1ZFr5OHUiFNz1X40+yehszDWEbJkneZx7BGKIe9eMT/AN1NSL+PMjOiMyZaqVB2xw==",
         manifest_sha256: "de11cde1dd28b678f380c865be674a1f1a18a198e399ad2f997fd83aef1c163c",
+    },
+    AuditedArchive {
+        name: "@solidjs/signals",
+        version: "2.0.0-rc.9",
+        integrity: "sha512-o3pqiTgpH5NR2DstiKrt9s/6+0YOFtv+MfvLONwLsS247I+EWMMyTu9BkRcgd35UR5Pa1DM16lI1/5uaIMY6Gw==",
+        manifest_sha256: "c612461c9264f2b3509ced91ea91019ed7b1ea0df0d64bba7f0f30c8d00bb1c6",
     },
     AuditedArchive {
         name: "@solidjs/web",
@@ -200,12 +214,23 @@ const RC3_OWNER_CONTEXT_AUDIT: &str =
 const RC6_SIGNALS_AUDIT: &str =
     "docs/package-contract-v2/audits/2026-09-25-solid-2-rc6-signals-negative-rows.md";
 
+/// The reading of five `@solidjs/signals` `creates` rows — `getOwner`,
+/// `onCleanup`, `createRoot`, `untrack`, `runWithOwner` — on the exact bytes of
+/// `@solidjs/signals@2.0.0-rc.9` (2026-09-26), in every runtime build rc.9's
+/// `exports` map can select: `dist/prod/**`, `dist/dev.js` with
+/// `dist/dev-shared.js`, and the new `dist/observe/**`. All five granted. The
+/// source of every rc.9 [`AuditedCitation::Implementation`] below; for the
+/// repository owner's review, as the rc.3 and rc.6 audits were.
+const RC9_SIGNALS_AUDIT: &str =
+    "docs/package-contract-v2/audits/2026-09-26-solid-2-rc9-signals-negative-rows.md";
+
 /// The version each row is keyed to. Spelled once so a row cannot name a
 /// prerelease by a typo that happens to match no archive; a test pins that
 /// every row's `(package, version)` names exactly one [`AUDITED_ARCHIVES`]
 /// tuple.
 const RC3: &str = "2.0.0-rc.3";
 const RC6: &str = "2.0.0-rc.6";
+const RC9: &str = "2.0.0-rc.9";
 
 /// What the audited 2.0 documents **deny**, per archive, per canonical export,
 /// per call claim domain.
@@ -222,10 +247,10 @@ const RC6: &str = "2.0.0-rc.6";
 /// that reading, not its conclusion; see [`AuditedCitation`] for the exact
 /// difference and ADR 0007 for why it is stated rather than smoothed over.
 /// Three more rc.3 rows (`runWithOwner`, `createContext`, `useContext`) are
-/// readings of the same kind ([`RC3_OWNER_CONTEXT_AUDIT`]), and every rc.6 row
-/// is one ([`RC6_SIGNALS_AUDIT`]).
+/// readings of the same kind ([`RC3_OWNER_CONTEXT_AUDIT`]), and every rc.6 and
+/// rc.9 row is one ([`RC6_SIGNALS_AUDIT`], [`RC9_SIGNALS_AUDIT`]).
 ///
-/// # Rows are archive-scoped, and two `@solidjs/signals` archives carry rows
+/// # Rows are archive-scoped, and three `@solidjs/signals` archives carry rows
 ///
 /// Every row names its archive's version ([`NegativeClaimRow::version`]) and
 /// answers for that archive alone. The 51 rc.3 rows answer for the three
@@ -246,10 +271,22 @@ const RC6: &str = "2.0.0-rc.6";
 /// for rc.3, paired with `solid-js@2.0.0-rc.3`'s server bodies (the audit read
 /// those beside rc.6); a different `solid-js` version is not covered.
 ///
+/// The 5 rc.9 rows answer for `@solidjs/signals@2.0.0-rc.9` (solid-primitives'
+/// `next` installs it beside `solid-js@2.0.0-rc.9`): `getOwner`, `onCleanup`,
+/// `createRoot`, `untrack` and `runWithOwner` `creates`, the five the rc.9
+/// vocabulary review named as cheap. Each was read on rc.9's own bytes in all
+/// three builds its `exports` map can select, and nothing else of rc.9 was
+/// read, so no other rc.9 row exists: `createSignal` among them, which is why
+/// the scoped `solid-js` `createSignal` row cannot bind beside rc.9 (its
+/// delegate is unanswered there, and the census refuses). Their `solid-js`
+/// pairing covers `solid-js@2.0.0-rc.9`'s `server.js`, `server.dev.js` and
+/// `server.observe.js` bodies of the four names it re-exports from this archive
+/// (`createRoot` is `solid-js`' own declaration in rc.9) as well as rc.3's.
+///
 /// # `creates` and `reads`, and only those
 ///
-/// Rows carry [`CallClaimDomain::Creates`] (49: 32 on rc.3, one of them scoped, 17 on rc.6) and
-/// [`CallClaimDomain::Reads`] (26: 19 on rc.3, 7 on rc.6). The other six kinded domains are withheld
+/// Rows carry [`CallClaimDomain::Creates`] (54: 32 on rc.3, one of them scoped, 17 on rc.6, 5 on
+/// rc.9) and [`CallClaimDomain::Reads`] (26: 19 on rc.3, 7 on rc.6). The other six kinded domains are withheld
 /// wholesale, because the audited documents' closures in them are not yet
 /// admissible as negative authority and each counter-example below is a defect
 /// against the *audit*, not against this table:
@@ -1777,6 +1814,193 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
                 start_byte: 138485,
                 end_byte: 138765,
                 slice_sha256: "7c6477036bc9e674dc99ea792fac64ac38fc9ad394f535163659a8e620bf6767",
+            },
+        ],
+    },
+    // `@solidjs/signals@2.0.0-rc.9`, read on its own bytes (RC9_SIGNALS_AUDIT):
+    // the five `creates` rows the rc.9 vocabulary review called cheap, and
+    // nothing else. Every row cites all three builds rc.9's `exports` map
+    // can select -- `dist/prod/**` (`default`), the `development`/`test`
+    // build `dist/dev.js`, which imports four of the five definitions from
+    // `dist/dev-shared.js` and defines `onCleanup` itself, and the new
+    // `observe` build `dist/observe/**`. rc.9 ships no CommonJS bundle.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "createRoot",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_SIGNALS_AUDIT,
+                section: "### 3. `createRoot` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/core/owner.js",
+                file_sha256: "a6b4d87b97f2d8021224d343a28bccf77ef2a9be8ba6872d91cfaa8b29dfc36e",
+                start_byte: 11782,
+                end_byte: 11902,
+                slice_sha256: "eefc749ba75a19179e86ce86935623ba829da692628162c809267f812583bbe3",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_SIGNALS_AUDIT,
+                section: "### 3. `createRoot` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev-shared.js",
+                file_sha256: "70b88ba97dcb1107878ccc161cd00651b3cff09d7e17aee5443f1cbf9689463e",
+                start_byte: 135728,
+                end_byte: 135870,
+                slice_sha256: "9a66667de7c1a48f5a90e9901d994ba532da603ac763dc460c16fb8e60496fa5",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_SIGNALS_AUDIT,
+                section: "### 3. `createRoot` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/core/owner.js",
+                file_sha256: "c384c5ab163cb53e1a611ce76bf9e2b27c8a7e7884d7a9c4ec7dfebf0f5e4126",
+                start_byte: 11828,
+                end_byte: 11948,
+                slice_sha256: "d266035c22be8514767dbee4fe3aa0c947336ad4da585e24b09ee1722d916259",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "getOwner",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_SIGNALS_AUDIT,
+                section: "### 1. `getOwner` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/core/owner.js",
+                file_sha256: "a6b4d87b97f2d8021224d343a28bccf77ef2a9be8ba6872d91cfaa8b29dfc36e",
+                start_byte: 8615,
+                end_byte: 8663,
+                slice_sha256: "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_SIGNALS_AUDIT,
+                section: "### 1. `getOwner` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev-shared.js",
+                file_sha256: "70b88ba97dcb1107878ccc161cd00651b3cff09d7e17aee5443f1cbf9689463e",
+                start_byte: 131908,
+                end_byte: 131950,
+                slice_sha256: "e8cb95b765807fa14a97032551f4bbced263cc3d7837fc1258f156ffc71ba8bb",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_SIGNALS_AUDIT,
+                section: "### 1. `getOwner` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/core/owner.js",
+                file_sha256: "c384c5ab163cb53e1a611ce76bf9e2b27c8a7e7884d7a9c4ec7dfebf0f5e4126",
+                start_byte: 8635,
+                end_byte: 8683,
+                slice_sha256: "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "onCleanup",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_SIGNALS_AUDIT,
+                section: "### 2. `onCleanup` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/signals.js",
+                file_sha256: "d1a61ff0872b42987400100413bdb69e83e1e8e67dad175cf1178c7fb34646b6",
+                start_byte: 2598,
+                end_byte: 2651,
+                slice_sha256: "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_SIGNALS_AUDIT,
+                section: "### 2. `onCleanup` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 96698,
+                end_byte: 97559,
+                slice_sha256: "5f8d40b1c3165f17bc00846b5063eb55f8bdd0a6b49dceba4a60f5aeb6570e44",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_SIGNALS_AUDIT,
+                section: "### 2. `onCleanup` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/signals.js",
+                file_sha256: "6a338c1513530b9c423c215723b171fda5b23f47a010037f845fd3c467ad41b5",
+                start_byte: 2646,
+                end_byte: 2699,
+                slice_sha256: "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "runWithOwner",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_SIGNALS_AUDIT,
+                section: "### 5. `runWithOwner` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/core/core.js",
+                file_sha256: "4baa2f64e47621423c0246529d3ce1b56ef82a8274aa54dfc1d345141158d53d",
+                start_byte: 87558,
+                end_byte: 87770,
+                slice_sha256: "5c40363ecc6eaf66378b57e0c387103fe67f51706d30dab3cb041fd10f8af3e5",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_SIGNALS_AUDIT,
+                section: "### 5. `runWithOwner` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev-shared.js",
+                file_sha256: "70b88ba97dcb1107878ccc161cd00651b3cff09d7e17aee5443f1cbf9689463e",
+                start_byte: 287156,
+                end_byte: 287864,
+                slice_sha256: "332a218ceec024a1d0c3464213b7d043d4a902c529b5f02a7d6ae0467070a11c",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_SIGNALS_AUDIT,
+                section: "### 5. `runWithOwner` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/core/core.js",
+                file_sha256: "5b2dba3ad755fce3a52b6d1a788dd3db9b720bd03193cc16bcd909958208adbe",
+                start_byte: 89058,
+                end_byte: 89270,
+                slice_sha256: "5c40363ecc6eaf66378b57e0c387103fe67f51706d30dab3cb041fd10f8af3e5",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "untrack",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_SIGNALS_AUDIT,
+                section: "### 4. `untrack` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/core/core.js",
+                file_sha256: "4baa2f64e47621423c0246529d3ce1b56ef82a8274aa54dfc1d345141158d53d",
+                start_byte: 49018,
+                end_byte: 49298,
+                slice_sha256: "28c2d9f3861b28ad08edaeb66a6d8f2caa5530d6e7cff226afda0a9a7b5d912a",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_SIGNALS_AUDIT,
+                section: "### 4. `untrack` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev-shared.js",
+                file_sha256: "70b88ba97dcb1107878ccc161cd00651b3cff09d7e17aee5443f1cbf9689463e",
+                start_byte: 242868,
+                end_byte: 243344,
+                slice_sha256: "2a929c2683ae93a3820bf2b4bf1a4455b41c6a928880eaa480a6820fe43a1852",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_SIGNALS_AUDIT,
+                section: "### 4. `untrack` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/core/core.js",
+                file_sha256: "5b2dba3ad755fce3a52b6d1a788dd3db9b720bd03193cc16bcd909958208adbe",
+                start_byte: 50382,
+                end_byte: 50662,
+                slice_sha256: "01672a8cba1c1d7a8800b0effde85a96cffd51ac0bb7025b40b208f805e98773",
             },
         ],
     },
@@ -4554,6 +4778,55 @@ mod tests {
                  this code, and its row stays",
             ),
         ),
+        // RC9_SIGNALS_AUDIT: the five `creates` rows the rc.9 vocabulary
+        // review called cheap, each read on rc.9's own bytes in all three
+        // builds its `exports` map can select. All five granted; nothing else
+        // of rc.9 was read, so nothing else is derivable for rc.9.
+        (
+            "@solidjs/signals",
+            RC9,
+            "createRoot",
+            CallClaimDomain::Creates,
+            RC9_SIGNALS_AUDIT,
+            "### 3. `createRoot` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "getOwner",
+            CallClaimDomain::Creates,
+            RC9_SIGNALS_AUDIT,
+            "### 1. `getOwner` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "onCleanup",
+            CallClaimDomain::Creates,
+            RC9_SIGNALS_AUDIT,
+            "### 2. `onCleanup` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "runWithOwner",
+            CallClaimDomain::Creates,
+            RC9_SIGNALS_AUDIT,
+            "### 5. `runWithOwner` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "untrack",
+            CallClaimDomain::Creates,
+            RC9_SIGNALS_AUDIT,
+            "### 4. `untrack` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
     ];
 
     /// The directory under `benchmarks/package-contract-v2/phase0/` that
@@ -4571,6 +4844,7 @@ mod tests {
             ("@solidjs/web", RC3) => "rc3/solidjs-web",
             ("solid-js", RC3) => "rc3/solid-js",
             ("@solidjs/signals", RC6) => "rc6/solidjs-signals",
+            ("@solidjs/signals", RC9) => "rc9/solidjs-signals",
             (other, version) => {
                 panic!("no pinned phase0 manifest directory for {other}@{version}")
             }
@@ -4588,11 +4862,13 @@ mod tests {
     /// hashes to the cited digest, and the cited file is the one pinned in
     /// `phase0/rc6/solidjs-signals/files.json` at that digest and length — are
     /// what runs, and demanding the tree would fail every verification run for
-    /// an install nobody performs.
+    /// an install nobody performs. rc.9 is the same: optional, with
+    /// `phase0/rc9/solidjs-signals/files.json` as the pin.
     fn archive_root_variable(version: &str) -> (&'static str, bool) {
         match version {
             RC3 => ("SOLID_CHECKER_RC3_ARCHIVE_ROOT", true),
             RC6 => ("SOLID_CHECKER_RC6_ARCHIVE_ROOT", false),
+            RC9 => ("SOLID_CHECKER_RC9_ARCHIVE_ROOT", false),
             other => panic!("no archive-root variable for {other}"),
         }
     }
@@ -4604,6 +4880,7 @@ mod tests {
         match audit {
             RC3_CORE_PRIMITIVES_AUDIT | RC3_OWNER_CONTEXT_AUDIT => RC3,
             RC6_SIGNALS_AUDIT => RC6,
+            RC9_SIGNALS_AUDIT => RC9,
             other => panic!("{other} is not a known audit document"),
         }
     }
@@ -4945,10 +5222,12 @@ mod tests {
         // each for `createContext` and `useContext` -- 30 -- plus
         // (2026-09-25) the one `dist/solid.js` citation of the scoped
         // `solid-js` `createSignal` row. On rc.6 (2026-09-25): 24 rows, three
-        // bundles each -- 72.
+        // bundles each -- 72. On rc.9 (2026-09-26): 5 rows, three builds each
+        // (`dist/prod/**`, `dist/dev.js`/`dist/dev-shared.js`,
+        // `dist/observe/**`) -- 15.
         assert_eq!(
             implementation_citations,
-            30 + 1 + 72,
+            30 + 1 + 72 + 15,
             "the Implementation citation arm did not run over the rows that need it"
         );
     }
@@ -5147,17 +5426,19 @@ mod tests {
         // the 3 the 2026-09-23 one did -- 50 on rc.3 -- plus the 24 rows the
         // 2026-09-25 rc.6 re-audit granted. `createSignal`'s rc.3 `creates` and
         // `createOptimisticStore`'s rc.6 `reads` withholdings are derivable
-        // only from IMPLEMENTATION_AUDITED, so neither is subtracted here.
+        // only from IMPLEMENTATION_AUDITED, so neither is subtracted here. The
+        // 2026-09-26 rc.9 audit adds 5 closed `creates` rows and withholds
+        // nothing: it read only the five it grants.
         assert_eq!(from_json.len(), 45);
-        assert_eq!(implementation_closed.len(), 8 + 24);
+        assert_eq!(implementation_closed.len(), 8 + 24 + 5);
         assert_eq!(implementation_withheld.len(), 3);
         let on = |version: &str| shipped.iter().filter(|(_, v, _, _)| v == version).count();
-        assert_eq!((on(RC3), on(RC6)), (50, 24));
-        assert_eq!(shipped.len(), 74);
+        assert_eq!((on(RC3), on(RC6), on(RC9)), (50, 24, 5));
+        assert_eq!(shipped.len(), 79);
 
         // The scoped rows: each is a flat row both sources withhold, read
         // under one host-target condition in a section HOST_TARGET_READINGS
-        // names, and nothing else. 74 flat + 1 scoped = 75 rows.
+        // names, and nothing else. 79 flat + 1 scoped = 80 rows.
         let mut scoped = BTreeSet::new();
         for row in NEGATIVE_ROWS {
             let RowScope::HostTarget(scope) = row.scope else {
@@ -5206,7 +5487,7 @@ mod tests {
             assert!(scoped.insert(key), "{:?} is scoped twice", row.export);
         }
         assert_eq!(scoped.len(), 1);
-        assert_eq!(NEGATIVE_ROWS.len(), 74 + 1);
+        assert_eq!(NEGATIVE_ROWS.len(), 79 + 1);
 
         // The two authorities must not be confusable from the row alone: a row
         // the hand census closed cites runtime bytes, and every other row cites
@@ -5491,7 +5772,10 @@ mod tests {
     /// length, and `exports.json` is its `exports` map. The integrity is not
     /// checked for rc.6, because nothing here holds the tarball it digests;
     /// see [`AUDITED_ARCHIVES`] for why that cannot bind the rows to other
-    /// bytes.
+    /// bytes. rc.9 is checked the same way, and additionally its tuple's
+    /// integrity must equal the registry integrity the downloaded tarball was
+    /// verified against (`tarball.json`), which is a record of that check,
+    /// not a re-derivation here.
     #[test]
     fn audited_archive_tuples_match_their_documents_or_their_pinned_manifest() {
         #[derive(Clone, Copy)]
@@ -5501,7 +5785,7 @@ mod tests {
         }
         let evidence = |archive: &AuditedArchive| match (archive.name, archive.version) {
             (_, RC3) => Evidence::BundledDocuments,
-            ("@solidjs/signals", RC6) => Evidence::PinnedManifest,
+            ("@solidjs/signals", RC6 | RC9) => Evidence::PinnedManifest,
             (name, version) => panic!("{name}@{version} has no stated evidence"),
         };
 
@@ -5584,6 +5868,39 @@ mod tests {
                         "exports.json is not the manifest's map"
                     );
                     assert!(archive.integrity.starts_with("sha512-"));
+                    // rc.9's tarball was downloaded and verified; rc.6's was
+                    // not, so only rc.9 must carry the record.
+                    let record = std::fs::read(directory.join("tarball.json"));
+                    assert_eq!(
+                        record.is_ok(),
+                        archive.version == RC9,
+                        "{}@{}: a tarball record exists exactly where the tarball was verified",
+                        archive.name,
+                        archive.version
+                    );
+                    if let Ok(record) = record {
+                        let record: serde_json::Value = serde_json::from_slice(&record).unwrap();
+                        assert_eq!(record["name"].as_str(), Some(archive.name));
+                        assert_eq!(record["version"].as_str(), Some(archive.version));
+                        for field in [
+                            &record["registryIntegrity"],
+                            &record["downloaded"]["sha512"],
+                            &record["lockfileIntegrity"]["integrity"],
+                        ] {
+                            assert_eq!(
+                                field.as_str(),
+                                Some(archive.integrity),
+                                "{}@{}'s tarball record disagrees with its tuple",
+                                archive.name,
+                                archive.version
+                            );
+                        }
+                        assert_eq!(
+                            record["downloaded"]["extractedFileCount"].as_u64(),
+                            Some(files.as_array().unwrap().len() as u64),
+                            "files.json does not pin every file of the verified tarball"
+                        );
+                    }
                 }
             }
         }
@@ -5605,6 +5922,25 @@ mod tests {
         }
     }
 
+    /// Audited archives that deliberately do **not** answer a scoped row's
+    /// delegate, as `(package, version, export, domain)`.
+    ///
+    /// A delegate is bound against the one audited archive of its package in
+    /// the certification's closure, and the census refuses the scoped row
+    /// when that archive carries no every-condition row denying the delegate
+    /// ("whose audit carries no every-condition row denying it",
+    /// `contract_certification/type_facts.rs`). So an archive listed here makes
+    /// the scoped row fail closed beside it, never bind. Each entry is an
+    /// archive whose reading did not cover the delegate: rc.9's audit
+    /// (`RC9_SIGNALS_AUDIT`) read five exports, and `createSignal` is not one
+    /// of them — its closure (`computed`, `recompute`) was rewritten in rc.9.
+    const DELEGATE_GAPS: &[(&str, &str, &str, CallClaimDomain)] = &[(
+        "@solidjs/signals",
+        RC9,
+        "createSignal",
+        CallClaimDomain::Creates,
+    )];
+
     /// A scoped row's premises are well formed, and nothing but the census
     /// entry reads it.
     ///
@@ -5612,9 +5948,11 @@ mod tests {
     ///   pinned in the archive's `files.json` — so a file the audit did not
     ///   walk can never be listed without a citation to it;
     /// - every delegate is another archive's canonical primitive that every
-    ///   audited archive of that package denies with an `EveryCondition` row —
-    ///   a delegate no audited archive answers would make the row unbindable,
-    ///   which is a table defect rather than a refusal;
+    ///   audited archive of that package denies with an `EveryCondition` row,
+    ///   except exactly the archives [`DELEGATE_GAPS`] names (beside which the
+    ///   census refuses the scoped row) — and at least one archive answers it,
+    ///   because a delegate no audited archive answers would make the row
+    ///   unbindable, which is a table defect rather than a refusal;
     /// - the proposal side consults it only for a case whose conditions carry
     ///   the scope's condition.
     #[test]
@@ -5682,14 +6020,23 @@ mod tests {
                     .filter(|archive| archive.name == package)
                     .collect::<Vec<_>>();
                 assert!(!archives.is_empty(), "delegate {package} is not audited");
+                let mut answered = 0usize;
                 for archive in archives {
-                    assert!(
+                    let gap =
+                        DELEGATE_GAPS.contains(&(archive.name, archive.version, export, domain));
+                    assert_eq!(
                         crate::primitive_performs_no_operation(archive, export, domain),
-                        "{}@{} does not deny delegate {export} {domain:?}",
+                        !gap,
+                        "{}@{} delegate {export} {domain:?}: denied exactly where no gap is listed",
                         archive.name,
                         archive.version
                     );
+                    answered += usize::from(!gap);
                 }
+                assert!(
+                    answered > 0,
+                    "no audited archive answers delegate {package}:{export}"
+                );
             }
 
             // Never a denial, and reachable through the scoped entry alone.

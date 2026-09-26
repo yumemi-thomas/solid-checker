@@ -30,6 +30,16 @@ RC.0 bundled Solid 2 contracts to RC.3.
   no `rc6/audit.json`: no tarball was downloaded, so the integrity the Rust
   archive tuple carries is the one the ecosystem's lockfiles record and is not
   re-derived here. It is not part of the frozen baseline below.
+- `rc9/solidjs-signals/` pins `@solidjs/signals@2.0.0-rc.9`, the prerelease
+  solid-primitives' `next` installs, for the negative table's five rc.9 rows
+  (`docs/package-contract-v2/audits/2026-09-26-solid-2-rc9-signals-negative-rows.md`):
+  the published manifest verbatim, its export map, and the extracted-file hash
+  list. Unlike rc.6, the tarball was downloaded (`npm pack`): its SRI SHA-512
+  equals the registry's and the lockfile's, and its extracted tree is
+  byte-identical to the installed tree the audit read. `tarball.json` records
+  that check (URL, `gitHead`, SHA-512, SHA-1, SHA-256, size, file count). There
+  is no `registry-metadata.json` or `audit.json`, and it is not part of the
+  frozen baseline below.
 
 Raw tarballs are deliberately not committed. The audit binds their registry
 URLs, SHA-1, SRI SHA-512, SHA-256, size, safe archive layout, complete file

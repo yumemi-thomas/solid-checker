@@ -27,6 +27,8 @@ cited offsets. It is armed per release:
   unconditional slice-and-pin check is what runs. Point it at a directory
   holding `@solidjs/signals/` of the installed `2.0.0-rc.6` to add the
   archive-reading check.
+- rc.9, `SOLID_CHECKER_RC9_ARCHIVE_ROOT`: optional, as for rc.6. Point it at a
+  directory holding `@solidjs/signals/` of the installed `2.0.0-rc.9`.
 
 ## Layout
 
@@ -34,7 +36,8 @@ cited offsets. It is armed per release:
 
 `<phase0-release-dir>/<phase0-archive-dir>` is the directory under
 `benchmarks/package-contract-v2/phase0/` that pins the archive the citation's
-row is about — `rc3/solidjs-signals`, `rc3/solid-js`, `rc6/solidjs-signals` —
+row is about — `rc3/solidjs-signals`, `rc3/solid-js`, `rc6/solidjs-signals`,
+`rc9/solidjs-signals` —
 which is where the whole file's pinned `sha256` and byte length live. The
 release directory is part of the path because two prereleases of one package
 cite the same package-relative paths (both `@solidjs/signals` archives cite
@@ -57,8 +60,15 @@ and `solid-js@2.0.0-rc.3`; those under `solid-v2/rc6/` are from
 `@solidjs/signals@2.0.0-rc.6`
 (`sha512-lPqwZNLPq1Z9CBvgXkMvi1ZFr5OHUiFNz1X40+yehszDWEbJkneZx7BGKIe9eMT/AN1NSL+PMjOiMyZaqVB2xw==`,
 `package.json` sha256 `de11cde1dd28b678f380c865be674a1f1a18a198e399ad2f997fd83aef1c163c`),
-cited by `docs/package-contract-v2/audits/2026-09-25-solid-2-rc6-signals-negative-rows.md`.
-All are published by the SolidJS project under the MIT licence. They are reproduced
+cited by `docs/package-contract-v2/audits/2026-09-25-solid-2-rc6-signals-negative-rows.md`;
+those under `solid-v2/rc9/` are from `@solidjs/signals@2.0.0-rc.9`
+(`sha512-o3pqiTgpH5NR2DstiKrt9s/6+0YOFtv+MfvLONwLsS247I+EWMMyTu9BkRcgd35UR5Pa1DM16lI1/5uaIMY6Gw==`,
+verified against the registry tarball, `package.json` sha256
+`c612461c9264f2b3509ced91ea91019ed7b1ea0df0d64bba7f0f30c8d00bb1c6`), cited by
+`docs/package-contract-v2/audits/2026-09-26-solid-2-rc9-signals-negative-rows.md`.
+rc.9 splits its development build in two, so its `dist/dev.js` citations are
+`onCleanup`'s alone and the other four cite `dist/dev-shared.js`, the file
+`dist/dev.js` imports them from. All are published by the SolidJS project under the MIT licence. They are reproduced
 here as citation evidence only. Do not edit a slice: it is not source, it is a
 quotation, and the test that reads it exists to detect exactly such an edit.
 

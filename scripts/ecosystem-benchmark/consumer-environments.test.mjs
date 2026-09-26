@@ -107,8 +107,14 @@ test("a runtime above the audited Solid 2 release, or not an audited archive, is
   assert.match(environmentProblems(republished, { manifest, auditedArchives }).join("\n"), /is not the audited archive's/);
 
   const unaudited = kobalte();
-  unaudited.runtime["@solidjs/signals"] = { version: "2.0.0-rc.9", integrity: "sha512-AAAA" };
-  assert.match(environmentProblems(unaudited, { manifest, auditedArchives }).join("\n"), /@solidjs\/signals@2\.0\.0-rc\.9 is not an audited archive/);
+  unaudited.runtime["@solidjs/signals"] = { version: "2.0.0-rc.7", integrity: "sha512-AAAA" };
+  assert.match(environmentProblems(unaudited, { manifest, auditedArchives }).join("\n"), /@solidjs\/signals@2\.0\.0-rc\.7 is not an audited archive/);
+
+  // rc.9 is an audited archive since 2026-09-26 (five rows), so an rc.9 pin
+  // is held to its integrity rather than refused by version.
+  const rc9 = kobalte();
+  rc9.runtime["@solidjs/signals"] = { version: "2.0.0-rc.9", integrity: "sha512-AAAA" };
+  assert.match(environmentProblems(rc9, { manifest, auditedArchives }).join("\n"), /@solidjs\/signals@2\.0\.0-rc\.9 integrity sha512-AAAA is not the audited archive's/);
 
   const missing = kobalte();
   delete missing.runtime["@solidjs/web"];
