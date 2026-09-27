@@ -1,6 +1,6 @@
 // Hand-authored `reads: []` veto for `@solid-primitives/rootless@2.0.0-next.2`,
 // on the published `.` runtime case
-// `artifact-case:fc4a55ae4b0ad5aaf5c875ae650421aa5d52509d55da8cb1e2ce791af7c6688c`.
+// `artifact-case:02aa74196453649adf127e3e15c543eb13ff3503b6b38c8649178c9d47ece601`.
 //
 // Demand-scoped: 27 call sites across the pinned consumer corpus name this
 // export -- the largest single demand this package leaves open.

@@ -690,6 +690,12 @@ alias returns moved what utils certifies: carried over to `rootless`
 `8376d63a…` (floor) and `fc4a55ae…` (head) and `trigger` `354ee754…` (floor)
 and `ec630d30…` (head).
 
+And on 2026-09-27 for a different reason: the head probes moved to the rc.9
+Solid runtime, which changes the head cases' dependency bytes, so the recipe
+address moved with the claim id. The floor recipes stayed bound; the head ones
+were carried over to `rootless` `02aa7419…` and `trigger` `20c9f079…`, with
+both the claim id and the recipe address read off that run.
+
 ## A second address that survives a dependency's contract (ADR 0117, 2026-09-24)
 
 The carry-overs above were the same mechanical step four times: the package's

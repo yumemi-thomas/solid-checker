@@ -295,10 +295,10 @@
     "surface": [
       {
         "package": "@kobalte/core",
-        "exports": 181,
-        "value": 4,
+        "exports": 222,
+        "value": 5,
         "clean": 0,
-        "share": 0.0221
+        "share": 0.0225
       },
       {
         "package": "@kobalte/utils",
@@ -407,24 +407,24 @@
       },
       {
         "package": "@solidjs/signals",
-        "exports": 70,
-        "value": 6,
+        "exports": 88,
+        "value": 13,
         "clean": 0,
-        "share": 0.0857
+        "share": 0.1477
       },
       {
         "package": "@solidjs/web",
-        "exports": 100,
-        "value": 15,
+        "exports": 104,
+        "value": 18,
         "clean": 0,
-        "share": 0.15
+        "share": 0.1731
       },
       {
         "package": "solid-js",
-        "exports": 39,
-        "value": 4,
+        "exports": 41,
+        "value": 5,
         "clean": 0,
-        "share": 0.1026
+        "share": 0.122
       }
     ],
     "misuseCapable": {
