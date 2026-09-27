@@ -70,7 +70,7 @@ function BodyAsync() {
   return <div />;
 }
 
-// Retained: each of these can run on its invoker's stack, inside the window.
+// Uncertifiable: each can run on its invoker's stack, in or after the window
 declare const thenable: PromiseLike<number>;
 declare const target: HTMLElement;
 function Listener() {

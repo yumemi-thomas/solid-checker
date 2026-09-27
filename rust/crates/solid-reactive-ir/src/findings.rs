@@ -341,6 +341,23 @@ pub fn strict_read_message(read: &ReactiveRead) -> String {
             read.accessor,
         );
     }
+    // The same honesty for the execution window. The callback is written in
+    // `context` but runs wherever the host invokes it, and the host may do so
+    // inside the strict-read window (a synchronous dispatch, a bound call, a
+    // synchronous thenable) or after it; only the first is the untracked read
+    // the ordinary sentence describes.
+    if read.host_callback_timing {
+        let through = if read.via.is_empty() {
+            String::new()
+        } else {
+            format!(" through {}", read.via)
+        };
+        return format!(
+            "{} {:?} is read{through} in a callback written in {context} that a host API retains (an event listener, a bound argument, a thenable callback or a Geolocation callback); the host may invoke this callback inside the component body's strict-read window, or after it, so whether this read runs untracked in {context} cannot be proven either way",
+            reactive_value_label(&read.kind),
+            read.accessor,
+        );
+    }
     if read.via.is_empty() {
         format!(
             "{} {:?} is read directly in {context}, which does not track; the read sees the current value once and never updates when {:?} changes",
@@ -377,6 +394,10 @@ fn untracked_evidence_sentence(read: &ReactiveRead, subject: &str) -> String {
     if read.missing_jsx_census {
         format!(
             "{subject} sits inside a JSX expression the compiler's execution census does not cover, so no compiler fact places it inside or outside a tracked region"
+        )
+    } else if read.host_callback_timing {
+        format!(
+            "{subject} sits in a callback a host API retains and may invoke on its invoker's stack, so no fact places its execution inside or after the component body's strict-read window"
         )
     } else {
         format!("{subject} is outside every compiler-tracked JSX region and deferred callback")
@@ -538,6 +559,7 @@ mod tests {
             origin_context: "".into(),
             uncertain: false,
             missing_jsx_census,
+            host_callback_timing: false,
         }
     }
 
@@ -580,6 +602,35 @@ mod tests {
         );
         assert!(
             last.contains("no compiler fact places it inside or outside a tracked region"),
+            "the evidence must state the missing fact: {last}"
+        );
+    }
+
+    /// A read in a host-retained callback names the hole it rests on: the
+    /// host may run the callback inside the strict-read window or after it,
+    /// so neither "does not track" nor a completed search is claimed.
+    #[test]
+    fn a_host_callback_read_never_claims_the_window_either_way() {
+        let mut host = read(false);
+        host.host_callback_timing = true;
+        assert!(host.is_uncertifiable());
+        let message = strict_read_message(&host);
+        assert!(
+            message.contains("inside the component body's strict-read window, or after it"),
+            "the host-timing hole must be named in the message: {message}"
+        );
+        assert!(
+            !message.contains("which does not track") && !message.contains("never updates when"),
+            "the message must not claim the read never updates: {message}"
+        );
+        let evidence = strict_read_evidence(&host);
+        let last = &evidence.last().unwrap().message;
+        assert!(
+            !last.contains("outside every compiler-tracked JSX region"),
+            "the evidence must not claim a completed search: {last}"
+        );
+        assert!(
+            last.contains("no fact places its execution inside or after"),
             "the evidence must state the missing fact: {last}"
         );
     }

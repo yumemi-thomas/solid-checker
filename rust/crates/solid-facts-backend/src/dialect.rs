@@ -1057,6 +1057,7 @@ mod tests {
                 origin_context: "".into(),
                 uncertain: false,
                 missing_jsx_census: false,
+                host_callback_timing: false,
             }],
             writes: vec![ReactiveWrite {
                 setter: "sampleSetter".into(),
@@ -1092,6 +1093,7 @@ mod tests {
                 options_opaque: false,
                 ssr_client_hole: false,
                 server_rendering_unresolved: false,
+                host_callback_timing: false,
             }],
             static_defects: defect_kinds
                 .into_iter()
@@ -1631,11 +1633,14 @@ mod tests {
         // (solid-js, signals, web, selected dialect id, notice due)
         let rows = [
             (RC3, RC3, RC3, "solid-v2", false),
+            // rc.0's optimistic-store setter meets no owned-scope guard (N5),
+            // its one answer that differs from rc.3's: a reviewed variant, so
+            // no notice.
             (
                 Some("2.0.0-rc.0"),
                 Some("2.0.0-rc.0"),
                 None,
-                "solid-v2",
+                "solid-v2@optimistic-store-setter-unguarded",
                 false,
             ),
             (

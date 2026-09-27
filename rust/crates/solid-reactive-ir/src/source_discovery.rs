@@ -905,6 +905,11 @@ pub(crate) fn discover_file_sources(
                         source_kind,
                     ),
                 ));
+                if let Some(primitive) = primitive.as_deref() {
+                    result
+                        .source_primitives
+                        .push((symbol.clone(), primitive.into()));
+                }
             }
         }
     }
@@ -997,6 +1002,11 @@ pub(crate) fn discover_file_sources(
                     source_kind,
                 ),
             ));
+            if let Some(primitive) = primitive.as_deref() {
+                result
+                    .source_primitives
+                    .push((setter_symbol.clone(), primitive.into()));
+            }
         }
     }
     for member in &file.ast.members {
@@ -1222,6 +1232,11 @@ pub(crate) struct SourceDiscovery {
     pub(crate) setters: HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
     pub(crate) actions: HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) source_kinds: HashMap<SymbolId, ReactiveSourceKind>,
+    /// The dialect primitive (canonical spelling) that created each reactive
+    /// source, and, for a setter bound from the same tuple, the primitive that
+    /// returned it: an owned-scope write guard can depend on which primitive
+    /// made the setter (`Dialect::optimistic_store_setter_guarded`). A setter
+    /// found only by its type has no entry.
     pub(crate) source_primitives: HashMap<SymbolId, SymbolId>,
     pub(crate) source_phases: HashMap<SymbolId, u8>,
     pub(crate) returned_source_symbols: HashSet<SymbolId>,

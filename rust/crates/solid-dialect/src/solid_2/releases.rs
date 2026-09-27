@@ -14,6 +14,7 @@
 //! | B3: does `omit`'s lone function argument run as a predicate? | `@solidjs/signals` (rc.9 only) | the installed `solid-js` |
 //! | N3: does the dev store-setter guard reject a root owner? | `@solidjs/signals` (`devGuardStoreSetterWrite`, rc.9 only) | the installed `solid-js` |
 //! | N4: does `flush` throw `FLUSH_IN_ACTION` inside an action step? | `@solidjs/signals` (`dist/dev-shared.js`, from rc.8) | the installed `solid-js` |
+//! | N5: does an optimistic-store setter meet the owned-scope write guard? | `@solidjs/signals` (`devGuardStoreSetterWrite`, from rc.1) | the installed `solid-js` |
 //!
 //! Every `solid-js@2.0.0-rc.N` depends on `@solidjs/signals: ^2.0.0-rc.N`, a
 //! range, so a fresh install of the audited `solid-js@2.0.0-rc.3` resolves
@@ -29,7 +30,7 @@
 //!
 //! | release | B1 store root | B2 `dynamic` options | B3 `omit` predicate | B4 `until` | N3 store setter under a root | N4 `FLUSH_IN_ACTION` | open gaps |
 //! | --- | --- | --- | --- | --- | --- | --- | --- |
-//! | rc.0-rc.3 | `Readonly` | ignored | absent | absent | exempt (rc.0: see `StoreSetterRootGuard`) | absent | none: audited (rc.3), or equal to rc.0/rc.3 on every premise the dialect cites (rc.0, rc.1, rc.2) |
+//! | rc.0-rc.3 | `Readonly` | ignored | absent | absent | exempt (rc.0: see `StoreSetterRootGuard`) | absent | none: audited (rc.3), or equal to rc.0/rc.3 on every premise the dialect cites but N5 (rc.0, rc.1, rc.2) |
 //! | rc.4 | `Readonly` | ignored | absent | absent | exempt | absent | `solid-js`: `registerPatch`, `registerRowOps`, `registerSlotPatch`; `@solidjs/web`: `installListDriver`, `driveList` (callback-taking, neither modelled nor excluded) |
 //! | rc.5, rc.6 | `Readonly` | ignored | absent | present | exempt | absent | as rc.4 |
 //! | rc.7 | `Mutable` | ignored (`DynamicOptions` is `deferStream` only, and no bundle reads it on the client) | absent | present | exempt | absent | `@solidjs/signals`: no negative row |
@@ -37,6 +38,10 @@
 //! | rc.9 | `Mutable` | `static` selects `staticDynamic(untrack(source))` | present | present | guarded | present | `@solidjs/signals`: negative rows for five creates answers only; `solid-js`: re-exports its declarations do not declare |
 //! | anything else (rc.10+, betas, `2.0.0`, an inexact spelling) | `Readonly` (see below) | not modelled | absent | not modelled | exempt (see below) | not modelled | the release is named as not compared |
 //! | not resolved | `Readonly` (see below) | as rc.3 (nothing can import `dynamic`) | absent | not modelled | exempt (see below) | not modelled | named for `@solidjs/signals`; none for `@solidjs/web` |
+//!
+//! N5 is `guarded` on every row but rc.0's, whose optimistic-store setter
+//! meets no owned-scope guard at all (`OptimisticStoreSetterGuard`); an unread
+//! or unresolved signals keeps the audited `guarded`.
 //!
 //! `2.0.0-experimental.x` of `solid-js` is refused, not analyzed.
 //!
@@ -166,6 +171,37 @@ pub(super) enum StoreSetterRootGuard {
     Guarded,
 }
 
+/// Whether the setter `createOptimisticStore` returns meets the dev owned-scope
+/// write guard at all, on the resolved `@solidjs/signals` (N5).
+///
+/// rc.0's `createOptimisticStore` returns `fn => storeSetter(wrappedStore, fn)`
+/// over a store whose nodes are marked `STORE_OPTIMISTIC` and take the
+/// optimistic engine's write path (`@solidjs/signals@2.0.0-rc.0`
+/// `dist/dev.js:7181-7213`), which never reaches `setSignal`'s guard
+/// (`:3154-3172`), and rc.0 has no setter-entry guard; rc.1 adds
+/// `devGuardStoreSetterWrite` at the setter entry (`storeSetterNext`,
+/// `dist/dev.js:6619-6620`, guard at `:3264-3280`) for every store setter.
+/// Probed on every published rc.0-rc.9 dev client build:
+///
+/// | signals | optimistic-store setter in a memo compute | in an effect compute | `createStore` setter in a memo compute |
+/// | --- | --- | --- | --- |
+/// | rc.0 | legal | legal | throws `REACTIVE_WRITE_IN_OWNED_SCOPE` |
+/// | rc.1-rc.9 | throws | throws | throws |
+///
+/// Under a root rc.0 is already silent ([`StoreSetterRootGuard::Exempt`]);
+/// this answer is what the owned scopes proper need. Prod builds carry no
+/// guard on any release.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) enum OptimisticStoreSetterGuard {
+    /// rc.1-rc.9, and the answer for a signals release nobody read or that does
+    /// not resolve: the audited release's, under its `SC9014` notice.
+    #[default]
+    Guarded,
+    /// rc.0: the optimistic store's writes bypass every owned-scope guard, so
+    /// an optimistic-store setter is legal in any owned scope.
+    Unguarded,
+}
+
 /// What `dynamic`'s second argument does on the resolved `@solidjs/web`.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(super) enum DynamicOptions {
@@ -201,12 +237,13 @@ impl Solid2 {
         dynamic_options: DynamicOptions::StaticForm,
         store_setter_roots: StoreSetterRootGuard::Guarded,
         flush_in_action: true,
+        optimistic_store_setter: OptimisticStoreSetterGuard::Guarded,
     };
 
     /// How many distinct vocabularies the answers above combine into: every
     /// combination is reachable, because the three owners install
     /// independently.
-    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2;
+    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2;
 
     /// The vocabulary at one mixed-radix index, the audited one at `0`. A new
     /// release-dependent answer adds one digit here and in
@@ -231,6 +268,11 @@ impl Solid2 {
                 StoreSetterRootGuard::Exempt
             },
             flush_in_action: (index / 48) % 2 == 1,
+            optimistic_store_setter: if (index / 96) % 2 == 1 {
+                OptimisticStoreSetterGuard::Unguarded
+            } else {
+                OptimisticStoreSetterGuard::Guarded
+            },
         }
     }
 
@@ -251,7 +293,17 @@ impl Solid2 {
             StoreSetterRootGuard::Guarded => 1,
         };
         let flush = if self.flush_in_action { 1 } else { 0 };
-        store + 2 * omit + 4 * until + 8 * dynamic + 24 * store_setter + 48 * flush
+        let optimistic = match self.optimistic_store_setter {
+            OptimisticStoreSetterGuard::Guarded => 0,
+            OptimisticStoreSetterGuard::Unguarded => 1,
+        };
+        store
+            + 2 * omit
+            + 4 * until
+            + 8 * dynamic
+            + 24 * store_setter
+            + 48 * flush
+            + 96 * optimistic
     }
 
     /// The one `'static` value per vocabulary, which is what an analysis holds.
@@ -304,6 +356,9 @@ fn variant_key(vocabulary: Solid2) -> Option<String> {
     }
     if vocabulary.store_setter_roots == StoreSetterRootGuard::Guarded {
         tokens.push("store-setter-guards-roots");
+    }
+    if vocabulary.optimistic_store_setter == OptimisticStoreSetterGuard::Unguarded {
+        tokens.push("optimistic-store-setter-unguarded");
     }
     (!tokens.is_empty()).then(|| tokens.join("+"))
 }
@@ -514,6 +569,16 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
         // dev). An unread or unresolved signals keeps `false`: the throw is
         // not claimed on bytes nobody read.
         flush_in_action: matches!(signals, Release::Read(number) if number >= 8),
+        // N5. The optimistic store's write path is signals', and only rc.0's
+        // skips every owned-scope guard (`OptimisticStoreSetterGuard`). Every
+        // other answer, unread and unresolved included, keeps the audited
+        // release's guard.
+        optimistic_store_setter: match signals {
+            Release::Read(0) => OptimisticStoreSetterGuard::Unguarded,
+            Release::Read(_) | Release::Unread(_) | Release::Unresolved => {
+                OptimisticStoreSetterGuard::Guarded
+            }
+        },
     }
 }
 
@@ -563,7 +628,8 @@ fn gaps_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>) -> Ve
                 "solid-js {}, @solidjs/signals {} and @solidjs/web {} are not one reviewed \
                  release, and no review read this combination: each release-dependent answer is \
                  taken from the package that declares it (the store typing, the store \
-                 setter's root guard and flush's action-step throw from @solidjs/signals, until \
+                 setter's root guard, the optimistic-store setter's guard and flush's \
+                 action-step throw from @solidjs/signals, until \
                  from solid-js and @solidjs/signals together, dynamic's options from \
                  @solidjs/web)",
                 solid_js.spelled(),
@@ -909,6 +975,45 @@ mod tests {
             assert!(vocabulary.callback_runs_as_action_steps(Primitive::Action, 0));
             assert!(!vocabulary.callback_runs_as_action_steps(Primitive::Action, 1));
             assert!(!vocabulary.throws_inside_action_step(Primitive::Untrack));
+        }
+    }
+
+    /// N5: only rc.0's optimistic-store setter meets no owned-scope guard, and
+    /// the answer is signals' alone; an unread or unresolved signals keeps the
+    /// audited guard. rc.0's `createStore` answer (N3) is unchanged.
+    #[test]
+    fn the_optimistic_store_setter_guard_follows_the_resolved_signals() {
+        for (signals, guarded) in [
+            (Some("2.0.0-rc.0"), false),
+            (Some("2.0.0-rc.1"), true),
+            (Some("2.0.0-rc.3"), true),
+            (Some("2.0.0-rc.9"), true),
+            (Some("2.0.0-rc.10"), true),
+            (Some("2.0.0-beta.2"), true),
+            (None, true),
+        ] {
+            let (vocabulary, _) =
+                analyzed(&triple(Some("2.0.0-rc.3"), signals, Some("2.0.0-rc.3")));
+            assert_eq!(
+                vocabulary.optimistic_store_setter_guarded(),
+                guarded,
+                "{signals:?}"
+            );
+        }
+        let (rc0, _) = analyzed(&same("2.0.0-rc.0"));
+        assert!(!rc0.optimistic_store_setter_guarded());
+        assert!(rc0.store_setter_guard_exempts_roots());
+        assert_eq!(rc0.store_setter_roots, StoreSetterRootGuard::Exempt);
+        assert_eq!(rc0.key(), Some("optimistic-store-setter-unguarded"));
+        assert!(Solid2::AUDITED.optimistic_store_setter_guarded());
+        assert!(Solid2::RC9.optimistic_store_setter_guarded());
+        // Rows rc.1-rc.3 still share the audited vocabulary.
+        for release in ["2.0.0-rc.1", "2.0.0-rc.2", "2.0.0-rc.3"] {
+            assert_eq!(
+                analyzed(&same(release)).0.index(),
+                Solid2::AUDITED.index(),
+                "{release}"
+            );
         }
     }
 

@@ -46,8 +46,10 @@ pub fn package_contract_finding(issue: &PackageContractIssue) -> Finding {
 // untracked in a proven tracking context, so Solid provably warns there — the
 // flat "Solid warns ... here in dev" claim is earned. An uncertifiable read is
 // not: it rests on unenumerable callers (`ReactiveRead::uncertain`), a census
-// hole (`ReactiveRead::missing_jsx_census`), and in either case the flat claim
-// asserts a runtime behavior the finding's own message says cannot be proven.
+// hole (`ReactiveRead::missing_jsx_census`), or a host callback whose
+// invocation window is not proven (`ReactiveRead::host_callback_timing`), and
+// in each case the flat claim asserts a runtime behavior the finding's own
+// message says cannot be proven.
 // The conditional phrasing stays true regardless of which uncertainty caused
 // the finding.
 const STRICT_READ_UNTRACKED_WARNS: &str = "Solid warns STRICT_READ_UNTRACKED here in dev.";
@@ -398,7 +400,12 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
         match read.execution {
             ExecutionRole::ModuleInitialization | ExecutionRole::UntrackedRendering => (
                 Rule::PendingAsyncUnsuspendableRead,
-                if declared {
+                if read.host_callback_timing {
+                    format!(
+                        "async accessor {:?} may be read here while pending, in a callback a host API retains; if the host invokes the callback inside the component body's strict-read window the read cannot suspend or retry and throws PENDING_ASYNC_UNTRACKED_READ in dev, and if it invokes it later the read throws a plain NotReadyError, and nothing here proves which",
+                        read.accessor
+                    )
+                } else if declared {
                     format!(
                         "async accessor {:?} declares a loadingValue, so this untracked read serves the declared value during the first flight, but after the first real answer lands a pending re-ask (input change or refresh) makes it throw PENDING_ASYNC_UNTRACKED_READ in dev",
                         read.accessor
@@ -474,6 +481,14 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
     {
         provenance.push_str(
             "; the source's options argument cannot be read statically, so a loadingValue declaration (which would make the first flight safe) can be neither proven nor ruled out — this finding is a proof obligation, not a proven throw",
+        );
+    }
+    if read.host_callback_timing
+        && rule == Rule::PendingAsyncUnsuspendableRead
+        && read.leaf_owner.is_none()
+    {
+        provenance.push_str(
+            "; the read sits in a callback a host API retains (an event listener, a bound argument, a thenable callback or a Geolocation callback), which the host may invoke inside the component body's strict-read window, where a pending read throws PENDING_ASYNC_UNTRACKED_READ in dev, or after it, where it throws a plain NotReadyError — this finding is a proof obligation, not a proven throw",
         );
     }
     let mut metadata = rule.metadata();

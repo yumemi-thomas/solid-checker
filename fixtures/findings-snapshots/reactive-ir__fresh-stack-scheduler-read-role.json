@@ -24,7 +24,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
       "start": 2137,
@@ -34,7 +34,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
       "start": 2225,
@@ -44,7 +44,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
       "start": 2358,

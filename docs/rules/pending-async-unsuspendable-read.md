@@ -21,6 +21,13 @@ with conditional wording. If the options object cannot be read, the untracked
 variant becomes uncertifiable because a declared first-paint value can neither
 be proven nor ruled out.
 
+A pending read in a callback a host API retains (an `addEventListener`
+listener, a `bind` bound argument, a `PromiseLike.then` callback, a Geolocation
+callback) written in a component body is also uncertifiable: invoked inside the
+body's strict-read window it throws `PENDING_ASYNC_UNTRACKED_READ` in dev, and
+invoked later it throws a plain `NotReadyError` (probed on rc.3 and rc.9), and
+the checker does not prove which.
+
 ## Examples
 
 Incorrect:

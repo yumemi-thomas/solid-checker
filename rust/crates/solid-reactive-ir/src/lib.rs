@@ -341,17 +341,29 @@ pub struct ReactiveRead {
     /// uncertifiable.
     #[serde(default, skip_serializing_if = "is_false")]
     pub missing_jsx_census: bool,
+    /// The read sits in a callback a host API retains and may invoke on its
+    /// invoker's stack -- an `addEventListener` listener, a `bind` bound
+    /// argument, a `PromiseLike.then` callback, a Geolocation callback
+    /// (`execution_role::host_callback_timing`). The host may invoke it inside
+    /// the component body's strict-read window, or after it, and nothing here
+    /// proves which. A third hole beside the other two, about the execution
+    /// window rather than the reactive backing or the compiler census, and
+    /// worded separately for that reason.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub host_callback_timing: bool,
 }
 
 impl ReactiveRead {
     /// Whether a finding about this read is **uncertifiable** rather than a
     /// proven violation.
     ///
-    /// Two independent holes, either of which is enough: the reactive
+    /// Three independent holes, any of which is enough: the reactive
     /// backing cannot be established because the component's callers cannot be
     /// enumerated ([`Self::uncertain`]), the execution context cannot be
     /// established because the compiler reported no census for the JSX region
-    /// ([`Self::missing_jsx_census`]).
+    /// ([`Self::missing_jsx_census`]), or the host may run the read's callback
+    /// inside the strict-read window or after it
+    /// ([`Self::host_callback_timing`]).
     ///
     /// This is one predicate on purpose. The projection sets a finding's `kind`
     /// from it and each dialect's wording selects its hint from it; when the two
@@ -359,7 +371,7 @@ impl ReactiveRead {
     /// carrying a proof-obligation hint, or the reverse.
     #[must_use]
     pub fn is_uncertifiable(&self) -> bool {
-        self.uncertain || self.missing_jsx_census
+        self.uncertain || self.missing_jsx_census || self.host_callback_timing
     }
 }
 
@@ -1031,6 +1043,14 @@ pub struct AsyncRead {
     /// missing server-entry import as proof of CSR.
     #[serde(default)]
     pub server_rendering_unresolved: bool,
+    /// The read sits in a callback a host API may invoke inside the component
+    /// body's strict-read window or after it
+    /// ([`ReactiveRead::host_callback_timing`]). Inside the window a pending
+    /// read throws `PENDING_ASYNC_UNTRACKED_READ` (dev); after it, a plain
+    /// `NotReadyError` (probed on rc.3 and rc.9), so SC5001 is a proof
+    /// obligation rather than a proven throw.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub host_callback_timing: bool,
 }
 
 fn default_async_provenance() -> bool {

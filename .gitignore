@@ -82,6 +82,12 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/write-scope-roots-rc3/node_modules/**
 !fixtures/reactive-ir/write-scope-roots-rc9/node_modules/
 !fixtures/reactive-ir/write-scope-roots-rc9/node_modules/**
+!fixtures/reactive-ir/write-scope-optimistic-store-rc0/node_modules/
+!fixtures/reactive-ir/write-scope-optimistic-store-rc0/node_modules/**
+!fixtures/reactive-ir/write-scope-optimistic-store-rc3/node_modules/
+!fixtures/reactive-ir/write-scope-optimistic-store-rc3/node_modules/**
+!fixtures/reactive-ir/flush-read-role/node_modules/
+!fixtures/reactive-ir/flush-read-role/node_modules/**
 !fixtures/reactive-ir/solid2-contract-callback-variants-node/node_modules/
 !fixtures/reactive-ir/solid2-contract-callback-variants-node/node_modules/**
 !fixtures/reactive-ir/ported-structure-v2/node_modules/

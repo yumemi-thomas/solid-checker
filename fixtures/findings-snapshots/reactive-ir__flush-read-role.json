@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-read-role/components.tsx",
+      "start": 421,
+      "end": 428,
+      "fixes": 0
+    }
+  ]
+}

@@ -1059,6 +1059,8 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             // A child the pinned fork lowers and the shipped compiler deletes
             // is the third: the fact is present and truthful about its producer,
             // and still proves nothing about the build the user will run.
+            // A host callback that may run inside the strict-read window or
+            // after it (`ReactiveRead::host_callback_timing`) is a fourth.
             if read.is_uncertifiable() {
                 finding.kind = "uncertifiable".into();
             }
@@ -1140,6 +1142,14 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             // informational either way, and the leaf-owner SC5001 variant's
             // throw is timing-dependent by nature.
             if read.options_opaque && finding.id == "SC5001" {
+                finding.kind = "uncertifiable".into();
+            }
+            // The same escalation for the execution window: a host that may
+            // run the read's callback inside the component body's strict-read
+            // window or after it makes the untracked-read throw one of two
+            // outcomes (`PENDING_ASYNC_UNTRACKED_READ` inside, a plain
+            // `NotReadyError` after), so it is not a proven throw.
+            if read.host_callback_timing && finding.id == "SC5001" {
                 finding.kind = "uncertifiable".into();
             }
             if read.server_rendering_unresolved {
@@ -1577,6 +1587,7 @@ mod tests {
                 options_opaque: false,
                 ssr_client_hole: false,
                 server_rendering_unresolved: false,
+                host_callback_timing: false,
             }],
             ..Program::default()
         };
@@ -1616,6 +1627,7 @@ mod tests {
                 options_opaque: false,
                 ssr_client_hole: false,
                 server_rendering_unresolved: false,
+                host_callback_timing: false,
             }],
             ..Program::default()
         };
@@ -1665,6 +1677,7 @@ mod tests {
                 options_opaque: false,
                 ssr_client_hole: false,
                 server_rendering_unresolved: false,
+                host_callback_timing: false,
             }],
             ..Program::default()
         };

@@ -85,6 +85,10 @@ pub struct Solid2 {
     /// N3, from `@solidjs/signals`: whether its dev store-setter guard
     /// exempts a root owner ([`Dialect::store_setter_guard_exempts_roots`]).
     store_setter_roots: releases::StoreSetterRootGuard,
+    /// N5, from `@solidjs/signals`: whether an optimistic-store setter meets
+    /// the owned-scope write guard at all
+    /// ([`Dialect::optimistic_store_setter_guarded`]).
+    optimistic_store_setter: releases::OptimisticStoreSetterGuard,
 }
 
 /// The audited Solid 2 vocabulary, spelled like the unit struct it used to be
@@ -2824,12 +2828,25 @@ impl Dialect for Solid2 {
     /// clears tracking, so reads inside them subscribe in the caller's scope
     /// exactly as a bare `fn()` would. Listing them here would erase those
     /// read obligations; their `callback_executions` rows say the same thing.
+    ///
+    /// `flush(fn)` is absent for the same reason. It runs `fn()` inline
+    /// between a `syncDepth` increment and the drain and touches neither
+    /// `context` nor the listener (`@solidjs/signals@2.0.0-rc.0`
+    /// `dist/dev.js:1085-1099`, rc.3 `dist/dev.js:1788-1802`, rc.9
+    /// `dist/dev-shared.js:2202-2230`), so its callback inherits the caller's
+    /// read role exactly as [`Solid2::callback_preserves_owner_write_context`]
+    /// already makes it inherit the caller's write role. Probed on every
+    /// published rc.0-rc.9 client build, dev and prod: `createMemo(() =>
+    /// flush(() => count()))` re-runs when `count` is written, as the bare
+    /// read does and `untrack` does not; `getObserver()` inside `flush(fn)` is
+    /// the memo's; an effect compute reading through `flush(fn)` re-runs; and
+    /// `flush(() => count())` in a component body raises
+    /// `STRICT_READ_UNTRACKED` (dev) exactly as `count()` there does.
     fn runs_callback_deferred(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
             Primitive::CreateRoot
                 | Primitive::CreateRevealOrder
-                | Primitive::Flush
                 | Primitive::Untrack
                 | Primitive::OnSettled
                 | Primitive::CreateReaction
@@ -2943,6 +2960,14 @@ impl Dialect for Solid2 {
     /// keeps `true`, which claims nothing.
     fn store_setter_guard_exempts_roots(&self) -> bool {
         self.store_setter_roots == releases::StoreSetterRootGuard::Exempt
+    }
+
+    /// Answered from the resolved `@solidjs/signals` (`releases.rs`, N5):
+    /// `false` on rc.0 only, whose optimistic store writes take the engine's
+    /// path and meet no owned-scope guard (probed: legal in a memo and an
+    /// effect compute on rc.0, `REACTIVE_WRITE_IN_OWNED_SCOPE` on rc.1-rc.9).
+    fn optimistic_store_setter_guarded(&self) -> bool {
+        self.optimistic_store_setter == releases::OptimisticStoreSetterGuard::Guarded
     }
 
     /// Source: rc.0 `onSettled` (`dev.js:4855-4893`). Called under a live

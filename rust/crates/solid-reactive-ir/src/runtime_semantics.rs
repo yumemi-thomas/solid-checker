@@ -115,6 +115,65 @@ pub(super) fn argument_behavior(
     })
 }
 
+/// Whether the host may invoke `argument` on its *invoker's* stack: after the
+/// runtime call returns, but synchronously inside whatever code later hands
+/// control to the host, which may be the very computation that registered it.
+///
+/// This is the non-fresh-stack remainder of
+/// [`RuntimeArgumentBehavior::DeferredCallback`] -- `addEventListener`'s
+/// listener (a synchronous `dispatchEvent` or `el.click()`), a
+/// `Function.prototype.bind` bound argument (the bound function is called by
+/// whoever holds it), a `PromiseLike.then` callback (a thenable may call back
+/// synchronously) and the Geolocation callbacks (the specification's
+/// "call back with error" for a document that is not fully active runs inside
+/// `getCurrentPosition`/`watchPosition`) -- plus the listener slot of every
+/// other default-library `addEventListener` declaration.
+///
+/// The timing table matches only the `EventTarget` and `Window`
+/// declarations, but `EventTarget` declares the method and every DOM subtype
+/// redeclares it with a narrower event map (`HTMLElement.addEventListener`,
+/// `Document.addEventListener`, ...). The producer's
+/// `defaultLibraryMemberInvokers` table already relies on the fact audited at
+/// the pinned typescript-go revision: every declaration of that name in the
+/// bundled default library is the same `EventTarget` registration whose
+/// argument 1 is the listener. That fact is used here for one purpose only,
+/// to withhold a claim about *when* the listener runs; it does not widen the
+/// timing table, whose rows also feed package contracts.
+pub(super) fn runs_on_invoker_stack(
+    call: &ResolvedCall,
+    actual_callability: Option<Callability>,
+    argument: usize,
+) -> bool {
+    match argument_behavior(call, actual_callability, argument) {
+        Some(RuntimeArgumentBehavior::DeferredCallback) => true,
+        Some(_) => false,
+        None => default_library_listener_slot(call, actual_callability, argument),
+    }
+}
+
+/// Argument 1 of a default-library `addEventListener` declaration, whatever
+/// DOM interface redeclares it. See [`runs_on_invoker_stack`].
+fn default_library_listener_slot(
+    call: &ResolvedCall,
+    actual_callability: Option<Callability>,
+    argument: usize,
+) -> bool {
+    call.validity == ResolvedCallValidity::Valid
+        && call.kind == CallKind::Call
+        && argument == 1
+        && potentially_callable(actual_callability)
+        && resolved_parameter(call, argument).is_some()
+        && call.declaration.as_ref().is_some_and(|declaration| {
+            declaration.standard_library
+                && declaration
+                    .qualified_name
+                    .rsplit_once('.')
+                    .is_some_and(|(owner, member)| {
+                        !owner.is_empty() && member == "addEventListener"
+                    })
+        })
+}
+
 fn timing_behavior(
     call: &ResolvedCall,
     actual_callability: Option<Callability>,

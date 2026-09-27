@@ -1786,6 +1786,20 @@ pub trait Dialect: Sync {
         true
     }
 
+    /// Whether the setter `createOptimisticStore` returns meets the dev
+    /// owned-scope write guard at all.
+    ///
+    /// `@solidjs/signals` 2.0.0-rc.0 routes an optimistic store's writes
+    /// through the optimistic engine, which never reaches a guard, so its
+    /// setter is legal in every owned scope; rc.1 onwards guard every store
+    /// setter at its entry. `false` makes an owned-scope write through that
+    /// setter legal wherever it is, and one through a store setter not proven
+    /// to be `createStore`'s unclaimed, since it may be the optimistic one. The
+    /// default is `true`: the setter is judged as every other store setter is.
+    fn optimistic_store_setter_guarded(&self) -> bool {
+        true
+    }
+
     /// Whether the ambient owner directly in a component body is a **root**,
     /// in the build whose write guards the rules model, so that a write there
     /// meets the guard exactly as one directly in a created root's body
@@ -2961,7 +2975,6 @@ mod tests {
         // 2.0 defers these imperative or loader callbacks even though each is
         // reachable from the call.
         let deferred = [
-            Primitive::Flush,
             Primitive::Untrack,
             Primitive::OnSettled,
             Primitive::CreateReaction,
@@ -2985,6 +2998,10 @@ mod tests {
             // obligations.
             Primitive::Latest,
             Primitive::IsPending,
+            // flush(fn) runs fn() inline and touches neither the owner nor the
+            // listener: a read inside it subscribes the caller (probed on
+            // rc.0-rc.9, `Solid2::runs_callback_deferred`).
+            Primitive::Flush,
         ] {
             assert!(!two.runs_callback_deferred(primitive), "{primitive:?}");
         }
@@ -3015,23 +3032,18 @@ mod tests {
     fn the_synchronous_clearing_set_is_the_inline_half_of_the_deferred_set() {
         let two = &Solid2 as &dyn Dialect;
 
-        // `flush` earns its place on the rc runtime's own bytes, not on its
-        // name: `@solidjs/signals` `flush(fn)` runs `fn()` inside a
-        // `try { return fn() } finally { flush(); syncDepth-- }`, so the
-        // callback is invoked and returned from *during* the call
-        // (2.0.0-rc dev bundle, `flush`). `createRevealOrder` is here for the
-        // same reason `createRoot` is — it clears tracking while establishing
-        // an owner and runs its callback immediately.
+        // `createRevealOrder` is here for the same reason `createRoot` is — it
+        // clears tracking while establishing an owner and runs its callback
+        // immediately. `flush` is not: `@solidjs/signals` `flush(fn)` runs
+        // `fn()` inside a `try { return fn() } finally { flush(); syncDepth-- }`,
+        // invoked during the call but with the caller's listener still current,
+        // so a read inside it subscribes the caller (probed on rc.0-rc.9). It
+        // is inline and transparent, as `latest` and `isPending` are.
         assert_eq!(
             synchronous_clearing_names(two),
-            vec![
-                "createRevealOrder",
-                "createRoot",
-                "flush",
-                "runWithOwner",
-                "untrack"
-            ]
+            vec!["createRevealOrder", "createRoot", "runWithOwner", "untrack"]
         );
+        assert!(!two.runs_callback_synchronously(Primitive::Flush));
 
         // The two halves of `runs_callback_deferred` stay separable: a
         // genuinely later callback is never synchronous, and a primitive the

@@ -58,6 +58,16 @@ as any memo compute is. On `rc.0` the dialect keeps the exemption, because its
 setter does not, and a write carries only "a store setter": the `createStore`
 case there is a miss, not a claim.
 
+`rc.0`'s `createOptimisticStore` setter meets no owned-scope guard anywhere:
+its writes take the optimistic engine's path, and `rc.1` is the first release
+whose store setters are guarded at their entry. So on an installation that
+resolves `@solidjs/signals@2.0.0-rc.0`, a `createOptimisticStore` setter
+(plain or derived) in a memo or effect compute is legal and not reported, and a
+store setter the checker cannot trace to `createStore` (an alias it knows only
+by type) is not reported either, since it may be the optimistic one. A setter
+traced to `createStore` is reported there as on every release (probed on every
+published `rc.0`-`rc.9` dev client build).
+
 `flush(fn)` is not a write region either. It runs `fn` inline between a
 scheduler depth increment and the drain, keeping both the owner and the
 listener, so a write in it is exactly as legal as at the `flush` call: it

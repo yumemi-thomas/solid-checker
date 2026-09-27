@@ -894,7 +894,9 @@ fn semantic_execution_role_within(
 /// arguments, `PromiseLike.then`, Geolocation) are deliberately not answered:
 /// each can run on its invoker's stack -- probed, a listener dispatched or a
 /// bound function called in the component body, or a synchronous thenable,
-/// runs inside the strict-read window and raises `STRICT_READ_UNTRACKED`.
+/// runs inside the strict-read window and raises `STRICT_READ_UNTRACKED`. They
+/// keep the lexical role, and [`host_callback_timing`] makes a read there
+/// uncertifiable rather than a proven violation.
 fn fresh_stack_callback_role(
     file: &solid_facts::FileFacts,
     span: Span,
@@ -923,6 +925,76 @@ fn fresh_stack_callback_role(
             RuntimeArgumentBehavior::DeferredCallback
             | RuntimeArgumentBehavior::RetainedValue
             | RuntimeArgumentBehavior::ValueOnly => return None,
+        }
+    }
+}
+
+/// Whether a read classified in `execution` is **uncertifiable** because it sits
+/// in a callback a host API retains and may invoke on its invoker's stack
+/// (`runtime_semantics::runs_on_invoker_stack`: an `addEventListener`
+/// listener, a `bind` bound argument, a `PromiseLike.then` callback, a
+/// Geolocation callback).
+///
+/// Such a callback is written in the component body but runs wherever the host
+/// invokes it: inside the body's strict-read window when the body itself hands
+/// control back synchronously, after it otherwise. Probed on 2.0.0-rc.3 and
+/// rc.9, dev and prod, from a component body: a listener dispatched with
+/// `dispatchEvent` or clicked with `el.click()` in the body, a bound function
+/// called in the body, and a synchronous thenable all raise
+/// `STRICT_READ_UNTRACKED` for a signal read and `PENDING_ASYNC_UNTRACKED_READ`
+/// for a pending async read; the same callbacks dispatched after mount, or run
+/// by a real promise, raise neither (a never-settled source throws a plain
+/// `NotReadyError`). Chrome ran neither Geolocation callback in the body, from
+/// an active or a detached document, but the specification's synchronous
+/// "call back with error" path exists, so it is treated the same way.
+///
+/// Registration alone does not decide which case holds, and proving a
+/// synchronous invocation in the window needs the dispatch to follow the
+/// registration on every path, on the same target, with a matching event type
+/// and no removal in between -- facts the syntax facts here do not carry. So
+/// the answer is uncertifiable, never a proven violation, for every such read
+/// the lexical fallback places in a role that reports untracked reads. A role
+/// that reports nothing is left alone: this withholds a claim, it never makes
+/// one.
+///
+/// The walk is [`fresh_stack_callback_role`]'s: the innermost function
+/// literal handed directly to a call, continuing outward through
+/// standard-library inline callbacks (`el.addEventListener("x", () =>
+/// list.forEach(() => read()))`), and ending with no answer at any other call.
+pub(crate) fn host_callback_timing(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    execution: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use crate::runtime_semantics::RuntimeArgumentBehavior;
+    if !execution.reports_untracked_read() {
+        return false;
+    }
+    let mut span = span;
+    loop {
+        let Some((call, index)) = file.ast.arguments_containing(span).find(|(call, index)| {
+            matches!(
+                call.arguments[*index].value,
+                solid_facts::ast::ArgumentValueKind::Function
+                    | solid_facts::ast::ArgumentValueKind::AsyncFunction
+            ) && direct_callback_contains(file, call.arguments[*index].span, span)
+        }) else {
+            return false;
+        };
+        let Some(resolved) = lookup.resolved_callee_call(file, call.callee) else {
+            return false;
+        };
+        let callability = lookup
+            .entity_at(file.path.as_str(), call.arguments[index].span)
+            .and_then(|entity| entity.callability);
+        if crate::runtime_semantics::runs_on_invoker_stack(resolved, callability, index) {
+            return true;
+        }
+        match crate::runtime_semantics::argument_behavior(resolved, callability, index) {
+            // The call contains `span` strictly, so the walk terminates.
+            Some(RuntimeArgumentBehavior::InlineCallback) => span = call.span,
+            _ => return false,
         }
     }
 }

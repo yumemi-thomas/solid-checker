@@ -37,9 +37,25 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   observer constructor runs from a task or microtask queue after the body
   returned, with no strict-read window open, so a read there is not reported
   (probed on rc.3 and rc.9). The scheduler is matched by its standard-library
-  declaration, not its name. An `addEventListener` listener, a `bind` argument
-  and a `PromiseLike.then` callback are still reported: each can run on its
-  invoker's stack inside the body.
+  declaration, not its name.
+- **A host-retained callback is uncertifiable.** An `addEventListener`
+  listener (on any DOM interface), a `Function.prototype.bind` bound argument, a
+  `PromiseLike.then` callback and a Geolocation callback written in a component
+  body run wherever the host invokes them: inside the body's strict-read window
+  when the body dispatches synchronously (`dispatchEvent`, `el.click()`), calls
+  the bound function, or hands the callback to a synchronous thenable, and after
+  it otherwise (probed on rc.3 and rc.9: the first raises
+  `STRICT_READ_UNTRACKED`, the second nothing). A read there is reported as
+  **uncertifiable**, not as a violation, and a pending async read there the same
+  way under `pending-async-unsuspendable-read`. The checker does not prove a
+  synchronous dispatch in the body reaches the listener, so even that case stays
+  uncertifiable. A JSX event handler (`onClick={...}`) is the compiler's event
+  callback and is not reported.
+- **`flush(fn)` keeps the caller's read role.** It runs `fn` inline without
+  touching the listener, so a read inside it subscribes a memo or effect compute
+  that calls it, and in a component body it is reported exactly as a bare read
+  there (probed on every published rc.0-rc.9 client build). `untrack` is the
+  wrapper that clears the listener.
 - **Props follow their callers.** `devComponent` wraps the body in
   `untrack(() => Comp(props), '<Name>')`, and the warning fires only when a prop
   *getter* reads reactive state in that window. A prop that every visible call

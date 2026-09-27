@@ -40,7 +40,7 @@ use crate::cache::{
     InterproceduralGraphTarget, InterproceduralResultDependency,
     InterproceduralResultDependencyState, TypedAccessorContribution, same_compiler_semantics,
 };
-use crate::execution_role::{direct_callback_contains, missing_jsx_census};
+use crate::execution_role::{direct_callback_contains, host_callback_timing, missing_jsx_census};
 use crate::owners::{
     containing_ast_function, enclosing_function_label, enclosing_render_function,
     function_binding_name, read_escapes_synchronous_extent, solid_accessor_declaration,
@@ -2977,10 +2977,10 @@ fn same_runtime_value(
 pub(crate) enum CallbackWrapper {
     /// Runs during the wrapping call and leaves the caller's tracking scope in
     /// place: 1.x `batch`, `startTransition`, `catchError`'s protected body,
-    /// 2.0 `latest`/`isPending`.
+    /// 2.0 `latest`/`isPending`/`flush`.
     Transparent,
     /// Runs during the wrapping call with the listener cleared: `untrack`,
-    /// `createRoot`, `runWithOwner`, 2.0 `flush` and `createRevealOrder`.
+    /// `createRoot`, `runWithOwner`, 2.0 `createRevealOrder`.
     Detaching,
     /// The wrapping call builds its own tracked computation around the code.
     ///
@@ -3452,7 +3452,8 @@ impl ForwardedAmbientExecution {
 /// tracked callback and a seed value.
 ///
 /// `untrack` and 2.0's `flush` sit in the `"inline"` arm beside `createRoot`
-/// and `runWithOwner`, which is what the contract vocabulary means by the word:
+/// and `runWithOwner` (only `flush` leaves the caller's listener current),
+/// which is what the contract vocabulary means by the word:
 /// `inline` and `deferred` are the *schedule* axis and describe only callbacks
 /// the export does not subscribe, while the clearing fact travels separately
 /// through [`solid_dialect::Dialect::runs_callback_synchronously`]
@@ -5596,6 +5597,12 @@ fn interprocedural_result_reads_for_file(
                                 call.span,
                                 callback_execution,
                             ),
+                            host_callback_timing: host_callback_timing(
+                                file,
+                                call.span,
+                                callback_execution,
+                                lookup,
+                            ),
                         });
                     }
                 }
@@ -5627,6 +5634,7 @@ fn interprocedural_result_reads_for_file(
                     origin_context: read.origin_context.into(),
                     uncertain: false,
                     missing_jsx_census: missing_jsx_census(file, call.span, execution),
+                    host_callback_timing: host_callback_timing(file, call.span, execution, lookup),
                 });
             }
         }
@@ -7312,7 +7320,8 @@ mod tests {
         // `untrack` and `flush` run their callback before returning, so the
         // contract word for both is `inline` -- the same word the reviewed
         // bundled contract for solid-js@2.0.0-rc.0 uses for them. The
-        // listener-clearing half is a separate dialect fact, not this word.
+        // listener-clearing half is a separate dialect fact, not this word
+        // (`untrack` clears the listener, `flush` does not).
         assert_eq!(
             primitive_callback_execution(Some(Primitive::Untrack), 0, 1, &dialect),
             Some("inline")

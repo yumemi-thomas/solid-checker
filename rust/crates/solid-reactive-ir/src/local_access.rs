@@ -25,7 +25,7 @@ use std::{
 
 use crate::execution_role::{
     RootBodyGuard, allowed_callback_spans, async_execution_role, control_flow_execution_role,
-    missing_jsx_census, named_callback_execution_role, read_analysis_context,
+    host_callback_timing, missing_jsx_census, named_callback_execution_role, read_analysis_context,
     semantic_execution_role, semantic_write_execution_role,
 };
 use crate::identity::SymbolId;
@@ -450,6 +450,12 @@ impl LocalAccessContext<'_, '_> {
                         origin_context: Arc::from("package return contract"),
                         uncertain: self.lookup.inside_possible_component(file, call.span),
                         missing_jsx_census: missing_jsx_census(file, call.span, execution),
+                        host_callback_timing: host_callback_timing(
+                            file,
+                            call.span,
+                            execution,
+                            self.lookup,
+                        ),
                     }));
                     if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                         result.strict_read_obligations += 1;
@@ -535,6 +541,12 @@ impl LocalAccessContext<'_, '_> {
                         .into(),
                     uncertain: self.lookup.inside_possible_component(file, call.span),
                     missing_jsx_census: missing_jsx_census(file, call.span, execution),
+                    host_callback_timing: host_callback_timing(
+                        file,
+                        call.span,
+                        execution,
+                        self.lookup,
+                    ),
                 }));
                 if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                     result.strict_read_obligations += 1;
@@ -570,6 +582,12 @@ impl LocalAccessContext<'_, '_> {
                         options_opaque: async_options.opaque,
                         ssr_client_hole: async_options.ssr_client_bare,
                         server_rendering_unresolved: async_options.server_rendering_unresolved,
+                        host_callback_timing: host_callback_timing(
+                            file,
+                            call.callee,
+                            async_execution,
+                            self.lookup,
+                        ),
                     }));
                 }
             }
@@ -603,6 +621,12 @@ impl LocalAccessContext<'_, '_> {
                     origin_context: Arc::from(""),
                     uncertain: self.lookup.inside_possible_component(file, call.span),
                     missing_jsx_census: missing_jsx_census(file, call.span, execution),
+                    host_callback_timing: host_callback_timing(
+                        file,
+                        call.span,
+                        execution,
+                        self.lookup,
+                    ),
                 }));
                 result.strict_read_obligations += 1;
             }
@@ -631,6 +655,12 @@ impl LocalAccessContext<'_, '_> {
                             origin_context: via.clone().into(),
                             uncertain: self.lookup.inside_possible_component(file, call.span),
                             missing_jsx_census: missing_jsx_census(file, call.span, execution),
+                            host_callback_timing: host_callback_timing(
+                                file,
+                                call.span,
+                                execution,
+                                self.lookup,
+                            ),
                         }));
                         if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                             result.strict_read_obligations += 1;
@@ -683,6 +713,12 @@ impl LocalAccessContext<'_, '_> {
                             origin_context: via.clone().into(),
                             uncertain: self.lookup.inside_possible_component(file, call.span),
                             missing_jsx_census: missing_jsx_census(file, call.span, execution),
+                            host_callback_timing: host_callback_timing(
+                                file,
+                                call.span,
+                                execution,
+                                self.lookup,
+                            ),
                         }));
                         if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                             result.strict_read_obligations += 1;
@@ -725,7 +761,7 @@ impl LocalAccessContext<'_, '_> {
                     }
                     ReactiveSourceKind::Store => RootBodyGuard::Exempts,
                 };
-                let write_execution = semantic_write_execution_role(
+                let mut write_execution = semantic_write_execution_role(
                     file,
                     call.callee,
                     &allowed,
@@ -734,6 +770,25 @@ impl LocalAccessContext<'_, '_> {
                     self.lookup,
                     root_body,
                 );
+                // Where the resolved release's optimistic-store setter meets no
+                // owned-scope guard (rc.0), a store setter is reported only when
+                // it is proven to be `createStore`'s, whose writes do reach the
+                // guard. An optimistic-store setter is legal in every owned
+                // scope, and a store setter found only by its type could be
+                // either, so both take the role that reports nothing, as an
+                // exempted root-body write does: the second is a miss, never a
+                // violation the runtime does not raise.
+                if write_execution.reports_disallowed_write()
+                    && *source_kind == ReactiveSourceKind::Store
+                    && !self.lookup.dialect.optimistic_store_setter_guarded()
+                    && self
+                        .source_primitives
+                        .get(symbol)
+                        .and_then(|primitive| self.lookup.dialect.primitive(primitive))
+                        != Some(solid_dialect::Primitive::CreateStore)
+                {
+                    write_execution = ExecutionRole::UntrackedCallback;
+                }
                 for _ in 0..multiplicity {
                     result.writes.push(Arc::new(ReactiveWrite {
                         setter: name.to_string().into(),
@@ -894,6 +949,12 @@ impl LocalAccessContext<'_, '_> {
                 origin_context: Arc::from(""),
                 uncertain,
                 missing_jsx_census: missing_jsx_census(file, member.span, execution),
+                host_callback_timing: host_callback_timing(
+                    file,
+                    member.span,
+                    execution,
+                    self.lookup,
+                ),
             }));
             if counts_as_strict_read_root(file, member.span, execution, self.lookup) {
                 result.strict_read_obligations += 1;
@@ -934,6 +995,12 @@ impl LocalAccessContext<'_, '_> {
                     options_opaque: member_options.opaque,
                     ssr_client_hole: member_options.ssr_client_bare,
                     server_rendering_unresolved: member_options.server_rendering_unresolved,
+                    host_callback_timing: host_callback_timing(
+                        file,
+                        member.span,
+                        async_execution,
+                        self.lookup,
+                    ),
                 }));
             }
         }
@@ -997,6 +1064,12 @@ impl LocalAccessContext<'_, '_> {
                 origin_context: Arc::from(""),
                 uncertain,
                 missing_jsx_census: missing_jsx_census(file, spread.span, execution),
+                host_callback_timing: host_callback_timing(
+                    file,
+                    spread.span,
+                    execution,
+                    self.lookup,
+                ),
             }));
             if counts_as_strict_read_root(file, spread.span, execution, self.lookup) {
                 result.strict_read_obligations += 1;
@@ -1044,6 +1117,7 @@ impl LocalAccessContext<'_, '_> {
                 options_opaque: false,
                 ssr_client_hole: false,
                 server_rendering_unresolved: false,
+                host_callback_timing: false,
             }));
         }
         result

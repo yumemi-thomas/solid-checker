@@ -42,7 +42,9 @@ listener dispatched with `dispatchEvent` or `el.click()` in the component body,
 a bound function called in the body, and a synchronous thenable all run the read
 inside the strict-read window and raise `STRICT_READ_UNTRACKED`; dispatched
 later, or through a real promise, they do not. Registration alone does not
-decide which, so those reads keep their previous role.
+decide which, so those reads keep their lexical role and are reported as
+**uncertifiable** (`execution_role::host_callback_timing`; the
+`host-callback-read-timing` fixture covers them in full).
 
 | Case | Finding | Why |
 | --- | --- | --- |
@@ -53,7 +55,7 @@ decide which, so those reads keep their previous role.
 | a timer callback that reads a signal and writes one JSX renders | none | the read is not in the body, and the rendered read tracks |
 | a pending async read in a `setTimeout` callback | none | **not claimed**: no `PENDING_ASYNC_UNTRACKED_READ` there; a never-settled source throws `NotReadyError`, which the checker does not report here or in a listener |
 | the same pending async read in the body | `SC5001` violation (its `SC1001` is owned by it) | the body read throws `PENDING_ASYNC_UNTRACKED_READ` |
-| a read in an `addEventListener` listener, a `PromiseLike.then` callback, a bound argument | `SC1001` violation, **retained** | each can run inside the window; not proven either way |
+| a read in an `addEventListener` listener, a `PromiseLike.then` callback, a bound argument | `SC1001` **uncertifiable** | each can run inside the window or after it; not proven either way |
 | a read in a callback of a local function named `setTimeout` | `SC1001` violation | not the standard-library declaration: it runs the callback in the body |
 | a read in `setTimeout(wrap(() => ...))` | `SC1001` violation, **retained** | the scheduler receives what `wrap` returns, and the arrow may run on `wrap`'s own stack |
 
