@@ -5067,6 +5067,9 @@ struct UnresolvedExportIndex<'a> {
     /// The analyzed file the requested entrypoint's runtime target is, under
     /// the program's own spelling; `None` without an entry file.
     entry_file: Option<&'a solid_facts::FileFacts>,
+    /// The requested entrypoint's exact resolution record, for the runtime
+    /// bindings of its public names; `None` without an entry file.
+    resolution: Option<&'a solid_facts_backend::ResolvedImport>,
 }
 
 /// How an open semantic leaf was attributed to the exports it affects.
@@ -5098,6 +5101,14 @@ enum AttributionMechanism {
     /// the entry's own export list, so it belongs to the names that list
     /// publishes for it (ADR 0133).
     ReexportedImport,
+    /// The obligation runs when a module-level class is constructed, so it
+    /// belongs to the class's public names and to the exports that contain
+    /// its exact `new` sites (ADR 0134).
+    ClassConstruction,
+    /// The obligation runs when a member of a class instance is invoked, so
+    /// it opens `returns` of exactly the exports that create or publish the
+    /// class (ADR 0134, owner decision 2026-09-27).
+    ClassInstanceMember,
     /// Nothing identified the obligation's function, so every export of the
     /// entrypoint is marked. This is the surviving fail-closed rung.
     FallbackAll,
@@ -5113,6 +5124,8 @@ impl AttributionMechanism {
             Self::ObligationIdentity => "obligation-identity",
             Self::ReexportSpecifier => "reexport-specifier",
             Self::ReexportedImport => "reexported-import",
+            Self::ClassConstruction => "class-construction",
+            Self::ClassInstanceMember => "class-instance-member",
             Self::FallbackAll => "fallback-all",
         }
     }
@@ -5439,6 +5452,17 @@ fn attribute_unresolved_obligation(
     if let Some(names) = export_names_of_reexported_import(index, location, exports) {
         return (AttributionMechanism::ReexportedImport, names);
     }
+    if let Some((kind, names)) = export_names_of_class_obligation(index, location, exports) {
+        let mechanism = match kind {
+            solid_facts::ast::ClassObligationKind::Construction => {
+                AttributionMechanism::ClassConstruction
+            }
+            solid_facts::ast::ClassObligationKind::InstanceMember => {
+                AttributionMechanism::ClassInstanceMember
+            }
+        };
+        return (mechanism, names);
+    }
     (
         AttributionMechanism::FallbackAll,
         exports.keys().cloned().collect(),
@@ -5551,6 +5575,185 @@ fn export_names_of_reexported_import(
         .then_some(names)
 }
 
+/// Which exports an obligation at, or inside, a module-level class belongs to
+/// (ADR 0134).
+///
+/// [`solid_facts::ast::class_obligation`] decides from the module's own bytes
+/// when the code at the obligation runs -- at construction, or when an
+/// instance member is invoked -- and which of the module's export names and
+/// `new` sites can bring that about, refusing unless every reference of every
+/// affected class is accounted for. This adds the two package-level facts the
+/// module cannot see, each exact or refused:
+///
+/// - **No other module reaches the classes.** Every analyzed file's static
+///   imports, `export … from`, and literal dynamic loads are resolved with
+///   ESM's own relative-URL rule, no extension guessing, and any that lands on
+///   this module and names an affected class refuses -- except the entry
+///   file's own publication of it (an `export { C } from`, or an import it
+///   only re-exports, ADR 0133). A namespace import or `export *` of this
+///   module, a nonliteral load inside the package, or a relative specifier
+///   inside the package that does not resolve to exactly one file refuses.
+/// - **Each construction site has an exact owner.** A `new C(…)` site belongs
+///   to the exports the enclosing-chain rung gives it; a site no export
+///   lexically contains refuses.
+///
+/// The entry names come from the resolution record: those whose exact runtime
+/// binding is this module and one of its publishing export names.
+fn export_names_of_class_obligation(
+    index: UnresolvedExportIndex<'_>,
+    location: &typefacts::Location,
+    exports: &BTreeMap<String, solid_reactive_ir::ContractExport>,
+) -> Option<(solid_facts::ast::ClassObligationKind, Vec<String>)> {
+    let entry = index.entry_file?;
+    let resolution = index.resolution?;
+    let module = index.files_by_path.get(location.path.as_ref()).copied()?;
+    let module_path = Path::new(module.path.as_str()).canonicalize().ok()?;
+    let package_root = Path::new(&resolution.package_root).canonicalize().ok()?;
+    if !module_path.starts_with(&package_root) {
+        return None;
+    }
+    let span = solid_facts::core::Span::new(
+        u32::try_from(location.start_byte).ok()?,
+        u32::try_from(location.end_byte).ok()?,
+    );
+    let found = solid_facts::ast::class_obligation(&module_path, &module.source, span)?;
+    let published = found.published.iter().cloned().collect::<BTreeSet<_>>();
+    if !classes_stay_in_their_module(
+        index,
+        entry,
+        module,
+        &module_path,
+        &package_root,
+        &published,
+    ) {
+        return None;
+    }
+    let mut names = BTreeSet::new();
+    for (name, binding) in &resolution.exports {
+        let Ok(target) = Path::new(&binding.runtime.module.path).canonicalize() else {
+            continue;
+        };
+        if target == module_path && published.contains(&binding.runtime.export_name) {
+            if !exports.contains_key(name) {
+                return None;
+            }
+            names.insert(name.clone());
+        }
+    }
+    for site in &found.construction_sites {
+        let site = typefacts::Location {
+            path: location.path.clone(),
+            start_byte: u64::from(site.start),
+            end_byte: u64::from(site.end),
+        };
+        let (_, owners) = export_names_along_enclosing_chain(index, &site, exports)?;
+        if owners.is_empty() {
+            return None;
+        }
+        names.extend(owners);
+    }
+    Some((found.kind, names.into_iter().collect()))
+}
+
+/// Whether no analyzed module other than `module` can reach one of its
+/// `published` class names, except the entry file publishing it. See
+/// [`export_names_of_class_obligation`].
+fn classes_stay_in_their_module(
+    index: UnresolvedExportIndex<'_>,
+    entry: &solid_facts::FileFacts,
+    module: &solid_facts::FileFacts,
+    module_path: &Path,
+    package_root: &Path,
+    published: &BTreeSet<String>,
+) -> bool {
+    for file in &index.facts.files {
+        if file.path.as_str() == module.path.as_str() {
+            continue;
+        }
+        let file_path = Path::new(file.path.as_str());
+        let inside = file_path
+            .canonicalize()
+            .is_ok_and(|path| path.starts_with(package_root));
+        // `Some(true)`: lands on the module; `Some(false)`: lands elsewhere;
+        // `None`: cannot be resolved exactly.
+        let lands = |specifier: &str| -> Option<bool> {
+            if !(specifier.starts_with("./") || specifier.starts_with("../")) {
+                return Some(false);
+            }
+            let joined = file_path.parent()?.join(specifier);
+            let target = joined.canonicalize().ok()?;
+            if !target.is_file() {
+                return None;
+            }
+            Some(target == module_path)
+        };
+        let is_entry = file.path.as_str() == entry.path.as_str();
+        for import in file.ast.imports.iter().filter(|import| !import.type_only) {
+            match lands(&import.module) {
+                Some(false) => continue,
+                None if inside => return false,
+                None => continue,
+                Some(true) => {}
+            }
+            for binding in import.bindings.iter().filter(|binding| !binding.type_only) {
+                let name = match binding.kind {
+                    solid_facts::ast::ImportKind::Namespace => return false,
+                    solid_facts::ast::ImportKind::Default => "default",
+                    _ => binding.imported.as_deref().unwrap_or_default(),
+                };
+                if !published.contains(name) {
+                    continue;
+                }
+                if !is_entry
+                    || solid_facts::ast::reexport_only_import_names(
+                        file_path,
+                        &file.source,
+                        binding.local.span,
+                    )
+                    .is_none()
+                {
+                    return false;
+                }
+            }
+        }
+        for export in file.ast.exports.iter().filter(|export| !export.type_only) {
+            let Some(specifier) = export.module.as_deref() else {
+                continue;
+            };
+            match lands(specifier) {
+                Some(false) => continue,
+                None if inside => return false,
+                None => continue,
+                Some(true) => {}
+            }
+            if export.kind == solid_facts::ast::ExportKind::All || export.namespace.is_some() {
+                return false;
+            }
+            let names_class = export.specifiers.iter().any(|specifier| {
+                !specifier.type_only
+                    && file
+                        .source_text(specifier.local.span)
+                        .is_none_or(|local| published.contains(local))
+            });
+            if names_class && !is_entry {
+                return false;
+            }
+        }
+        for load in &file.ast.module_loads {
+            match load.specifier.as_deref() {
+                None if inside => return false,
+                None => {}
+                Some(specifier) => match lands(specifier) {
+                    Some(true) => return false,
+                    None if inside => return false,
+                    _ => {}
+                },
+            }
+        }
+    }
+    true
+}
+
 /// Whether the published `parameter-member` reactive-read row already carries
 /// this obligation's uncertainty, so the ladder has nothing to add.
 ///
@@ -5607,6 +5810,20 @@ fn mark_unresolved_export_claims(
     exports: &mut BTreeMap<String, solid_reactive_ir::ContractExport>,
 ) {
     let (mechanism, names) = attribute_unresolved_obligation(index, &defect.location, exports);
+    // ADR 0134, owner decision 2026-09-27: what an instance member does is a
+    // fact about the instance an export hands out, so it opens that export's
+    // `returns` and no domain of the export's own call.
+    let domains = if mechanism == AttributionMechanism::ClassInstanceMember {
+        UnresolvedClaimDomains {
+            reactive_reads: false,
+            returns: domains.returns,
+            callbacks: false,
+            owner_requirements: false,
+            async_behavior: false,
+        }
+    } else {
+        domains
+    };
     let mut identity_only = Vec::new();
     let marked = names
         .into_iter()
@@ -6317,6 +6534,7 @@ fn emit_package_contract(
             .then(|| Path::new(&request.contract_entry_file).canonicalize().ok())
             .flatten()
             .and_then(|entry| files_by_canonical_path.get(&entry).copied()),
+        resolution: (!request.contract_entry_file.is_empty()).then_some(&resolution),
     };
     for unresolved in &program.contract_generation_obligations {
         let target_names = contract_generation_obligation_target_names(

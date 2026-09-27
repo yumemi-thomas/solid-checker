@@ -31,6 +31,7 @@ use thiserror::Error;
 
 pub const AST_FACTS_SCHEMA: u32 = 46;
 
+mod class_obligation;
 mod emission;
 mod import_reexport;
 mod inert_erasure;
@@ -38,6 +39,7 @@ mod inert_javascript;
 mod object_binding;
 mod span_index;
 
+pub use class_obligation::{ClassObligation, ClassObligationKind, class_obligation};
 pub use import_reexport::reexport_only_import_names;
 pub use inert_erasure::{
     ImportFreeErasure, InertErasure, RelativeImportErasure, import_free_erasure, inert_erasure,
