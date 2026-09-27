@@ -6142,23 +6142,49 @@ fn emit_package_contract(
             })
             .collect::<HashMap<_, _>>()
     };
+    // ADR 0132 § 2: the entity the resolver's exact runtime binding names,
+    // beside the one the entry file's specifier names. They differ exactly
+    // when the entry's relative import resolves to a sibling declaration
+    // file, so the entry entity is the declaration's and the function the
+    // call graph and the enclosing chain see is the runtime module's.
+    let runtime_binding_entities_by_name = if request.contract_entry_file.is_empty() {
+        HashMap::new()
+    } else {
+        exports
+            .keys()
+            .filter_map(|name| {
+                runtime_binding_entity(
+                    facts,
+                    &files_by_canonical_path,
+                    &entities_by_location,
+                    &resolution,
+                    name,
+                )
+                .map(|entity| (name.clone(), entity))
+            })
+            .collect::<HashMap<_, _>>()
+    };
+    let export_entities = |name: &String| {
+        entry_entities_by_name
+            .get(name)
+            .copied()
+            .into_iter()
+            .chain(runtime_binding_entities_by_name.get(name).copied())
+    };
     let exported_names_by_identity = if request.contract_entry_file.is_empty() {
         HashMap::new()
     } else {
         let mut names = HashMap::<String, Vec<String>>::new();
         for name in exports.keys() {
-            let Some(identity) = entry_entities_by_name
-                .get(name)
-                .copied()
+            for identity in export_entities(name)
                 .map(|entity| entity.runtime_identity.as_ref())
                 .filter(|identity| !identity.is_empty())
-            else {
-                continue;
-            };
-            names
-                .entry(identity.to_owned())
-                .or_default()
-                .push(name.clone());
+            {
+                let entry = names.entry(identity.to_owned()).or_default();
+                if !entry.contains(name) {
+                    entry.push(name.clone());
+                }
+            }
         }
         names
     };
@@ -6168,15 +6194,15 @@ fn emit_package_contract(
     } else {
         let mut names = HashMap::<String, Vec<String>>::new();
         for name in exports.keys() {
-            let Some(symbol) = entry_entities_by_name
-                .get(name)
-                .copied()
+            for symbol in export_entities(name)
                 .map(|entity| canonical_symbol(&entity.symbol, &symbol_aliases))
                 .filter(|symbol| !symbol.is_empty())
-            else {
-                continue;
-            };
-            names.entry(symbol).or_default().push(name.clone());
+            {
+                let entry = names.entry(symbol).or_default();
+                if !entry.contains(name) {
+                    entry.push(name.clone());
+                }
+            }
         }
         names
     };
@@ -8429,6 +8455,47 @@ fn entry_export_entity<'a>(
     name: &str,
 ) -> Option<&'a typefacts::EntityFact> {
     entry_export_entity_with_visiting(facts, entry_file, name, &mut HashSet::new())
+}
+
+/// The compiler entity of `name`'s exact runtime binding, as the resolution
+/// record states it (ADR 0132 § 2).
+///
+/// `resolution.exports[name].runtime` is the resolver's own answer for which
+/// module and export name the public name binds to at run time, with that
+/// module's digest; certification replays it from the archive bytes. It is
+/// followed here only when the module is one of this package's analyzed files
+/// and its bytes are the ones the record names, so a sibling version, a
+/// dependency's module, or changed bytes join nothing. The join is an
+/// identity, not a name match: it adds the runtime declaration's own entity to
+/// the export's attribution keys, and that entity is reached by the same
+/// specifier-to-local walk the entry file's own entity is.
+fn runtime_binding_entity<'a>(
+    facts: &'a solid_facts::ProjectFacts,
+    files_by_canonical_path: &HashMap<PathBuf, &'a solid_facts::FileFacts>,
+    entities_by_location: &HashMap<typefacts::Location, &'a typefacts::EntityFact>,
+    resolution: &solid_facts_backend::ResolvedImport,
+    name: &str,
+) -> Option<&'a typefacts::EntityFact> {
+    let binding = resolution.exports.get(name)?;
+    let module = Path::new(&binding.runtime.module.path)
+        .canonicalize()
+        .ok()?;
+    let package_root = Path::new(&resolution.package_root).canonicalize().ok()?;
+    if !module.starts_with(&package_root) {
+        return None;
+    }
+    let file = files_by_canonical_path.get(&module).copied()?;
+    if sha256_digest(file.source.as_bytes()) != binding.runtime.module.digest {
+        return None;
+    }
+    entry_export_entity_indexed(
+        facts,
+        files_by_canonical_path,
+        entities_by_location,
+        &module,
+        &binding.runtime.export_name,
+        &mut HashSet::new(),
+    )
 }
 
 fn entry_export_entity_indexed<'a>(
