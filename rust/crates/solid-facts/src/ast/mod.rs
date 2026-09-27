@@ -33,6 +33,7 @@ pub const AST_FACTS_SCHEMA: u32 = 46;
 
 mod binding_references;
 mod class_obligation;
+mod component_value_flow;
 mod emission;
 mod import_reexport;
 mod inert_erasure;
@@ -42,6 +43,7 @@ mod span_index;
 
 pub use binding_references::import_binding_references;
 pub use class_obligation::{ClassObligation, ClassObligationKind, class_obligation};
+pub use component_value_flow::{ComponentPropSite, ComponentValueFlow, component_value_flows};
 pub use import_reexport::reexport_only_import_names;
 pub use inert_erasure::{
     ImportFreeErasure, InertErasure, RelativeImportErasure, import_free_erasure, inert_erasure,

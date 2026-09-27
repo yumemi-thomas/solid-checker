@@ -289,6 +289,10 @@ type BindingsByReference = HashMap<String, HashMap<(u64, u64), BindingResolution
 /// per site ([`SemanticLookup::function_render_call_sites`]).
 type RenderCallSites<'a> = HashMap<(&'a str, Span), Vec<(usize, Span)>>;
 
+/// Rendering-prop flows by value reference: the render sites each reaches
+/// ([`SemanticLookup::prop_render_sites_at`]).
+type PropRenderSites<'a> = HashMap<(&'a str, Span), Vec<Span>>;
+
 /// One argument a project wrapper forwards into a result-access slot
 /// ([`SemanticLookup::result_access_forwarded_arguments`]).
 #[derive(Clone, Copy, Debug)]
@@ -329,6 +333,7 @@ pub(super) struct SemanticLookup<'a> {
     declaration_symbols: OnceLock<DeclarationSymbols<'a>>,
     function_call_sites: OnceLock<HashMap<(&'a str, Span), Vec<FunctionCallSite>>>,
     render_call_sites: OnceLock<RenderCallSites<'a>>,
+    prop_render_sites: OnceLock<PropRenderSites<'a>>,
     direct_value_aliases: OnceLock<HashSet<SymbolId>>,
     bindings_by_symbol: OnceLock<HashMap<SymbolId, BindingResolution>>,
     bindings_by_reference: OnceLock<BindingsByReference>,
@@ -455,6 +460,7 @@ impl<'a> SemanticLookup<'a> {
             declaration_symbols: OnceLock::new(),
             function_call_sites: OnceLock::new(),
             render_call_sites: OnceLock::new(),
+            prop_render_sites: OnceLock::new(),
             direct_value_aliases: OnceLock::new(),
             bindings_by_symbol: OnceLock::new(),
             bindings_by_reference: OnceLock::new(),
@@ -2407,6 +2413,119 @@ impl<'a> SemanticLookup<'a> {
             .find_map(|declaration| {
                 self.dialect
                     .renders_component_argument(declaration.name.as_ref())
+            })
+    }
+
+    /// The render sites a value reference reaches, when its value reaches
+    /// only a dialect component's rendering prop:
+    /// `createComponent(Dynamic, { get component() { return Selected(); } })`
+    /// with `const Selected = createMemo(() => cond() ? Panel : Other)`
+    /// invokes the value `Panel` holds as a component, from computations that
+    /// render creates and nowhere else (ADR 0138). The sites are in the
+    /// reference's file; `None` for any other reference.
+    ///
+    /// Keyed by the reference, not by a function: the call graph asks it of
+    /// each compiler-resolved reference of a function's symbols, the walk its
+    /// escape test already makes, so *which* function the value is comes from
+    /// those references and never from a name or a demanded entity. Kept
+    /// beside [`Self::function_render_call_sites`] and apart from
+    /// [`Self::function_call_sites`] for the same reason: only the attribution
+    /// call graph asks who can enter a function, and neither component
+    /// identity nor execution-role inheritance has this answer for a value.
+    ///
+    /// The syntax fact ([`solid_facts::ast::component_value_flows`]) says
+    /// only where the value can go. Every span it hands back must resolve
+    /// here, or the reference has no entry:
+    ///
+    /// - each site's component is declared in one of the dialect's
+    ///   primitive-defining packages under a name the dialect says renders
+    ///   that prop ([`solid_dialect::Dialect::component_prop_renderers`]),
+    ///   and a call form's callee renders its first argument
+    ///   ([`solid_dialect::Dialect::renders_component_argument`]);
+    /// - each holder call is a primitive whose accessor yields only its
+    ///   compute ([`solid_dialect::Dialect::accessor_yields_only_its_compute`]).
+    pub(super) fn prop_render_sites_at(&self, path: &str, reference: Span) -> Option<Vec<Span>> {
+        self.prop_render_sites().get(&(path, reference)).cloned()
+    }
+
+    fn prop_render_sites(&self) -> &PropRenderSites<'a> {
+        self.prop_render_sites.get_or_init(|| {
+            let mut map = PropRenderSites::new();
+            let renderers = self.dialect.component_prop_renderers();
+            if renderers.is_empty() {
+                return map;
+            }
+            let mut props = renderers.iter().map(|(_, prop)| *prop).collect::<Vec<_>>();
+            props.sort_unstable();
+            props.dedup();
+            let facts: &'a ProjectFacts = self.facts;
+            for file in &facts.files {
+                // Only a module that spells a rendering component and its prop
+                // can hold one of these flows; the rest are not parsed again.
+                if !renderers.iter().any(|(component, prop)| {
+                    file.source.contains(component) && file.source.contains(prop)
+                }) {
+                    continue;
+                }
+                let Some(flows) = solid_facts::ast::component_value_flows(
+                    std::path::Path::new(file.path.as_str()),
+                    &file.source,
+                    &props,
+                ) else {
+                    continue;
+                };
+                for flow in flows {
+                    if flow
+                        .holder_calls
+                        .iter()
+                        .all(|call| self.holder_call_is_exact(file, *call))
+                        && flow.sites.iter().all(|site| self.renders_prop(file, site))
+                    {
+                        map.insert(
+                            (file.path.as_str(), flow.reference),
+                            flow.sites.iter().map(|site| site.site).collect(),
+                        );
+                    }
+                }
+            }
+            map
+        })
+    }
+
+    /// Whether the call at `call` is a primitive whose accessor hands its
+    /// compute's results to nothing but its own reads.
+    fn holder_call_is_exact(&self, file: &FileFacts, call: Span) -> bool {
+        self.primitive_at_call(file, call)
+            .is_some_and(|primitive| self.dialect.accessor_yields_only_its_compute(primitive))
+    }
+
+    /// Whether `site` renders its component with the dialect's semantics for
+    /// its prop: the component is exactly a dialect export that renders that
+    /// prop, and a call form's callee is exactly a dialect renderer of its
+    /// first argument.
+    fn renders_prop(&self, file: &FileFacts, site: &solid_facts::ast::ComponentPropSite) -> bool {
+        if let Some(renderer) = site.renderer
+            && self
+                .callee_symbol(file, renderer)
+                .and_then(|symbol| self.rendered_argument_of(symbol))
+                != Some(0)
+        {
+            return false;
+        }
+        let Some(component) = self.entities.at(file.path.as_str(), site.component) else {
+            return false;
+        };
+        let packages = self.dialect.primitive_defining_packages();
+        let renderers = self.dialect.component_prop_renderers();
+        self.symbols_by_id()
+            .get(component.as_str())
+            .into_iter()
+            .flat_map(|symbol| symbol.declarations().iter())
+            .filter(|declaration| declared_in_package(declaration.location.path.as_ref(), packages))
+            .any(|declaration| {
+                renderers.iter().any(|(name, prop)| {
+                    *name == declaration.name.as_ref() && *prop == site.prop.as_str()
+                })
             })
     }
 

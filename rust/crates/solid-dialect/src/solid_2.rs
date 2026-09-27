@@ -4344,8 +4344,12 @@ impl Dialect for Solid2 {
     /// (rc.3 has none) and makes code inside an rc.9 predicate uncertifiable.
     /// Revision 4 (2026-09-27) states that `createComponent` renders its first
     /// argument (`Solid2::renders_component_argument`, ADR 0136).
+    /// Revision 5 (2026-09-28) states that `Dynamic` renders its `component`
+    /// prop and that a one-argument `createMemo` hands its compute's results
+    /// only to its accessor (`Solid2::component_prop_renderers`,
+    /// `Solid2::accessor_yields_only_its_compute`, ADR 0138).
     fn runtime_model_identity(&self) -> &'static str {
-        "solid-v2/model-4"
+        "solid-v2/model-5"
     }
 
     /// [`AUDITED_ARCHIVES`] and [`NEGATIVE_ROWS`]: archive-scoped rows read out
@@ -5520,6 +5524,61 @@ impl Dialect for Solid2 {
     /// never again.
     fn renders_component_argument(&self, name: &str) -> Option<usize> {
         (name == "createComponent").then_some(0)
+    }
+
+    /// `Dynamic`'s `component`, on every release the reviews read. `Dynamic`
+    /// is `@solidjs/web`'s, the same function in every build of rc.3 and rc.9
+    /// (rc.3 `web.js:1865`, `dev.js:1935`, `server.js:3208`; rc.9 `web.js:2099`,
+    /// `web.dev.js:2271`, `web.observe.js:2121`, `server.js:3764`,
+    /// `server.dev.js:4013`, `server.observe.js:3852`):
+    ///
+    /// ```js
+    /// function Dynamic(props) {
+    ///   const Comp = dynamic(() => props.component);
+    ///   return createComponent(Comp, omit(props, "component"));
+    /// }
+    /// ```
+    ///
+    /// `dynamic(source)` keeps the value in a memo it creates (`cached`) and
+    /// returns a component that, rendered, creates one more memo reading it:
+    /// a function is called there as `component(props)` (or its
+    /// `Symbol.for("solid.component-binding")` target, when it carries one),
+    /// a string builds an element, and nothing else is done with it. The value
+    /// reaches no other invocation: `bindingOf` and the thenable test read a
+    /// property of it, and the dev and observe builds' `Object.assign(component,
+    /// { [$DEVCOMP]: true })` writes one. The `props` it receives are
+    /// `omit(props, "component")`. `createComponent` runs `Dynamic`, and then
+    /// `Comp`, in place (ADR 0136), so the component is invoked only inside
+    /// computations the render creates.
+    ///
+    /// Probed on the published triples: `createComponent(Dynamic, { get
+    /// component() { return Selected(); } })` with `Selected = createMemo(() =>
+    /// flag() ? A : B)`, inside a root. In all six rc.9 builds and rc.3's
+    /// four, `A` ran once, between the statements before and after the call,
+    /// with no `component` in its props, under an owner below the render's
+    /// (one level in prod, three in dev and observe; rc.3's client prod owners
+    /// do not expose the link). The client builds ran `B` once when `flag` was
+    /// written and flushed, under the same owner depth; the server builds,
+    /// which do not re-run, never did. A data property (`{ component: A }`)
+    /// behaved the same.
+    fn component_prop_renderers(&self) -> &'static [(&'static str, &'static str)] {
+        &[("Dynamic", "component")]
+    }
+
+    /// `createMemo(compute)`, one argument, `compute` taking no parameters. The
+    /// value `compute` returns is the node's value, and the node is reachable
+    /// from program code only through the accessor `createMemo` returns
+    /// (`accessor(computed(compute, undefined))` in `@solidjs/signals`, rc.9
+    /// `prod/signals.js:77`; the accessor is `read.bind(null, node)`, and its
+    /// `$REFRESH` slot re-runs `compute`). With no options there is no
+    /// `loadingValue`, `equals` or `ssrSource`; a parameterless compute cannot
+    /// read its previous value. `solid-js`'s client `createMemo` is the
+    /// hydration wrapper (rc.9 `solid.js:596-601`, `770-772`): while hydrating
+    /// it may yield a serialized value instead of calling `compute`, which is
+    /// another value, never a second path for this one. The server
+    /// `createMemo` runs `compute` in place.
+    fn accessor_yields_only_its_compute(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::CreateMemo
     }
 
     /// `flush` inside an action step: the `FLUSH_IN_ACTION` dev throw, on the

@@ -229,11 +229,16 @@ impl<'a> CallGraph<'a, '_> {
             }
             // A render through a dialect renderer (`createComponent(Panel,
             // props)`) enters the function as a JSX tag does (ADR 0136).
+            // A value that reaches only `Dynamic`'s `component` is entered by
+            // each render it reaches, wherever the value was written (ADR
+            // 0138).
+            let prop_renders = self.prop_render_sites(path, function);
             let sites = self
                 .lookup
                 .function_call_sites(path, function)
                 .into_iter()
-                .chain(self.lookup.function_render_call_sites(path, function));
+                .chain(self.lookup.function_render_call_sites(path, function))
+                .chain(prop_renders);
             for (caller, callee) in sites {
                 let Some(owner) = outermost_function(caller, callee) else {
                     // A call at module scope runs when the module is imported,
@@ -276,24 +281,25 @@ impl<'a> CallGraph<'a, '_> {
         verdict
     }
 
-    fn compute_entered_only_through_calls(&self, path: &str, function: Span) -> bool {
-        let Some(file) = self.file(path) else {
-            return false;
-        };
-        let Some(fact) = file
+    /// The symbols whose references are this function's: its binding's own,
+    /// and every alias of the same root.
+    ///
+    /// `None` when references cannot bound the function's entries at all:
+    ///
+    /// - a class method is entered by member dispatch, which resolves by the
+    ///   instance's class at run time, not by the declaration a reference
+    ///   names: a base constructor's `this.init()` names the base's `init` and
+    ///   runs a subclass override that no reference names at all (ADR 0134,
+    ///   amendment of 2026-09-28). No reference-based reasoning applies to it,
+    ///   the render sites of ADR 0138 included;
+    /// - a function with no binding name, or a name with no symbol.
+    fn function_symbols(&self, path: &str, function: Span) -> Option<Vec<SymbolId>> {
+        let file = self.file(path)?;
+        let fact = file
             .ast
             .functions
             .iter()
-            .find(|candidate| candidate.span == function)
-        else {
-            return false;
-        };
-        // A class method is entered by member dispatch, which resolves by the
-        // instance's class at run time, not by the declaration a reference
-        // names: a base constructor's `this.init()` names the base's `init`
-        // and runs a subclass override that no reference names at all. Its
-        // references therefore do not bound its callers (ADR 0134, amendment
-        // of 2026-09-28).
+            .find(|candidate| candidate.span == function)?;
         if fact.name.is_none()
             && fact.method_name.is_some()
             && file
@@ -302,19 +308,56 @@ impl<'a> CallGraph<'a, '_> {
                 .iter()
                 .any(|class| class.span.start <= fact.span.start && fact.span.end <= class.span.end)
         {
-            return false;
+            return None;
         }
-        let Some(declaration) = crate::owners::function_binding_name(file, fact) else {
-            // No binding name: nothing can name it, so the only entry is the
+        let declaration = crate::owners::function_binding_name(file, fact)?;
+        let symbol = self.entities.at(path, declaration.span)?;
+        let root = self.aliases.get(symbol).unwrap_or(symbol);
+        let mut aliased = self
+            .symbols_by_root
+            .get(root)
+            .cloned()
+            .unwrap_or_else(|| vec![symbol.clone()]);
+        if !aliased.iter().any(|candidate| candidate == symbol) {
+            aliased.push(symbol.clone());
+        }
+        Some(aliased)
+    }
+
+    /// The renders that enter this function through a value: each of its
+    /// references whose value reaches only a dialect component's rendering
+    /// prop (`Dynamic`'s `component`) is entered by every render it reaches
+    /// (ADR 0138). The references are the compiler's, over the same symbols
+    /// the escape test walks, so the value is this function by resolution. A
+    /// class method has none ([`Self::function_symbols`]).
+    fn prop_render_sites(&self, path: &str, function: Span) -> Vec<(&'a FileFacts, Span)> {
+        let mut sites = Vec::new();
+        for symbol in self.function_symbols(path, function).unwrap_or_default() {
+            for reference in self.lookup.symbol_references(symbol.as_str()) {
+                let Some(file) = self.file(reference.path.as_ref()) else {
+                    continue;
+                };
+                let span = Span::new(
+                    u32::try_from(reference.start_byte).unwrap_or(u32::MAX),
+                    u32::try_from(reference.end_byte).unwrap_or(u32::MAX),
+                );
+                if let Some(renders) = self.lookup.prop_render_sites_at(file.path.as_str(), span) {
+                    sites.extend(renders.iter().map(|site| (file, *site)));
+                }
+            }
+        }
+        sites
+    }
+
+    fn compute_entered_only_through_calls(&self, path: &str, function: Span) -> bool {
+        let Some(aliased) = self.function_symbols(path, function) else {
+            // A class method: its references do not bound its callers. Or no
+            // binding name: nothing can name it, so the only entry is the
             // expression it was written in. That expression is inside the
             // enclosing function the walk already visited, or at module scope,
             // and neither is enumerable from here.
             return false;
         };
-        let Some(symbol) = self.entities.at(path, declaration.span) else {
-            return false;
-        };
-        let root = self.aliases.get(symbol).unwrap_or(symbol);
         // References, not sites: this test asks whether every reference to the
         // function is accounted for, and one render can write the component's
         // name twice (`<Panel></Panel>`). The call graph still holds one edge
@@ -329,14 +372,6 @@ impl<'a> CallGraph<'a, '_> {
             .chain(self.lookup.function_render_call_sites(path, function))
             .map(|(caller, callee)| (caller.path.to_string(), callee.start, callee.end))
             .collect::<HashSet<_>>();
-        let mut aliased = self
-            .symbols_by_root
-            .get(root)
-            .cloned()
-            .unwrap_or_else(|| vec![symbol.clone()]);
-        if !aliased.iter().any(|candidate| candidate == symbol) {
-            aliased.push(symbol.clone());
-        }
         aliased.iter().all(|candidate| {
             self.lookup
                 .symbol_references(candidate.as_str())
@@ -361,6 +396,16 @@ impl<'a> CallGraph<'a, '_> {
             return true;
         };
         let span = Span::new(start, end);
+        // A reference whose value reaches only rendering props is accounted
+        // for by the renders it reaches, which `reach_from` walks as its edges
+        // (ADR 0138).
+        if self
+            .lookup
+            .prop_render_sites_at(file.path.as_str(), span)
+            .is_some()
+        {
+            return true;
+        }
         // The declaration that introduces the function, and the import/export
         // surface that forwards it, are not runtime entries: emission resolves
         // the export surface itself, by name.

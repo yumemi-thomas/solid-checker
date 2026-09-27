@@ -2147,6 +2147,42 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// The components that **render a prop's value** as a component: each
+    /// `(export, prop)` pair names an export whose render, `<export
+    /// prop={value}/>` or its compiled `renderer(export, { prop: value })`,
+    /// invokes `value` as a component only inside computations that render
+    /// creates, and hands it to nothing else that invokes it.
+    ///
+    /// Like [`Dialect::renders_component_argument`], this is one fact about
+    /// control flow and nothing about reactivity. The engine asks it only of
+    /// a component whose exact declaration sits in one of this dialect's
+    /// packages, uses the answer only as a call-graph edge from the render to
+    /// a project function whose value provably reaches that prop, and follows
+    /// that value only through the holders
+    /// [`Dialect::accessor_yields_only_its_compute`] vouches for (ADR 0138).
+    ///
+    /// Solid 2.0's deprecated `<Dynamic component={…}/>` is the case. The
+    /// default is empty.
+    fn component_prop_renderers(&self) -> &'static [(&'static str, &'static str)] {
+        &[]
+    }
+
+    /// Whether a call of `primitive` with exactly one argument, a compute
+    /// function that takes no parameters, returns an accessor that is the
+    /// only way the values the compute returns reach program code.
+    ///
+    /// The engine uses it only to follow a value through `const X =
+    /// primitive(() => value)` read as `X()`, on the way to a rendering prop
+    /// ([`Dialect::component_prop_renderers`], ADR 0138). It claims nothing
+    /// about *which* values the accessor yields: a value the runtime
+    /// substitutes (a hydrated one, say) is another value, and the flow the
+    /// engine proves is only that this one goes nowhere else. The default is
+    /// `false`.
+    fn accessor_yields_only_its_compute(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
     /// Whether calling `primitive` while an action step
     /// ([`Dialect::callback_runs_as_action_steps`]) is on the stack **throws**
     /// in the development build of this installation.

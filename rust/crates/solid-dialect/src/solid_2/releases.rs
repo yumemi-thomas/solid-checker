@@ -1109,6 +1109,33 @@ mod tests {
         }
     }
 
+    /// ADR 0138: `Dynamic` renders `component` on every release the reviews
+    /// read, and only a one-argument `createMemo` is a holder a rendered value
+    /// may be followed through. `dynamic`'s returned component, the store and
+    /// signal constructors, and the optimistic memos are not.
+    #[test]
+    fn dynamic_renders_its_component_prop_in_every_vocabulary() {
+        for vocabulary in std::iter::once(&Solid2::CONSERVATIVE).chain(VARIANTS.iter()) {
+            assert_eq!(
+                vocabulary.component_prop_renderers(),
+                &[("Dynamic", "component")]
+            );
+            assert!(vocabulary.accessor_yields_only_its_compute(Primitive::CreateMemo));
+            for other in [
+                Primitive::Dynamic,
+                Primitive::CreateSignal,
+                Primitive::CreateStore,
+                Primitive::CreateOptimistic,
+                Primitive::CreateProjection,
+            ] {
+                assert!(
+                    !vocabulary.accessor_yields_only_its_compute(other),
+                    "{other:?}"
+                );
+            }
+        }
+    }
+
     /// N5: only rc.0's optimistic-store setter meets no owned-scope guard, and
     /// the answer is signals' alone; an unread or unresolved signals keeps the
     /// audited guard. rc.0's `createStore` answer (N3) is unchanged.
