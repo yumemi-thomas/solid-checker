@@ -31,6 +31,15 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   deliberate module-scope snapshot is legal, undiagnosed Solid, so this rule stays
   silent for it. (The `v1/` catalog keeps reporting module scope, matching
   eslint-plugin-solid.)
+- **A host-scheduled callback is not the body.** A callback a component body
+  hands to `setTimeout`, `setInterval`, `queueMicrotask`, `Promise.then`/
+  `catch`/`finally`, `requestAnimationFrame`, `requestIdleCallback` or an
+  observer constructor runs from a task or microtask queue after the body
+  returned, with no strict-read window open, so a read there is not reported
+  (probed on rc.3 and rc.9). The scheduler is matched by its standard-library
+  declaration, not its name. An `addEventListener` listener, a `bind` argument
+  and a `PromiseLike.then` callback are still reported: each can run on its
+  invoker's stack inside the body.
 - **Props follow their callers.** `devComponent` wraps the body in
   `untrack(() => Comp(props), '<Name>')`, and the warning fires only when a prop
   *getter* reads reactive state in that window. A prop that every visible call

@@ -725,6 +725,12 @@ fn semantic_execution_role_within(
     if compiler_role != ExecutionRole::Unknown {
         return compiler_role;
     }
+    // Ahead of the lexical fallbacks below, which place code by where it is
+    // written: a callback a fresh-stack host scheduler runs is written in the
+    // component body but does not execute there.
+    if let Some(role) = fresh_stack_callback_role(file, span, lookup) {
+        return role;
+    }
     if lookup.inside_component(file, span) {
         return ExecutionRole::UntrackedRendering;
     }
@@ -741,6 +747,73 @@ fn semantic_execution_role_within(
         return ExecutionRole::ModuleInitialization;
     }
     ExecutionRole::Unknown
+}
+
+/// [`ExecutionRole::DeferredCallback`] for code in a callback that a reviewed
+/// fresh-stack host scheduler runs (`runtime_semantics::FRESH_STACK_SCHEDULERS`:
+/// `setTimeout`, `queueMicrotask`, `Promise.then`, `requestAnimationFrame`, the
+/// observer constructors, ...), wherever the scheduling call is written.
+///
+/// The scheduler invokes the callback from a task or microtask queue on an
+/// otherwise empty execution-context stack, so none of the scheduling code's
+/// dynamic state is current there: no listener (the read subscribes to nothing
+/// and nothing re-runs the callback), no owner, and no strict-read label.
+/// Probed on 2.0.0-rc.3 and rc.9, dev and prod, from a component body: a read
+/// in the body raises `STRICT_READ_UNTRACKED` and the same read in each such
+/// callback does not; `getObserver()` and `getOwner()` are `null` there; a
+/// write or an action there does not raise `REACTIVE_WRITE_IN_OWNED_SCOPE` or
+/// `ACTION_CALLED_IN_OWNED_SCOPE`; a pending async read there does not raise
+/// `PENDING_ASYNC_UNTRACKED_READ` -- a re-ask serves the settled value, and a
+/// source that never settled throws a plain `NotReadyError`, exactly as it does
+/// in a listener dispatched after mount. That is the role's meaning -- after
+/// the scheduling call returns, outside its tracking pass -- the same one a
+/// deferred primitive position gets.
+///
+/// The host fact comes from the compiler-selected standard-library declaration
+/// through [`crate::runtime_semantics::argument_behavior`], never from
+/// spelling, so a local `setTimeout` keeps its lexical role. Only a function
+/// literal handed to the scheduler is its callback; `setTimeout(wrap(fn))`
+/// hands over whatever `wrap` returns. Code in a callback that a
+/// standard-library call runs inline (`list.forEach(fn)`) executes wherever
+/// that call does, so the walk continues outward from the call. Any other
+/// enclosing call ends the walk with no answer, leaving the arms after this
+/// one to decide.
+///
+/// The other deferring host callbacks (`addEventListener`, `bind`'s bound
+/// arguments, `PromiseLike.then`, Geolocation) are deliberately not answered:
+/// each can run on its invoker's stack -- probed, a listener dispatched or a
+/// bound function called in the component body, or a synchronous thenable,
+/// runs inside the strict-read window and raises `STRICT_READ_UNTRACKED`.
+fn fresh_stack_callback_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    use crate::runtime_semantics::RuntimeArgumentBehavior;
+    let mut span = span;
+    loop {
+        let (call, index) = file.ast.arguments_containing(span).find(|(call, index)| {
+            matches!(
+                call.arguments[*index].value,
+                solid_facts::ast::ArgumentValueKind::Function
+                    | solid_facts::ast::ArgumentValueKind::AsyncFunction
+            ) && direct_callback_contains(file, call.arguments[*index].span, span)
+        })?;
+        let resolved = lookup.resolved_callee_call(file, call.callee)?;
+        let callability = lookup
+            .entity_at(file.path.as_str(), call.arguments[index].span)
+            .and_then(|entity| entity.callability);
+        match crate::runtime_semantics::argument_behavior(resolved, callability, index)? {
+            RuntimeArgumentBehavior::FreshStackCallback => {
+                return Some(ExecutionRole::DeferredCallback);
+            }
+            // The call contains `span` strictly, so the walk terminates.
+            RuntimeArgumentBehavior::InlineCallback => span = call.span,
+            RuntimeArgumentBehavior::DeferredCallback
+            | RuntimeArgumentBehavior::RetainedValue
+            | RuntimeArgumentBehavior::ValueOnly => return None,
+        }
+    }
 }
 
 /// Whether `span` lies inside an argument the dialect says runs on reads of

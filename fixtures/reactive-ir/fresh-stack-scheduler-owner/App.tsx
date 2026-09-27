@@ -80,9 +80,8 @@ function Clock() {
 // Controls: each stays silent.
 declare const thenable: PromiseLike<number>;
 
-// A timer callback that only reads has no owner requirement. (Scheduled from a
-// root rather than a component body: see README.md for the separate `SC1001`
-// the same read draws in a component.)
+// A timer callback that only reads has no owner requirement. (Its strict-read
+// role is `fresh-stack-scheduler-read-role`'s claim.)
 createRoot(() => {
   setTimeout(() => {
     console.log(count());

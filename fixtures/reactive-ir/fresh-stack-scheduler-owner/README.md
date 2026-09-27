@@ -51,12 +51,9 @@ runs on that root's disposal.
 `Scheduler.postTask` has no case: TypeScript 5.9's `lib.dom.d.ts` declares no
 `scheduler`, so no program here can select that declaration.
 
-A signal read in a timer callback scheduled from a *component body* draws a
-separate `SC1001`, which this fixture avoids by scheduling its read-only control
-from a root. The runtime does not warn there (probed on rc.3 and rc.9 dev in
-Chromium: `STRICT_READ_UNTRACKED` fires for the read in the body and not for
-the read in the timer), so that `SC1001` is a false positive of its own, and
-not this fixture's claim.
+The read-only control is scheduled from a root. A signal read in a timer
+callback scheduled from a *component body* is not a strict-read violation
+either; `fresh-stack-scheduler-read-role` owns that claim.
 
 **Stub.** `solid-js.d.ts` is `detached-callback-in-root`'s, whose declarations
 are verbatim from the published rc.3 typings. `App.tsx` type-checks cleanly
