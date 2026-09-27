@@ -88,16 +88,39 @@ Follow-ups, same day (measured):
   tier (it imports `@tanstack/solid-router`'s root, the tier holds only
   `ssr/client`). No false positive in the spot checks.
 
-Open:
+Second round, same day (`make verify` passed at the notice commit, 334 s):
 
-- **SC9014 on a project with no Solid code.** kobalte's `tailwindcss` and
-  `vanilla-extract` configs get the older-release notice and nothing else,
-  which makes them uncertifiable. By design of dialect selection, but the
-  notice says nothing useful there.
-- **Tier admission ignores pnpm patches** (Rust side): lock integrity is
-  checked but `patchedDependencies`/`patch_hash` are not, so a bundle can be
-  admitted for bytes the consumer patched. Live on viviana's
-  `@tanstack/solid-start`.
+- **ADR 0130** (981a74eb): an unwritten binding whose initializer is a
+  primitive literal (or `void` of one) proves a non-callable export root.
+  `@tanstack/router-core`'s browser `./isServer` (`const loadServerRoute =
+  void 0`, declared `never`) refused every `@tanstack/solid-router` root case.
+  On viviana's environment the root `.` now certifies: 97 of 97 root exports in
+  the contract (was 0), every domain still open (the generator proposes no
+  closure for solid-router's own exports), 106 dependency closures certified.
+  Estimated: after a tier regeneration viviana's 213 root-import sites move
+  from SC9005 to open claims, none certified.
+- **ADR 0131** (5cbf854b): a patched package is not the certified archive.
+  The certified package's installed files must reproduce the receipt's
+  signed `snapshotRoot` (measured to match all 33 tier packages; ~30-94 ms per
+  package, debug); an environment package recorded as patched (pnpm lock /
+  workspace / manifest, bun, yarn `patch:`, patch-package dirs) refuses.
+  Residuals, all fail closed or documented: an environment package changed
+  with no record is undetected (needs a per-entry snapshot root, a receipt
+  change); npm-6-style installs that rewrite `package.json` are refused; the
+  daemon does not treat installed files as inputs.
+- **SC9014 only for a project that uses Solid** (the notice commit after
+  5cbf854b): every gap is dropped unless the facts cannot rule out Solid use
+  (a runtime-package reference in any form, any JSX, or an imported package
+  whose installed dependency closure names a runtime package; unattested or
+  unresolved references keep it). Facts schema 45 -> 46 (`import_equals`,
+  `type_imports`), so `import S = require("solid-js")` now reaches the rc.9
+  re-export gap. kobalte `tailwindcss` and `vanilla-extract` certify again;
+  `package-argument-container-consumer` loses SC9014 (Solid-free).
+  Residuals: a file whose only reference is import-equals or `require` is not
+  attested and keeps the notice; WASM has no attestation, so any bare import
+  keeps it; the daemon does not watch transitive manifests.
+
+Open:
 - `contract-differential` fails on a stale `schemaVersion 2` assertion before
   any release-dependent step; nothing gates it.
 - Client `Loading`'s dynamic `import()`/`$dfr` path is unclassified.
