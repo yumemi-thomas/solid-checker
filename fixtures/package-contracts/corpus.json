@@ -27,6 +27,7 @@
     "conditional-targets",
     "creates-decline-records",
     "declaration-closure-member",
+    "declaration-reexport-gap",
     "declaration-sibling-reach",
     "deferred-returned-callback",
     "destructured-parameter-callback",

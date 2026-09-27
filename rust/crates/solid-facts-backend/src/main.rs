@@ -6054,8 +6054,23 @@ fn emit_package_contract(
         .iter()
         .map(|entity| (entity.location.clone(), *entity))
         .collect::<HashMap<_, _>>();
-    let declaration_export_names =
-        (!resolution.declaration_exports.is_empty()).then_some(&resolution.declaration_exports);
+    // ADR 0128: a name whose declaration re-export chain ends in a module
+    // that publishes no export by it has no declaration identity, so it
+    // cannot be described. The resolver names each such export, and leaving
+    // it off the surface here costs that export alone, where emitting it cost
+    // the whole artifact case at `bind_exports`. This is not trusting the
+    // resolver's omission: certification replays the same census from the
+    // archive bytes and refuses any disagreement, so an omitted bindable name
+    // still refuses. (Validation requires the census whenever the resolver
+    // names such an export.)
+    let declaration_surface = (!resolution.declaration_exports.is_empty()).then(|| {
+        resolution
+            .declaration_exports
+            .difference(&resolution.unbound_declaration_exports)
+            .cloned()
+            .collect::<BTreeSet<_>>()
+    });
+    let declaration_export_names = declaration_surface.as_ref();
     let mut exports = if request.contract_entry_file.is_empty() {
         contract_exports_without_entry_file(
             program.contract_exports.as_ref(),

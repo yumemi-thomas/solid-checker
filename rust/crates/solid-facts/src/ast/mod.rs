@@ -47,7 +47,8 @@ pub use inert_javascript::{
 pub use object_binding::{UnwrittenObjectBinding, unwritten_object_binding};
 
 pub use emission::{
-    EmittingStatement, ModuleEmission, ModuleEmissionError, ModuleFlavor, module_emission,
+    EmittingStatement, ModuleEmission, ModuleEmissionError, ModuleFlavor, has_export_assignment,
+    module_emission,
 };
 pub use span_index::{AstSpanIndex, LazySpanIndex};
 

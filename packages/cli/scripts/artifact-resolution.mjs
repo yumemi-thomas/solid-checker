@@ -1653,6 +1653,16 @@ class LazyClosureModuleParser {
   }
 }
 
+/// Every identifier a binding name introduces, through object and array
+/// destructuring patterns: `export const { a, b: [c] } = value` publishes
+/// `a` and `c`.
+function boundIdentifierNames(name) {
+  if (ts.isIdentifier(name)) return [name.text];
+  return name.elements.flatMap(element =>
+    ts.isOmittedExpression(element) ? [] : boundIdentifierNames(element.name)
+  );
+}
+
 function hasModifier(node, kind) {
   return node.modifiers?.some(modifier => modifier.kind === kind) ?? false;
 }
@@ -1889,6 +1899,14 @@ function moduleDescription(path, axis, packageRoot, cache) {
     // runtime-only export from being mistaken for shared without granting a
     // namespace binding.
     declarationSurfaceOnly: new Set(),
+    // Every name a module-level export statement of this module publishes, in
+    // either space and by any spelling -- value, type-only, namespace,
+    // import-equals -- plus whether anything else could publish one: an
+    // `export =` assignment, or an `export *` this walk does not follow as a
+    // local value star. Only `declarationReexportGap` reads it, and only to
+    // prove that a module publishes *no* export by a name.
+    declaredNames: new Set(),
+    unfollowedExportSource: false,
     imports: new Map(),
     externalImports: new Map(),
     specifiers: [],
@@ -1970,6 +1988,15 @@ function moduleDescription(path, axis, packageRoot, cache) {
             scope.packageRoot === packageRoot && isExplicitOptionalPeer(scope.manifest, module.text)
         });
       }
+      if (!statement.exportClause) {
+        if (statement.isTypeOnly || !target) description.unfollowedExportSource = true;
+      } else if (ts.isNamespaceExport(statement.exportClause)) {
+        description.declaredNames.add(statement.exportClause.name.text);
+      } else {
+        for (const element of statement.exportClause.elements) {
+          description.declaredNames.add(element.name.text);
+        }
+      }
       if (statement.isTypeOnly) continue;
       if (!statement.exportClause) {
         if (target) description.stars.push(target);
@@ -2013,9 +2040,23 @@ function moduleDescription(path, axis, packageRoot, cache) {
     }
     if (ts.isExportAssignment(statement)) {
       description.direct.set("default", { file: path, name: "default" });
+      // `export = value` (not `export default`) publishes the members of
+      // `value` to TypeScript's named imports, which no census here follows.
+      if (statement.isExportEquals) description.unfollowedExportSource = true;
       continue;
     }
     if (!hasModifier(statement, ts.SyntaxKind.ExportKeyword)) continue;
+    if (hasModifier(statement, ts.SyntaxKind.DefaultKeyword)) {
+      description.declaredNames.add("default");
+    } else if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        for (const name of boundIdentifierNames(declaration.name)) {
+          description.declaredNames.add(name);
+        }
+      }
+    } else if (statement.name && ts.isIdentifier(statement.name)) {
+      description.declaredNames.add(statement.name.text);
+    }
     if (
       axis === "declarations" &&
       ts.isModuleDeclaration(statement) &&
@@ -2231,6 +2272,58 @@ function bindExport(
   return unique.values().next().value;
 }
 
+/// Whether `name`, looked up in declaration module `path`, reaches a module of
+/// this package that publishes no export by that name at all.
+///
+/// This is the one declaration-axis shape `bindExport` leaves unbound that is
+/// a fact about the published bytes rather than about this resolver's reach:
+/// `export { $DEVCOMP } from "./client/core.js"` where `core.d.ts` declares
+/// no `$DEVCOMP` (`solid-js@2.0.0-rc.9`, an upstream typing defect). The name
+/// has no declaration identity for any consumer, so it cannot be described,
+/// and ADR 0128 makes it cost only itself: it leaves the contract surface,
+/// and every other export of the entrypoint keeps its exact binding. The
+/// certifier replays this census from the archive and refuses a disagreement
+/// (`export_bindings.rs`'s `declaration_reexport_gap`); change the two
+/// together.
+///
+/// Fail-closed by construction: anything this walk cannot see through
+/// answers `false`, which leaves the name to its existing whole-case refusal.
+/// That is a module that declares the name in any space or by any spelling
+/// (a namespace, an interface, a type-only specifier), forwards it from
+/// outside the package, has an `export =` or an `export *` this walk does not
+/// follow, or a cycle.
+function declarationReexportGap(path, name, packageRoot, cache, visiting = new Set()) {
+  const identity = `${path}:${name}`;
+  if (visiting.has(identity)) return false;
+  visiting.add(identity);
+  const description = moduleDescription(path, "declarations", packageRoot, cache);
+  let gap;
+  const direct = description.direct.get(name);
+  if (direct) {
+    gap =
+      direct.file !== path &&
+      direct.name !== "*" &&
+      declarationReexportGap(direct.file, direct.name, packageRoot, cache, visiting);
+  } else if (
+    description.externalDirect.has(name) ||
+    description.declarationSurfaceOnly.has(name) ||
+    description.declaredNames.has(name) ||
+    description.unfollowedExportSource ||
+    description.externalStars.length > 0
+  ) {
+    gap = false;
+  } else if (name === "default") {
+    // ESM `export *` never forwards a default export.
+    gap = true;
+  } else {
+    gap = description.stars.every(target =>
+      declarationReexportGap(target, name, packageRoot, cache, visiting)
+    );
+  }
+  visiting.delete(identity);
+  return gap;
+}
+
 function exportedNames(
   path,
   axis,
@@ -2293,6 +2386,7 @@ function exactExportBindings(
   );
   const names = [...runtimeNames].filter(name => declarationNames.has(name)).sort();
   const exports = {};
+  const unboundDeclarationExports = [];
   for (const name of names) {
     const runtimeTarget = bindExport(
       runtime.path,
@@ -2310,10 +2404,25 @@ function exactExportBindings(
       cache,
       acceptedDependencies
     );
+    // Only a runtime-bound name qualifies: a runtime re-export of a name its
+    // module does not declare fails the whole module graph at link time, so
+    // no export of the entrypoint would be usable and the case must refuse.
+    if (
+      runtimeTarget &&
+      !declarationTarget &&
+      declarationReexportGap(declarations.path, name, packageRoot, cache)
+    ) {
+      unboundDeclarationExports.push(name);
+    }
     if (!runtimeTarget || !declarationTarget) continue;
     exports[name] = { runtime: runtimeTarget, declarations: declarationTarget };
   }
-  return { exports, declarationExports: [...declarationNames].sort(), cache };
+  return {
+    exports,
+    declarationExports: [...declarationNames].sort(),
+    unboundDeclarationExports,
+    cache
+  };
 }
 
 // Member names that install a property accessor, or a prototype carrying one,
@@ -2837,7 +2946,7 @@ export function resolvePackageArtifacts({
   ]);
   let semantic = session?.[SESSION_LOOKUP](semanticKey, logicalRoot);
   if (!semantic) {
-    const { exports, declarationExports, cache } = exactExportBindings(
+    const { exports, declarationExports, unboundDeclarationExports, cache } = exactExportBindings(
       runtime.file,
       declarations.file,
       logicalRoot,
@@ -2854,7 +2963,7 @@ export function resolvePackageArtifacts({
       cache,
       acceptedDependencies
     );
-    semantic = { exports, declarationExports, closure };
+    semantic = { exports, declarationExports, unboundDeclarationExports, closure };
     session?.[SESSION_STORE](semanticKey, semantic);
   }
   const realRoot = realpath(logicalRoot);
@@ -2879,6 +2988,11 @@ export function resolvePackageArtifacts({
     closure: semantic.closure,
     exports: semantic.exports,
     declarationExports: semantic.declarationExports,
+    // Additive: absent unless nonempty, so every resolution without such a
+    // name keeps its exact bytes (and its receipt identity).
+    ...(semantic.unboundDeclarationExports.length > 0
+      ? { unboundDeclarationExports: semantic.unboundDeclarationExports }
+      : {}),
     authority: "standalonePackageResolver"
   };
 }

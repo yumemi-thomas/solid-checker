@@ -256,7 +256,12 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // word: its first run is during the call on the plain path and later
       // under `defer`/`schedule` or an async compute, so neither `inline` nor
       // `deferred` is published for a callback forwarded there.
-      stableMainDocuments: 152,
+      //
+      // 153 on 2026-09-27 adds declaration-reexport-gap's main document, the
+      // corpus pin of ADR 0128: a declaration re-export of a name its module
+      // does not declare leaves the surface alone instead of refusing the
+      // artifact case (`solid-js@2.0.0-rc.9`'s `$DEVCOMP`).
+      stableMainDocuments: 153,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

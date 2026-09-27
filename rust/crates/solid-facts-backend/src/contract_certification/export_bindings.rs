@@ -183,6 +183,40 @@ pub(super) fn verify_snapshot_exports_with_dependencies(
         .intersection(&declaration_names)
         .cloned()
         .collect::<BTreeSet<_>>();
+    // ADR 0128: a name whose runtime binding is exact but whose declaration
+    // re-export chain ends in a module of this package that publishes no
+    // export by it is unavailable, not a reason to refuse every other export.
+    // The census is the generator's `declarationReexportGap`, replayed here
+    // from the archive bytes; the two must agree exactly, so a resolver that
+    // omits a bindable name, or names a gap the bytes do not show, refuses.
+    // Only the declaration axis qualifies: a runtime re-export of an
+    // undeclared name fails the module graph at link time, and that name
+    // stays below, where its missing runtime binding refuses the case.
+    let mut unbound = BTreeSet::new();
+    for name in &names {
+        if replay.declaration_reexport_gap(
+            resolution.declarations_path(),
+            name,
+            &mut BTreeSet::new(),
+        )? && replay
+            .bind_export(
+                resolution.runtime_path(),
+                name,
+                ModuleAxis::Runtime,
+                &mut BTreeSet::new(),
+            )?
+            .is_some()
+        {
+            unbound.insert(name.clone());
+        }
+    }
+    if unbound != resolved.unbound_declaration_exports {
+        return export_mismatch(format!(
+            "supplied unbound declaration exports do not equal archive replay; replayed {unbound:?}; supplied {:?}",
+            resolved.unbound_declaration_exports,
+        ));
+    }
+    let names = names.difference(&unbound).cloned().collect::<BTreeSet<_>>();
     let supplied_names = resolved.exports.keys().cloned().collect::<BTreeSet<_>>();
     if names != supplied_names {
         let replayed_only = names
@@ -400,6 +434,16 @@ struct ModuleDescription {
     stars: Vec<String>,
     external_direct: BTreeMap<String, (String, String)>,
     external_stars: Vec<String>,
+    /// Every name a module-level export statement publishes, in either space
+    /// and by any spelling. Read only by `declaration_reexport_gap`, to prove
+    /// a module publishes *no* export by a name; the generator's
+    /// `declaredNames`.
+    declared_names: BTreeSet<String>,
+    /// An `export *` this replay does not follow as a local value star: a
+    /// type-only one, or one whose source is not a module of this package.
+    /// The generator's `unfollowedExportSource`, less `export =`, which the
+    /// syntax facts do not record (see `has_export_assignment`).
+    unfollowed_star: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -584,6 +628,15 @@ impl ExportReplay<'_> {
         }
 
         for export in facts.module_level_exports() {
+            description.declared_names.extend(
+                export
+                    .specifiers
+                    .iter()
+                    .chain(&export.declarations)
+                    .chain(&export.declaration_surface_only)
+                    .map(|specifier| specifier.exported.to_string())
+                    .chain(export.namespace.as_ref().map(ToString::to_string)),
+            );
             let module_resolution = export
                 .module
                 .as_deref()
@@ -601,6 +654,12 @@ impl ExportReplay<'_> {
             )
             .then(|| export.module.as_deref())
             .flatten();
+            if export.kind == ExportKind::All
+                && export.namespace.is_none()
+                && (export.type_only || target.is_none())
+            {
+                description.unfollowed_star = true;
+            }
             match export.kind {
                 ExportKind::All => {
                     if !export.type_only
@@ -939,6 +998,76 @@ impl ExportReplay<'_> {
         };
         visiting.remove(&identity);
         Ok(answer)
+    }
+
+    /// Whether `name`, looked up in declaration module `path`, reaches a
+    /// module of this package that publishes no export by that name at all.
+    ///
+    /// The byte-for-byte mirror of the generator's `declarationReexportGap`
+    /// (`packages/cli/scripts/artifact-resolution.mjs`); change the two
+    /// together. `true` implies [`Self::bind_export`] answers `None` on the
+    /// declaration axis, and every shape this walk cannot see through answers
+    /// `false`, leaving the name to its existing refusal: a module that
+    /// declares the name in any space or by any spelling, forwards it from
+    /// outside the package, has an `export =` or an unfollowed `export *`,
+    /// and a cycle.
+    fn declaration_reexport_gap(
+        &mut self,
+        path: &str,
+        name: &str,
+        visiting: &mut BTreeSet<(String, String)>,
+    ) -> Result<bool, ArtifactSnapshotError> {
+        let identity = (path.to_owned(), name.to_owned());
+        if !visiting.insert(identity.clone()) {
+            return Ok(false);
+        }
+        let description = self.description(path, ModuleAxis::Declarations)?;
+        let gap = if let Some(direct) = description.direct.get(name) {
+            direct.file != path
+                && direct.name != "*"
+                && direct.snapshot_root == self.snapshot.root()
+                && self.declaration_reexport_gap(&direct.file, &direct.name, visiting)?
+        } else if description.external_direct.contains_key(name)
+            || description.declaration_surface_only.contains(name)
+            || description.declared_names.contains(name)
+            || description.unfollowed_star
+            || !description.external_stars.is_empty()
+            || self.has_export_assignment(path)?
+        {
+            false
+        } else if name == "default" {
+            // ESM `export *` never forwards a default export.
+            true
+        } else {
+            let mut every = true;
+            for target in &description.stars {
+                if !self.declaration_reexport_gap(target, name, visiting)? {
+                    every = false;
+                    break;
+                }
+            }
+            every
+        };
+        visiting.remove(&identity);
+        Ok(gap)
+    }
+
+    fn has_export_assignment(&self, path: &str) -> Result<bool, ArtifactSnapshotError> {
+        let bytes = self.snapshot.read(path).ok_or_else(|| {
+            ArtifactSnapshotError::ExportBindings(format!(
+                "export module {path:?} is absent from the snapshot"
+            ))
+        })?;
+        let source = std::str::from_utf8(bytes).map_err(|_| {
+            ArtifactSnapshotError::ExportBindings(format!(
+                "export module {path:?} is not valid UTF-8"
+            ))
+        })?;
+        solid_facts::ast::has_export_assignment(source).map_err(|error| {
+            ArtifactSnapshotError::ExportBindings(format!(
+                "export module {path:?} cannot be parsed: {error}"
+            ))
+        })
     }
 
     fn bind_export(

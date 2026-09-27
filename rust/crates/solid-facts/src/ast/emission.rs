@@ -146,6 +146,37 @@ pub fn module_emission(
     }
 }
 
+/// Whether a module-level `export = value` assignment appears in these bytes.
+///
+/// `export =` is the one TypeScript export form the syntax facts do not
+/// record as an [`super::ExportFact`], and it publishes the members of
+/// `value` to named imports -- the `@types/react` pattern. A census that has
+/// to prove a module publishes *no* export by some name therefore has to ask
+/// about it separately. `export default value` is not this form.
+///
+/// # Errors
+///
+/// Refuses bytes no configuration of the module ladder parses.
+pub fn has_export_assignment(source: &str) -> Result<bool, ModuleEmissionError> {
+    let mut first_error = None;
+    for flavor in MODULE_LADDER {
+        match with_parse(source, flavor, |program| {
+            program
+                .body
+                .iter()
+                .any(|statement| matches!(statement, Statement::TSExportAssignment(_)))
+        }) {
+            Ok(answer) => return Ok(answer),
+            Err(ModuleEmissionError::Parse(error)) => {
+                first_error.get_or_insert(error);
+            }
+        }
+    }
+    Err(ModuleEmissionError::Parse(first_error.unwrap_or_else(
+        || "no parse configuration accepted the bytes".into(),
+    )))
+}
+
 fn module_emission_with_ladder(
     source: &str,
     ladder: &[ParseFlavor],
@@ -673,9 +704,33 @@ fn statement_declares(statement: &Statement<'_>) -> bool {
 mod tests {
     use super::{
         EmittingStatement, MODULE_LADDER, ModuleEmission, ModuleEmissionError, ModuleFlavor,
-        ParseFlavor, module_emission, module_emission_with_ladder,
+        ParseFlavor, has_export_assignment, module_emission, module_emission_with_ladder,
     };
     use serde::Deserialize;
+
+    #[test]
+    fn export_assignment_is_the_equals_form_at_module_level_only() {
+        for (source, expected) in [
+            (
+                "declare namespace React { const x: 1 }\nexport = React;\n",
+                true,
+            ),
+            (
+                "declare const value: number;\nexport default value;\n",
+                false,
+            ),
+            ("export declare const IS_DEV: boolean;\n", false),
+            // Inside an ambient module block it assigns that module's export,
+            // not this file's.
+            (
+                "declare module \"other\" { const x: 1; export = x; }\nexport {};\n",
+                false,
+            ),
+        ] {
+            assert_eq!(has_export_assignment(source), Ok(expected), "{source}");
+        }
+        assert!(has_export_assignment("export = ;").is_err());
+    }
 
     /// The shared corpus. Both this module's tests and
     /// `packages/cli/test/artifact-resolution.test.mjs` read these exact bytes

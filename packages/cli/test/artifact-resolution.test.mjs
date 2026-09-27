@@ -790,6 +790,95 @@ describe("exact artifact records and closure", () => {
     expect(record.declarationExports).toEqual(["declarationOnly", "shared"]);
   });
 
+  test("a declaration re-export of a name its module does not declare is unbound, alone", () => {
+    // ADR 0128. `solid-js@2.0.0-rc.9`'s `types/index.d.ts` re-exports
+    // `$DEVCOMP` from `./client/core.js`, whose declarations never declare it
+    // (an upstream typing defect); the runtime exports it. The census names
+    // exactly that shape, and only when the runtime side binds.
+    const manifest = {
+      name: "declaration-gap",
+      version: "1.0.0",
+      type: "module",
+      exports: { ".": { types: "./types/index.d.ts", import: "./dist/index.js" } }
+    };
+    const resolve = files => {
+      const root = fixture(manifest, files);
+      return resolvePackageArtifacts({
+        importer: join(root, "consumer.mjs"),
+        specifier: manifest.name,
+        packageRoot: root,
+        integrity: "sha512:test"
+      });
+    };
+    const runtime = {
+      "dist/index.js": 'export { GAP } from "./core.js";\nexport const own = 1;\n',
+      "dist/core.js": "export const GAP = 2;\n"
+    };
+    const entry = 'export { GAP } from "./core.js";\nexport declare const own: number;\n';
+
+    const gap = resolve({
+      ...runtime,
+      "types/index.d.ts": entry,
+      "types/core.d.ts": "export declare const IS_DEV: boolean;\n"
+    });
+    expect(Object.keys(gap.exports)).toEqual(["own"]);
+    expect(gap.declarationExports).toEqual(["GAP", "own"]);
+    expect(gap.unboundDeclarationExports).toEqual(["GAP"]);
+
+    // Through a local `export *`, and through an import-then-export.
+    expect(resolve({
+      ...runtime,
+      "types/index.d.ts": 'export * from "./mid.js";\nexport declare const own: number;\n',
+      "types/mid.d.ts": 'export { GAP } from "./core.js";\n',
+      "types/core.d.ts": "export {};\n"
+    }).unboundDeclarationExports).toEqual(["GAP"]);
+    expect(resolve({
+      ...runtime,
+      "types/index.d.ts":
+        'import { GAP } from "./core.js";\nexport { GAP };\nexport declare const own: number;\n',
+      "types/core.d.ts": "export {};\n"
+    }).unboundDeclarationExports).toEqual(["GAP"]);
+
+    // Every terminal that publishes the name some other way, or could, is
+    // not proven a gap; the field is then absent and the name keeps its
+    // existing refusal downstream.
+    for (const core of [
+      "export interface GAP { value: number }\n",
+      "export type GAP = number;\n",
+      'export type { GAP } from "./other.js";\n',
+      "export declare namespace GAP { const value: number; }\n",
+      "declare const value: { GAP: number };\nexport = value;\n",
+      'export * from "some-dependency";\n',
+      'export type * from "./other.js";\n'
+    ]) {
+      const record = resolve({
+        ...runtime,
+        "types/index.d.ts": entry,
+        "types/core.d.ts": core,
+        "types/other.d.ts": "export type GAP = number;\n"
+      });
+      expect(record.unboundDeclarationExports, core).toBeUndefined();
+      expect(Object.keys(record.exports), core).toEqual(["own"]);
+    }
+
+    // A runtime re-export of an undeclared name fails the module graph at
+    // link time, so it is never an isolated gap.
+    const runtimeGap = resolve({
+      "dist/index.js": 'export { GAP } from "./core.js";\nexport const own = 1;\n',
+      "dist/core.js": "export const IS_DEV = true;\n",
+      "types/index.d.ts": entry,
+      "types/core.d.ts": "export {};\n"
+    });
+    expect(runtimeGap.unboundDeclarationExports).toBeUndefined();
+
+    // The resolution of a package without such a name is byte-unchanged.
+    expect(resolve({
+      ...runtime,
+      "types/index.d.ts": entry,
+      "types/core.d.ts": "export declare const GAP: number;\n"
+    })).not.toHaveProperty("unboundDeclarationExports");
+  });
+
   test("named default declarations do not invent public named exports", () => {
     for (const kind of ["function", "class"]) {
       for (const named of [false, true]) {

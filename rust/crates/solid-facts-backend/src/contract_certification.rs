@@ -5726,6 +5726,7 @@ mod tests {
             transform: None,
             exports,
             declaration_exports: BTreeSet::new(),
+            unbound_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -5921,6 +5922,7 @@ mod tests {
             transform: None,
             exports,
             declaration_exports: BTreeSet::new(),
+            unbound_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -6123,6 +6125,7 @@ mod tests {
                 },
             )]),
             declaration_exports: BTreeSet::new(),
+            unbound_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -7354,6 +7357,264 @@ mod tests {
         );
     }
 
+    /// One published package whose declaration entry re-exports `GAP` from
+    /// `types/core.d.ts`, with that module's bytes chosen by the caller, and
+    /// whose runtime binds `GAP` exactly unless `runtime_core` says otherwise.
+    /// `solid-js@2.0.0-rc.9` is this shape for `$DEVCOMP` (ADR 0128).
+    fn declaration_gap_archive(
+        declaration_entry: &[u8],
+        declaration_core: &[u8],
+        runtime_core: &[u8],
+    ) -> PublishedArchive {
+        published_archive_for(
+            "gap-package",
+            "1.0.0",
+            &[
+                ("package/package.json", GAP_MANIFEST),
+                ("package/dist/index.js", GAP_RUNTIME),
+                ("package/dist/core.js", runtime_core),
+                ("package/types/index.d.ts", declaration_entry),
+                ("package/types/core.d.ts", declaration_core),
+                (
+                    "package/types/other.d.ts",
+                    b"export type GAP = number;\n".as_slice(),
+                ),
+            ],
+        )
+    }
+
+    const GAP_MANIFEST: &[u8] = br#"{"name":"gap-package","version":"1.0.0","exports":{".":{"types":"./types/index.d.ts","import":"./dist/index.js"}}}"#;
+    const GAP_RUNTIME: &[u8] = b"export { GAP } from \"./core.js\";\nexport const own = 1;\n";
+    const GAP_ENTRY: &[u8] =
+        b"export { GAP } from \"./core.js\";\nexport declare const own: number;\n";
+    const GAP_ROOT: &str = "/project/node_modules/gap-package";
+
+    fn plan_gap_package(
+        archive: &PublishedArchive,
+        unbound: &[&str],
+        extra_candidate_exports: &[&str],
+        importer: &str,
+    ) -> Result<CertificationPlan, super::CertificationPlanningError> {
+        let snapshot =
+            ArtifactSnapshot::from_published(archive, SnapshotLimits::policy_2()).unwrap();
+        let runtime = snapshot.read("dist/index.js").unwrap().to_vec();
+        let declarations = snapshot.read("types/index.d.ts").unwrap().to_vec();
+        let unbound = unbound
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect::<BTreeSet<_>>();
+        try_plan_adjusted_for_test_package(
+            archive,
+            "gap-package",
+            "1.0.0",
+            GAP_ROOT,
+            GAP_MANIFEST,
+            &["import"],
+            &[(
+                "own",
+                ("dist/index.js", runtime.as_slice()),
+                ("types/index.d.ts", declarations.as_slice()),
+                GAP_ROOT,
+            )],
+            &[],
+            importer,
+            &[],
+            &|_| ValueShape::Plain,
+            extra_candidate_exports,
+            &|resolved| {
+                // A resolver that names an unbound export also supplies the
+                // declaration census it is a subset of; this entry's is the
+                // same in every variant below.
+                if !unbound.is_empty() {
+                    resolved.declaration_exports = BTreeSet::from(["GAP".into(), "own".into()]);
+                }
+                resolved.unbound_declaration_exports.clone_from(&unbound);
+            },
+        )
+    }
+
+    fn refusal_text(
+        result: Result<CertificationPlan, super::CertificationPlanningError>,
+    ) -> String {
+        match result {
+            Ok(_) => panic!("the case must stay refused"),
+            Err(error) => error.to_string(),
+        }
+    }
+
+    // ADR 0128: a declaration re-export of a name its module does not declare
+    // costs that export alone. Before, the whole artifact case refused with
+    // `resolved artifact has no exact runtime/declaration binding for export
+    // "$DEVCOMP"`, and with it every graph that composed `solid-js@2.0.0-rc.9`.
+    #[test]
+    fn a_declaration_reexport_of_an_undeclared_name_costs_only_that_export() {
+        let gap = declaration_gap_archive(
+            GAP_ENTRY,
+            b"export declare const IS_DEV: boolean;\n",
+            b"export const GAP = 2;\n",
+        );
+        let plan = plan_gap_package(&gap, &["GAP"], &[], "/project/src/app.ts").unwrap();
+        assert_eq!(plan.verified_exports.binding_count(), 1);
+        assert!(plan.verified_exports.declaration_binding("own").is_some());
+        assert!(plan.verified_exports.declaration_binding("GAP").is_none());
+
+        // The census is replayed, not trusted, in both directions: a resolver
+        // that does not name the gap disagrees with the bytes...
+        let unnamed = refusal_text(plan_gap_package(&gap, &[], &[], "/project/src/app.ts"));
+        assert!(
+            unnamed.contains("supplied unbound declaration exports do not equal archive replay"),
+            "{unnamed}"
+        );
+        // ...and a document that still names the unavailable export refuses
+        // at the binding, exactly as before (`bind_exports` stays strict).
+        let named = refusal_text(plan_gap_package(
+            &gap,
+            &["GAP"],
+            &["GAP"],
+            "/project/src/app.ts",
+        ));
+        assert!(
+            named.contains("no exact runtime/declaration binding for export \"GAP\""),
+            "{named}"
+        );
+    }
+
+    #[test]
+    fn a_declaration_reexport_gap_is_never_claimed_where_the_bytes_could_publish_the_name() {
+        // A module that declares the name in another space or by another
+        // spelling, forwards it from outside the package, assigns `export =`,
+        // or has an `export *` the replay does not follow is not proven to
+        // publish nothing by it: a resolver naming the gap there refuses.
+        for core in [
+            b"export interface GAP { value: number }\n".as_slice(),
+            b"export type GAP = number;\n",
+            b"export type { GAP } from \"./other.js\";\n",
+            b"export declare namespace GAP { const value: number; }\n",
+            b"declare const value: { GAP: number };\nexport = value;\n",
+            b"export type * from \"./other.js\";\n",
+            b"export declare const GAP: number;\n",
+        ] {
+            let archive = declaration_gap_archive(GAP_ENTRY, core, b"export const GAP = 2;\n");
+            let refusal = refusal_text(plan_gap_package(
+                &archive,
+                &["GAP"],
+                &[],
+                "/project/src/app.ts",
+            ));
+            assert!(
+                refusal
+                    .contains("supplied unbound declaration exports do not equal archive replay")
+                    || refusal.contains("both bound and declared unbound"),
+                "{}: {refusal}",
+                String::from_utf8_lossy(core)
+            );
+        }
+
+        // A runtime re-export of an undeclared name fails the module graph at
+        // link time, so no export of the entrypoint is usable: never a gap.
+        let runtime_gap =
+            declaration_gap_archive(GAP_ENTRY, b"export {};\n", b"export const IS_DEV = true;\n");
+        let refusal = refusal_text(plan_gap_package(
+            &runtime_gap,
+            &["GAP"],
+            &[],
+            "/project/src/app.ts",
+        ));
+        assert!(
+            refusal.contains("supplied unbound declaration exports do not equal archive replay"),
+            "{refusal}"
+        );
+
+        // The gap is found through a local `export *` too.
+        let through_star = published_archive_for(
+            "gap-package",
+            "1.0.0",
+            &[
+                ("package/package.json", GAP_MANIFEST),
+                ("package/dist/index.js", GAP_RUNTIME),
+                (
+                    "package/dist/core.js",
+                    b"export const GAP = 2;\n".as_slice(),
+                ),
+                (
+                    "package/types/index.d.ts",
+                    b"export * from \"./mid.js\";\nexport declare const own: number;\n",
+                ),
+                (
+                    "package/types/mid.d.ts",
+                    b"export { GAP } from \"./core.js\";\n",
+                ),
+                ("package/types/core.d.ts", b"export {};\n"),
+            ],
+        );
+        let plan = plan_gap_package(&through_star, &["GAP"], &[], "/project/src/app.ts").unwrap();
+        assert_eq!(plan.verified_exports.binding_count(), 1);
+    }
+
+    // What reaches the unavailable export from a dependent package stays
+    // refused; what does not reach it binds.
+    #[test]
+    fn a_dependent_binds_around_a_declaration_reexport_gap_and_refuses_through_it() {
+        let gap = declaration_gap_archive(
+            GAP_ENTRY,
+            b"export declare const IS_DEV: boolean;\n",
+            b"export const GAP = 2;\n",
+        );
+        let dependent_root = "/project/node_modules/gap-dependent";
+        let dependent_importer = "/project/node_modules/gap-dependent/dist/index.js";
+        let leaf = plan_gap_package(&gap, &["GAP"], &[], dependent_importer).unwrap();
+        let leaf_runtime = b"export { GAP } from \"./core.js\";\nexport const own = 1;\n";
+        let leaf_declarations = GAP_ENTRY;
+        let dependent_manifest = br#"{"name":"gap-dependent","version":"1.0.0","exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.js"}}}"#;
+        let own_binding = [(
+            "own",
+            ("dist/index.js", leaf_runtime.as_slice()),
+            ("types/index.d.ts", leaf_declarations),
+            GAP_ROOT,
+        )];
+        let dependent = |source: &[u8]| {
+            let archive = published_archive_for(
+                "gap-dependent",
+                "1.0.0",
+                &[
+                    ("package/package.json", dependent_manifest.as_slice()),
+                    ("package/dist/index.js", source),
+                    ("package/dist/index.d.ts", source),
+                ],
+            );
+            try_plan_for_test_package_from_importer(
+                &archive,
+                "gap-dependent",
+                "1.0.0",
+                dependent_root,
+                dependent_manifest,
+                &["import"],
+                &own_binding,
+                &[&leaf],
+                "/project/src/app.ts",
+            )
+        };
+
+        // A named re-export of a sibling export binds, and so does `export *`,
+        // which forwards exactly the dependency's verified surface.
+        for source in [
+            b"export { own } from \"gap-package\";\n".as_slice(),
+            b"export * from \"gap-package\";\n",
+        ] {
+            let plan = dependent(source)
+                .unwrap_or_else(|error| panic!("{}: {error}", String::from_utf8_lossy(source)));
+            assert_eq!(plan.verified_exports.binding_count(), 1);
+        }
+
+        // A named re-export of the unavailable export reaches it, and refuses.
+        let refusal = refusal_text(dependent(b"export { own, GAP } from \"gap-package\";\n"));
+        assert!(
+            refusal.contains("do not equal the runtime/declaration intersection")
+                || refusal.contains("has no exact binding"),
+            "{refusal}"
+        );
+    }
+
     // Regression: `external_dependency` selected a planned dependency by its
     // bare specifier across the *whole* authenticated descendant set. That set
     // repeats a specifier as soon as two packages of one graph depend on the
@@ -8153,6 +8414,7 @@ mod tests {
                 })
                 .collect(),
             declaration_exports: BTreeSet::new(),
+            unbound_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         (request, resolved)
@@ -8261,7 +8523,45 @@ mod tests {
         closed_domains: &[(&str, ClaimDomain)],
         shape: &dyn Fn(&str) -> ValueShape,
     ) -> Result<CertificationPlan, super::CertificationPlanningError> {
-        let (request, resolved) = test_package_resolution(
+        try_plan_adjusted_for_test_package(
+            archive,
+            name,
+            version,
+            root,
+            manifest,
+            conditions,
+            exports,
+            dependencies,
+            importer,
+            closed_domains,
+            shape,
+            &[],
+            &|_| {},
+        )
+    }
+
+    /// As `try_plan_closing_for_test_package_from_importer`, but the
+    /// candidate additionally names `extra_candidate_exports` (bound to the
+    /// entry files, the way an emitter that kept them would write them), and
+    /// `adjust` edits the resolver's answer before planning -- the two sides
+    /// a test of a resolver/emitter disagreement has to set independently.
+    #[expect(clippy::too_many_arguments, reason = "exact resolution inputs")]
+    fn try_plan_adjusted_for_test_package(
+        archive: &PublishedArchive,
+        name: &str,
+        version: &str,
+        root: &str,
+        manifest: &[u8],
+        conditions: &[&str],
+        exports: &[TestExportBinding<'_>],
+        dependencies: &[&CertificationPlan],
+        importer: &str,
+        closed_domains: &[(&str, ClaimDomain)],
+        shape: &dyn Fn(&str) -> ValueShape,
+        extra_candidate_exports: &[&str],
+        adjust: &dyn Fn(&mut ResolvedImport),
+    ) -> Result<CertificationPlan, super::CertificationPlanningError> {
+        let (request, mut resolved) = test_package_resolution(
             archive,
             name,
             version,
@@ -8272,6 +8572,7 @@ mod tests {
             dependencies,
             importer,
         );
+        adjust(&mut resolved);
         let (package, mut artifact_case) =
             crate::artifact_resolution::proposal_identity(&resolved).unwrap();
         // Each export's proposed value shape is chosen per export name: the
@@ -8281,20 +8582,22 @@ mod tests {
         // stay open.
         artifact_case.exports = exports
             .iter()
-            .map(|(export, _, _, _)| {
+            .map(|(export, _, _, _)| *export)
+            .chain(extra_candidate_exports.iter().copied())
+            .map(|export| {
                 (
-                    (*export).to_owned(),
+                    export.to_owned(),
                     ExportSemantics {
                         identity: ExportIdentity {
                             entrypoint: artifact_case.entrypoint.clone(),
-                            public_name: (*export).to_owned(),
+                            public_name: export.to_owned(),
                             runtime: ExportTargetIdentity {
                                 module: artifact_case.runtime.clone(),
-                                export_name: (*export).to_owned(),
+                                export_name: export.to_owned(),
                             },
                             declarations: ExportTargetIdentity {
                                 module: artifact_case.declarations.clone(),
-                                export_name: (*export).to_owned(),
+                                export_name: export.to_owned(),
                             },
                         },
                         shape: shape(export),
@@ -8914,6 +9217,7 @@ export const value = phantom;
                 "publicName".into(),
                 "shared".into(),
             ]),
+            unbound_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -9047,6 +9351,7 @@ export const value = phantom;
             transform: None,
             exports: BTreeMap::new(),
             declaration_exports: BTreeSet::new(),
+            unbound_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -9209,6 +9514,7 @@ export const value = phantom;
             transform: None,
             exports,
             declaration_exports: BTreeSet::new(),
+            unbound_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         let (package, mut artifact_case) =
@@ -9528,6 +9834,7 @@ export const value = phantom;
             transform: None,
             exports: BTreeMap::new(),
             declaration_exports: BTreeSet::new(),
+            unbound_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         let (package, mut artifact_case) =
@@ -10396,6 +10703,7 @@ export const value = phantom;
                 transform: None,
                 exports,
                 declaration_exports: BTreeSet::new(),
+                unbound_declaration_exports: BTreeSet::new(),
                 authority: ResolutionAuthority::Host,
             };
             let (package, mut artifact_case) =
@@ -11423,6 +11731,7 @@ export const value = phantom;
                 },
             )]),
             declaration_exports: BTreeSet::new(),
+            unbound_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         let (package, mut artifact_case) =

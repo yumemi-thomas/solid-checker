@@ -595,6 +595,15 @@ pub struct ResolvedImport {
     /// supply this additive evidence and grants no filtering authority.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub declaration_exports: BTreeSet<String>,
+    /// Names on the runtime/declaration intersection whose runtime binding is
+    /// exact and whose declaration re-export chain ends in a module of this
+    /// package that publishes no export by that name (ADR 0128). Each is
+    /// unavailable -- it leaves the contract surface, so whatever reaches it
+    /// stays refused -- while every other export keeps its exact binding.
+    /// Additive resolution evidence: certification replays it from the
+    /// archive and refuses a disagreement in either direction.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub unbound_declaration_exports: BTreeSet<String>,
     pub authority: ResolutionAuthority,
 }
 
@@ -645,6 +654,19 @@ impl ResolvedImport {
         }
         for name in &self.declaration_exports {
             validate_identifier(name, "declaration export name")?;
+        }
+        for name in &self.unbound_declaration_exports {
+            validate_identifier(name, "unbound declaration export name")?;
+            if self.exports.contains_key(name) {
+                return invalid_resolution(format!(
+                    "export {name:?} is both bound and declared unbound"
+                ));
+            }
+            if !self.declaration_exports.contains(name) {
+                return invalid_resolution(format!(
+                    "unbound declaration export {name:?} is absent from the declaration export census"
+                ));
+            }
         }
         Ok(())
     }
@@ -1653,6 +1675,7 @@ mod tests {
             transform: None,
             exports: BTreeMap::from([("value".into(), binding.clone()), ("other".into(), binding)]),
             declaration_exports: BTreeSet::new(),
+            unbound_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         }
     }

@@ -129,6 +129,7 @@ fn resolved_import() -> ResolvedImport {
         transform: None,
         exports,
         declaration_exports: std::collections::BTreeSet::new(),
+        unbound_declaration_exports: std::collections::BTreeSet::new(),
         authority: ResolutionAuthority::Host,
     }
 }
@@ -984,6 +985,40 @@ fn resolved_import_root_binds_the_declaration_export_census() {
         policy2_resolved_import_root(&changed).unwrap(),
         "an additive declaration-surface census is receipt identity"
     );
+}
+
+#[test]
+fn resolved_import_root_binds_the_unbound_declaration_export_census() {
+    let resolved = resolved_import();
+    let original_root = policy2_resolved_import_root(&resolved).unwrap();
+    let mut changed = resolved.clone();
+    changed.declaration_exports.insert("UnboundName".into());
+    let census_only = policy2_resolved_import_root(&changed).unwrap();
+    changed
+        .unbound_declaration_exports
+        .insert("UnboundName".into());
+    assert_ne!(census_only, original_root);
+
+    assert_ne!(
+        original_root,
+        policy2_resolved_import_root(&changed).unwrap(),
+        "an export ADR 0128 leaves unbound is receipt identity"
+    );
+    assert_ne!(census_only, policy2_resolved_import_root(&changed).unwrap());
+
+    // The census it is a subset of is required.
+    let mut uncensused = resolved.clone();
+    uncensused
+        .unbound_declaration_exports
+        .insert("UnboundName".into());
+    assert!(policy2_resolved_import_root(&uncensused).is_err());
+
+    // A name cannot be both: the census names exports with no binding.
+    let mut both = resolved;
+    let bound = both.exports.keys().next().expect("a bound export").clone();
+    both.declaration_exports.insert(bound.clone());
+    both.unbound_declaration_exports.insert(bound);
+    assert!(policy2_resolved_import_root(&both).is_err());
 }
 
 /// The whole point of the acceptance root: two consumers that resolved the same
