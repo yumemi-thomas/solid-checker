@@ -120,6 +120,42 @@ Second round, same day (`make verify` passed at the notice commit, 334 s):
   attested and keeps the notice; WASM has no attestation, so any bare import
   keeps it; the daemon does not watch transitive manifests.
 
+Third round, 2026-09-27/28 (measured; `make verify` passed at each tier
+commit, last at the ADR 0136-0137 tier, 331 s):
+
+- **ADR 0132** (f5c4b84c): an installed package's own relative imports under
+  `node_modules` no longer read as uncontracted package imports, and each
+  export also joins by its digest-checked runtime binding. Census ungated:
+  misuse-capable exports 91 -> 98, claims needing a recipe 341 -> 359; tier
+  228 -> 258 bundles (85057e9b), the full rc.9 triple 21 -> 51.
+- **ADR 0133** (c7e589ba): an entry-file import used only in `export { }`
+  belongs to its published names. solid-router root catch-alls 44 -> 15.
+- **ADR 0134** (9a457cdf): a class obligation belongs to the exports that
+  construct it; an instance-member obligation marks the creators' `returns`
+  (owner decision 2026-09-27). 15 -> 6.
+- **ADR 0135** (36bf0e9d): helper reachability follows an exact call graph
+  only. **Soundness fix:** a helper published by its own module and imported
+  as `./f.js` (resolving to `f.d.ts`) had its obligations attributed to no
+  export. The tier regenerated after it (09f30fee): 2 bundles' summaries
+  changed (focus, props), nothing else. 6 -> 9 (the four no-export
+  obligations become catch-alls).
+- **ADR 0136** (e9a1b76f): `createComponent(C, props)` is a call edge to `C`
+  (rc.0-rc.9 read and probed; `solid-v2/model-4`). Answered on every
+  vocabulary, unread releases included, as `callback_runs_as_action_steps`
+  is; the edge only chooses which export an obligation is charged to.
+- **ADR 0137** (e6af85a9): the `.d.ts` split joins to the runtime module Node
+  loads (the runtime-module-resolutions feed, empty since 474c101f, is
+  written again). 9 -> 5. Tier regenerated (this commit's parent): 1 bundle
+  changed (focus).
+
+The solid-router root still publishes 93 of 97 exports with nothing
+determined, so viviana's 213 root-import sites certify nothing. The 5
+remaining catch-alls cover every domain between them:
+- 3 `getNotFound`: its callers are component values rendered by `Dynamic`
+  (`Match.js:44`, `:200`) -- value flow, a third rule;
+- 2 `getStoreFactory`: handed to `RouterCore`'s constructor; needs
+  router-core's constructor contract.
+
 Open:
 - `contract-differential` fails on a stale `schemaVersion 2` assertion before
   any release-dependent step; nothing gates it.
