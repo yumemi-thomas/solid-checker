@@ -67,7 +67,9 @@ test("the checked-in pins load and name the archives the Rust tables audit", () 
   // the only place a row is ever read as authority. Since 2026-09-26, five
   // more every-condition rows on `@solidjs/signals@2.0.0-rc.9`, and since
   // 2026-09-27 nineteen more there (rc.9 then carries rc.6's 24).
-  assert.equal(solid2.negativeRowCount, 99);
+  // Withdrawn since 2026-09-27 on rc.3's own bytes: `solid-js@2.0.0-rc.3`
+  // `Show` `reads`.
+  assert.equal(solid2.negativeRowCount, 98);
 });
 
 test("a pin file that parses but pins nothing is refused, not read as full coverage", () => {
