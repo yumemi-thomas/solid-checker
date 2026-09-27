@@ -1192,6 +1192,11 @@ mod tests {
             "/project/app/pnpm-lock.yaml",
             "/project/app/yarn.lock",
             "/project/package-lock.json",
+            // Where pnpm and Bun declare a patch, and where a script names
+            // patch-package's directory (ADR 0131).
+            "/project/app/package.json",
+            "/project/app/pnpm-workspace.yaml",
+            "/project/package.json",
         ] {
             assert!(
                 paths.iter().any(|path| path == Path::new(expected)),

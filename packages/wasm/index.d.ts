@@ -113,6 +113,12 @@ export interface InstalledPackage {
    * acceptances that share a declaration file.
    */
   resolvedTarget: string
+  /**
+   * The artifact snapshot root of the installed package's files, which a
+   * compiled-in contract's signed `snapshotRoot` must equal: a lockfile keeps
+   * the published integrity for a patched package. Absent admits nothing.
+   */
+  snapshotRoot?: string
 }
 
 export interface CheckRequest {

@@ -962,12 +962,14 @@ pub(crate) fn declared_conditions(conditions: &std::collections::BTreeSet<String
 ///
 /// `conditions` is the host's declaration, not a guess: the analyzer has no
 /// condition facts of its own, and conditions select the artifact.
+#[allow(clippy::too_many_arguments)]
 pub fn admitted_project_artifacts(
     catalogs: &[PathBuf],
     trust: Option<&Policy2TrustConfiguration>,
     project_directory: &Path,
     conditions: &std::collections::BTreeSet<String>,
     installed_integrity: &InstalledArtifactIdentity,
+    installed_bytes: &crate::accepted_bundles::InstalledArtifactBytes,
     resolved_target: &ResolvedTargetIdentity,
     installed_environment: &crate::accepted_bundles::InstalledEnvironment,
 ) -> Result<Vec<(String, String)>, ContractFailure> {
@@ -1020,6 +1022,7 @@ pub fn admitted_project_artifacts(
                 specifier: entry.import.specifier.clone(),
                 requested_entrypoint: entry.import.requested_entrypoint.clone(),
                 acceptance_root: bindings.artifact_acceptance_root.clone(),
+                snapshot_root: bindings.snapshot_root.clone(),
                 conditions,
                 runtime_target,
                 declaration_target,
@@ -1031,6 +1034,7 @@ pub fn admitted_project_artifacts(
         candidates.iter().map(ProjectCandidate::acceptance),
         conditions,
         installed_integrity,
+        installed_bytes,
         resolved_target,
         installed_environment,
     ))
@@ -1045,11 +1049,16 @@ pub fn admitted_project_artifacts(
 pub fn project_admission_refusals(
     catalogs: &[PathBuf],
     installed_integrity: &InstalledArtifactIdentity,
+    installed_bytes: &crate::accepted_bundles::InstalledArtifactBytes,
     installed_difference: &crate::accepted_bundles::InstalledEnvironmentDifference,
 ) -> Result<Vec<(String, Option<crate::accepted_bundles::AdmissionRefusal>)>, ContractFailure> {
-    project_admission_refusals_where(catalogs, installed_integrity, installed_difference, |_| {
-        true
-    })
+    project_admission_refusals_where(
+        catalogs,
+        installed_integrity,
+        installed_bytes,
+        installed_difference,
+        |_| true,
+    )
 }
 
 /// [`project_admission_refusals`] over only the entries whose signed bindings
@@ -1058,6 +1067,7 @@ pub fn project_admission_refusals(
 pub(crate) fn project_admission_refusals_where(
     catalogs: &[PathBuf],
     installed_integrity: &InstalledArtifactIdentity,
+    installed_bytes: &crate::accepted_bundles::InstalledArtifactBytes,
     installed_difference: &crate::accepted_bundles::InstalledEnvironmentDifference,
     keep: impl Fn(&Policy2ReceiptBindings) -> bool,
 ) -> Result<Vec<(String, Option<crate::accepted_bundles::AdmissionRefusal>)>, ContractFailure> {
@@ -1090,6 +1100,7 @@ pub(crate) fn project_admission_refusals_where(
                     specifier: entry.import.specifier.clone(),
                     requested_entrypoint: entry.import.requested_entrypoint.clone(),
                     acceptance_root: bindings.artifact_acceptance_root.clone(),
+                    snapshot_root: bindings.snapshot_root.clone(),
                     conditions: entry
                         .export_conditions
                         .clone()
@@ -1112,6 +1123,7 @@ pub(crate) fn project_admission_refusals_where(
             (acceptance, version.as_str())
         }),
         installed_integrity,
+        installed_bytes,
         installed_difference,
     ))
 }
@@ -1125,6 +1137,7 @@ struct ProjectCandidate {
     runtime_target: String,
     declaration_target: String,
     acceptance_root: String,
+    snapshot_root: String,
     environment: Vec<DependencyEnvironmentEntry>,
     identity: String,
 }
@@ -1138,6 +1151,7 @@ impl ProjectCandidate {
             runtime_target: &self.runtime_target,
             declaration_target: &self.declaration_target,
             acceptance_root: &self.acceptance_root,
+            snapshot_root: &self.snapshot_root,
             environment: Some(&self.environment),
             identity: &self.identity,
         }

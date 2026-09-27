@@ -58,6 +58,13 @@ anything missing, different, ambiguous or unreadable refuses, and the import
 behaves as if no bundle existed. See `accepted_bundles::admitted_bundle_artifacts`,
 which shares its case-selection rule with the project-catalog tier.
 
+A lockfile integrity is the record of what was fetched, and a patched package
+keeps it (ADR 0131). So the imported package's installed files must also
+reproduce the receipt's signed `snapshotRoot`, and no environment package may
+be patched by any record the tree keeps: pnpm and Bun `patchedDependencies`
+(lockfile, `package.json`, `pnpm-workspace.yaml`), pnpm's `patch_hash`, a
+Yarn `patch:` resolution, or a `patch-package` patch file.
+
 One artifact therefore usually has several bundles, one per environment the
 corpus certified it in: the floor row (signals rc.0) and the head row (rc.6),
 plus dependency-node certifications, whose environment is graph-wide and so

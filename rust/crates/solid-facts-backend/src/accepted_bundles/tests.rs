@@ -171,6 +171,14 @@ fn any_environment(_: &str, _: &[DependencyEnvironmentEntry]) -> bool {
     true
 }
 
+/// The installed files are the archive every test bundle signs
+/// (`snapshotRoot` is `stand_in(3)`). For the tests about everything but the
+/// bytes, which the bytes half must not change.
+#[allow(clippy::unnecessary_wraps)]
+fn signed_bytes(_: &str) -> Result<String, String> {
+    Ok(stand_in(3))
+}
+
 /// An installed tree, as the location of every package in it: `(location,
 /// name) -> location` is what Node would resolve, and each location's identity.
 struct Tree {
@@ -185,6 +193,7 @@ impl Tree {
             "root",
             |from: &&str, name: &str| Ok(self.resolves.get(&(*from, name)).copied()),
             |at: &&str| self.identities.get(at).cloned(),
+            |_: &&str| None,
         )
     }
 }
@@ -308,7 +317,14 @@ fn admission_needs_the_installed_bytes_to_reproduce_the_signed_root() {
         ))
     };
     assert_eq!(
-        admitted_from(&bundles, &conditions, &same, &resolved, &any_environment),
+        admitted_from(
+            &bundles,
+            &conditions,
+            &same,
+            &signed_bytes,
+            &resolved,
+            &any_environment
+        ),
         vec![("plain-package".to_owned(), bundles[0].identity.clone())]
     );
 
@@ -326,6 +342,7 @@ fn admission_needs_the_installed_bytes_to_reproduce_the_signed_root() {
             &bundles,
             &conditions,
             &repacked,
+            &signed_bytes,
             &resolved,
             &any_environment
         )
@@ -340,6 +357,7 @@ fn admission_needs_the_installed_bytes_to_reproduce_the_signed_root() {
             &bundles,
             &conditions,
             &unstated,
+            &signed_bytes,
             &resolved,
             &any_environment
         )
@@ -373,6 +391,7 @@ fn admission_needs_this_project_to_have_resolved_the_file_the_contract_is_about(
                 &bundles,
                 &conditions,
                 &installed,
+                &signed_bytes,
                 &resolved,
                 &any_environment
             )
@@ -387,6 +406,7 @@ fn admission_needs_this_project_to_have_resolved_the_file_the_contract_is_about(
             &bundles,
             &conditions,
             &installed,
+            &signed_bytes,
             &elsewhere,
             &any_environment
         )
@@ -423,13 +443,20 @@ fn an_undeclared_host_never_receives_a_browser_scoped_case() {
     let both = || [case(&["browser", "import"]), case(&["import"])];
     let identities = both().map(|bundle| bundle.identity);
     let admitted = |bundles: &[LoadedBundle], conditions: &BTreeSet<String>| {
-        admitted_from(bundles, conditions, &installed, &resolved, &any_environment)
-            .into_iter()
-            .map(|(specifier, identity)| {
-                assert_eq!(specifier, "plain-package");
-                identity
-            })
-            .collect::<Vec<_>>()
+        admitted_from(
+            bundles,
+            conditions,
+            &installed,
+            &signed_bytes,
+            &resolved,
+            &any_environment,
+        )
+        .into_iter()
+        .map(|(specifier, identity)| {
+            assert_eq!(specifier, "plain-package");
+            identity
+        })
+        .collect::<Vec<_>>()
     };
 
     let undeclared = BTreeSet::new();
@@ -483,7 +510,17 @@ fn a_require_project_does_not_get_a_contract_proven_under_import() {
     };
     let resolved = |_: &str| Some("dist/index.js".to_owned());
     let required = BTreeSet::from(["require".to_owned(), "node".to_owned()]);
-    assert!(admitted_from(&bundles, &required, &installed, &resolved, &any_environment).is_empty());
+    assert!(
+        admitted_from(
+            &bundles,
+            &required,
+            &installed,
+            &signed_bytes,
+            &resolved,
+            &any_environment
+        )
+        .is_empty()
+    );
 }
 
 #[test]
@@ -543,7 +580,14 @@ fn a_matching_environment_admits_and_a_different_one_refuses() {
             );
             tree.installs(environment)
         };
-        admitted_from(&bundles, &conditions, &installed, &resolved, &environment)
+        admitted_from(
+            &bundles,
+            &conditions,
+            &installed,
+            &signed_bytes,
+            &resolved,
+            &environment,
+        )
     };
 
     let same = flat_tree(entry(
@@ -666,6 +710,7 @@ fn a_tree_that_cannot_answer_a_lookup_refuses() {
         "root",
         |_: &&str, _: &str| Err(()),
         |_: &&str| None,
+        |_: &&str| None,
     ));
 }
 
@@ -698,6 +743,7 @@ fn a_receipt_that_states_no_environment_is_never_admitted() {
             &[bundle],
             &conditions,
             &installed,
+            &signed_bytes,
             &resolved,
             &any_environment
         )
@@ -782,7 +828,14 @@ fn floor_and_head_certifications_of_one_artifact_are_two_bundles() {
         let environment =
             |_: &str, environment: &[DependencyEnvironmentEntry]| tree.installs(environment);
         assert_eq!(
-            admitted_from(&bundles, &conditions, &installed, &resolved, &environment),
+            admitted_from(
+                &bundles,
+                &conditions,
+                &installed,
+                &signed_bytes,
+                &resolved,
+                &environment
+            ),
             vec![("plain-package".to_owned(), expected.clone())],
             "each tree gets the certification of its own environment, and only that one"
         );
@@ -837,7 +890,14 @@ fn a_consumer_tree_gets_only_the_certification_of_its_own_environment() {
         let environment = |specifier: &str, environment: &[DependencyEnvironmentEntry]| {
             crate::diagnostics::installed_environment_matches(&directory, specifier, environment)
         };
-        admitted_from(&bundles, &conditions, &installed, &resolved, &environment)
+        admitted_from(
+            &bundles,
+            &conditions,
+            &installed,
+            &signed_bytes,
+            &resolved,
+            &environment,
+        )
     };
 
     install("2.0.0-rc.6", "sha512-signals-rc6");
@@ -873,6 +933,7 @@ fn an_environment_difference_names_the_first_differing_package() {
             "root",
             |from: &&str, name: &str| Ok(tree.resolves.get(&(*from, name)).copied()),
             |at: &&str| tree.identities.get(at).cloned(),
+            |_: &&str| None,
             |_: &&str| version_of.map(str::to_owned),
         );
         assert_eq!(
@@ -931,6 +992,7 @@ fn admission_refusals_name_the_step_that_failed() {
         runtime_target: &bundle.runtime_target,
         declaration_target: &bundle.declaration_target,
         acceptance_root: &bundle.acceptance_root,
+        snapshot_root: &bundle.snapshot_root,
         environment: bundle.environment.as_deref(),
         identity: &bundle.identity,
     };
@@ -950,10 +1012,15 @@ fn admission_refusals_name_the_step_that_failed() {
     let refusal = |acceptance,
                    installed: &InstalledArtifactIdentity,
                    difference: &InstalledEnvironmentDifference| {
-        admission_refusals([(acceptance, "1.0.0")], installed, difference)
-            .pop()
-            .unwrap()
-            .1
+        admission_refusals(
+            [(acceptance, "1.0.0")],
+            installed,
+            &signed_bytes,
+            difference,
+        )
+        .pop()
+        .unwrap()
+        .1
     };
     assert_eq!(refusal(stated(), &installed("1.0.0"), &same), None);
     assert_eq!(
@@ -1046,6 +1113,7 @@ impl Tree {
             |from: &&str, name: &str| Ok(self.resolves.get(&(*from, name)).copied()),
             |at: &&str| self.identities.get(at).cloned(),
             |_: &&str| None,
+            |_: &&str| None,
         );
         assert_eq!(
             found.is_none(),
@@ -1121,6 +1189,7 @@ fn a_missing_or_unresolvable_edge_target_refuses() {
             }
         },
         |at: &&str| tree.identities.get(at).cloned(),
+        |_: &&str| None,
     ));
 }
 
@@ -1162,5 +1231,325 @@ fn an_edge_bearing_environment_is_keyed_apart_from_the_same_packages_without_edg
     assert_ne!(
         environment_acceptance_identity("sha256:artifact", &edged),
         environment_acceptance_identity("sha256:artifact", &strict)
+    );
+}
+
+/// A consumer tree for ADR 0131, on disk: the certified `plain-package`, the
+/// `@solidjs/signals` it resolves, and the `leaf-dep` signals resolves in turn
+/// -- plus an `unrelated` package the certification never read. Integrities
+/// are registry-shaped (the SHA-512 of each name), which every lockfile reader
+/// accepts.
+struct PatchTree {
+    directory: std::path::PathBuf,
+}
+
+const PLAIN_INTEGRITY: &str = "sha512-zN09qfKZ0Rt7CBzVPnscSx/q1ZRTI/cCJ0JKxvJiMU8m4p628jVm+HFVK02ykmfcEJHl7Ar5CaytDctctAmeKg==";
+const SIGNALS_INTEGRITY: &str = "sha512-k5Fd5w/wyBqMYIWiZD3WSP75Ijd4fCh5A6qZT+L7KotX02Q3VrgWwaAohd2oh/rLa5m4fTkabZI/NuKDqWa+OA==";
+const LEAF_INTEGRITY: &str = "sha512-7l4YxsJgDWOVNoJlPkbDTv4Y2p81Uq3obLYj4PgeA/QaxqJ2kjvNyVKRBsDruFsX6/tYWcFdPcrSGWqo11OrUw==";
+const UNRELATED_INTEGRITY: &str = "sha512-z/GtFuGju3yAqg2912t2YS3/bZTyKtVwzNRlgk5n48ICUe5wclrln9wa3y7kXw7NMnbEb1Kgd4JR4se5roHOaQ==";
+
+impl PatchTree {
+    fn new(label: &str) -> Self {
+        let directory = std::env::temp_dir().join(format!(
+            "solid-checker-patched-admission-{label}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        let tree = Self { directory };
+        tree.write("package.json", r#"{"name":"consumer","private":true}"#);
+        tree.write(
+            "node_modules/plain-package/package.json",
+            r#"{"name":"plain-package","version":"1.0.0"}"#,
+        );
+        tree.write(
+            "node_modules/plain-package/dist/index.js",
+            "export const value = 1;\n",
+        );
+        tree.write(
+            "node_modules/@solidjs/signals/package.json",
+            r#"{"name":"@solidjs/signals","version":"2.0.0-rc.6"}"#,
+        );
+        tree.write(
+            "node_modules/leaf-dep/package.json",
+            r#"{"name":"leaf-dep","version":"1.0.0"}"#,
+        );
+        tree.write(
+            "node_modules/unrelated/package.json",
+            r#"{"name":"unrelated","version":"1.0.0"}"#,
+        );
+        tree
+    }
+
+    fn write(&self, relative: &str, text: &str) {
+        let path = self.directory.join(relative);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+
+    /// A pnpm v9 lockfile for the tree, with `patched` (a whole
+    /// `patchedDependencies:` block, or empty) spliced in.
+    fn pnpm_lock(&self, patched: &str) {
+        self.write(
+            "pnpm-lock.yaml",
+            &format!(
+                "lockfileVersion: '9.0'\n\n{patched}importers:\n  .:\n    dependencies:\n      plain-package:\n        specifier: 1.0.0\n        version: 1.0.0\n\npackages:\n  plain-package@1.0.0:\n    resolution: {{integrity: {PLAIN_INTEGRITY}}}\n  '@solidjs/signals@2.0.0-rc.6':\n    resolution: {{integrity: {SIGNALS_INTEGRITY}}}\n  leaf-dep@1.0.0:\n    resolution: {{integrity: {LEAF_INTEGRITY}}}\n  unrelated@1.0.0:\n    resolution: {{integrity: {UNRELATED_INTEGRITY}}}\n"
+            ),
+        );
+    }
+
+    fn npm_lock(&self) {
+        self.write(
+            "package-lock.json",
+            &format!(
+                r#"{{"lockfileVersion":3,"packages":{{
+                    "node_modules/plain-package":{{"version":"1.0.0","integrity":"{PLAIN_INTEGRITY}"}},
+                    "node_modules/@solidjs/signals":{{"version":"2.0.0-rc.6","integrity":"{SIGNALS_INTEGRITY}"}},
+                    "node_modules/leaf-dep":{{"version":"1.0.0","integrity":"{LEAF_INTEGRITY}"}},
+                    "node_modules/unrelated":{{"version":"1.0.0","integrity":"{UNRELATED_INTEGRITY}"}}}}}}"#
+            ),
+        );
+    }
+
+    fn bun_lock(&self, patched: &str) {
+        self.write(
+            "bun.lock",
+            &format!(
+                r#"{{
+                  "lockfileVersion": 2,
+                  {patched}
+                  "packages": {{
+                    "plain-package": ["plain-package@1.0.0", "", {{}}, "{PLAIN_INTEGRITY}"],
+                    "@solidjs/signals": ["@solidjs/signals@2.0.0-rc.6", "", {{}}, "{SIGNALS_INTEGRITY}"],
+                    "leaf-dep": ["leaf-dep@1.0.0", "", {{}}, "{LEAF_INTEGRITY}"],
+                    "unrelated": ["unrelated@1.0.0", "", {{}}, "{UNRELATED_INTEGRITY}"],
+                  }},
+                }}"#
+            ),
+        );
+    }
+
+    /// The environment the certification read, with its lookups: signals from
+    /// the certified package, and `leaf-dep` from signals.
+    fn environment() -> Vec<DependencyEnvironmentEntry> {
+        let signals = entry("@solidjs/signals", "2.0.0-rc.6", SIGNALS_INTEGRITY);
+        let mut environment = vec![
+            entry("leaf-dep", "1.0.0", LEAF_INTEGRITY)
+                .resolved_from(signals.as_importer(), "leaf-dep"),
+            signals.resolved_from(EnvironmentImporter::Certified, "@solidjs/signals"),
+        ];
+        environment.sort();
+        environment
+    }
+
+    /// The bundle certified in this tree as first written: its signed
+    /// snapshot root is the root of the files installed now.
+    fn bundle(&self) -> LoadedBundle {
+        let environment = Self::environment();
+        let (entry, document, receipt) = bundle_in(
+            "plain-package",
+            "1.0.0",
+            PLAIN_INTEGRITY,
+            "plain-package",
+            &["import"],
+            Some(&environment),
+        );
+        let mut bundle =
+            load_bundle(&entry, &document, &receipt).expect("the bundle authenticates");
+        bundle.snapshot_root = crate::installed_package_snapshot_root(
+            &self.directory.join("node_modules/plain-package"),
+            "plain-package",
+            "1.0.0",
+        )
+        .unwrap();
+        bundle
+    }
+
+    /// Whether the native admission path admits `bundle` here, and the refusal
+    /// `contract check` reports when it does not.
+    fn admit(&self, bundle: &LoadedBundle) -> Result<(), String> {
+        let directory = &self.directory;
+        let installed =
+            |specifier: &str| crate::diagnostics::installed_artifact_identity(directory, specifier);
+        let bytes =
+            |specifier: &str| crate::diagnostics::installed_artifact_snapshot(directory, specifier);
+        let environment = |specifier: &str, environment: &[DependencyEnvironmentEntry]| {
+            crate::diagnostics::installed_environment_matches(directory, specifier, environment)
+        };
+        let difference = |specifier: &str, environment: &[DependencyEnvironmentEntry]| {
+            crate::diagnostics::installed_environment_difference(
+                directory,
+                specifier,
+                environment,
+                &crate::installed_patches::InstalledPatches::read(directory),
+            )
+        };
+        let admitted = admitted_from(
+            std::slice::from_ref(bundle),
+            &BTreeSet::from(["import".to_owned()]),
+            &installed,
+            &bytes,
+            &|_: &str| Some("dist/index.js".to_owned()),
+            &environment,
+        );
+        let refusal = admission_refusals(
+            [(
+                ArtifactAcceptance {
+                    specifier: &bundle.specifier,
+                    requested_entrypoint: &bundle.requested_entrypoint,
+                    export_conditions: &bundle.export_conditions,
+                    runtime_target: &bundle.runtime_target,
+                    declaration_target: &bundle.declaration_target,
+                    acceptance_root: &bundle.acceptance_root,
+                    snapshot_root: &bundle.snapshot_root,
+                    environment: bundle.environment.as_deref(),
+                    identity: &bundle.identity,
+                },
+                "1.0.0",
+            )],
+            &installed,
+            &bytes,
+            &difference,
+        )
+        .pop()
+        .unwrap()
+        .1;
+        assert_eq!(
+            admitted.is_empty(),
+            refusal.is_some(),
+            "admission and its report agree: {refusal:?}"
+        );
+        refusal.map_or(Ok(()), |refusal| Err(refusal.to_string()))
+    }
+}
+
+impl Drop for PatchTree {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.directory);
+    }
+}
+
+#[test]
+fn a_pnpm_patch_of_an_environment_package_refuses_and_names_the_patch() {
+    let tree = PatchTree::new("pnpm");
+    tree.pnpm_lock("");
+    let bundle = tree.bundle();
+    assert_eq!(
+        tree.admit(&bundle),
+        Ok(()),
+        "the unpatched tree is admitted"
+    );
+
+    // The lock keeps the published integrity for the patched copy, so without
+    // the patch record this tree is indistinguishable from the certified one.
+    tree.pnpm_lock(
+        "patchedDependencies:\n  '@solidjs/signals@2.0.0-rc.6':\n    hash: 0123abcd\n    path: patches/@solidjs__signals@2.0.0-rc.6.patch\n\n",
+    );
+    assert_eq!(
+        tree.admit(&bundle),
+        Err(
+            "its dependency environment differs: @solidjs/signals@2.0.0-rc.6 resolved from \
+             plain-package@1.0.0 is patched (pnpm-lock.yaml patchedDependencies), so its \
+             installed bytes are not the published archive the certification read"
+                .into()
+        )
+    );
+
+    // A patch of a package the certification never read is irrelevant.
+    tree.pnpm_lock("patchedDependencies:\n  unrelated@1.0.0: 0123abcd\n\n");
+    assert_eq!(tree.admit(&bundle), Ok(()));
+
+    // A patch deeper in the environment -- a package signals resolves -- is a
+    // patch of the environment all the same, and the edge is named.
+    tree.pnpm_lock("patchedDependencies:\n  leaf-dep@1.0.0: 0123abcd\n\n");
+    assert_eq!(
+        tree.admit(&bundle),
+        Err(
+            "its dependency environment differs: leaf-dep@1.0.0 resolved from \
+             @solidjs/signals@2.0.0-rc.6 is patched (pnpm-lock.yaml \
+             patchedDependencies), so its installed bytes are not the published archive the \
+             certification read"
+                .into()
+        )
+    );
+}
+
+#[test]
+fn a_patched_certified_package_is_refused_by_its_record_or_by_its_bytes() {
+    let tree = PatchTree::new("certified");
+    tree.pnpm_lock("");
+    let bundle = tree.bundle();
+    assert_eq!(tree.admit(&bundle), Ok(()));
+    tree.pnpm_lock("patchedDependencies:\n  plain-package@1.0.0: 0123abcd\n\n");
+    assert_eq!(
+        tree.admit(&bundle),
+        Err(
+            "the installed package's files are not the certified archive's: \
+             plain-package@1.0.0 is patched (pnpm-lock.yaml patchedDependencies)"
+                .into()
+        )
+    );
+    // No record at all -- a hand edit, a postinstall script -- and the files
+    // still are not the signed archive's.
+    tree.pnpm_lock("");
+    tree.write(
+        "node_modules/plain-package/dist/index.js",
+        "export const value = 2;\n",
+    );
+    assert_eq!(
+        tree.admit(&bundle),
+        Err(
+            "the installed package's files are not the certified archive's: they do not \
+             reproduce the signed snapshot root, so something changed them after install"
+                .into()
+        )
+    );
+    // A dependency nested under the package is not its archive.
+    tree.write(
+        "node_modules/plain-package/dist/index.js",
+        "export const value = 1;\n",
+    );
+    tree.write(
+        "node_modules/plain-package/node_modules/nested/package.json",
+        r#"{"name":"nested","version":"1.0.0"}"#,
+    );
+    assert_eq!(tree.admit(&bundle), Ok(()));
+}
+
+#[test]
+fn bun_and_patch_package_patches_refuse_the_packages_they_patch_only() {
+    let tree = PatchTree::new("bun");
+    tree.bun_lock("");
+    let bundle = tree.bundle();
+    assert_eq!(tree.admit(&bundle), Ok(()));
+    tree.bun_lock(
+        r#""patchedDependencies": { "@solidjs/signals@2.0.0-rc.6": "patches/signals.patch" },"#,
+    );
+    let refusal = tree.admit(&bundle).unwrap_err();
+    assert!(
+        refusal.contains(
+            "@solidjs/signals@2.0.0-rc.6 resolved from plain-package@1.0.0 is patched (bun.lock \
+             patchedDependencies)"
+        ),
+        "{refusal}"
+    );
+    tree.bun_lock(r#""patchedDependencies": { "unrelated@1.0.0": "patches/unrelated.patch" },"#);
+    assert_eq!(tree.admit(&bundle), Ok(()));
+
+    // npm has no patch record: patch-package rewrites the files at
+    // postinstall, and its patch files are the only trace.
+    let tree = PatchTree::new("patch-package");
+    tree.npm_lock();
+    let bundle = tree.bundle();
+    assert_eq!(tree.admit(&bundle), Ok(()));
+    tree.write("patches/unrelated+1.0.0.patch", "");
+    assert_eq!(tree.admit(&bundle), Ok(()));
+    tree.write("patches/leaf-dep+1.0.0.patch", "");
+    let refusal = tree.admit(&bundle).unwrap_err();
+    assert!(
+        refusal.contains(
+            "leaf-dep@1.0.0 resolved from @solidjs/signals@2.0.0-rc.6 is patched (patch-package \
+             patch patches/leaf-dep+1.0.0.patch)"
+        ),
+        "{refusal}"
     );
 }

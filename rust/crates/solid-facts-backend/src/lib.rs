@@ -105,6 +105,7 @@ mod first_party_bundles;
 /// into the project.
 pub mod fixture_authorization;
 mod inferred_contract;
+mod installed_patches;
 mod package_requirements;
 mod phase16_benchmark;
 mod proposal_generation;
@@ -138,8 +139,9 @@ pub use contract_certification::{
     WITHHELD_CLOSURE_NO_RECIPE, WithheldClosure, WitnessWireError, authenticate_policy2_receipt,
     canonicalize_policy2_main, certify_published_contract_graph_case_set,
     certify_value_only_case_set, decode_policy2_trust_configuration,
-    encode_policy2_trust_configuration, issue_builtin_policy2_receipt, issue_policy2_receipt,
-    plan_certification, plan_published_contract_graph, policy2_artifact_acceptance_root,
+    encode_policy2_trust_configuration, installed_package_snapshot_root,
+    issue_builtin_policy2_receipt, issue_policy2_receipt, plan_certification,
+    plan_published_contract_graph, policy2_artifact_acceptance_root,
     policy2_artifact_acceptance_root_for_identity, policy2_dependency_environment_root,
     policy2_main_closed_claims_root, policy2_main_semantic_digest, policy2_policy_digest,
     policy2_resolved_import_root, policy2_trust_configuration_for_issuer, publish_policy2_catalog,

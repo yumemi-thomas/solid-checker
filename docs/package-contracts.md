@@ -182,6 +182,14 @@ importers reach more than one install is never admitted project-wide. A
 refusal is explained from the install that was refused. A project whose
 importers all reach its own installs is admitted exactly as before.
 
+A patched dependency is refused even though its lockfile still states the
+published integrity (ADR 0131). The imported package's installed files must
+reproduce the archive the receipt signs (`snapshotRoot`), whatever changed
+them. Its dependency environment is checked by the patch records the tree
+keeps: pnpm's and Bun's `patchedDependencies`, pnpm `patch_hash` keys, Yarn
+`patch:` resolutions, and `patch-package` files under `patches/` or a
+`--patch-dir`. `contract check` names the patch as the reason for `missing`.
+
 A missing sweep can generate proposals for registry-installed packages that
 carry exact integrity:
 

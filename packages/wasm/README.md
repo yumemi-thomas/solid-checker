@@ -54,7 +54,10 @@ registry integrity and resolved file. Admission recomputes each bundled
 contract's signed artifact root from those five facts and applies it only on
 equality, so a wrong or invented entry yields no contract rather than the wrong
 one. `exportConditions` must name what the host resolved under; an empty set
-admits nothing, because conditions select the artifact. Stating no
+admits nothing, because conditions select the artifact. Each entry must also
+state `snapshotRoot`, the snapshot root of the package's installed files: a
+patched package keeps its published integrity, so a bundle applies only where
+the files reproduce the archive its receipt signs (ADR 0131). Stating no
 `installedPackages` at all keeps the previous behavior exactly.
 
 The asymmetry is deliberate and is the price of having no filesystem: on the

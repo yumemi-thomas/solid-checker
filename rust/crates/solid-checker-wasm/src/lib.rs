@@ -74,6 +74,13 @@ struct HostInstalledPackage {
     /// root -- `dist/index.js` or `dist/index.d.ts`. It is what selects between
     /// two acceptances that share a declaration file.
     resolved_target: String,
+    /// The artifact snapshot root of the installed package's files
+    /// (`installed_package_snapshot_root`), which a bundle's signed
+    /// `snapshotRoot` must equal (ADR 0131): a lockfile keeps the published
+    /// integrity for a patched package, so the integrity alone does not say the
+    /// files are the certified archive's. Absent admits nothing.
+    #[serde(default)]
+    snapshot_root: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -262,6 +269,18 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
                     )
                 })
         };
+        let installed_bytes = |specifier: &str| {
+            request
+                .installed_packages
+                .iter()
+                .find(|package| package.specifier == specifier)
+                .and_then(|package| package.snapshot_root.clone())
+                .ok_or_else(|| {
+                    format!(
+                        "the host stated no snapshot root for the files installed for {specifier}"
+                    )
+                })
+        };
         let resolved_target = |specifier: &str| {
             request
                 .installed_packages
@@ -290,6 +309,7 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
         let admitted = solid_facts_backend::admitted_bundle_artifacts(
             &conditions,
             &installed,
+            &installed_bytes,
             &resolved_target,
             &environment,
         )?;

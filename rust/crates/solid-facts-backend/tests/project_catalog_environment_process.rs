@@ -29,9 +29,9 @@ use solid_facts_backend::{
     RECEIPT_WITNESS_FAMILIES, ResolutionAuthority, ResolutionTrace, ResolvedExportBinding,
     ResolvedExportTarget, ResolvedFile, ResolvedImport, authenticate_policy2_receipt,
     canonicalize_policy2_main, certified_catalog_self_admission,
-    encode_policy2_trust_configuration, issue_policy2_receipt, policy2_artifact_acceptance_root,
-    policy2_dependency_environment_root, policy2_main_closed_claims_root,
-    policy2_main_semantic_digest, policy2_resolved_import_root,
+    encode_policy2_trust_configuration, installed_package_snapshot_root, issue_policy2_receipt,
+    policy2_artifact_acceptance_root, policy2_dependency_environment_root,
+    policy2_main_closed_claims_root, policy2_main_semantic_digest, policy2_resolved_import_root,
     policy2_trust_configuration_for_issuer, publish_policy2_catalog,
 };
 
@@ -256,7 +256,15 @@ fn certify_into(
         artifact_acceptance_root: policy2_artifact_acceptance_root(&resolved, &conditions).unwrap(),
         semantic_digest: policy2_main_semantic_digest(&main).unwrap(),
         artifact_provenance_root: stand_in(1),
-        snapshot_root: stand_in(2),
+        // The archive this tree installs, as a certification would have
+        // snapshotted it: admission recomputes it from the installed files
+        // (ADR 0131), so a stand-in would refuse every tree.
+        snapshot_root: installed_package_snapshot_root(
+            Path::new(&resolved.package_root),
+            PACKAGE,
+            "1.3.0",
+        )
+        .unwrap(),
         package_root: stand_in(3),
         manifest_root: stand_in(4),
         artifacts_root: stand_in(5),
@@ -582,6 +590,66 @@ fn a_project_catalog_applies_only_in_the_tree_whose_environment_it_certified() {
         Ok("certified")
     );
 
+    // ADR 0131. The same tree, with the certified dependency patched by
+    // `patch-package`: the lockfile still states the published integrity, and
+    // the patch file is the only trace. Refused, naming the patch.
+    let patched = scratch.join("patched");
+    copy_tree(&own, &patched);
+    fs::write(
+        patched.join("package.json"),
+        r#"{"name":"consumer","scripts":{"postinstall":"patch-package"}}"#,
+    )
+    .unwrap();
+    fs::create_dir_all(patched.join("patches")).unwrap();
+    fs::write(
+        patched.join(format!("patches/{DEPENDENCY}+1.0.0.patch")),
+        "--- a/index.js\n+++ b/index.js\n",
+    )
+    .unwrap();
+    assert_eq!(
+        contract_status(&patched, &trust, &typefacts).as_deref(),
+        Ok("missing")
+    );
+    let rows = analysis(&patched, Some(&trust), &typefacts);
+    let detail = summaries(&rows)[0]["detail"].as_str().unwrap().to_owned();
+    assert!(
+        detail.contains(&format!(
+            "its dependency environment differs: {DEPENDENCY}@1.0.0 is patched (patch-package \
+             patch patches/{DEPENDENCY}+1.0.0.patch)"
+        )),
+        "{detail}"
+    );
+    // A patch of a package the certification never read changes nothing.
+    fs::remove_file(patched.join(format!("patches/{DEPENDENCY}+1.0.0.patch"))).unwrap();
+    fs::write(patched.join("patches/unrelated+1.0.0.patch"), "").unwrap();
+    assert_eq!(
+        contract_status(&patched, &trust, &typefacts).as_deref(),
+        Ok("certified")
+    );
+
+    // And the certified package's own files changed after install, with no
+    // record of why: its bytes do not reproduce the signed archive.
+    let edited = scratch.join("edited");
+    copy_tree(&own, &edited);
+    fs::write(
+        edited
+            .join("node_modules")
+            .join(PACKAGE)
+            .join("dist/index.js"),
+        "export const patched = true;\n",
+    )
+    .unwrap();
+    assert_eq!(
+        contract_status(&edited, &trust, &typefacts).as_deref(),
+        Ok("missing")
+    );
+    let rows = analysis(&edited, Some(&trust), &typefacts);
+    let detail = summaries(&rows)[0]["detail"].as_str().unwrap().to_owned();
+    assert!(
+        detail.contains("the installed package's files are not the certified archive's"),
+        "{detail}"
+    );
+
     // A tampered acceptance root: rewritten in the receipt and in the catalog
     // together, with every digest the catalog states recomputed. The
     // signature covers the root, so the catalog is refused.
@@ -822,6 +890,48 @@ fn a_pnpm_certification_with_resolution_edges_is_admitted_in_its_own_tree() {
         Some(
             "its dependency environment differs: environment-dependency installed 2.0.0, \
              certified 1.0.0"
+        )
+    );
+
+    // ADR 0131: the certified dependency patched by pnpm, which keeps its
+    // published integrity in `packages` and records the patch beside it.
+    let patched = scratch.join("patched");
+    pnpm_consumer_tree(&patched);
+    let environment = pnpm_environment(true);
+    let trust = certify(&patched, Some(&environment));
+    let lock = fs::read_to_string(patched.join("pnpm-lock.yaml")).unwrap();
+    fs::write(
+        patched.join("pnpm-lock.yaml"),
+        lock.replace(
+            "\npackages:\n",
+            &format!(
+                "\npatchedDependencies:\n  {DEPENDENCY}@1.0.0:\n    hash: 0123abcd\n    path: patches/{DEPENDENCY}@1.0.0.patch\n\npackages:\n"
+            ),
+        ),
+    )
+    .unwrap();
+    assert_eq!(
+        contract_status(&patched, &trust, &typefacts).as_deref(),
+        Ok("missing")
+    );
+    let real_root = patched
+        .join("node_modules")
+        .join(PACKAGE)
+        .canonicalize()
+        .unwrap();
+    let refusals = certified_catalog_self_admission(
+        &patched.join(".solid-checker"),
+        PACKAGE,
+        &real_root,
+        &issued(&patched, &environment),
+    )
+    .unwrap();
+    assert_eq!(
+        refusals[0].1.as_ref().map(ToString::to_string).as_deref(),
+        Some(
+            "its dependency environment differs: environment-dependency@1.0.0 resolved from \
+             @solid-primitives/debounce@1.3.0 is patched (pnpm-lock.yaml patchedDependencies), \
+             so its installed bytes are not the published archive the certification read"
         )
     );
 

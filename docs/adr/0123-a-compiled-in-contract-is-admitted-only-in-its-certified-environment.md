@@ -110,3 +110,13 @@ its importer instead of requiring every lookup from every located package to
 match, and two copies of one package under different importers apply. The
 all-lookups rule above still governs environments without edges, including
 every bundle in the tier this ADR regenerated.
+
+## Amendment (2026-09-27): ADR 0131
+
+A lockfile keeps the published integrity for a patched package, so name,
+version and integrity do not show that the installed bytes are the certified
+ones. Admission now also requires the imported package's installed files to
+reproduce the receipt's signed `snapshotRoot` (step 2b). It also refuses an
+environment entry that the tree records as patched: pnpm or Bun
+`patchedDependencies`, pnpm `patch_hash`, a Yarn `patch:` resolution, or a
+`patch-package` file. Both refusals are reported the way a mismatch is.

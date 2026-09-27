@@ -85,3 +85,11 @@ Still open:
 - lookups are replayed from package roots, not from the importing file's
   directory;
 - a graph leaf's graph-wide environment usually falls back to the strict form.
+
+## Amendment (2026-09-27): ADR 0131
+
+An edge that reaches exactly its entry by identity still refuses when the tree
+records the installed copy as patched. The reason names the edge, for example
+"leaf-dep@1.0.0 resolved from @solidjs/signals@2.0.0-rc.6 is patched
+(pnpm-lock.yaml patchedDependencies)". Self-admission applies the same rule, so
+`contract certify` in a patched tree exits 1.

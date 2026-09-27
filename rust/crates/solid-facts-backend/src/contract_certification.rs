@@ -3960,6 +3960,97 @@ fn snapshot_root(
     format!("sha256:{:x}", hasher.finalize())
 }
 
+/// The [`snapshot_root`] of a package as it is installed at `directory`: every
+/// regular file under it, keyed by its package-relative path, hashed exactly as
+/// the published archive's members are when a certification snapshots it.
+///
+/// A receipt signs the snapshot root of the archive its proof read
+/// (`snapshotRoot`), so a consumer whose installed files reproduce it runs the
+/// bytes the contract is about, whatever mechanism might have changed them
+/// otherwise -- a package manager's patch, `patch-package` at postinstall, a
+/// package's own install script, a hand edit. Package managers install an
+/// archive's members as they are, so the root reproduces from any unmodified
+/// install (ADR 0131 measured all 33 packages in the compiled-in tier).
+///
+/// The package's own `node_modules` is left out: that is where npm and Yarn
+/// nest the package's dependencies, which are not its archive. A package
+/// whose archive bundles dependencies there therefore never reproduces, which
+/// refuses rather than guesses. `Err` names why the installed bytes cannot be
+/// stated: a symbolic link or other non-regular member, which no published
+/// archive member becomes, an unreadable file, or a tree beyond the policy's
+/// archive limits.
+pub fn installed_package_snapshot_root(
+    directory: &Path,
+    package_name: &str,
+    package_version: &str,
+) -> Result<String, String> {
+    let limits = SnapshotLimits::policy_2();
+    let mut files = BTreeMap::<String, std::path::PathBuf>::new();
+    let mut pending = vec![(directory.to_path_buf(), String::new())];
+    while let Some((at, prefix)) = pending.pop() {
+        let entries = std::fs::read_dir(&at)
+            .map_err(|error| format!("{} cannot be listed: {error}", at.display()))?;
+        for entry in entries {
+            let entry =
+                entry.map_err(|error| format!("{} cannot be listed: {error}", at.display()))?;
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else {
+                return Err(format!(
+                    "{} has a member whose name is not UTF-8",
+                    at.display()
+                ));
+            };
+            let path = if prefix.is_empty() {
+                name.to_owned()
+            } else {
+                format!("{prefix}/{name}")
+            };
+            if path.len() > limits.package_path_bytes {
+                return Err(format!("{path} exceeds the package path limit"));
+            }
+            let kind = entry
+                .file_type()
+                .map_err(|error| format!("{path} cannot be inspected: {error}"))?;
+            if kind.is_dir() {
+                if path != "node_modules" {
+                    pending.push((entry.path(), path));
+                }
+            } else if kind.is_file() {
+                files.insert(path, entry.path());
+                if files.len() > limits.archive_members {
+                    return Err("the installed package exceeds the archive member limit".into());
+                }
+            } else {
+                return Err(format!(
+                    "{path} is not a regular file, which no published archive member installs as"
+                ));
+            }
+        }
+    }
+    let directories = derive_directories(files.keys());
+    let mut hasher = Sha256::new();
+    hasher.update(SNAPSHOT_HASH_DOMAIN);
+    hash_field(&mut hasher, package_name.as_bytes());
+    hash_field(&mut hasher, package_version.as_bytes());
+    for directory in &directories {
+        hash_field(&mut hasher, b"directory");
+        hash_field(&mut hasher, directory.as_bytes());
+    }
+    let mut expanded = 0_usize;
+    for (path, location) in &files {
+        let bytes =
+            std::fs::read(location).map_err(|error| format!("{path} cannot be read: {error}"))?;
+        expanded = expanded.saturating_add(bytes.len());
+        if expanded > limits.expanded_archive_bytes {
+            return Err("the installed package exceeds the expanded archive limit".into());
+        }
+        hash_field(&mut hasher, b"file");
+        hash_field(&mut hasher, path.as_bytes());
+        hash_field(&mut hasher, &bytes);
+    }
+    Ok(format!("sha256:{:x}", hasher.finalize()))
+}
+
 fn provenance_root(provenance: &SnapshotProvenance, snapshot_root: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(b"solid-checker:artifact-provenance:v1\0");

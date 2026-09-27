@@ -1436,27 +1436,38 @@ pub fn admission_refusal_details(
     bundled: bool,
 ) -> Result<BTreeMap<String, String>, BackendError> {
     use crate::accepted_bundles::AdmissionRefusal;
+    let patches = crate::installed_patches::InstalledPatches::read(project_directory);
+    let snapshots = InstalledSnapshots::default();
     let installed = |specifier: &str| installed_artifact_identity(project_directory, specifier);
+    let bytes = |specifier: &str| {
+        installed_artifact_bytes(project_directory, specifier, &patches, &snapshots)
+    };
     let difference = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
-        installed_environment_difference(project_directory, specifier, environment)
+        installed_environment_difference(project_directory, specifier, environment, &patches)
     };
     let contract = |error: crate::ContractFailure| BackendError::Contract(error.to_string());
     let mut tiers = vec![(
         "a project catalog entry",
-        crate::contract_interface::project_admission_refusals(catalogs, &installed, &difference)
-            .map_err(contract)?,
+        crate::contract_interface::project_admission_refusals(
+            catalogs,
+            &installed,
+            &bytes,
+            &difference,
+        )
+        .map_err(contract)?,
     )];
     if bundled {
         tiers.push((
             "a compiled-in contract",
-            crate::accepted_bundles::bundle_admission_refusals(&installed, &difference)
+            crate::accepted_bundles::bundle_admission_refusals(&installed, &bytes, &difference)
                 .map_err(contract)?,
         ));
     }
     let rank = |refusal: &AdmissionRefusal| match refusal {
         AdmissionRefusal::EnvironmentDiffers(_) => 0,
-        AdmissionRefusal::NoEnvironmentStated => 1,
-        AdmissionRefusal::AcceptanceRootNotReproduced { .. } => 2,
+        AdmissionRefusal::InstalledBytesDiffer(_) => 1,
+        AdmissionRefusal::NoEnvironmentStated => 2,
+        AdmissionRefusal::AcceptanceRootNotReproduced { .. } => 3,
     };
     let mut details = BTreeMap::new();
     for (tier, refusals) in tiers {
@@ -1600,13 +1611,14 @@ fn admitted_catalog_artifacts(
         facts,
         within,
         installs,
-        &|installed, resolved_target, environment| {
+        &|installed, bytes, resolved_target, environment| {
             crate::contract_interface::admitted_project_artifacts(
                 catalogs,
                 trust,
                 project_directory,
                 conditions,
                 installed,
+                bytes,
                 resolved_target,
                 environment,
             )
@@ -1790,6 +1802,7 @@ fn importer_installs(
 /// [`crate::contract_interface::admitted_project_artifacts`].
 type TierAdmission<'a> = dyn Fn(
         &crate::contract_interface::InstalledArtifactIdentity,
+        &crate::accepted_bundles::InstalledArtifactBytes,
         &crate::contract_interface::ResolvedTargetIdentity,
         &crate::accepted_bundles::InstalledEnvironment,
     ) -> Result<Vec<(String, String)>, crate::ContractFailure>
@@ -1870,13 +1883,20 @@ fn admitted_by_install(
             .then(|| installed_artifact_identity(directory, specifier))
             .flatten()
     };
+    // Read once per install directory, not once per acceptance: the tier
+    // offers many acceptances of one package, and each would otherwise hash
+    // its files and re-read every lockfile above it again.
+    let snapshots = InstalledSnapshots::default();
+    let patches = crate::installed_patches::InstalledPatches::read(directory);
+    let bytes =
+        |specifier: &str| installed_artifact_bytes(directory, specifier, &patches, &snapshots);
     let resolved_target =
         |specifier: &str| resolved_target_identity(directory, facts, specifier, &counted);
     let environment = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
-        installed_environment_matches(directory, specifier, environment)
+        installed_environment_matches_in(directory, specifier, environment, &patches)
     };
     let mut admissions = ArtifactAdmissions {
-        project_wide: tier(&installed, &resolved_target, &environment).map_err(contract)?,
+        project_wide: tier(&installed, &bytes, &resolved_target, &environment).map_err(contract)?,
         installs: Vec::new(),
     };
     for (base, specifiers) in &installs.contexts {
@@ -1886,6 +1906,9 @@ fn admitted_by_install(
                 .then(|| installed_artifact_identity(base, specifier))
                 .flatten()
         };
+        let patches = crate::installed_patches::InstalledPatches::read(base);
+        let bytes =
+            |specifier: &str| installed_artifact_bytes(base, specifier, &patches, &snapshots);
         let resolved_target = |specifier: &str| {
             let importers = specifiers.get(specifier)?;
             resolved_target_identity(base, facts, specifier, &|importer| {
@@ -1893,9 +1916,10 @@ fn admitted_by_install(
             })
         };
         let environment = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
-            installed_environment_matches(base, specifier, environment)
+            installed_environment_matches_in(base, specifier, environment, &patches)
         };
-        let admitted = tier(&installed, &resolved_target, &environment).map_err(contract)?;
+        let admitted =
+            tier(&installed, &bytes, &resolved_target, &environment).map_err(contract)?;
         if !admitted.is_empty() {
             admissions.installs.push((admitted, specifiers.clone()));
         }
@@ -2491,7 +2515,16 @@ pub fn admission_input_paths(project_directory: &Path) -> Vec<PathBuf> {
         paths.push(ancestor.join("bun.lock"));
         paths.push(ancestor.join("pnpm-lock.yaml"));
         paths.push(ancestor.join("yarn.lock"));
+        // Where a patch is declared (ADR 0131): pnpm and Bun declare theirs
+        // here, and a manifest's scripts name `patch-package`'s directory.
+        paths.push(ancestor.join("package.json"));
+        paths.push(ancestor.join("pnpm-workspace.yaml"));
     }
+    // And the patch files themselves, which no lockfile mentions. A patch
+    // file added or removed changes this list, which is a change too.
+    paths.extend(crate::installed_patches::patch_input_paths(
+        project_directory,
+    ));
     paths
 }
 
@@ -2522,10 +2555,11 @@ fn bundled_admissions(
         facts,
         None,
         installs,
-        &|installed, resolved_target, environment| {
+        &|installed, bytes, resolved_target, environment| {
             crate::accepted_bundles::admitted_bundle_artifacts(
                 conditions,
                 installed,
+                bytes,
                 resolved_target,
                 environment,
             )
@@ -2568,15 +2602,20 @@ pub fn certified_catalog_self_admission(
     let project = catalog_project
         .filter(|project| installed_artifact_identity(project, package_name).is_some())
         .unwrap_or(package_root);
+    let patches = crate::installed_patches::InstalledPatches::read(project);
+    let snapshots = InstalledSnapshots::default();
     let installed = |specifier: &str| installed_artifact_identity(project, specifier);
+    let bytes =
+        |specifier: &str| installed_artifact_bytes(project, specifier, &patches, &snapshots);
     let difference = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
-        installed_environment_difference(project, specifier, environment)
+        installed_environment_difference(project, specifier, environment, &patches)
     };
     let catalogs = crate::contract_interface::catalog_paths_in(catalog_root)
         .map_err(|error| BackendError::Contract(error.to_string()))?;
     Ok(crate::contract_interface::project_admission_refusals_where(
         &catalogs,
         &installed,
+        &bytes,
         &difference,
         |bindings| {
             issued.contains(&(
@@ -2603,10 +2642,28 @@ pub fn certified_catalog_self_admission(
 /// state exactly -- a missing package, an unreadable manifest, a lockfile that
 /// names no integrity or two -- answers `false`, so the acceptance is not
 /// admitted.
+#[cfg(test)]
 pub(crate) fn installed_environment_matches(
     project_directory: &Path,
     specifier: &str,
     environment: &[crate::DependencyEnvironmentEntry],
+) -> bool {
+    installed_environment_matches_in(
+        project_directory,
+        specifier,
+        environment,
+        &crate::installed_patches::InstalledPatches::read(project_directory),
+    )
+}
+
+/// [`installed_environment_matches`] with the tree's patch records already
+/// read: an entry whose installed copy the tree records as patched is not the
+/// certified one, however its lockfile integrity reads (ADR 0131).
+fn installed_environment_matches_in(
+    project_directory: &Path,
+    specifier: &str,
+    environment: &[crate::DependencyEnvironmentEntry],
+    patches: &crate::installed_patches::InstalledPatches,
 ) -> bool {
     if environment.is_empty() {
         return true;
@@ -2628,16 +2685,18 @@ pub(crate) fn installed_environment_matches(
         root,
         |from, name| node_package_lookup(from, name),
         |at| installed_environment_identity(&project, at),
+        |at| installed_package_patch(patches, at),
     )
 }
 
 /// The first way this tree differs from `environment`, rendered, by the same
 /// walk [`installed_environment_matches`] takes; `None` when it reproduces it.
 /// Diagnostic only.
-fn installed_environment_difference(
+pub(crate) fn installed_environment_difference(
     project_directory: &Path,
     specifier: &str,
     environment: &[crate::DependencyEnvironmentEntry],
+    patches: &crate::installed_patches::InstalledPatches,
 ) -> Option<String> {
     if environment.is_empty() {
         return None;
@@ -2664,6 +2723,7 @@ fn installed_environment_difference(
         root,
         |from, name| node_package_lookup(from, name),
         |at| installed_environment_identity(&project, at),
+        |at| installed_package_patch(patches, at),
         |at| {
             serde_json::from_slice::<PackageManifest>(&fs::read(at.join("package.json")).ok()?)
                 .ok()
@@ -2672,6 +2732,72 @@ fn installed_environment_difference(
         },
     )
     .map(|difference| difference.to_string())
+}
+
+/// What the tree records about the package installed at `directory` being
+/// patched, by its installed name and manifest version; `None` when nothing
+/// does, or when the package states no identity (which refuses it anyway).
+fn installed_package_patch(
+    patches: &crate::installed_patches::InstalledPatches,
+    directory: &Path,
+) -> Option<String> {
+    let name = installed_package_name(directory)?;
+    let manifest: PackageManifest =
+        serde_json::from_slice(&fs::read(directory.join("package.json")).ok()?).ok()?;
+    patches.of(directory, &name, &manifest.version)
+}
+
+/// Installed snapshot roots already computed in one admission, by canonical
+/// package directory.
+#[derive(Default)]
+struct InstalledSnapshots(std::cell::RefCell<HashMap<PathBuf, Result<String, String>>>);
+
+/// The [`crate::installed_package_snapshot_root`] of the package `specifier`
+/// names, as installed for `project_directory`, or why its files cannot be
+/// stated to be the published archive: a patch the tree records, or a member
+/// no archive installs as (ADR 0131). The admission side of
+/// [`crate::accepted_bundles::InstalledArtifactBytes`].
+fn installed_artifact_bytes(
+    project_directory: &Path,
+    specifier: &str,
+    patches: &crate::installed_patches::InstalledPatches,
+    snapshots: &InstalledSnapshots,
+) -> Result<String, String> {
+    let unlocatable = || format!("{specifier} is not installed where this tree can say");
+    let module = package_name_of_specifier(specifier).ok_or_else(unlocatable)?;
+    let (directory, manifest) = installed_package_manifest(project_directory, &module)
+        .ok()
+        .flatten()
+        .ok_or_else(unlocatable)?;
+    let directory = fs::canonicalize(&directory).map_err(|_| unlocatable())?;
+    if let Some(evidence) = patches.of(&directory, &module, &manifest.version) {
+        return Err(format!(
+            "{module}@{} is patched ({evidence})",
+            manifest.version
+        ));
+    }
+    snapshots
+        .0
+        .borrow_mut()
+        .entry(directory)
+        .or_insert_with_key(|directory| {
+            crate::installed_package_snapshot_root(directory, &module, &manifest.version)
+        })
+        .clone()
+}
+
+/// [`installed_artifact_bytes`] with this tree's patch records read afresh.
+#[cfg(test)]
+pub(crate) fn installed_artifact_snapshot(
+    project_directory: &Path,
+    specifier: &str,
+) -> Result<String, String> {
+    installed_artifact_bytes(
+        project_directory,
+        specifier,
+        &crate::installed_patches::InstalledPatches::read(project_directory),
+        &InstalledSnapshots::default(),
+    )
 }
 
 /// Node's lookup of the bare package `name` from the package installed at
@@ -2877,7 +3003,7 @@ struct BunLockfile {
     packages: HashMap<String, Vec<serde_json::Value>>,
 }
 
-fn parse_json_with_trailing_commas<T: DeserializeOwned>(data: &[u8]) -> Option<T> {
+pub(crate) fn parse_json_with_trailing_commas<T: DeserializeOwned>(data: &[u8]) -> Option<T> {
     if let Ok(value) = serde_json::from_slice(data) {
         return Some(value);
     }

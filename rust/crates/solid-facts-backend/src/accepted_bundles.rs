@@ -140,6 +140,9 @@ struct LoadedBundle {
     /// `policy2_artifact_acceptance_root` of the five identity fields, which is
     /// what a consumer's installed identity must reproduce.
     acceptance_root: String,
+    /// The signed `snapshotRoot`: the archive the proof read, which a
+    /// consumer's installed files must reproduce (ADR 0131).
+    snapshot_root: String,
     /// The key this bundle is indexed and admitted under: the acceptance root
     /// and the environment together, because two certifications of one
     /// artifact in different environments are two acceptances, and keyed by
@@ -309,6 +312,7 @@ fn load_bundle(
         declaration_target: entry.declaration_target.clone(),
         identity: bundle_identity(&identity, environment.as_deref()),
         acceptance_root: identity,
+        snapshot_root: entry.bindings.snapshot_root.clone(),
         environment,
         contract,
     })
@@ -362,6 +366,18 @@ pub fn compiled_in_accepted_contracts() -> Result<AcceptedContractIndex, Contrac
 /// for the empty environment.
 pub type InstalledEnvironment<'a> = dyn Fn(&str, &[DependencyEnvironmentEntry]) -> bool + 'a;
 
+/// The artifact snapshot root of the files installed for the package the
+/// specifier names (`installed_package_snapshot_root`), or why this tree
+/// cannot state that its files are the published archive's: a patch the tree
+/// records, a member no archive installs, an unreadable file.
+///
+/// Step 2's acceptance root reproduces from the lockfile's integrity, which a
+/// package manager keeps when it patches the installed files, so the files
+/// themselves are asked too (ADR 0131). The native answer walks the installed
+/// directory; a host with no filesystem has no answer and admits nothing that
+/// needs one.
+pub type InstalledArtifactBytes<'a> = dyn Fn(&str) -> Result<String, String> + 'a;
+
 /// Whether an installed tree reproduces `environment`, starting from `root`,
 /// the imported package's installed location.
 ///
@@ -402,13 +418,22 @@ pub type InstalledEnvironment<'a> = dyn Fn(&str, &[DependencyEnvironmentEntry]) 
 ///   refused rather than guessed.
 /// - Two entries with the same name -- two copies of one package in the
 ///   certified environment -- can therefore never both hold, and refuse.
+///
+/// **Under either rule, a copy that matches but is patched refuses** (ADR
+/// 0131). `patched(at)` names the evidence that the package installed at `at`
+/// is not the published archive its lockfile integrity names -- a package
+/// manager's patch record, a `patch-package` patch -- or `None` when the tree
+/// shows none. A lockfile keeps the published integrity for a patched package,
+/// so name, version and integrity alone would admit a contract about bytes the
+/// consumer does not run.
 pub(crate) fn environment_is_installed<L: Clone + Ord>(
     environment: &[DependencyEnvironmentEntry],
     root: L,
     resolve: impl Fn(&L, &str) -> Result<Option<L>, ()>,
     identity: impl Fn(&L) -> Option<DependencyEnvironmentEntry>,
+    patched: impl Fn(&L) -> Option<String>,
 ) -> bool {
-    environment_difference(environment, root, resolve, identity, |_| None).is_none()
+    environment_difference(environment, root, resolve, identity, patched, |_| None).is_none()
 }
 
 /// The first way an installed tree fails to reproduce `environment`, by the
@@ -422,10 +447,18 @@ pub(crate) fn environment_difference<L: Clone + Ord>(
     root: L,
     resolve: impl Fn(&L, &str) -> Result<Option<L>, ()>,
     identity: impl Fn(&L) -> Option<DependencyEnvironmentEntry>,
+    patched: impl Fn(&L) -> Option<String>,
     version_of: impl Fn(&L) -> Option<String>,
 ) -> Option<EnvironmentDifference> {
     if dependency_environment_states_edges(environment) {
-        return edge_environment_difference(environment, root, resolve, identity, version_of);
+        return edge_environment_difference(
+            environment,
+            root,
+            resolve,
+            identity,
+            patched,
+            version_of,
+        );
     }
     let mut names = BTreeSet::new();
     if let Some(entry) = environment
@@ -466,6 +499,13 @@ pub(crate) fn environment_difference<L: Clone + Ord>(
                     from: None,
                 });
             }
+            if let Some(evidence) = patched(&at) {
+                return Some(EnvironmentDifference::Patched {
+                    certified: entry.clone(),
+                    from: None,
+                    evidence,
+                });
+            }
             found.insert(entry.name.as_str());
             if located.insert(at.clone()) {
                 pending.push(at);
@@ -489,6 +529,7 @@ fn edge_environment_difference<L: Clone + Ord>(
     root: L,
     resolve: impl Fn(&L, &str) -> Result<Option<L>, ()>,
     identity: impl Fn(&L) -> Option<DependencyEnvironmentEntry>,
+    patched: impl Fn(&L) -> Option<String>,
     version_of: impl Fn(&L) -> Option<String>,
 ) -> Option<EnvironmentDifference> {
     let certified_label = identity(&root).map_or_else(
@@ -550,6 +591,13 @@ fn edge_environment_difference<L: Clone + Ord>(
                     from: Some(label(&importer)),
                 });
             }
+            if let Some(evidence) = patched(&at) {
+                return Some(EnvironmentDifference::Patched {
+                    certified: entry.clone(),
+                    from: Some(label(&importer)),
+                    evidence,
+                });
+            }
             reached[index] = true;
             let key = entry.as_importer();
             if located.entry(key.clone()).or_default().insert(at.clone()) {
@@ -598,6 +646,15 @@ pub(crate) enum EnvironmentDifference {
     NotInstalled {
         certified: DependencyEnvironmentEntry,
         from: Option<String>,
+    },
+    /// The certified copy resolves -- name, version and lockfile integrity all
+    /// match -- and the tree shows it patched, so its bytes are not the
+    /// published archive that integrity names (ADR 0131).
+    Patched {
+        certified: DependencyEnvironmentEntry,
+        from: Option<String>,
+        /// What shows the patch, e.g. `pnpm-lock.yaml patchedDependencies`.
+        evidence: String,
     },
 }
 
@@ -658,6 +715,18 @@ impl std::fmt::Display for EnvironmentDifference {
                 via(from),
                 certified.version
             ),
+            Self::Patched {
+                certified,
+                from,
+                evidence,
+            } => write!(
+                formatter,
+                "{}@{}{} is patched ({evidence}), so its installed bytes are not the published \
+                 archive the certification read",
+                certified.name,
+                certified.version,
+                via(from)
+            ),
         }
     }
 }
@@ -672,6 +741,7 @@ impl std::fmt::Display for EnvironmentDifference {
 pub fn admitted_bundle_artifacts(
     conditions: &BTreeSet<String>,
     installed_integrity: &InstalledArtifactIdentity,
+    installed_bytes: &InstalledArtifactBytes,
     resolved_target: &ResolvedTargetIdentity,
     installed_environment: &InstalledEnvironment,
 ) -> Result<Vec<(String, String)>, ContractFailure> {
@@ -679,6 +749,7 @@ pub fn admitted_bundle_artifacts(
         bundles()?,
         conditions,
         installed_integrity,
+        installed_bytes,
         resolved_target,
         installed_environment,
     ))
@@ -688,6 +759,7 @@ fn admitted_from(
     loaded: &[LoadedBundle],
     conditions: &BTreeSet<String>,
     installed_integrity: &InstalledArtifactIdentity,
+    installed_bytes: &InstalledArtifactBytes,
     resolved_target: &ResolvedTargetIdentity,
     installed_environment: &InstalledEnvironment,
 ) -> Vec<(String, String)> {
@@ -699,11 +771,13 @@ fn admitted_from(
             runtime_target: &bundle.runtime_target,
             declaration_target: &bundle.declaration_target,
             acceptance_root: &bundle.acceptance_root,
+            snapshot_root: &bundle.snapshot_root,
             environment: bundle.environment.as_deref(),
             identity: &bundle.identity,
         }),
         conditions,
         installed_integrity,
+        installed_bytes,
         resolved_target,
         installed_environment,
     )
@@ -725,6 +799,10 @@ pub enum AdmissionRefusal {
         installed: Option<(String, String)>,
         certified_version: String,
     },
+    /// Step 2b: the installed package's files are not the archive the receipt
+    /// signs (`snapshotRoot`) -- patched, rebuilt or edited after install; the
+    /// text says what shows it (ADR 0131).
+    InstalledBytesDiffer(String),
     /// Step 3: the installed tree differs from the certified environment; the
     /// text names the first differing package.
     EnvironmentDiffers(String),
@@ -755,6 +833,10 @@ impl std::fmt::Display for AdmissionRefusal {
                 "the installed package has no exact lockfile integrity, so its acceptance root \
                  cannot be reproduced",
             ),
+            Self::InstalledBytesDiffer(difference) => write!(
+                formatter,
+                "the installed package's files are not the certified archive's: {difference}"
+            ),
             Self::EnvironmentDiffers(difference) => {
                 write!(
                     formatter,
@@ -780,6 +862,7 @@ pub type InstalledEnvironmentDifference<'a> =
 pub(crate) fn admission_refusals<'a>(
     acceptances: impl IntoIterator<Item = (ArtifactAcceptance<'a>, &'a str)>,
     installed_integrity: &InstalledArtifactIdentity,
+    installed_bytes: &InstalledArtifactBytes,
     installed_difference: &InstalledEnvironmentDifference,
 ) -> Vec<(String, Option<AdmissionRefusal>)> {
     acceptances
@@ -809,6 +892,9 @@ pub(crate) fn admission_refusals<'a>(
                         certified_version: certified_version.to_owned(),
                     });
                 }
+                if let Some(difference) = bytes_difference(&acceptance, installed_bytes) {
+                    return Some(AdmissionRefusal::InstalledBytesDiffer(difference));
+                }
                 installed_difference(acceptance.specifier, environment)
                     .map(AdmissionRefusal::EnvironmentDiffers)
             })();
@@ -820,6 +906,7 @@ pub(crate) fn admission_refusals<'a>(
 /// [`admission_refusals`] over the compiled-in tier.
 pub fn bundle_admission_refusals(
     installed_integrity: &InstalledArtifactIdentity,
+    installed_bytes: &InstalledArtifactBytes,
     installed_difference: &InstalledEnvironmentDifference,
 ) -> Result<Vec<(String, Option<AdmissionRefusal>)>, ContractFailure> {
     Ok(admission_refusals(
@@ -832,6 +919,7 @@ pub fn bundle_admission_refusals(
                     runtime_target: &bundle.runtime_target,
                     declaration_target: &bundle.declaration_target,
                     acceptance_root: &bundle.acceptance_root,
+                    snapshot_root: &bundle.snapshot_root,
                     environment: bundle.environment.as_deref(),
                     identity: &bundle.identity,
                 },
@@ -839,8 +927,30 @@ pub fn bundle_admission_refusals(
             )
         }),
         installed_integrity,
+        installed_bytes,
         installed_difference,
     ))
+}
+
+/// Why step 2b refuses `acceptance`, or `None` when the installed files
+/// reproduce the signed snapshot root. The one reading of that step, for both
+/// admission and the refusal report.
+fn bytes_difference(
+    acceptance: &ArtifactAcceptance,
+    installed_bytes: &InstalledArtifactBytes,
+) -> Option<String> {
+    if acceptance.snapshot_root.is_empty() {
+        return Some("its receipt signs no snapshot root to compare them with".into());
+    }
+    match installed_bytes(acceptance.specifier) {
+        Ok(root) if root == acceptance.snapshot_root => None,
+        Ok(_) => Some(
+            "they do not reproduce the signed snapshot root, so something changed them after \
+             install"
+                .into(),
+        ),
+        Err(reason) => Some(reason),
+    }
 }
 
 /// One acceptance a consumer could reach by artifact rather than by importer,
@@ -857,6 +967,8 @@ pub(crate) struct ArtifactAcceptance<'a> {
     pub(crate) declaration_target: &'a str,
     /// The signed `artifactAcceptanceRoot`.
     pub(crate) acceptance_root: &'a str,
+    /// The signed `snapshotRoot`, which the installed files must reproduce.
+    pub(crate) snapshot_root: &'a str,
     /// The entries behind the signed `dependencyEnvironmentRoot`, already
     /// reproduced against it. `None` when the receipt states no environment
     /// or its entries were not published: such an acceptance is never admitted.
@@ -875,8 +987,12 @@ pub(crate) struct ArtifactAcceptance<'a> {
 /// 2. the project's installed identity for the specifier -- name, manifest
 ///    version, lockfile integrity -- reproduces the signed acceptance root under
 ///    the conditions it was computed over;
+///    2b. the files installed for that package reproduce the signed
+///    `snapshotRoot`, so they are the archive the proof read and not a patched
+///    copy that kept its lockfile integrity (ADR 0131);
 /// 3. the project's installed tree, resolved from that package's own location,
-///    reproduces the environment exactly ([`environment_is_installed`]);
+///    reproduces the environment exactly, and no package in it is patched
+///    ([`environment_is_installed`]);
 /// 4. the file this project resolved is one the acceptance was proven about,
 ///    and [`admissible_cases`] selects it under the host's declaration.
 ///
@@ -886,6 +1002,7 @@ pub(crate) fn admit_by_artifact<'a>(
     acceptances: impl IntoIterator<Item = ArtifactAcceptance<'a>>,
     conditions: &BTreeSet<String>,
     installed_integrity: &InstalledArtifactIdentity,
+    installed_bytes: &InstalledArtifactBytes,
     resolved_target: &ResolvedTargetIdentity,
     installed_environment: &InstalledEnvironment,
 ) -> Vec<(String, String)> {
@@ -910,6 +1027,12 @@ pub(crate) fn admit_by_artifact<'a>(
             acceptance.export_conditions,
         );
         if derived != acceptance.acceptance_root {
+            continue;
+        }
+        // The integrity is the lockfile's record of what was fetched, not of
+        // what is on disk: a patched package keeps the published one. The
+        // files themselves have to be the archive the proof read.
+        if bytes_difference(&acceptance, installed_bytes).is_some() {
             continue;
         }
         // The same artifact, and now the same environment, or it is a

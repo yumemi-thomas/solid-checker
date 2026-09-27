@@ -86,3 +86,11 @@ Still open:
 - **The `missing` status does not say why.** It never names an environment
   mismatch, and its remedy text still describes the retired generate/verify
   flow.
+
+## Amendment (2026-09-27): ADR 0131
+
+`admit_by_artifact` gains step 2b: the imported package's installed files must
+reproduce the signed `snapshotRoot`. Step 3 also refuses an environment
+package that the tree records as patched. Both apply to project catalogs and
+compiled-in bundles alike, and `contract check` names the patch or the byte
+difference as the reason for `missing`.
