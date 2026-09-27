@@ -213,3 +213,80 @@ from `NEGATIVE_ROWS`, and it is listed in `WITHHELD` and in
 `IMPLEMENTATION_AUDITED` under this section. A browser-scoped row, as
 `createSignal` has, would need `@solidjs/signals`' `createMemo` `creates` as a
 delegate. No audited archive carries that row, so none is added.
+
+---
+
+## 3. `Loading` — `creates` — archive `solid-js@2.0.0-rc.3` — **WITHDRAWN**
+
+### 3.1 The rc.3 body
+
+The client builds are one slice, `b2eb0ac4…ba89`:
+
+- `dist/solid.js:1224-1229`
+- `dist/dev.js:1260-1265`
+- `solid.cjs:1225-1230`
+- `dev.cjs:1261-1266`
+
+```js
+function Loading(props) {
+  const onOpt = "on" in props ? { on: () => props.on } : undefined;
+  return createLoadingBoundary(() => props.children, () => props.fallback, onOpt);
+}
+```
+
+The server builds, `dist/server.js:1917-1919` (`60538..60641`) and
+`server.cjs:1918-1920`, share one slice, `f92a3e9c…c37f`:
+
+```js
+function Loading(props) {
+  return createLoadingBoundary(() => props.children, () => props.fallback);
+}
+```
+
+### 3.2 The server builds register into the render context
+
+| Callee | Site (`server.js`) | Reach | Disposition | What it does |
+| --- | --- | --- | --- | --- |
+| `createLoadingBoundary(fn, fallback)` | `:1658-1664` | always | local | with no `sharedConfig.context`, the try/catch `createLoadingBoundary$1` (`:1345-`), which reaches nothing; otherwise `ssrLoadingBoundary(ctx, fn, fallback)` |
+| `ssrLoadingBoundary` | `:1665-1818` | cond: any SSR render | local | `createOwner`, `setContext`, a buffered `Object.create(ctx)` whose `serialize` either forwards or buffers; runs the caller's children |
+| `commitBoundaryState()` → `flushSerializeBuffer()`, `ctx.getBoundaryModules?.(id)` | `:1683-1694` | cond | local → **host** | `ctx.serialize(args…)` for buffered values (`:1684`) and **`ctx.serialize(id + "_assets", {...modules})`** (`:1691`), the boundary's own asset list |
+| **`ctx.serialize(id, "$$f")`** | `:1757`, `:1771`, `:1816` | cond: children pending under `renderToString` (`:1815-1816`), or a collapsed or final hole | **host** | writes the fallback marker for this boundary into the hydration payload |
+| **`done = ctx.registerFragment(id, regOpts)`** | `:1779` | cond: children pending and `ctx.async` (`renderToStream`) | **host** | registers a streamed fragment with the per-request runtime |
+
+**What acts on these values.** Both targets are in
+`@solidjs/web@2.0.0-rc.3` `dist/server.js`:
+
+- `renderToString`'s `serialize` (`:1042-1048`) calls
+  `serializer.write(id, p)`. The value lands in the HTML's `_$HY.r` script.
+- `renderToStream`'s `registerFragment` (`:1401-`) enters the key in the
+  per-request fragment `registry`. It writes a `key + "_fr"` promise to the
+  serializer (or its stub batch), and it returns the `done` callback that later
+  streams the resolved `<template>` and its activation into the response.
+
+These are the export's own acts. `Loading`'s code makes both calls; the
+caller's children decide only whether they are pending. Each call registers a
+value into the response `stream`, and the per-request runtime acts on that value
+after the call returns. That is `semantic-model.md` § creates **[Decision
+2026-09-04]**.
+
+Pending children are ordinary type-correct use: `children: SolidElement`, and a
+child that reads an unresolved async memo throws `NotReadyError`.
+
+The guard is `node`/`worker`/`deno` ∧ an SSR context ∧ either pending children
+(for `$$f` and `registerFragment`) or boundary modules. A guarded reach still
+counts.
+
+### 3.3 The client builds (not decided here)
+
+On the client, `createLoadingBoundary` dispatches to `@solidjs/signals`'
+boundary or, after `enableHydration()`, to `hydratedCreateLoadingBoundary`.
+That path does a dynamic `import()` of boundary modules and calls
+`globalThis.$dfr` to activate a streamed fragment. No decision says whether
+either is a `create`. This section does not need one: the server builds
+already withdraw the row.
+
+### 3.4 Verdict
+
+**WITHDRAWN.** The row `(solid-js, 2.0.0-rc.3, Loading, Creates)` is removed
+from `NEGATIVE_ROWS`, and it is listed in `WITHHELD` and in
+`IMPLEMENTATION_AUDITED` under this section.
