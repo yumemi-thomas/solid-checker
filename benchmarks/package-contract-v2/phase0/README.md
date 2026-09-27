@@ -40,6 +40,15 @@ RC.0 bundled Solid 2 contracts to RC.3.
   that check (URL, `gitHead`, SHA-512, SHA-1, SHA-256, size, file count). There
   is no `registry-metadata.json` or `audit.json`, and it is not part of the
   frozen baseline below.
+- `rc9/solid-js/` and `rc9/solidjs-web/` pin `solid-js@2.0.0-rc.9` and
+  `@solidjs/web@2.0.0-rc.9`, for the negative table's rc.9 `solid-js` and
+  `@solidjs/web` rows
+  (`docs/package-contract-v2/audits/2026-09-27-solid-2-rc9-core-and-web-negative-rows.md`).
+  They are in the same layout and carry the same kind of `tarball.json`
+  record as `rc9/solidjs-signals/`. Both tarballs were downloaded with
+  `npm pack` on 2026-09-27. Each SRI SHA-512 equals the registry's and the
+  solid-primitives lockfile's, and each extracted tree is byte-identical to that
+  lockfile's install. They are not part of the frozen baseline below.
 
 Raw tarballs are deliberately not committed. The audit binds their registry
 URLs, SHA-1, SRI SHA-512, SHA-256, size, safe archive layout, complete file

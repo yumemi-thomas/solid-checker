@@ -25847,6 +25847,116 @@ mod tests {
         );
     }
 
+    /// The scoped `(solid-js@2.0.0-rc.9, createSignal, creates)` row
+    /// (2026-09-27), replayed against the pinned rc.9 `package.json`.
+    ///
+    /// rc.9 ships three browser builds and the audit walked all three, so the
+    /// row terminates under `browser` for each: `dist/solid.js`, and with
+    /// `development` or `observe` `dist/solid.dev.js` or `dist/solid.observe.js`.
+    /// Its delegates bind beside `@solidjs/signals@2.0.0-rc.9`, whose own
+    /// `createSignal` and `getOwner` `creates` rows the rc.9 signals audits
+    /// granted. A set without `browser`, or one whose `.` selects a server
+    /// build (`worker` precedes `browser`), refuses by name.
+    #[test]
+    fn census_host_target_row_binds_solid_js_rc9_beside_signals_rc9() {
+        const SOLID_JS_RC9_INTEGRITY: &str = "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g==";
+        let certified = archive_snapshot(
+            "consumer",
+            "1.0.0",
+            "sha512-consumer",
+            b"{\"name\":\"consumer\"}",
+            "/snapshot/consumer",
+        );
+        let manifest = audited_phase0_manifest("rc9", "solid-js");
+        let mut files = [
+            "dist/solid.js",
+            "dist/solid.dev.js",
+            "dist/solid.observe.js",
+            "dist/server.js",
+            "dist/server.dev.js",
+            "dist/server.observe.js",
+            "types/index.d.ts",
+            "types/client/hydration.d.ts",
+        ]
+        .into_iter()
+        .map(|path| {
+            (
+                path.to_owned(),
+                std::sync::Arc::<[u8]>::from(&b"export {};"[..]),
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+        files.insert(
+            "package.json".to_owned(),
+            std::sync::Arc::<[u8]>::from(manifest.as_slice()),
+        );
+        let solid_js = super::super::ArtifactSnapshot {
+            package_name: "solid-js".into(),
+            package_version: "2.0.0-rc.9".into(),
+            package_integrity: SOLID_JS_RC9_INTEGRITY.into(),
+            files: std::sync::Arc::new(files),
+            directories: std::sync::Arc::new(std::collections::BTreeSet::new()),
+            root: "/snapshot/solid-js-rc9".into(),
+            provenance_root: "/snapshot/solid-js-rc9-archive".into(),
+        };
+        let signals = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.9",
+            SIGNALS_RC9_INTEGRITY,
+            &audited_phase0_manifest("rc9", "solidjs-signals"),
+            "/snapshot/signals-rc9",
+        );
+        let roots = vec![solid_js_root(&solid_js), signals_root(&signals)];
+        let answer = |requested: &[&str]| {
+            census_dialect_axiom(
+                &solid_js_call("createSignal"),
+                solid_dialect::CallClaimDomain::Creates,
+                ReachabilityFloor::MayExecute,
+                &certified,
+                &roots,
+                &conditions(requested),
+            )
+        };
+        for (requested, file) in [
+            (&["browser", "import"][..], "dist/solid.js"),
+            (&["browser", "development", "import"], "dist/solid.dev.js"),
+            (&["browser", "import", "observe"], "dist/solid.observe.js"),
+        ] {
+            assert_eq!(
+                answer(requested).map(|terminator| terminator.witness_site),
+                Ok(format!(
+                    "census-dialect-axiom:solid-js@2.0.0-rc.9#sha512-J/oHWnWqe7S0FeIE:createSignal:\
+                     creates:browser:{file}:delegates=@solidjs/signals@2.0.0-rc.9#sha512-o3pqiTgpH5NR2Dst:\
+                     createSignal:creates+@solidjs/signals@2.0.0-rc.9#sha512-o3pqiTgpH5NR2Dst:getOwner:creates"
+                )),
+                "{requested:?}"
+            );
+        }
+        for (requested, expected) in [
+            (&["import"][..], "which does not name it"),
+            (
+                &["browser", "import", "worker"],
+                "\"dist/server.js\", which is not a runtime file",
+            ),
+        ] {
+            match answer(requested) {
+                Err(Some(reason)) => assert!(reason.contains(expected), "{requested:?}: {reason}"),
+                other => panic!("{requested:?} must refuse by name, got {other:?}"),
+            }
+        }
+        // The flat row does not exist, so with no conditions nothing answers.
+        assert!(
+            census_dialect_axiom_for_callee(
+                &solid_js_call("createSignal"),
+                solid_dialect::CallClaimDomain::Creates,
+                ReachabilityFloor::MayExecute,
+                &certified,
+                &roots,
+            )
+            .is_none()
+        );
+    }
+
     /// The condition replay the scoped row rests on, against the checked-in
     /// pinned manifests: `solid-js@2.0.0-rc.3` selects `dist/solid.js` for
     /// `["import"]` *and* for `["browser","import"]` — the same file, which is

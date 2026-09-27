@@ -30,13 +30,25 @@
           "manifestSha256": "ee9b514b90b06b679d2376c5b5a993c0391aa66ec744e453ec3e534babd30e8e"
         },
         {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.9",
+          "integrity": "sha512-pfiWoLDnLc+QYWc7UyLqO+5QrPEf3oTiNmmRC+C+uM6AZ5VH0bZMNPtLM5rJ29LKPiTwQitKV843IQDf/oeyhQ==",
+          "manifestSha256": "5de9244eb8121c5efe10f3976a06b09ca09cb99de4caf5fcf56dc040ce9773dc"
+        },
+        {
           "name": "solid-js",
           "version": "2.0.0-rc.3",
           "integrity": "sha512-pmW6bRoTvfp/rN4jN7JmLvSaoIpFt7wm0Hi3j508S/smuJqUbRg3dQEjOPTkAwHW+McYnXrMG7cJ4AMNpLevtQ==",
           "manifestSha256": "e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b"
+        },
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.9",
+          "integrity": "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g==",
+          "manifestSha256": "c8d6224bd4bd63ed38f0cec77eb4d30d3f78debec091338dc4e466a2618e11bc"
         }
       ],
-      "negativeRowCount": 94
+      "negativeRowCount": 109
     }
   ]
 }

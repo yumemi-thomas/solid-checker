@@ -826,8 +826,8 @@ pub enum AuditedCitation {
         /// manifest of the row's own archive,
         /// `benchmarks/package-contract-v2/phase0/<release>/<archive>/files.json`
         /// (`rc3/` for the `2.0.0-rc.3` archives, `rc6/` for
-        /// `@solidjs/signals@2.0.0-rc.6`, `rc9/` for
-        /// `@solidjs/signals@2.0.0-rc.9`).
+        /// `@solidjs/signals@2.0.0-rc.6`, `rc9/` for the three
+        /// `2.0.0-rc.9` archives).
         file_sha256: &'static str,
         /// First byte of the cited definition in that file.
         start_byte: usize,
@@ -4557,9 +4557,132 @@ mod tests {
         }
         assert!(audited_archives("").is_empty());
         assert!(audited_archives("@solidjs/router").is_empty());
-        // One archive named `solid-js` is audited now that the 1.x dialect,
-        // which audited `solid-js@1.9.14`, is gone.
-        assert_eq!(audited_archives("solid-js").len(), 1);
+        // Two archives named `solid-js` are audited -- rc.3 and, since
+        // 2026-09-27, rc.9 -- now that the 1.x dialect, which audited
+        // `solid-js@1.9.14`, is gone; `@solidjs/web` the same two.
+        for name in ["solid-js", "@solidjs/web"] {
+            assert_eq!(
+                audited_archives(name)
+                    .iter()
+                    .map(|archive| archive.version)
+                    .collect::<Vec<_>>(),
+                ["2.0.0-rc.3", "2.0.0-rc.9"],
+                "{name}"
+            );
+        }
+    }
+
+    /// `solid-js@2.0.0-rc.9` and `@solidjs/web@2.0.0-rc.9` answer from exactly
+    /// the rows read on their own bytes (2026-09-27), and from nothing rc.3
+    /// carries beyond them.
+    ///
+    /// The controls are rows rc.3 still grants and rc.9's reading withheld:
+    /// the four `solid-js` names rc.9 re-exports from `@solidjs/signals`
+    /// (`affects`, `isPending`, `latest`, `refresh`). Every other rc.3 row of
+    /// these two packages was either re-granted on rc.9 or withdrawn on rc.3
+    /// too.
+    #[test]
+    fn rc9_core_and_web_answer_only_their_own_rows() {
+        let js3 = audited_archive("solid-js", "2.0.0-rc.3");
+        let js9 = audited_archive("solid-js", "2.0.0-rc.9");
+        let web3 = audited_archive("@solidjs/web", "2.0.0-rc.3");
+        let web9 = audited_archive("@solidjs/web", "2.0.0-rc.9");
+        for (archive, export, domain) in [
+            (js9, "For", CallClaimDomain::Reads),
+            (js9, "For", CallClaimDomain::Creates),
+            (js9, "Repeat", CallClaimDomain::Reads),
+            (js9, "Repeat", CallClaimDomain::Creates),
+            (js9, "Match", CallClaimDomain::Reads),
+            (js9, "Match", CallClaimDomain::Creates),
+            (js9, "createContext", CallClaimDomain::Creates),
+            (js9, "useContext", CallClaimDomain::Creates),
+            (web9, "clientOnly", CallClaimDomain::Reads),
+            (web9, "clientOnly", CallClaimDomain::Creates),
+            (web9, "httpHeader", CallClaimDomain::Reads),
+            (web9, "httpHeader", CallClaimDomain::Creates),
+            (web9, "httpStatus", CallClaimDomain::Reads),
+            (web9, "httpStatus", CallClaimDomain::Creates),
+        ] {
+            assert!(
+                primitive_performs_no_operation(&archive, export, domain),
+                "{}@{} {export} {domain:?}",
+                archive.name,
+                archive.version
+            );
+        }
+        // Withheld on rc.9, for a reach of the export's own closure.
+        for (archive, export, domain) in [
+            (js9, "Show", CallClaimDomain::Reads),
+            (js9, "Show", CallClaimDomain::Creates),
+            (js9, "Loading", CallClaimDomain::Creates),
+            (js9, "createSignal", CallClaimDomain::Creates),
+            (web9, "hydrate", CallClaimDomain::Reads),
+            (web9, "render", CallClaimDomain::Reads),
+            (web9, "hydrate", CallClaimDomain::Creates),
+            (web9, "render", CallClaimDomain::Creates),
+        ] {
+            assert!(
+                !primitive_performs_no_operation(&archive, export, domain),
+                "{}@{} {export} {domain:?} is withheld",
+                archive.name,
+                archive.version
+            );
+        }
+        // The scoped `createSignal` row is not a denial.
+        assert!(host_target_row(&js9, "createSignal", CallClaimDomain::Creates).is_some());
+        // rc.3 rows do not stand in for rc.9: the re-exported names.
+        for (export, domain) in [
+            ("affects", CallClaimDomain::Reads),
+            ("affects", CallClaimDomain::Creates),
+            ("isPending", CallClaimDomain::Creates),
+            ("latest", CallClaimDomain::Creates),
+            ("refresh", CallClaimDomain::Reads),
+            ("refresh", CallClaimDomain::Creates),
+        ] {
+            assert!(primitive_performs_no_operation(&js3, export, domain));
+            assert!(
+                !primitive_performs_no_operation(&js9, export, domain),
+                "rc.3's {export} {domain:?} row must not answer for rc.9"
+            );
+        }
+        assert!(primitive_performs_no_operation(
+            &web3,
+            "clientOnly",
+            CallClaimDomain::Creates
+        ));
+
+        // rc.9's coordinate over rc.3's bytes, or with another integrity, is
+        // not rc.9.
+        for (why, archive) in [
+            (
+                "solid-js rc.9's coordinate with rc.3's integrity and manifest",
+                AuditedArchive {
+                    version: js9.version,
+                    ..js3
+                },
+            ),
+            (
+                "solid-js rc.9 with rc.3's integrity",
+                AuditedArchive {
+                    integrity: js3.integrity,
+                    ..js9
+                },
+            ),
+            (
+                "@solidjs/web rc.9 with rc.3's manifest digest",
+                AuditedArchive {
+                    manifest_sha256: web3.manifest_sha256,
+                    ..web9
+                },
+            ),
+        ] {
+            for export in ["For", "createContext", "clientOnly"] {
+                assert!(
+                    !primitive_performs_no_operation(&archive, export, CallClaimDomain::Creates),
+                    "{why} must deny nothing ({export})"
+                );
+            }
+        }
     }
 
     /// The domain vocabulary is the eight kinded call claim domains, and

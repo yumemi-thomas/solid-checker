@@ -1,0 +1,6 @@
+function clientOnly(_fn, _options = {}, moduleUrl) {
+  return props => {
+    if (moduleUrl) registerClientOnlyPreload(moduleUrl);
+    return createMemo(() => props.fallback);
+  };
+}

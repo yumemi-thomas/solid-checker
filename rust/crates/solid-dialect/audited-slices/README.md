@@ -28,7 +28,8 @@ cited offsets. It is armed per release:
   holding `@solidjs/signals/` of the installed `2.0.0-rc.6` to add the
   archive-reading check.
 - rc.9, `SOLID_CHECKER_RC9_ARCHIVE_ROOT`: optional, as for rc.6. Point it at a
-  directory holding `@solidjs/signals/` of the installed `2.0.0-rc.9`.
+  directory holding `@solidjs/signals/`, `@solidjs/web/` and `solid-js/` of the
+  installed `2.0.0-rc.9` packages.
 
 ## Layout
 
@@ -37,7 +38,7 @@ cited offsets. It is armed per release:
 `<phase0-release-dir>/<phase0-archive-dir>` is the directory under
 `benchmarks/package-contract-v2/phase0/` that pins the archive the citation's
 row is about — `rc3/solidjs-signals`, `rc3/solid-js`, `rc6/solidjs-signals`,
-`rc9/solidjs-signals` —
+`rc9/solidjs-signals`, `rc9/solid-js`, `rc9/solidjs-web` —
 which is where the whole file's pinned `sha256` and byte length live. The
 release directory is part of the path because two prereleases of one package
 cite the same package-relative paths (both `@solidjs/signals` archives cite
@@ -70,7 +71,22 @@ and `docs/package-contract-v2/audits/2026-09-27-solid-2-rc9-signals-negative-row
 rc.9 splits its development build in two, so a development-build citation names
 the file that defines the export: `dist/dev-shared.js` for `getOwner`,
 `createRoot`, `untrack`, `runWithOwner` and `flush`, which `dist/dev.js`
-imports, and `dist/dev.js` for the rest. All are published by the SolidJS project under the MIT licence. They are reproduced
+imports, and `dist/dev.js` for the rest.
+
+Those under `solid-v2/rc9/solid-js/` and `solid-v2/rc9/solidjs-web/` come from
+two archives, both verified against the registry tarball:
+
+- `solid-js@2.0.0-rc.9`
+  (`sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g==`,
+  `package.json` sha256 `c8d6224bd4bd63ed38f0cec77eb4d30d3f78debec091338dc4e466a2618e11bc`);
+- `@solidjs/web@2.0.0-rc.9`
+  (`sha512-pfiWoLDnLc+QYWc7UyLqO+5QrPEf3oTiNmmRC+C+uM6AZ5VH0bZMNPtLM5rJ29LKPiTwQitKV843IQDf/oeyhQ==`,
+  `package.json` sha256 `5de9244eb8121c5efe10f3976a06b09ca09cb99de4caf5fcf56dc040ce9773dc`).
+
+Both are cited by
+`docs/package-contract-v2/audits/2026-09-27-solid-2-rc9-core-and-web-negative-rows.md`.
+Each flat row cites all six builds its `.` entry can select. All are published
+by the SolidJS project under the MIT licence. They are reproduced
 here as citation evidence only. Do not edit a slice: it is not source, it is a
 quotation, and the test that reads it exists to detect exactly such an edit.
 
