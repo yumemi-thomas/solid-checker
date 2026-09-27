@@ -26,6 +26,7 @@ pub enum Rule {
     ActionCalledInOwnedScope,
     ResolveInReactiveScope,
     UntilInTrackedScope,
+    StaticDynamicAsyncSource,
     LeafOwnerForbiddenCall,
     MissingOwner,
     PendingAsyncUnsuspendableRead,
@@ -68,7 +69,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 29] = [
+    pub const ALL: [Self; 30] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -82,6 +83,7 @@ impl Rule {
         Self::ActionCalledInOwnedScope,
         Self::ResolveInReactiveScope,
         Self::UntilInTrackedScope,
+        Self::StaticDynamicAsyncSource,
         Self::LeafOwnerForbiddenCall,
         Self::MissingOwner,
         Self::PendingAsyncUnsuspendableRead,
@@ -138,6 +140,14 @@ impl Rule {
             // same dev-only throw, so it takes the next code in the family
             // and the same severity.
             Self::UntilInTrackedScope => ("SC2005", "until-in-tracked-scope", "error", false),
+            // rc.9's static `dynamic` form refuses a promise-valued source:
+            // the dev builds throw at the call (`@solidjs/web@2.0.0-rc.9`
+            // `dist/web.dev.js:2249`, `dist/server.dev.js:3979`) and the
+            // production builds render nothing. A proven violation with the
+            // family's dev-throw severity.
+            Self::StaticDynamicAsyncSource => {
+                ("SC2007", "static-dynamic-async-source", "error", false)
+            }
             Self::LeafOwnerForbiddenCall => ("SC3001", "leaf-owner-forbidden-call", "error", false),
             // Settled-cleanup findings override this family default to error:
             // the rc.0 dev runtime throws SETTLED_CLEANUP_UNOWNED, while the
@@ -297,6 +307,7 @@ mod tests {
         for (code, name) in [
             ("SC2004", "resolve-in-tracked-scope"),
             ("SC2005", "until-in-tracked-scope"),
+            ("SC2007", "static-dynamic-async-source"),
             ("SC7002", "sync-computation-received-async"),
             ("SC7005", "http-response-after-flush"),
             ("SC7006", "server-function-module-directive"),
@@ -355,6 +366,10 @@ mod tests {
         // until() carries the same dev throw ("Cannot call until inside a
         // reactive scope", rc.9 signals dev bundle).
         assert_eq!(Rule::UntilInTrackedScope.metadata().severity, "error");
+        // A promise-valued static dynamic() source is a dev *throw*
+        // ("dynamic(): a static source must resolve synchronously, not to a
+        // promise", rc.9 web.dev.js and server.dev.js).
+        assert_eq!(Rule::StaticDynamicAsyncSource.metadata().severity, "error");
         // The rich-argument transport throw is unconditional at the default
         // client (probed) — error; the post-flush header drop only occurs
         // when the boundary settles after the shell flush — warning.

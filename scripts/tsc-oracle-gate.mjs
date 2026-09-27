@@ -397,6 +397,20 @@ const EXEMPT = {
   // reports its four tracked-scope calls. Replace this entry with a keystone
   // case when the oracle provisions an rc.9 install.
   "until-in-tracked-scope": "until() exists only from solid-js 2.0.0-rc.9; the oracle provisions the audited rc.3, where importing it is TS2305. The keystone is fixtures/reactive-ir/rc9-until-scope, tsc-clean against the published rc.9 typings",
+  // Unprovisioned for the same reason: `dynamic`'s `static` option first
+  // ships in @solidjs/web 2.0.0-rc.9, and against the oracle's rc.3 typings
+  // every two-argument `dynamic` call is TS2554 while the checker answers the
+  // default form, so the rule cannot fire and no keystone case can exist. The
+  // absolute rule was checked by hand against the published rc.9 triple
+  // (strict, bundler resolution, `jsxImportSource: "@solidjs/web"`):
+  // `fixtures/reactive-ir/rc9-static-dynamic-async/App.tsx` is `tsc
+  // --noEmit`-clean while this rule reports its eight promise-valued static
+  // sources, because the source is typed `() => T | Promise<T> | ...` and
+  // `DynamicOptions.static` is a plain boolean (`types/index.d.ts:82-97`).
+  // The one spelling the type rejects, a `PromiseLike<T>` source (TS2322), is
+  // not reported. Replace this entry with a keystone case when the oracle
+  // provisions an rc.9 install.
+  "static-dynamic-async-source": "dynamic()'s static option exists only from @solidjs/web 2.0.0-rc.9; the oracle provisions the audited rc.3, where a second argument is TS2554. The keystone is fixtures/reactive-ir/rc9-static-dynamic-async, tsc-clean against the published rc.9 typings",
 };
 
 const catalogRules = catalogEntries.map((rule) => rule.name);

@@ -552,6 +552,27 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
             "{findings:#?}"
         );
     }
+    if let Some(findings) = diagnostic_fixture("rc9-static-dynamic-async") {
+        // rc.9's static dynamic() form throws in dev on a thenable source and
+        // renders nothing in production. Four inline async sources, the
+        // standard library's Promise.resolve and Promise construct signature,
+        // and two identifiers resolved to same-file async functions; the
+        // synchronous, default-form, unknown-form, shadowed, parameter, `let`
+        // and block-bodied sources stay silent.
+        assert_rule_findings(&findings, "static-dynamic-async-source", 8);
+        assert!(
+            findings.iter().all(|finding| {
+                (finding["rule"] == "static-dynamic-async-source" && finding["kind"] == "violation")
+                    || finding["rule"] == "unaudited-solid-release"
+            }),
+            "{findings:#?}"
+        );
+        // rc.3 has no static form: the same calls are the memo's async
+        // compute, which settles the Promise.
+        if let Some(rc3) = diagnostic_fixture("release-triple-static-dynamic-async-rc3") {
+            assert!(rc3.is_empty(), "{rc3:#?}");
+        }
+    }
     if let Some(findings) = diagnostic_fixture("uncalled-accessor-v2") {
         // The positions TypeScript permits: a string-concatenation operand, a
         // logical-not operand, the two unary numeric coercions (`-count` and

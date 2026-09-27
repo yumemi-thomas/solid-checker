@@ -991,7 +991,7 @@ fn declared_as_parameter(file: &solid_facts::FileFacts, declaration: Span) -> bo
 /// The function a same-file binding declared at `declaration` denotes: a
 /// `function` declaration of that name, or a `const` whose initializer is a
 /// function literal. Anything reassignable or indirect is not a body.
-fn same_file_function(
+pub(crate) fn same_file_function(
     file: &solid_facts::FileFacts,
     declaration: Span,
 ) -> Option<&solid_facts::ast::FunctionFact> {

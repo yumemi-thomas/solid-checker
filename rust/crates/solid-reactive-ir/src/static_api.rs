@@ -186,6 +186,37 @@ impl StaticApiContext<'_> {
                     uncertain: false,
                 });
             }
+            // SC2007: a promise-valued source for rc.9's static `dynamic`
+            // form. `DynamicStatic` is only ever the dialect's answer where
+            // the resolved `@solidjs/web` has the form (`call_form`), so no
+            // other release reaches this arm. Every build calls the source
+            // once, untracked, before `dynamic` returns; the dev builds then
+            // throw on a thenable (`dist/web.dev.js:2249`,
+            // `dist/server.dev.js:3979`) and the production builds fall
+            // through to `() => undefined` (`dist/web.js:2080-2090`,
+            // `dist/server.js:3729-3733`). `DynamicOptions.static` is a plain
+            // `boolean` beside a source typed `() => T | Promise<T> | ...`,
+            // so `tsc` accepts every source proven here.
+            if kind == Some(Primitive::DynamicStatic)
+                && let Some(source) = call.arguments.first()
+                && let Some(proof) = static_source_promise(file, source, self)
+            {
+                result.violations.push(StaticViolation {
+                    id: "SC2007".into(),
+                    rule: "static-dynamic-async-source".into(),
+                    message: format!(
+                        "dynamic() is called with {{ static: true }} and a source that {proof}; the static form calls the source once and renders what it returns synchronously, so the dev builds throw \"dynamic(): a static source must resolve synchronously, not to a promise\" here and the production builds render nothing"
+                    ),
+                    hint: format!(
+                        "Drop static: true so dynamic() settles the source in its memo (and render it under a <{}> boundary), or resolve the component before calling dynamic() and pass a synchronous source.",
+                        dialect.boundary_name(solid_dialect::Boundary::Async)
+                    ),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                    uncertain: false,
+                });
+            }
             let Some(kind @ (Primitive::Refresh | Primitive::Affects)) = kind else {
                 continue;
             };
@@ -415,6 +446,91 @@ fn resolve_tracked_scope(
             context.lookup,
         ) == crate::ExecutionRole::TrackedJsx)
         .then(|| "tracked JSX".to_owned())
+}
+
+/// Why a `dynamic` source provably returns a Promise, phrased for the
+/// message, or `None` where that is not proven.
+///
+/// Two proofs, and nothing else:
+///
+/// - the source is an `async` function (not an async generator, whose
+///   iterator has no `then`), which returns a native Promise on every call;
+/// - the source is an expression-bodied, non-async arrow whose returned
+///   expression is exactly a call the compiler resolved to the standard
+///   library's `PromiseConstructor.resolve` or its construct signature
+///   (`Promise.resolve(...)`, `new Promise(...)`). A same-named project
+///   declaration, a shadowed `Promise`, or an unresolved call proves nothing.
+///
+/// The source may be written inline or named by an identifier that resolves,
+/// through Type Facts, to a same-file `function` declaration or a `const`
+/// initialized with a function literal. A block-bodied non-async function, a
+/// parameter, an import, a reassignable binding, and every other source stay
+/// silent: whether they return a Promise is not decided here.
+fn static_source_promise(
+    file: &FileFacts,
+    source: &solid_facts::ast::ArgumentFact,
+    context: &StaticApiContext<'_>,
+) -> Option<&'static str> {
+    if source.spread {
+        return None;
+    }
+    let function = match source.value {
+        ArgumentValueKind::Function | ArgumentValueKind::AsyncFunction => {
+            crate::cleanup::callback_argument_literal(file, source.span)?
+        }
+        ArgumentValueKind::Identifier => {
+            let declaration = source.binding_declaration?;
+            let function = crate::static_rules::same_file_function(file, declaration)?;
+            // The binder's declaration only chose what to ask; the proof is
+            // that the compiler resolves the reference and the declared name
+            // to one symbol.
+            let path = file.path.as_str();
+            let referenced = context.entities.at(path, source.span)?;
+            let declared = context.entities.at(path, declaration)?;
+            if referenced != declared {
+                return None;
+            }
+            function
+        }
+        _ => return None,
+    };
+    if function.generator {
+        return None;
+    }
+    if function.r#async {
+        return Some("is an async function, which always returns a Promise");
+    }
+    if !function.expression_body {
+        return None;
+    }
+    let returned = function.expression_return.as_ref()?;
+    let callee = returned.callee?;
+    let call = file
+        .ast
+        .calls
+        .iter()
+        .find(|call| call.callee == callee && call.span == returned.span)?;
+    let resolved = context.lookup.resolved_callee_call(file, call.callee)?;
+    if resolved.validity != typefacts::ResolvedCallValidity::Valid {
+        return None;
+    }
+    let declaration = resolved.declaration.as_ref()?;
+    if !declaration.standard_library {
+        return None;
+    }
+    match (
+        declaration.qualified_name.as_ref(),
+        resolved.kind,
+        call.construct,
+    ) {
+        ("PromiseConstructor.resolve", typefacts::CallKind::Call, false) => {
+            Some("returns Promise.resolve(...)")
+        }
+        ("PromiseConstructor.construct", typefacts::CallKind::Construct, true) => {
+            Some("returns new Promise(...)")
+        }
+        _ => None,
+    }
 }
 
 /// The root expression span of a member/call chain: `state.user` and

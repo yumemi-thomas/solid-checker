@@ -511,6 +511,9 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::UntilInTrackedScope => {
             "the until() call runs directly in a tracked scope, where the runtime's observer guard throws in dev"
         }
+        Rule::StaticDynamicAsyncSource => {
+            "the static-form dynamic() source is proven to return a Promise, which the dev builds reject at the call and the production builds render as nothing"
+        }
         Rule::HttpResponseAfterFlush => {
             "the call's scope renders below a Loading boundary, but request-time ordering does not prove whether the boundary settles before or after the response head commits"
         }

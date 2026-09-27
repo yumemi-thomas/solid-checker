@@ -18,6 +18,7 @@
     { "code": "SC2002", "name": "action-called-in-owned-scope", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC2004", "name": "resolve-in-tracked-scope", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC2005", "name": "until-in-tracked-scope", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
+    { "code": "SC2007", "name": "static-dynamic-async-source", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC3001", "name": "leaf-owner-forbidden-call", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC4001", "name": "missing-owner", "severity": "warning", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC5001", "name": "pending-async-unsuspendable-read", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
