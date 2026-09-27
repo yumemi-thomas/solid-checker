@@ -1,5 +1,64 @@
 # Precision backlog
 
+## Owner, role and write-scope batch; SC2006 and SC2007 (2026-09-27)
+
+Status: **implemented**, ef7a92ca through fad52523. `make verify` passed at
+fad52523 (369 s). Every change was probed on the published solid-js,
+@solidjs/signals and @solidjs/web bytes: rc.3 and rc.9 dev and prod, and
+rc.0-rc.9 where a release boundary mattered. Probe scripts are in the session
+scratchpad.
+
+- **Fresh-stack scheduler callbacks run with no owner** (ef7a92ca). All 14
+  `FRESH_STACK_SCHEDULERS` get an unowned owner edge. An `onCleanup`, an effect
+  or `onSettled` there is a proven SC4001 (Chrome probes: `getOwner()` null,
+  `NO_OWNER_CLEANUP`, cleanup never runs). One existing snapshot gained that
+  pinned false negative. A wrapper (`setTimeout(wrap(fn))`) or a member
+  callback gets no edge.
+- **Reads in those callbacks are outside the strict-read window** (f00f9cfd).
+  A new `fresh_stack_callback_role` gives `DeferredCallback`, so SC1001 and
+  SC5001 no longer report there (false positives). No existing snapshot moved.
+- **A setter directly in a `createRoot` body** (c2fd4018). A root callback
+  counted as a write-allowed region, which also hid writes in computes nested
+  in a root. Now:
+  - a signal setter there is SC2001 on every release;
+  - a store setter only where `Solid2.store_setter_roots` says the guard covers
+    roots: signals rc.9 only (rc.1-rc.8 exempt; rc.0 kept exempt).
+- **SC2007 `static-dynamic-async-source`** (c8915492). On `@solidjs/web` rc.9,
+  a static `dynamic` source that returns a Promise throws in dev and renders
+  nothing in prod. tsc accepts every spelling except a `PromiseLike` source,
+  which the rule does not report. It fires only on provable Promises (an async
+  function, `Promise.resolve`/`new Promise`).
+- **SC2006 `flush-in-action`** (7913ad46). From signals rc.8, `flush()` in an
+  action step throws in dev. It is reported where the call provably runs
+  during a step. Facts schema 44 -> 45 (`loop_statements`,
+  `implicit_suspensions`).
+- **Write-scope follow-ups** (fad52523):
+  - a store setter in a component body is legal on rc.1-rc.8 (dev
+    `createComponent` runs bodies in a transparent root), so SC2001 no longer
+    reports it: 2 false positives removed in `write-scope`;
+  - writes inside `flush(fn)` inherit the caller's region (probed: throws in a
+    memo, a body and a root). Two eslint-corpus findings were added where
+    upstream says "valid"; this divergence is pinned as a product-owned case;
+  - SC2002 gets a root-body arm;
+  - a named function passed to `createRoot` is judged like an inline one;
+  - ownership gate 37 -> 41 cases.
+
+Counters after the merges: 31 rules, `Solid2::VARIANT_COUNT` 96, facts schema
+45, ledger pin unchanged.
+
+Still open:
+
+- reads in `addEventListener`/`bind`/`PromiseLike.then` callbacks are proven
+  SC1001 although nothing proves they run in the window (fix in progress);
+- `flush(fn)` still clears read tracking in the model;
+- rc.0 answers: a `createStore` setter in a component body is legal on
+  rc.1-rc.8 but throws on rc.0, where it is not reported; an
+  optimistic-store setter in a memo is legal on rc.0 but reported;
+- a named root body from another module is not judged;
+- SC2006 misses helpers, `untrack` callbacks, re-entry after `await`, and
+  async loops;
+- SC2007 misses block-bodied sources and `.then` chains.
+
 ## Remaining items after the parallel batch, fixed (2026-09-26)
 
 Status: **implemented**, 689b6b5c through db38b432. `make verify` passed at
