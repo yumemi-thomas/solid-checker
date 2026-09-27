@@ -11,7 +11,8 @@ import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import { loadAuditedArchives } from "./lib/dialect-authority.mjs";
-import { installLockfileCacheEntry, lockCopies, parseBunLock } from "./lib/install.mjs";
+import { installLockfileCacheEntry, lockAgreesWithOverrides, lockCopies, parseBunLock } from "./lib/install.mjs";
+import { AUDITED_SOLID_2 } from "./lib/families.mjs";
 import {
   SIGNALS_FLOOR,
   SIGNALS_HEAD,
@@ -33,7 +34,7 @@ const solid2Probes = rows =>
 test("the audited signals pins are ADR 0007's archives, in the JSON mirror and in solid_2.rs", () => {
   const archives = loadAuditedArchives().dialects.find(dialect => dialect.id === "solid-v2").archives;
   const rust = readFileSync(join(ROOT, "rust/crates/solid-dialect/src/solid_2.rs"), "utf8");
-  for (const version of ["2.0.0-rc.3", "2.0.0-rc.6"]) {
+  for (const version of ["2.0.0-rc.3", "2.0.0-rc.6", "2.0.0-rc.9"]) {
     const archive = archives.find(entry => entry.name === "@solidjs/signals" && entry.version === version);
     assert.ok(archive, `${version} is an audited archive`);
     assert.equal(SOLID_SIGNALS_RELEASES[version], archive.integrity);
@@ -43,11 +44,15 @@ test("the audited signals pins are ADR 0007's archives, in the JSON mirror and i
     assert.ok(block, `solid_2.rs AUDITED_ARCHIVES lists @solidjs/signals@${version}`);
     assert.equal(SOLID_SIGNALS_RELEASES[version], block[1]);
   }
-  // The checked-in rc.6 package.json is the archive the integrity names.
-  const rc6 = readFileSync(join(ROOT, "benchmarks/package-contract-v2/phase0/rc6/solidjs-signals/package.json"));
-  assert.equal(JSON.parse(rc6.toString("utf8")).version, SIGNALS_HEAD);
+  // The checked-in rc.9 package.json is the archive the head integrity names.
+  const rc9 = readFileSync(join(ROOT, "benchmarks/package-contract-v2/phase0/rc9/solidjs-signals/package.json"));
+  assert.equal(JSON.parse(rc9.toString("utf8")).version, SIGNALS_HEAD);
   const archive = archives.find(entry => entry.name === "@solidjs/signals" && entry.version === SIGNALS_HEAD);
-  assert.equal(createHash("sha256").update(rc6).digest("hex"), archive.manifestSha256);
+  assert.equal(createHash("sha256").update(rc9).digest("hex"), archive.manifestSha256);
+});
+
+test("the signals head is the audited Solid 2 release", () => {
+  assert.equal(SIGNALS_HEAD, AUDITED_SOLID_2);
 });
 
 test("every signals release the shipped tier was proven with is the pinned one", () => {
@@ -81,10 +86,12 @@ test("every Solid 2 probe's pin sits inside the signals range its solid-js decla
     const range = solidJs ? peers[solidJs]?.["@solidjs/signals"] : null;
     if (range) assert.ok(satisfies(pin.version, range), `${probe.id}: ${pin.version} outside solid-js@${solidJs}'s ${range}`);
   }
-  // The rule, stated on the two tuples the census measures.
+  // The rule, stated on the two tuples the census measures and on a floor
+  // between them.
   assert.equal(corpusSignalsPin({ solid: { "solid-js": "2.0.0-rc.0", "@solidjs/web": "2.0.0-rc.0" } }).version, SIGNALS_FLOOR);
-  assert.equal(corpusSignalsPin({ solid: { "solid-js": "2.0.0-rc.3", "@solidjs/web": "2.0.0-rc.3" } }).version, SIGNALS_HEAD);
-  assert.equal(corpusSignalsPin({ solid: { "@solidjs/signals": "2.0.0-rc.9" } }), null, "an unpinned release refuses");
+  assert.equal(corpusSignalsPin({ solid: { "solid-js": "2.0.0-rc.9", "@solidjs/web": "2.0.0-rc.9" } }).version, SIGNALS_HEAD);
+  assert.equal(corpusSignalsPin({ solid: { "solid-js": "2.0.0-rc.8", "@solidjs/web": "2.0.0-rc.8" } }).version, SIGNALS_HEAD);
+  assert.equal(corpusSignalsPin({ solid: { "@solidjs/signals": "2.0.0-rc.7" } }), null, "an unpinned release refuses");
 });
 
 test("a Solid 1 probe pins nothing", () => {
@@ -94,20 +101,35 @@ test("a Solid 1 probe pins nothing", () => {
   assert.deepEqual(overrides, {});
 });
 
-// The byte-identity claim. Every corpus probe installs frozen from this cache,
-// so a pin that disagreed with what a cached lock resolves would either fail
-// verification or, through the lockfile inheritance, never be inherited and
-// re-resolve against today's registry. Skipped where there is no cache (CI).
+// The byte-identity claim. Every corpus probe installs frozen from this cache:
+// from the entry written under its own pins, or else from the spec-only entry
+// written before pins existed, which it inherits only when that lock already
+// resolves every pin (`lockAgreesWithOverrides`, install.mjs). A pinned entry
+// that disagreed with its pin would fail verification, so it is a failure here.
+// A spec-only entry that disagrees is never inherited -- the probe re-resolves
+// against the registry and stores its own entry -- which is what the
+// 2026-09-27 re-pin of the head to rc.9 does on the first corpus run, so it is
+// counted, not failed. Skipped where there is no cache (CI).
 test.skipIf(!existsSync(join(LOCK_CACHE, "v1")))(
   "the install-lockfile cache resolves exactly the pinned signals release for every cached probe",
   () => {
     const disagreements = [];
     let checked = 0;
     let uncached = 0;
+    let reResolved = 0;
     for (const { row, probe } of solid2Probes(manifest.rows)) {
       const { specs, pins, overrides } = probeInstallPlan(row, probe, manifest.solidReleases);
-      const entry = [installLockfileCacheEntry(LOCK_CACHE, specs, overrides), installLockfileCacheEntry(LOCK_CACHE, specs)]
-        .find(candidate => existsSync(join(candidate, "bun.lock")));
+      const own = installLockfileCacheEntry(LOCK_CACHE, specs, overrides);
+      const legacy = installLockfileCacheEntry(LOCK_CACHE, specs);
+      let entry = existsSync(join(own, "bun.lock")) ? own : null;
+      if (!entry && existsSync(join(legacy, "bun.lock"))) {
+        if (lockAgreesWithOverrides(parseBunLock(readFileSync(join(legacy, "bun.lock"), "utf8")), overrides)) {
+          entry = legacy;
+        } else {
+          reResolved += 1;
+          continue;
+        }
+      }
       if (!entry) {
         uncached += 1;
         continue;
@@ -121,6 +143,6 @@ test.skipIf(!existsSync(join(LOCK_CACHE, "v1")))(
       }
     }
     assert.deepEqual(disagreements, []);
-    assert.ok(checked > 0, `the cache exists but answers none of the manifest's Solid 2 probes (${uncached} uncached)`);
+    assert.ok(checked > 0, `the cache exists but answers none of the manifest's Solid 2 probes (${uncached} uncached, ${reResolved} to re-resolve)`);
   }
 );

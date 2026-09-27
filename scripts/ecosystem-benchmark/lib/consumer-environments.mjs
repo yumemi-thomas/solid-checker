@@ -39,8 +39,11 @@ const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const INTEGRITY = /^sha512-[A-Za-z0-9+/]+={0,2}$/;
 
 // The runtime packages whose release `AUDITED_SOLID_2` names. `@solidjs/signals`
-// is versioned apart from them (the corpus head installs rc.6 beside an rc.3
-// `solid-js`), so it is held to the audited archives alone.
+// is versioned apart from them (a floor installs the rc.9 head's signals beside
+// an rc.6 or rc.8 `solid-js`, and kobalte pins rc.3 beside rc.3), so it is held
+// to the audited archives alone. The ceiling only refuses a release above the
+// audited one; at or below it, a runtime is admitted by being an audited archive
+// with that archive's integrity, and nothing else.
 const CEILINGED_RUNTIME = ["solid-js", "@solidjs/web"];
 
 /**

@@ -64,7 +64,7 @@ test("a Solid 2 probe the signals table cannot pin is an install failure, never 
     rows: [
       {
         ...makeRow({ pkg: "@solid-primitives/alpha", version: "1.0.0", solidTarget: "solid2", probes: [] }),
-        probes: [{ id: "alpha|solid2|only", kind: "only", channel: "rc", solid: { "@solidjs/signals": "2.0.0-rc.9" } }]
+        probes: [{ id: "alpha|solid2|only", kind: "only", channel: "rc", solid: { "@solidjs/signals": "2.0.0-rc.7" } }]
       }
     ],
     exclusions: [],
@@ -86,7 +86,7 @@ test("a Solid 2 corpus probe hands its signals pin to the install as an override
         ...makeRow({ pkg: "@solid-primitives/alpha", version: "1.0.0", solidTarget: "solid2", probes: [] }),
         probes: [
           { id: "alpha|solid2|floor", kind: "floor", channel: "rc", solid: { "solid-js": "2.0.0-rc.0", "@solidjs/web": "2.0.0-rc.0" } },
-          { id: "alpha|solid2|head", kind: "head", channel: "rc", solid: { "solid-js": "2.0.0-rc.3", "@solidjs/web": "2.0.0-rc.3" } }
+          { id: "alpha|solid2|head", kind: "head", channel: "rc", solid: { "solid-js": "2.0.0-rc.9", "@solidjs/web": "2.0.0-rc.9" } }
         ]
       }
     ],
@@ -98,7 +98,7 @@ test("a Solid 2 corpus probe hands its signals pin to the install as an override
   const results = await runBenchmark({ manifest, hooks: successHooks({ installCalls }) });
   assert.deepEqual(installCalls.map(call => call.overrides), [
     { "@solidjs/signals": "2.0.0-rc.0" },
-    { "@solidjs/signals": "2.0.0-rc.6" }
+    { "@solidjs/signals": "2.0.0-rc.9" }
   ]);
   assert.deepEqual(installCalls[0].specs, ["@solid-primitives/alpha@1.0.0", "solid-js@2.0.0-rc.0", "@solidjs/web@2.0.0-rc.0"], "the specs, and so the cache key's spec half, are unchanged");
   // The success hook reports no pin facts, and an unverified pin fails closed.

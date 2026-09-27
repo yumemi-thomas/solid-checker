@@ -197,7 +197,8 @@ against the registry; the report records the choice under
 Every Solid 2 probe pins `@solidjs/signals`, which no spec names on its own
 (`solid-js`'s caret range would otherwise resolve the registry's newest
 release): `solid-js@2.0.0-rc.0` installs signals rc.0, every other Solid 2
-environment rc.6, and a row that names signals itself installs exactly that
+environment rc.9 (rc.6 until the 2026-09-27 re-pin; rc.9's and rc.8's own
+`solid-js` exclude it), and a row that names signals itself installs exactly that
 version (`lib/runtime-pins.mjs`). The pin travels as a package.json `override`,
 the lockfile cache key covers the overrides, and a pinned probe whose own entry
 is missing inherits the spec-only entry when that lock already resolves the pin

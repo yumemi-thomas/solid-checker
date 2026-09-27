@@ -65,12 +65,13 @@ repository audits its bundled 1.x contract against (see
 there is no floor/head split because there is only one pinned version to
 probe.
 
-Solid 2.x is audited at the exact RC.3 runtime tuple: `solid-js@2.0.0-rc.3`,
-`@solidjs/web@2.0.0-rc.3`, and `@solidjs/signals@2.0.0-rc.3`. That pin is the
-authority ceiling, so a later registry refresh cannot silently advance the
-benchmark to RC.4. For each compatible package version, selection still keeps
+Solid 2.x is audited at the exact RC.9 runtime tuple: `solid-js@2.0.0-rc.9`,
+`@solidjs/web@2.0.0-rc.9`, and `@solidjs/signals@2.0.0-rc.9` (since
+2026-09-27; it was RC.3 before, see the 2026-09-27 entry below). That pin is
+the authority ceiling, so a later registry refresh cannot silently advance the
+benchmark to RC.10. For each compatible package version, selection still keeps
 the oldest supported compatibility floor and the newest accepted release at
-or below RC.3, across all three runtime packages together.
+or below RC.9, across all three runtime packages together.
 When floor and head land on the same release for every runtime package, that
 is a single `kind: "only"` probe rather than two identical ones — this is how
 a beta-only package's exact compatibility window is preserved rather than
@@ -2750,6 +2751,36 @@ Raw generation and install classes are environment-sensitive. This run traded
 three prior install failures for two additional generation failures and produced
 one more contract overall; no no-contention substitution was made. The reports
 therefore preserve 297/97/17/3/2 rather than presenting a corrected composite.
+
+## 2026-09-27 rediscovery: the audited Solid 2 ceiling is RC.9
+
+`AUDITED_SOLID_2` moved from `2.0.0-rc.3` to `2.0.0-rc.9` (owner decision:
+rc.9 is the audited release, rc.0-rc.8 are analyzed under SC9014), and the
+manifest was rediscovered against the live registry. That run is also a month
+of ordinary registry drift, so not every change is the ceiling's:
+
+- the ceiling's own: the three official runtime rows are `2.0.0-rc.9`; 118
+  Solid 2 head and `only` probes install `solid-js@2.0.0-rc.9` where 117
+  installed rc.3 (`@kobalte/core@2.0.0-alpha.2` peers exactly rc.3, so its one
+  probe stays there);
+  the official `@solidjs/*` companions (`diagnostics`, `element`, `h`, `html`,
+  `universal`) are rc.9; `@solidjs/testing-library@1.0.0-beta.3` and
+  `@solidjs/prerender@0.2.0` gained a `solid2` row; and the tanstack router and
+  query floors moved to rc.6/rc.8 where their new releases no longer accept
+  rc.0/rc.2;
+- drift: 307 -> 309 rows and 418 -> 421 probes (Solid 2: 250 -> 253); 213
+  rows changed in all (including `@solidjs/router` next.18 ->
+  next.30, `@kobalte/core` alpha.0 -> alpha.2, the tanstack Solid 2 rows rc.2
+  -> rc.6/rc.8, and three primitives), with 32 exclusions added.
+  `@tanstack/charts` was re-reviewed at 0.18.0: `./solid` is unchanged and its
+  one new subpath, `./renderer/rect`, falls in the excluded set.
+
+Every non-floor Solid 2 probe now pins `@solidjs/signals@2.0.0-rc.9` rather than
+rc.6: rc.9's and rc.8's `solid-js` declare `^2.0.0-rc.9` and `^2.0.0-rc.8`, which
+rc.6 no longer satisfies (`lib/runtime-pins.mjs`). The rc.0 floors keep rc.0.
+This is a re-pin, so the install-lockfile cache re-resolves those probes on the
+first corpus run. The pinned `benchmarks/ecosystem/report.json` still describes
+the rc.3 manifest until it is re-pinned.
 
 ## 2026-08-26 authority run: audited Solid 2 RC.3 tuple and framework scopes
 

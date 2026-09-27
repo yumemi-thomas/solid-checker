@@ -11,17 +11,21 @@
 // certified in is part of what was proven (bundles are keyed by it), so it has to
 // be a fact of the manifest, not of the cache.
 //
-// The pins below are the versions and integrities the cached locks resolved on
-// 2026-09-26, so pinning moves no probe: 111 cached locks resolve rc.0 and 134
-// resolve rc.6, and every one of them names the integrity recorded here.
-// `install.test.mjs` fails if the cache and these pins ever disagree.
+// The pins were first the versions and integrities the cached locks resolved on
+// 2026-09-26, so pinning moved no probe: 111 cached locks resolved rc.0 and 134
+// resolved rc.6. Since 2026-09-27 the head is rc.9 (see `SIGNALS_HEAD`), which is
+// a deliberate re-pin: every non-floor probe moves to rc.9, and the cache
+// re-resolves it on the first corpus run. `runtime-pins.test.mjs` fails if a
+// cached lock written under a pin ever disagrees with it.
 
 // sha512 integrities, by version.
 //
-// - rc.3 and rc.6 are ADR 0007's audited archives
+// - rc.3, rc.6 and rc.9 are audited archives
 //   (rust/crates/solid-dialect/src/solid_2.rs `AUDITED_ARCHIVES`, mirrored in
-//   rust/crates/solid-dialect/audited-archives.json); rc.6's `package.json` is
-//   checked in at benchmarks/package-contract-v2/phase0/rc6/solidjs-signals.
+//   rust/crates/solid-dialect/audited-archives.json); rc.6's and rc.9's
+//   `package.json` are checked in at
+//   benchmarks/package-contract-v2/phase0/{rc6,rc9}/solidjs-signals. rc.6 stays
+//   because the shipped tier's head environments were proven with it.
 // - rc.0 has no audited archive. Its integrity is the one all 111 cached rc.0
 //   locks record and the one every rc.0 environment of the shipped tier
 //   (pkg/contracts/accepted/index.json) states. It is an install pin, never an
@@ -32,27 +36,37 @@ export const SOLID_SIGNALS_RELEASES = Object.freeze({
   "2.0.0-rc.3":
     "sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA==",
   "2.0.0-rc.6":
-    "sha512-lPqwZNLPq1Z9CBvgXkMvi1ZFr5OHUiFNz1X40+yehszDWEbJkneZx7BGKIe9eMT/AN1NSL+PMjOiMyZaqVB2xw=="
+    "sha512-lPqwZNLPq1Z9CBvgXkMvi1ZFr5OHUiFNz1X40+yehszDWEbJkneZx7BGKIe9eMT/AN1NSL+PMjOiMyZaqVB2xw==",
+  "2.0.0-rc.9":
+    "sha512-o3pqiTgpH5NR2DstiKrt9s/6+0YOFtv+MfvLONwLsS247I+EWMMyTu9BkRcgd35UR5Pa1DM16lI1/5uaIMY6Gw=="
 });
 
 // The floor tuple is rc.0 of all three runtime packages: `solid-js@2.0.0-rc.0`
 // was measured with the signals release it shipped beside.
 export const SIGNALS_FLOOR = "2.0.0-rc.0";
 
-// Every other Solid 2 environment in the corpus -- the rc.3 head, the two rc.2
-// floors, the beta.19 `only` rows, and the rows that install no `solid-js` of
-// their own -- was measured with rc.6, the prerelease the ecosystem installs and
-// the one ADR 0007's re-audit read.
-export const SIGNALS_HEAD = "2.0.0-rc.6";
+// Every other Solid 2 environment in the corpus -- the rc.9 head, the rc.6 and
+// rc.8 floors, the beta.19 `only` rows, and the rows that install no `solid-js`
+// of their own -- is measured with rc.9.
+//
+// It was rc.6 until 2026-09-27, while the audited Solid 2 ceiling was rc.3 and
+// rc.9 was kept out of certification. With the ceiling at rc.9
+// (`AUDITED_SOLID_2`) there is no choice left: `solid-js@2.0.0-rc.9` declares
+// `@solidjs/signals ^2.0.0-rc.9`, and so does rc.8 (the tanstack router
+// floors) with `^2.0.0-rc.8`, so rc.6 no longer sits inside the range the
+// head's own `solid-js` declares. rc.9 is also what a fresh install of any
+// 2.0 prerelease `solid-js` resolves today, and it is an audited archive, so
+// its negative rows answer.
+export const SIGNALS_HEAD = "2.0.0-rc.9";
 
 /**
  * The signals release a corpus probe installs.
  *
  * Keyed by the probe's `solid-js` release, not by its kind, because `solid-js`
  * is what declares the range the pin has to sit inside: the two
- * `@tanstack/solid-router*` floors install `solid-js@2.0.0-rc.2`, whose
- * `^2.0.0-rc.2` excludes rc.0, and their cached locks resolve rc.6. A row that
- * names `@solidjs/signals` itself is installed at exactly that version.
+ * `@tanstack/solid-router*` floors install `solid-js@2.0.0-rc.8`, whose
+ * `^2.0.0-rc.8` excludes rc.0 and rc.6. A row that names `@solidjs/signals`
+ * itself is installed at exactly that version.
  *
  * Returns `null` for a version this table has no integrity for, which the
  * caller turns into a refusal rather than an unpinned install.

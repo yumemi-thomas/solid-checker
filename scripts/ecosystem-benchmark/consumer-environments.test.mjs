@@ -95,12 +95,19 @@ test("a package that is not its manifest row's artifact is refused", () => {
 });
 
 test("a runtime above the audited Solid 2 release, or not an audited archive, is refused", () => {
+  // rc.10 is not published; it stands for the next release nobody reviewed.
   const newer = kobalte();
-  newer.runtime["solid-js"] = { version: "2.0.0-rc.9", integrity: "sha512-AAAA" };
-  newer.runtime["@solidjs/web"] = { version: "2.0.0-rc.9", integrity: "sha512-AAAA" };
+  newer.runtime["solid-js"] = { version: "2.0.0-rc.10", integrity: "sha512-AAAA" };
+  newer.runtime["@solidjs/web"] = { version: "2.0.0-rc.10", integrity: "sha512-AAAA" };
   const problems = environmentProblems(newer, { manifest, auditedArchives }).join("\n");
-  assert.match(problems, new RegExp(`solid-js@2\\.0\\.0-rc\\.9 is above the audited Solid 2 release ${AUDITED_SOLID_2.replace(/\./g, "\\.")}`));
-  assert.match(problems, /@solidjs\/web@2\.0\.0-rc\.9 is above/);
+  assert.match(problems, new RegExp(`solid-js@2\\.0\\.0-rc\\.10 is above the audited Solid 2 release ${AUDITED_SOLID_2.replace(/\./g, "\\.")}`));
+  assert.match(problems, /@solidjs\/web@2\.0\.0-rc\.10 is above/);
+
+  // The ceiling itself is not above the ceiling: an rc.9 runtime is judged by
+  // the audited archives alone.
+  const atCeiling = kobalte();
+  atCeiling.runtime["solid-js"] = { version: AUDITED_SOLID_2, integrity: "sha512-AAAA" };
+  assert.doesNotMatch(environmentProblems(atCeiling, { manifest, auditedArchives }).join("\n"), /is above/);
 
   const republished = kobalte();
   republished.runtime["@solidjs/signals"].integrity = "sha512-AAAA";
