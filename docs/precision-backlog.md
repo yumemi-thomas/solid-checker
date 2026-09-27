@@ -63,15 +63,41 @@ five names. All numbers below are measured.
   not delivered. Census dry run on rc.9: gated totals unchanged; probe-recipe
   addressing 95 -> 90 (to re-address).
 
+Follow-ups, same day (measured):
+
+- **ADR 0128** (f5f268c0): a declaration re-export whose target module
+  declares nothing by that name (rc.9's `$DEVCOMP` and the other four) is left
+  out of the contract instead of refusing the whole `solid-js@2.0.0-rc.9`
+  graph node. Resolver and certifier compute the list independently and
+  refuse any mismatch; a dependent that reaches a dropped name still refuses.
+- **ADR 0129** (24c7741d): a non-root graph node that states nothing
+  (`solid-js@2.0.0-rc.9 ./internal`, nine aliases of names the root typings do
+  not declare) leaves the graph instead of refusing every dependent above it.
+  Census head rows 0 -> 145/148/141/139 (memo, rootless, trigger, storage),
+  equal to their floors.
+- **Recipes** (663e9021): the five rootless/trigger head recipes carried to
+  the rc.9 cases; addressing 90 -> 95, all hold on rc.9.
+- **Tier** (3b0d99f4): 206 -> 228 bundles; 21 on the rc.9 triple (none
+  before); rc.0 139 -> 21 (the rediscovered floors moved).
+- **Consumer effect** (`phase22/2026-09-27-consumer-effect-of-rc9-audited.md`,
+  1a96cdff -> 3b0d99f4, 21 project configs): kobalte SC9005 sites 311 -> 281
+  (`@solid-primitives/form` now delivered), SC9014 on 0 -> 7 projects (rc.3
+  is older), certified 2 -> 0; oscar (rc.9) SC9005 13 -> 6 (`@solidjs/meta`
+  through an rc.9 bundle), SC9014 3 -> 0, certified 0 -> 1; viviana (rc.9)
+  SC9014 gaps 2 -> 1 (`sharedConfig` is really imported), nothing from the
+  tier (it imports `@tanstack/solid-router`'s root, the tier holds only
+  `ssr/client`). No false positive in the spot checks.
+
 Open:
 
+- **SC9014 on a project with no Solid code.** kobalte's `tailwindcss` and
+  `vanilla-extract` configs get the older-release notice and nothing else,
+  which makes them uncertifiable. By design of dialect selection, but the
+  notice says nothing useful there.
 - **Tier admission ignores pnpm patches** (Rust side): lock integrity is
   checked but `patchedDependencies`/`patch_hash` are not, so a bundle can be
   admitted for bytes the consumer patched. Live on viviana's
   `@tanstack/solid-start`.
-- The accepted tier is not yet regenerated for the rc.9 environments; the
-  census re-pin, recipe re-addressing, consumer-environment runs and
-  `make accepted-bundles` follow.
 - `contract-differential` fails on a stale `schemaVersion 2` assertion before
   any release-dependent step; nothing gates it.
 - Client `Loading`'s dynamic `import()`/`$dfr` path is unclassified.
