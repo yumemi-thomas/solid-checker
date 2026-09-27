@@ -3891,6 +3891,13 @@ mod tests {
             .expect("2.0 audits solid-js@2.0.0-rc.3");
         assert!(primitive_performs_no_operation(
             &solid_js,
+            "For",
+            CallClaimDomain::Creates
+        ));
+        // `Show`'s row was withdrawn on 2026-09-27 for the same kind of reach:
+        // its server body's own memo hands a thenable to `ctx.serialize`.
+        assert!(!primitive_performs_no_operation(
+            &solid_js,
             "Show",
             CallClaimDomain::Creates
         ));

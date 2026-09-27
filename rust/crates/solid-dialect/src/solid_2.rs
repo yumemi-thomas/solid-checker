@@ -340,7 +340,7 @@ const RC9: &str = "2.0.0-rc.9";
 /// # Rows are archive-scoped, and three `@solidjs/signals` archives carry rows
 ///
 /// Every row names its archive's version ([`NegativeClaimRow::version`]) and
-/// answers for that archive alone. The 50 rc.3 rows answer for the three
+/// answers for that archive alone. The 49 rc.3 rows answer for the three
 /// `2.0.0-rc.3` archives; the 24 rc.6 rows answer for
 /// `@solidjs/signals@2.0.0-rc.6`, which the ecosystem installs in place of
 /// rc.3 (every `solid-js@2.0.0-rc.3` declares `@solidjs/signals: ^2.0.0-rc.3`).
@@ -377,7 +377,7 @@ const RC9: &str = "2.0.0-rc.9";
 ///
 /// # `creates` and `reads`, and only those
 ///
-/// Rows carry [`CallClaimDomain::Creates`] (66: 32 on rc.3, one of them scoped, 17 on rc.6, 17 on
+/// Rows carry [`CallClaimDomain::Creates`] (65: 31 on rc.3, one of them scoped, 17 on rc.6, 17 on
 /// rc.9) and [`CallClaimDomain::Reads`] (32: 18 on rc.3, 7 on rc.6, 7 on rc.9). The other six kinded
 /// domains are withheld wholesale, because the audited documents' closures in them are not yet
 /// admissible as negative authority and each counter-example below is a defect
@@ -3054,22 +3054,12 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             end_byte: 12189,
         }],
     },
-    // `Show` `reads` is withdrawn (RC3_SHOW_LOADING_AUDIT § 1): its memos
-    // compute on the call's own stack and read `conditionValue()` and
-    // `condition()`, memos `Show` created, which § reads still counts.
-    NegativeClaimRow {
-        package: "solid-js",
-        version: RC3,
-        export: "Show",
-        domain: CallClaimDomain::Creates,
-        scope: RowScope::EveryCondition,
-        citations: &[AuditedCitation::Summary {
-            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
-            summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
-            start_byte: 6598,
-            end_byte: 12189,
-        }],
-    },
+    // `Show` carries no row (RC3_SHOW_LOADING_AUDIT): `reads` is withdrawn
+    // because its memos compute on the call's own stack and read
+    // `conditionValue()` and `condition()`, memos `Show` created (§ 1);
+    // `creates` because the server body's own `createMemo(() => props.when)`
+    // reaches `ctx.serialize(id, deferred.promise, ..)` for a thenable `when`
+    // (§ 2).
     // `reads` on the same audited bytes as the `creates` row below.
     // Its only argument-path atoms are parameter-rooted, which
     // `semantic-model.md` § reads [Decision 2026-09-10] assigns to the
@@ -5369,6 +5359,7 @@ mod tests {
         ("solid-js", RC3, "createEffect", CallClaimDomain::Reads),
         ("solid-js", RC3, "createSignal", CallClaimDomain::Creates),
         ("solid-js", RC3, "Show", CallClaimDomain::Reads),
+        ("solid-js", RC3, "Show", CallClaimDomain::Creates),
     ];
 
     /// The reading each [`RowScope::HostTarget`] row rests on: the audit, the
@@ -5807,6 +5798,23 @@ mod tests {
                  conditionValue(), and the returned memo reads condition() \
                  (dist/solid.js:1153-1174). A read of a source the export \
                  created still counts under semantic-model.md § reads",
+            ),
+        ),
+        (
+            "solid-js",
+            RC3,
+            "Show",
+            CallClaimDomain::Creates,
+            RC3_SHOW_LOADING_AUDIT,
+            "## 2. `Show` — `creates` — archive `solid-js@2.0.0-rc.3` — **WITHDRAWN**",
+            ImplementationVerdict::Withheld(
+                "the node/worker/deno body (dist/server.js:1853-1872) calls the \
+                 server createMemo(() => props.when), whose processResult runs \
+                 ctx.serialize(id, deferred.promise, deferStream) when when is a \
+                 thenable, ctx.async, the owner has an id and no NoHydrate \
+                 (:555-558) -- a create under semantic-model.md § creates' \
+                 [Decision 2026-09-04], type-correctly reachable (when: T is \
+                 unconstrained). A flat row carries no guard",
             ),
         ),
         // RC9_SIGNALS_AUDIT: the five `creates` rows the rc.9 vocabulary
@@ -6673,18 +6681,18 @@ mod tests {
         // `reads` withheld as on rc.6 (again derivable only from
         // IMPLEMENTATION_AUDITED). rc.9 then carries what rc.6 does: 24.
         // The 2026-09-27 rc.3 re-reading (RC3_SHOW_LOADING_AUDIT) withdraws
-        // 1 document-derivable row, each listed in WITHHELD and
+        // 2 document-derivable rows, each listed in WITHHELD and
         // IMPLEMENTATION_AUDITED.
         assert_eq!(from_json.len(), 45);
         assert_eq!(implementation_closed.len(), 8 + 24 + 5 + 19);
-        assert_eq!(implementation_withheld.len(), 4 + 1);
+        assert_eq!(implementation_withheld.len(), 4 + 2);
         let on = |version: &str| shipped.iter().filter(|(_, v, _, _)| v == version).count();
-        assert_eq!((on(RC3), on(RC6), on(RC9)), (49, 24, 24));
-        assert_eq!(shipped.len(), 97);
+        assert_eq!((on(RC3), on(RC6), on(RC9)), (48, 24, 24));
+        assert_eq!(shipped.len(), 96);
 
         // The scoped rows: each is a flat row both sources withhold, read
         // under one host-target condition in a section HOST_TARGET_READINGS
-        // names, and nothing else. 97 flat + 1 scoped = 98 rows.
+        // names, and nothing else. 96 flat + 1 scoped = 97 rows.
         let mut scoped = BTreeSet::new();
         for row in NEGATIVE_ROWS {
             let RowScope::HostTarget(scope) = row.scope else {
@@ -6733,7 +6741,7 @@ mod tests {
             assert!(scoped.insert(key), "{:?} is scoped twice", row.export);
         }
         assert_eq!(scoped.len(), 1);
-        assert_eq!(NEGATIVE_ROWS.len(), 97 + 1);
+        assert_eq!(NEGATIVE_ROWS.len(), 96 + 1);
 
         // The two authorities must not be confusable from the row alone: a row
         // the hand census closed cites runtime bytes, and every other row cites

@@ -8,7 +8,8 @@ it follows were. It withdraws rows that the negative table
 rc.3's own runtime bytes.
 
 **Why it exists.** Reading the same exports on `solid-js@2.0.0-rc.9`
-(`2026-09-27-solid-2-rc9-core-and-web-negative-rows.md`) found reads and creates that the rc.3 summaries do not publish. The rc.3 bodies
+(`2026-09-27-solid-2-rc9-core-and-web-negative-rows.md`) found reads and
+creates that the rc.3 summaries do not publish. The rc.3 bodies
 involved are byte-identical to rc.9's, or reach the same operation by the same
 path. So the rows were re-read on rc.3, and every row that fails is withdrawn
 here, one row per commit.
@@ -145,3 +146,70 @@ verdict.
 every rc.3 build. The row `(solid-js, 2.0.0-rc.3, Show, Reads)` is removed from
 `NEGATIVE_ROWS`, and it is listed in `WITHHELD` and in `IMPLEMENTATION_AUDITED`
 under this section.
+
+---
+
+## 2. `Show` — `creates` — archive `solid-js@2.0.0-rc.3` — **WITHDRAWN**
+
+### 2.1 The client builds perform no `create`
+
+The client `Show` (§ 1.1) calls only `@solidjs/signals`' `createMemo` and
+`untrack`, besides the caller's children. The rc.3 signals archive-wide
+host-boundary census (`2026-09-04-solid-2-rc3-core-primitives-creates.md`
+§ 1.5) finds no handle to a document or a server runtime in the archive. The
+browser side is clean, and it is the side `solid-js.json` captured.
+
+### 2.2 The server builds reach `ctx.serialize`
+
+`dist/server.js:1853-1872` (`58768..59264`, slice `b1c7dfb9…24bd`, and the
+same slice in `server.cjs:1854-1873`):
+
+```js
+function Show(props) {
+  const conditionValue = createMemo(() => props.when);
+  ...
+}
+```
+
+This is the server's own `createMemo`, not `@solidjs/signals'`. Its call table:
+
+| Callee | Site | Reach | Disposition | What it does |
+| --- | --- | --- | --- | --- |
+| `createMemo(() => props.when)` | `server.js:1854` → `:306-395` | always | local | no `sync`, no `lazy`, no `ssrSource`, so `update()` runs at once (`:378-380`) |
+| `createOwner(options)` | `:311` → `:44-` | always | local | `id` is `nextChildIdFor(parent, true)` (`:26-33`) whenever the parent owner has an id, which it does under a hydrating render |
+| `update()` → `run()` | `:341-360` | always | local, then **caller value** | the compute returns `props.when`, a value the caller supplied, which may be a thenable |
+| `processResult(comp, result, owner, ctx, …)` | `:349` → `:500-803` | always | local | when `result` is a thenable and no slot settled it: `const serializes = !!(ctx?.async && ctx.serialize && id && !noHydrate)` (`:555`), then **`if (serializes) ctx.serialize(id, deferred.promise, deferStream)`** (`:558`). An async iterable takes the sibling arm to `ctx.serialize` at `:699`/`:760` |
+
+`ctx` is `sharedConfig.context`. Under `@solidjs/web@2.0.0-rc.3`'s
+`renderToStream` that is the per-request context (`web` `dist/server.js:1325`,
+`async: true`). Its `serialize` (`:1383-1397`) adds a thenable to
+`blockingPromises` or batches it, and then `serializer.write(id, p)` writes it
+into the response stream. `semantic-model.md` § creates **[Decision
+2026-09-04]** settles that this is a `create`:
+
+- it is the export's own act;
+- the memo's pending result is an `async-computation` landing in the response
+  `stream`;
+- the hydration serializer acts on it after the call returns.
+
+Here the memo is `Show`'s own. The caller supplies a value, not a callable.
+
+**Type-correct.** `Show<T>(props: { when: T | undefined | null | false; … })`
+(`types/client/flow.d.ts:90`, `:96`, `:102`, `:108`; `.` has one `types` entry
+for every condition) leaves `T` unconstrained. So `<Show when={promise}>`
+type-checks, and a reader of the rc.9 twin ran `tsc` to confirm it. Nothing
+in `processResult`'s thenable arm needs an option: the `ssrSource` guard the
+2026-09-04 audit lists belongs to `serverEffect` (`createEffect`), not to
+`createMemo`.
+
+The guard is `node`/`worker`/`deno` ∧ `renderToStream` (`ctx.async`) ∧ an
+owner with an id ∧ no `NoHydrate` ancestor ∧ a thenable or async-iterable
+`when`. It is a guarded reach, and a flat row has nowhere to put the guard.
+
+### 2.3 Verdict
+
+**WITHDRAWN.** The row `(solid-js, 2.0.0-rc.3, Show, Creates)` is removed
+from `NEGATIVE_ROWS`, and it is listed in `WITHHELD` and in
+`IMPLEMENTATION_AUDITED` under this section. A browser-scoped row, as
+`createSignal` has, would need `@solidjs/signals`' `createMemo` `creates` as a
+delegate. No audited archive carries that row, so none is added.

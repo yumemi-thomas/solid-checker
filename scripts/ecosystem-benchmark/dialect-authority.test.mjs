@@ -68,8 +68,8 @@ test("the checked-in pins load and name the archives the Rust tables audit", () 
   // more every-condition rows on `@solidjs/signals@2.0.0-rc.9`, and since
   // 2026-09-27 nineteen more there (rc.9 then carries rc.6's 24).
   // Withdrawn since 2026-09-27 on rc.3's own bytes: `solid-js@2.0.0-rc.3`
-  // `Show` `reads`.
-  assert.equal(solid2.negativeRowCount, 98);
+  // `Show` `reads`, `Show` `creates`.
+  assert.equal(solid2.negativeRowCount, 97);
 });
 
 test("a pin file that parses but pins nothing is refused, not read as full coverage", () => {
