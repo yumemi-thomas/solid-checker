@@ -1,5 +1,84 @@
 # Precision backlog
 
+## rc.9 is the audited Solid 2 release (2026-09-27)
+
+Status: **implemented**, 68555fea through the phase16 fix after 2a7015d0
+(ADR 0127). `make verify` passed at that fix (247 s). Owner
+decisions, 2026-09-27: rc.9 becomes the audited triple; rc.0-rc.8 stay
+analyzed and get `SC9014` naming them older than the audited release; the
+`solid-js` rc.9 re-export gap is due only where a project reaches one of its
+five names. All numbers below are measured.
+
+- **Three vocabularies, not one** (68555fea). `Solid2::CONSERVATIVE` (the
+  answers for an unresolved owner), `Solid2::AUDITED` and `Solid2::DEFAULTED`
+  (no `solid-js` resolved) were one value. Split with 0 of 657 findings moved.
+  Dialect ids are keyed against the conservative vocabulary, so no install's
+  id changed with the flip.
+- **The re-export gap is import-scoped** (01d34e8b, `release_scope.rs`). Six
+  fixtures `rc9-reexport-gap-*`. Fails closed on an escaping namespace, a
+  default import, `export *`, and literal `import()`/`require()`. Remaining
+  approximations, all towards over-reporting: a namespace in a type position
+  counts as an escape; `export * from "solid-js"` keeps the gap; a `paths`
+  alias to a subpath reads as the root. **Not seen at all:**
+  `import S = require("solid-js")` (no fact records it).
+- **`@solidjs/signals` rc.9 carries rc.6's 24 rows** (4b0b5c51,
+  `2026-09-27-solid-2-rc9-signals-negative-rows-parity.md`). 19 of the 20
+  missing rows granted; `createOptimisticStore` `reads` withheld as on rc.6
+  (its landing router reads the proxy it created). The scoped `solid-js`
+  `createSignal` row now binds beside signals rc.9.
+- **rc.3 rows withdrawn, contradicted by rc.3's own bytes** (4bf3bbfb
+  through 5adf3e6d, `2026-09-27-solid-2-rc3-show-loading-withdrawals.md`):
+  `Show` `reads` (reads memos it created) and `creates` (server memo
+  serializes a thenable `when`), `Loading` `creates` (server boundary
+  registers a fragment), web `render` and `hydrate` `reads` (the undeclared
+  `insertOptions` reaches a hydration gate that reads its own signal; a
+  non-fresh object type-checks). **Owner to rule** on the `render`/`hydrate`
+  reachability reading; withdrawing is the fail-closed side. No fixture
+  finding moved.
+- **`solid-js` and `@solidjs/web` rc.9 are audited archives** (e7aa4fac,
+  `2026-09-27-solid-2-rc9-core-and-web-negative-rows.md`): 15 rows. Withheld:
+  `Show`, `Loading`, flat `createSignal`, `render`/`hydrate` `reads`, and the
+  six `affects`/`isPending`/`latest`/`refresh` rows (rc.9's declarations and
+  bodies are signals', so a `solid-js` row cannot bind). Rows 80 -> 109.
+  Owner flags recorded in that audit: the returned-value line, the
+  external-source hook line, `httpHeader`/`httpStatus` `creates`.
+- **Every quoted archive is provisioned apart from the oracle** (1c9f821f):
+  `make audited-archives-provision`; rc.3, rc.6 and rc.9 roots are armed by
+  `make test-rust` and required under `SOLID_CHECKER_EXPECT_PROBE_PINS=1`.
+- **The flip and the oracle** (31577438). Snapshots: 31 fixtures on
+  rc.0-rc.8 gain `SC9014`, 9 on rc.9 lose it, and `write-scope` (no
+  `solid-js`, so now rc.9) gains two `SC2001`: store setters in a component
+  body, which rc.9's guard rejects (the two findings fad52523 removed as false
+  positives on rc.1-rc.8). The tsc oracle compiles against rc.9: store-root
+  writes are TS2540 on rc.3 and clean on rc.9, one-argument `createEffect` is
+  TS2554 from signals rc.6 (the rule was already silent), and the `until`,
+  static-`dynamic` and flush-in-action exemptions became keystone and negative
+  cases. No absolute-rule violation found. Nothing pins the rc.3-era TS2540
+  record any more.
+- **Benchmark ceiling and consumer environments** (e171f4dc, 2a7015d0):
+  `AUDITED_SOLID_2` and `SIGNALS_HEAD` are rc.9; rediscovery also took a month
+  of registry drift (307 -> 309 rows, 418 -> 421 probes). Two rc.9 consumer
+  environments: `viviana-ui-main-b005c00a` (TanStack Start) and
+  `oscartbeaumont-website-main-60823453`. A pnpm-patched package is recorded,
+  not delivered. Census dry run on rc.9: gated totals unchanged; probe-recipe
+  addressing 95 -> 90 (to re-address).
+
+Open:
+
+- **Tier admission ignores pnpm patches** (Rust side): lock integrity is
+  checked but `patchedDependencies`/`patch_hash` are not, so a bundle can be
+  admitted for bytes the consumer patched. Live on viviana's
+  `@tanstack/solid-start`.
+- The accepted tier is not yet regenerated for the rc.9 environments; the
+  census re-pin, recipe re-addressing, consumer-environment runs and
+  `make accepted-bundles` follow.
+- `contract-differential` fails on a stale `schemaVersion 2` assertion before
+  any release-dependent step; nothing gates it.
+- Client `Loading`'s dynamic `import()`/`$dfr` path is unclassified.
+- Older releases get no new per-release work (owner decision): the rc.0
+  `createStore` setter in a component body, signals rc.1/rc.2/rc.4/rc.5
+  negative rows, and mixed triples stay as recorded below.
+
 ## Owner, role and write-scope batch; SC2006 and SC2007 (2026-09-27)
 
 Status: **implemented**, ef7a92ca through fad52523. `make verify` passed at
