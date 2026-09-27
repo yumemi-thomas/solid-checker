@@ -35,11 +35,26 @@ component, and an `onSettled` there is out-of-band. A root created inside such
 a callback, or a compiled JSX child, which the render effect the compiler
 generates for it owns, answers for what it contains.
 
+A callback handed directly to a host scheduler that runs it from a task or
+microtask queue -- `setTimeout`, `setInterval`, `queueMicrotask`,
+`requestAnimationFrame`, `requestIdleCallback`, `scheduler.postTask`,
+`Promise.prototype.then`/`catch`/`finally`, and the `IntersectionObserver`,
+`ResizeObserver`, `MutationObserver`, `PerformanceObserver` and
+`ReportingObserver` callbacks -- also runs with no owner, wherever it was
+scheduled: in a component body, a computation, a `createRoot` callback or at
+module scope. An `onCleanup`, an effect or a cleanup-returning `onSettled` there
+is a proven violation. The scheduler is identified from the compiler-selected
+standard-library declaration, never from its name. A `PromiseLike.then` (any
+thenable, which may call back synchronously), an `addEventListener` listener
+(a synchronous `dispatchEvent` runs it on the dispatcher's stack) and a
+Geolocation callback are not in that list.
+
 One approximation remains: a nested callback the owner graph gives no owner
-edge at all, such as a `setTimeout` callback or a callback handed to a function
-the analysis does not model, is still treated as owned by the owner-creating
-callback it is written in. A `setTimeout` callback runs with no owner, so that
-is a false negative.
+edge at all, such as a callback handed to a function the analysis does not
+model, or handed to a scheduler through a wrapper call
+(`setTimeout(wrap(() => ...))`), is still treated as owned by the
+owner-creating callback it is written in, and is not reported inside a
+component. Where it runs with no owner, that is a false negative.
 
 The proven `onSettled` cleanup variant has **error** severity because Solid 2.0
 throws `SETTLED_CLEANUP_UNOWNED` in development and silently drops the cleanup

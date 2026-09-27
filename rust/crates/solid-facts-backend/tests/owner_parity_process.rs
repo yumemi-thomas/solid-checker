@@ -201,3 +201,43 @@ fn root_contained_unowned_callbacks_get_the_same_owner_analysis_in_both_passes()
         "a root created inside the apply answers for what it contains"
     );
 }
+
+/// A callback handed to a reviewed fresh-stack host scheduler gets the same
+/// unowned owner edge from both passes, wherever it was scheduled: at module
+/// scope (a sourceless edge), in a root (the region's lexical answer is
+/// withheld) and in a component (a sourced edge), through a literal or an
+/// identifier. A root created inside such a callback still answers for what
+/// it contains, and a `PromiseLike.then` callback, which is not a fresh-stack
+/// scheduler's, gets no edge.
+#[test]
+fn fresh_stack_scheduler_callbacks_get_the_same_owner_analysis_in_both_passes() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let (source, requirements) =
+        fresh_matches_incremental(&typefacts, "owner-fresh-stack-scheduler-parity", "App.tsx");
+    let requirement = |marker| cleanup_requirement(&source, &requirements, marker);
+    for marker in [
+        "// module timer",
+        "// root microtask",
+        "// component then",
+        "// component observer",
+        "// named callback",
+    ] {
+        let found = requirement(marker).unwrap_or_else(|| panic!("{marker}: no requirement"));
+        assert!(
+            found.report && !found.uncertain,
+            "{marker}: a fresh-stack scheduler callback is a proven violation"
+        );
+    }
+    assert!(
+        requirement("// root in microtask").is_none(),
+        "a root created inside the callback answers for what it contains"
+    );
+    for marker in ["// thenable", "// component body"] {
+        assert!(
+            requirement(marker).is_none_or(|found| !found.report),
+            "{marker}: not reported"
+        );
+    }
+}

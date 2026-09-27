@@ -80,6 +80,16 @@
       "start": 1858,
       "end": 1867,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/detached-callback-in-root/App.tsx",
+      "start": 2956,
+      "end": 2965,
+      "fixes": 0
     }
   ]
 }

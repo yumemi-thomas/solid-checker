@@ -2873,6 +2873,27 @@ impl Dialect for Solid2 {
         primitive == Primitive::OnSettled
     }
 
+    /// The owner is a synchronous dynamic scope: `@solidjs/signals` sets it
+    /// around each computation and `runWithOwner` and restores it before
+    /// returning, so no owner is current on an empty stack. Probed on
+    /// `solid-js`/`@solidjs/signals` 2.0.0-rc.3 and rc.9, dev and prod builds,
+    /// in Chromium 153, for every one of the fourteen reviewed fresh-stack
+    /// schedulers (`queueMicrotask`, `setTimeout`, `setInterval`,
+    /// `requestAnimationFrame`, `requestIdleCallback`, `Promise.then`/`catch`/
+    /// `finally`, `scheduler.postTask`, and the `IntersectionObserver`,
+    /// `ResizeObserver`, `MutationObserver`, `PerformanceObserver` and
+    /// `ReportingObserver` callbacks), each scheduled inside a `createRoot`,
+    /// inside a `createMemo` compute and at module scope: `getOwner()` is
+    /// `null` in the callback; an `onCleanup` there raises `NO_OWNER_CLEANUP`
+    /// (dev) and never runs on the root's disposal; a `createEffect` there
+    /// raises `NO_OWNER_EFFECT` (dev); an `onSettled` returning a cleanup
+    /// raises `SETTLED_CLEANUP_UNOWNED` (dev) and the cleanup never runs.
+    /// Control: a `createRoot` created in the callback owns its `onCleanup`,
+    /// which runs on that root's disposal.
+    fn fresh_stack_callback_owner(&self) -> Option<CallbackOwner> {
+        Some(CallbackOwner::None)
+    }
+
     /// `createStore` returns `Readonly<T>` over the root record
     /// (`@solidjs/signals@2.0.0-rc.0` and `rc.3`), so a write to one of its own
     /// properties is TS2540 and belongs to TypeScript. Nested records and props

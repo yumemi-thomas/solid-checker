@@ -1628,9 +1628,13 @@ pub(crate) fn providing_region_chain<K>(
 /// answers for what it contains: probed, an `onCleanup` in either runs on that
 /// owner's disposal or re-run.
 ///
-/// A nested callback with no owner edge at all (a `setTimeout` callback, a
-/// callback handed to an unmodelled function) carries neither bit and is still
-/// answered by the region: a pre-existing approximation this does not widen.
+/// A callback handed to a reviewed fresh-stack host scheduler (`setTimeout`,
+/// `queueMicrotask`, `Promise.then`, an observer constructor, ...) gets the
+/// dialect's unowned edge ([`fresh_stack_scheduler_edges`]) and is judged on
+/// the graph like the positions above. A nested callback with no owner edge at
+/// all (one handed to an unmodelled function, or to a scheduler through a
+/// wrapper call) carries neither bit and is still answered by the region: a
+/// pre-existing approximation this does not widen.
 pub(crate) fn root_owned_at<K>(chain: Option<&[K]>, context_of: impl Fn(&K) -> u8) -> bool {
     chain.is_some_and(|chain| {
         chain
@@ -1775,6 +1779,10 @@ pub(crate) fn owner_callback_edges(
         }
     }
     let Some(primitive) = known_primitive(primitive) else {
+        let scheduled = fresh_stack_scheduler_edges(file, call, lookup);
+        if !scheduled.is_empty() {
+            return scheduled;
+        }
         // A call that names no primitive can still be an invocation of a
         // function some primitive returned -- but only where the dialect models
         // such a function. Solid 2.0 models none, so the binding-chain walk
@@ -1837,6 +1845,63 @@ pub(crate) fn owner_callback_edges(
         }
     }
     edges
+}
+
+/// The owner edges of callbacks handed to a reviewed fresh-stack host
+/// scheduler (`runtime_semantics::FRESH_STACK_SCHEDULERS`: `setTimeout`,
+/// `queueMicrotask`, `Promise.then`, the observer constructors, ...).
+///
+/// Two separately reviewed facts compose here. The host fact -- the scheduler
+/// invokes the argument only from a task or microtask queue, on an otherwise
+/// empty stack -- comes from the compiler-selected standard-library
+/// declaration, never from spelling. The owner fact -- what that empty stack
+/// means for the owner -- is the dialect's
+/// ([`Dialect::fresh_stack_callback_owner`]); a dialect that does not answer
+/// gives no edge, and the callback keeps its lexical answer.
+///
+/// Only an argument that *is* the callback gets the edge: a function literal
+/// or an identifier naming one. `setTimeout(wrap(() => ...))` hands the host
+/// whatever `wrap` returns, and the arrow inside may run on `wrap`'s own
+/// stack, under the scheduling call's owner.
+///
+/// Both owner passes reach this through [`owner_callback_edges`], so the
+/// batch and incremental graphs cannot disagree about it.
+fn fresh_stack_scheduler_edges(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<OwnerCallbackEdge> {
+    let Some(owner) = lookup.dialect.fresh_stack_callback_owner() else {
+        return Vec::new();
+    };
+    let Some(resolved) = lookup.resolved_callee_call(file, call.callee) else {
+        return Vec::new();
+    };
+    call.arguments
+        .iter()
+        .enumerate()
+        .filter(|(_, argument)| {
+            matches!(
+                argument.value,
+                solid_facts::ast::ArgumentValueKind::Function
+                    | solid_facts::ast::ArgumentValueKind::AsyncFunction
+                    | solid_facts::ast::ArgumentValueKind::Identifier
+            )
+        })
+        .filter(|(index, argument)| {
+            let callability = lookup
+                .entity_at(file.path.as_str(), argument.span)
+                .and_then(|entity| entity.callability);
+            crate::runtime_semantics::argument_behavior(resolved, callability, *index)
+                .is_some_and(crate::runtime_semantics::RuntimeArgumentBehavior::runs_on_fresh_stack)
+        })
+        .map(|(argument, _)| OwnerCallbackEdge {
+            argument,
+            kind: callback_owner_edge_kind(owner),
+            source_path: file.path.to_string(),
+            source: call.span,
+        })
+        .collect()
 }
 
 pub(crate) const fn callback_owner_edge_kind(owner: solid_dialect::CallbackOwner) -> OwnerEdgeKind {

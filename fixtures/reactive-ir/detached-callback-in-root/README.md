@@ -47,7 +47,7 @@ on the graph (`owners::root_owned_at`).
 | cleanup in a compiled JSX child in a `createEffect` apply | none | the render effect the compiler generates for the child owns it (probed through `insert`: the cleanup runs on the child's re-run) |
 | cleanup in a `createEffect` compute | none | the effect owns its compute |
 | `onSettled` returning a cleanup in the root body | none | owned |
-| cleanup in a `setTimeout` callback | none | **not this fixture's claim, and a known false negative**: the callback runs with no owner (probed), but the owner graph gives a host scheduler's callback no owner edge, so the root still answers it lexically. Pinned so a change to it is deliberate |
+| cleanup in a `setTimeout` callback | `SC4001` violation | the callback runs from a task queue with no owner (probed). Once a pinned false negative here; the unowned edge a reviewed fresh-stack scheduler gives its callback is `fresh-stack-scheduler-owner`'s claim |
 
 **Stub.** `solid-js.d.ts` is `render-effect-apply-root`'s, whose declarations
 are verbatim from the published rc.3 typings, plus `createReaction`,

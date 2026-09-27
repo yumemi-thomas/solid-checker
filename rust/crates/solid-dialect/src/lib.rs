@@ -1775,6 +1775,28 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// The owner a callback sees when a reviewed fresh-stack host scheduler
+    /// runs it: `setTimeout`, `queueMicrotask`, `Promise.then`, an observer
+    /// callback and the rest of the analyzer's `FRESH_STACK_SCHEDULERS`, which
+    /// invoke the callback from a task or microtask queue on an otherwise
+    /// empty execution-context stack.
+    ///
+    /// The host half (the stack is empty) is the analyzer's reviewed fact; this
+    /// is the dialect half: what that empty stack means for the owner. A
+    /// runtime whose owner is a synchronous dynamic scope has none current
+    /// there, whatever owner the scheduling call ran under. A runtime that
+    /// carried its owner across tasks (an `AsyncContext`-style variable) would
+    /// answer [`CallbackOwner::Inherits`] instead, which is why this is asked
+    /// rather than assumed.
+    ///
+    /// **`None` is a refusal, not a default.** It gives such a callback no owner
+    /// edge at all, so an owner requirement inside it keeps whatever lexical
+    /// answer a region around it gives -- the answer every dialect had before
+    /// this question existed.
+    fn fresh_stack_callback_owner(&self) -> Option<CallbackOwner> {
+        None
+    }
+
     /// Whether this dialect's store type makes the **root record's own
     /// properties** `readonly`, so a direct write to one is already a
     /// TypeScript error and this checker must not report it as well.
@@ -3174,6 +3196,10 @@ mod tests {
         assert!(!silent.leaf_scopes_allow_writes());
         assert!(!silent.callback_preserves_owner_write_context(Primitive::CreateEffect));
         assert!(!silent.leaf_owner_requires_owned_call_site(Primitive::OnCleanup));
+        // No owner edge for a host scheduler's callback: 2.0's `None` would
+        // prove unowned every callback a language with task-carried owners
+        // runs owned.
+        assert_eq!(silent.fresh_stack_callback_owner(), None);
         assert!(!silent.store_root_properties_are_readonly());
         assert!(!silent.store_setter_callback_enables_proxy_writes());
         // No release is audited for a dialect that names none: the notice,

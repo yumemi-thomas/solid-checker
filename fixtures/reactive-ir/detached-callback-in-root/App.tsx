@@ -129,9 +129,9 @@ createRoot(() => {
   onSettled(() => () => {});
 });
 
-// Not this fixture's claim, and deliberately unchanged: a timer callback runs
-// with no owner too (probed), but the owner graph gives a host scheduler's
-// callback no edge, so the root still answers it lexically (see README.md).
+// A timer callback runs from a task queue with no owner: the reviewed
+// fresh-stack schedulers give their callback an unowned owner edge (the
+// `fresh-stack-scheduler-owner` fixture owns that claim).
 createRoot(() => {
   setTimeout(() => {
     onCleanup(() => {});
