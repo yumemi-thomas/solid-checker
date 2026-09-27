@@ -58,18 +58,27 @@ CERTIFICATION_ENV = $(TYPEFACTS_CERTIFICATION_ENV) $(PROBE_HARNESS_ENV)
 # `scripts/verify.sh` (which exits 127 without Node) closes it.
 PROBE_EXPECT_PINS = $(if $(PROBE_NODE),SOLID_CHECKER_EXPECT_PROBE_PINS=1,)
 
-# The rc.3 archives the Solid 2.0 negative table's implementation-audited rows
-# quote by byte range. The cited ranges are checked into
+# The published archives the Solid 2.0 negative table's implementation-audited
+# rows quote by byte range. The cited ranges are checked into
 # `rust/crates/solid-dialect/audited-slices/` and their digests are verified
 # with no install; this arms the stronger arm, which re-reads the real archive
 # and asserts the checked-in slice is still exactly those bytes of the pinned
-# file. `PROBE_EXPECT_PINS` above makes its absence a loud failure, so any
-# target that sets that must set this too — which is why `test-rust` now
-# depends on `tsc-oracle-provision` (idempotent: it short-circuits on a tree
-# that already passes the version check).
-RC3_ARCHIVE_ENV = SOLID_CHECKER_RC3_ARCHIVE_ROOT="$(CURDIR)/rust/target/tsc-oracle/v2/node_modules"
+# file. `PROBE_EXPECT_PINS` above makes rc.3's absence a loud failure, so any
+# target that sets that must set this too -- which is why `test-rust` depends on
+# `audited-archives-provision` (idempotent: it short-circuits on an archive
+# whose stamp and `package.json` digest already match
+# `rust/crates/solid-dialect/audited-archives.json`). One root per release,
+# because the test reads one variable per release; rc.6 and rc.9 are armed here
+# too, so a default run reads every cited archive rather than only rc.3's.
+#
+# Not the tsc-oracle install: that is the *audited release* and moves with it,
+# while a row's archive stays those bytes for as long as the row does.
+ARCHIVES_ROOT = $(CURDIR)/rust/target/audited-archives/solid-v2
+ARCHIVE_ENV = SOLID_CHECKER_RC3_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.3/node_modules" \
+  SOLID_CHECKER_RC6_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.6/node_modules" \
+  SOLID_CHECKER_RC9_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.9/node_modules"
 
-.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-probe-harness test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit phase19-audit phase20-ledger phase21-ledger compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update accepted-bundles tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
+.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-probe-harness test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit phase19-audit phase20-ledger phase21-ledger compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update accepted-bundles tsc-oracle tsc-oracle-provision audited-archives-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
 
 build: build-rust
 
@@ -102,8 +111,8 @@ package: build-typefacts
 
 test: test-rust test-cli
 
-test-rust: build-typefacts tsc-oracle-provision
-	$(CERTIFICATION_ENV) $(PROBE_EXPECT_PINS) $(RC3_ARCHIVE_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_TEST_BIN="$(CURDIR)/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) $(CARGO_TEST_RUNNER) --manifest-path $(RUST_MANIFEST) --workspace
+test-rust: build-typefacts audited-archives-provision
+	$(CERTIFICATION_ENV) $(PROBE_EXPECT_PINS) $(ARCHIVE_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_TEST_BIN="$(CURDIR)/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) $(CARGO_TEST_RUNNER) --manifest-path $(RUST_MANIFEST) --workspace
 
 # The probe-harness binding on its own, for the fast loop and for
 # `verify-delta`'s harness-script row.
@@ -194,6 +203,12 @@ verify-delta:
 # to run on a version mismatch.
 tsc-oracle-provision:
 	$(BUN) scripts/tsc-oracle.mjs provision --dialect all
+
+# The archives the negative rows quote, each fetched at its exact version and
+# refused unless its tarball hashes to the integrity pinned in
+# rust/crates/solid-dialect/audited-archives.json.
+audited-archives-provision:
+	$(BUN) scripts/audited-archives.mjs provision
 
 # Needs the checker as well as the compiler: each case declares what TypeScript
 # says *and* what this checker says about the same bytes.

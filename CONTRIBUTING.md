@@ -101,8 +101,8 @@ Go race tests.
 `TEST_PACKAGE=solid-reactive-ir` (or another exact crate) to change the owner.
 It checks the producer stamp, compiles and lists matching tests, refuses an
 empty selection, and runs with the certification pins and test environment.
-It does not install packages. For tests that read the audited runtime archive,
-provision it once with `make tsc-oracle-provision`; missing external artifacts
+It does not install packages. For tests that read the audited runtime archives,
+provision them once with `make audited-archives-provision`; missing external artifacts
 remain failures. Run the related positive and negative filters during editing,
 then coverage and the full handoff checks required for the change.
 

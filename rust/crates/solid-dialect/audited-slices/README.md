@@ -19,17 +19,21 @@ installed, and "green" would have meant "skipped" on most machines. Every
 stronger check that confirms these bytes are still the archive's bytes at the
 cited offsets. It is armed per release:
 
-- rc.3, `SOLID_CHECKER_RC3_ARCHIVE_ROOT`: `scripts/verify.sh` always arms it
-  from the tsc-oracle install, and `SOLID_CHECKER_EXPECT_PROBE_PINS=1` makes
-  its absence a failure.
-- rc.6, `SOLID_CHECKER_RC6_ARCHIVE_ROOT`: optional. Nothing provisions an rc.6
-  tree today, so a run without it is not a failure, and for rc.6 the
-  unconditional slice-and-pin check is what runs. Point it at a directory
-  holding `@solidjs/signals/` of the installed `2.0.0-rc.6` to add the
-  archive-reading check.
-- rc.9, `SOLID_CHECKER_RC9_ARCHIVE_ROOT`: optional, as for rc.6. Point it at a
-  directory holding `@solidjs/signals/`, `@solidjs/web/` and `solid-js/` of the
-  installed `2.0.0-rc.9` packages.
+- rc.3, `SOLID_CHECKER_RC3_ARCHIVE_ROOT`; rc.6,
+  `SOLID_CHECKER_RC6_ARCHIVE_ROOT`; rc.9, `SOLID_CHECKER_RC9_ARCHIVE_ROOT`.
+  `make audited-archives-provision` (`scripts/audited-archives.mjs`) installs
+  every archive `../audited-archives.json` lists -- each fetched at its exact
+  version and refused unless its tarball hashes to the pinned integrity and its
+  `package.json` to the pinned digest -- under
+  `rust/target/audited-archives/solid-v2/<version>/node_modules`, and
+  `make test-rust`, `scripts/verify.sh` and the cargo drivers built on
+  `scripts/lib/certification-environment.mjs` arm all three, so a default run
+  reads every cited archive. This is deliberately not the tsc-oracle install:
+  that is the *audited release* and moves with it, while a row's archive stays
+  the bytes it quotes.
+- Only rc.3's absence is a failure under `SOLID_CHECKER_EXPECT_PROBE_PINS=1`
+  (`archive_root_variable` in `src/solid_2.rs`); a run that sets none of the
+  three runs only the unconditional slice-and-pin check for rc.6 and rc.9.
 
 ## Layout
 

@@ -26,7 +26,15 @@ export function certificationEnvironment(root, environment = process.env) {
     SOLID_CHECKER_EXPECT_PROBE_PINS: "1",
     TYPEFACTS_TEST_BIN: join(root, "bin/solid-typefacts"),
     SOLID_TYPEFACTS_BIN: join(root, "bin/solid-typefacts"),
-    SOLID_CHECKER_RC3_ARCHIVE_ROOT: join(root, "rust/target/tsc-oracle/v2/node_modules")
+    // The archives the negative rows quote, from `make audited-archives-provision`
+    // (scripts/audited-archives.mjs) -- not the tsc-oracle install, which is
+    // the audited release and moves with it.
+    ...Object.fromEntries(
+      ["3", "6", "9"].map(release => [
+        `SOLID_CHECKER_RC${release}_ARCHIVE_ROOT`,
+        join(root, `rust/target/audited-archives/solid-v2/2.0.0-rc.${release}/node_modules`)
+      ])
+    )
   };
   delete result.SOLID_CHECKER_PROBE_BROWSER_SHA256;
   delete result.SOLID_CHECKER_EXPECT_BROWSER_PIN;
