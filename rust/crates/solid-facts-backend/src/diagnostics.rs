@@ -217,7 +217,11 @@ impl DiagnosticSession {
             .validate()
             .map_err(BackendError::Contract)?;
         rule_options.runtime = enablement.runtime;
-        let release_notice = dialect::release_notice(self.dialect, project);
+        // Scoped to this generation's facts: a gap about named exports is due
+        // only where the project reaches one (`release_scope`), so the answer
+        // moves with the sources as well as the install.
+        let release_notice = dialect::release_notice(self.dialect, project)
+            .and_then(|notice| notice.scoped_to(facts));
         let identity = DiagnosticIdentity {
             dialect: self.dialect.id,
             project_id: facts.project_id.clone(),
@@ -462,6 +466,19 @@ pub fn unaudited_release_finding(notice: &dialect::ReleaseNotice) -> Finding {
             .map(|gap| solid_reactive_ir::EvidenceStep {
                 message: format!("known gap {}", gap.gap),
                 location: None,
+            }),
+    );
+    evidence.extend(
+        notice
+            .reaches
+            .iter()
+            .map(|reach| solid_reactive_ir::EvidenceStep {
+                message: reach.message.clone(),
+                location: Some(typefacts::Location {
+                    path: reach.path.as_str().into(),
+                    start_byte: u64::from(reach.span.start),
+                    end_byte: u64::from(reach.span.end),
+                }),
             }),
     );
     let metadata = solid_reactive_ir::RuleMetadata {

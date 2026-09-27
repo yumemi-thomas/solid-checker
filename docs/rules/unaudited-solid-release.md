@@ -34,7 +34,7 @@ rc.9's.
 | `2.0.0-rc.3` (the audited release), and `rc.0`, `rc.1`, `rc.2`, which behave as rc.3 on every premise the dialect cites | analyzed, no notice |
 | `rc.4`-`rc.6` | analyzed, **this notice**: `solid-js` re-exports `registerPatch`, `registerRowOps` and `registerSlotPatch`, and `@solidjs/web` exports `installListDriver` and `driveList`, callback-taking exports the vocabulary neither models nor excludes |
 | `rc.7`, `rc.8` | analyzed with rc.9's store answer (a root write type-checks), and on rc.8 rc.9's `FLUSH_IN_ACTION` answer, **this notice**: no negative row is granted for their `@solidjs/signals` |
-| `2.0.0-rc.9` | analyzed with rc.9's answers, **this notice**, naming the review's open gaps |
+| `2.0.0-rc.9` | analyzed with rc.9's answers, **this notice**, naming the review's open gaps; the `solid-js` re-export gap only where the project reaches one of its five names (below) |
 | `2.0.0-experimental.x` of `solid-js` | refused with [unsupported-solid-runtime](unsupported-solid-runtime.md) |
 | any other version (`rc.10` and later, betas, `2.0.0`, an inexact spelling) | analyzed with the conservative answers below, **this notice** naming the package as not compared |
 | `@solidjs/signals` does not resolve | the conservative answers, **this notice** |
@@ -43,6 +43,28 @@ rc.9's.
 Packages at different releases are judged answer by answer, each from its
 owner, and the notice adds a gap saying no review read that combination
 (rc.0-rc.3 count as one release for this).
+
+**A gap scoped to named exports.** Most gaps are about the installation,
+whatever the project imports. One is about five names: `solid-js@2.0.0-rc.9`'s
+typings re-export `createErrorBoundary`, `createLoadingBoundary`,
+`createRevealOrder`, `sharedConfig` and `$DEVCOMP` from files that no longer
+declare them, so under `skipLibCheck` those names are untyped and a call
+through one is not the primitive. That gap is due only for a project that
+reaches one of them from `solid-js`: a named or aliased import (type-only
+included), a namespace member read (`S.createErrorBoundary`,
+`S["createErrorBoundary"]`, `<S.Name>`), or a project module's
+`export { … } from "solid-js"`. The gap's sentence then names what reached it,
+and an evidence step locates each site. A use that does not say which names it
+reaches keeps the gap due: a namespace object that escapes (passed, stored,
+destructured, re-exported, named in a type, or indexed by a non-literal key),
+a default import, `export *` or `export * as` from `solid-js`, and a literal
+`import("solid-js")` or `require("solid-js")`. A `paths` alias the compiler
+resolves into the `solid-js` package counts as `solid-js`; a subpath
+(`solid-js/internal`) re-exports none of the five and does not. A nonliteral
+`import(path)` does not count: it resolves through no declarations on any
+release, so it loses what it loses whether or not the gap is open. A project
+that reaches none of the five gets no notice from this gap; on rc.9 the
+triple's other gaps still give it one.
 
 **The conservative answers.** An unknown or unresolved `@solidjs/signals`
 keeps the `Readonly` store answer, so [no-direct-mutation](no-direct-mutation.md)

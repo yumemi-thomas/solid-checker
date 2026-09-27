@@ -659,6 +659,18 @@ pub struct ReleaseNotice {
     pub gaps: Vec<solid_dialect::InstallationGap>,
     /// What to pin to certify ([`solid_dialect::Dialect::audited_installation`]).
     pub audited: &'static [(&'static str, &'static str)],
+    /// Where the project reaches a scoped gap's exports, one site per
+    /// distinct reach: why each scoped gap in `gaps` is due. Empty until the
+    /// notice is scoped to a project's facts ([`ReleaseNotice::scoped_to`]).
+    pub reaches: Vec<GapReach>,
+}
+
+/// One site that makes a scoped gap ([`solid_dialect::GapScope`]) due.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GapReach {
+    pub message: String,
+    pub path: String,
+    pub span: solid_facts::core::Span,
 }
 
 /// The `SC9014` notice for analyzing `project` under `dialect`, if one is due.
@@ -671,6 +683,10 @@ pub struct ReleaseNotice {
 /// Read from disk on every call rather than handed down from the selection
 /// site, because the daemon receives only the dialect id it was spawned with
 /// and must still say which release it analyzed.
+///
+/// This is the installation's notice: every gap, scoped ones included. What a
+/// project's analysis carries is [`ReleaseNotice::scoped_to`] its facts, which
+/// drops a scoped gap the project does not reach.
 #[must_use]
 pub fn release_notice(dialect: &'static Dialect, project: &Path) -> Option<ReleaseNotice> {
     let Detection::Installed {
@@ -696,6 +712,7 @@ pub fn release_notice(dialect: &'static Dialect, project: &Path) -> Option<Relea
         releases,
         gaps,
         audited,
+        reaches: Vec::new(),
     })
 }
 

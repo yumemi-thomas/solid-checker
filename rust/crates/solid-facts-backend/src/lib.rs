@@ -108,6 +108,7 @@ mod inferred_contract;
 mod package_requirements;
 mod phase16_benchmark;
 mod proposal_generation;
+mod release_scope;
 mod runtime_probe_wire;
 mod runtime_probes;
 mod wire;

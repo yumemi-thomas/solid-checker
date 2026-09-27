@@ -83,8 +83,8 @@ use std::sync::LazyLock;
 
 use super::Solid2;
 use crate::{
-    Dialect, InstallationGap, InstallationReview, InstalledRelease, Primitive, RefusedRelease,
-    ReleaseOwner,
+    Dialect, GapScope, InstallationGap, InstallationReview, InstalledRelease, Primitive,
+    RefusedRelease, ReleaseOwner,
 };
 
 const SOLID_JS: &str = "solid-js";
@@ -454,6 +454,10 @@ struct KnownGap {
     through: u8,
     gap: &'static str,
     review: &'static str,
+    /// `None`: open for every project on the release. `Some`: open only for a
+    /// project that reaches one of these exports of the owner's root entry, or
+    /// whose use of it the facts cannot bound ([`GapScope`]).
+    exports: Option<&'static [&'static str]>,
 }
 
 /// Every open gap a review measured, by owner and release. A gap leaves this
@@ -469,6 +473,7 @@ const KNOWN_GAPS: &[KnownGap] = &[
               callbacks this vocabulary neither models nor excludes, so code inside one is not \
               classified",
         review: RC1_RC8_REVIEW,
+        exports: None,
     },
     KnownGap {
         package: WEB,
@@ -477,6 +482,7 @@ const KNOWN_GAPS: &[KnownGap] = &[
         gap: "exports installListDriver and driveList, which take callbacks this vocabulary \
               neither models nor excludes, so code inside one is not classified",
         review: RC1_RC8_REVIEW,
+        exports: None,
     },
     // The rc.1-rc.8 review § 0.2: rc.7 and rc.8 are "reviewed with one gap".
     KnownGap {
@@ -486,6 +492,7 @@ const KNOWN_GAPS: &[KnownGap] = &[
         gap: "has no negative row granted for it, so certification closes fewer claim domains \
               than on the audited release",
         review: RC1_RC8_REVIEW,
+        exports: None,
     },
     // The rc.9 review § 4.
     KnownGap {
@@ -497,6 +504,17 @@ const KNOWN_GAPS: &[KnownGap] = &[
               skipLibCheck those primitives are not resolved and their bodies are not analyzed \
               as such",
         review: RC9_REVIEW,
+        // `<j9>/types/index.d.ts:3` and `:8`. The subpath entries
+        // (`./internal`, `./refresh`, `./attribution`) re-export none of the
+        // five, so only the root specifier reaches the gap, and a project that
+        // reaches none of them loses nothing to it.
+        exports: Some(&[
+            "createErrorBoundary",
+            "createLoadingBoundary",
+            "createRevealOrder",
+            "sharedConfig",
+            "$DEVCOMP",
+        ]),
     },
     // 59643beb read five creates rows on rc.9's own bytes, and nothing else.
     KnownGap {
@@ -507,6 +525,7 @@ const KNOWN_GAPS: &[KnownGap] = &[
               untrack, runWithOwner and createRoot, so certification closes fewer claim domains \
               than on the audited release",
         review: RC9_REVIEW,
+        exports: None,
     },
 ];
 
@@ -655,6 +674,10 @@ fn gaps_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>) -> Ve
                     .map(|known| InstallationGap {
                         gap: format!("{package}@{} {}", release.spelled(), known.gap),
                         review: Some(known.review),
+                        scope: known.exports.map(|exports| GapScope {
+                            specifier: package,
+                            exports,
+                        }),
                     }),
             ),
             Release::Unread(_) => gaps.push(InstallationGap {
@@ -664,12 +687,14 @@ fn gaps_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>) -> Ve
                     unread_consequence(package)
                 ),
                 review: None,
+                scope: None,
             }),
             Release::Unresolved => {
                 if let Some(consequence) = unresolved_consequence(package) {
                     gaps.push(InstallationGap {
                         gap: consequence.to_owned(),
                         review: None,
+                        scope: None,
                     });
                 }
             }
@@ -696,6 +721,7 @@ fn gaps_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>) -> Ve
                 web.spelled()
             ),
             review: Some(RC1_RC8_REVIEW),
+            scope: None,
         });
     }
     gaps
@@ -1374,6 +1400,54 @@ mod tests {
                 panic!("rc.9 is analyzed");
             };
             assert!(std::ptr::addr_eq(chosen as *const dyn Dialect, expected));
+        }
+    }
+
+    /// rc.9's unresolvable re-exports are the one gap scoped to the exports a
+    /// project reaches; every other gap stays release-wide.
+    #[test]
+    fn only_the_rc9_re_export_gap_is_scoped_to_the_names_it_loses() {
+        let (_, gaps) = analyzed(&same("2.0.0-rc.9"));
+        let scoped = gaps
+            .iter()
+            .filter_map(|gap| gap.scope.map(|scope| (gap, scope)))
+            .collect::<Vec<_>>();
+        let [(gap, scope)] = scoped.as_slice() else {
+            panic!("exactly one rc.9 gap is scoped: {gaps:?}");
+        };
+        assert!(
+            gap.gap.starts_with("solid-js@2.0.0-rc.9 re-exports"),
+            "{gap:?}"
+        );
+        assert_eq!(scope.specifier, SOLID_JS);
+        assert_eq!(
+            scope.exports,
+            [
+                "createErrorBoundary",
+                "createLoadingBoundary",
+                "createRevealOrder",
+                "sharedConfig",
+                "$DEVCOMP",
+            ]
+        );
+        for export in scope.exports {
+            assert!(gap.gap.contains(export), "the gap names {export}");
+        }
+        // The signals gap, and every gap of another release or a mixed
+        // installation, is release-wide.
+        for installed in [
+            same("2.0.0-rc.4"),
+            same("2.0.0-rc.7"),
+            same("2.0.0-rc.10"),
+            triple(Some("2.0.0-rc.9"), Some("2.0.0-rc.3"), None),
+        ] {
+            let (_, gaps) = analyzed(&installed);
+            assert!(
+                gaps.iter()
+                    .filter(|gap| gap.scope.is_some())
+                    .all(|gap| gap.gap.starts_with("solid-js@2.0.0-rc.9 ")),
+                "{installed:?}: {gaps:?}"
+            );
         }
     }
 

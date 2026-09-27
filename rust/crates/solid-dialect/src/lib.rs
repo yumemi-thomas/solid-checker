@@ -228,6 +228,28 @@ pub struct InstallationGap {
     /// The review document, repository-relative. `None` for a gap no review
     /// covers: an owner nobody compared, or one that did not resolve.
     pub review: Option<&'static str>,
+    /// `None`: the gap is open for every project on the installation.
+    /// `Some`: it is open only for a project whose sources reach one of the
+    /// named exports ([`GapScope`]), and shared code decides that from the
+    /// project's import facts before the notice is due.
+    pub scope: Option<GapScope>,
+}
+
+/// The exports a scoped [`InstallationGap`] is about: the gap is due only for
+/// a project that reaches one of `exports` through the module `specifier`
+/// resolves to, or whose use of that module the facts cannot bound to named
+/// exports (a namespace object that escapes, `export *`, a dynamic load).
+///
+/// The dialect names the module and the export names; shared code knows only
+/// how an ECMAScript module reaches a named export, never why these names
+/// matter.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GapScope {
+    /// The bare specifier of the module whose exports these are, exactly as
+    /// an import spells it (`solid-js`, never a subpath).
+    pub specifier: &'static str,
+    /// Export names, exactly as the module's declarations spell them.
+    pub exports: &'static [&'static str],
 }
 
 /// A release line refused within a modelled major, and why.
@@ -1523,6 +1545,7 @@ pub trait Dialect: Sync {
             gaps: vec![InstallationGap {
                 gap: "this vocabulary names no release it was read on".into(),
                 review: None,
+                scope: None,
             }],
         }
     }

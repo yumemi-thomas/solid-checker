@@ -842,12 +842,15 @@ fn a_reviewed_release_is_analyzed_with_one_notice_beside_the_findings() {
         .filter(|message| message.starts_with("known gap "))
         .collect::<Vec<_>>();
     // B3 left the list when code inside an `omit` predicate became
-    // uncertifiable (SC9012): the two gaps still open are the typings'
-    // unresolvable re-exports and the missing rc.9 negative rows.
+    // uncertifiable (SC9012). The typings' unresolvable re-exports are due
+    // only for a project that reaches one of the five names, and `App.tsx`
+    // imports `createSignal` alone, so the one gap still open is the missing
+    // rc.9 negative rows (`rc9_re_export_gap_is_due_only_where_a_project_reaches_it`
+    // pins the scoped gap).
     assert!(
-        gaps.len() == 2
+        gaps.len() == 1
             && !gaps.iter().any(|gap| gap.contains("omit"))
-            && gaps.iter().any(|gap| gap.contains("skipLibCheck"))
+            && !gaps.iter().any(|gap| gap.contains("skipLibCheck"))
             && gaps.iter().any(|gap| gap.contains("negative row")),
         "every open gap is named: {gaps:?}"
     );
@@ -864,4 +867,105 @@ fn a_reviewed_release_is_analyzed_with_one_notice_beside_the_findings() {
     let ids = finding_ids(&explicit);
     assert!(!ids.contains(&"SC9014".to_owned()), "{ids:?}");
     assert!(ids.contains(&"SC1003".to_owned()), "{ids:?}");
+}
+
+/// `solid-js@2.0.0-rc.9`'s typings re-export five names their declarations do
+/// not declare. That gap is scoped to those exports: the `SC9014` notice
+/// carries it only for a project that reaches one of them, names what reached
+/// it, and keeps it where a use of `solid-js` does not name what it reaches.
+///
+/// Asserted on the notice's gap list, not on its presence: the rc.9 triple has
+/// release-wide gaps of its own (signals' negative rows), so a notice on the
+/// negative fixture is not a failure, and one on a positive is not a pass.
+#[test]
+fn rc9_re_export_gap_is_due_only_where_a_project_reaches_it() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    // (fixture, the clause the gap must carry, or `None` for no gap).
+    let cases: [(&str, Option<&str>); 6] = [
+        ("rc9-reexport-gap-none", None),
+        (
+            "rc9-reexport-gap-named",
+            Some("this project uses createErrorBoundary from solid-js"),
+        ),
+        (
+            "rc9-reexport-gap-aliased",
+            Some("this project uses sharedConfig from solid-js"),
+        ),
+        (
+            "rc9-reexport-gap-namespace-member",
+            Some("this project uses createLoadingBoundary from solid-js"),
+        ),
+        (
+            "rc9-reexport-gap-namespace-escape",
+            Some(
+                "this project uses solid-js in a way that does not name the exports it reaches \
+                 (a namespace import of solid-js used other than as a member name)",
+            ),
+        ),
+        (
+            "rc9-reexport-gap-project-reexport",
+            Some("this project uses createRevealOrder and $DEVCOMP from solid-js"),
+        ),
+    ];
+    let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/reactive-ir");
+    for (fixture, clause) in cases {
+        // Detection chooses the dialect: an explicit `--dialect` gets no notice.
+        let findings =
+            project_snapshot_findings(fixtures.join(fixture).join("tsconfig.json"), None);
+        let notices = findings
+            .iter()
+            .filter(|finding| finding["id"] == "SC9014")
+            .collect::<Vec<_>>();
+        assert!(notices.len() <= 1, "{fixture}: one notice per project");
+        let evidence = notices
+            .first()
+            .map(|notice| {
+                notice["evidence"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter_map(|step| Some((step["message"].as_str()?, step.get("location"))))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let re_export_gaps = evidence
+            .iter()
+            .filter(|(message, _)| {
+                message.starts_with("known gap solid-js@2.0.0-rc.9 re-exports createErrorBoundary")
+            })
+            .collect::<Vec<_>>();
+        match clause {
+            None => assert!(
+                re_export_gaps.is_empty(),
+                "{fixture} reaches none of the five names: {evidence:?}"
+            ),
+            Some(clause) => {
+                let [(gap, _)] = re_export_gaps.as_slice() else {
+                    panic!("{fixture}: the re-export gap is due exactly once: {evidence:?}");
+                };
+                assert!(gap.contains(clause), "{fixture}: {gap}");
+                // The site that made it due is evidence, located in the
+                // project's own source.
+                let located = evidence
+                    .iter()
+                    .filter(|(message, _)| {
+                        message.contains(" is reached from solid-js here")
+                            || message.contains("so which of its exports the project reaches")
+                    })
+                    .filter_map(|(_, location)| {
+                        location.and_then(|location| location["path"].as_str())
+                    })
+                    .collect::<Vec<_>>();
+                assert!(
+                    !located.is_empty()
+                        && located
+                            .iter()
+                            .all(|path| path.contains(fixture) && path.ends_with(".ts")),
+                    "{fixture}: the reaching site is located: {evidence:?}"
+                );
+            }
+        }
+    }
 }
