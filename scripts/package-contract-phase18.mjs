@@ -215,7 +215,7 @@ const INDEPENDENT_JSON_VERSIONS = [
 
 const INDEPENDENT_SOURCE_VERSIONS = [
   ["rust/crates/solid-facts-backend/src/main.rs", "if document.schema_version != 1"],
-  ["packages/cli/scripts/generate-package-contract.mjs", "{\"schemaVersion\":1,\"resolutions\":[]}"],
+  ["packages/cli/scripts/generate-package-contract.mjs", "const RUNTIME_MODULE_RESOLUTIONS_SCHEMA_VERSION = 1;"],
   ["scripts/lib/gate-cache.mjs", "export const CACHE_FORMAT_VERSION = 3;"],
   ["scripts/check-contract-pins.mjs", "export const MEMO_FORMAT_VERSION = 3;"],
   ["rust/crates/solid-reactive-ir/src/contract_semantics.rs", "pub const SEMANTIC_MODEL_VERSION: u16 = 1;"],

@@ -29,10 +29,10 @@ module, that silent certification was the normal case, not the exotic one. The
 previous soundness repair detected the unaccounted module surface and widened
 the whole entrypoint to `fallback-all`; sound, but it also marked `Isolated`.
 
-The package generator now supplies the fact the compiler intentionally does
-not: the successful static runtime edge for the exact importer, literal
-specifier, and runtime target selected by the same closure walk that seeded the
-analysis. The backend accepts it only when Type Facts confirms that exact
+The package generator supplies the fact the compiler intentionally does not
+(it wrote an empty feed from `474c101f` until ADR 0137 restored it): the
+successful static runtime edge for the exact importer, literal specifier, and
+runtime target of the same closure record that seeded the analysis. The backend accepts it only when Type Facts confirms that exact
 specifier resolved to a declaration file with no compiler-provided
 `includedPath`, then joins the import binding and runtime export through exact
 compiler entities. Reactive IR uses that runtime symbol as the alias root, so

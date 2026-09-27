@@ -5407,8 +5407,10 @@ fn function_published_by_its_module(
 /// literal dynamic loads are resolved with ESM's relative-URL rule, with no
 /// extension guessing. A binding landing on the module under one of the
 /// function's export names must carry, at its local identifier, a compiler
-/// entity whose canonical symbol is the function declaration's. A split
-/// through a sibling `.d.ts` is exactly a different symbol. A namespace
+/// entity whose canonical symbol is the function declaration's, after the
+/// generator's exact declaration-to-runtime redirects (ADR 0137). A split
+/// through a sibling `.d.ts` that no redirect joins is exactly a different
+/// symbol. A namespace
 /// import, an `export *` or `export … from` of the module, a literal dynamic
 /// load of it, a nonliteral load inside the package, or a relative specifier
 /// inside the package that does not resolve to exactly one file answers
@@ -5432,7 +5434,12 @@ fn imports_join_the_implementation(
     else {
         return false;
     };
-    let symbol = canonical_symbol(&declaration.symbol, index.aliases);
+    // Runtime canonical on both sides: an importer whose `./m.js` TypeScript
+    // bound to `m.d.ts` joins the implementation exactly when the generator's
+    // runtime edge and the compiler entities redirected that declaration to
+    // it (ADR 0137). Without a redirect the two symbols stay apart and the
+    // join refuses, as before.
+    let symbol = runtime_canonical_symbol(index, &declaration.symbol);
     if symbol.is_empty() {
         return false;
     }
@@ -5488,7 +5495,7 @@ fn imports_join_the_implementation(
                         end_byte: u64::from(binding.local.span.end),
                     })
                     .is_some_and(|entity| {
-                        canonical_symbol(&entity.symbol, index.aliases) == symbol
+                        runtime_canonical_symbol(index, &entity.symbol) == symbol
                     });
                 if !joined {
                     return false;

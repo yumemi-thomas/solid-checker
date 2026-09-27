@@ -28,6 +28,7 @@ import {
   nonEmittingModuleTarget,
   nonModuleTargetExtension,
   resolvePackageExport,
+  runtimeModuleResolutions,
   selectPackageExportTarget
 } from "./artifact-resolution.mjs";
 
@@ -708,6 +709,34 @@ async function checked(args, cwd) {
   return child;
 }
 
+/// The `--runtime-module-resolutions` document's own version, independent of
+/// every contract schema; the native reader accepts exactly this one.
+const RUNTIME_MODULE_RESOLUTIONS_SCHEMA_VERSION = 1;
+
+/// The exact package-local runtime edges of every resolution analyzed in one
+/// program (ADR 0137), for `--runtime-module-resolutions`. An edge is a fact
+/// about two files, not about the entrypoint that reached them, so a batch
+/// writes the union; relative specifiers do not depend on conditions.
+function writeRuntimeModuleResolutions(path, resolutions) {
+  const edges = new Map();
+  for (const resolution of resolutions) {
+    for (const edge of runtimeModuleResolutions(resolution)) {
+      edges.set(JSON.stringify([edge.importer, edge.specifier]), edge);
+    }
+  }
+  writeFileSync(
+    path,
+    `${JSON.stringify(
+      {
+        schemaVersion: RUNTIME_MODULE_RESOLUTIONS_SCHEMA_VERSION,
+        resolutions: [...edges.keys()].sort().map(key => edges.get(key))
+      },
+      null,
+      2
+    )}\n`
+  );
+}
+
 function projectFiles(resolution) {
   const files = new Set([resolution.runtime.path]);
   for (const entry of resolution.closure.entries ?? []) {
@@ -1010,7 +1039,7 @@ async function analyzeArtifact({
     )}\n`
   );
   writeFileSync(resolutionPath, `${JSON.stringify(resolution, null, 2)}\n`);
-  writeFileSync(runtimeResolutions, '{"schemaVersion":1,"resolutions":[]}\n');
+  writeRuntimeModuleResolutions(runtimeResolutions, [resolution]);
   const analyzerArguments = [
       "--project",
       project,
@@ -1111,7 +1140,10 @@ async function analyzeArtifactsBatch({
         },
         files: [...files].sort()
       }, null, 2)}\n`);
-      writeFileSync(runtimeResolutions, '{"schemaVersion":1,"resolutions":[]}\n');
+      writeRuntimeModuleResolutions(
+        runtimeResolutions,
+        batch.map(candidate => candidate.prepared.resolution)
+      );
       writeFileSync(batchRequest, `${JSON.stringify({
         schemaVersion: 1,
         targets

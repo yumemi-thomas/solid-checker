@@ -2997,6 +2997,71 @@ export function resolvePackageArtifacts({
   };
 }
 
+/// The package-local static ESM edges of one resolved artifact case, as the
+/// runtime loads them (ADR 0137): `{ importer, specifier, target }` for every
+/// import or `export … from` statement of a runtime module in the case's
+/// closure whose literal relative specifier lands, by ESM's relative-URL rule
+/// alone, on another runtime module of that closure.
+///
+/// This is the fact TypeScript does not supply. It resolves `./m.js` to a
+/// sibling `m.d.ts`, so the analysis binds the importer to the declaration
+/// while Node loads `m.js`. The analyzer joins the two only through compiler
+/// entities (`runtime_symbol_redirects`), and only where Type Facts confirms
+/// the specifier resolved to a declaration file; this side answers only
+/// which file the runtime loads.
+///
+/// Exact or absent, per edge:
+///
+/// - both ends are closure entries of this resolution, and both files' bytes
+///   hash to the digests the record pinned;
+/// - the specifier starts with `./` or `../` and carries no `?`, `#`, `%` or
+///   backslash, so the URL rule is plain path joining against the importer's
+///   real directory, the way Node resolves it (no extension or index
+///   guessing, which only a bundler does);
+/// - the landing is not a declaration file, and a type-only statement is no
+///   runtime edge.
+///
+/// Anything else writes no edge, and the analysis keeps TypeScript's binding.
+export function runtimeModuleResolutions(resolution) {
+  const root = resolve(resolution.packageRoot);
+  const modules = new Map();
+  const admit = (path, digest) => {
+    if (isDeclarationFileName(path)) return;
+    const real = realpath(path);
+    if (!isFile(real) || fileDigest(real) !== digest) return;
+    modules.set(real, path);
+  };
+  if (resolution.runtime?.path && resolution.runtime?.digest) {
+    admit(resolve(resolution.runtime.path), resolution.runtime.digest);
+  }
+  for (const entry of resolution.closure?.entries ?? []) {
+    if (entry.role !== "runtime" && entry.role !== "literal-dynamic-chunk") continue;
+    admit(resolve(root, entry.path), entry.digest);
+  }
+  const edges = new Map();
+  for (const [real, importer] of modules) {
+    const file = ts.createSourceFile(real, readFileSync(real, "utf8"), ts.ScriptTarget.Latest, true);
+    for (const statement of file.statements) {
+      if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) continue;
+      if (!statement.moduleSpecifier || !ts.isStringLiteralLike(statement.moduleSpecifier)) continue;
+      if (specifierIsTypeOnly(statement)) continue;
+      const specifier = statement.moduleSpecifier.text;
+      if (!specifier.startsWith("./") && !specifier.startsWith("../")) continue;
+      if (/[?#%\\]/.test(specifier)) continue;
+      const landing = resolve(dirname(real), specifier);
+      if (!isFile(landing)) continue;
+      const target = modules.get(realpath(landing));
+      if (target === undefined) continue;
+      edges.set(JSON.stringify([importer, specifier]), { importer, specifier, target });
+    }
+  }
+  return [...edges.values()].sort(
+    (left, right) =>
+      compareText(left.importer, right.importer) ||
+      compareText(left.specifier, right.specifier)
+  );
+}
+
 // Dependency certification planning needs the exact runtime/declaration
 // closure even when an external export-all prevents export binding. Keep that
 // operation separate from `resolvePackageArtifacts`: it deliberately returns

@@ -13,7 +13,7 @@
             "sha256": "6dc60acdacfd978341ed2ede2cf15a916d3ee606f6ce5cc47e01f03457e1b1f0"
           },
           "exports": {
-            "Isolated": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "Isolated": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
             "forwarded": "summary-2bea96ef54a98a43971017a6037500e6147b57eee612e1b64a4bb8a48e2097ce"
           },
           "resolution": {
@@ -174,18 +174,21 @@
       },
       "shape": "callable"
     },
-    "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d": {
+    "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
       "call": {
         "callbacks": [],
         "closed": [
           "callbacks",
+          "reads",
           "creates"
         ],
         "creates": [],
         "proposedClosures": [
           "callbacks",
+          "reads",
           "creates"
-        ]
+        ],
+        "reads": []
       },
       "shape": "callable"
     }
