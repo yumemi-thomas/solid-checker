@@ -876,6 +876,32 @@ fn a_reviewed_release_is_analyzed_with_one_notice_beside_the_findings() {
     assert!(ids.contains(&"SC1003".to_owned()), "{ids:?}");
 }
 
+/// The whole release notice is due only for a project that uses the runtime
+/// (`release_scope::solid_use`). On one unaudited rc.3 triple: a project with
+/// no Solid code and a Solid-free dependency gets none; a `solid-js` import,
+/// JSX alone, and a dependency that peer-depends on `solid-js` each keep it.
+#[test]
+fn the_release_notice_is_due_only_for_a_project_that_uses_solid() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/reactive-ir");
+    for (fixture, due) in [
+        ("release-triple-solid-free-rc3", false),
+        ("release-triple-solid-import-rc3", true),
+        ("release-triple-jsx-only-rc3", true),
+        ("release-triple-solid-dependent-rc3", true),
+    ] {
+        let findings =
+            project_snapshot_findings(fixtures.join(fixture).join("tsconfig.json"), None);
+        let notices = findings
+            .iter()
+            .filter(|finding| finding["id"] == "SC9014")
+            .count();
+        assert_eq!(notices, usize::from(due), "{fixture}: {findings:?}");
+    }
+}
+
 /// `solid-js@2.0.0-rc.9`'s typings re-export five names their declarations do
 /// not declare. That gap is scoped to those exports: the `SC9014` notice
 /// carries it only for a project that reaches one of them, names what reached
@@ -890,7 +916,7 @@ fn rc9_re_export_gap_is_due_only_where_a_project_reaches_it() {
         return;
     }
     // (fixture, the clause the gap must carry, or `None` for no gap).
-    let cases: [(&str, Option<&str>); 6] = [
+    let cases: [(&str, Option<&str>); 7] = [
         ("rc9-reexport-gap-none", None),
         (
             "rc9-reexport-gap-named",
@@ -914,6 +940,12 @@ fn rc9_re_export_gap_is_due_only_where_a_project_reaches_it() {
         (
             "rc9-reexport-gap-project-reexport",
             Some("this project uses createRevealOrder and $DEVCOMP from solid-js"),
+        ),
+        // `import S = require("solid-js")` binds the namespace object; its
+        // member reads are read like `import * as S`'s.
+        (
+            "rc9-reexport-gap-import-equals",
+            Some("this project uses createErrorBoundary from solid-js"),
         ),
     ];
     let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/reactive-ir");

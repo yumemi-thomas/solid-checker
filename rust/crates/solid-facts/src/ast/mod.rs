@@ -17,7 +17,8 @@ use oxc_ast::ast::{
     JSXAttributeValue, JSXElement, JSXElementName, JSXExpression, LogicalExpression,
     LogicalOperator, ModuleExportName, NewExpression, ObjectProperty, ObjectPropertyKind,
     PropertyKey, PropertyKind, ReturnStatement, SpreadElement, StaticMemberExpression,
-    TSGlobalDeclaration, TSModuleBlock, TSModuleDeclaration, TSModuleDeclarationName,
+    TSGlobalDeclaration, TSImportEqualsDeclaration, TSImportType, TSImportTypeQualifier,
+    TSModuleBlock, TSModuleDeclaration, TSModuleDeclarationName, TSModuleReference,
     UnaryExpression, UpdateExpression, VariableDeclarator,
 };
 use oxc_ast_visit::{Visit, walk};
@@ -28,7 +29,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 45;
+pub const AST_FACTS_SCHEMA: u32 = 46;
 
 mod emission;
 mod inert_erasure;
@@ -90,6 +91,20 @@ pub struct AstFacts {
     /// module census.
     #[serde(default)]
     pub module_loads: Vec<ModuleLoadFact>,
+    /// Every TypeScript `import S = require("…")` (facts schema 46): the one
+    /// module load that is neither an `ImportDeclaration` nor a call, so
+    /// neither [`AstFacts::imports`] nor [`AstFacts::module_loads`] records
+    /// it. `S` binds the module's namespace object. The entity-name form
+    /// (`import S = Other.Name`) loads no module and is not recorded.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub import_equals: Vec<ImportEqualsFact>,
+    /// Every `import("…")` written in a type position (facts schema 46):
+    /// `import("m").Name`, `typeof import("m").name`, `typeof import("m")`.
+    /// Erased at run time and loading nothing, but resolved through the same
+    /// module declarations an import is, so a consumer that counts type-only
+    /// imports counts these too.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub type_imports: Vec<TypeImportFact>,
     /// Syntax whose module/runtime reachability cannot be made finite from a
     /// local specifier graph. These rows are scope-resolved by Oxc's binder.
     #[serde(default)]
@@ -659,6 +674,38 @@ pub struct ModuleLoadFact {
     pub kind: ModuleLoadKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub specifier: Option<CompactString>,
+}
+
+/// `import S = require("m")`, `import type S = require("m")`, or either
+/// exported (`export import S = require("m")`).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportEqualsFact {
+    /// The whole declaration, which contains the specifier literal.
+    pub span: Span,
+    /// The specifier, cooked.
+    pub module: CompactString,
+    /// The binding `S`, whose references the binder resolves to this span.
+    pub local: NamedSpan,
+    pub type_only: bool,
+    /// `export import S = require("m")`: the namespace object is also one of
+    /// this module's exports.
+    pub exported: bool,
+}
+
+/// `import("m")` in a type position, with the first name its qualifier
+/// reads: `Name` in `import("m").Name.Inner` and in
+/// `typeof import("m").Name`, `None` for a bare `typeof import("m")`, whose
+/// type is the whole namespace.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TypeImportFact {
+    /// The import type, which contains the specifier literal.
+    pub span: Span,
+    /// The specifier, cooked.
+    pub module: CompactString,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member: Option<CompactString>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1247,6 +1294,8 @@ impl AstFacts {
             imports: Vec::new(),
             exports: Vec::new(),
             module_loads: Vec::new(),
+            import_equals: Vec::new(),
+            type_imports: Vec::new(),
             module_hazards: Vec::new(),
             module_blocks: Vec::new(),
             identifiers: Vec::new(),
@@ -1383,6 +1432,11 @@ struct Collector<'s, 'semantic> {
     imports: Vec<ImportFact>,
     exports: Vec<ExportFact>,
     module_loads: Vec<ModuleLoadFact>,
+    import_equals: Vec<ImportEqualsFact>,
+    type_imports: Vec<TypeImportFact>,
+    /// The declaration spans of `export import S = require("m")`, recorded by
+    /// the export visitor before the walk reaches the declaration itself.
+    exported_import_equals: Vec<Span>,
     module_hazards: Vec<ModuleHazardFact>,
     module_blocks: Vec<Span>,
     ambient_module_depth: usize,
@@ -1522,6 +1576,9 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             imports: Vec::new(),
             exports: Vec::new(),
             module_loads: Vec::new(),
+            import_equals: Vec::new(),
+            type_imports: Vec::new(),
+            exported_import_equals: Vec::new(),
             module_hazards: Vec::new(),
             module_blocks: Vec::new(),
             ambient_module_depth: 0,
@@ -1574,6 +1631,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.imports.sort_by_key(|fact| fact.span);
         self.exports.sort_by_key(|fact| fact.span);
         self.module_loads.sort_by_key(|fact| fact.span);
+        self.import_equals.sort_by_key(|fact| fact.span);
+        self.type_imports.sort_by_key(|fact| fact.span);
         self.module_hazards.sort_by_key(|fact| fact.span);
         self.module_blocks.sort_unstable();
         self.identifiers.sort_by_key(|identifier| identifier.span);
@@ -1620,6 +1679,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             imports: self.imports,
             exports: self.exports,
             module_loads: self.module_loads,
+            import_equals: self.import_equals,
+            type_imports: self.type_imports,
             module_hazards: self.module_hazards,
             module_blocks: self.module_blocks,
             identifiers: self.identifiers,
@@ -2601,7 +2662,47 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         walk::walk_import_declaration(self, declaration);
     }
 
+    fn visit_ts_import_equals_declaration(&mut self, declaration: &TSImportEqualsDeclaration<'a>) {
+        if let TSModuleReference::ExternalModuleReference(reference) = &declaration.module_reference
+        {
+            let declaration_span = span(declaration.span);
+            self.import_equals.push(ImportEqualsFact {
+                span: declaration_span,
+                module: reference.expression.value.as_str().into(),
+                local: NamedSpan {
+                    span: span(declaration.id.span),
+                },
+                type_only: declaration.import_kind.is_type(),
+                exported: self.exported_import_equals.contains(&declaration_span),
+            });
+        }
+        walk::walk_ts_import_equals_declaration(self, declaration);
+    }
+
+    fn visit_ts_import_type(&mut self, import: &TSImportType<'a>) {
+        let mut qualifier = import.qualifier.as_ref();
+        let mut member = None;
+        while let Some(current) = qualifier {
+            match current {
+                TSImportTypeQualifier::Identifier(name) => {
+                    member = Some(name.name.as_str().into());
+                    qualifier = None;
+                }
+                TSImportTypeQualifier::QualifiedName(name) => qualifier = Some(&name.left),
+            }
+        }
+        self.type_imports.push(TypeImportFact {
+            span: span(import.span),
+            module: import.source.value.as_str().into(),
+            member,
+        });
+        walk::walk_ts_import_type(self, import);
+    }
+
     fn visit_export_named_declaration(&mut self, declaration: &ExportNamedDeclaration<'a>) {
+        if let Some(Declaration::TSImportEqualsDeclaration(inner)) = &declaration.declaration {
+            self.exported_import_equals.push(span(inner.span));
+        }
         // Oxc represents a local `export { value }` name as a module-export
         // name and does not walk it through `visit_identifier_reference`.
         // Preserve the binder-selected declaration explicitly so consumers do
@@ -4420,6 +4521,77 @@ renamed();"#,
             ]
         );
         assert_eq!(facts.module_hazards.len(), 7);
+    }
+
+    /// `import S = require("m")` and a type-position `import("m")` are module
+    /// references no import declaration or call records (facts schema 46).
+    #[test]
+    fn import_equals_and_type_imports_are_recorded() {
+        let source = r#"import S = require("solid-js");
+import type T = require("./types");
+export import E = require("@solidjs/web");
+import Alias = S.createSignal;
+type A = import("solid-js").Accessor<number>;
+type B = typeof import("solid-js").createErrorBoundary;
+type C = typeof import("solid-js");
+type D = import("./deep").Outer.Inner;
+S.createErrorBoundary;
+"#;
+        let facts = extract("/p/App.ts", source).unwrap();
+        let rows = facts
+            .import_equals
+            .iter()
+            .map(|fact| {
+                (
+                    fact.module.as_str(),
+                    &source[fact.local.span.start as usize..fact.local.span.end as usize],
+                    fact.type_only,
+                    fact.exported,
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            rows,
+            [
+                ("solid-js", "S", false, false),
+                ("./types", "T", true, false),
+                ("@solidjs/web", "E", false, true),
+            ]
+        );
+        // Every declaration contains its specifier literal, which is how an
+        // attested resolution row joins it.
+        for fact in &facts.import_equals {
+            let text = &source[fact.span.start as usize..fact.span.end as usize];
+            assert!(text.contains(&format!("\"{}\"", fact.module)), "{text}");
+        }
+        // The binder resolves a member read's object to the import-equals
+        // binding.
+        let member = facts
+            .members
+            .iter()
+            .find(|member| {
+                &source[member.property.start as usize..member.property.end as usize]
+                    == "createErrorBoundary"
+            })
+            .expect("the member read is recorded");
+        assert_eq!(
+            facts.reference_declaration(member.object),
+            Some(facts.import_equals[0].local.span)
+        );
+        let types = facts
+            .type_imports
+            .iter()
+            .map(|fact| (fact.module.as_str(), fact.member.as_deref()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            types,
+            [
+                ("solid-js", Some("Accessor")),
+                ("solid-js", Some("createErrorBoundary")),
+                ("solid-js", None),
+                ("./deep", Some("Outer")),
+            ]
+        );
     }
 
     /// Every way to install a property accessor at run time, which is the

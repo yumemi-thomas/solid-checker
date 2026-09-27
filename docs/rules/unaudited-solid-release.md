@@ -44,6 +44,48 @@ Packages at different releases are judged answer by answer, each from its
 owner, and the notice adds a gap saying no review read that combination
 (rc.0-rc.3 count as one release for this).
 
+**Only for a project that uses Solid.** Dialect detection walks up from the
+project to the nearest installed `solid-js`, so a project with no Solid code
+of its own (a Tailwind plugin or a style package in a Solid monorepo) finds
+the monorepo's install. No gap is about such a project: it asks the
+vocabulary no release-dependent question. So the whole notice, every gap, is
+due only when the project's facts cannot rule out that it uses the three
+packages above (the dialect names them; `release_scope.rs`, `solid_use`):
+
+- a module reference naming `solid-js`, `@solidjs/signals` or `@solidjs/web`,
+  or a subpath of one: an import (type-only included), a re-export, `export *`,
+  a literal `import("…")` or `require("…")`, `import S = require("…")`, or a
+  type-position `import("…")`; a `paths` alias the compiler resolves into one
+  of the packages counts as well;
+- any JSX. The checker's compiler lowers every JSX expression onto Solid's
+  runtime and never reads `jsxImportSource`, so JSX is a use whatever the
+  project configures;
+- a package the project reaches whose installed dependency closure names one
+  of the three: its `dependencies`, `peerDependencies` and
+  `optionalDependencies`, each resolved the way Node resolves it from the
+  package's real directory, and theirs in turn. A dependency that is not
+  installed is passed over only when the manifest marks it optional
+  (`optionalDependencies`, `peerDependenciesMeta`);
+- and, failing closed, any package reference the facts cannot place: one the
+  compiler's resolution does not cover (an `import S = require` or a
+  `require` in a file with no import declaration of a package, or an
+  analysis with no Type Facts session), one that resolved nowhere, one whose
+  package manifest cannot be read, and a closure with a required dependency
+  that is not installed.
+
+What does not count: a relative import of a project file (the census reads
+that file itself when it is analyzed, and the analysis asks nothing of one it
+does not analyze) unless the path walks into a `node_modules` tree; a `node:`
+builtin; and a nonliteral `import(path)` or `require(path)`, which resolves
+through no declarations. A project's `declare module "solid-js"` augmentation
+or `/// <reference types>` directive is not counted either: neither names a
+Solid declaration the analysis could ask about without one of the uses above,
+and the three packages declare no global a project could use instead (their
+only globals are `Solid$$` and DOM event interfaces).
+
+A project the census rules out gets no notice, and so is not made
+uncertifiable by an installation it does not use.
+
 **A gap scoped to named exports.** Most gaps are about the installation,
 whatever the project imports. One is about five names: `solid-js@2.0.0-rc.9`'s
 typings re-export `createErrorBoundary`, `createLoadingBoundary`,
@@ -52,12 +94,17 @@ declare them, so under `skipLibCheck` those names are untyped and a call
 through one is not the primitive. That gap is due only for a project that
 reaches one of them from `solid-js`: a named or aliased import (type-only
 included), a namespace member read (`S.createErrorBoundary`,
-`S["createErrorBoundary"]`, `<S.Name>`), or a project module's
-`export { … } from "solid-js"`. The gap's sentence then names what reached it,
+`S["createErrorBoundary"]`, `<S.Name>`) through `import * as S` or through
+TypeScript's `import S = require("solid-js")`, which binds the same namespace
+object, a type-position `typeof import("solid-js").createErrorBoundary`
+(counted like a type-only import, since it resolves through the same
+declarations), or a project module's `export { … } from "solid-js"`. The gap's sentence then names what reached it,
 and an evidence step locates each site. A use that does not say which names it
 reaches keeps the gap due: a namespace object that escapes (passed, stored,
 destructured, re-exported, named in a type, or indexed by a non-literal key),
-a default import, `export *` or `export * as` from `solid-js`, and a literal
+an `export import S = require("solid-js")`, a bare
+`typeof import("solid-js")`, a default import, `export *` or `export * as`
+from `solid-js`, and a literal
 `import("solid-js")` or `require("solid-js")`. A `paths` alias the compiler
 resolves into the `solid-js` package counts as `solid-js`; a subpath
 (`solid-js/internal`) re-exports none of the five and does not. A nonliteral
