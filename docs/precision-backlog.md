@@ -46,14 +46,29 @@ scratchpad.
 Counters after the merges: 31 rules, `Solid2::VARIANT_COUNT` 96, facts schema
 45, ledger pin unchanged.
 
+Follow-up (140dc616, `make verify` passed at 140dc616, 338 s):
+
+- **Host-retained callback reads are uncertifiable.** Probed in Chrome on
+  rc.3 and rc.9. Reads in `addEventListener` listeners, `bind` arguments,
+  `PromiseLike.then` callbacks and Geolocation callbacks warn only when the
+  callback runs inside the body, and not in the usual after-mount case. So
+  SC1001 and SC5001 there are uncertifiable, with a named reason, instead of
+  proven. Listeners on `HTMLElement` and `Document` are now matched too.
+  Moved: three findings in `fresh-stack-scheduler-read-role`, violation ->
+  uncertifiable.
+- **Reads in `flush(fn)` inherit the caller's role.** Probed on rc.0-rc.9: a
+  memo reading through `flush(() => count())` re-runs, and a body read
+  there warns. `flush` left `runs_callback_deferred`. Nothing moved.
+- **rc.0 optimistic-store setters in computes are legal** (rc.0 has no
+  `devGuardStoreSetterWrite`). This is a new per-release answer; the variant
+  count goes 96 -> 192.
+
 Still open:
 
-- reads in `addEventListener`/`bind`/`PromiseLike.then` callbacks are proven
-  SC1001 although nothing proves they run in the window (fix in progress);
-- `flush(fn)` still clears read tracking in the model;
-- rc.0 answers: a `createStore` setter in a component body is legal on
-  rc.1-rc.8 but throws on rc.0, where it is not reported; an
-  optimistic-store setter in a memo is legal on rc.0 but reported;
+- a listener dispatched right after registration in the same body is
+  uncertifiable, not proven (the facts have no statement order);
+- rc.0: a `createStore` setter in a component body throws but is not
+  reported; a store setter known only by type is not reported;
 - a named root body from another module is not judged;
 - SC2006 misses helpers, `untrack` callbacks, re-entry after `await`, and
   async loops;
