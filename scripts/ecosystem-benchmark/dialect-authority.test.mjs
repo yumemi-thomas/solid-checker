@@ -69,8 +69,8 @@ test("the checked-in pins load and name the archives the Rust tables audit", () 
   // 2026-09-27 nineteen more there (rc.9 then carries rc.6's 24).
   // Withdrawn since 2026-09-27 on rc.3's own bytes: `solid-js@2.0.0-rc.3`
   // `Show` `reads`, `Show` `creates`, `Loading` `creates`,
-  // `@solidjs/web@2.0.0-rc.3` `render` `reads`.
-  assert.equal(solid2.negativeRowCount, 95);
+  // `@solidjs/web@2.0.0-rc.3` `render` `reads`, `hydrate` `reads`.
+  assert.equal(solid2.negativeRowCount, 94);
 });
 
 test("a pin file that parses but pins nothing is refused, not read as full coverage", () => {

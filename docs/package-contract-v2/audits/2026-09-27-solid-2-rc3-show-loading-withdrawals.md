@@ -355,3 +355,21 @@ the walk, which is clean.
 
 **WITHDRAWN.** The row `(@solidjs/web, 2.0.0-rc.3, render, Reads)` is listed
 in `WITHHELD` and in `IMPLEMENTATION_AUDITED` under this section.
+
+---
+
+## 5. `hydrate` — `reads` — archive `@solidjs/web@2.0.0-rc.3` — **WITHDRAWN**
+
+`hydrate` (`dist/web.js:1159-1230`) calls `enableHydration()` first. That
+installs `hydratedCreateRenderEffect` and makes `sharedConfig.hydrating`
+reachable. On every path (2026-09-04 audit § 8.2) it returns
+`render(code, element, [...element.childNodes], options)` with the **same
+`options` object**. So `options.insertOptions` reaches § 4's path. Here the
+hydrating precondition is `hydrate`'s own act.
+
+The row's own comment rested `hydrate`'s `reads` on `render`'s ("whose own
+reads row rests on the same [Decision 2026-09-10]"), and that reading falls
+with § 4.
+
+**WITHDRAWN.** The row `(@solidjs/web, 2.0.0-rc.3, hydrate, Reads)` is listed
+in `WITHHELD` and in `IMPLEMENTATION_AUDITED` under this section.
