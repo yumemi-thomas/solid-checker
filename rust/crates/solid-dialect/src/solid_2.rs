@@ -66,6 +66,9 @@ pub struct Solid2 {
     until: bool,
     /// B2, from `@solidjs/web`.
     dynamic_options: releases::DynamicOptions,
+    /// N3, from `@solidjs/signals`: whether its dev store-setter guard
+    /// exempts a root owner ([`Dialect::store_setter_guard_exempts_roots`]).
+    store_setter_roots: releases::StoreSetterRootGuard,
 }
 
 /// The audited Solid 2 vocabulary, spelled like the unit struct it used to be
@@ -2859,6 +2862,38 @@ impl Dialect for Solid2 {
     /// at the `dynamic` call.
     fn callback_preserves_owner_write_context(&self, primitive: Primitive) -> bool {
         matches!(primitive, Primitive::Untrack | Primitive::DynamicStatic)
+    }
+
+    /// Source: `createRoot(init)` is `createOwner()` then `runWithOwner(owner,
+    /// init)` (`@solidjs/signals@2.0.0-rc.3` `dist/dev.js:2275-2281` for
+    /// `createOwner`, which marks every owner it makes `_root: true`; the rc.9
+    /// review § 3.3 finds the `createRoot` slice byte-identical, and rc.9's
+    /// own `solid-js` export only forwards to it). So `init` runs during the
+    /// call with that root as the ambient `context` the write guards read.
+    ///
+    /// Probed on the published rc.0-rc.9 triples, dev client builds: a signal
+    /// setter, and `refresh(memo)`, directly in a `createRoot` body throw
+    /// `REACTIVE_WRITE_IN_OWNED_SCOPE` on every release, whether the root is at
+    /// module scope, in a component body, in a memo compute or in an effect
+    /// apply. Prod builds carry no guard and throw nothing.
+    ///
+    /// Only `createRoot`. `runWithOwner(owner, fn)` also runs `fn` inline under
+    /// an owner, but a supplied owner can be a leaf (`getOwner()` in a tracked
+    /// effect), where every write is legal; `render`, `hydrate` and
+    /// `createRevealOrder` create a root too but were not probed for this.
+    fn callback_runs_in_created_root(&self, primitive: Primitive, argument: usize) -> bool {
+        primitive == Primitive::CreateRoot && argument == 0
+    }
+
+    /// Answered from the resolved `@solidjs/signals` (`releases.rs`, N3 of the
+    /// rc.9 review). rc.1-rc.8's `devGuardStoreSetterWrite` opens with
+    /// `if (context && !context._root && …)`; rc.9 drops `!context._root`
+    /// (`dist/dev-shared.js:5878`, citing #3500), so `false` there only. rc.0
+    /// has no setter-entry guard, and its `createStore` and
+    /// `createOptimisticStore` setters disagree under a root (probed), so it
+    /// keeps `true`, which claims nothing.
+    fn store_setter_guard_exempts_roots(&self) -> bool {
+        self.store_setter_roots == releases::StoreSetterRootGuard::Exempt
     }
 
     /// Source: rc.0 `onSettled` (`dev.js:4855-4893`). Called under a live

@@ -1758,6 +1758,34 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the callback at `argument` runs during the call, directly
+    /// under a **root** owner the call creates for it, so that the ambient
+    /// owner a write guard reads there is that root.
+    ///
+    /// A root is a children-capable owner, so a write guard that exempts only
+    /// children-forbidden leaves rejects a write there. Nothing about the
+    /// callback's *reads* follows from this: a root body is untracked. The
+    /// default claims nothing, which leaves such a write to the ordinary
+    /// callback classification.
+    fn callback_runs_in_created_root(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
+    /// Whether a store setter called with a root as the ambient owner is legal,
+    /// when a signal setter there is not.
+    ///
+    /// `@solidjs/signals` 2.0.0-rc.1 through rc.8 exempt a root from the store
+    /// setter's dev guard and not from `setSignal`'s; rc.9 exempts it from
+    /// neither. So the answer belongs to the release that implements the guard
+    /// ([`Dialect::review_installation`]). The default is `true`, the
+    /// answer that claims no write: for a release nobody read, reporting a
+    /// store write the runtime accepts would be a false violation, while
+    /// silence is only a miss.
+    fn store_setter_guard_exempts_roots(&self) -> bool {
+        true
+    }
+
     /// Whether this primitive's [`CallbackOwner::Leaf`] callback only
     /// materializes as a leaf owner when the call executes under a live,
     /// children-capable owner.

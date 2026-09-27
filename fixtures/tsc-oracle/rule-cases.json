@@ -387,6 +387,22 @@
       "code": "import { createSignal, createMemo } from \"solid-js\";\nconst [count, setCount] = createSignal(0);\nexport const doubled = createMemo(() => {\n  setCount(1);\n  return count();\n});\n"
     },
     {
+      "rule": "reactive-write-in-owned-scope",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "why": "The createRoot-body arm. `createRoot`'s `init` is typed `((dispose: () => void) => T) | (() => T)`, and a setter call in it type checks. The claim is that the body runs with the new root as the ambient owner, a children-capable owner, so `setSignal`'s dev guard throws REACTIVE_WRITE_IN_OWNED_SCOPE (probed on every published rc.0-rc.9 triple).",
+      "code": "import { createRoot, createSignal } from \"solid-js\";\nconst [, setCount] = createSignal(0);\ncreateRoot(() => {\n  setCount(1);\n});\n"
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "silent",
+      "why": "The store half of the createRoot-body arm, on the audited rc.3 triple this oracle installs. `@solidjs/signals@2.0.0-rc.3`'s `devGuardStoreSetterWrite` exempts a root (`!context._root`), so the store setter in a root body is legal and SC2001 stays silent; rc.9 dropped the exemption, which `fixtures/reactive-ir/setter-in-root-rc9` pins.",
+      "code": "import { createRoot, createStore } from \"solid-js\";\nconst [, setState] = createStore({ value: 0 });\ncreateRoot(() => {\n  setState((draft) => {\n    draft.value = 1;\n  });\n});\n"
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "dialect": "v2",
       "expect": "silent",

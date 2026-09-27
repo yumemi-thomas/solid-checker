@@ -74,6 +74,10 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/store-root-write-rc3/node_modules/**
 !fixtures/reactive-ir/store-root-write-rc9/node_modules/
 !fixtures/reactive-ir/store-root-write-rc9/node_modules/**
+!fixtures/reactive-ir/setter-in-root-rc3/node_modules/
+!fixtures/reactive-ir/setter-in-root-rc3/node_modules/**
+!fixtures/reactive-ir/setter-in-root-rc9/node_modules/
+!fixtures/reactive-ir/setter-in-root-rc9/node_modules/**
 !fixtures/reactive-ir/solid2-contract-callback-variants-node/node_modules/
 !fixtures/reactive-ir/solid2-contract-callback-variants-node/node_modules/**
 !fixtures/reactive-ir/ported-structure-v2/node_modules/

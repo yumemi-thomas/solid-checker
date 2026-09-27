@@ -9,7 +9,7 @@ use solid_facts::core::Span;
 use typefacts::Location;
 
 use crate::effect_api::{ProofStatus, classify_effect_call};
-use crate::execution_role::{allowed_callback_spans, semantic_write_execution_role};
+use crate::execution_role::{RootBodyGuard, allowed_callback_spans, semantic_write_execution_role};
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
 use crate::owners::{analysis_context, computation_is_async_with_contracts};
@@ -350,6 +350,8 @@ impl StaticApiContext<'_> {
                         ),
                     ),
                     declaration: declaration.clone(),
+                    // `refresh`'s guard has no root exemption on any release
+                    // (probed rc.0-rc.9, dev).
                     execution: semantic_write_execution_role(
                         file,
                         call.callee,
@@ -357,6 +359,7 @@ impl StaticApiContext<'_> {
                         self.entities,
                         self.symbol_names,
                         self.lookup,
+                        RootBodyGuard::Rejects,
                     ),
                     allowed_by_option: self
                         .source_owned_write

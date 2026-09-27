@@ -2984,6 +2984,13 @@ pub(crate) fn analysis_context(
                 {
                     Some("apply callback")
                 }
+                // A root body names its root: an anonymous one has no
+                // enclosing label to fall back to.
+                solid_dialect::Execution::Inline
+                    if dialect.callback_runs_in_created_root(resolved, argument) =>
+                {
+                    Some("callback")
+                }
                 _ => None,
             })
         });

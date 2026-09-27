@@ -24,9 +24,9 @@ use std::{
 };
 
 use crate::execution_role::{
-    allowed_callback_spans, async_execution_role, control_flow_execution_role, missing_jsx_census,
-    named_callback_execution_role, read_analysis_context, semantic_execution_role,
-    semantic_write_execution_role,
+    RootBodyGuard, allowed_callback_spans, async_execution_role, control_flow_execution_role,
+    missing_jsx_census, named_callback_execution_role, read_analysis_context,
+    semantic_execution_role, semantic_write_execution_role,
 };
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
@@ -712,6 +712,18 @@ impl LocalAccessContext<'_, '_> {
             if let Some((name, declaration, allowed_by_option, source_kind)) =
                 self.setters.get(symbol)
             {
+                // Under a root owner `setSignal`'s guard throws on every
+                // release; a store setter's only where the resolved signals
+                // dropped the root exemption (rc.9).
+                let root_body = match source_kind {
+                    ReactiveSourceKind::Accessor => RootBodyGuard::Rejects,
+                    ReactiveSourceKind::Store
+                        if !self.lookup.dialect.store_setter_guard_exempts_roots() =>
+                    {
+                        RootBodyGuard::Rejects
+                    }
+                    ReactiveSourceKind::Store => RootBodyGuard::Exempts,
+                };
                 let write_execution = semantic_write_execution_role(
                     file,
                     call.callee,
@@ -719,6 +731,7 @@ impl LocalAccessContext<'_, '_> {
                     self.entities,
                     self.symbol_names,
                     self.lookup,
+                    root_body,
                 );
                 for _ in 0..multiplicity {
                     result.writes.push(Arc::new(ReactiveWrite {
@@ -749,6 +762,7 @@ impl LocalAccessContext<'_, '_> {
                     self.entities,
                     self.symbol_names,
                     self.lookup,
+                    RootBodyGuard::Unclaimed,
                 );
                 for _ in 0..multiplicity {
                     result.action_invocations.push(Arc::new(ActionInvocation {

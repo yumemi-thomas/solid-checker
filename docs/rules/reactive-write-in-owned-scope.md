@@ -3,28 +3,50 @@
 `SC2001` · **error** · violation
 
 A signal or store setter (or `refresh()`) is called inside an owned scope — a
-component body or a children-capable computation.
+component body, a `createRoot` body, or a children-capable computation.
 
 ## What it does
 
 Flags calls to setters returned by `createSignal`/`createStore` and to `refresh()`
-when they execute under a live children-capable owner: a component body, a memo,
-or an effect's compute function. Writes are allowed in event handlers, actions,
-`createEffect` apply callbacks, directive apply callbacks, and the children-forbidden
-leaf scopes `onSettled` and `createTrackedEffect` — the runtime's write guard
+when they execute under a live children-capable owner: a component body, a
+`createRoot` body, a memo, or an effect's compute function. Writes are allowed
+in event handlers, actions, `createEffect` apply callbacks, directive apply
+callbacks, and the children-forbidden leaf scopes `onSettled` and `createTrackedEffect` — the runtime's write guard
 explicitly exempts leaf imperative scopes.
 
 A `createRenderEffect` apply callback is only partly such a scope. Its first run
 happens before `createRenderEffect` returns, under the caller's owner, so a
-write there throws `REACTIVE_WRITE_IN_OWNED_SCOPE` in a component body or a
-computation exactly as a write at the call site would. That run is withheld,
-though, when the call passes `defer` or `schedule`, when the compute returns a
+write there throws `REACTIVE_WRITE_IN_OWNED_SCOPE` in a component body, a
+`createRoot` body or a computation exactly as a write at the call site would.
+That run is withheld, though, when the call passes `defer` or `schedule`, when the compute returns a
 promise or reads a source that is still pending, and (on rc.9) when the first
 pass was staged into a transaction; it then runs later from the flush, where
 the write is legal, as every later run is. The checker cannot prove the compute
 settles synchronously, so it reports nothing for such a write rather than
 claiming either answer. A `createRenderEffect` created where writes are legal
 (an event handler, module scope) leaves every run of its apply legal.
+
+A `createRoot` body is not a write region either. It runs during the call
+with the new root as the ambient owner, and a root is a children-capable
+owner, so a signal setter or `refresh()` directly in the body throws
+`REACTIVE_WRITE_IN_OWNED_SCOPE` wherever the root is created: at module scope,
+in a component, in a memo compute, or in an effect apply. (Probed on every
+published `2.0.0-rc.0` to `rc.9` triple, dev client builds.) A **store** setter
+there depends on the installed `@solidjs/signals`. `rc.1` through `rc.8` exempt
+a root from the store setter's guard (`!context._root`), so the write is legal
+and not reported. `rc.9` removed the exemption, so it throws and is reported.
+For `rc.0`, or a signals release this checker has not read, it is not reported.
+Callbacks nested in the body keep their own answer: an effect apply,
+`onSettled` or an event listener inside the root stays legal, and a memo compute
+inside it is reported as any memo compute is. A write inside
+`flush(() => ...)` in a root body also throws, because `flush` keeps the owner
+as `untrack` does. The checker does not model that yet and reports nothing
+there.
+
+The same exemption covers component bodies, and SC2001 does not apply it there
+yet. In dev builds `solid-js` runs every component body under a transparent
+`createRoot`, so on `rc.1` through `rc.8` a store setter directly in a component
+body is legal too. SC2001 still reports it: a known over-report.
 
 `untrack` is **not** an allowed write region. The `2.0.0-rc.0` guard keys on the
 ambient *owner*, not on tracking: `untrack` clears the tracking listener but
@@ -60,6 +82,9 @@ Examples of **incorrect** code for this rule:
 const [doubled, setDoubled] = createSignal(0);
 // A derivation written imperatively — throws in dev.
 createMemo(() => setDoubled(count() * 2));
+
+// A root body runs under the root, a children-capable owner.
+createRoot(() => setCount(1));
 
 function Counter() {
   setCount(0); // Write in a component body.

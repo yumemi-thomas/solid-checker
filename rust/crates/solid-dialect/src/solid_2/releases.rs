@@ -12,6 +12,7 @@
 //! | B4: is `until` an export? | `solid-js` (the root re-export, from rc.5) *and* `@solidjs/signals` (the declaration, from rc.5) | as above |
 //! | B2: does `dynamic(source, { static: true })` select a different runtime? | `@solidjs/web` (`if (options?.static)`, rc.9 only) | the project |
 //! | B3: does `omit`'s lone function argument run as a predicate? | `@solidjs/signals` (rc.9 only) | the installed `solid-js` |
+//! | N3: does the dev store-setter guard reject a root owner? | `@solidjs/signals` (`devGuardStoreSetterWrite`, rc.9 only) | the installed `solid-js` |
 //!
 //! Every `solid-js@2.0.0-rc.N` depends on `@solidjs/signals: ^2.0.0-rc.N`, a
 //! range, so a fresh install of the audited `solid-js@2.0.0-rc.3` resolves
@@ -25,15 +26,15 @@
 //!
 //! ## Releases, per package (the two 2026-09-26 reviews)
 //!
-//! | release | B1 store root | B2 `dynamic` options | B3 `omit` predicate | B4 `until` | open gaps |
-//! | --- | --- | --- | --- | --- | --- |
-//! | rc.0-rc.3 | `Readonly` | ignored | absent | absent | none: audited (rc.3), or equal to rc.0/rc.3 on every premise the dialect cites (rc.0, rc.1, rc.2) |
-//! | rc.4 | `Readonly` | ignored | absent | absent | `solid-js`: `registerPatch`, `registerRowOps`, `registerSlotPatch`; `@solidjs/web`: `installListDriver`, `driveList` (callback-taking, neither modelled nor excluded) |
-//! | rc.5, rc.6 | `Readonly` | ignored | absent | present | as rc.4 |
-//! | rc.7, rc.8 | `Mutable` | ignored (`DynamicOptions` is `deferStream` only, and no bundle reads it on the client) | absent | present | `@solidjs/signals`: no negative row |
-//! | rc.9 | `Mutable` | `static` selects `staticDynamic(untrack(source))` | present | present | `@solidjs/signals`: negative rows for five creates answers only; `solid-js`: re-exports its declarations do not declare |
-//! | anything else (rc.10+, betas, `2.0.0`, an inexact spelling) | `Readonly` (see below) | not modelled | absent | not modelled | the release is named as not compared |
-//! | not resolved | `Readonly` (see below) | as rc.3 (nothing can import `dynamic`) | absent | not modelled | named for `@solidjs/signals`; none for `@solidjs/web` |
+//! | release | B1 store root | B2 `dynamic` options | B3 `omit` predicate | B4 `until` | N3 store setter under a root | open gaps |
+//! | --- | --- | --- | --- | --- | --- | --- |
+//! | rc.0-rc.3 | `Readonly` | ignored | absent | absent | exempt (rc.0: see `StoreSetterRootGuard`) | none: audited (rc.3), or equal to rc.0/rc.3 on every premise the dialect cites (rc.0, rc.1, rc.2) |
+//! | rc.4 | `Readonly` | ignored | absent | absent | exempt | `solid-js`: `registerPatch`, `registerRowOps`, `registerSlotPatch`; `@solidjs/web`: `installListDriver`, `driveList` (callback-taking, neither modelled nor excluded) |
+//! | rc.5, rc.6 | `Readonly` | ignored | absent | present | exempt | as rc.4 |
+//! | rc.7, rc.8 | `Mutable` | ignored (`DynamicOptions` is `deferStream` only, and no bundle reads it on the client) | absent | present | exempt | `@solidjs/signals`: no negative row |
+//! | rc.9 | `Mutable` | `static` selects `staticDynamic(untrack(source))` | present | present | guarded | `@solidjs/signals`: negative rows for five creates answers only; `solid-js`: re-exports its declarations do not declare |
+//! | anything else (rc.10+, betas, `2.0.0`, an inexact spelling) | `Readonly` (see below) | not modelled | absent | not modelled | exempt (see below) | the release is named as not compared |
+//! | not resolved | `Readonly` (see below) | as rc.3 (nothing can import `dynamic`) | absent | not modelled | exempt (see below) | named for `@solidjs/signals`; none for `@solidjs/web` |
 //!
 //! `2.0.0-experimental.x` of `solid-js` is refused, not analyzed.
 //!
@@ -56,6 +57,12 @@
 //! notice already keeps the project from certifying, so the miss is visible.
 //! Only one of the two defaults can break the absolute rule, so the default is
 //! the other one.
+//!
+//! N3 defaults the same way, for the same kind of reason: an unknown signals
+//! keeps the root exemption, so a store setter directly in a `createRoot` body
+//! is not reported there. Reporting it on a release that exempts roots would be
+//! a violation the runtime does not raise; silence is a miss the notice already
+//! makes visible.
 //!
 //! `until` and the `dynamic` option forms are simply not modelled on an
 //! unknown owner: `until` is not a vocabulary name, and an option-bearing
@@ -126,6 +133,36 @@ pub(super) enum StoreRootTyping {
     Mutable,
 }
 
+/// Whether the resolved `@solidjs/signals`'s dev store-setter guard exempts a
+/// root owner (N3 of the rc.9 review).
+///
+/// Read from each release's `dist/dev.js` (`dist/dev-shared.js` from rc.8)
+/// under the rc.1-rc.8 and rc.9 reviews' unpacked tarballs, and probed on each
+/// published triple's dev client build with a store setter directly in a
+/// `createRoot` body:
+///
+/// | signals | guard | `createStore` setter (plain and derived) | `createOptimisticStore` setter |
+/// | --- | --- | --- | --- |
+/// | rc.0 | none at the setter entry; a `createStore` draft write reaches `setSignal`'s guard through `notifyStoreProperty` | throws `REACTIVE_WRITE_IN_OWNED_SCOPE` | legal |
+/// | rc.1-rc.8 | `devGuardStoreSetterWrite`: `if (context && !context._root && …)` (rc.3 `dist/dev.js:4111`, rc.8 `dist/dev-shared.js:4857`) | legal | legal |
+/// | rc.9 | `if (context && …)` (`dist/dev-shared.js:5878`, citing #3500: "Roots are NOT exempt") | throws | throws |
+///
+/// So rc.9 is the first release that removed the exemption. rc.0 had none to
+/// remove, but its two store setters disagree and a write carries only "a
+/// store setter", so rc.0 keeps [`Self::Exempt`], the answer that claims
+/// nothing. A signal setter there throws on every release: `setSignal` never
+/// exempted roots. Prod builds carry neither guard.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) enum StoreSetterRootGuard {
+    /// A store setter under a root owner is not reported: legal on rc.1-rc.8,
+    /// and the answer for rc.0 and for a signals release nobody read, the one
+    /// that claims no write ([`Dialect::store_setter_guard_exempts_roots`]).
+    #[default]
+    Exempt,
+    /// rc.9: every store setter's guard rejects a root, as `setSignal`'s does.
+    Guarded,
+}
+
 /// What `dynamic`'s second argument does on the resolved `@solidjs/web`.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(super) enum DynamicOptions {
@@ -151,19 +188,20 @@ impl Solid2 {
     pub const AUDITED: Self = Self::from_index(0);
 
     /// The vocabulary for the `2.0.0-rc.9` triple: a mutable store root (B1),
-    /// `dynamic`'s static form (B2), `omit`'s predicate form (B3) and `until`
-    /// (B4).
+    /// `dynamic`'s static form (B2), `omit`'s predicate form (B3), `until`
+    /// (B4), and a store-setter guard that no longer exempts roots (N3).
     pub const RC9: Self = Self {
         store_root: StoreRootTyping::Mutable,
         omit_predicate_form: true,
         until: true,
         dynamic_options: DynamicOptions::StaticForm,
+        store_setter_roots: StoreSetterRootGuard::Guarded,
     };
 
     /// How many distinct vocabularies the answers above combine into: every
     /// combination is reachable, because the three owners install
     /// independently.
-    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3;
+    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2;
 
     /// The vocabulary at one mixed-radix index, the audited one at `0`. A new
     /// release-dependent answer adds one digit here and in
@@ -182,6 +220,11 @@ impl Solid2 {
                 1 => DynamicOptions::StaticForm,
                 _ => DynamicOptions::Unread,
             },
+            store_setter_roots: if (index / 24) % 2 == 1 {
+                StoreSetterRootGuard::Guarded
+            } else {
+                StoreSetterRootGuard::Exempt
+            },
         }
     }
 
@@ -197,7 +240,11 @@ impl Solid2 {
             DynamicOptions::StaticForm => 1,
             DynamicOptions::Unread => 2,
         };
-        store + 2 * omit + 4 * until + 8 * dynamic
+        let store_setter = match self.store_setter_roots {
+            StoreSetterRootGuard::Exempt => 0,
+            StoreSetterRootGuard::Guarded => 1,
+        };
+        store + 2 * omit + 4 * until + 8 * dynamic + 24 * store_setter
     }
 
     /// The one `'static` value per vocabulary, which is what an analysis holds.
@@ -244,6 +291,9 @@ fn variant_key(vocabulary: Solid2) -> Option<String> {
         DynamicOptions::Ignored => {}
         DynamicOptions::StaticForm => tokens.push("dynamic-static"),
         DynamicOptions::Unread => tokens.push("dynamic-options-unread"),
+    }
+    if vocabulary.store_setter_roots == StoreSetterRootGuard::Guarded {
+        tokens.push("store-setter-guards-roots");
     }
     (!tokens.is_empty()).then(|| tokens.join("+"))
 }
@@ -437,6 +487,16 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
         // (`dist/dev.js:4380`; the rc.1-rc.8 review § 3.3 finds no earlier
         // release that does). An unread or unresolved signals keeps `false`.
         omit_predicate_form: matches!(signals, Release::Read(NEWEST_READ)),
+        // N3. `devGuardStoreSetterWrite` is signals' (`solid-js` re-exports
+        // `createStore`), and rc.9 is the only release whose store setters all
+        // reject a root (`StoreSetterRootGuard`). Every other answer, unread
+        // and unresolved included, keeps the one that reports nothing.
+        store_setter_roots: match signals {
+            Release::Read(NEWEST_READ) => StoreSetterRootGuard::Guarded,
+            Release::Read(_) | Release::Unread(_) | Release::Unresolved => {
+                StoreSetterRootGuard::Exempt
+            }
+        },
     }
 }
 
@@ -485,9 +545,9 @@ fn gaps_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>) -> Ve
             gap: format!(
                 "solid-js {}, @solidjs/signals {} and @solidjs/web {} are not one reviewed \
                  release, and no review read this combination: each release-dependent answer is \
-                 taken from the package that declares it (the store typing from \
-                 @solidjs/signals, until from solid-js and @solidjs/signals together, dynamic's \
-                 options from @solidjs/web)",
+                 taken from the package that declares it (the store typing and the store \
+                 setter's root guard from @solidjs/signals, until from solid-js and \
+                 @solidjs/signals together, dynamic's options from @solidjs/web)",
                 solid_js.spelled(),
                 signals.spelled(),
                 web.spelled()
@@ -503,7 +563,8 @@ fn unread_consequence(package: &str) -> &'static str {
     match package {
         SIGNALS => {
             "the store typing it declares is unknown: a write to a store root's own property \
-             outside a setter is not reported, and until is not modelled"
+             outside a setter is not reported, nor is a store setter called directly in a \
+             createRoot body, and until is not modelled"
         }
         WEB => {
             "a dynamic call with options is not modelled, and every other export it declares is \
@@ -524,7 +585,8 @@ fn unresolved_consequence(package: &str) -> Option<&'static str> {
         SIGNALS => Some(
             "@solidjs/signals does not resolve from the installed solid-js, so the store typing \
              it declares is unknown: a write to a store root's own property outside a setter is \
-             not reported, and until is not modelled",
+             not reported, nor is a store setter called directly in a createRoot body, and until \
+             is not modelled",
         ),
         WEB => None,
         _ => Some(
@@ -608,7 +670,8 @@ mod tests {
     /// The classification table, one same-release triple per row.
     #[test]
     fn every_reviewed_triple_answers_as_the_reviews_measured() {
-        // (release, store root, omit predicate, until, dynamic options, gap count)
+        // (release, store root, omit predicate, until, dynamic options, store setter under a
+        // root, gap count)
         let rows = [
             (
                 "2.0.0-rc.0",
@@ -616,6 +679,7 @@ mod tests {
                 false,
                 false,
                 DynamicOptions::Ignored,
+                StoreSetterRootGuard::Exempt,
                 0,
             ),
             (
@@ -624,6 +688,7 @@ mod tests {
                 false,
                 false,
                 DynamicOptions::Ignored,
+                StoreSetterRootGuard::Exempt,
                 0,
             ),
             (
@@ -632,6 +697,7 @@ mod tests {
                 false,
                 false,
                 DynamicOptions::Ignored,
+                StoreSetterRootGuard::Exempt,
                 0,
             ),
             (
@@ -640,6 +706,7 @@ mod tests {
                 false,
                 false,
                 DynamicOptions::Ignored,
+                StoreSetterRootGuard::Exempt,
                 0,
             ),
             (
@@ -648,6 +715,7 @@ mod tests {
                 false,
                 false,
                 DynamicOptions::Ignored,
+                StoreSetterRootGuard::Exempt,
                 2,
             ),
             (
@@ -656,6 +724,7 @@ mod tests {
                 false,
                 true,
                 DynamicOptions::Ignored,
+                StoreSetterRootGuard::Exempt,
                 2,
             ),
             (
@@ -664,6 +733,7 @@ mod tests {
                 false,
                 true,
                 DynamicOptions::Ignored,
+                StoreSetterRootGuard::Exempt,
                 2,
             ),
             (
@@ -672,6 +742,7 @@ mod tests {
                 false,
                 true,
                 DynamicOptions::Ignored,
+                StoreSetterRootGuard::Exempt,
                 1,
             ),
             (
@@ -680,6 +751,7 @@ mod tests {
                 false,
                 true,
                 DynamicOptions::Ignored,
+                StoreSetterRootGuard::Exempt,
                 1,
             ),
             (
@@ -688,19 +760,36 @@ mod tests {
                 true,
                 true,
                 DynamicOptions::StaticForm,
+                StoreSetterRootGuard::Guarded,
                 2,
             ),
         ];
-        for (release, store_root, omit_predicate_form, until, dynamic_options, gap_count) in rows {
+        for (
+            release,
+            store_root,
+            omit_predicate_form,
+            until,
+            dynamic_options,
+            store_setter_roots,
+            gap_count,
+        ) in rows
+        {
             let (vocabulary, gaps) = analyzed(&same(release));
             assert_eq!(
                 (
                     vocabulary.store_root,
                     vocabulary.omit_predicate_form,
                     vocabulary.until,
-                    vocabulary.dynamic_options
+                    vocabulary.dynamic_options,
+                    vocabulary.store_setter_roots
                 ),
-                (store_root, omit_predicate_form, until, dynamic_options),
+                (
+                    store_root,
+                    omit_predicate_form,
+                    until,
+                    dynamic_options,
+                    store_setter_roots
+                ),
                 "{release}"
             );
             assert_eq!(gaps.len(), gap_count, "{release}: {gaps:?}");
@@ -735,8 +824,10 @@ mod tests {
         let fresh = triple(Some("2.0.0-rc.3"), Some("2.0.0-rc.9"), Some("2.0.0-rc.3"));
         let (vocabulary, gaps) = analyzed(&fresh);
         assert_eq!(vocabulary.store_root, StoreRootTyping::Mutable);
-        // `omit` is signals' too, so its predicate form comes with rc.9.
+        // `omit` is signals' too, so its predicate form comes with rc.9, and
+        // so is the store setter's guard, which no longer exempts roots.
         assert!(vocabulary.omit_predicate_form);
+        assert_eq!(vocabulary.store_setter_roots, StoreSetterRootGuard::Guarded);
         // rc.3's root does not re-export until (TS2305 on that tree), and
         // rc.3's web has no static option.
         assert!(!vocabulary.until);
@@ -755,6 +846,7 @@ mod tests {
         assert_eq!(vocabulary.store_root, StoreRootTyping::Readonly);
         assert!(vocabulary.until);
         assert_eq!(vocabulary.dynamic_options, DynamicOptions::StaticForm);
+        assert_eq!(vocabulary.store_setter_roots, StoreSetterRootGuard::Exempt);
     }
 
     /// Defect 2: B2 and B4 answer only where the owner has the feature.
@@ -799,6 +891,11 @@ mod tests {
                 "{signals:?}"
             );
             assert!(!vocabulary.until, "{signals:?}");
+            assert_eq!(
+                vocabulary.store_setter_roots,
+                StoreSetterRootGuard::Exempt,
+                "{signals:?}"
+            );
             assert!(
                 gaps.iter()
                     .any(|gap| gap.gap.contains("store root") && gap.review.is_none()),
@@ -889,7 +986,9 @@ mod tests {
         assert_eq!(OTHER_VARIANTS.len(), Solid2::VARIANT_COUNT - 1);
         assert_eq!(
             Solid2::RC9.key(),
-            Some("store-root-mutable+omit-predicate+until+dynamic-static")
+            Some(
+                "store-root-mutable+omit-predicate+until+dynamic-static+store-setter-guards-roots"
+            )
         );
     }
 
@@ -904,6 +1003,32 @@ mod tests {
         assert!(Solid2::default().store_root_properties_are_readonly());
         assert_eq!(Solid2::default().index(), Solid2::AUDITED.index());
         assert!(Solid2::RC9.store_setter_callback_enables_proxy_writes());
+        assert!(Solid2::AUDITED.store_setter_guard_exempts_roots());
+        assert!(!Solid2::RC9.store_setter_guard_exempts_roots());
+        for release in 0..=8 {
+            let release = format!("2.0.0-rc.{release}");
+            assert!(
+                analyzed(&same(&release))
+                    .0
+                    .store_setter_guard_exempts_roots(),
+                "{release}"
+            );
+        }
+        // Only `createRoot`'s own body is a created root.
+        assert!(Solid2.callback_runs_in_created_root(Primitive::CreateRoot, 0));
+        for (primitive, argument) in [
+            (Primitive::CreateRoot, 1),
+            (Primitive::RunWithOwner, 1),
+            (Primitive::Untrack, 0),
+            (Primitive::Flush, 0),
+            (Primitive::CreateMemo, 0),
+            (Primitive::Render, 0),
+        ] {
+            assert!(
+                !Solid2.callback_runs_in_created_root(primitive, argument),
+                "{primitive:?} {argument}"
+            );
+        }
         for gated in super::super::RELEASE_GATED_NAMES {
             assert_eq!(Solid2::AUDITED.primitive(gated), None, "{gated}");
             assert!(Solid2::RC9.primitive(gated).is_some(), "{gated}");
