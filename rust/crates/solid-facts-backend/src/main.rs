@@ -5317,6 +5317,20 @@ fn export_names_from_reachability(
             .iter()
             .find(|function| function.body == span)?;
         let resolved = export_names_for_function(index, file, function, exports)?;
+        // ADR 0135: a function its own module publishes, that is none of this
+        // entrypoint's exports, may be entered from another module through
+        // an import the call graph cannot join to it -- the importer's
+        // `./m.js` resolves to `m.d.ts`, so the call carries the declaration's
+        // symbol while the graph walks the implementation's. Matching the two
+        // by runtime identity (`module_surface_is_unaccounted`) says the
+        // references exist, not that the graph saw them as calls, and the
+        // difference is an obligation attributed to no export at all.
+        if resolved.is_empty()
+            && function_published_by_its_module(file, function)
+            && !imports_join_the_implementation(index, file, function)
+        {
+            return None;
+        }
         if resolved.is_empty() && module_surface_is_unaccounted(index, file, function) {
             return None;
         }
@@ -5358,6 +5372,182 @@ fn export_names_from_reachability(
 ///
 /// Accounting is by exact identity, never by name text: a reference counts when
 /// its Type Facts runtime identity or canonical symbol is the function's own.
+/// Whether `function`'s own module publishes it by name.
+///
+/// A declaration export (`export function f`) carries the name span itself;
+/// an export list (`function f() {}` … `export { f }`, what every bundler
+/// writes) carries a *reference*, which only the exact binder edge joins to
+/// the declaration. Comparing spans alone read every export-list module as
+/// publishing nothing.
+fn function_published_by_its_module(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    let Some(name) = solid_reactive_ir::function_binding_name(file, function) else {
+        return false;
+    };
+    file.ast.exports.iter().any(|export| {
+        export
+            .specifiers
+            .iter()
+            .chain(export.declarations.iter())
+            .any(|specifier| {
+                specifier.local.span == name.span
+                    || (export.module.is_none()
+                        && file.ast.reference_declaration(specifier.local.span) == Some(name.span))
+            })
+    })
+}
+
+/// Whether every other module that can reach `function` through its module's
+/// exports binds the implementation's own symbol, so the call graph's edges
+/// from there are the implementation's (ADR 0135).
+///
+/// Exact or `false`. Each analyzed file's static imports, `export … from` and
+/// literal dynamic loads are resolved with ESM's relative-URL rule, with no
+/// extension guessing. A binding landing on the module under one of the
+/// function's export names must carry, at its local identifier, a compiler
+/// entity whose canonical symbol is the function declaration's. A split
+/// through a sibling `.d.ts` is exactly a different symbol. A namespace
+/// import, an `export *` or `export … from` of the module, a literal dynamic
+/// load of it, a nonliteral load inside the package, or a relative specifier
+/// inside the package that does not resolve to exactly one file answers
+/// `false`.
+fn imports_join_the_implementation(
+    index: UnresolvedExportIndex<'_>,
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    let Some(name) = solid_reactive_ir::function_binding_name(file, function) else {
+        return false;
+    };
+    let Some(declaration) = index
+        .entities_by_location
+        .get(&typefacts::Location {
+            path: file.path.to_string().into(),
+            start_byte: u64::from(name.span.start),
+            end_byte: u64::from(name.span.end),
+        })
+        .copied()
+    else {
+        return false;
+    };
+    let symbol = canonical_symbol(&declaration.symbol, index.aliases);
+    if symbol.is_empty() {
+        return false;
+    }
+    let published = file
+        .ast
+        .exports
+        .iter()
+        .filter(|export| export.module.is_none() && !export.type_only)
+        .flat_map(|export| export.specifiers.iter().chain(export.declarations.iter()))
+        .filter(|specifier| {
+            specifier.local.span == name.span
+                || file.ast.reference_declaration(specifier.local.span) == Some(name.span)
+        })
+        .map(|specifier| specifier.exported.to_string())
+        .collect::<BTreeSet<_>>();
+    let Ok(module_path) = Path::new(file.path.as_str()).canonicalize() else {
+        return false;
+    };
+    let package_root = index
+        .resolution
+        .and_then(|resolution| Path::new(&resolution.package_root).canonicalize().ok());
+    for other in &index.facts.files {
+        if other.path.as_str() == file.path.as_str() {
+            continue;
+        }
+        let other_path = Path::new(other.path.as_str());
+        let inside = package_root.as_ref().is_none_or(|root| {
+            other_path
+                .canonicalize()
+                .is_ok_and(|path| path.starts_with(root))
+        });
+        for import in other.ast.imports.iter().filter(|import| !import.type_only) {
+            match relative_landing(other_path, &import.module, &module_path) {
+                Some(false) => continue,
+                None if inside => return false,
+                None => continue,
+                Some(true) => {}
+            }
+            for binding in import.bindings.iter().filter(|binding| !binding.type_only) {
+                let imported = match binding.kind {
+                    solid_facts::ast::ImportKind::Namespace => return false,
+                    solid_facts::ast::ImportKind::Default => "default",
+                    _ => binding.imported.as_deref().unwrap_or_default(),
+                };
+                if !published.contains(imported) {
+                    continue;
+                }
+                let joined = index
+                    .entities_by_location
+                    .get(&typefacts::Location {
+                        path: other.path.to_string().into(),
+                        start_byte: u64::from(binding.local.span.start),
+                        end_byte: u64::from(binding.local.span.end),
+                    })
+                    .is_some_and(|entity| {
+                        canonical_symbol(&entity.symbol, index.aliases) == symbol
+                    });
+                if !joined {
+                    return false;
+                }
+            }
+        }
+        for export in other.ast.exports.iter().filter(|export| !export.type_only) {
+            let Some(specifier) = export.module.as_deref() else {
+                continue;
+            };
+            match relative_landing(other_path, specifier, &module_path) {
+                Some(false) => continue,
+                None if inside => return false,
+                None => continue,
+                Some(true) => {}
+            }
+            // Forwarding the function to another module's surface is an
+            // entry the graph does not model; forwarding a sibling is not.
+            if export.kind == solid_facts::ast::ExportKind::All
+                || export.namespace.is_some()
+                || export.specifiers.iter().any(|specifier| {
+                    other
+                        .source_text(specifier.local.span)
+                        .is_none_or(|local| published.contains(local))
+                })
+            {
+                return false;
+            }
+        }
+        for load in &other.ast.module_loads {
+            match load.specifier.as_deref() {
+                None if inside => return false,
+                None => {}
+                Some(specifier) => match relative_landing(other_path, specifier, &module_path) {
+                    Some(true) => return false,
+                    None if inside => return false,
+                    _ => {}
+                },
+            }
+        }
+    }
+    true
+}
+
+/// Where a relative `specifier` written in `importer` lands, by ESM's
+/// relative-URL rule and nothing else: `Some(true)` on `module`,
+/// `Some(false)` elsewhere or for a bare specifier, `None` when it does not
+/// resolve to exactly one existing file.
+fn relative_landing(importer: &Path, specifier: &str, module: &Path) -> Option<bool> {
+    if !(specifier.starts_with("./") || specifier.starts_with("../")) {
+        return Some(false);
+    }
+    let target = importer.parent()?.join(specifier).canonicalize().ok()?;
+    if !target.is_file() {
+        return None;
+    }
+    Some(target == module)
+}
+
 fn module_surface_is_unaccounted(
     index: UnresolvedExportIndex<'_>,
     file: &solid_facts::FileFacts,

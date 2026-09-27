@@ -102,6 +102,12 @@ pub(crate) fn obligation_reach(
         .collect()
 }
 
+/// The functions a reach walk starts from, and whether they are all of them.
+struct ImportBindingUses<'a> {
+    functions: Vec<(&'a str, Span, Span)>,
+    complete: bool,
+}
+
 struct CallGraph<'a, 'b> {
     files_by_path: HashMap<&'a str, &'a FileFacts>,
     lookup: &'a SemanticLookup<'b>,
@@ -121,6 +127,9 @@ impl<'a> CallGraph<'a, '_> {
             u32::try_from(obligation.start_byte).unwrap_or(u32::MAX),
             u32::try_from(obligation.end_byte).unwrap_or(u32::MAX),
         );
+        if let Some(uses) = self.import_binding_uses(file, span) {
+            return Some(self.reach_from(obligation, uses));
+        }
         // The outermost enclosing function, not the innermost: a nested arrow
         // is entered whenever its enclosing declaration is, and only the
         // outermost declaration is a call-graph node other functions name.
@@ -136,10 +145,83 @@ impl<'a> CallGraph<'a, '_> {
                 .iter()
                 .find(|function| function.span == span)
         })?;
-        let mut queue = VecDeque::from([(file.path.as_str(), start.span, start.body)]);
-        let mut visited = HashSet::from([(file.path.as_str(), start.span)]);
+        Some(self.reach_from(
+            obligation,
+            ImportBindingUses {
+                functions: vec![(file.path.as_str(), start.span, start.body)],
+                complete: true,
+            },
+        ))
+    }
+
+    /// Where an obligation filed at a module-level import binding runs: the
+    /// outermost function around each of the binding's uses (ADR 0135).
+    ///
+    /// `None` when `span` is not exactly a value import binding of `file`, so
+    /// the caller keeps its own answer. The uses are the binding's resolved
+    /// lexical references on the module's bytes
+    /// ([`solid_facts::ast::import_binding_references`]), not a name search. A
+    /// use outside every function -- a module-level read, an export specifier
+    /// that republishes the binding -- runs when the module is evaluated or is
+    /// reached through a name this graph does not model, so the answer is
+    /// reported incomplete, never narrowed. So is a module the exact
+    /// reference walk refuses (an `eval`, a parse error).
+    fn import_binding_uses(
+        &self,
+        file: &'a FileFacts,
+        span: Span,
+    ) -> Option<ImportBindingUses<'a>> {
+        let is_binding = file.ast.imports.iter().any(|import| {
+            !import.type_only
+                && import
+                    .bindings
+                    .iter()
+                    .any(|binding| !binding.type_only && binding.local.span == span)
+        });
+        if !is_binding {
+            return None;
+        }
+        let Some(references) = solid_facts::ast::import_binding_references(
+            std::path::Path::new(file.path.as_str()),
+            &file.source,
+            span,
+        ) else {
+            return Some(ImportBindingUses {
+                functions: Vec::new(),
+                complete: false,
+            });
+        };
+        let mut uses = ImportBindingUses {
+            functions: Vec::new(),
+            complete: true,
+        };
+        for reference in references {
+            match outermost_function(file, reference) {
+                Some(function) => {
+                    if !uses
+                        .functions
+                        .iter()
+                        .any(|(_, span, _)| *span == function.span)
+                    {
+                        uses.functions
+                            .push((file.path.as_str(), function.span, function.body));
+                    }
+                }
+                None => uses.complete = false,
+            }
+        }
+        Some(uses)
+    }
+
+    fn reach_from(&self, obligation: &Location, uses: ImportBindingUses<'a>) -> ObligationReach {
+        let mut visited = uses
+            .functions
+            .iter()
+            .map(|(path, span, _)| (*path, *span))
+            .collect::<HashSet<_>>();
+        let mut queue = uses.functions.into_iter().collect::<VecDeque<_>>();
         let mut reaching = Vec::new();
-        let mut complete = true;
+        let mut complete = uses.complete;
         while let Some((path, function, body)) = queue.pop_front() {
             reaching.push(location(path, body));
             if !self.entered_only_through_calls(path, function) {
@@ -158,11 +240,11 @@ impl<'a> CallGraph<'a, '_> {
             }
         }
         reaching.sort_by(crate::location_order);
-        Some(ObligationReach {
+        ObligationReach {
             location: obligation.clone(),
             reaching,
             complete,
-        })
+        }
     }
 
     /// Whether every way of entering this function is one of the call sites
