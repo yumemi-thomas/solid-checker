@@ -2126,6 +2126,27 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// The argument that a call of the export declared as `name` **renders**:
+    /// the call invokes that argument as a component, synchronously, before
+    /// it returns, on the caller's stack.
+    ///
+    /// That is what a compiled JSX tag does, and it is a different question
+    /// from a primitive's callback slots. `name` is not a primitive: nothing
+    /// about the call is reactive, and the vocabulary models no obligation for
+    /// it. What the engine needs is one fact about control flow: a call to a
+    /// project function passed there is an invocation of that function, the
+    /// same edge the tag `<C/>` is, not a value escaping into a callee the
+    /// graph cannot follow. The engine asks it only of a callee whose exact
+    /// declaration sits in one of this dialect's packages, and it uses the
+    /// answer only as a call edge (ADR 0136).
+    ///
+    /// Solid 2.0's `createComponent(Comp, props)` is the case. The default is
+    /// `None`.
+    fn renders_component_argument(&self, name: &str) -> Option<usize> {
+        let _ = name;
+        None
+    }
+
     /// Whether calling `primitive` while an action step
     /// ([`Dialect::callback_runs_as_action_steps`]) is on the stack **throws**
     /// in the development build of this installation.

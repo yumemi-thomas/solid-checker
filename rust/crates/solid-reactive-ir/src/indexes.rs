@@ -285,6 +285,10 @@ struct FunctionCallSite {
 
 type BindingsByReference = HashMap<String, HashMap<(u64, u64), BindingResolution>>;
 
+/// Render sites by rendered function: `(file index, rendered argument span)`
+/// per site ([`SemanticLookup::function_render_call_sites`]).
+type RenderCallSites<'a> = HashMap<(&'a str, Span), Vec<(usize, Span)>>;
+
 /// One argument a project wrapper forwards into a result-access slot
 /// ([`SemanticLookup::result_access_forwarded_arguments`]).
 #[derive(Clone, Copy, Debug)]
@@ -324,6 +328,7 @@ pub(super) struct SemanticLookup<'a> {
     jsx_call_sites: OnceLock<HashMap<(&'a str, Span), CallSiteLoading>>,
     declaration_symbols: OnceLock<DeclarationSymbols<'a>>,
     function_call_sites: OnceLock<HashMap<(&'a str, Span), Vec<FunctionCallSite>>>,
+    render_call_sites: OnceLock<RenderCallSites<'a>>,
     direct_value_aliases: OnceLock<HashSet<SymbolId>>,
     bindings_by_symbol: OnceLock<HashMap<SymbolId, BindingResolution>>,
     bindings_by_reference: OnceLock<BindingsByReference>,
@@ -392,6 +397,18 @@ fn member_at(file: &FileFacts, span: Span) -> Option<&solid_facts::ast::MemberFa
         .map(|index| &file.ast.members[index])
 }
 
+/// Whether `path` lies inside an installation of one of `packages`: its
+/// components contain the package name as consecutive directory names
+/// (`solid-js`, or `@solidjs` then `web`). Exact components, never a
+/// substring, so `my-solid-js-tools/` and `@solidjs/router/` are neither.
+fn declared_in_package(path: &str, packages: &[&str]) -> bool {
+    let components = path.split(['/', '\\']).collect::<Vec<_>>();
+    packages.iter().any(|package| {
+        let name = package.split('/').collect::<Vec<_>>();
+        components.windows(name.len()).any(|window| window == name)
+    })
+}
+
 /// Resolved Solid primitive names for one file's calls and JSX elements,
 /// index-aligned with `file.ast.calls` / `file.ast.jsx_elements`. Computed
 /// once per file per build so per-call classifier scans stop re-resolving
@@ -437,6 +454,7 @@ impl<'a> SemanticLookup<'a> {
             jsx_call_sites: OnceLock::new(),
             declaration_symbols: OnceLock::new(),
             function_call_sites: OnceLock::new(),
+            render_call_sites: OnceLock::new(),
             direct_value_aliases: OnceLock::new(),
             bindings_by_symbol: OnceLock::new(),
             bindings_by_reference: OnceLock::new(),
@@ -1021,14 +1039,7 @@ impl<'a> SemanticLookup<'a> {
     }
 
     pub(super) fn symbol_references(&self, symbol: &str) -> Vec<Location> {
-        self.symbols_by_id
-            .get_or_init(|| {
-                self.facts
-                    .typescript
-                    .symbols()
-                    .map(|candidate| (candidate.id(), candidate))
-                    .collect()
-            })
+        self.symbols_by_id()
             .get(symbol)
             .map(|candidate| candidate.references().cloned().collect())
             .unwrap_or_default()
@@ -2307,6 +2318,108 @@ impl<'a> SemanticLookup<'a> {
             .collect()
     }
 
+    /// Call sites that **render** the project function at `(path, function)`
+    /// through a dialect renderer: `createComponent(Panel, props)` invokes
+    /// `Panel` exactly as the tag `<Panel/>` does (ADR 0136). Each site's span
+    /// is the rendered argument, the function's own reference.
+    ///
+    /// Kept apart from [`Self::function_call_sites`] on purpose. That map
+    /// feeds component identity (a function called directly is not a
+    /// component) and execution-role inheritance (the role at the callee
+    /// span), and neither question is the same for an argument of a Solid
+    /// call; the call graph in `attribution` is the one consumer, and it asks
+    /// only who can enter a function.
+    ///
+    /// Exact or nothing, at both ends:
+    ///
+    /// - the callee resolves to a symbol one of whose declarations sits in one
+    ///   of the dialect's primitive-defining packages under a name the dialect
+    ///   says renders an argument
+    ///   ([`solid_dialect::Dialect::renders_component_argument`]); a project
+    ///   function that happens to be called `createComponent` is not one;
+    /// - the argument at that position is a bare identifier, no spread up to
+    ///   it, whose symbol is one project function. A parameter, a computed
+    ///   value, `options.Wrap || Fallback`, or an unresolved import resolves
+    ///   to no function and adds no edge, so the reference stays the value
+    ///   escape it was.
+    pub(super) fn function_render_call_sites(
+        &self,
+        path: &str,
+        function: Span,
+    ) -> Vec<(&'a FileFacts, Span)> {
+        self.render_call_sites()
+            .get(&(path, function))
+            .into_iter()
+            .flatten()
+            .map(|(file, argument)| (&self.facts.files[*file], *argument))
+            .collect()
+    }
+
+    fn render_call_sites(&self) -> &RenderCallSites<'a> {
+        self.render_call_sites.get_or_init(|| {
+            let mut map = RenderCallSites::new();
+            let facts: &'a ProjectFacts = self.facts;
+            for (file_index, file) in facts.files.iter().enumerate() {
+                for call in &file.ast.calls {
+                    let Some(index) = self
+                        .callee_symbol(file, call.callee)
+                        .and_then(|symbol| self.rendered_argument_of(symbol))
+                    else {
+                        continue;
+                    };
+                    if call
+                        .arguments
+                        .iter()
+                        .take(index.saturating_add(1))
+                        .any(|argument| argument.spread)
+                    {
+                        continue;
+                    }
+                    let Some(argument) = call.arguments.get(index) else {
+                        continue;
+                    };
+                    if argument.value != solid_facts::ast::ArgumentValueKind::Identifier {
+                        continue;
+                    }
+                    let Some((target_file, target)) =
+                        self.function_called_at(file.path.as_str(), argument.span)
+                    else {
+                        continue;
+                    };
+                    map.entry((target_file.path.as_str(), target.span))
+                        .or_default()
+                        .push((file_index, argument.span));
+                }
+            }
+            map
+        })
+    }
+
+    /// The argument a call of `symbol` renders, when `symbol` is declared by
+    /// one of the dialect's own packages under a rendering name.
+    fn rendered_argument_of(&self, symbol: &str) -> Option<usize> {
+        let packages = self.dialect.primitive_defining_packages();
+        self.symbols_by_id()
+            .get(symbol)?
+            .declarations()
+            .iter()
+            .filter(|declaration| declared_in_package(declaration.location.path.as_ref(), packages))
+            .find_map(|declaration| {
+                self.dialect
+                    .renders_component_argument(declaration.name.as_ref())
+            })
+    }
+
+    fn symbols_by_id(&self) -> &HashMap<&'a str, solid_facts::TypeScriptSymbol<'a>> {
+        self.symbols_by_id.get_or_init(|| {
+            self.facts
+                .typescript
+                .symbols()
+                .map(|candidate| (candidate.id(), candidate))
+                .collect()
+        })
+    }
+
     fn smallest_contained(
         &self,
         path: &str,
@@ -3164,5 +3277,25 @@ mod tests {
             None,
             "`handlers[i]()` must never be read as a property named `i`"
         );
+    }
+
+    #[test]
+    fn a_renderer_declaration_must_sit_in_a_dialect_package() {
+        let packages = ["solid-js", "@solidjs/signals", "@solidjs/web"];
+        for inside in [
+            "/p/node_modules/solid-js/types/client/component.d.ts",
+            "/p/node_modules/@solidjs/web/types/client.d.ts",
+            r"C:\p\node_modules\@solidjs\web\types\client.d.ts",
+        ] {
+            assert!(declared_in_package(inside, &packages), "{inside}");
+        }
+        for outside in [
+            "/p/my-solid-js-tools/component.d.ts",
+            "/p/node_modules/@solidjs/router/dist/index.d.ts",
+            "/p/node_modules/web/solid.d.ts",
+            "/p/node_modules/not-@solidjs/web/index.d.ts",
+        ] {
+            assert!(!declared_in_package(outside, &packages), "{outside}");
+        }
     }
 }

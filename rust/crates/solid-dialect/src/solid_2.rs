@@ -4342,8 +4342,10 @@ impl Dialect for Solid2 {
     /// `dynamic`'s option-selected call forms, and `omit`'s predicate.
     /// Revision 3 (2026-09-26) answers the `omit` predicate per release
     /// (rc.3 has none) and makes code inside an rc.9 predicate uncertifiable.
+    /// Revision 4 (2026-09-27) states that `createComponent` renders its first
+    /// argument (`Solid2::renders_component_argument`, ADR 0136).
     fn runtime_model_identity(&self) -> &'static str {
-        "solid-v2/model-3"
+        "solid-v2/model-4"
     }
 
     /// [`AUDITED_ARCHIVES`] and [`NEGATIVE_ROWS`]: archive-scoped rows read out
@@ -5488,6 +5490,36 @@ impl Dialect for Solid2 {
     /// one release-keyed fact.
     fn callback_runs_as_action_steps(&self, primitive: Primitive, argument: usize) -> bool {
         primitive == Primitive::Action && argument == 0
+    }
+
+    /// `createComponent(Comp, props)`, argument 0, on every release the
+    /// reviews read. The export is `solid-js`'s; `@solidjs/web` re-exports it
+    /// unchanged in every build (`export { …, createComponent, … } from
+    /// 'solid-js'`, rc.3 and rc.9 `dist/web.js:2`, `dist/server.js:2`, and the
+    /// dev and observe builds). Each `solid-js` build calls `Comp` exactly once,
+    /// synchronously, before it returns, and retains nothing it later invokes:
+    ///
+    /// | build | rc.0-rc.9 | owner `Comp` runs under |
+    /// | --- | --- | --- |
+    /// | client prod (`solid.js`; rc.9 `:1122-1124`, rc.3 `:1095-1097`) | `untrack(() => Comp(props \|\| {}))` | the caller's |
+    /// | client dev (`dev.js`/`solid.dev.js`; rc.3 `devComponent` `:35-53`, rc.9 `observedComponent` `:35-57`) | `createRoot(() => untrack(() => Comp(props)), { transparent: true })` | a transparent child root of the caller's |
+    /// | client observe (rc.8, rc.9 `solid.observe.js:36-46`) | as dev, without the dev checks | as dev |
+    /// | server prod (`server.js`; rc.9 `:1644-1646`, rc.3 `:1466-1468`), and rc.7/rc.8's server dev and observe | `Comp(props \|\| {})` | the caller's |
+    /// | server dev/observe (rc.9 `server.dev.js:1748-1755`, `server.observe.js:1721-1725`) | `runWithOwner(createComponentOwner(…), () => Comp(props \|\| {}))`, or `Comp(props \|\| {})` with no owner | a child of the caller's |
+    ///
+    /// `createRoot` runs its function in place (`runWithOwner(owner, …)` on
+    /// the caller's stack), so no build defers the call. Every one of the ten
+    /// releases' builds was read for the three shapes above.
+    /// The dev builds also store `Comp` on the owner (`owner._component = { fn:
+    /// Comp, … }`) and tag it with `$DEVCOMP`; no build of `solid-js`,
+    /// `@solidjs/signals` or `@solidjs/web` at rc.3 or rc.9 reads
+    /// `_component` back, so neither is a second entry. Probed on the
+    /// published triples (`createComponent` inside a memo, then a write to a
+    /// signal `Comp` read): every one of rc.3's four builds and rc.9's six ran
+    /// `Comp` once, between the statements before and after the call, and
+    /// never again.
+    fn renders_component_argument(&self, name: &str) -> Option<usize> {
+        (name == "createComponent").then_some(0)
     }
 
     /// `flush` inside an action step: the `FLUSH_IN_ACTION` dev throw, on the

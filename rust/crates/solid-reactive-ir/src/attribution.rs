@@ -227,7 +227,14 @@ impl<'a> CallGraph<'a, '_> {
             if !self.entered_only_through_calls(path, function) {
                 complete = false;
             }
-            for (caller, callee) in self.lookup.function_call_sites(path, function) {
+            // A render through a dialect renderer (`createComponent(Panel,
+            // props)`) enters the function as a JSX tag does (ADR 0136).
+            let sites = self
+                .lookup
+                .function_call_sites(path, function)
+                .into_iter()
+                .chain(self.lookup.function_render_call_sites(path, function));
+            for (caller, callee) in sites {
                 let Some(owner) = outermost_function(caller, callee) else {
                     // A call at module scope runs when the module is imported,
                     // so every consumer of the entrypoint reaches it.
@@ -294,10 +301,14 @@ impl<'a> CallGraph<'a, '_> {
         // function is accounted for, and one render can write the component's
         // name twice (`<Panel></Panel>`). The call graph still holds one edge
         // per invocation.
+        // The rendered argument of `createComponent(Panel, props)` is the
+        // render's own reference, accounted for by its edge exactly as a tag
+        // name is (ADR 0136).
         let known_call_sites = self
             .lookup
             .function_call_site_references(path, function)
             .into_iter()
+            .chain(self.lookup.function_render_call_sites(path, function))
             .map(|(caller, callee)| (caller.path.to_string(), callee.start, callee.end))
             .collect::<HashSet<_>>();
         let mut aliased = self

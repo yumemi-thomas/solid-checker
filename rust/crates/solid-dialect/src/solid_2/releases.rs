@@ -1089,6 +1089,26 @@ mod tests {
         }
     }
 
+    /// ADR 0136: `createComponent` renders its first argument on every
+    /// release the reviews read (rc.0-rc.9 all call `Comp` in place), so the
+    /// answer is the same in every vocabulary, and no other name renders.
+    #[test]
+    fn create_component_renders_its_first_argument_in_every_vocabulary() {
+        for vocabulary in std::iter::once(&Solid2::CONSERVATIVE).chain(VARIANTS.iter()) {
+            assert_eq!(
+                vocabulary.renders_component_argument("createComponent"),
+                Some(0)
+            );
+            for other in ["createMemo", "Dynamic", "lazy", "untrack", "createRoot"] {
+                assert_eq!(
+                    vocabulary.renders_component_argument(other),
+                    None,
+                    "{other}"
+                );
+            }
+        }
+    }
+
     /// N5: only rc.0's optimistic-store setter meets no owned-scope guard, and
     /// the answer is signals' alone; an unread or unresolved signals keeps the
     /// audited guard. rc.0's `createStore` answer (N3) is unchanged.
