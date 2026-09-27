@@ -8822,9 +8822,10 @@ fn require_export_recursive_subject_with_factory(
     }
 }
 
-/// A local object initializer can establish the root's non-callability without
-/// inventing a declaration-side type. The export resolver supplies the exact
-/// authenticated owner and binding span; this grants no member or effect claim.
+/// A local object or primitive-literal initializer can establish the root's
+/// non-callability without inventing a declaration-side type. The export
+/// resolver supplies the exact authenticated owner and binding span; this
+/// grants no member or effect claim.
 fn require_object_export_root(
     plan: &CertificationPlan,
     proof: &ScheduledProofDemand,
@@ -8872,14 +8873,24 @@ fn require_object_export_root(
     // Export lists carry a reference span; direct declarations carry the name
     // span itself. Only an exact binder edge may connect the former to a local.
     let declaration = facts.reference_declaration(span).unwrap_or(span);
-    let Some(fact) = solid_facts::ast::unwritten_object_binding(source, declaration) else {
+    // ADR 0130: a primitive literal initializer is the same premise with a
+    // different initializer. It is what reaches a root whose declaration is
+    // `never`, `any` or `unknown`, which the producer rightly refuses to call
+    // non-callable, while the runtime binding plainly holds a primitive.
+    let initializer = if let Some(fact) =
+        solid_facts::ast::unwritten_object_binding(source, declaration)
+    {
+        fact.matches(source, declaration).then_some("object")
+    } else if let Some(fact) = solid_facts::ast::unwritten_primitive_binding(source, declaration) {
+        fact.matches(source, declaration).then_some("primitive")
+    } else {
+        None
+    };
+    let Some(initializer) = initializer else {
         return false;
     };
-    if !fact.matches(source, declaration) {
-        return false;
-    }
     sites.push(format!(
-        "recursive-export-object-binding:v1:{owner}:{runtime_path}:{}:{}:{}:{}",
+        "recursive-export-{initializer}-binding:v1:{owner}:{runtime_path}:{}:{}:{}:{}",
         span.start, span.end, declaration.start, declaration.end
     ));
     true

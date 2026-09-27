@@ -7968,16 +7968,36 @@ mod tests {
             return;
         };
         let manifest = br#"{"name":"fixture-package","version":"1.2.3","type":"module","exports":{".":{"types":"./index.d.ts","import":"./index.js"}}}"#;
-        let declarations = b"export declare const value: unknown;\n";
-        for (runtime, accepted) in [
-            ("export var value = {};", true),
-            ("var value = {}; export { value };", true),
-            ("export var value = {}; value = () => {};", false),
+        let unknown: &[u8] = b"export declare const value: unknown;\n";
+        // ADR 0130: `@tanstack/router-core@1.171.22`'s browser `./isServer`
+        // declares `loadServerRoute: never` over `const loadServerRoute =
+        // void 0`. The producer refuses `never` as a callability answer, so
+        // the root is proved from the runtime bytes or not at all.
+        let never: &[u8] = b"export declare const value: never;\n";
+        for (declarations, runtime, accepted) in [
+            (unknown, "export var value = {};", true),
+            (unknown, "var value = {}; export { value };", true),
+            (unknown, "export var value = {}; value = () => {};", false),
             (
+                unknown,
                 "export var value = {}; function change() { value = () => {}; }",
                 false,
             ),
-            ("export var value = () => {};", false),
+            (unknown, "export var value = () => {};", false),
+            (never, "const value = void 0;\nexport { value };\n", true),
+            (never, "export const value = false;", true),
+            (unknown, "export const value = \"on\";", true),
+            (
+                never,
+                "var value = void 0; value = () => {}; export { value };",
+                false,
+            ),
+            (never, "const value = undefined; export { value };", false),
+            (
+                never,
+                "const value = void globalThis.f(); export { value };",
+                false,
+            ),
         ] {
             let runtime = runtime.as_bytes();
             let archive = published_archive_for(
@@ -8015,14 +8035,17 @@ mod tests {
             let issuer =
                 ConfiguredReceiptIssuer::persistent_local("object-export-root", [87; 32]).unwrap();
             let result = plan.certify_value_only(&proposal, &pin, &issuer, 1, None);
+            let label = std::str::from_utf8(runtime).unwrap();
             if !accepted {
                 assert!(
                     result.is_err(),
-                    "unproved object root must not receive a receipt"
+                    "unproved root must not receive a receipt: {label}"
                 );
                 continue;
             }
-            let finalized = result.expect("authenticated unwritten object root closes the claim");
+            let finalized = result.unwrap_or_else(|error| {
+                panic!("authenticated unwritten root closes the claim: {label}: {error}")
+            });
             let load = |import: &ResolvedImport| {
                 crate::contract_interface::load_authenticated_policy2_contract(
                     finalized.canonical_main(),

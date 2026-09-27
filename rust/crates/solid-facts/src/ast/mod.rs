@@ -44,7 +44,10 @@ pub use inert_javascript::{
     InertJavaScriptModule, InertJavaScriptRefusal, inert_javascript_module,
     inert_javascript_module_with_export_all,
 };
-pub use object_binding::{UnwrittenObjectBinding, unwritten_object_binding};
+pub use object_binding::{
+    UnwrittenObjectBinding, UnwrittenPrimitiveBinding, unwritten_object_binding,
+    unwritten_primitive_binding,
+};
 
 pub use emission::{
     EmittingStatement, ModuleEmission, ModuleEmissionError, ModuleFlavor, has_export_assignment,
