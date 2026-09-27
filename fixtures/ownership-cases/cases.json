@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "cases": [
   {
-   "id": "missing-effect-function/positive/001",
+   "id": "missing-effect-function/typescript-owned/001",
    "dialect": "solid-v2",
    "source": {
     "extension": ".tsx",
@@ -17,25 +17,31 @@
      {
       "rule": "missing-effect-function",
       "code": "SC7001",
-      "kind": "violation",
-      "severity": "error",
       "span": {
        "textRange": [
         112,
         124
        ]
       },
-      "fix": {
-       "behavior": "none"
-      },
       "typescript": {
-       "ownership": "checker-only",
-       "diagnostics": []
+       "ownership": "typescript-owned",
+       "diagnostics": [
+        {
+         "code": "TS2554",
+         "span": {
+          "textRange": [
+           112,
+           124
+          ]
+         }
+        }
+       ]
       }
      }
     ],
     "absent": []
-   }
+   },
+   "note": "Until @solidjs/signals rc.5 the deprecated one-argument `createEffect(compute): never` overload made this call type-check, and SC7001 reported the absent apply function as checker-only. rc.6 removed the overload, so on the audited rc.9 the call is TS2554 (\"Expected 2-3 arguments, but got 1.\") at exactly these bytes and the checker is silent: TypeScript owns it. The non-ASCII first line still pins that spans are UTF-8 byte offsets."
   },
   {
    "id": "missing-owner/positive/001",
@@ -1272,7 +1278,7 @@
         {
          "code": "TS2345",
          "span": {
-          "marker": "() => count()"
+          "marker": "\"value\""
          }
         }
        ]
@@ -1280,7 +1286,8 @@
      }
     ],
     "absent": []
-   }
+   },
+   "note": "TypeScript still rejects this call, and the removed SC7003 arm stays silent. The diagnostic moved with the audited release: on rc.3 (`Store<T> = Readonly<T>`) the two-argument overload rejected the arrow target (TS2345 at `() => count()`); on rc.9 (`Store<T> = T`) it binds the arrow as the store and rejects the key instead (TS2345: `'\"value\"'` is not assignable to `never`)."
   },
   {
    "id": "affects-target-unresolved/typescript-owned/001",
@@ -1474,7 +1481,7 @@
    "note": "A function passed to `createRoot` by name is its root body, exactly as an inline arrow is: it runs during the call with the new root as the ambient owner, and `setSignal` throws there on every rc.0-rc.9 dev build (probed). Resolved by the argument's symbol to the same-file declaration."
   },
   {
-   "id": "reactive-write-in-owned-scope/negative/001",
+   "id": "reactive-write-in-owned-scope/positive/004",
    "dialect": "solid-v2",
    "source": {
     "extension": ".tsx",
@@ -1485,14 +1492,30 @@
    "presets": [],
    "enableRules": [],
    "expect": {
-    "findings": [],
-    "absent": [
+    "findings": [
      {
-      "rule": "reactive-write-in-owned-scope"
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "textRange": [
+        123,
+        170
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
      }
-    ]
+    ],
+    "absent": []
    },
-   "note": "On the audited rc.3 triple a store setter directly in a component body is legal: dev `createComponent` runs the body under `createRoot(..., { transparent: true })`, and rc.1-rc.8's `devGuardStoreSetterWrite` exempts a root (`!context._root`, rc.3 `dist/dev.js:4111`). rc.9 dropped the exemption; fixtures/reactive-ir/write-scope-roots-rc9 pins that side. A signal setter at the same spot is still reported."
+   "note": "On the audited rc.9 triple a store setter directly in a component body throws: dev `createComponent` runs the body under `createRoot(..., { transparent: true })`, and rc.9's `devGuardStoreSetterWrite` no longer exempts a root (rc.1-rc.8 did, `!context._root`, rc.3 `dist/dev.js:4111`), while `setState`'s signature accepts the call. fixtures/reactive-ir/write-scope-roots-rc9 pins the same arm; this case was the rc.3 negative until the oracle moved to rc.9."
   },
   {
    "id": "action-called-in-owned-scope/positive/002",

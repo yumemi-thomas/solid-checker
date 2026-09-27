@@ -1,20 +1,28 @@
 {
   "schemaVersion": 1,
-  "note": "Exact published package versions the tsc oracle compiles against. The Solid runtime pin matches the repository audit: `v2` matches pkg/contracts/bundled/runtime-lock.json. A newer release must be reviewed, never silently substituted -- the oracle verifies every installed version against `expect` and refuses to run on a mismatch.",
+  "note": "Exact published package versions the tsc oracle compiles against: the audited release, the triple the checker's AUDITED_INSTALLATION (rust/crates/solid-dialect/src/solid_2/releases.rs) names, so the checker half of every case runs with no SC9014 notice and the gate refuses one if they drift apart. `integrity` pins each tarball to the SRI digest recorded under `audit`; provisioning refuses a lockfile that installed anything else. A newer release must be reviewed, never silently substituted -- the oracle verifies every installed version against `expect`, and every locked integrity against `integrity`, and refuses to run on a mismatch. The archives the negative rows quote are a separate install (scripts/audited-archives.mjs), so this pin can move without moving them.",
   "dialects": {
     "v2": {
       "install": [
-        "solid-js@2.0.0-rc.3",
-        "@solidjs/signals@2.0.0-rc.3",
-        "@solidjs/web@2.0.0-rc.3"
+        "solid-js@2.0.0-rc.9",
+        "@solidjs/signals@2.0.0-rc.9",
+        "@solidjs/web@2.0.0-rc.9"
       ],
       "expect": {
-        "solid-js": "2.0.0-rc.3",
-        "@solidjs/signals": "2.0.0-rc.3",
-        "@solidjs/web": "2.0.0-rc.3"
+        "solid-js": "2.0.0-rc.9",
+        "@solidjs/signals": "2.0.0-rc.9",
+        "@solidjs/web": "2.0.0-rc.9"
+      },
+      "integrity": {
+        "solid-js": "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g==",
+        "@solidjs/signals": "sha512-o3pqiTgpH5NR2DstiKrt9s/6+0YOFtv+MfvLONwLsS247I+EWMMyTu9BkRcgd35UR5Pa1DM16lI1/5uaIMY6Gw==",
+        "@solidjs/web": "sha512-pfiWoLDnLc+QYWc7UyLqO+5QrPEf3oTiNmmRC+C+uM6AZ5VH0bZMNPtLM5rJ29LKPiTwQitKV843IQDf/oeyhQ=="
       },
       "jsxImportSource": "@solidjs/web",
-      "audit": "pkg/contracts/bundled/runtime-lock.json"
+      "audit": [
+        "benchmarks/package-contract-v2/phase0/rc9",
+        "docs/package-contract-v2/audits/2026-09-26-solid-2-rc9-vocabulary-review.md"
+      ]
     }
   }
 }

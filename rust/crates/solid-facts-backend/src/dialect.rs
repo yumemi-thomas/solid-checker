@@ -1177,8 +1177,10 @@ mod tests {
             .max()
             .expect("ALL is non-empty");
         assert_eq!(default_dialect().vocabulary.version(), newest);
+        // Registered: the language itself or one of its release variants,
+        // resolvable by id to this very value.
         assert!(
-            ALL.iter().any(|dialect| dialect.id == default_dialect().id),
+            by_id(default_dialect().id).is_some_and(|found| std::ptr::eq(found, default_dialect())),
             "the default must be a registered dialect, not a value beside the registry"
         );
     }
@@ -1662,7 +1664,7 @@ mod tests {
         const RC9: Option<&str> = Some("2.0.0-rc.9");
         // (solid-js, signals, web, selected dialect id, notice due)
         let rows = [
-            (RC3, RC3, RC3, "solid-v2", false),
+            (RC3, RC3, RC3, "solid-v2", true),
             // rc.0's optimistic-store setter meets no owned-scope guard (N5),
             // its one answer that differs from rc.3's: a reviewed variant, so
             // no notice.
@@ -1671,23 +1673,23 @@ mod tests {
                 Some("2.0.0-rc.0"),
                 None,
                 "solid-v2@optimistic-store-setter-unguarded",
-                false,
+                true,
             ),
             (
                 Some("2.0.0-rc.1"),
                 Some("2.0.0-rc.1"),
                 Some("2.0.0-rc.1"),
                 "solid-v2",
-                false,
+                true,
             ),
             (
                 Some("2.0.0-rc.2"),
                 Some("2.0.0-rc.2"),
                 Some("2.0.0-rc.2"),
                 "solid-v2",
-                false,
+                true,
             ),
-            (RC3, RC3, None, "solid-v2", false),
+            (RC3, RC3, None, "solid-v2", true),
             (
                 RC9,
                 RC9,
@@ -1795,7 +1797,10 @@ mod tests {
             Some("2.0.0-rc.3"),
             Some("2.0.0-rc.3"),
         );
-        assert_eq!(release_notice(&SOLID_V2, &project), None);
+        // The rc.3 triple is reviewed, and older than the audited release:
+        // that is its one gap.
+        let notice = release_notice(&SOLID_V2, &project).expect("rc.3 is older than audited");
+        assert_eq!(notice.gaps.len(), 1, "{notice:?}");
         let nested = root.join("node_modules/solid-js/node_modules/@solidjs/signals");
         std::fs::create_dir_all(&nested).unwrap();
         std::fs::write(
@@ -1989,7 +1994,7 @@ mod tests {
         // The advice pins all three, and names what it found.
         assert!(
             finding.hint.contains(
-                "pin solid-js, @solidjs/signals and @solidjs/web to 2.0.0-rc.3, the audited release of each"
+                "pin solid-js, @solidjs/signals and @solidjs/web to 2.0.0-rc.9, the audited release of each"
             ) && finding
                 .hint
                 .contains(&format!("this project resolves {found}")),
@@ -2003,12 +2008,11 @@ mod tests {
             finding.hint
         );
         assert!(
+            // signals rc.9 carries no gap of its own any more; the mixed
+            // triple's is the rc.1-rc.8 review's.
             finding
                 .hint
-                .contains("2026-09-26-solid-2-rc9-vocabulary-review.md")
-                && finding
-                    .hint
-                    .contains("2026-09-26-solid-2-rc1-rc8-release-review.md"),
+                .contains("The review is docs/package-contract-v2/audits/2026-09-26-solid-2-rc1-rc8-release-review.md."),
             "the notice points at the reviews: {}",
             finding.hint
         );

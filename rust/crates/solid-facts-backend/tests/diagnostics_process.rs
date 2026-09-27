@@ -11,15 +11,16 @@ fn write_scope_diagnostics_have_semantic_locations() {
     // 12 writes / 2 actions: the untrack-wrapped writes in the component body
     // and in a memo count (the rc.0 guard keys on the owner, not tracking),
     // while writes and the action inside createTrackedEffect no longer do
-    // (children-forbidden leaf scopes are legal write regions), nor do the two
-    // store setters directly in the component body (the dev component body is
-    // a root, and the rc.3 store setter guard exempts roots).
+    // (children-forbidden leaf scopes are legal write regions). The two store
+    // setters directly in the component body count too: the fixture resolves
+    // no solid-js, so it is analyzed as the audited rc.9, whose store setter
+    // guard rejects a root owner (ADR 0127).
     assert_eq!(
         (
             findings_for_rule(&findings, "reactive-write-in-owned-scope").len(),
             findings_for_rule(&findings, "action-called-in-owned-scope").len(),
         ),
-        (12, 2)
+        (14, 2)
     );
     assert!(
         findings
@@ -539,11 +540,10 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // tracked scopes throw and the same observer-free ones -- plus the
         // action step rc.9 documents -- stay silent.
         assert_rule_findings(&findings, "until-in-tracked-scope", 4);
-        // Beside them, the one project-scoped rc.9 notice (SC9014), which is
-        // located at the solid-js manifest rather than at source.
+        // rc.9 is the audited release (ADR 0127): no SC9014 notice beside them.
         assert_eq!(
             findings_for_rule(&findings, "unaudited-solid-release").len(),
-            1,
+            0,
             "{findings:#?}"
         );
         assert!(
@@ -572,18 +572,24 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // rc.3 has no static form: the same calls are the memo's async
         // compute, which settles the Promise.
         if let Some(rc3) = diagnostic_fixture("release-triple-static-dynamic-async-rc3") {
-            assert!(rc3.is_empty(), "{rc3:#?}");
+            // Only the older-release notice (ADR 0127).
+            assert!(
+                rc3.iter()
+                    .all(|finding| finding["rule"] == "unaudited-solid-release"),
+                "{rc3:#?}"
+            );
+            assert_eq!(rc3.len(), 1, "{rc3:#?}");
         }
     }
     // SC2006 is keyed on the resolved @solidjs/signals: the FLUSH_IN_ACTION
     // guard ships from rc.8, so the same positives report on rc.8 and rc.9
-    // and nothing reports on the audited rc.3, where flush drains inside a
+    // and nothing reports on rc.3, where flush drains inside a
     // step as anywhere else.
     let line = |finding: &serde_json::Value| finding["primaryLocation"]["line"].as_u64();
-    for (fixture, lines) in [
-        ("rc9-flush-in-action", &[14_u64, 20, 27, 32, 39, 44][..]),
-        ("release-triple-flush-rc8", &[9, 15][..]),
-        ("release-triple-flush-rc3", &[][..]),
+    for (fixture, lines, notice) in [
+        ("rc9-flush-in-action", &[14_u64, 20, 27, 32, 39, 44][..], 0),
+        ("release-triple-flush-rc8", &[9, 15][..], 1),
+        ("release-triple-flush-rc3", &[][..], 1),
     ] {
         let Some(findings) = diagnostic_fixture(fixture) else {
             continue;
@@ -603,11 +609,16 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
                 .all(|finding| finding["id"] == "SC2006" && finding["kind"] == "violation"),
             "{fixture}: {findings:#?}"
         );
-        // Beside them only the release notice, which the audited rc.3 triple
-        // does not get.
+        // Beside them only the release notice, which the audited rc.9 triple
+        // does not get and the older ones do (ADR 0127).
+        assert_eq!(
+            findings_for_rule(&findings, "unaudited-solid-release").len(),
+            notice,
+            "{fixture}: {findings:#?}"
+        );
         assert_eq!(
             findings.len(),
-            lines.len() + usize::from(!lines.is_empty()),
+            lines.len() + notice,
             "{fixture}: {findings:#?}"
         );
     }
@@ -686,11 +697,11 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
             [Some(50), Some(57), Some(62), Some(71)],
             "{findings:#?}"
         );
-        // Seven findings, plus the one project-scoped rc.9 notice (SC9014).
-        assert_eq!(findings.len(), 8, "{findings:#?}");
+        // Seven findings, and no SC9014: rc.9 is the audited release (ADR 0127).
+        assert_eq!(findings.len(), 7, "{findings:#?}");
         assert_eq!(
             findings_for_rule(&findings, "unaudited-solid-release").len(),
-            1,
+            0,
             "{findings:#?}"
         );
     }
@@ -742,8 +753,8 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
             "{findings:#?}"
         );
         // The exported wrapper's own open callback (its callers may be outside
-        // the project), the control, the eight predicates, and the one
-        // project-scoped rc.9 notice (SC9014).
+        // the project), the control and the eight predicates; rc.9 is the
+        // audited release, so no SC9014 (ADR 0127).
         assert_eq!(
             findings_for_rule(&findings, "package-contract-incomplete")
                 .iter()
@@ -752,10 +763,10 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
             [Some(100)],
             "{findings:#?}"
         );
-        assert_eq!(findings.len(), 11, "{findings:#?}");
+        assert_eq!(findings.len(), 10, "{findings:#?}");
         assert_eq!(
             findings_for_rule(&findings, "unaudited-solid-release").len(),
-            1,
+            0,
             "{findings:#?}"
         );
     }

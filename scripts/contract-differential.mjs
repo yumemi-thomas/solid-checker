@@ -32,12 +32,18 @@ import { resolvePackageArtifacts } from "../packages/cli/scripts/artifact-resolu
 const root = resolve(import.meta.dirname, "..");
 const checker = process.env.SOLID_CHECKER_NATIVE_BIN ?? join(root, "rust/target/debug/solid-checker-rust");
 const typeFacts = process.env.SOLID_TYPEFACTS_BIN ?? join(root, "bin/solid-typefacts");
+// The audited release, not a quoted archive: both projects must be analyzed
+// under the audited vocabulary with no SC9014 notice beside the findings, and
+// the tsc-oracle install is the one tree pinned (version and integrity) to
+// exactly the triple the checker audits (fixtures/tsc-oracle/packages.json).
+// Its `@solidjs/signals` resolves from the link's real path, so the whole
+// triple comes with it.
 const auditedSolid = join(root, "rust/target/tsc-oracle/v2/node_modules/solid-js");
 const cli = join(root, "packages/cli/bin/solid-checker.mjs");
 
 if (!existsSync(checker) || !existsSync(typeFacts) || !existsSync(auditedSolid)) {
   throw new Error(
-    `contract differential needs checker, TypeFacts, and the provisioned v2 solid-js package (${checker}, ${typeFacts}, ${auditedSolid})`
+    `contract differential needs checker, TypeFacts, and the provisioned v2 solid-js package (make tsc-oracle-provision; ${checker}, ${typeFacts}, ${auditedSolid})`
   );
 }
 

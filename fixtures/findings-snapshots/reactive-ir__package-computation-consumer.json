@@ -10,6 +10,16 @@
       "start": 337,
       "end": 350,
       "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-computation-consumer/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
     }
   ]
 }

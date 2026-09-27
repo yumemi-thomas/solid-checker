@@ -68,6 +68,7 @@ const ledger = JSON.parse(readFileSync(LEDGER, "utf8"));
 
 const EXPECTATIONS = new Set(Object.keys(ledger.expectations));
 const CASE_COMPILER_OPTIONS = new Set(["verbatimModuleSyntax"]);
+const UNAUDITED_RELEASE = "unaudited-solid-release";
 
 /** Fail loudly rather than skip -- the same contract the oracle's provisioning check keeps. */
 const locate = (variable, ...candidates) => {
@@ -189,6 +190,19 @@ const evaluate = (testCase, index, { perPass, checkerPasses }) => {
   };
   const done = () => ({ result, failures });
 
+  // The oracle must install the release the checker audits. If the two drift
+  // apart, every case is analyzed beside an SC9014 notice whose subject is the
+  // whole project -- and the case no longer asks whether TypeScript reports
+  // what the *audited* vocabulary reports. Named here, once per case, rather
+  // than surfacing as a subject overlap with every diagnostic in the ledger.
+  if (checkerPasses.some(([, observed]) => observed.findings.some((f) => f.rule === UNAUDITED_RELEASE))) {
+    failures.push(
+      `${label}: the checker reported ${UNAUDITED_RELEASE} (SC9014) on the oracle install, so` +
+        ` fixtures/tsc-oracle/packages.json does not install the release the checker audits` +
+        ` (AUDITED_INSTALLATION in rust/crates/solid-dialect/src/solid_2/releases.rs). Move them together.`,
+    );
+  }
+
   if (testCase.checker !== "reports" && testCase.checker !== "silent") {
     failures.push(
       `${label}: every case must declare 'checker' as "reports" or "silent" --` +
@@ -234,6 +248,8 @@ const evaluate = (testCase, index, { perPass, checkerPasses }) => {
   for (const [passName, diagnostics] of perPass) {
     const checker = checkerPasses.find(([name]) => name === passName)[1];
     for (const finding of checker.findings) {
+      // Its subject is the whole project; the release check above names it.
+      if (finding.rule === UNAUDITED_RELEASE) continue;
       const overlapping = diagnostics.filter((diagnostic) => subjectsOverlap(finding, diagnostic));
       if (!overlapping.length) continue;
       const targetIsDistinct = finding.rule === expectedRule && testCase.expect === "distinct-claim";
@@ -383,48 +399,10 @@ const EXEMPT = {
   // The same subject, one step further: which *release* of a carried major is
   // installed. Also decided by dialect detection and appended beside the
   // analysis rather than produced by the rules engine, and the oracle installs
-  // the audited rc.3, on which the notice cannot appear. Its pins are in
+  // the audited release (fixtures/tsc-oracle/packages.json), on which the
+  // notice cannot appear -- every case asserts that it does not. Its pins are in
   // `dialects_process` and `dialect.rs`.
   "unaudited-solid-release": "the subject is which solid-js release is installed, not any expression in the project; no snippet can express it and tsc has nothing to say about it",
-  // Not an unexpressible subject -- an unprovisioned one. `until` first ships
-  // in solid-js 2.0.0-rc.9, and this oracle installs the audited rc.3
-  // (fixtures/tsc-oracle/packages.json), whose typings do not export it:
-  // every snippet is TS2305 at the import and the checker resolves no
-  // primitive, so no keystone case can exist here. The absolute rule was
-  // checked by hand instead: `fixtures/reactive-ir/rc9-until-scope/App.tsx`
-  // is `tsc --noEmit`-clean against the published rc.9 typings (strict,
-  // bundler resolution, `jsxImportSource: "@solidjs/web"`) while this rule
-  // reports its four tracked-scope calls. Replace this entry with a keystone
-  // case when the oracle provisions an rc.9 install.
-  "until-in-tracked-scope": "until() exists only from solid-js 2.0.0-rc.9; the oracle provisions the audited rc.3, where importing it is TS2305. The keystone is fixtures/reactive-ir/rc9-until-scope, tsc-clean against the published rc.9 typings",
-  // Unprovisioned for the same reason: `dynamic`'s `static` option first
-  // ships in @solidjs/web 2.0.0-rc.9, and against the oracle's rc.3 typings
-  // every two-argument `dynamic` call is TS2554 while the checker answers the
-  // default form, so the rule cannot fire and no keystone case can exist. The
-  // absolute rule was checked by hand against the published rc.9 triple
-  // (strict, bundler resolution, `jsxImportSource: "@solidjs/web"`):
-  // `fixtures/reactive-ir/rc9-static-dynamic-async/App.tsx` is `tsc
-  // --noEmit`-clean while this rule reports its eight promise-valued static
-  // sources, because the source is typed `() => T | Promise<T> | ...` and
-  // `DynamicOptions.static` is a plain boolean (`types/index.d.ts:82-97`).
-  // The one spelling the type rejects, a `PromiseLike<T>` source (TS2322), is
-  // not reported. Replace this entry with a keystone case when the oracle
-  // provisions an rc.9 install.
-  "static-dynamic-async-source": "dynamic()'s static option exists only from @solidjs/web 2.0.0-rc.9; the oracle provisions the audited rc.3, where a second argument is TS2554. The keystone is fixtures/reactive-ir/rc9-static-dynamic-async, tsc-clean against the published rc.9 typings",
-  // Unprovisioned the other way round: the snippet type-checks on rc.3, but
-  // the runtime fact is absent there. `flush` and `action` are declared
-  // identically on rc.3, rc.8 and rc.9 (scheduler.d.ts's two `flush`
-  // overloads, action.d.ts's one signature), and only @solidjs/signals rc.8+
-  // throws FLUSH_IN_ACTION, so on this oracle's rc.3 install the rule is
-  // correctly silent and no case can show it reporting. The absolute rule was
-  // checked by hand instead: `fixtures/reactive-ir/rc9-flush-in-action/App.tsx`
-  // is `tsc --noEmit`-clean (5.9.3, strict, bundler resolution,
-  // `jsxImportSource: "@solidjs/web"`, skipLibCheck) against the published
-  // rc.9, rc.8 and rc.3 installs while this rule reports its six positives on
-  // rc.9, and `release-triple-flush-rc8/App.ts` is clean against rc.8 while it
-  // reports two. Replace this entry with a keystone case when the oracle
-  // provisions an rc.8 or later install.
-  "flush-in-action": "the FLUSH_IN_ACTION throw exists only from @solidjs/signals 2.0.0-rc.8; the oracle provisions the audited rc.3, where flush() in an action is legal and the rule is silent. The keystones are fixtures/reactive-ir/rc9-flush-in-action and release-triple-flush-rc8, tsc-clean against the published rc.9 and rc.8 typings",
 };
 
 const catalogRules = catalogEntries.map((rule) => rule.name);

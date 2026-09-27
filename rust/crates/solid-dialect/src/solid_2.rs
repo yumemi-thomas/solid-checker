@@ -26,8 +26,9 @@ mod releases;
 /// per answer the reviewed releases disagree on, each decided by the resolved
 /// release of the package that declares it (`releases.rs`, which builds the
 /// value from the resolved `solid-js`, `@solidjs/signals` and `@solidjs/web`).
-/// `Solid2` the value is the audited vocabulary ([`Solid2::AUDITED`], the rc.3
-/// triple); [`Solid2::RC9`] is the rc.9 triple's. The audited vocabulary, the
+/// `Solid2` the value is the conservative vocabulary
+/// ([`Solid2::CONSERVATIVE`]); [`Solid2::RC3`] and [`Solid2::RC9`] are those
+/// triples', and the audited one is rc.9's. The audited vocabulary, the
 /// conservative one variant ids are spelled against ([`Solid2::CONSERVATIVE`])
 /// and the one a project with no `solid-js` is analyzed under
 /// ([`Solid2::DEFAULTED`]) are three names, not one (`releases.rs`).
@@ -94,12 +95,15 @@ pub struct Solid2 {
     optimistic_store_setter: releases::OptimisticStoreSetterGuard,
 }
 
-/// The audited Solid 2 vocabulary, spelled like the unit struct it used to be
-/// so the value keeps its name everywhere the engine and its tests hold it.
+/// The Solid 2 language's own vocabulary, [`Solid2::CONSERVATIVE`], spelled
+/// like the unit struct it used to be so the value keeps its name everywhere
+/// the engine and its tests hold it. It is not the audited release's: the
+/// engine's tests pin the conservative answers, and a release-dependent
+/// answer is tested on the variant that gives it.
 /// A braced struct lives only in the type namespace, which leaves the value
 /// namespace free for this constant.
 #[allow(non_upper_case_globals)]
-pub const Solid2: Solid2 = Solid2::AUDITED;
+pub const Solid2: Solid2 = Solid2::CONSERVATIVE;
 
 /// Source: the pre-ADR-0006 hardcoded name list `solid-reactive-ir` used to
 /// carry (26 names), plus the four the namespace-import expansion adds in
@@ -5088,7 +5092,7 @@ impl Dialect for Solid2 {
     }
 
     /// Read from `@solidjs/signals@2.0.0-rc.0` `dist/dev.js`, the bundle the
-    /// oracle install under `rust/target/tsc-oracle/v2` resolves — line numbers
+    /// rc.0 install resolves — line numbers
     /// are that file's. Every answer below was also measured against that
     /// bundle under `--conditions browser` with the probe worker's own
     /// observation shape.
@@ -6029,7 +6033,7 @@ mod tests {
                 ));
             }
         }
-        assert!(!Solid2::AUDITED.callback_runs_on_result_access(Primitive::Omit, 1, 2));
+        assert!(!Solid2::RC3.callback_runs_on_result_access(Primitive::Omit, 1, 2));
         assert!(!Solid2::default().callback_runs_on_result_access(Primitive::Omit, 1, 2));
         let two: &dyn Dialect = &Solid2::RC9;
         assert!(two.callback_runs_on_result_access(Primitive::Omit, 1, 2));
@@ -7432,20 +7436,19 @@ mod tests {
     /// release (`<root>/<package>/<archive_path>`), for the archive-reading arm
     /// of the citation test, and whether a verification run must set it.
     ///
-    /// rc.3's tree is provisioned by the tsc-oracle install, so
-    /// `scripts/verify.sh` arms it and `SOLID_CHECKER_EXPECT_PROBE_PINS=1`
-    /// makes its absence a failure. Nothing provisions an rc.6 tree today, so
-    /// its arm is optional: the unconditional checks — the checked-in slice
+    /// Every archive `audited-archives.json` lists is provisioned by
+    /// `make audited-archives-provision` (`scripts/audited-archives.mjs`),
+    /// apart from the tsc-oracle install, and `make test-rust` and
+    /// `scripts/verify.sh` arm all three, so `SOLID_CHECKER_EXPECT_PROBE_PINS=1`
+    /// makes any one's absence a failure. Without that variable a run that
+    /// sets none still performs the unconditional checks: the checked-in slice
     /// hashes to the cited digest, and the cited file is the one pinned in
-    /// `phase0/rc6/solidjs-signals/files.json` at that digest and length — are
-    /// what runs, and demanding the tree would fail every verification run for
-    /// an install nobody performs. rc.9 is the same: optional, with
-    /// `phase0/rc9/solidjs-signals/files.json` as the pin.
+    /// `phase0/<release>/*/files.json` at that digest and length.
     fn archive_root_variable(version: &str) -> (&'static str, bool) {
         match version {
             RC3 => ("SOLID_CHECKER_RC3_ARCHIVE_ROOT", true),
-            RC6 => ("SOLID_CHECKER_RC6_ARCHIVE_ROOT", false),
-            RC9 => ("SOLID_CHECKER_RC9_ARCHIVE_ROOT", false),
+            RC6 => ("SOLID_CHECKER_RC6_ARCHIVE_ROOT", true),
+            RC9 => ("SOLID_CHECKER_RC9_ARCHIVE_ROOT", true),
             other => panic!("no archive-root variable for {other}"),
         }
     }
@@ -7734,11 +7737,12 @@ mod tests {
                              {variable} is unset: the cited ranges would only be \
                              checked against the checked-in slices, never \
                              against the archive they claim to quote. \
-                             scripts/verify.sh exports it from the tsc-oracle \
-                             install."
+                             make test-rust and scripts/verify.sh export it \
+                             from make audited-archives-provision."
                         ),
-                        // Not provisioned by anything; the slice and pin
-                        // checks above are the whole verification.
+                        // An archive a verification run need not arm; the
+                        // slice and pin checks above are the whole
+                        // verification. Every archive is required today.
                         _ => {}
                     }
                     continue;

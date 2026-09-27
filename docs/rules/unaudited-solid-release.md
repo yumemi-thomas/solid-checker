@@ -31,10 +31,10 @@ rc.9's.
 
 | release, per package | result |
 | --- | --- |
-| `2.0.0-rc.3` (the audited release), and `rc.0`, `rc.1`, `rc.2`, which behave as rc.3 on every premise the dialect cites | analyzed, no notice |
-| `rc.4`-`rc.6` | analyzed, **this notice**: `solid-js` re-exports `registerPatch`, `registerRowOps` and `registerSlotPatch`, and `@solidjs/web` exports `installListDriver` and `driveList`, callback-taking exports the vocabulary neither models nor excludes |
-| `rc.7`, `rc.8` | analyzed with rc.9's store answer (a root write type-checks), and on rc.8 rc.9's `FLUSH_IN_ACTION` answer, **this notice**: no negative row is granted for their `@solidjs/signals` |
-| `2.0.0-rc.9` | analyzed with rc.9's answers, **this notice**, naming the review's open gaps; the `solid-js` re-export gap only where the project reaches one of its five names (below) |
+| `2.0.0-rc.9` (the audited release) | analyzed with rc.9's answers, no notice, except the `solid-js` re-export gap where the project reaches one of its five names (below) |
+| `rc.0`-`rc.3`, which behave as rc.3 on every premise the dialect cites | analyzed with rc.3's answers, **this notice**: older than the audited release, so new rules and precision work are measured on rc.9 only |
+| `rc.4`-`rc.6` | analyzed, **this notice**: older than the audited release, and `solid-js` re-exports `registerPatch`, `registerRowOps` and `registerSlotPatch`, and `@solidjs/web` exports `installListDriver` and `driveList`, callback-taking exports the vocabulary neither models nor excludes |
+| `rc.7`, `rc.8` | analyzed with rc.9's store answer (a root write type-checks), and on rc.8 rc.9's `FLUSH_IN_ACTION` answer, **this notice**: older than the audited release, and no negative row is granted for their `@solidjs/signals` |
 | `2.0.0-experimental.x` of `solid-js` | refused with [unsupported-solid-runtime](unsupported-solid-runtime.md) |
 | any other version (`rc.10` and later, betas, `2.0.0`, an inexact spelling) | analyzed with the conservative answers below, **this notice** naming the package as not compared |
 | `@solidjs/signals` does not resolve | the conservative answers, **this notice** |
@@ -63,8 +63,8 @@ resolves into the `solid-js` package counts as `solid-js`; a subpath
 (`solid-js/internal`) re-exports none of the five and does not. A nonliteral
 `import(path)` does not count: it resolves through no declarations on any
 release, so it loses what it loses whether or not the gap is open. A project
-that reaches none of the five gets no notice from this gap; on rc.9 the
-triple's other gaps still give it one.
+that reaches none of the five gets no notice from this gap, and on the rc.9
+triple, the audited release, no notice at all.
 
 **The conservative answers.** An unknown or unresolved `@solidjs/signals`
 keeps the `Readonly` store answer, so [no-direct-mutation](no-direct-mutation.md)
@@ -121,8 +121,9 @@ notice lists what is still open.
 
 ## How to fix
 
-Pin `solid-js`, `@solidjs/signals` and `@solidjs/web` to `2.0.0-rc.3` to
-certify. `@solidjs/signals` is a dependency of `solid-js`, and its range admits
+Pin `solid-js`, `@solidjs/signals` and `@solidjs/web` to `2.0.0-rc.9`, the
+audited release (since 2026-09-27; it was rc.3 before), to certify, and do not
+import the five names above from `solid-js`. `@solidjs/signals` is a dependency of `solid-js`, and its range admits
 later releases, so pin it with an `overrides` (npm, bun), `pnpm.overrides` or
 `resolutions` (yarn) entry. The notice's hint names the versions it found. Or
 use a checker release that has reviewed your installation. Without either,

@@ -189,8 +189,9 @@ analyzed under the wrong language (ADR 0110). The pre-beta
 the vocabulary was not audited on is analyzed, with one
 `SC9014 unaudited-solid-release` notice that keeps the result from certifying.
 The audited installation is `solid-js`, `@solidjs/signals` and `@solidjs/web`
-at `2.0.0-rc.3` (or rc.0-rc.2, which behave as rc.3); a fresh install of
-`solid-js@2.0.0-rc.3` resolves a later `@solidjs/signals`, so pin that one too.
+at `2.0.0-rc.9`; older release candidates are analyzed with the answers
+their reviews gave, under the notice. `@solidjs/signals` is a ranged
+dependency of `solid-js`, so pin it too.
 Set
 `settings.solidChecker.dialect` to `"solid-v2"` to override detection for every
 rule the adapter runs — which also overrides that refusal, and is appropriate

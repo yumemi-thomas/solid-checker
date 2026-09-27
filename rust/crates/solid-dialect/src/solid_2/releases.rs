@@ -118,9 +118,9 @@ pub(super) const OWNERS: &[ReleaseOwner] = &[
 /// unread owner's consequence, SC9014's pin) is derived from this list, and
 /// [`Solid2::AUDITED`] is tested to be the vocabulary it reviews to.
 pub(super) const AUDITED_INSTALLATION: &[(&str, &str)] = &[
-    (SOLID_JS, "2.0.0-rc.3"),
-    (SIGNALS, "2.0.0-rc.3"),
-    (WEB, "2.0.0-rc.3"),
+    (SOLID_JS, "2.0.0-rc.9"),
+    (SIGNALS, "2.0.0-rc.9"),
+    (WEB, "2.0.0-rc.9"),
 ];
 
 /// The audited release of one owner, from [`AUDITED_INSTALLATION`].
@@ -266,7 +266,7 @@ impl Solid2 {
 
     /// The vocabulary of the audited triple, [`AUDITED_INSTALLATION`]: what
     /// the review answers for exactly that installation, with no gap.
-    pub const AUDITED: Self = Self::RC3;
+    pub const AUDITED: Self = Self::RC9;
 
     /// The vocabulary a project is analyzed under when no `solid-js`
     /// resolves at all, so no owner was reviewed (the backend's `Defaulted`
@@ -516,17 +516,6 @@ const KNOWN_GAPS: &[KnownGap] = &[
             "$DEVCOMP",
         ]),
     },
-    // 59643beb read five creates rows on rc.9's own bytes, and nothing else.
-    KnownGap {
-        package: SIGNALS,
-        from: 9,
-        through: 9,
-        gap: "has negative rows granted only for the creates domain of getOwner, onCleanup, \
-              untrack, runWithOwner and createRoot, so certification closes fewer claim domains \
-              than on the audited release",
-        review: RC9_REVIEW,
-        exports: None,
-    },
 ];
 
 /// The pre-beta Solid 2 experiment. Measured on `2.0.0-experimental.1`
@@ -700,6 +689,34 @@ fn gaps_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>) -> Ve
             }
         }
     }
+    // An owner read by a review but older than the audited release keeps the
+    // answers that review gave it, and gets nothing newer: new rules and
+    // precision work are measured on the audited triple alone (owner decision,
+    // 2026-09-27). The notice says so rather than implying equal standing.
+    let older = [(SOLID_JS, solid_js), (SIGNALS, signals), (WEB, web)]
+        .into_iter()
+        .filter(
+            |(package, release)| match (release, Release::of(Some(audited_release(package)))) {
+                (Release::Read(number), Release::Read(audited)) => number < &audited,
+                _ => false,
+            },
+        )
+        .map(|(package, release)| format!("{package} {}", release.spelled()))
+        .collect::<Vec<_>>();
+    if !older.is_empty() {
+        gaps.push(InstallationGap {
+            gap: format!(
+                "{} {} older than the audited release, {}: the answers {} review gave still \
+                 apply, but new rules and precision work are measured on the audited release only",
+                spelled_list(&older),
+                if older.len() == 1 { "is" } else { "are" },
+                audited_release(SOLID_JS),
+                if older.len() == 1 { "its" } else { "their" },
+            ),
+            review: None,
+            scope: None,
+        });
+    }
     let mut rows = [solid_js, signals, web]
         .into_iter()
         .filter_map(Release::row)
@@ -725,6 +742,15 @@ fn gaps_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>) -> Ve
         });
     }
     gaps
+}
+
+/// `a`, `a and b`, `a, b and c`.
+fn spelled_list(items: &[String]) -> String {
+    match items {
+        [] => String::new(),
+        [only] => only.clone(),
+        [init @ .., last] => format!("{} and {last}", init.join(", ")),
+    }
 }
 
 /// What the vocabulary cannot answer when an owner's release was not read.
@@ -851,7 +877,7 @@ mod tests {
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
                 false,
-                0,
+                1,
             ),
             (
                 "2.0.0-rc.1",
@@ -861,7 +887,7 @@ mod tests {
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
                 false,
-                0,
+                1,
             ),
             (
                 "2.0.0-rc.2",
@@ -871,7 +897,7 @@ mod tests {
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
                 false,
-                0,
+                1,
             ),
             (
                 "2.0.0-rc.3",
@@ -881,7 +907,7 @@ mod tests {
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
                 false,
-                0,
+                1,
             ),
             (
                 "2.0.0-rc.4",
@@ -891,7 +917,7 @@ mod tests {
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
                 false,
-                2,
+                3,
             ),
             (
                 "2.0.0-rc.5",
@@ -901,7 +927,7 @@ mod tests {
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
                 false,
-                2,
+                3,
             ),
             (
                 "2.0.0-rc.6",
@@ -911,7 +937,7 @@ mod tests {
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
                 false,
-                2,
+                3,
             ),
             (
                 "2.0.0-rc.7",
@@ -921,7 +947,7 @@ mod tests {
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
                 false,
-                1,
+                2,
             ),
             (
                 "2.0.0-rc.8",
@@ -931,7 +957,7 @@ mod tests {
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
                 true,
-                1,
+                2,
             ),
             (
                 "2.0.0-rc.9",
@@ -941,7 +967,7 @@ mod tests {
                 DynamicOptions::StaticForm,
                 StoreSetterRootGuard::Guarded,
                 true,
-                2,
+                1,
             ),
         ];
         for (
@@ -977,11 +1003,11 @@ mod tests {
             );
             assert_eq!(gaps.len(), gap_count, "{release}: {gaps:?}");
         }
+        assert_eq!(analyzed(&same("2.0.0-rc.3")).0.index(), Solid2::RC3.index());
         assert_eq!(
-            analyzed(&same("2.0.0-rc.3")).0.index(),
+            analyzed(&same("2.0.0-rc.9")).0.index(),
             Solid2::AUDITED.index()
         );
-        assert_eq!(analyzed(&same("2.0.0-rc.9")).0.index(), Solid2::RC9.index());
         // rc.4-rc.6 name all five patch-channel exports between them.
         let names = analyzed(&same("2.0.0-rc.5"))
             .1
@@ -1090,13 +1116,13 @@ mod tests {
         assert!(rc0.store_setter_guard_exempts_roots());
         assert_eq!(rc0.store_setter_roots, StoreSetterRootGuard::Exempt);
         assert_eq!(rc0.key(), Some("optimistic-store-setter-unguarded"));
-        assert!(Solid2::AUDITED.optimistic_store_setter_guarded());
+        assert!(Solid2::RC3.optimistic_store_setter_guarded());
         assert!(Solid2::RC9.optimistic_store_setter_guarded());
-        // Rows rc.1-rc.3 still share the audited vocabulary.
+        // Rows rc.1-rc.3 still share rc.3's vocabulary.
         for release in ["2.0.0-rc.1", "2.0.0-rc.2", "2.0.0-rc.3"] {
             assert_eq!(
                 analyzed(&same(release)).0.index(),
-                Solid2::AUDITED.index(),
+                Solid2::RC3.index(),
                 "{release}"
             );
         }
@@ -1161,20 +1187,28 @@ mod tests {
             Some("2.0.1"),
         ));
         assert_eq!(vocabulary.dynamic_options, DynamicOptions::Unread);
-        assert_eq!(gaps.len(), 1, "{gaps:?}");
+        // The unread web, and the rc.3 pair's being older than the audited
+        // release.
+        assert_eq!(gaps.len(), 2, "{gaps:?}");
         // A web that does not resolve is not asked about, so it adds no gap;
-        // the rc.3 pair beside it is still audited.
+        // the rc.3 pair beside it keeps its reviewed answers and only the
+        // older-release gap.
         let (vocabulary, gaps) = analyzed(&triple(Some("2.0.0-rc.3"), Some("2.0.0-rc.3"), None));
-        assert_eq!(vocabulary.index(), Solid2::AUDITED.index());
-        assert!(gaps.is_empty(), "{gaps:?}");
-        // An unknown solid-js keeps the audited answers it owns, with a gap.
+        assert_eq!(vocabulary.index(), Solid2::RC3.index());
+        assert_eq!(gaps.len(), 1, "{gaps:?}");
+        assert!(
+            gaps[0].gap.contains("older than the audited release"),
+            "{gaps:?}"
+        );
+        // An unknown solid-js keeps the conservative answers it owns, with a
+        // gap, beside the rc.3 pair's older-release gap.
         let (vocabulary, gaps) = analyzed(&triple(
             Some("2.0.0"),
             Some("2.0.0-rc.3"),
             Some("2.0.0-rc.3"),
         ));
         assert!(!vocabulary.until);
-        assert_eq!(gaps.len(), 1, "{gaps:?}");
+        assert_eq!(gaps.len(), 2, "{gaps:?}");
     }
 
     #[test]
@@ -1325,7 +1359,9 @@ mod tests {
         assert_eq!(installed.len(), OWNERS.len());
         let (vocabulary, gaps) = analyzed(&installed);
         assert_eq!(vocabulary.index(), Solid2::AUDITED.index());
-        assert!(gaps.is_empty(), "{gaps:?}");
+        // The audited release carries no gap but import-scoped ones, which
+        // are due only where a project reaches the exports they name.
+        assert!(gaps.iter().all(|gap| gap.scope.is_some()), "{gaps:?}");
         assert!(std::ptr::eq(
             Solid2::DEFAULTED.interned(),
             &VARIANTS[Solid2::DEFAULTED.index()]
@@ -1344,14 +1380,14 @@ mod tests {
     /// review does not depend on which variant is asked.
     #[test]
     fn the_trait_answers_from_the_variant() {
-        assert!(Solid2::AUDITED.store_root_properties_are_readonly());
+        assert!(Solid2::RC3.store_root_properties_are_readonly());
         assert!(!Solid2::RC9.store_root_properties_are_readonly());
-        // The value the engine holds by name is the audited vocabulary.
+        // The value the engine holds by name is the conservative vocabulary.
         assert!(Solid2.store_root_properties_are_readonly());
         assert!(Solid2::default().store_root_properties_are_readonly());
         assert_eq!(Solid2::default().index(), Solid2::CONSERVATIVE.index());
         assert!(Solid2::RC9.store_setter_callback_enables_proxy_writes());
-        assert!(Solid2::AUDITED.store_setter_guard_exempts_roots());
+        assert!(Solid2::RC3.store_setter_guard_exempts_roots());
         assert!(!Solid2::RC9.store_setter_guard_exempts_roots());
         for release in 0..=8 {
             let release = format!("2.0.0-rc.{release}");
@@ -1379,7 +1415,7 @@ mod tests {
         }
         // `flush(fn)` creates no root: it keeps the caller's owner, as
         // `untrack` does, on every release (probed rc.0-rc.9).
-        for vocabulary in [Solid2::AUDITED, Solid2::RC9] {
+        for vocabulary in [Solid2::RC3, Solid2::RC9] {
             assert!(vocabulary.callback_preserves_owner_write_context(Primitive::Flush));
             assert!(vocabulary.callback_preserves_owner_write_context(Primitive::Untrack));
             assert!(!vocabulary.callback_preserves_owner_write_context(Primitive::CreateRoot));
@@ -1387,7 +1423,7 @@ mod tests {
             assert!(vocabulary.component_body_runs_under_root());
         }
         for gated in super::super::RELEASE_GATED_NAMES {
-            assert_eq!(Solid2::AUDITED.primitive(gated), None, "{gated}");
+            assert_eq!(Solid2::RC3.primitive(gated), None, "{gated}");
             assert!(Solid2::RC9.primitive(gated).is_some(), "{gated}");
         }
         let expected = Solid2::RC9.interned() as *const Solid2;

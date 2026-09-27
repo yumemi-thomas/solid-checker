@@ -168,6 +168,18 @@
       "fixes": 0,
       "message": "reactive accessor \"seed\" is read directly in createEffect apply callback, which does not track; the read sees the current value once and never updates when \"seed\" changes",
       "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dialect-solid-2/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0,
+      "message": "solid-js 2.0.0-rc.0, @solidjs/signals 2.0.0-rc.0 and no @solidjs/web are installed; this build's Solid 2 vocabulary was audited on solid-js 2.0.0-rc.9, @solidjs/signals 2.0.0-rc.9 and @solidjs/web 2.0.0-rc.9, and 1 gap in what it knows about this installation is still open, so the analysis ran and cannot certify the project",
+      "hint": "Findings beside this notice stand; certification waits on the gaps. To certify, pin solid-js, @solidjs/signals and @solidjs/web to 2.0.0-rc.9, the audited release of each, a transitive one with an overrides or resolutions entry, because a dependency's own range can admit later releases; this project resolves solid-js 2.0.0-rc.0, @solidjs/signals 2.0.0-rc.0 and no @solidjs/web."
     }
   ]
 }

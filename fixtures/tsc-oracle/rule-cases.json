@@ -128,10 +128,13 @@
     {
       "rule": "missing-effect-function",
       "dialect": "v2",
-      "expect": "silent",
-      "checker": "reports",
-      "why": "SC7001 is independent. The single-argument `createEffect(compute)` overload still exists in rc.0 -- deprecated, and typed to return `never` -- so `tsc` accepts the call. The finding's claim is that the effect never runs, which no part of that signature says.",
-      "code": "import { createSignal, createEffect } from \"solid-js\";\nconst [count] = createSignal(0);\ncreateEffect(() => count());\n"
+      "expect": "removed-because-redundant",
+      "checker": "silent",
+      "why": "SC7001's absent-apply arm. Through rc.5 the single-argument `createEffect(compute)` overload existed -- deprecated, typed to return `never` -- so `tsc` accepted the call and the finding (the effect never runs) was the rule's own. On the audited rc.9 the call is TS2554 (\"Expected 2-3 arguments, but got 1.\"): @solidjs/signals removed the deprecated one-argument `createEffect(compute): never` overload in rc.6 (declared through rc.5, absent from rc.6-rc.9 `dist/types/signals.d.ts`), so the absent apply slot the finding asserted is TypeScript's, and SC7001 is silent on it because the call resolves to no published signature. Pinned so that a release which restores the overload -- making `tsc` silent again -- fails here and the arm's claim is reconsidered.",
+      "code": "import { createSignal, createEffect } from \"solid-js\";\nconst [count] = createSignal(0);\ncreateEffect(() => count());\n",
+      "allow": [
+        2554
+      ]
     },
     {
       "rule": "missing-effect-function",
@@ -166,11 +169,14 @@
     {
       "rule": "missing-effect-function",
       "dialect": "v2",
-      "expect": "silent",
-      "checker": "reports",
+      "expect": "removed-because-redundant",
+      "checker": "silent",
       "sourceExtension": "ts",
-      "why": "The compiler proves this required-only tuple has exactly one element. After expansion the Solid 2 apply slot is therefore absent, so the runtime MISSING_EFFECT_FN failure is a violation even though TypeScript accepts the deprecated one-argument overload.",
-      "code": "import { createEffect } from \"solid-js\";\nconst operands: [() => number] = [() => 1];\nexport function inOwner() {\n  createEffect(...operands);\n}\n"
+      "why": "The compiler proves this required-only tuple has exactly one element, so after expansion the Solid 2 apply slot is absent. On the audited rc.9 the call is TS2554 (\"Expected 2-3 arguments, but got 1.\"): @solidjs/signals removed the deprecated one-argument `createEffect(compute): never` overload in rc.6 (declared through rc.5, absent from rc.6-rc.9 `dist/types/signals.d.ts`), so the absent apply slot the finding asserted is TypeScript's, and SC7001 is silent on it because the call resolves to no published signature. Pinned so that a release which restores the overload -- making `tsc` silent again -- fails here and the arm's claim is reconsidered.",
+      "code": "import { createEffect } from \"solid-js\";\nconst operands: [() => number] = [() => 1];\nexport function inOwner() {\n  createEffect(...operands);\n}\n",
+      "allow": [
+        2554
+      ]
     },
     {
       "rule": "missing-effect-function",
@@ -398,8 +404,8 @@
       "rule": "reactive-write-in-owned-scope",
       "dialect": "v2",
       "expect": "silent",
-      "checker": "silent",
-      "why": "The store half of the createRoot-body arm, on the audited rc.3 triple this oracle installs. `@solidjs/signals@2.0.0-rc.3`'s `devGuardStoreSetterWrite` exempts a root (`!context._root`), so the store setter in a root body is legal and SC2001 stays silent; rc.9 dropped the exemption, which `fixtures/reactive-ir/setter-in-root-rc9` pins.",
+      "checker": "reports",
+      "why": "The store half of the createRoot-body arm, on the audited rc.9 triple. `@solidjs/signals@2.0.0-rc.9`'s `devGuardStoreSetterWrite` no longer exempts a root (rc.3 did, `!context._root`), so a store setter call in a root body throws REACTIVE_WRITE_IN_OWNED_SCOPE in dev while `setState`'s signature accepts it. `fixtures/reactive-ir/setter-in-root-rc9` pins the same arm; on rc.3 this case was silent.",
       "code": "import { createRoot, createStore } from \"solid-js\";\nconst [, setState] = createStore({ value: 0 });\ncreateRoot(() => {\n  setState((draft) => {\n    draft.value = 1;\n  });\n});\n"
     },
     {
@@ -414,8 +420,8 @@
       "rule": "reactive-write-in-owned-scope",
       "dialect": "v2",
       "expect": "silent",
-      "checker": "silent",
-      "why": "The component-body half of the store root exemption, on the audited rc.3 triple this oracle installs. Dev `createComponent` runs the body under `createRoot(..., { transparent: true })`, and `@solidjs/signals@2.0.0-rc.3`'s `devGuardStoreSetterWrite` exempts a root, so the store setter is legal and SC2001 stays silent; `fixtures/reactive-ir/write-scope-roots-rc9` pins rc.9, which reports it.",
+      "checker": "reports",
+      "why": "The component-body half of the store root guard, on the audited rc.9 triple. Dev `createComponent` runs the body under `createRoot(..., { transparent: true })`, and `@solidjs/signals@2.0.0-rc.9`'s `devGuardStoreSetterWrite` no longer exempts a root, so the store setter throws while its signature accepts the call. `fixtures/reactive-ir/write-scope-roots-rc9` pins the same arm; on rc.3, whose guard exempted roots, this case was silent.",
       "code": "import { createStore } from \"solid-js\";\nconst [state, setState] = createStore({ value: 0 });\nexport function Panel() {\n  setState((draft) => {\n    draft.value = 1;\n  });\n  return <div>{state.value}</div>;\n}\n"
     },
     {
@@ -565,13 +571,11 @@
     {
       "rule": "no-direct-mutation",
       "dialect": "v2",
-      "expect": "removed-because-redundant",
-      "checker": "silent",
-      "why": "SC2003's root-record arm, narrowed 2026-08-17 in the 2.0 catalog only. `createStore` returns a shallowly `Readonly` proxy there, so a write to a root property is TS2540 for both the assignment and the update form. Solid 1.x is the opposite -- its store type is mutable throughout and the same writes produce no diagnostic at all -- so the 1.x rule is untouched, which is why the predicate is asked of the dialect. The rule SURVIVES on nested records, casts, and props members; see the sibling `silent` case.",
-      "allow": [
-        2540
-      ],
-      "code": "import { createStore } from \"solid-js\";\nconst [state] = createStore({ count: 0 });\nexport function Assign() {\n  state.count = 1;\n}\nexport function Update() {\n  state.count++;\n}\n"
+      "expect": "silent",
+      "checker": "reports",
+      "why": "SC2003's root-record arm, on the audited rc.9. @solidjs/signals rc.7-rc.9 declare `Store<T> = T` (`dist/types/store/store.d.ts:4`; rc.0-rc.6 declared `Readonly<T>`), so a write to a root property is no longer TS2540 in either the assignment or the update form, while the store proxy still drops it at runtime. The dialect answers `store_root_properties_are_readonly` from the resolved @solidjs/signals, so the arm TypeScript owned on rc.3 is reported here. The TS2540 record this case used to pin (the arm narrowed 2026-08-17 for rc.0-rc.6) is carried by the release-sensitive dialect answer and its fixtures, not by this oracle, which installs only the audited release.",
+      "code": "import { createStore } from \"solid-js\";\nconst [state] = createStore({ count: 0 });\nexport function Assign() {\n  state.count = 1;\n}\nexport function Update() {\n  state.count++;\n}\n",
+      "checkerCount": 2
     },
     {
       "rule": "reactive-handler-frozen",
@@ -638,12 +642,13 @@
     {
       "rule": "missing-effect-function",
       "dialect": "v2",
-      "expect": "silent",
-      "checker": "reports",
-      "checkerKind": "uncertifiable",
-      "checkerCount": 1,
-      "why": "A function-level use-server directive is only a framework convention: the source alone does not prove whether a transform selects Solid 2's server entry. The one-argument call is a client defect but inert on the server, so the checker must preserve the unresolved execution mode as uncertifiable rather than certify or assert a violation.",
-      "code": "import { createEffect } from \"solid-js\";\nexport function serverOnly() {\n  \"use server\";\n  createEffect(() => 1);\n  createEffect(() => 1, () => {});\n}\n"
+      "expect": "removed-because-redundant",
+      "checker": "silent",
+      "why": "A function-level use-server directive is only a framework convention, so through rc.5 the one-argument call was an uncertifiable SC7001 obligation (a client defect, inert on the server). On the audited rc.9 the call is TS2554 (\"Expected 2-3 arguments, but got 1.\"): @solidjs/signals removed the deprecated one-argument `createEffect(compute): never` overload in rc.6 (declared through rc.5, absent from rc.6-rc.9 `dist/types/signals.d.ts`), so the absent apply slot the finding asserted is TypeScript's, and SC7001 is silent on it because the call resolves to no published signature. Pinned so that a release which restores the overload -- making `tsc` silent again -- fails here and the arm's claim is reconsidered. The two-argument call beside it stays silent for SC7001; its missing-owner obligation is pinned by the sibling missing-owner case.",
+      "code": "import { createEffect } from \"solid-js\";\nexport function serverOnly() {\n  \"use server\";\n  createEffect(() => 1);\n  createEffect(() => 1, () => {});\n}\n",
+      "allow": [
+        2554
+      ]
     },
     {
       "rule": "missing-owner",
@@ -652,8 +657,8 @@
       "checker": "reports",
       "checkerKind": "uncertifiable",
       "checkerCount": 3,
-      "why": "The directive does not prove whether the client or server entry executes. The two-argument createEffect, createRenderEffect, and createTrackedEffect allocate owner-bound computations on the client but not on the server; each must therefore be an uncertifiable ownership obligation. The one-argument createEffect allocates under neither possible path and stays silent.",
-      "code": "import { createEffect, createRenderEffect, createTrackedEffect } from \"solid-js\";\nexport function serverOnly() {\n  \"use server\";\n  createEffect(() => 1);\n  createEffect(() => 1, () => {});\n  createRenderEffect(() => 1, () => {});\n  createTrackedEffect(() => {});\n}\n"
+      "why": "The directive does not prove whether the client or server entry executes. The two-argument createEffect, createRenderEffect, and createTrackedEffect allocate owner-bound computations on the client but not on the server; each must therefore be an uncertifiable ownership obligation. (Until rc.9 this case also carried a one-argument createEffect the rule stays silent on; from @solidjs/signals rc.6 that call is TS2554, so it no longer belongs in a `silent` case and its absent-apply claim is pinned under missing-effect-function.)",
+      "code": "import { createEffect, createRenderEffect, createTrackedEffect } from \"solid-js\";\nexport function serverOnly() {\n  \"use server\";\n  createEffect(() => 1, () => {});\n  createRenderEffect(() => 1, () => {});\n  createTrackedEffect(() => {});\n}\n"
     },
     {
       "rule": "missing-owner",
@@ -896,6 +901,56 @@
       "checker": "reports",
       "why": "The published Solid 2 typings type innerHTML and children independently, while the DOM runtime gives them one competing content slot.",
       "code": "export const Case = (props: { html: string }) => <div innerHTML={props.html}>fallback</div>;\n"
+    },
+    {
+      "rule": "until-in-tracked-scope",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "why": "`until` first ships in solid-js 2.0.0-rc.9 and is called here exactly as its published signature allows; the claim is that its observer guard (`if (getObserver()) throw`, @solidjs/signals rc.9 `dist/dev.js`) throws when it runs inside a memo's compute, which no type expresses.",
+      "code": "import { createMemo, createSignal, until } from \"solid-js\";\nconst [ready] = createSignal(false);\nexport function Waiting() {\n  const label = createMemo(() => {\n    void until(() => ready());\n    return ready();\n  });\n  return <div>{String(label())}</div>;\n}\n"
+    },
+    {
+      "rule": "until-in-tracked-scope",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "silent",
+      "why": "The negative beside the keystone: an event handler runs with no observer, so the same `until` call is legal there and the rule must stay quiet.",
+      "code": "import { createSignal, until } from \"solid-js\";\nconst [ready, setReady] = createSignal(false);\nexport const Wait = () => (\n  <button onClick={async () => {\n    await until(() => ready());\n    setReady(false);\n  }}>wait</button>\n);\n"
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "why": "@solidjs/web 2.0.0-rc.9 types `dynamic`'s source `() => T | Promise<T> | ...` whatever `DynamicOptions.static` says, so a promise-valued static source type-checks; the claim is the runtime's: the static form calls the source once and needs its component synchronously (the dev builds throw, production renders nothing).",
+      "code": "import { dynamic } from \"@solidjs/web\";\nconst Plain = () => <div />;\nexport const Lazy = dynamic(async () => Plain, { static: true });\n"
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "silent",
+      "why": "The negative beside the keystone: the default form settles an async source inside its memo, so the same source without `static: true` is legal and the rule must stay quiet.",
+      "code": "import { dynamic } from \"@solidjs/web\";\nconst Plain = () => <div />;\nexport const Lazy = dynamic(async () => Plain);\n"
+    },
+    {
+      "rule": "flush-in-action",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "sourceExtension": "ts",
+      "why": "`flush` and `action` are declared identically on rc.3 and rc.9, so `flush()` in an action body type-checks; the claim is the runtime's: from @solidjs/signals rc.8 `flush` throws FLUSH_IN_ACTION while a step of the action's generator is running, which no type expresses.",
+      "code": "import { action, flush } from \"solid-js\";\nexport const save = action(function* (text: string) {\n  flush();\n  yield text;\n});\n"
+    },
+    {
+      "rule": "flush-in-action",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "silent",
+      "sourceExtension": "ts",
+      "why": "The negative beside the keystone: after an `await` an async generator body continues from a microtask, outside any step, so the same `flush()` is legal there and the rule must stay quiet.",
+      "code": "import { action, flush } from \"solid-js\";\nexport const save = action(async function* () {\n  await Promise.resolve();\n  flush();\n});\n"
     }
   ]
 }

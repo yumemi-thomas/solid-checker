@@ -799,15 +799,25 @@ fn the_pre_beta_experiment_is_refused_although_its_major_is_carried() {
     );
 }
 
-/// A reviewed-with-gaps release is analyzed, and the analysis carries one
-/// project-level uncertifiable notice naming the release, its open gaps, and
-/// the review.
+/// A reviewed release older than the audited one is analyzed, and the
+/// analysis carries one project-level uncertifiable notice naming the release,
+/// its open gaps, and the review. The audited release beside it carries none.
 #[test]
 fn a_reviewed_release_is_analyzed_with_one_notice_beside_the_findings() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
-    let (code, snapshot) = run_checker("unaudited-release-rc9", &[]);
+    // rc.9 is the audited release (ADR 0127): the same project, analyzed, no
+    // notice. `App.tsx` imports `createSignal` alone, so the scoped re-export
+    // gap is not reached (`rc9_re_export_gap_is_due_only_where_a_project_reaches_it`
+    // pins that gap).
+    let (code, audited) = run_checker("unaudited-release-rc9", &[]);
+    let ids = finding_ids(&audited);
+    assert!(ids.contains(&"SC1003".to_owned()), "{ids:?}");
+    assert!(!ids.contains(&"SC9014".to_owned()), "{ids:?}");
+    assert_eq!(code, 0);
+
+    let (code, snapshot) = run_checker("unaudited-release-rc8", &[]);
     let ids = finding_ids(&snapshot);
     assert!(
         ids.contains(&"SC1003".to_owned()),
@@ -826,13 +836,13 @@ fn a_reviewed_release_is_analyzed_with_one_notice_beside_the_findings() {
     assert_eq!(notice["severity"], "warning");
     assert_eq!(notice["subjectKind"], "project");
     let message = notice["message"].as_str().unwrap();
-    assert!(message.contains("2.0.0-rc.9"), "{message}");
+    assert!(message.contains("2.0.0-rc.8"), "{message}");
     let hint = notice["hint"].as_str().unwrap();
     assert!(
         hint.contains(
-            "docs/package-contract-v2/audits/2026-09-26-solid-2-rc9-vocabulary-review.md"
-        ),
-        "the notice points at the review: {hint}"
+            "docs/package-contract-v2/audits/2026-09-26-solid-2-rc1-rc8-release-review.md"
+        ) && hint.contains("to 2.0.0-rc.9, the audited release of each"),
+        "the notice points at the review and the audited release: {hint}"
     );
     let gaps = notice["evidence"]
         .as_array()
@@ -841,29 +851,26 @@ fn a_reviewed_release_is_analyzed_with_one_notice_beside_the_findings() {
         .filter_map(|step| step["message"].as_str())
         .filter(|message| message.starts_with("known gap "))
         .collect::<Vec<_>>();
-    // B3 left the list when code inside an `omit` predicate became
-    // uncertifiable (SC9012). The typings' unresolvable re-exports are due
-    // only for a project that reaches one of the five names, and `App.tsx`
-    // imports `createSignal` alone, so the one gap still open is the missing
-    // rc.9 negative rows (`rc9_re_export_gap_is_due_only_where_a_project_reaches_it`
-    // pins the scoped gap).
+    // rc.8's signals has no negative row, and every owner is older than the
+    // audited release.
     assert!(
-        gaps.len() == 1
-            && !gaps.iter().any(|gap| gap.contains("omit"))
-            && !gaps.iter().any(|gap| gap.contains("skipLibCheck"))
-            && gaps.iter().any(|gap| gap.contains("negative row")),
+        gaps.len() == 2
+            && gaps.iter().any(|gap| gap.contains("negative row"))
+            && gaps
+                .iter()
+                .any(|gap| gap.contains("older than the audited release")),
         "every open gap is named: {gaps:?}"
     );
     let path = notice["primaryLocation"]["path"].as_str().unwrap();
     assert!(
-        path.ends_with("unaudited-release-rc9/node_modules/solid-js/package.json"),
+        path.ends_with("unaudited-release-rc8/node_modules/solid-js/package.json"),
         "{path}"
     );
     assert_eq!(code, 0);
 
     // `--dialect solid-v2` is the decision to analyze under the audited
     // vocabulary; it is not a detection, so it carries no notice.
-    let (_, explicit) = run_checker("unaudited-release-rc9", &["--dialect", "solid-v2"]);
+    let (_, explicit) = run_checker("unaudited-release-rc8", &["--dialect", "solid-v2"]);
     let ids = finding_ids(&explicit);
     assert!(!ids.contains(&"SC9014".to_owned()), "{ids:?}");
     assert!(ids.contains(&"SC1003".to_owned()), "{ids:?}");
