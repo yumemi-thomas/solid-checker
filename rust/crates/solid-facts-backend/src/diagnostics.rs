@@ -489,6 +489,26 @@ fn english_list(items: &[String]) -> String {
     }
 }
 
+/// An audited installation as one release, `2.0.0-rc.3`, when every package
+/// shares it, and otherwise as `solid-js 2.0.0-rc.3 and …`. `None` for a
+/// vocabulary audited on none.
+fn audited_spelling(audited: &[(&str, &str)]) -> Option<String> {
+    let versions = audited
+        .iter()
+        .map(|(_, version)| *version)
+        .collect::<std::collections::BTreeSet<_>>();
+    match versions.iter().collect::<Vec<_>>().as_slice() {
+        [] => None,
+        [single] => Some((**single).to_owned()),
+        _ => Some(english_list(
+            &audited
+                .iter()
+                .map(|(package, version)| format!("{package} {version}"))
+                .collect::<Vec<_>>(),
+        )),
+    }
+}
+
 /// The whole result for a project whose installed Solid runtime this build has
 /// no dialect for.
 ///
@@ -527,7 +547,10 @@ pub fn unsupported_runtime_snapshot(
                 refusal.line, refusal.reason
             ),
             format!(
-                "Upgrade the project to a Solid 2.0 release candidate (the audited one is 2.0.0-rc.3). Passing --dialect analyzes the project anyway, under a runtime it does not run. The measurement is in {}.",
+                "Upgrade the project to a Solid 2.0 release candidate{}. Passing --dialect analyzes the project anyway, under a runtime it does not run. The measurement is in {}.",
+                audited_spelling(refusal.audited)
+                    .map(|audited| format!(" (the audited one is {audited})"))
+                    .unwrap_or_default(),
                 refusal.review
             ),
         ),

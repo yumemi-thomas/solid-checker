@@ -113,12 +113,24 @@ pub(super) const OWNERS: &[ReleaseOwner] = &[
     },
 ];
 
-/// The audited triple, what SC9014 tells a user to pin.
+/// The audited triple, what SC9014 tells a user to pin, and the one place the
+/// audited release is named: every sentence that states it (SC9013's hint, an
+/// unread owner's consequence, SC9014's pin) is derived from this list, and
+/// [`Solid2::AUDITED`] is tested to be the vocabulary it reviews to.
 pub(super) const AUDITED_INSTALLATION: &[(&str, &str)] = &[
     (SOLID_JS, "2.0.0-rc.3"),
     (SIGNALS, "2.0.0-rc.3"),
     (WEB, "2.0.0-rc.3"),
 ];
+
+/// The audited release of one owner, from [`AUDITED_INSTALLATION`].
+fn audited_release(package: &str) -> &'static str {
+    AUDITED_INSTALLATION
+        .iter()
+        .find(|(owner, _)| *owner == package)
+        .map(|(_, version)| *version)
+        .expect("every owner has an audited release")
+}
 
 /// Whether a `createStore` root's own properties are declared `readonly`.
 ///
@@ -221,10 +233,47 @@ pub(super) enum DynamicOptions {
     Unread,
 }
 
+/// Three vocabularies that coincide today and are kept apart by name, so that
+/// moving the audited release is a change of which release [`Solid2::AUDITED`]
+/// and [`Solid2::DEFAULTED`] name and of [`AUDITED_INSTALLATION`], and nothing
+/// else:
+///
+/// - [`Solid2::CONSERVATIVE`]: every answer the one for an owner that did not
+///   resolve (each field's `#[default]`, which the module docs derive from the
+///   absolute rule, not from any audit). Variant keys, and so dialect ids, are
+///   spelled against it.
+/// - [`Solid2::AUDITED`]: the audited triple's answers.
+/// - [`Solid2::DEFAULTED`]: what a project with no `solid-js` resolved is
+///   analyzed under ([`Dialect::defaulted_vocabulary`]).
 impl Solid2 {
-    /// The vocabulary as audited on `2.0.0-rc.3` (and read on `rc.0`): every
-    /// answer the rc.3 triple gives.
-    pub const AUDITED: Self = Self::from_index(0);
+    /// Every answer the conservative one, as for an installation none of
+    /// whose owners resolved: index `0`, and [`Solid2::default`]. Independent
+    /// of which release is audited. Its [`variant_key`] is `None`, so it is
+    /// the language's own vocabulary, the one the plain `solid-v2` id names.
+    pub const CONSERVATIVE: Self = Self::from_index(0);
+
+    /// The vocabulary for the `2.0.0-rc.3` triple (and rc.1, rc.2): every
+    /// answer as rc.0-rc.3 give it, with the owned-scope guard rc.1 added.
+    pub const RC3: Self = Self {
+        store_root: StoreRootTyping::Readonly,
+        omit_predicate_form: false,
+        until: false,
+        dynamic_options: DynamicOptions::Ignored,
+        store_setter_roots: StoreSetterRootGuard::Exempt,
+        flush_in_action: false,
+        optimistic_store_setter: OptimisticStoreSetterGuard::Guarded,
+    };
+
+    /// The vocabulary of the audited triple, [`AUDITED_INSTALLATION`]: what
+    /// the review answers for exactly that installation, with no gap.
+    pub const AUDITED: Self = Self::RC3;
+
+    /// The vocabulary a project is analyzed under when no `solid-js`
+    /// resolves at all, so no owner was reviewed (the backend's `Defaulted`
+    /// detection, and a request that names no dialect). The audited
+    /// release's: a project that states no release most likely means the one
+    /// the checker was audited on.
+    pub const DEFAULTED: Self = Self::AUDITED;
 
     /// The vocabulary for the `2.0.0-rc.9` triple: a mutable store root (B1),
     /// `dynamic`'s static form (B2), `omit`'s predicate form (B3), `until`
@@ -245,7 +294,8 @@ impl Solid2 {
     /// independently.
     const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2;
 
-    /// The vocabulary at one mixed-radix index, the audited one at `0`. A new
+    /// The vocabulary at one mixed-radix index, [`Solid2::CONSERVATIVE`] at
+    /// `0`: digit `0` of every answer is its conservative one. A new
     /// release-dependent answer adds one digit here and in
     /// [`Solid2::index`], and one token in [`variant_key`].
     const fn from_index(index: usize) -> Self {
@@ -324,7 +374,7 @@ impl Solid2 {
 }
 
 static VARIANTS: [Solid2; Solid2::VARIANT_COUNT] = {
-    let mut variants = [Solid2::AUDITED; Solid2::VARIANT_COUNT];
+    let mut variants = [Solid2::CONSERVATIVE; Solid2::VARIANT_COUNT];
     let mut index = 0;
     while index < Solid2::VARIANT_COUNT {
         variants[index] = Solid2::from_index(index);
@@ -333,8 +383,15 @@ static VARIANTS: [Solid2; Solid2::VARIANT_COUNT] = {
     variants
 };
 
-/// The key naming how a variant differs from the audited vocabulary, one
-/// token per answer it moves. `None` for the audited vocabulary itself.
+/// The key naming how a variant differs from [`Solid2::CONSERVATIVE`], one
+/// token per answer it moves. `None` for the conservative vocabulary itself.
+///
+/// Spelled from the answers alone, never from which release is audited: the
+/// key is part of the dialect id (`solid-v2@<key>`), which keys every cache,
+/// retained session and daemon socket, so one id must name one set of answers
+/// in every build. Moving the audited release therefore renames nothing: the
+/// installations that reach a vocabulary keep its id, and only which id the
+/// audited triple (and a defaulted project) lands on moves.
 fn variant_key(vocabulary: Solid2) -> Option<String> {
     let mut tokens = Vec::new();
     if vocabulary.store_root == StoreRootTyping::Mutable {
@@ -370,7 +427,8 @@ static KEYS: LazyLock<Vec<Option<String>>> = LazyLock::new(|| {
         .collect()
 });
 
-/// Every variant but the audited vocabulary, for [`Dialect::variants`].
+/// Every variant but [`Solid2::CONSERVATIVE`], the language's own vocabulary,
+/// for [`Dialect::variants`].
 pub(super) static OTHER_VARIANTS: LazyLock<Vec<&'static dyn Dialect>> = LazyLock::new(|| {
     VARIANTS[1..]
         .iter()
@@ -462,6 +520,7 @@ static PRE_BETA_EXPERIMENT: RefusedRelease = RefusedRelease {
              vocabulary reads options, and its Suspense and ErrorBoundary are not the Loading and \
              Errored boundaries the rules recognise",
     review: RC9_REVIEW,
+    audited: AUDITED_INSTALLATION,
 };
 
 /// One owner's resolved release, as far as the reviews go.
@@ -643,22 +702,22 @@ fn gaps_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>) -> Ve
 }
 
 /// What the vocabulary cannot answer when an owner's release was not read.
-fn unread_consequence(package: &str) -> &'static str {
+fn unread_consequence(package: &str) -> String {
     match package {
-        SIGNALS => {
-            "the store typing it declares is unknown: a write to a store root's own property \
-             outside a setter is not reported, nor is a store setter called directly in a \
-             createRoot or component body, or flush() in an action body, and until is not \
-             modelled"
-        }
-        WEB => {
+        SIGNALS => "the store typing it declares is unknown: a write to a store root's own \
+                    property outside a setter is not reported, nor is a store setter called \
+                    directly in a createRoot or component body, or flush() in an action body, and \
+                    until is not modelled"
+            .to_owned(),
+        WEB => format!(
             "a dynamic call with options is not modelled, and every other export it declares is \
-             read as 2.0.0-rc.3 declares it"
-        }
-        _ => {
-            "until is not modelled, and every other export it declares is read as 2.0.0-rc.3 \
-             declares it"
-        }
+             read as {} declares it",
+            audited_release(WEB)
+        ),
+        _ => format!(
+            "until is not modelled, and every other export it declares is read as {} declares it",
+            audited_release(SOLID_JS)
+        ),
     }
 }
 
@@ -1160,6 +1219,101 @@ mod tests {
         );
     }
 
+    /// The conservative answers are the enum defaults and the unresolved
+    /// owner's, and they are not read from the audited release: nothing here
+    /// names [`Solid2::AUDITED`] or [`AUDITED_INSTALLATION`], so pointing
+    /// either at another release leaves this test, and the plain `solid-v2`
+    /// id it anchors, as they are.
+    #[test]
+    fn the_conservative_answers_do_not_depend_on_the_audited_release() {
+        let conservative = Solid2::CONSERVATIVE;
+        assert_eq!(conservative.index(), 0);
+        assert_eq!(Solid2::default().index(), conservative.index());
+        assert_eq!(conservative.store_root, StoreRootTyping::Readonly);
+        assert!(!conservative.omit_predicate_form);
+        assert!(!conservative.until);
+        assert_eq!(conservative.dynamic_options, DynamicOptions::Ignored);
+        assert_eq!(
+            conservative.store_setter_roots,
+            StoreSetterRootGuard::Exempt
+        );
+        assert!(!conservative.flush_in_action);
+        assert_eq!(
+            conservative.optimistic_store_setter,
+            OptimisticStoreSetterGuard::Guarded
+        );
+        // It is exactly what an installation with nothing resolved reads as.
+        assert_eq!(
+            vocabulary_for(
+                Release::Unresolved,
+                Release::Unresolved,
+                Release::Unresolved
+            )
+            .index(),
+            conservative.index()
+        );
+        // Every answer `@solidjs/signals` owns falls back to it, over the
+        // newest read `solid-js` and `@solidjs/web`.
+        let rc9 = Release::Read(NEWEST_READ);
+        for signals in [Release::Unresolved, Release::Unread("2.0.0-rc.10")] {
+            let vocabulary = vocabulary_for(rc9, signals, rc9);
+            assert_eq!(vocabulary.store_root, conservative.store_root);
+            assert_eq!(
+                vocabulary.omit_predicate_form,
+                conservative.omit_predicate_form
+            );
+            assert_eq!(vocabulary.until, conservative.until);
+            assert_eq!(
+                vocabulary.store_setter_roots,
+                conservative.store_setter_roots
+            );
+            assert_eq!(vocabulary.flush_in_action, conservative.flush_in_action);
+            assert_eq!(
+                vocabulary.optimistic_store_setter,
+                conservative.optimistic_store_setter
+            );
+        }
+        // Ids are spelled against it, so either candidate audited release
+        // keeps the id it has today.
+        assert_eq!(conservative.key(), None);
+        assert_eq!(Solid2::RC3.key(), None);
+        assert!(Solid2::RC9.key().is_some());
+    }
+
+    /// The audited vocabulary is the one its installation reviews to, with no
+    /// gap, and every sentence naming the audited release reads it from
+    /// [`AUDITED_INSTALLATION`].
+    #[test]
+    fn the_audited_vocabulary_is_what_the_audited_installation_reviews_to() {
+        let installed = OWNERS
+            .iter()
+            .zip(AUDITED_INSTALLATION)
+            .map(|(owner, (package, version))| {
+                assert_eq!(owner.package, *package, "in owner order");
+                InstalledRelease {
+                    package,
+                    version: Some(version),
+                }
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(installed.len(), OWNERS.len());
+        let (vocabulary, gaps) = analyzed(&installed);
+        assert_eq!(vocabulary.index(), Solid2::AUDITED.index());
+        assert!(gaps.is_empty(), "{gaps:?}");
+        assert!(std::ptr::eq(
+            Solid2::DEFAULTED.interned(),
+            &VARIANTS[Solid2::DEFAULTED.index()]
+        ));
+        assert_eq!(PRE_BETA_EXPERIMENT.audited, AUDITED_INSTALLATION);
+        for package in [SOLID_JS, WEB] {
+            assert!(
+                unread_consequence(package)
+                    .contains(&format!("read as {} declares it", audited_release(package))),
+                "{package}"
+            );
+        }
+    }
+
     /// What the engine asks, through the trait, follows the variant; the
     /// review does not depend on which variant is asked.
     #[test]
@@ -1169,7 +1323,7 @@ mod tests {
         // The value the engine holds by name is the audited vocabulary.
         assert!(Solid2.store_root_properties_are_readonly());
         assert!(Solid2::default().store_root_properties_are_readonly());
-        assert_eq!(Solid2::default().index(), Solid2::AUDITED.index());
+        assert_eq!(Solid2::default().index(), Solid2::CONSERVATIVE.index());
         assert!(Solid2::RC9.store_setter_callback_enables_proxy_writes());
         assert!(Solid2::AUDITED.store_setter_guard_exempts_roots());
         assert!(!Solid2::RC9.store_setter_guard_exempts_roots());

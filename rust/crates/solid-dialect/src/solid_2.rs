@@ -27,7 +27,10 @@ mod releases;
 /// release of the package that declares it (`releases.rs`, which builds the
 /// value from the resolved `solid-js`, `@solidjs/signals` and `@solidjs/web`).
 /// `Solid2` the value is the audited vocabulary ([`Solid2::AUDITED`], the rc.3
-/// triple); [`Solid2::RC9`] is the rc.9 triple's.
+/// triple); [`Solid2::RC9`] is the rc.9 triple's. The audited vocabulary, the
+/// conservative one variant ids are spelled against ([`Solid2::CONSERVATIVE`])
+/// and the one a project with no `solid-js` is analyzed under
+/// ([`Solid2::DEFAULTED`]) are three names, not one (`releases.rs`).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Solid2 {
     /// B1, from `@solidjs/signals`.
@@ -3037,6 +3040,10 @@ impl Dialect for Solid2 {
 
     fn variants(&self) -> &'static [&'static dyn Dialect] {
         &releases::OTHER_VARIANTS
+    }
+
+    fn defaulted_vocabulary(&self) -> Option<&'static dyn Dialect> {
+        Some(Solid2::DEFAULTED.interned())
     }
 
     /// Source: rc.0 store setters put the store into the Writing set for the

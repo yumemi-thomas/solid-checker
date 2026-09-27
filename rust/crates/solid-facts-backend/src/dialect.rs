@@ -390,6 +390,8 @@ const _: () = assert!(!ALL.is_empty(), "a build must carry at least one dialect"
 /// because the id keys every cache, retained session and daemon socket, and a
 /// result computed under one vocabulary must never answer for another;
 /// [`by_id`] resolves it so the daemon can forward the selection it hashed.
+/// The key is spelled from the vocabulary's answers, so moving the audited
+/// release renames no variant.
 ///
 /// Built once from the vocabularies rather than listed here, so a dialect that
 /// adds an answer adds its variants without shared code naming them.
@@ -448,12 +450,18 @@ fn for_vocabulary(
 /// answering the *older* default the day a newer dialect was added, and
 /// nothing would have said so; `Version`'s ordering is declaration order, so
 /// this follows the registry instead.
+///
+/// Within that language, the vocabulary is the one it names for a project
+/// with nothing installed ([`solid_dialect::Dialect::defaulted_vocabulary`]):
+/// the language itself, or one of its [`RELEASE_VARIANTS`].
 #[must_use]
 pub fn default_dialect() -> &'static Dialect {
-    ALL.iter()
+    let language = ALL
+        .iter()
         .copied()
         .max_by_key(|dialect| dialect.vocabulary.version())
-        .expect("the const assertion above holds ALL non-empty")
+        .expect("the const assertion above holds ALL non-empty");
+    for_vocabulary(language, language.vocabulary.defaulted_vocabulary())
 }
 
 /// The dialect for a Solid language version, if this build includes it.
@@ -839,8 +847,13 @@ fn resolved_solid_version(
     None
 }
 
+/// The Solid 2 language: the vocabulary whose variant key is `None`,
+/// [`solid_dialect::Solid2::CONSERVATIVE`], so the plain `solid-v2` id names
+/// the same answers whichever release is audited. The audited triple and a
+/// defaulted project reach theirs through the review and [`default_dialect`];
+/// today both are this one.
 #[cfg(feature = "dialect-v2")]
-static SOLID_V2: Dialect = SOLID_V2_AUDITED;
+static SOLID_V2: Dialect = SOLID_V2_LANGUAGE;
 
 /// The rc.9 triple's dialect: the [`RELEASE_VARIANTS`] entry whose vocabulary
 /// is [`solid_dialect::Solid2::RC9`]. Named for tests; detection reaches it
@@ -850,10 +863,10 @@ static SOLID_V2_RC9: std::sync::LazyLock<&'static Dialect> =
     std::sync::LazyLock::new(|| for_vocabulary(&SOLID_V2, Some(&solid_dialect::Solid2::RC9)));
 
 #[cfg(feature = "dialect-v2")]
-const SOLID_V2_AUDITED: Dialect = Dialect {
+const SOLID_V2_LANGUAGE: Dialect = Dialect {
     id: "solid-v2",
     compiler_facts_identity: solid_v2_compiler::COMPILER_FACTS_IDENTITY,
-    vocabulary: &solid_dialect::Solid2::AUDITED,
+    vocabulary: &solid_dialect::Solid2::CONSERVATIVE,
     rule_count: solid_v2_rules::Rule::ALL.len(),
     compiler: || Box::new(solid_v2_compiler::NativeCompilerFacts),
     solve_measured: solid_v2_rules::solve_measured,
@@ -1846,6 +1859,18 @@ mod tests {
                 && !message.contains("carries no dialect"),
             "the refusal states the vocabulary's reason, not an absent dialect: {message}"
         );
+        // The release it points to is the audited one, read from the
+        // vocabulary rather than spelled in the hint.
+        let audited = by_version(solid_dialect::Version::V2)
+            .expect("2.0 is carried")
+            .vocabulary
+            .audited_installation();
+        assert_eq!(refusal.audited, audited);
+        let hint = &snapshot.findings[0].hint;
+        assert!(
+            hint.contains(&format!("(the audited one is {})", audited[0].1)),
+            "{hint}"
+        );
         assert_eq!(snapshot.findings[0].id, UNSUPPORTED_RUNTIME_CODE);
         std::fs::remove_dir_all(&root).unwrap();
     }
@@ -1905,6 +1930,14 @@ mod tests {
                 .callback_runs_on_result_access(omit, 1, 2)
         );
         assert!(std::ptr::eq(for_vocabulary(&SOLID_V2, None), &SOLID_V2));
+        // The language is the vocabulary ids are spelled against, and a
+        // project with nothing installed gets the one the dialect names for
+        // it, whichever entry that is.
+        assert_eq!(SOLID_V2.vocabulary.variant_key(), None);
+        assert!(std::ptr::eq(
+            default_dialect(),
+            for_vocabulary(&SOLID_V2, Some(&solid_dialect::Solid2::DEFAULTED))
+        ));
     }
 
     /// The notice's identity is held here and published by the catalog; this

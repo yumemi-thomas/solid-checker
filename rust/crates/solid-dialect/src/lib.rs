@@ -239,6 +239,10 @@ pub struct RefusedRelease {
     pub reason: &'static str,
     /// Where that difference was measured, repository-relative.
     pub review: &'static str,
+    /// The installation the refusing vocabulary was audited on
+    /// ([`Dialect::audited_installation`]), which the refusal names as the
+    /// one to move to.
+    pub audited: &'static [(&'static str, &'static str)],
 }
 
 /// A Solid primitive the checker models.
@@ -1526,7 +1530,9 @@ pub trait Dialect: Sync {
     /// Which release variant of its language this vocabulary is: `None` for
     /// the language's own vocabulary, and otherwise a stable key naming how
     /// its answers differ from it. The key is part of every identity a result
-    /// is cached under, so two variants must never share one.
+    /// is cached under, so two variants must never share one, and one key
+    /// must name the same answers in every build: spell it from the answers,
+    /// not from which release happens to be audited.
     fn variant_key(&self) -> Option<&'static str> {
         None
     }
@@ -1537,6 +1543,16 @@ pub trait Dialect: Sync {
     /// a daemon forwarding the selection it hashed has.
     fn variants(&self) -> &'static [&'static dyn Dialect] {
         &[]
+    }
+
+    /// The vocabulary a project is analyzed under when no installation of
+    /// the language resolves at all, so nothing was reviewed: the language's
+    /// own vocabulary or one of its [`Dialect::variants`]. Asked of the
+    /// language's own vocabulary.
+    ///
+    /// The default is `None`, the language's own vocabulary.
+    fn defaulted_vocabulary(&self) -> Option<&'static dyn Dialect> {
+        None
     }
 
     /// Whether a binding spelling is a dialect convention that makes
@@ -3311,6 +3327,7 @@ mod tests {
         assert_eq!(gaps.len(), 1, "{gaps:?}");
         assert_eq!(silent.variant_key(), None);
         assert!(silent.variants().is_empty());
+        assert!(silent.defaulted_vocabulary().is_none());
 
         // Surfaces this dialect has not claimed to model.
         assert!(!silent.models_server_functions());
