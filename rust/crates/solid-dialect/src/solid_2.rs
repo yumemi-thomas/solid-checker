@@ -340,7 +340,7 @@ const RC9: &str = "2.0.0-rc.9";
 /// # Rows are archive-scoped, and three `@solidjs/signals` archives carry rows
 ///
 /// Every row names its archive's version ([`NegativeClaimRow::version`]) and
-/// answers for that archive alone. The 48 rc.3 rows answer for the three
+/// answers for that archive alone. The 47 rc.3 rows answer for the three
 /// `2.0.0-rc.3` archives; the 24 rc.6 rows answer for
 /// `@solidjs/signals@2.0.0-rc.6`, which the ecosystem installs in place of
 /// rc.3 (every `solid-js@2.0.0-rc.3` declares `@solidjs/signals: ^2.0.0-rc.3`).
@@ -378,7 +378,7 @@ const RC9: &str = "2.0.0-rc.9";
 /// # `creates` and `reads`, and only those
 ///
 /// Rows carry [`CallClaimDomain::Creates`] (64: 30 on rc.3, one of them scoped, 17 on rc.6, 17 on
-/// rc.9) and [`CallClaimDomain::Reads`] (32: 18 on rc.3, 7 on rc.6, 7 on rc.9). The other six kinded
+/// rc.9) and [`CallClaimDomain::Reads`] (31: 17 on rc.3, 7 on rc.6, 7 on rc.9). The other six kinded
 /// domains are withheld wholesale, because the audited documents' closures in them are not yet
 /// admissible as negative authority and each counter-example below is a defect
 /// against the *audit*, not against this table:
@@ -419,16 +419,18 @@ const RC9: &str = "2.0.0-rc.9";
 /// closure conforms as written, and no bundled document models a props access
 /// as a read, so the closures became derivable rows.
 ///
-/// Eighteen of the twenty derivable rows ship: `createEffect` below, and
-/// `Show`, withdrawn 2026-09-27 on rc.3's own bytes (its memos compute on the
-/// call's stack and read memos `Show` created; RC3_SHOW_LOADING_AUDIT § 1),
-/// are the two that do not. All five that the worksheet
+/// Seventeen of the twenty derivable rows ship. `createEffect` below is
+/// withheld; `Show` (its memos compute on the call's stack and read memos
+/// `Show` created; RC3_SHOW_LOADING_AUDIT § 1) and `@solidjs/web`'s `render`
+/// (an undeclared `insertOptions` reaches a hydration gate signal its own
+/// closure creates and reads; § 4) were withdrawn 2026-09-27 on rc.3's own
+/// bytes. All five that the worksheet
 /// left open were read against the pinned rc.3 bytes on 2026-09-10
 /// (`phase21/2026-09-10-reads-negative-rows-audit-worksheet.md` § 6); four
 /// cleared and one did not.
 ///
 /// - **`@solidjs/signals`'s `flush` and `action`, and `@solidjs/web`'s
-///   `render` and `hydrate`** ship under § reads
+///   `hydrate`** ship under § reads
 ///   **[Decision 2026-09-10]** on authorship: `flush()` drains `globalQueue`
 ///   and runs computations a *third party* registered, and those reads belong
 ///   to whoever registered them. Everything else in the four bodies routes to
@@ -2938,23 +2940,11 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             end_byte: 15951,
         }],
     },
-    // `code()`, `flatten(tree)` and `insert(.., () => tree, ..)` all run over the
-    // caller's tree (ADR 0048); `element.firstChild` and `options.*` are not
-    // sources; the remaining reach is `flush()`, attributed by § reads
-    // [Decision 2026-09-10].
-    NegativeClaimRow {
-        package: "@solidjs/web",
-        version: RC3,
-        export: "render",
-        domain: CallClaimDomain::Reads,
-        scope: RowScope::EveryCondition,
-        citations: &[AuditedCitation::Summary {
-            document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
-            summary: "summary-d6e8921e93fd37f6028c1ad809693ef42764ab602a477ba683dd4afc3efa7530",
-            start_byte: 16033,
-            end_byte: 21942,
-        }],
-    },
+    // `render` `reads` is withdrawn (RC3_SHOW_LOADING_AUDIT § 4): under
+    // hydration, `options.insertOptions` reaches `insert`'s effect, and with
+    // `{ scope: true, ssrSource: "client" }` `solid-js`' `hydratedEffect`
+    // creates a gate signal that a compute it authored reads on `render`'s
+    // own stack.
     NegativeClaimRow {
         package: "solid-js",
         version: RC3,
@@ -5345,6 +5335,7 @@ mod tests {
             CallClaimDomain::Reads,
         ),
         ("@solidjs/web", RC3, "hydrate", CallClaimDomain::Creates),
+        ("@solidjs/web", RC3, "render", CallClaimDomain::Reads),
         ("solid-js", RC3, "createEffect", CallClaimDomain::Creates),
         ("solid-js", RC3, "createEffect", CallClaimDomain::Reads),
         ("solid-js", RC3, "createSignal", CallClaimDomain::Creates),
@@ -5824,6 +5815,24 @@ mod tests {
                  pending -- registrations the per-request render runtime \
                  writes into the response, a create under semantic-model.md \
                  § creates' [Decision 2026-09-04]. A flat row carries no guard",
+            ),
+        ),
+        (
+            "@solidjs/web",
+            RC3,
+            "render",
+            CallClaimDomain::Reads,
+            RC3_SHOW_LOADING_AUDIT,
+            "## 4. `render` — `reads` — archive `@solidjs/web@2.0.0-rc.3` — **WITHDRAWN**",
+            ImplementationVerdict::Withheld(
+                "render spreads options.insertOptions into insert's options \
+                 (dist/web.js:347-378), and effect (:59-65) makes the effect \
+                 non-transparent for scope: true; under hydration solid-js' \
+                 hydratedEffect (solid.js:645-662) then runs withHydrationGate \
+                 for ssrSource: \"client\", which creates a signal that a \
+                 compute it authored reads when the effect computes on \
+                 render's own stack. The option is undeclared but reaches \
+                 render through any non-fresh object",
             ),
         ),
         // RC9_SIGNALS_AUDIT: the five `creates` rows the rc.9 vocabulary
@@ -6690,18 +6699,18 @@ mod tests {
         // `reads` withheld as on rc.6 (again derivable only from
         // IMPLEMENTATION_AUDITED). rc.9 then carries what rc.6 does: 24.
         // The 2026-09-27 rc.3 re-reading (RC3_SHOW_LOADING_AUDIT) withdraws
-        // 3 document-derivable rows, each listed in WITHHELD and
+        // 4 document-derivable rows, each listed in WITHHELD and
         // IMPLEMENTATION_AUDITED.
         assert_eq!(from_json.len(), 45);
         assert_eq!(implementation_closed.len(), 8 + 24 + 5 + 19);
-        assert_eq!(implementation_withheld.len(), 4 + 3);
+        assert_eq!(implementation_withheld.len(), 4 + 4);
         let on = |version: &str| shipped.iter().filter(|(_, v, _, _)| v == version).count();
-        assert_eq!((on(RC3), on(RC6), on(RC9)), (47, 24, 24));
-        assert_eq!(shipped.len(), 95);
+        assert_eq!((on(RC3), on(RC6), on(RC9)), (46, 24, 24));
+        assert_eq!(shipped.len(), 94);
 
         // The scoped rows: each is a flat row both sources withhold, read
         // under one host-target condition in a section HOST_TARGET_READINGS
-        // names, and nothing else. 95 flat + 1 scoped = 96 rows.
+        // names, and nothing else. 94 flat + 1 scoped = 95 rows.
         let mut scoped = BTreeSet::new();
         for row in NEGATIVE_ROWS {
             let RowScope::HostTarget(scope) = row.scope else {
@@ -6750,7 +6759,7 @@ mod tests {
             assert!(scoped.insert(key), "{:?} is scoped twice", row.export);
         }
         assert_eq!(scoped.len(), 1);
-        assert_eq!(NEGATIVE_ROWS.len(), 95 + 1);
+        assert_eq!(NEGATIVE_ROWS.len(), 94 + 1);
 
         // The two authorities must not be confusable from the row alone: a row
         // the hand census closed cites runtime bytes, and every other row cites

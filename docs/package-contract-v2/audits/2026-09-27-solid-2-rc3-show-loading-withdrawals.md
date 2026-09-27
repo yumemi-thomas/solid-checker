@@ -1,11 +1,11 @@
-# Audit: `solid-js@2.0.0-rc.3` — `Show` and `Loading` rows withdrawn on rc.3's own bytes
+# Audit: `solid-js@2.0.0-rc.3` and `@solidjs/web@2.0.0-rc.3` — `Show`, `Loading`, `render` and `hydrate` rows withdrawn on rc.3's own bytes
 
 Date: 2026-09-27. Status: **for the repository owner's review**, as the audits
 it follows were. It withdraws rows that the negative table
 (`rust/crates/solid-dialect/src/solid_2.rs`, `NEGATIVE_ROWS`) carried for
-`solid-js@2.0.0-rc.3`. Each of them rested only on a summary in
-`pkg/contracts/bundled/solid-v2/solid-js.json`, and each is contradicted by
-rc.3's own runtime bytes.
+`solid-js@2.0.0-rc.3` and `@solidjs/web@2.0.0-rc.3`. Each of them rested only
+on a summary in `pkg/contracts/bundled/solid-v2/solid-js.json` or
+`solidjs-web.json`, and each is contradicted by rc.3's own runtime bytes.
 
 **Why it exists.** Reading the same exports on `solid-js@2.0.0-rc.9`
 (`2026-09-27-solid-2-rc9-core-and-web-negative-rows.md`) found reads and
@@ -290,3 +290,68 @@ already withdraw the row.
 **WITHDRAWN.** The row `(solid-js, 2.0.0-rc.3, Loading, Creates)` is removed
 from `NEGATIVE_ROWS`, and it is listed in `WITHHELD` and in
 `IMPLEMENTATION_AUDITED` under this section.
+
+---
+
+## 4. `render` — `reads` — archive `@solidjs/web@2.0.0-rc.3` — **WITHDRAWN**
+
+`@solidjs/web@2.0.0-rc.3`,
+`sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg==`,
+was re-downloaded with `npm pack` on 2026-09-27. Its `dist/web.js` sha256,
+`3eccc22880306613c83a658d5889f9b307fad4a114c8842e12b9db5ffe46bf27`, equals
+`phase0/rc3/solidjs-web/files.json`. The row's comment said the
+remaining reach was `flush()`: "`code()`, `flatten(tree)` and `insert(..,
+() => tree, ..)` all run over the caller's tree (ADR 0048)". One more reach
+exists.
+
+### 4.1 The path
+
+- **`render` spreads a caller-supplied object into `insert`'s options.**
+  `render` (`dist/web.js:347-378`) calls `insert(element, () => tree, …, init,
+  { ...options.insertOptions, schedule: true })`.
+- **`insert` lets that object turn transparency off.** `insert` passes those
+  options to the package's `effect` (`:59-65`), which builds
+  `{ sync: true, ...options, transparent: !options.scope }` and calls
+  `solid-js`' `createRenderEffect`.
+- **Hydration routes the effect through `hydratedEffect`.** Once
+  `enableHydration()` has run (`@solidjs/web`'s own `hydrate` runs it first),
+  `solid-js`' `createRenderEffect` (`solid.js:770`) is `hydratedCreateRenderEffect`
+  (`:663-665`, installed at `:688`). That function is `hydratedEffect`
+  (`:645-662`).
+- **An `ssrSource: "client"` option makes `hydratedEffect` create and read a
+  signal.** With `sharedConfig.hydrating`, a non-transparent effect, and
+  `ssrSource === "client"`, `hydratedEffect` calls `withHydrationGate`
+  (`:542-549`). `withHydrationGate` does `createSignal$1(false, { ownedWrite:
+  true })`. It then creates the effect with a compute that `solid-js` authored:
+  `prev => { if (!hydrated()) return prev; … }`.
+- **The read happens on `render`'s own stack.** `@solidjs/signals`' `effect`
+  computes at creation (`recompute(f, true)`, `dist/prod/core/effect.js:16`;
+  `dist/dev.js:5285`).
+
+So a compute inside `render`'s own closure, not a caller's callable, reads a
+signal created during this call. That is the shape that withholds `solid-js`
+`createEffect` `reads`.
+
+### 4.2 Reachability
+
+The path needs `options.insertOptions` to be `{ scope: true, ssrSource:
+"client" }`.
+
+- `render`'s declared options are `{ owner?, renderId? }`
+  (`types/client.d.ts:119-122`), so a fresh object literal carrying
+  `insertOptions` is rejected (TS2353).
+- An object that is not fresh is accepted. A reader ran `tsc` 5.9.3 against
+  the rc.9 typings, which have the same shape and the same omission: `const
+  opts = { renderId: "a", insertOptions: { scope: true, ssrSource: "client" } };
+  render(code, el, undefined, opts)` type-checks. An untyped caller needs no
+  such step.
+- The body reads the property unconditionally.
+
+This is a guarded reach. **For the owner:** if an option absent from the
+declared type is ruled unreachable, this row (and § 5) stand on the rest of
+the walk, which is clean.
+
+### 4.3 Verdict
+
+**WITHDRAWN.** The row `(@solidjs/web, 2.0.0-rc.3, render, Reads)` is listed
+in `WITHHELD` and in `IMPLEMENTATION_AUDITED` under this section.
