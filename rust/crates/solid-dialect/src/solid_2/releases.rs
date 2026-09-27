@@ -13,6 +13,7 @@
 //! | B2: does `dynamic(source, { static: true })` select a different runtime? | `@solidjs/web` (`if (options?.static)`, rc.9 only) | the project |
 //! | B3: does `omit`'s lone function argument run as a predicate? | `@solidjs/signals` (rc.9 only) | the installed `solid-js` |
 //! | N3: does the dev store-setter guard reject a root owner? | `@solidjs/signals` (`devGuardStoreSetterWrite`, rc.9 only) | the installed `solid-js` |
+//! | N4: does `flush` throw `FLUSH_IN_ACTION` inside an action step? | `@solidjs/signals` (`dist/dev-shared.js`, from rc.8) | the installed `solid-js` |
 //!
 //! Every `solid-js@2.0.0-rc.N` depends on `@solidjs/signals: ^2.0.0-rc.N`, a
 //! range, so a fresh install of the audited `solid-js@2.0.0-rc.3` resolves
@@ -26,15 +27,16 @@
 //!
 //! ## Releases, per package (the two 2026-09-26 reviews)
 //!
-//! | release | B1 store root | B2 `dynamic` options | B3 `omit` predicate | B4 `until` | N3 store setter under a root | open gaps |
-//! | --- | --- | --- | --- | --- | --- | --- |
-//! | rc.0-rc.3 | `Readonly` | ignored | absent | absent | exempt (rc.0: see `StoreSetterRootGuard`) | none: audited (rc.3), or equal to rc.0/rc.3 on every premise the dialect cites (rc.0, rc.1, rc.2) |
-//! | rc.4 | `Readonly` | ignored | absent | absent | exempt | `solid-js`: `registerPatch`, `registerRowOps`, `registerSlotPatch`; `@solidjs/web`: `installListDriver`, `driveList` (callback-taking, neither modelled nor excluded) |
-//! | rc.5, rc.6 | `Readonly` | ignored | absent | present | exempt | as rc.4 |
-//! | rc.7, rc.8 | `Mutable` | ignored (`DynamicOptions` is `deferStream` only, and no bundle reads it on the client) | absent | present | exempt | `@solidjs/signals`: no negative row |
-//! | rc.9 | `Mutable` | `static` selects `staticDynamic(untrack(source))` | present | present | guarded | `@solidjs/signals`: negative rows for five creates answers only; `solid-js`: re-exports its declarations do not declare |
-//! | anything else (rc.10+, betas, `2.0.0`, an inexact spelling) | `Readonly` (see below) | not modelled | absent | not modelled | exempt (see below) | the release is named as not compared |
-//! | not resolved | `Readonly` (see below) | as rc.3 (nothing can import `dynamic`) | absent | not modelled | exempt (see below) | named for `@solidjs/signals`; none for `@solidjs/web` |
+//! | release | B1 store root | B2 `dynamic` options | B3 `omit` predicate | B4 `until` | N3 store setter under a root | N4 `FLUSH_IN_ACTION` | open gaps |
+//! | --- | --- | --- | --- | --- | --- | --- | --- |
+//! | rc.0-rc.3 | `Readonly` | ignored | absent | absent | exempt (rc.0: see `StoreSetterRootGuard`) | absent | none: audited (rc.3), or equal to rc.0/rc.3 on every premise the dialect cites (rc.0, rc.1, rc.2) |
+//! | rc.4 | `Readonly` | ignored | absent | absent | exempt | absent | `solid-js`: `registerPatch`, `registerRowOps`, `registerSlotPatch`; `@solidjs/web`: `installListDriver`, `driveList` (callback-taking, neither modelled nor excluded) |
+//! | rc.5, rc.6 | `Readonly` | ignored | absent | present | exempt | absent | as rc.4 |
+//! | rc.7 | `Mutable` | ignored (`DynamicOptions` is `deferStream` only, and no bundle reads it on the client) | absent | present | exempt | absent | `@solidjs/signals`: no negative row |
+//! | rc.8 | `Mutable` | as rc.7 | absent | present | exempt | present | as rc.7 |
+//! | rc.9 | `Mutable` | `static` selects `staticDynamic(untrack(source))` | present | present | guarded | present | `@solidjs/signals`: negative rows for five creates answers only; `solid-js`: re-exports its declarations do not declare |
+//! | anything else (rc.10+, betas, `2.0.0`, an inexact spelling) | `Readonly` (see below) | not modelled | absent | not modelled | exempt (see below) | not modelled | the release is named as not compared |
+//! | not resolved | `Readonly` (see below) | as rc.3 (nothing can import `dynamic`) | absent | not modelled | exempt (see below) | not modelled | named for `@solidjs/signals`; none for `@solidjs/web` |
 //!
 //! `2.0.0-experimental.x` of `solid-js` is refused, not analyzed.
 //!
@@ -64,9 +66,10 @@
 //! a violation the runtime does not raise; silence is a miss the notice already
 //! makes visible.
 //!
-//! `until` and the `dynamic` option forms are simply not modelled on an
-//! unknown owner: `until` is not a vocabulary name, and an option-bearing
-//! `dynamic` call is the form that states nothing.
+//! `until`, the `dynamic` option forms and the `FLUSH_IN_ACTION` throw are
+//! simply not modelled on an unknown owner: `until` is not a vocabulary name,
+//! an option-bearing `dynamic` call is the form that states nothing, and
+//! `flush` in an action step is not claimed to throw.
 //!
 //! Matching is exact on the trimmed string. A range (`^2.0.0-rc.3`) or build
 //! metadata (`2.0.0-rc.3+local`) is not the release that was read.
@@ -189,19 +192,21 @@ impl Solid2 {
 
     /// The vocabulary for the `2.0.0-rc.9` triple: a mutable store root (B1),
     /// `dynamic`'s static form (B2), `omit`'s predicate form (B3), `until`
-    /// (B4), and a store-setter guard that no longer exempts roots (N3).
+    /// (B4), a store-setter guard that no longer exempts roots (N3), and the
+    /// `FLUSH_IN_ACTION` throw (N4).
     pub const RC9: Self = Self {
         store_root: StoreRootTyping::Mutable,
         omit_predicate_form: true,
         until: true,
         dynamic_options: DynamicOptions::StaticForm,
         store_setter_roots: StoreSetterRootGuard::Guarded,
+        flush_in_action: true,
     };
 
     /// How many distinct vocabularies the answers above combine into: every
     /// combination is reachable, because the three owners install
     /// independently.
-    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2;
+    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2;
 
     /// The vocabulary at one mixed-radix index, the audited one at `0`. A new
     /// release-dependent answer adds one digit here and in
@@ -225,6 +230,7 @@ impl Solid2 {
             } else {
                 StoreSetterRootGuard::Exempt
             },
+            flush_in_action: (index / 48) % 2 == 1,
         }
     }
 
@@ -244,7 +250,8 @@ impl Solid2 {
             StoreSetterRootGuard::Exempt => 0,
             StoreSetterRootGuard::Guarded => 1,
         };
-        store + 2 * omit + 4 * until + 8 * dynamic + 24 * store_setter
+        let flush = if self.flush_in_action { 1 } else { 0 };
+        store + 2 * omit + 4 * until + 8 * dynamic + 24 * store_setter + 48 * flush
     }
 
     /// The one `'static` value per vocabulary, which is what an analysis holds.
@@ -286,6 +293,9 @@ fn variant_key(vocabulary: Solid2) -> Option<String> {
     }
     if vocabulary.until {
         tokens.push("until");
+    }
+    if vocabulary.flush_in_action {
+        tokens.push("flush-in-action");
     }
     match vocabulary.dynamic_options {
         DynamicOptions::Ignored => {}
@@ -497,6 +507,13 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
                 StoreSetterRootGuard::Exempt
             }
         },
+        // N4. `flush` is `@solidjs/signals`'s (`solid-js` re-exports it), and
+        // the `actionStepDepth` guard first ships in its rc.8
+        // (`dist/dev-shared.js:1904-1913`; the rc.1-rc.8 review § 3, probe R:
+        // rc.0-rc.7 resolve, rc.8 and rc.9 reject with `FLUSH_IN_ACTION` in
+        // dev). An unread or unresolved signals keeps `false`: the throw is
+        // not claimed on bytes nobody read.
+        flush_in_action: matches!(signals, Release::Read(number) if number >= 8),
     }
 }
 
@@ -545,9 +562,10 @@ fn gaps_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>) -> Ve
             gap: format!(
                 "solid-js {}, @solidjs/signals {} and @solidjs/web {} are not one reviewed \
                  release, and no review read this combination: each release-dependent answer is \
-                 taken from the package that declares it (the store typing and the store \
-                 setter's root guard from @solidjs/signals, until from solid-js and \
-                 @solidjs/signals together, dynamic's options from @solidjs/web)",
+                 taken from the package that declares it (the store typing, the store \
+                 setter's root guard and flush's action-step throw from @solidjs/signals, until \
+                 from solid-js and @solidjs/signals together, dynamic's options from \
+                 @solidjs/web)",
                 solid_js.spelled(),
                 signals.spelled(),
                 web.spelled()
@@ -564,7 +582,7 @@ fn unread_consequence(package: &str) -> &'static str {
         SIGNALS => {
             "the store typing it declares is unknown: a write to a store root's own property \
              outside a setter is not reported, nor is a store setter called directly in a \
-             createRoot body, and until is not modelled"
+             createRoot body or flush() in an action body, and until is not modelled"
         }
         WEB => {
             "a dynamic call with options is not modelled, and every other export it declares is \
@@ -585,8 +603,8 @@ fn unresolved_consequence(package: &str) -> Option<&'static str> {
         SIGNALS => Some(
             "@solidjs/signals does not resolve from the installed solid-js, so the store typing \
              it declares is unknown: a write to a store root's own property outside a setter is \
-             not reported, nor is a store setter called directly in a createRoot body, and until \
-             is not modelled",
+             not reported, nor is a store setter called directly in a createRoot body or flush() \
+             in an action body, and until is not modelled",
         ),
         WEB => None,
         _ => Some(
@@ -671,7 +689,7 @@ mod tests {
     #[test]
     fn every_reviewed_triple_answers_as_the_reviews_measured() {
         // (release, store root, omit predicate, until, dynamic options, store setter under a
-        // root, gap count)
+        // root, flush in action, gap count)
         let rows = [
             (
                 "2.0.0-rc.0",
@@ -680,6 +698,7 @@ mod tests {
                 false,
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
+                false,
                 0,
             ),
             (
@@ -689,6 +708,7 @@ mod tests {
                 false,
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
+                false,
                 0,
             ),
             (
@@ -698,6 +718,7 @@ mod tests {
                 false,
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
+                false,
                 0,
             ),
             (
@@ -707,6 +728,7 @@ mod tests {
                 false,
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
+                false,
                 0,
             ),
             (
@@ -716,6 +738,7 @@ mod tests {
                 false,
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
+                false,
                 2,
             ),
             (
@@ -725,6 +748,7 @@ mod tests {
                 true,
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
+                false,
                 2,
             ),
             (
@@ -734,6 +758,7 @@ mod tests {
                 true,
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
+                false,
                 2,
             ),
             (
@@ -743,6 +768,7 @@ mod tests {
                 true,
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
+                false,
                 1,
             ),
             (
@@ -752,6 +778,7 @@ mod tests {
                 true,
                 DynamicOptions::Ignored,
                 StoreSetterRootGuard::Exempt,
+                true,
                 1,
             ),
             (
@@ -761,6 +788,7 @@ mod tests {
                 true,
                 DynamicOptions::StaticForm,
                 StoreSetterRootGuard::Guarded,
+                true,
                 2,
             ),
         ];
@@ -771,6 +799,7 @@ mod tests {
             until,
             dynamic_options,
             store_setter_roots,
+            flush_in_action,
             gap_count,
         ) in rows
         {
@@ -781,14 +810,16 @@ mod tests {
                     vocabulary.omit_predicate_form,
                     vocabulary.until,
                     vocabulary.dynamic_options,
-                    vocabulary.store_setter_roots
+                    vocabulary.store_setter_roots,
+                    vocabulary.flush_in_action
                 ),
                 (
                     store_root,
                     omit_predicate_form,
                     until,
                     dynamic_options,
-                    store_setter_roots
+                    store_setter_roots,
+                    flush_in_action
                 ),
                 "{release}"
             );
@@ -828,6 +859,8 @@ mod tests {
         // so is the store setter's guard, which no longer exempts roots.
         assert!(vocabulary.omit_predicate_form);
         assert_eq!(vocabulary.store_setter_roots, StoreSetterRootGuard::Guarded);
+        // `flush` is signals' as well, so its action-step throw comes along.
+        assert!(vocabulary.flush_in_action);
         // rc.3's root does not re-export until (TS2305 on that tree), and
         // rc.3's web has no static option.
         assert!(!vocabulary.until);
@@ -847,6 +880,35 @@ mod tests {
         assert!(vocabulary.until);
         assert_eq!(vocabulary.dynamic_options, DynamicOptions::StaticForm);
         assert_eq!(vocabulary.store_setter_roots, StoreSetterRootGuard::Exempt);
+        assert!(!vocabulary.flush_in_action);
+    }
+
+    /// N4: the `FLUSH_IN_ACTION` throw is signals' alone, from rc.8, and is
+    /// never claimed on a signals release nobody read.
+    #[test]
+    fn the_flush_throw_follows_the_resolved_signals() {
+        for (signals, throws) in [
+            (Some("2.0.0-rc.3"), false),
+            (Some("2.0.0-rc.7"), false),
+            (Some("2.0.0-rc.8"), true),
+            (Some("2.0.0-rc.9"), true),
+            (Some("2.0.0-rc.10"), false),
+            (Some("2.0.0-beta.2"), false),
+            (None, false),
+        ] {
+            let (vocabulary, _) =
+                analyzed(&triple(Some("2.0.0-rc.3"), signals, Some("2.0.0-rc.3")));
+            assert_eq!(vocabulary.flush_in_action, throws, "{signals:?}");
+            assert_eq!(
+                vocabulary.throws_inside_action_step(Primitive::Flush),
+                throws,
+                "{signals:?}"
+            );
+            // The stepping is the same on every release; only the throw moves.
+            assert!(vocabulary.callback_runs_as_action_steps(Primitive::Action, 0));
+            assert!(!vocabulary.callback_runs_as_action_steps(Primitive::Action, 1));
+            assert!(!vocabulary.throws_inside_action_step(Primitive::Untrack));
+        }
     }
 
     /// Defect 2: B2 and B4 answer only where the owner has the feature.
@@ -987,7 +1049,7 @@ mod tests {
         assert_eq!(
             Solid2::RC9.key(),
             Some(
-                "store-root-mutable+omit-predicate+until+dynamic-static+store-setter-guards-roots"
+                "store-root-mutable+omit-predicate+until+flush-in-action+dynamic-static+store-setter-guards-roots"
             )
         );
     }

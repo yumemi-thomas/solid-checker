@@ -1657,7 +1657,7 @@ mod tests {
                 RC9,
                 RC9,
                 RC9,
-                "solid-v2@store-root-mutable+omit-predicate+until+dynamic-static+store-setter-guards-roots",
+                "solid-v2@store-root-mutable+omit-predicate+until+flush-in-action+dynamic-static+store-setter-guards-roots",
                 true,
             ),
             // A fresh install of the audited solid-js today (the rc.1-rc.8
@@ -1666,7 +1666,7 @@ mod tests {
                 RC3,
                 RC9,
                 RC3,
-                "solid-v2@store-root-mutable+omit-predicate+store-setter-guards-roots",
+                "solid-v2@store-root-mutable+omit-predicate+flush-in-action+store-setter-guards-roots",
                 true,
             ),
             (
@@ -1776,7 +1776,7 @@ mod tests {
         };
         assert_eq!(
             dialect.id,
-            "solid-v2@store-root-mutable+omit-predicate+store-setter-guards-roots"
+            "solid-v2@store-root-mutable+omit-predicate+flush-in-action+store-setter-guards-roots"
         );
         assert_eq!(releases[1].version.as_deref(), Some("2.0.0-rc.9"));
         let nested_manifest = "node_modules/solid-js/node_modules/@solidjs/signals/package.json";

@@ -411,6 +411,20 @@ const EXEMPT = {
   // not reported. Replace this entry with a keystone case when the oracle
   // provisions an rc.9 install.
   "static-dynamic-async-source": "dynamic()'s static option exists only from @solidjs/web 2.0.0-rc.9; the oracle provisions the audited rc.3, where a second argument is TS2554. The keystone is fixtures/reactive-ir/rc9-static-dynamic-async, tsc-clean against the published rc.9 typings",
+  // Unprovisioned the other way round: the snippet type-checks on rc.3, but
+  // the runtime fact is absent there. `flush` and `action` are declared
+  // identically on rc.3, rc.8 and rc.9 (scheduler.d.ts's two `flush`
+  // overloads, action.d.ts's one signature), and only @solidjs/signals rc.8+
+  // throws FLUSH_IN_ACTION, so on this oracle's rc.3 install the rule is
+  // correctly silent and no case can show it reporting. The absolute rule was
+  // checked by hand instead: `fixtures/reactive-ir/rc9-flush-in-action/App.tsx`
+  // is `tsc --noEmit`-clean (5.9.3, strict, bundler resolution,
+  // `jsxImportSource: "@solidjs/web"`, skipLibCheck) against the published
+  // rc.9, rc.8 and rc.3 installs while this rule reports its six positives on
+  // rc.9, and `release-triple-flush-rc8/App.ts` is clean against rc.8 while it
+  // reports two. Replace this entry with a keystone case when the oracle
+  // provisions an rc.8 or later install.
+  "flush-in-action": "the FLUSH_IN_ACTION throw exists only from @solidjs/signals 2.0.0-rc.8; the oracle provisions the audited rc.3, where flush() in an action is legal and the rule is silent. The keystones are fixtures/reactive-ir/rc9-flush-in-action and release-triple-flush-rc8, tsc-clean against the published rc.9 and rc.8 typings",
 };
 
 const catalogRules = catalogEntries.map((rule) => rule.name);

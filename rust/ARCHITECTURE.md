@@ -79,14 +79,14 @@ has chosen the language and hands the versions over. The answer is either
 refused (`SC9013`) or a vocabulary plus a list of open gaps: empty is audited
 (analyze, say nothing), anything else analyzes and adds one `SC9014` notice
 naming each gap and the versions found. The vocabulary is built per answer from
-the package that owns it (the store typing, `omit`'s predicate and the store
-setter's root guard from signals, `dynamic`'s options from web, `until` from
-`solid-js` and signals together), so a fresh install of `solid-js@2.0.0-rc.3`
-over signals rc.9 gets rc.9's store answers. Every distinct vocabulary other
-than the language's own is a release variant, `dialect::RELEASE_VARIANTS`: the
-same catalog under an id of its own, `solid-v2@<variant key>` (for the rc.9
-triple
-`solid-v2@store-root-mutable+omit-predicate+until+dynamic-static+store-setter-guards-roots`),
+the package that owns it (the store typing, `omit`'s predicate, the store
+setter's root guard and `flush`'s action-step throw from signals, `dynamic`'s
+options from web, `until` from `solid-js` and signals together), so a fresh
+install of `solid-js@2.0.0-rc.3` over signals rc.9 gets rc.9's store answers.
+Every distinct vocabulary other than the language's own is a release variant,
+`dialect::RELEASE_VARIANTS`: the same catalog under an id of its own,
+`solid-v2@<variant key>` (for the rc.9 triple
+`solid-v2@store-root-mutable+omit-predicate+until+flush-in-action+dynamic-static+store-setter-guards-roots`),
 so caches and daemon sockets never mix two. The registry is built from
 `Dialect::variants`, and shared code never classifies a release or names what a
 package owns. See `solid-dialect/src/solid_2/releases.rs`.

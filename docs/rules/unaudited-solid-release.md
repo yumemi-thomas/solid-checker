@@ -21,8 +21,8 @@ about that installation (`rust/crates/solid-dialect/src/solid_2/releases.rs`):
 - `@solidjs/web`, from the project.
 
 Each release-dependent answer is taken from the package that declares it: the
-store root typing and `omit`'s predicate form from `@solidjs/signals`,
-`dynamic`'s options from `@solidjs/web`, and `until` from `solid-js` and
+store root typing, `omit`'s predicate form and `flush`'s action-step throw
+from `@solidjs/signals`, `dynamic`'s options from `@solidjs/web`, and `until` from `solid-js` and
 `@solidjs/signals` together. Every `solid-js@2.0.0-rc.N` depends on
 `@solidjs/signals: ^2.0.0-rc.N`, a range, so a fresh install of
 `solid-js@2.0.0-rc.3` resolves `@solidjs/signals@2.0.0-rc.9` today; reading
@@ -33,7 +33,7 @@ rc.9's.
 | --- | --- |
 | `2.0.0-rc.3` (the audited release), and `rc.0`, `rc.1`, `rc.2`, which behave as rc.3 on every premise the dialect cites | analyzed, no notice |
 | `rc.4`-`rc.6` | analyzed, **this notice**: `solid-js` re-exports `registerPatch`, `registerRowOps` and `registerSlotPatch`, and `@solidjs/web` exports `installListDriver` and `driveList`, callback-taking exports the vocabulary neither models nor excludes |
-| `rc.7`, `rc.8` | analyzed with rc.9's store answer (a root write type-checks), **this notice**: no negative row is granted for their `@solidjs/signals` |
+| `rc.7`, `rc.8` | analyzed with rc.9's store answer (a root write type-checks), and on rc.8 rc.9's `FLUSH_IN_ACTION` answer, **this notice**: no negative row is granted for their `@solidjs/signals` |
 | `2.0.0-rc.9` | analyzed with rc.9's answers, **this notice**, naming the review's open gaps |
 | `2.0.0-experimental.x` of `solid-js` | refused with [unsupported-solid-runtime](unsupported-solid-runtime.md) |
 | any other version (`rc.10` and later, betas, `2.0.0`, an inexact spelling) | analyzed with the conservative answers below, **this notice** naming the package as not compared |
@@ -52,10 +52,11 @@ so. Reporting it would be unsafe: every signals release before rc.7 declares
 checker never reports what TypeScript already reports. `until` is not a name
 the vocabulary knows unless both `solid-js` and signals are at rc.5 or later,
 so [until-in-tracked-scope](until-in-tracked-scope.md) cannot fire on an
-installation where the import is TS2305. A `dynamic` call with options on an
-unknown `@solidjs/web` is the form that states nothing, and on rc.0-rc.8 it is
-the default form whatever it passes, because those runtimes never read the
-option.
+installation where the import is TS2305. `flush` is not claimed to throw
+inside an action step, so [flush-in-action](flush-in-action.md) is silent. A
+`dynamic` call with options on an unknown `@solidjs/web` is the form that
+states nothing, and on rc.0-rc.8 it is the default form whatever it passes,
+because those runtimes never read the option.
 
 The notice is one project-scoped finding located at the deciding
 `node_modules/solid-js/package.json`. Its message names the version of each

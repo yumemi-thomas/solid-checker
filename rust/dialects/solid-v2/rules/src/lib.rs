@@ -511,6 +511,9 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::UntilInTrackedScope => {
             "the until() call runs directly in a tracked scope, where the runtime's observer guard throws in dev"
         }
+        Rule::FlushInAction => {
+            "the flush() call runs directly in an action body, inside a step, where the installed @solidjs/signals throws FLUSH_IN_ACTION in dev"
+        }
         Rule::StaticDynamicAsyncSource => {
             "the static-form dynamic() source is proven to return a Promise, which the dev builds reject at the call and the production builds render as nothing"
         }

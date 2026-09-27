@@ -2035,6 +2035,44 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the generator function at `argument` of a `primitive` call is
+    /// an **action body**: the runtime drives it one step at a time, and each
+    /// step -- the synchronous slice of the body that one `next()`/`throw()`
+    /// of the generator runs -- executes with the runtime's action-step marker
+    /// set, cleared again as the step returns.
+    ///
+    /// What counts as inside a step is then the language's, not the
+    /// dialect's: a sync generator's every slice runs within its step, and an
+    /// async generator's slice ends at its first suspension (an `await`, a
+    /// `for await`, an async `yield*`), whose continuation runs from a
+    /// microtask with no step on the stack. A plain `yield` hands the
+    /// runtime the value and is resumed by the next step. Parameter
+    /// initializers run when the generator object is created, before the first
+    /// step. The engine proves positions against these; the dialect answers
+    /// only which callback is stepped.
+    ///
+    /// Solid 2.0's `action(genFn)` is the case (`@solidjs/signals`'
+    /// `action`, whose `step` brackets `it.next(v)` with
+    /// `enterActionStep()`/`exitActionStep()` from `2.0.0-rc.8`). The default
+    /// is `false`.
+    fn callback_runs_as_action_steps(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
+    /// Whether calling `primitive` while an action step
+    /// ([`Dialect::callback_runs_as_action_steps`]) is on the stack **throws**
+    /// in the development build of this installation.
+    ///
+    /// A release's answer, not a language's: `@solidjs/signals@2.0.0-rc.8`
+    /// added the `FLUSH_IN_ACTION` throw to `flush`, and earlier releases
+    /// drain as they do anywhere else. A vocabulary answers it only for the
+    /// releases whose bytes have the throw. The default is `false`.
+    fn throws_inside_action_step(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
     /// Whether a call of `primitive` returns a **tuple** whose first slot
     /// carries the reactive value.
     ///

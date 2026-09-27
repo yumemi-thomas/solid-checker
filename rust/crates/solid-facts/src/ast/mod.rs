@@ -28,7 +28,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 44;
+pub const AST_FACTS_SCHEMA: u32 = 45;
 
 mod emission;
 mod inert_erasure;
@@ -251,6 +251,32 @@ pub struct AstFacts {
     /// not have.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub iteration_targets: Vec<Span>,
+    /// The span of every iteration statement -- `for`, `for … in`,
+    /// `for … of` (including `for await`), `while` and `do … while` -- sorted
+    /// (facts schema 45). The only construct that can run code positioned
+    /// earlier in a function body again after code positioned later: without
+    /// one, a function body's own statements execute in source order. What
+    /// the action-step proof (SC2006) reads to refuse a call a loop can reach
+    /// again after a suspension.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub loop_statements: Vec<Span>,
+    /// The points where an `async` function or generator suspends without an
+    /// [`AstFacts::awaits`] expression, by span, sorted (facts schema 45):
+    ///
+    /// - a `for await (… of …)` statement, which awaits every iterator result
+    ///   before its body runs;
+    /// - a delegating `yield* operand` (in an async generator it awaits every
+    ///   result of the delegate; in a sync generator it does not suspend the
+    ///   caller's step, and a consumer must tell the two apart by the
+    ///   function's own `async` flag);
+    /// - an `await using` declaration, which awaits its disposal when the
+    ///   enclosing block exits.
+    ///
+    /// Recorded for the function the construct is written in, never for a
+    /// nested one; like `awaits`, a consumer attributes each span to its
+    /// innermost enclosing function.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub implicit_suspensions: Vec<Span>,
     /// Module-level string directives (`"use server"`, `"use strict"`, …):
     /// the statements the parser classifies as the module's directive
     /// prologue, in source order, carrying the cooked directive text. A
@@ -1245,6 +1271,8 @@ impl AstFacts {
             if_regions: Vec::new(),
             jump_statements: Vec::new(),
             iteration_targets: Vec::new(),
+            loop_statements: Vec::new(),
+            implicit_suspensions: Vec::new(),
             module_directives: Vec::new(),
         }
     }
@@ -1380,6 +1408,8 @@ struct Collector<'s, 'semantic> {
     if_regions: Vec<IfRegionFact>,
     jump_statements: Vec<Span>,
     iteration_targets: Vec<Span>,
+    loop_statements: Vec<Span>,
+    implicit_suspensions: Vec<Span>,
     module_directives: Vec<DirectiveFact>,
     conditional_control_stack: Vec<Span>,
     method_names: Vec<Option<NamedSpan>>,
@@ -1517,6 +1547,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             if_regions: Vec::new(),
             jump_statements: Vec::new(),
             iteration_targets: Vec::new(),
+            loop_statements: Vec::new(),
+            implicit_suspensions: Vec::new(),
             module_directives: Vec::new(),
             conditional_control_stack: Vec::new(),
             discarded_expression: None,
@@ -1568,6 +1600,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.if_regions.sort_by_key(|fact| fact.consequent);
         self.jump_statements.sort_unstable();
         self.iteration_targets.sort_unstable();
+        self.loop_statements.sort_unstable();
+        self.implicit_suspensions.sort_unstable();
         self.module_directives.sort_by_key(|fact| fact.span);
         AstFacts {
             schema: AST_FACTS_SCHEMA,
@@ -1610,6 +1644,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             if_regions: self.if_regions,
             jump_statements: self.jump_statements,
             iteration_targets: self.iteration_targets,
+            loop_statements: self.loop_statements,
+            implicit_suspensions: self.implicit_suspensions,
             module_directives: self.module_directives,
         }
     }
@@ -2312,6 +2348,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_variable_declarator(&mut self, declaration: &VariableDeclarator<'a>) {
+        // The disposal is awaited where the block exits, which is after this
+        // declarator; recording the declarator itself is the earlier, and so
+        // the conservative, position.
+        if declaration.kind == oxc_ast::ast::VariableDeclarationKind::AwaitUsing {
+            self.implicit_suspensions.push(span(declaration.span));
+        }
         if matches!(declaration.id, BindingPattern::ArrayPattern(_))
             && let Some(init) = &declaration.init
         {
@@ -2934,12 +2976,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_for_statement(&mut self, statement: &oxc_ast::ast::ForStatement<'a>) {
+        self.loop_statements.push(span(statement.span));
         self.conditional_flow_depth += 1;
         walk::walk_for_statement(self, statement);
         self.conditional_flow_depth -= 1;
     }
 
     fn visit_for_in_statement(&mut self, statement: &oxc_ast::ast::ForInStatement<'a>) {
+        self.loop_statements.push(span(statement.span));
         self.conditional_flow_depth += 1;
         walk::walk_for_in_statement(self, statement);
         self.conditional_flow_depth -= 1;
@@ -2947,18 +2991,24 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_for_of_statement(&mut self, statement: &oxc_ast::ast::ForOfStatement<'a>) {
         self.iterated_operands.push(span(statement.right.span()));
+        self.loop_statements.push(span(statement.span));
+        if statement.r#await {
+            self.implicit_suspensions.push(span(statement.span));
+        }
         self.conditional_flow_depth += 1;
         walk::walk_for_of_statement(self, statement);
         self.conditional_flow_depth -= 1;
     }
 
     fn visit_while_statement(&mut self, statement: &oxc_ast::ast::WhileStatement<'a>) {
+        self.loop_statements.push(span(statement.span));
         self.conditional_flow_depth += 1;
         walk::walk_while_statement(self, statement);
         self.conditional_flow_depth -= 1;
     }
 
     fn visit_do_while_statement(&mut self, statement: &oxc_ast::ast::DoWhileStatement<'a>) {
+        self.loop_statements.push(span(statement.span));
         self.conditional_flow_depth += 1;
         walk::walk_do_while_statement(self, statement);
         self.conditional_flow_depth -= 1;
@@ -3282,6 +3332,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_yield_expression(&mut self, expression: &oxc_ast::ast::YieldExpression<'a>) {
+        if expression.delegate {
+            self.implicit_suspensions.push(span(expression.span));
+        }
         if expression.delegate
             && let Some(argument) = &expression.argument
         {
@@ -5216,5 +5269,53 @@ function object() { return { active: () => state(), pending: createMemo(() => st
             Some("createMemo(() => state())")
         );
         assert!(facts.calls.iter().any(|call| call.span == pending.value));
+    }
+
+    /// Facts schema 45: every loop, and every suspension an `async` body can
+    /// take without an `await` expression, is recorded where it is written.
+    #[test]
+    fn records_loops_and_suspensions_without_an_await_expression() {
+        let source = r#"
+async function* body(items: AsyncIterable<number>, inner: () => AsyncGenerator<number>) {
+  for (let i = 0; i < 1; i++) {}
+  for (const key in {}) {}
+  for (const item of [1]) {}
+  while (false) {}
+  do {} while (false);
+  for await (const item of items) {}
+  yield* inner();
+  yield 1;
+  await using resource = { async [Symbol.asyncDispose]() {} };
+  await 0;
+}
+"#;
+        let facts = extract("/project/body.ts", source).unwrap();
+        let text = |span: &Span| &source[span.start as usize..span.end as usize];
+        assert_eq!(
+            facts
+                .loop_statements
+                .iter()
+                .map(|span| text(span).split_whitespace().next().unwrap())
+                .collect::<Vec<_>>(),
+            ["for", "for", "for", "while", "do", "for"]
+        );
+        assert_eq!(
+            facts
+                .implicit_suspensions
+                .iter()
+                .map(text)
+                .collect::<Vec<_>>(),
+            [
+                "for await (const item of items) {}",
+                "yield* inner()",
+                "resource = { async [Symbol.asyncDispose]() {} }"
+            ]
+        );
+        // A plain `yield` resumes inside its caller's step and is not one; an
+        // `await` expression is its own fact.
+        assert_eq!(
+            facts.awaits.iter().map(text).collect::<Vec<_>>(),
+            ["await 0"]
+        );
     }
 }

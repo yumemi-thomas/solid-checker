@@ -64,6 +64,22 @@ pub struct Solid2 {
     /// the name everywhere the vocabulary is asked about it, so nothing reaches
     /// the `until` rows or SC2005.
     until: bool,
+    /// N4 of the rc.9 review: whether `flush` throws `FLUSH_IN_ACTION` in dev
+    /// while an action step is on the stack, from `@solidjs/signals`.
+    ///
+    /// `2.0.0-rc.8` added the guard (`dist/dev-shared.js:1904-1913`; rc.9
+    /// `:2210-2219`): `if (actionStepDepth > 0) throw new Error("[FLUSH_IN_ACTION]
+    /// …")` opens `flush`, before its `fn` argument is read, so `flush()` and
+    /// `flush(fn)` both throw. `actionStepDepth` is raised only by `action`'s
+    /// `step`, around `it.next(v)`/`it.throw(v)` (rc.8 `dist/dev.js:1682-1690`,
+    /// rc.9 `:2016-2024`). The production and observe builds take the same
+    /// branch and return `fn?.()` without draining (rc.9
+    /// `dist/prod/core/scheduler.js:1182-1184`), so nothing throws there. No
+    /// release before rc.8 has `actionStepDepth` at all (the rc.1-rc.8 review
+    /// § 3, probe R). `true` only for a signals release some review read at
+    /// rc.8 or later; an unread or unresolved one keeps `false`, which states
+    /// nothing, under its `SC9014` notice.
+    flush_in_action: bool,
     /// B2, from `@solidjs/web`.
     dynamic_options: releases::DynamicOptions,
     /// N3, from `@solidjs/signals`: whether its dev store-setter guard
@@ -3743,6 +3759,25 @@ impl Dialect for Solid2 {
             && primitive == Primitive::Omit
             && argument == 1
             && argument_count == 2
+    }
+
+    /// `action(genFn)`'s generator, argument 0. Every release the reviews read
+    /// drives it the same way: `const it = genFn(...args)` inside the returned
+    /// wrapper's promise executor, then `step()`, which runs `it.next(v)` (or
+    /// `it.throw(v)` for a rejected yielded thenable) and settles or schedules
+    /// the next step from the result (`@solidjs/signals@2.0.0-rc.9`
+    /// `dist/dev.js:1961-2066`). From rc.8 `step` brackets that call with
+    /// `enterActionStep()`/`exitActionStep()`; the stepping itself is older,
+    /// and answering it on every release is what lets the throw below be the
+    /// one release-keyed fact.
+    fn callback_runs_as_action_steps(&self, primitive: Primitive, argument: usize) -> bool {
+        primitive == Primitive::Action && argument == 0
+    }
+
+    /// `flush` inside an action step: the `FLUSH_IN_ACTION` dev throw, on the
+    /// releases that have it (`Solid2::flush_in_action`).
+    fn throws_inside_action_step(&self, primitive: Primitive) -> bool {
+        self.flush_in_action && primitive == Primitive::Flush
     }
 
     /// `createSignal` and `createOptimistic` both return

@@ -217,6 +217,32 @@ impl StaticApiContext<'_> {
                     uncertain: false,
                 });
             }
+            // SC2006: flush() in an action step. `@solidjs/signals` from
+            // 2.0.0-rc.8 opens `flush` with `if (actionStepDepth > 0) throw
+            // new Error("[FLUSH_IN_ACTION] …")` in dev (rc.9
+            // `dist/dev-shared.js:2210-2219`), and `action`'s `step` raises
+            // that depth only around the generator's own `next()`/`throw()`.
+            // The production build takes the same branch and returns
+            // `fn?.()` without draining. Which primitive throws, on which
+            // release, and which callback is stepped are the dialect's; the
+            // position proof below is the language's.
+            if let Some(kind) = kind
+                && dialect.throws_inside_action_step(kind)
+                && let Some(body) = action_step_body(file, call, self)
+            {
+                result.violations.push(StaticViolation {
+                    id: "SC2006".into(),
+                    rule: "flush-in-action".into(),
+                    message: format!(
+                        "{primitive}() is called in an action's {body} body, inside one of its steps; the installed @solidjs/signals throws FLUSH_IN_ACTION here in dev, and in production the call drains nothing, so the writes it was meant to reveal stay held until the action settles"
+                    ),
+                    hint: "Remove the flush(): an action's writes are held by its transaction and commit when the action settles, so no flush inside the body can reveal them. To observe the result, read after the action resolves (`await save(); …`).".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                    uncertain: false,
+                });
+            }
             let Some(kind @ (Primitive::Refresh | Primitive::Affects)) = kind else {
                 continue;
             };
@@ -534,6 +560,103 @@ fn static_source_promise(
         }
         _ => None,
     }
+}
+
+/// The action body a call provably runs inside a step of, named for the
+/// message, or `None` where that is not proven.
+///
+/// Probed on `@solidjs/signals` rc.0-rc.9, dev and prod (`step` brackets
+/// `it.next(v)` with the action-step marker):
+///
+/// - The call must sit **directly** in the body of a generator function
+///   written as the stepped argument ([`Dialect::callback_runs_as_action_steps`])
+///   -- not in a nested function (a helper, an `untrack` callback, a
+///   `setTimeout` or `.then` callback), and not in a parameter initializer,
+///   which runs when `genFn(...args)` creates the generator, before the first
+///   step. A helper called synchronously from the body does throw at runtime;
+///   the proof is lexical and does not claim it.
+/// - A **sync generator's** body runs entirely inside steps: after a `yield`,
+///   a `yield promise` or a `yield*`, the next step resumes it synchronously.
+/// - An **async generator's** body is inside a step only until its first
+///   suspension; the continuation of an `await`, a `for await` or a `yield*`
+///   runs from a microtask with no step on the stack. So the call is claimed
+///   only when no suspension of this body can run before it: every `await` of
+///   the body that starts before the call ends must contain it (it is the
+///   awaited operand, evaluated first), no implicit suspension may start
+///   before it, and no loop around it may contain a suspension that a later
+///   iteration would pass first. A call after a suspension that a later
+///   `yield` re-enters a step for is not claimed.
+fn action_step_body(
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    context: &StaticApiContext<'_>,
+) -> Option<&'static str> {
+    let (container, index) =
+        file.ast
+            .arguments_containing(call.span)
+            .find(|(container, index)| {
+                crate::execution_role::direct_callback_contains(
+                    file,
+                    container.arguments[*index].span,
+                    call.span,
+                )
+            })?;
+    let argument = &container.arguments[index];
+    if argument.spread {
+        return None;
+    }
+    let primitive = context.lookup.primitive_at_call(file, container.span)?;
+    if !context
+        .lookup
+        .dialect
+        .callback_runs_as_action_steps(primitive, index)
+    {
+        return None;
+    }
+    // The generator must *be* the argument (behind TypeScript sugar at
+    // most): `action(wrap(function* () { … }))` steps whatever `wrap`
+    // returns.
+    let written = argument.value_span.unwrap_or(argument.span);
+    let body = crate::owners::containing_ast_function(&file.ast, call.span)
+        .filter(|function| function.span == written && function.generator)?;
+    if !body.r#async {
+        return Some("sync generator");
+    }
+    let own = |span: Span| {
+        crate::owners::containing_ast_function(&file.ast, span)
+            .is_some_and(|function| function.span == body.span)
+    };
+    let awaits = file
+        .ast
+        .awaits
+        .iter()
+        .copied()
+        .filter(|span| body.body.contains(*span) && own(*span))
+        .collect::<Vec<_>>();
+    let implicit = file
+        .ast
+        .implicit_suspensions
+        .iter()
+        .copied()
+        .filter(|span| body.body.contains(*span) && own(*span))
+        .collect::<Vec<_>>();
+    let before = |suspension: &Span| suspension.start < call.span.end;
+    if awaits
+        .iter()
+        .any(|suspension| before(suspension) && !suspension.contains(call.span))
+        || implicit.iter().any(before)
+    {
+        return None;
+    }
+    let repeated_past_a_suspension = file.ast.loop_statements.iter().any(|looped| {
+        looped.contains(call.span)
+            && body.body.contains(*looped)
+            && awaits
+                .iter()
+                .chain(&implicit)
+                .any(|suspension| looped.contains(*suspension))
+    });
+    (!repeated_past_a_suspension).then_some("async generator")
 }
 
 /// The root expression span of a member/call chain: `state.user` and

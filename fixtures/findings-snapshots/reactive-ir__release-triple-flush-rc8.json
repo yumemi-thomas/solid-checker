@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/release-triple-flush-rc8/App.ts",
+      "start": 464,
+      "end": 469,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/release-triple-flush-rc8/App.ts",
+      "start": 621,
+      "end": 626,
+      "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/release-triple-flush-rc8/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    }
+  ]
+}

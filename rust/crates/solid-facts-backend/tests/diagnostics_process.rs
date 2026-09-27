@@ -573,6 +573,42 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
             assert!(rc3.is_empty(), "{rc3:#?}");
         }
     }
+    // SC2006 is keyed on the resolved @solidjs/signals: the FLUSH_IN_ACTION
+    // guard ships from rc.8, so the same positives report on rc.8 and rc.9
+    // and nothing reports on the audited rc.3, where flush drains inside a
+    // step as anywhere else.
+    let line = |finding: &serde_json::Value| finding["primaryLocation"]["line"].as_u64();
+    for (fixture, lines) in [
+        ("rc9-flush-in-action", &[14_u64, 20, 27, 32, 39, 44][..]),
+        ("release-triple-flush-rc8", &[9, 15][..]),
+        ("release-triple-flush-rc3", &[][..]),
+    ] {
+        let Some(findings) = diagnostic_fixture(fixture) else {
+            continue;
+        };
+        let flushes = findings_for_rule(&findings, "flush-in-action");
+        assert_eq!(
+            flushes
+                .iter()
+                .map(|finding| line(finding))
+                .collect::<Vec<_>>(),
+            lines.iter().copied().map(Some).collect::<Vec<_>>(),
+            "{fixture}: {findings:#?}"
+        );
+        assert!(
+            flushes
+                .iter()
+                .all(|finding| finding["id"] == "SC2006" && finding["kind"] == "violation"),
+            "{fixture}: {findings:#?}"
+        );
+        // Beside them only the release notice, which the audited rc.3 triple
+        // does not get.
+        assert_eq!(
+            findings.len(),
+            lines.len() + usize::from(!lines.is_empty()),
+            "{fixture}: {findings:#?}"
+        );
+    }
     if let Some(findings) = diagnostic_fixture("uncalled-accessor-v2") {
         // The positions TypeScript permits: a string-concatenation operand, a
         // logical-not operand, the two unary numeric coercions (`-count` and
