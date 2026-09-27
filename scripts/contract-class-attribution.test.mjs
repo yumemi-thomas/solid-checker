@@ -12,6 +12,11 @@
 // `@tanstack/solid-router@2.0.0-rc.8`'s `route.js` and `router.js` are the
 // measured shape: eight construction obligations and one instance-member one,
 // each of which marked all 97 root exports.
+//
+// Amendment of 2026-09-28: a member the constructor can invoke runs at
+// construction (`@tanstack/router-core`'s `this.update(...)`), and a member
+// whose invokers at construction are not exact -- a base this module cannot
+// see, an override a base constructor calls -- keeps marking every export.
 
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -59,12 +64,11 @@ function closed(document, exportName) {
 const LOCAL = "export function local(handler) {\n  handler();\n}\n";
 const LOCAL_DECLARATION = "export declare function local(handler: () => void): void;\n";
 
-// The class module, in the shape `route.js` has: a dependency base, a
-// `super(...)`, and a member closure the constructor installs.
+// The class module, in the shape `route.js` has: a dependency base and a
+// `super(...)`. (A member closure beside them is the `inherited` case.)
 const THING =
   "function createThing(options) {\n  return new Thing(options);\n}\n" +
-  "var Thing = class extends Base {\n  constructor(options) {\n    super(options);\n" +
-  "    this.lookup = (id) => opaque(id);\n  }\n};\n";
+  "var Thing = class extends Base {\n  constructor(options) {\n    super(options);\n  }\n};\n";
 // A class with no dependency base: only the instance-member obligation.
 const PLAIN =
   "function createPlain() {\n  return new Plain();\n}\n" +
@@ -107,14 +111,42 @@ describe("a class obligation belongs to the exports that construct or hand out t
         'import { opaque } from "depkg";\nfunction register(value) {\n  return value;\n}\n' +
         "function createPlain() {\n  return new Plain();\n}\n" +
         "var Plain = class {\n  constructor() {\n    register(this);\n    this.lookup = (id) => opaque(id);\n  }\n};\n" +
-        `export { createPlain };\n${LOCAL}`
+        `export { createPlain };\n${LOCAL}`,
+      // The constructor installs a member and then calls it, as
+      // `RouterCore`'s constructor calls `this.update(...)`.
+      invoked:
+        'import { opaque } from "depkg";\nfunction createInvoked() {\n  return new Invoked();\n}\n' +
+        "var Invoked = class {\n  constructor() {\n    this.lookup = (id) => opaque(id);\n    this.lookup(0);\n  }\n};\n" +
+        `export { createInvoked };\n${LOCAL}`,
+      // A dependency base's constructor may call the member during
+      // `super(...)`, and nothing here says whether it does.
+      inherited:
+        'import { Base, opaque } from "depkg";\n' +
+        "function createThing(options) {\n  return new Thing(options);\n}\n" +
+        "var Thing = class extends Base {\n  constructor(options) {\n    super(options);\n" +
+        "    this.lookup = (id) => opaque(id);\n  }\n};\n" +
+        `export { createThing };\n${LOCAL}`,
+      // The base constructor calls a member the subclass overrides, so the
+      // override runs while the subclass is constructed.
+      overridden:
+        'import { opaque } from "depkg";\nfunction createSub() {\n  return new Sub();\n}\n' +
+        "var Core = class {\n  constructor() {\n    this.init();\n  }\n  init() {}\n};\n" +
+        "var Sub = class extends Core {\n  init() {\n    opaque(1);\n  }\n};\n" +
+        `export { createSub };\n${LOCAL}`
     };
     const declarations = {
       control: LOCAL_DECLARATION,
       classes: `${DECLARATIONS}${LOCAL_DECLARATION}`,
       escaping:
         "export declare function createPlain(): { lookup(id: unknown): unknown };\n" +
-        LOCAL_DECLARATION
+        LOCAL_DECLARATION,
+      invoked:
+        "export declare function createInvoked(): { lookup(id: unknown): unknown };\n" +
+        LOCAL_DECLARATION,
+      inherited:
+        "export declare function createThing(options: unknown): { lookup(id: unknown): unknown };\n" +
+        LOCAL_DECLARATION,
+      overridden: `export declare function createSub(): { init(): void };\n${LOCAL_DECLARATION}`
     };
     const dependencyOutput = join(directory, "depkg.json");
     const generated = await generatePackageContract(
@@ -214,5 +246,17 @@ describe("a class obligation belongs to the exports that construct or hand out t
 
   test("an instance that escapes its constructor keeps marking every export", () => {
     expect(closed(documents.escaping, "local")).not.toContain("callbacks");
+  });
+
+  test("a member the constructor invokes opens the creators' own call", () => {
+    // Attributed exactly: `local` is untouched, and `createInvoked` runs the
+    // member's open dependency call inside its own construction.
+    expect(closed(documents.invoked, "local")).toEqual(closed(documents.control, "local"));
+    expect(closed(documents.invoked, "createInvoked")).not.toContain("callbacks");
+  });
+
+  test("a member a base constructor may invoke keeps marking every export", () => {
+    expect(closed(documents.inherited, "local")).not.toContain("callbacks");
+    expect(closed(documents.overridden, "local")).not.toContain("callbacks");
   });
 });

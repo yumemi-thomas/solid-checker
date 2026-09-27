@@ -166,3 +166,5 @@ then opens only the creators' `returns`, but the obligation runs during the
 creator's own call. The premise of § 2, "not during the exporting call", does
 not hold for that shape. The narrowing is unsound in the direction that
 publishes a closed domain, so it is recorded here for the owner of ADR 0134.
+
+Fixed by the amendment of 2026-09-28 in ADR 0134.

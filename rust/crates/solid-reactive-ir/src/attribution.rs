@@ -280,13 +280,31 @@ impl<'a> CallGraph<'a, '_> {
         let Some(file) = self.file(path) else {
             return false;
         };
-        let Some(declaration) = file
+        let Some(fact) = file
             .ast
             .functions
             .iter()
             .find(|candidate| candidate.span == function)
-            .and_then(|function| crate::owners::function_binding_name(file, function))
         else {
+            return false;
+        };
+        // A class method is entered by member dispatch, which resolves by the
+        // instance's class at run time, not by the declaration a reference
+        // names: a base constructor's `this.init()` names the base's `init`
+        // and runs a subclass override that no reference names at all. Its
+        // references therefore do not bound its callers (ADR 0134, amendment
+        // of 2026-09-28).
+        if fact.name.is_none()
+            && fact.method_name.is_some()
+            && file
+                .ast
+                .classes
+                .iter()
+                .any(|class| class.span.start <= fact.span.start && fact.span.end <= class.span.end)
+        {
+            return false;
+        }
+        let Some(declaration) = crate::owners::function_binding_name(file, fact) else {
             // No binding name: nothing can name it, so the only entry is the
             // expression it was written in. That expression is inside the
             // enclosing function the walk already visited, or at module scope,

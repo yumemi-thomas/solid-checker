@@ -1,6 +1,7 @@
 # ADR 0134: A class obligation belongs to the exports that construct or hand out the class
 
-- Status: accepted and implemented (2026-09-27); written with the implementation
+- Status: accepted and implemented (2026-09-27); written with the implementation;
+  amended 2026-09-28 (a member construction can invoke is construction)
 - Date: 2026-09-27
 - Owners:
   - the syntax fact (`rust/crates/solid-facts/src/ast/class_obligation.rs`,
@@ -138,3 +139,81 @@ dependency call, and that call carries its own obligation.
   The viviana environment run is unchanged: 93 of 97 root exports are still
   degenerate. The 6 left are `getStoreFactory` in `routerStores.js` (2),
   `Transitioner` (2), `getNotFound` (1), and `useScrollRestoration` (1).
+
+## Amendment (2026-09-28): a member construction can invoke is construction
+
+§ 2 assumed that an instance member runs "not during the exporting call". That
+is false for a member the construction itself invokes.
+`@tanstack/router-core@1.171.22`'s `RouterCore` constructor installs
+`this.update = (newOptions) => { … }` and then calls `this.update({ … })`, so
+everything `update` does runs inside every creator's own call. § 2 opened only
+the creators' `returns` for it, which is unsound in the direction that
+publishes a closed domain. The amendment makes three changes.
+
+1. **Construction includes the members it can invoke.** Construction code is
+   every constructor body and instance field initializer, on the class and on
+   each of its module-level bases. A member is one of these:
+   - a method or accessor;
+   - a closure the constructor installs as a top-level `this.key = <function>`;
+   - a field whose initializer is a function.
+
+   A member is *reached* when reached code names its key on `this` or `super`.
+   That covers `this.m(…)`, `this.m.call(this, …)`, a read that hands the
+   member on, and a setter write. The member's body is then reached code too,
+   so reach is transitive. Keys are matched by name across the hierarchy,
+   which can only over-approximate what runs. An obligation in a reached
+   member is a construction obligation, in every domain, of the same exact
+   creators.
+2. **Any other closure the constructor or an initializer creates is
+   construction.** § 2 used to classify it as an instance member. A callback
+   handed on (`list.forEach(() => …)`) or an IIFE can run during construction.
+3. **Fail closed where the reached set is not exact.** The class rung answers
+   nothing, so the obligation stays `fallback-all`, when any of these holds:
+   - a class on the way has a base that is not a module-level class (an
+     imported base's constructor may call any member, an override included);
+   - `this` or `super` is accessed with a computed non-literal key;
+   - an instance escapes as a value (`this.m.call(this, …)` and
+     `.apply(this, …)` are the only exceptions);
+   - a callable member is written anywhere other than its own installation, or
+     is declared twice, or shares its key with an accessor or a data field;
+   - a class has a static member or a static block;
+   - a reached key is defined by two classes in the hierarchy (an override a
+     base constructor would run in place of its own method).
+
+   Prototype augmentation outside the class body is already refused by § 3.
+
+The same shape exposed a defect in the `reachability` rung, which runs first.
+The call graph bounds a function's callers by its references. A class method
+is entered by member dispatch: a base constructor's `this.init()` names the
+base's `init` and runs a subclass override that no reference names. The rung
+therefore reported the override complete with no caller, and attributed its
+obligation to **no export at all**. A class method is now never
+"entered only through calls" (`compute_entered_only_through_calls`,
+`solid-reactive-ir/src/attribution.rs`), and its obligations fall through to
+this rung. Object-literal methods keep the reference test. They can also be
+dispatched through a value typed by another declaration, and that remains
+open.
+
+### Consequences of the amendment
+
+- Pinned by the `class_obligation` unit tests. Each of these fails on the
+  previous rule:
+  - `a_member_the_constructor_invokes_runs_at_construction`: the `RouterCore`
+    shape, directly and transitively, through `.call`, a field initializer,
+    and a handed-on closure;
+  - `a_base_constructor_that_calls_an_overridden_member_refuses`;
+  - `a_member_of_a_class_on_an_imported_base_refuses`;
+  - `an_inexact_member_set_refuses`.
+- Pinned by `scripts/contract-class-attribution.test.mjs`:
+  - `invoked`: `createInvoked` cannot close `callbacks`, and `local` is still
+    described as it is alone;
+  - `inherited` and `overridden` keep marking every export.
+
+  The previous binary fails both new tests. Without the reachability change,
+  `overridden`'s obligation goes to no export.
+- On solid-router's root node, replayed exactly, catch-alls went from 5 to 6.
+  `RouteApi`'s `notFound` (`route.js` 465) was `class-instance-member`. Its
+  class extends the imported `BaseRouteApi`, whose constructor this package
+  cannot see. There are still 91 degenerate exports, and router-core's own
+  node is unchanged. Coverage (127 fixtures) and the contract corpus (107
+  fixtures) are unchanged.
