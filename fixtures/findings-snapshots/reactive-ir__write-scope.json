@@ -77,28 +77,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-scope/App.tsx",
-      "start": 1046,
-      "end": 1085,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-write-in-owned-scope",
-      "code": "SC2001",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-scope/App.tsx",
       "start": 1089,
       "end": 1105,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-write-in-owned-scope",
-      "code": "SC2001",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-scope/App.tsx",
-      "start": 1109,
-      "end": 1158,
       "fixes": 0
     },
     {

@@ -160,6 +160,16 @@
       "start": 2855,
       "end": 2906,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/setter-in-root-rc9/root.ts",
+      "start": 3131,
+      "end": 3143,
+      "fixes": 0
     }
   ]
 }

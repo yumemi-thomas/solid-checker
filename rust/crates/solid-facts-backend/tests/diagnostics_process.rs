@@ -8,16 +8,18 @@ fn write_scope_diagnostics_have_semantic_locations() {
     let Some(findings) = diagnostic_fixture("write-scope") else {
         return;
     };
-    // 14 writes / 2 actions: the untrack-wrapped writes in the component body
+    // 12 writes / 2 actions: the untrack-wrapped writes in the component body
     // and in a memo count (the rc.0 guard keys on the owner, not tracking),
     // while writes and the action inside createTrackedEffect no longer do
-    // (children-forbidden leaf scopes are legal write regions).
+    // (children-forbidden leaf scopes are legal write regions), nor do the two
+    // store setters directly in the component body (the dev component body is
+    // a root, and the rc.3 store setter guard exempts roots).
     assert_eq!(
         (
             findings_for_rule(&findings, "reactive-write-in-owned-scope").len(),
             findings_for_rule(&findings, "action-called-in-owned-scope").len(),
         ),
-        (14, 2)
+        (12, 2)
     );
     assert!(
         findings

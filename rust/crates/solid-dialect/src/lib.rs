@@ -1786,6 +1786,19 @@ pub trait Dialect: Sync {
         true
     }
 
+    /// Whether the ambient owner directly in a component body is a **root**,
+    /// in the build whose write guards the rules model, so that a write there
+    /// meets the guard exactly as one directly in a created root's body
+    /// ([`Dialect::callback_runs_in_created_root`]) does.
+    ///
+    /// Only the root-exemption answers read this: an operation whose guard
+    /// rejects every children-capable owner is reported in a component body
+    /// either way. The default is `false`, which keeps a component body the
+    /// ordinary owned scope and exempts nothing.
+    fn component_body_runs_under_root(&self) -> bool {
+        false
+    }
+
     /// Whether this primitive's [`CallbackOwner::Leaf`] callback only
     /// materializes as a leaf owner when the call executes under a live,
     /// children-capable owner.
@@ -3262,6 +3275,8 @@ mod tests {
         assert!(!silent.leaf_scopes_allow_writes());
         assert!(!silent.callback_preserves_owner_write_context(Primitive::CreateEffect));
         assert!(!silent.leaf_owner_requires_owned_call_site(Primitive::OnCleanup));
+        // No component body is a root, so no root exemption reaches one.
+        assert!(!silent.component_body_runs_under_root());
         // No owner edge for a host scheduler's callback: 2.0's `None` would
         // prove unowned every callback a language with task-carried owners
         // runs owned.

@@ -38,15 +38,34 @@ and not reported. `rc.9` removed the exemption, so it throws and is reported.
 For `rc.0`, or a signals release this checker has not read, it is not reported.
 Callbacks nested in the body keep their own answer: an effect apply,
 `onSettled` or an event listener inside the root stays legal, and a memo compute
-inside it is reported as any memo compute is. A write inside
-`flush(() => ...)` in a root body also throws, because `flush` keeps the owner
-as `untrack` does. The checker does not model that yet and reports nothing
-there.
+inside it is reported as any memo compute is. A function passed to `createRoot`
+by name, `createRoot(init)`, is the root body exactly as an inline arrow is; it
+is resolved by the argument's symbol to a `function` declaration or an
+arrow-bound `const` in the same file, so an `init` parameter never stands for a
+same-named module function. A root body taken from another module, or from a
+value the checker cannot resolve to one declaration, is not judged as a root
+body.
 
-The same exemption covers component bodies, and SC2001 does not apply it there
-yet. In dev builds `solid-js` runs every component body under a transparent
-`createRoot`, so on `rc.1` through `rc.8` a store setter directly in a component
-body is legal too. SC2001 still reports it: a known over-report.
+The same exemption covers component bodies. In dev builds `solid-js` runs every
+component body under `createRoot(…, { transparent: true })`, so a store setter
+directly in a component body, or reached from it through `untrack`,
+`flush(fn)` or a helper it calls, answers exactly as one in a `createRoot` body
+does: legal on `rc.1` through `rc.8` and not reported, reported on `rc.9`
+(probed on every published triple). A signal setter there is reported on every
+release, and a store setter in a memo compute inside the component is reported
+as any memo compute is. On `rc.0` the dialect keeps the exemption, because its
+`createStore` setter throws under a root while its `createOptimisticStore`
+setter does not, and a write carries only "a store setter": the `createStore`
+case there is a miss, not a claim.
+
+`flush(fn)` is not a write region either. It runs `fn` inline between a
+scheduler depth increment and the drain, keeping both the owner and the
+listener, so a write in it is exactly as legal as at the `flush` call: it
+throws in a memo compute, a component body or a root body and is legal at
+module scope or in an event handler (probed on every published triple). The
+callback may be inline or a same-file function passed by name; a function that
+also runs from other positions is reported when any `flush` or `untrack` call
+passing it is in an owned scope.
 
 `untrack` is **not** an allowed write region. The `2.0.0-rc.0` guard keys on the
 ambient *owner*, not on tracking: `untrack` clears the tracking listener but
@@ -85,6 +104,9 @@ createMemo(() => setDoubled(count() * 2));
 
 // A root body runs under the root, a children-capable owner.
 createRoot(() => setCount(1));
+
+// flush(fn) keeps the memo's owner, inline or by name.
+createMemo(() => flush(() => setCount(2)));
 
 function Counter() {
   setCount(0); // Write in a component body.
@@ -128,4 +150,3 @@ using it on application state reintroduces the feedback loops this rule prevents
 ## Related
 
 - [action-called-in-owned-scope](action-called-in-owned-scope.md) — the same constraint for actions
-- [action-called-in-owned-scope](action-called-in-owned-scope.md) — the action form of the same restriction

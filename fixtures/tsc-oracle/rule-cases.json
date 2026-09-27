@@ -403,6 +403,22 @@
       "code": "import { createRoot, createStore } from \"solid-js\";\nconst [, setState] = createStore({ value: 0 });\ncreateRoot(() => {\n  setState((draft) => {\n    draft.value = 1;\n  });\n});\n"
     },
     {
+      "rule": "reactive-write-in-owned-scope",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "why": "The `flush(fn)` arm. `flush<T>(fn: () => T): T` accepts any thunk, and a setter call in it type checks. The claim is that `flush` runs `fn` inline under the caller's owner -- here the memo compute's -- so `setSignal`'s dev guard throws REACTIVE_WRITE_IN_OWNED_SCOPE (probed on every published rc.0-rc.9 triple).",
+      "code": "import { createMemo, createSignal, flush } from \"solid-js\";\nconst [count, setCount] = createSignal(0);\nexport const doubled = createMemo(() => {\n  flush(() => setCount(1));\n  return count();\n});\n"
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "silent",
+      "why": "The component-body half of the store root exemption, on the audited rc.3 triple this oracle installs. Dev `createComponent` runs the body under `createRoot(..., { transparent: true })`, and `@solidjs/signals@2.0.0-rc.3`'s `devGuardStoreSetterWrite` exempts a root, so the store setter is legal and SC2001 stays silent; `fixtures/reactive-ir/write-scope-roots-rc9` pins rc.9, which reports it.",
+      "code": "import { createStore } from \"solid-js\";\nconst [state, setState] = createStore({ value: 0 });\nexport function Panel() {\n  setState((draft) => {\n    draft.value = 1;\n  });\n  return <div>{state.value}</div>;\n}\n"
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "dialect": "v2",
       "expect": "silent",
@@ -489,6 +505,14 @@
       "checker": "reports",
       "why": "SC2002's keystone. Calling an action is an ordinary call of a well typed value. The claim is that invoking one starts a write transaction -- optimistic writes, refresh -- under a children-capable owner, which re-triggers the very scope that called it. A transaction's interaction with the owner tree is not expressible as a type.",
       "code": "import { action, createMemo } from \"solid-js\";\nconst save = action(function* () {});\ncreateMemo(() => save());\n"
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "why": "The createRoot-body arm. `createRoot`'s `init` is an ordinary function type and calling an action in it type checks. The claim is that the body runs with the new root as the ambient owner, a children-capable owner, so the action's dev guard throws ACTION_CALLED_IN_OWNED_SCOPE (probed on every published rc.0-rc.9 triple).",
+      "code": "import { action, createRoot } from \"solid-js\";\nconst save = action(function* () {});\ncreateRoot(() => {\n  save();\n});\n"
     },
     {
       "rule": "resolve-in-tracked-scope",

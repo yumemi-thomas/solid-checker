@@ -714,7 +714,8 @@ impl LocalAccessContext<'_, '_> {
             {
                 // Under a root owner `setSignal`'s guard throws on every
                 // release; a store setter's only where the resolved signals
-                // dropped the root exemption (rc.9).
+                // dropped the root exemption (rc.9). In dev a component body
+                // runs under a root too, so the same answer covers it.
                 let root_body = match source_kind {
                     ReactiveSourceKind::Accessor => RootBodyGuard::Rejects,
                     ReactiveSourceKind::Store
@@ -755,6 +756,10 @@ impl LocalAccessContext<'_, '_> {
                 }
             }
             if let Some((name, declaration)) = self.actions.get(symbol) {
+                // An action call's guard has no root exemption on any release:
+                // it throws `ACTION_CALLED_IN_OWNED_SCOPE` directly in a
+                // `createRoot` body, and in a memo nested in one (probed
+                // rc.0-rc.9, dev).
                 let action_execution = semantic_write_execution_role(
                     file,
                     call.callee,
@@ -762,7 +767,7 @@ impl LocalAccessContext<'_, '_> {
                     self.entities,
                     self.symbol_names,
                     self.lookup,
-                    RootBodyGuard::Unclaimed,
+                    RootBodyGuard::Rejects,
                 );
                 for _ in 0..multiplicity {
                     result.action_invocations.push(Arc::new(ActionInvocation {

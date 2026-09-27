@@ -1388,6 +1388,163 @@
     ],
     "absent": []
    }
+  },
+  {
+   "id": "reactive-write-in-owned-scope/positive/002",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createMemo, createSignal, flush } from \"solid-js\";\n\nconst [count, setCount] = createSignal(0);\nconst flushWrite = () => setCount(1);\nflush(flushWrite);\nexport const doubled = createMemo(() => {\n  flush(() => setCount(2));\n  flush(flushWrite);\n  return count() * 2;\n});\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "setCount(1)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "setCount(2)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "A deliberate divergence from eslint-plugin-solid 0.14.5, whose corpus (fixtures/reactive-ir/eslint-plugin-corpus/owned-scope-valid.tsx) lists a write in `flush(fn)` inside a memo as valid. Under 2.0 the runtime decides: `flush(fn)` runs `fn` inline and touches neither the owner nor the listener (@solidjs/signals rc.3 `dist/dev.js:1788-1802`), so `fn` answers to the memo compute's owner, and on every published rc.0-rc.9 dev client build `setSignal` throws REACTIVE_WRITE_IN_OWNED_SCOPE there, inline or with the callback passed by name (probed). The module-scope `flush(flushWrite)` is legal, which is why the finding on `setCount(1)` rests on the memo call alone."
+  },
+  {
+   "id": "reactive-write-in-owned-scope/positive/003",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createRoot, createSignal } from \"solid-js\";\n\nconst [, setCount] = createSignal(0);\n\nfunction init() {\n  setCount(1);\n}\ncreateRoot(init);\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "setCount(1)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "A function passed to `createRoot` by name is its root body, exactly as an inline arrow is: it runs during the call with the new root as the ambient owner, and `setSignal` throws there on every rc.0-rc.9 dev build (probed). Resolved by the argument's symbol to the same-file declaration."
+  },
+  {
+   "id": "reactive-write-in-owned-scope/negative/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\n\nconst [state, setState] = createStore({ value: 0 });\n\nexport function Panel() {\n  setState((draft) => {\n    draft.value = 1;\n  });\n  return <div>{state.value}</div>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "reactive-write-in-owned-scope"
+     }
+    ]
+   },
+   "note": "On the audited rc.3 triple a store setter directly in a component body is legal: dev `createComponent` runs the body under `createRoot(..., { transparent: true })`, and rc.1-rc.8's `devGuardStoreSetterWrite` exempts a root (`!context._root`, rc.3 `dist/dev.js:4111`). rc.9 dropped the exemption; fixtures/reactive-ir/write-scope-roots-rc9 pins that side. A signal setter at the same spot is still reported."
+  },
+  {
+   "id": "action-called-in-owned-scope/positive/002",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { action, createMemo, createRoot, createSignal } from \"solid-js\";\n\nconst [count] = createSignal(0);\nconst save = action(function* () {});\n\ncreateRoot(() => {\n  save();\n  createMemo(() => {\n    save();\n    return count();\n  });\n});\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "save()",
+       "occurrence": 1
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "save()",
+       "occurrence": 2
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "An action call's dev guard (`getOwner()` not children-forbidden, @solidjs/signals rc.3 `dist/dev.js:5567`) has no root exemption: directly in a `createRoot` body, and in a memo compute nested in one, it throws ACTION_CALLED_IN_OWNED_SCOPE on every rc.0-rc.9 dev build (probed)."
   }
  ]
 }

@@ -2876,8 +2876,21 @@ impl Dialect for Solid2 {
     /// `untrack` (`@solidjs/web@2.0.0-rc.9` `dist/web.dev.js:2199`), with no
     /// owner of its own, so a write in a static source is exactly as legal as
     /// at the `dynamic` call.
+    ///
+    /// `flush(fn)` runs `fn()` inline between a `syncDepth` increment and the
+    /// drain, touching neither `context` nor the listener
+    /// (`@solidjs/signals@2.0.0-rc.0` `dist/dev.js:1085-1099`, rc.3
+    /// `dist/dev.js:1788-1802`, rc.9 `dist/dev-shared.js:2202-2230`). Probed
+    /// on every published rc.0-rc.9 dev client build: `getOwner()`
+    /// inside `flush(fn)` is the caller's owner, and a signal setter inside
+    /// `flush(fn)` throws `REACTIVE_WRITE_IN_OWNED_SCOPE` in a memo compute,
+    /// a component body and a `createRoot` body, inline or passed by name,
+    /// while the same call at module scope succeeds.
     fn callback_preserves_owner_write_context(&self, primitive: Primitive) -> bool {
-        matches!(primitive, Primitive::Untrack | Primitive::DynamicStatic)
+        matches!(
+            primitive,
+            Primitive::Untrack | Primitive::DynamicStatic | Primitive::Flush
+        )
     }
 
     /// Source: `createRoot(init)` is `createOwner()` then `runWithOwner(owner,
@@ -2899,6 +2912,26 @@ impl Dialect for Solid2 {
     /// `createRevealOrder` create a root too but were not probed for this.
     fn callback_runs_in_created_root(&self, primitive: Primitive, argument: usize) -> bool {
         primitive == Primitive::CreateRoot && argument == 0
+    }
+
+    /// Source: `solid-js`'s dev `createComponent` is `devComponent`, which runs
+    /// the component as `createRoot(() => { …; return untrack(() =>
+    /// Comp(props)) }, { transparent: true })` (`solid-js@2.0.0-rc.3`
+    /// `dist/dev.js:35-53` and `:1116-1118`; rc.0 the same shape; rc.9 renames
+    /// it `observedComponent`, `dist/solid.dev.js:35-58` and `:1148-1150`).
+    /// `untrack` keeps the owner, so the owner a write directly in the body
+    /// meets is that root (`_root: true`, probed on rc.3 and rc.9). The prod
+    /// build calls `untrack(() => Comp(props))` with no root, and carries no
+    /// write guard either.
+    ///
+    /// Probed on every published rc.0-rc.9 dev client build, a store setter
+    /// directly in a component body (inline, through `untrack` or `flush(fn)`,
+    /// through a helper, and in a nested component) answers exactly as one in
+    /// a `createRoot` body: `createStore`'s throws on rc.0 and rc.9 and not on
+    /// rc.1-rc.8, `createOptimisticStore`'s throws on rc.9 only. A signal,
+    /// optimistic-signal or action call there throws on every release.
+    fn component_body_runs_under_root(&self) -> bool {
+        true
     }
 
     /// Answered from the resolved `@solidjs/signals` (`releases.rs`, N3 of the

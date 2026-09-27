@@ -2962,6 +2962,19 @@ pub(crate) fn analysis_context(
     if let Some((call, argument, _)) = callback
         && let Some(primitive) = call_primitive_name(file, call, entities, symbol_names, dialect)
     {
+        // An owner-transparent inline callback (`untrack`, `flush(fn)`) runs
+        // under its call site's owner, so it is described as that call site.
+        // It has no label of its own: an anonymous one used to leave the
+        // sentence with an empty scope name.
+        if let Some(resolved) = primitive.primitive()
+            && dialect.callback_preserves_owner_write_context(resolved)
+            && dialect
+                .callback_semantics_at(resolved, argument, call.arguments.len())
+                .execution
+                == Some(solid_dialect::Execution::Inline)
+        {
+            return analysis_context(file, call.span, entities, symbol_names, dialect, lookup);
+        }
         // Which phase of a primitive an argument is, asked of the dialect
         // rather than matched here. The pair this had hardcoded is 2.0's:
         // `createEffect(compute, apply)`. 1.x's second argument is a seed

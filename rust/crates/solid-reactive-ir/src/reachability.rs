@@ -15,7 +15,10 @@ use crate::cache::{
     CachedReachabilityFile, ReachabilityEdge, ReachabilityTarget, SourceDiscoveryTypeScriptDelta,
     same_compiler_semantics,
 };
-use crate::owners::{function_is_solid_callback, returned_callback_execution_at_call};
+use crate::execution_role::function_symbol;
+use crate::owners::{
+    callback_execution_at_call, function_is_solid_callback, returned_callback_execution_at_call,
+};
 use crate::pipeline::parallel_slice_results;
 use crate::source_discovery::{source_discovery_identity, source_discovery_identity_matches};
 
@@ -247,6 +250,42 @@ fn discover_reachability_file(
                         owner,
                         target: ReachabilityTarget::LocalSpan(function.span),
                     });
+                }
+            }
+            // A same-file function passed *by name* where the call runs it
+            // inline, under the caller's owner (`untrack`, `flush`) or under a
+            // root it creates (`createRoot`): `createRoot(init)` runs `init`
+            // exactly as `createRoot(() => …)` runs its arrow. Resolved by the
+            // argument's symbol against each function's own binding, so an
+            // `init` parameter never reaches a same-named module function.
+            // Only these positions: they are the ones whose writes the owned
+            // scope rules judge at the call (`named_callback_write_role`).
+            if let Some(primitive) = primitive {
+                for (index, argument) in call.arguments.iter().enumerate() {
+                    if argument.value != solid_facts::ast::ArgumentValueKind::Identifier
+                        || !(lookup
+                            .dialect
+                            .callback_runs_in_created_root(primitive, index)
+                            || lookup
+                                .dialect
+                                .callback_preserves_owner_write_context(primitive))
+                        || callback_execution_at_call(file, call, primitive, index, lookup)
+                            != Some(solid_dialect::Execution::Inline)
+                    {
+                        continue;
+                    }
+                    let Some(symbol) = entities.get(&location(file.path.shared(), argument.span))
+                    else {
+                        continue;
+                    };
+                    for function in &file.ast.functions {
+                        if function_symbol(file, function, entities) == Some(symbol) {
+                            edges.push(ReachabilityEdge {
+                                owner,
+                                target: ReachabilityTarget::LocalSpan(function.span),
+                            });
+                        }
+                    }
                 }
             }
             for property in call

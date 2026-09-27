@@ -122,9 +122,9 @@ createRoot(() => {
   });
 });
 
-// `flush(fn)` runs `fn` inline under the root too, and the runtime throws there
-// (probed), but the checker does not model `flush` as keeping the owner, so
-// this stays silent: a miss, not a claim.
+// `flush(fn)` runs `fn` inline under the root too, keeping its owner as
+// `untrack` does, and the runtime throws there (probed): SC2001 on every
+// release.
 createRoot(() => {
   flush(() => setCount(10));
 });

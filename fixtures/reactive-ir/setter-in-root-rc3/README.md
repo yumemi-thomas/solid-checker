@@ -48,9 +48,10 @@ Expected findings, rc.3:
   **none**. The rc.3 guard exempts the root.
 - `setInternal(1)` (`ownedWrite: true`), the effect apply, `onSettled`, the
   event listener, and the module-scope writes: **none**.
-- `flush(() => setCount(10))`: **none**, though the runtime throws. `flush`
-  keeps the owner exactly as `untrack` does, but the checker does not model
-  it as write-transparent, so this is a known miss, not a claim.
+- `flush(() => setCount(10))`: **SC2001**, violation. `flush(fn)` keeps the
+  owner exactly as `untrack` does (`callback_preserves_owner_write_context`),
+  so the write answers to the root. `write-scope-roots-rc3` covers `flush` in
+  a memo compute and a component body, and the callback passed by name.
 
 **Stubs.** `node_modules/@solidjs/signals/index.d.ts` copies every declaration
 the cases use byte for byte from the published `@solidjs/signals@2.0.0-rc.3`

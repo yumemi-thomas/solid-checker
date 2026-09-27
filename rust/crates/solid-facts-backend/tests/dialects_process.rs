@@ -417,7 +417,14 @@ fn solid_two_write_wording_follows_source_provenance() {
         root.join("fixtures/reactive-ir/write-scope/tsconfig.json"),
         Some("solid-v2"),
     );
-    let store = findings
+    // A store setter directly in a component body is legal on the audited
+    // rc.3 triple (the dev component body is a root, which its store setter
+    // guard exempts), so the store half reads the one in a memo compute.
+    let store_findings = project_snapshot_findings(
+        root.join("fixtures/reactive-ir/write-scope-roots-rc3/tsconfig.json"),
+        Some("solid-v2"),
+    );
+    let store = store_findings
         .iter()
         .find(|finding| {
             finding["id"] == "SC2001"
@@ -425,7 +432,7 @@ fn solid_two_write_wording_follows_source_provenance() {
                     .as_str()
                     .is_some_and(|message| message.contains("setState"))
         })
-        .expect("the store setter should report in the component body");
+        .expect("the store setter should report in the memo compute");
     assert!(
         store["message"]
             .as_str()

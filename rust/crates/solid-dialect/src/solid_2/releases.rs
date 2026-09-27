@@ -61,8 +61,8 @@
 //! the other one.
 //!
 //! N3 defaults the same way, for the same kind of reason: an unknown signals
-//! keeps the root exemption, so a store setter directly in a `createRoot` body
-//! is not reported there. Reporting it on a release that exempts roots would be
+//! keeps the root exemption, so a store setter directly in a `createRoot` body,
+//! or in a component body (a root in dev), is not reported there. Reporting it on a release that exempts roots would be
 //! a violation the runtime does not raise; silence is a miss the notice already
 //! makes visible.
 //!
@@ -582,7 +582,8 @@ fn unread_consequence(package: &str) -> &'static str {
         SIGNALS => {
             "the store typing it declares is unknown: a write to a store root's own property \
              outside a setter is not reported, nor is a store setter called directly in a \
-             createRoot body or flush() in an action body, and until is not modelled"
+             createRoot or component body, or flush() in an action body, and until is not \
+             modelled"
         }
         WEB => {
             "a dynamic call with options is not modelled, and every other export it declares is \
@@ -603,8 +604,8 @@ fn unresolved_consequence(package: &str) -> Option<&'static str> {
         SIGNALS => Some(
             "@solidjs/signals does not resolve from the installed solid-js, so the store typing \
              it declares is unknown: a write to a store root's own property outside a setter is \
-             not reported, nor is a store setter called directly in a createRoot body or flush() \
-             in an action body, and until is not modelled",
+             not reported, nor is a store setter called directly in a createRoot or component \
+             body, or flush() in an action body, and until is not modelled",
         ),
         WEB => None,
         _ => Some(
@@ -1090,6 +1091,15 @@ mod tests {
                 !Solid2.callback_runs_in_created_root(primitive, argument),
                 "{primitive:?} {argument}"
             );
+        }
+        // `flush(fn)` creates no root: it keeps the caller's owner, as
+        // `untrack` does, on every release (probed rc.0-rc.9).
+        for vocabulary in [Solid2::AUDITED, Solid2::RC9] {
+            assert!(vocabulary.callback_preserves_owner_write_context(Primitive::Flush));
+            assert!(vocabulary.callback_preserves_owner_write_context(Primitive::Untrack));
+            assert!(!vocabulary.callback_preserves_owner_write_context(Primitive::CreateRoot));
+            // The dev component body runs under `createRoot(…, { transparent: true })`.
+            assert!(vocabulary.component_body_runs_under_root());
         }
         for gated in super::super::RELEASE_GATED_NAMES {
             assert_eq!(Solid2::AUDITED.primitive(gated), None, "{gated}");

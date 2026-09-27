@@ -14,6 +14,7 @@ use super::{
     EntitySymbols, ExecutionRole, PrimitiveName, SemanticLookup, SymbolId, call_primitive_name,
     jsx_primitive_name, known_primitive, location,
 };
+use crate::indexes::ComponentStatus;
 use crate::owners::{
     callback_execution_at_call, callback_owner_at_call, containing_ast_function,
     enclosing_function_label, function_binding_name, returned_callback_execution_at_call,
@@ -343,16 +344,15 @@ pub(super) fn semantic_execution_role(
 
 /// What the operation's runtime guard does when a root owner is the ambient
 /// owner, which is the case directly in a `createRoot` body
-/// ([`solid_dialect::Dialect::callback_runs_in_created_root`]).
+/// ([`solid_dialect::Dialect::callback_runs_in_created_root`]) and, where the
+/// dialect says so, directly in a component body
+/// ([`solid_dialect::Dialect::component_body_runs_under_root`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum RootBodyGuard {
-    /// Nothing is claimed about a root body: the operation there keeps the
-    /// ordinary callback classification. Action invocations, whose rule has
-    /// no root-body arm.
-    Unclaimed,
     /// The guard rejects the operation under a root, as under any
-    /// children-capable owner: signal setters and `refresh` on every Solid 2
-    /// release, store setters where the release's guard does not exempt roots.
+    /// children-capable owner: signal setters, `refresh` and action calls on
+    /// every Solid 2 release, store setters where the release's guard does not
+    /// exempt roots.
     Rejects,
     /// The guard exempts a root: store setters on a release whose guard tests
     /// `!context._root` ([`solid_dialect::Dialect::store_setter_guard_exempts_roots`]).
@@ -377,7 +377,7 @@ pub(super) fn semantic_write_execution_role(
     lookup: &SemanticLookup<'_>,
     root_body: RootBodyGuard,
 ) -> ExecutionRole {
-    let allowed = write_allowed_spans(file, allowed, lookup, root_body);
+    let allowed = write_allowed_spans(file, allowed, lookup);
     semantic_write_execution_role_within(
         file,
         span,
@@ -390,27 +390,21 @@ pub(super) fn semantic_write_execution_role(
     )
 }
 
-/// The regions a write may treat as imperative, for an operation whose guard
-/// `root_body` describes.
+/// The regions a write may treat as imperative.
 ///
 /// [`allowed_callback_spans`] lists every callback whose *reads* run outside
 /// the surrounding tracking pass, and `createRoot`'s body is one: it clears
 /// the listener. For a write that is the wrong question. The body runs under
 /// the root, a children-capable owner, and containment in an allowed region
 /// is tested before a nested memo or effect compute is recognized, so every
-/// write anywhere inside a root used to be classified as legal. Where the
-/// guard's answer under a root is claimed, the root's own body is decided by
-/// [`WriteRegionAdjustment::CreatedRoot`] instead, and what is nested in it by
-/// its own callback.
+/// write anywhere inside a root used to be classified as legal. The root's own
+/// body is decided by [`WriteRegionAdjustment::CreatedRoot`] instead, and what
+/// is nested in it by its own callback.
 fn write_allowed_spans(
     file: &solid_facts::FileFacts,
     allowed: &[Span],
     lookup: &SemanticLookup<'_>,
-    root_body: RootBodyGuard,
 ) -> Vec<Span> {
-    if root_body == RootBodyGuard::Unclaimed {
-        return allowed.to_vec();
-    }
     let roots = file
         .ast
         .calls
@@ -536,11 +530,10 @@ fn semantic_write_execution_role_within(
             // in `createRoot(…, { transparent: true })` then `untrack`. So a
             // rejected operation there takes the component body's role; an
             // exempted one takes the inline untracked callback's, which
-            // reports nothing. Unclaimed keeps the classification below.
+            // reports nothing.
             Some(WriteRegionAdjustment::CreatedRoot) => match root_body {
                 RootBodyGuard::Rejects => return ExecutionRole::UntrackedRendering,
                 RootBodyGuard::Exempts => return ExecutionRole::UntrackedCallback,
-                RootBodyGuard::Unclaimed => break,
             },
             Some(WriteRegionAdjustment::FirstRunAtCallSite(call)) => {
                 // Where the call site forbids the write, the first run throws
@@ -568,10 +561,34 @@ fn semantic_write_execution_role_within(
                     _ => break,
                 }
             }
-            None => break,
+            None => {
+                if let Some(role) = named_callback_write_role(
+                    file,
+                    span,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    root_body,
+                    visiting,
+                ) {
+                    return role;
+                }
+                break;
+            }
         }
     }
     let direct = semantic_execution_role(file, span, allowed, entities, symbol_names, lookup);
+    // Directly in a component body the dev owner is the component's root, so
+    // a guard that exempts roots exempts the body too. Only the body itself:
+    // tracked JSX in it runs in a render effect, and a callback nested in it
+    // is judged as itself.
+    if direct == ExecutionRole::UntrackedRendering
+        && root_body == RootBodyGuard::Exempts
+        && runs_directly_in_component_root(file, span, lookup)
+    {
+        return ExecutionRole::UntrackedCallback;
+    }
     if direct != ExecutionRole::Unknown {
         return direct;
     }
@@ -588,7 +605,6 @@ fn semantic_write_execution_role_within(
             caller_file,
             &allowed_callback_spans(caller_file, lookup),
             lookup,
-            root_body,
         );
         let role = semantic_write_execution_role_within(
             caller_file,
@@ -610,6 +626,101 @@ fn semantic_write_execution_role_within(
     }
     visiting.remove(&key);
     imperative.unwrap_or(ExecutionRole::Unknown)
+}
+
+/// Whether `span` sits directly in the body of a function that is, or may be,
+/// a component, on a dialect whose component body runs under a root
+/// ([`Dialect::component_body_runs_under_root`]).
+///
+/// A possible component is included: the only premise that made a write there
+/// a violation is that it runs as a component body, and under this guard a
+/// component body is legal.
+fn runs_directly_in_component_root(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    lookup.dialect.component_body_runs_under_root()
+        && containing_ast_function(&file.ast, span).is_some_and(|function| {
+            lookup.function_component_status(file, function) != ComponentStatus::No
+        })
+}
+
+/// The write-legality answer a same-file function passed **by name** takes
+/// from the calls that pass it, where an inline callback in the same position
+/// would take a [`WriteRegionAdjustment`]: `createRoot(init)` runs `init` as
+/// the root body, and `untrack(write)` or `flush(write)` runs `write` exactly
+/// as legally as at the call.
+///
+/// The function is resolved by symbol: the argument must be a bare identifier
+/// whose symbol is the function's own binding (`entities.at` on a call span
+/// would answer with the callee instead). Only a rejecting site answers,
+/// because the function may also run from positions this does not look at --
+/// a direct call, another callback slot -- which keep their own
+/// classification; one invocation that throws is a violation, while one that
+/// does not proves nothing about the others.
+#[allow(clippy::too_many_arguments)]
+fn named_callback_write_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+    visiting: &mut HashSet<(String, Span)>,
+) -> Option<ExecutionRole> {
+    let function = containing_ast_function(&file.ast, span)?;
+    let symbol = function_symbol(file, function, entities)?;
+    let key = (file.path.to_string(), function.span);
+    if !visiting.insert(key.clone()) {
+        return None;
+    }
+    let mut rejected = None;
+    'calls: for call in &file.ast.calls {
+        for (index, argument) in call.arguments.iter().enumerate() {
+            if argument.value != solid_facts::ast::ArgumentValueKind::Identifier
+                || entities.at(file.path.as_str(), argument.span) != Some(symbol)
+            {
+                continue;
+            }
+            let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+                continue;
+            };
+            let execution = callback_execution_at_call(file, call, primitive, index, lookup);
+            let site = if lookup
+                .dialect
+                .callback_runs_in_created_root(primitive, index)
+                && execution == Some(Execution::Inline)
+            {
+                (root_body == RootBodyGuard::Rejects).then_some(ExecutionRole::UntrackedRendering)
+            } else if lookup
+                .dialect
+                .callback_preserves_owner_write_context(primitive)
+                && execution.is_some()
+            {
+                let at_call = semantic_write_execution_role_within(
+                    file,
+                    call.span,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    root_body,
+                    visiting,
+                );
+                at_call.reports_disallowed_write().then_some(at_call)
+            } else {
+                None
+            };
+            if site.is_some() {
+                rejected = site;
+                break 'calls;
+            }
+        }
+    }
+    visiting.remove(&key);
+    rejected
 }
 
 /// `classifying` is the stack of spans whose role is currently being derived

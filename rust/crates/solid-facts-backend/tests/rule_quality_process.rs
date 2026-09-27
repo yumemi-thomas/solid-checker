@@ -12,7 +12,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
     };
 
     for (rule, count) in [
-        ("reactive-write-in-owned-scope", 9),
+        ("reactive-write-in-owned-scope", 11),
         ("action-called-in-owned-scope", 2),
         ("strict-read-untracked", 22),
         ("reactive-read-after-await", 20),
@@ -144,7 +144,18 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "owned-scope-valid.tsx",
-            [("missing-owner", 1), ("cleanup-return-unresolved", 0)].as_slice(),
+            [
+                ("missing-owner", 1),
+                ("cleanup-return-unresolved", 0),
+                // Not incidental: a deliberate divergence from upstream, which
+                // lists `flush(fn)` inside a memo as valid. `flush` keeps the
+                // memo's owner, so the inline write and the `flushWrite` it is
+                // passed throw REACTIVE_WRITE_IN_OWNED_SCOPE on every
+                // rc.0-rc.9 dev build (ownership case
+                // reactive-write-in-owned-scope/positive/002).
+                ("reactive-write-in-owned-scope", 2),
+            ]
+            .as_slice(),
         ),
     ]);
     for (file, rules) in incidental {
@@ -162,12 +173,10 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
     }
 
     for (file, rules) in [
+        // SC2001 is pinned at two above: the `flush(fn)` divergence.
         (
             "owned-scope-valid.tsx",
-            &[
-                "reactive-write-in-owned-scope",
-                "action-called-in-owned-scope",
-            ][..],
+            &["action-called-in-owned-scope"][..],
         ),
         ("effect-apply-valid.tsx", &["strict-read-untracked"][..]),
         (
