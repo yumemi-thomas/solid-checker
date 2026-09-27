@@ -92,6 +92,8 @@ import {
   publicationHoldsPackage,
   cascadeGraphNodeRefusals,
   graphCasesWithoutRefusedNodes,
+  graphProposalStatesNothing,
+  reachableGraphStatesWithoutStatementlessNodes,
   retainedCaseFloorRefusal,
   recoveryGraphBudgetRefusal,
   RECOVERY_GRAPH_CASE_BUDGET,
@@ -1156,6 +1158,84 @@ test("a refused graph node refuses every node generated against its contract", (
   assert.match(nodeRefusals.get("middle").reason, /dependency broken refused: closure module was not found/);
   assert.match(nodeRefusals.get("root").reason, /dependency middle refused: dependency broken refused:/);
   assert.equal(nodeRefusals.has("unrelated"), false);
+});
+
+// ADR 0129. `solid-js@2.0.0-rc.9`'s `./internal` is this node: nine
+// `const x = core.x` aliases of names the `.` declarations do not publish,
+// every domain declined by the closure's hazards. No receipt can close
+// anything in it, so `@solidjs/web`, which imports it, refused its whole case.
+test("a dependency proposal that states nothing and proposes nothing is recognized exactly", () => {
+  const nothing = { call: {}, shape: "unknown" };
+  const document = summaries => ({
+    entrypoints: { "./internal": { cases: [{ exports: { a: "s1", b: "s2" } }] } },
+    summaries
+  });
+  const plan = { closureCandidates: [] };
+  assert.equal(graphProposalStatesNothing(document({ s1: nothing, s2: nothing }), plan), true);
+  assert.equal(
+    graphProposalStatesNothing(
+      document({ s1: nothing, s2: { call: { operations: [], closed: [] }, shape: "unknown" } }),
+      plan
+    ),
+    true
+  );
+  // Anything stated or proposed, or anything this reading does not know,
+  // keeps the node.
+  for (const [why, candidate, candidatePlan] of [
+    ["a closure candidate", document({ s1: nothing, s2: nothing }), { closureCandidates: [{}] }],
+    ["no plan census", document({ s1: nothing, s2: nothing }), {}],
+    ["a known shape", document({ s1: nothing, s2: { call: {}, shape: "callable" } }), plan],
+    ["an absent shape", document({ s1: nothing, s2: { call: {} } }), plan],
+    ["an operation", document({ s1: nothing, s2: { call: { operations: [{ id: "x" }] }, shape: "unknown" } }), plan],
+    ["a closed domain", document({ s1: nothing, s2: { call: { closed: ["reads"] }, shape: "unknown" } }), plan],
+    ["an unknown field", document({ s1: nothing, s2: { ...nothing, stability: "stable" } }), plan],
+    ["a missing summary", document({ s1: nothing }), plan],
+    [
+      "an initialization claim",
+      { entrypoints: { ".": { cases: [{ initialization: "inert", exports: { a: "s1" } }] } }, summaries: { s1: nothing } },
+      plan
+    ],
+    ["an empty surface", { entrypoints: { ".": { cases: [{ exports: {} }] } }, summaries: {} }, plan],
+    [
+      "two cases",
+      { entrypoints: { ".": { cases: [{ exports: { a: "s1" } }, { exports: { a: "s1" } }] } }, summaries: { s1: nothing } },
+      plan
+    ]
+  ]) {
+    assert.equal(graphProposalStatesNothing(candidate, candidatePlan), false, why);
+  }
+});
+
+test("a statementless dependency node leaves the graph instead of refusing its dependents", () => {
+  const leaf = graphNodeFixture("leaf");
+  const statementless = graphNodeFixture("statementless", [leaf]);
+  statementless.statesNothing = true;
+  const kept = graphNodeFixture("kept");
+  const dependent = graphNodeFixture("dependent", [statementless, kept]);
+  const root = graphNodeFixture("root", [dependent]);
+  const byKey = new Map(
+    [leaf, statementless, kept, dependent, root].map(state => [state.node.key, state])
+  );
+  // It is not a refusal, so nothing cascades from it.
+  assert.equal(cascadeGraphNodeRefusals([...byKey.values()], new Map()).size, 0);
+  const { cases, refusals } = graphCasesWithoutRefusedNodes({
+    prepared: [{ root, artifactCase: { entrypoint: ".", conditions: ["import"] } }],
+    byKey,
+    nodeRefusals: new Map(),
+    reachable: reachableGraphStatesWithoutStatementlessNodes
+  });
+  assert.equal(refusals.length, 0);
+  // Neither it nor what only it reached is certified with the case.
+  assert.deepEqual(cases[0].nodes.map(state => state.node.key).sort(), ["dependent", "kept", "root"]);
+  // A genuinely refused node still refuses every case that reaches it.
+  const refused = graphCasesWithoutRefusedNodes({
+    prepared: [{ root, artifactCase: { entrypoint: ".", conditions: ["import"] } }],
+    byKey,
+    nodeRefusals: new Map([["kept", { stage: "graph-generation", reason: "closure module was not found" }]]),
+    reachable: reachableGraphStatesWithoutStatementlessNodes
+  });
+  assert.equal(refused.cases.length, 0);
+  assert.equal(refused.refusals.length, 1);
 });
 
 test("a graph that cannot prepare a retained case is abandoned rather than published smaller", () => {

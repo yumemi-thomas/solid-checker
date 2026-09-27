@@ -2162,15 +2162,57 @@ async function executePreparedPublishedGraphs({
   };
 }
 
-function reachableGraphStates(root, byKey) {
+function reachableGraphStates(root, byKey, admit = () => true) {
   const found = new Set();
   const visit = state => {
     if (found.has(state.node.key)) return;
-    for (const dependency of state.node.dependencies) visit(byKey.get(dependency.node));
+    for (const dependency of state.node.dependencies) {
+      const child = byKey.get(dependency.node);
+      if (admit(child)) visit(child);
+    }
     found.add(state.node.key);
   };
   visit(root);
   return [...byKey.values()].filter(state => found.has(state.node.key));
+}
+
+/// The graph a case certifies once every statementless dependency node has
+/// left it (ADR 0129). Each such node's dependents were generated without it,
+/// so neither it nor anything reached only through it is part of the case.
+export function reachableGraphStatesWithoutStatementlessNodes(root, byKey) {
+  return reachableGraphStates(root, byKey, state => !state?.statesNothing);
+}
+
+/// Whether a graph node's generated proposal states nothing and proposes
+/// nothing: one artifact case, no module-initialization claim, no closure
+/// candidate, and every export `{ call: {}, shape: "unknown" }` (empty lists
+/// only). Such a proposal has no semantic claim a receipt could close
+/// (`derive_closed_claims_root` answers `NoClosedClaims`), so no certification
+/// can ever accept it and no dependent can project it.
+///
+/// Conservative in the only direction that matters for precision: anything
+/// this reading does not recognize answers `false`, which keeps the node and
+/// its existing refusal. Answering `true` is never unsound, because a pruned
+/// dependency is simply unaccepted for its dependents: a re-export of it still
+/// refuses, a closure reaching an ordinary package declines, and a core edge
+/// takes the dialect's answer, as in the default lane (ADR 0027).
+export function graphProposalStatesNothing(document, plan) {
+  if (!Array.isArray(plan?.closureCandidates) || plan.closureCandidates.length > 0) return false;
+  const cases = Object.values(document?.entrypoints ?? {}).flatMap(value => value?.cases ?? []);
+  if (cases.length !== 1) return false;
+  const [artifactCase] = cases;
+  if (artifactCase?.initialization !== undefined) return false;
+  const exports = Object.values(artifactCase?.exports ?? {});
+  if (exports.length === 0) return false;
+  return exports.every(id => {
+    const summary = document.summaries?.[id];
+    if (!summary || typeof summary !== "object" || Array.isArray(summary)) return false;
+    if (Object.keys(summary).some(key => key !== "call" && key !== "shape")) return false;
+    if (summary.shape !== "unknown") return false;
+    const call = summary.call ?? {};
+    if (typeof call !== "object" || Array.isArray(call)) return false;
+    return Object.values(call).every(value => Array.isArray(value) && value.length === 0);
+  });
 }
 
 /// A graph node that could not be prepared, acquired or generated is a fact
@@ -2179,6 +2221,11 @@ function reachableGraphStates(root, byKey) {
 /// it -- and only those. Nothing weaker would be sound: a dependent generated
 /// without the dependency it names is exactly the dependency-blind proposal
 /// this lane exists to replace.
+///
+/// A node that *generated* but states nothing is not a refusal and does not
+/// come through here (ADR 0129): it is pruned, and its dependents generate
+/// against it as an unaccepted dependency, which is what that node's contract
+/// could only ever have told them.
 export function cascadeGraphNodeRefusals(states, nodeRefusals) {
   let changed = true;
   while (changed) {
@@ -2778,6 +2825,7 @@ export async function preparePublishedGraphCases({
       ]);
       const preparedState = {
         index: `${caseIndex}-${nodeIndex}`,
+        isRoot,
         node,
         nodeIndex,
         nodeManifest,
@@ -2978,6 +3026,7 @@ export async function preparePublishedGraphCases({
   );
   let proposalGenerations = 0;
   let proposalGenerationsShared = 0;
+  const statesNothingNodes = [];
   // Importer variants of one artifact generate once. A node is keyed by the
   // module that imported it, so one package's many entrypoints put the same
   // `solid-js` into the graph once per importing module; every such variant is
@@ -3009,7 +3058,9 @@ export async function preparePublishedGraphCases({
         // below removes them from this frontier rather than leaving the
         // loop with nothing ready.
         const generateNodeProposal = async () => {
-          const dependencies = state.directDependencies.map(dependency => ({
+          const dependencies = state.directDependencies
+            .filter(dependency => !dependency.state.statesNothing)
+            .map(dependency => ({
             ...dependency.state,
             viaSpecifier: dependency.viaSpecifier,
             reexportImporters: [
@@ -3100,8 +3151,30 @@ export async function preparePublishedGraphCases({
           const reviewedPlan = reviewGraphProposal(generated);
           state.planning = plannings[0];
           state.demandPlan = reviewedPlan;
-          demandPlans[state.nodeIndex] = reviewedPlan;
           proposalGenerations += 1;
+          // ADR 0129: a dependency node whose proposal states nothing and
+          // proposes nothing can never be issued a receipt, so it is no
+          // accepted dependency for anyone. It leaves the graph instead of
+          // refusing every node above it; its dependents generate without it,
+          // exactly as the default lane generates against an unaccepted
+          // dependency.
+          if (
+            !state.isRoot &&
+            graphProposalStatesNothing(
+              JSON.parse(readFileSync(generated.output, "utf8")),
+              JSON.parse(readFileSync(generated.plan, "utf8"))
+            )
+          ) {
+            state.statesNothing = true;
+            statesNothingNodes.push({
+              packageName: state.node.packageName,
+              packageVersion: state.node.packageVersion,
+              entrypoint: state.node.entrypoint,
+              conditions: [...state.node.conditions]
+            });
+            return;
+          }
+          demandPlans[state.nodeIndex] = reviewedPlan;
         };
         try {
           await generateNodeProposal();
@@ -3129,7 +3202,12 @@ export async function preparePublishedGraphCases({
       state.environmentNotAcquired ??= graphEnvironmentNotAcquired;
     }
   }
-  const surviving = graphCasesWithoutRefusedNodes({ prepared, byKey, nodeRefusals });
+  const surviving = graphCasesWithoutRefusedNodes({
+    prepared,
+    byKey,
+    nodeRefusals,
+    reachable: reachableGraphStatesWithoutStatementlessNodes
+  });
   caseRefusals.push(...surviving.refusals);
   preparedCases.push(...surviving.cases);
   if (preparedCases.length === 0) {
@@ -3209,6 +3287,7 @@ export async function preparePublishedGraphCases({
       // Nodes that took an importer variant's document instead of generating;
       // `proposalGenerations - proposalGenerationsShared` generators ran.
       proposalGenerationsShared,
+      ...(statesNothingNodes.length ? { statesNothingNodes } : {}),
       proposalFrontiers,
       graphNodeReferences: preparedCases.reduce((total, item) => total + item.nodes.length, 0),
       nativeCertificationTransactions: 1,
