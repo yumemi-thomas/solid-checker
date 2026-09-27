@@ -18,6 +18,11 @@ const FROZEN_PHASE16_ECOSYSTEM_SHA256 =
   "ed8123852939c56ce2f7f93b9f77acebc96fe4d24989ee8c471bc74b7dda843b";
 const FROZEN_PHASE16_SYNTHETIC_CORPUS_SHA256 =
   "1a57dc66aca8a2ea4ed378c0958025875f0e9716d896af5c7c3bcf04e06acede";
+// The ecosystem manifest Phase 16 was measured on. Rediscovery under the rc.9
+// ceiling (ADR 0127, 2026-09-27) rewrote the manifest in place, as later
+// phases rewrote the ecosystem report.
+const FROZEN_PHASE16_MANIFEST_SHA256 =
+  "5c6fe39403bca959f281a087524beae9920fd9f0e3925b8d6cecc4f8dfaa0e09";
 
 const INPUTS = Object.freeze({
   ecosystem: "benchmarks/ecosystem/report.json",
@@ -348,7 +353,7 @@ export function assertPhase16Report(report, refusalReport, sources) {
   assert.equal(report.documentKind, "solid-checker-package-contract-phase16-report");
   for (const [name, path] of Object.entries(INPUTS)) {
     assert.equal(report.authority.inputs[name].path, path);
-    if (name === "ecosystem" || name === "syntheticCorpus") {
+    if (name === "ecosystem" || name === "syntheticCorpus" || name === "manifest") {
       // Phase 16 is the immutable pre-policy-2 baseline. Later phases refresh
       // the ecosystem report and extend the synthetic corpus in place, while
       // Slice 9 deliberately retired the 24 accepted cases that made this
@@ -356,9 +361,11 @@ export function assertPhase16Report(report, refusalReport, sources) {
       // instead of pretending current policy-2 state can regenerate it.
       assert.equal(
         report.authority.inputs[name].sha256,
-        name === "ecosystem"
-          ? FROZEN_PHASE16_ECOSYSTEM_SHA256
-          : FROZEN_PHASE16_SYNTHETIC_CORPUS_SHA256
+        {
+          ecosystem: FROZEN_PHASE16_ECOSYSTEM_SHA256,
+          syntheticCorpus: FROZEN_PHASE16_SYNTHETIC_CORPUS_SHA256,
+          manifest: FROZEN_PHASE16_MANIFEST_SHA256
+        }[name]
       );
     } else {
       assert.equal(report.authority.inputs[name].sha256, sha256(read(path)), `${name} input drifted`);
