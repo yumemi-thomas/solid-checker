@@ -4389,49 +4389,80 @@ mod tests {
         }
     }
 
-    /// `@solidjs/signals@2.0.0-rc.9` answers from exactly the five `creates`
-    /// rows read on its own bytes (2026-09-26), and from nothing rc.6 carries
-    /// beyond them.
+    /// `@solidjs/signals@2.0.0-rc.9` answers from exactly the rows read on its
+    /// own bytes: the five `creates` rows of 2026-09-26 and the nineteen of
+    /// the 2026-09-27 parity reading, which is rc.6's set, pair for pair.
     ///
-    /// `createSignal` `creates` and `createMemo` `reads` are the controls:
-    /// rc.6 grants both, and rc.9's audit did not read either (their closures,
-    /// `computed` and `recompute`, were rewritten), so rc.9 must stay silent.
+    /// `createOptimisticStore` `reads` is the control that matters: rc.3
+    /// grants it, rc.6 withholds it (the export's own landing router reads
+    /// through the proxy it created), and rc.9 keeps that router, so rc.9 must
+    /// stay silent while rc.3 still answers. A domain no audit read on any
+    /// archive (`createRoot` `reads`) stays silent too.
     #[test]
-    fn rc9_signals_answers_only_its_five_creates_rows() {
+    fn rc9_signals_answers_exactly_what_rc6_answers() {
+        let rc3 = audited_archive("@solidjs/signals", "2.0.0-rc.3");
         let rc6 = audited_archive("@solidjs/signals", "2.0.0-rc.6");
         let rc9 = audited_archive("@solidjs/signals", "2.0.0-rc.9");
         let granted = [
-            "createRoot",
-            "getOwner",
-            "onCleanup",
-            "runWithOwner",
-            "untrack",
-        ];
-        for export in granted {
-            assert!(
-                primitive_performs_no_operation(&rc9, export, CallClaimDomain::Creates),
-                "rc.9 {export} creates"
-            );
-            // A `creates` row says nothing about another domain.
-            assert!(
-                !primitive_performs_no_operation(&rc9, export, CallClaimDomain::Reads),
-                "rc.9 {export} reads was never read"
-            );
-        }
-        for (export, domain) in [
-            ("createSignal", CallClaimDomain::Creates),
+            ("action", CallClaimDomain::Creates),
+            ("action", CallClaimDomain::Reads),
             ("createMemo", CallClaimDomain::Creates),
             ("createMemo", CallClaimDomain::Reads),
+            ("createOptimistic", CallClaimDomain::Creates),
+            ("createOptimistic", CallClaimDomain::Reads),
+            ("createOptimisticStore", CallClaimDomain::Creates),
+            ("createProjection", CallClaimDomain::Creates),
+            ("createRoot", CallClaimDomain::Creates),
+            ("createSignal", CallClaimDomain::Creates),
+            ("createStore", CallClaimDomain::Creates),
+            ("createTrackedEffect", CallClaimDomain::Creates),
+            ("createTrackedEffect", CallClaimDomain::Reads),
             ("flush", CallClaimDomain::Creates),
+            ("flush", CallClaimDomain::Reads),
+            ("getOwner", CallClaimDomain::Creates),
+            ("onCleanup", CallClaimDomain::Creates),
+            ("onSettled", CallClaimDomain::Creates),
+            ("onSettled", CallClaimDomain::Reads),
+            ("reconcile", CallClaimDomain::Creates),
+            ("reconcile", CallClaimDomain::Reads),
+            ("runWithOwner", CallClaimDomain::Creates),
             ("snapshot", CallClaimDomain::Creates),
-        ] {
+            ("untrack", CallClaimDomain::Creates),
+        ];
+        for (export, domain) in granted {
             assert!(
-                primitive_performs_no_operation(&rc6, export, domain),
-                "rc.6 {export} {domain:?}"
+                primitive_performs_no_operation(&rc9, export, domain),
+                "rc.9 {export} {domain:?}"
             );
             assert!(
-                !primitive_performs_no_operation(&rc9, export, domain),
-                "rc.6's {export} {domain:?} row must not answer for rc.9"
+                primitive_performs_no_operation(&rc6, export, domain),
+                "rc.6 {export} {domain:?}: rc.9 grants nothing rc.6 does not"
+            );
+        }
+
+        // The withholding rc.6 introduced holds on rc.9, and does not reach
+        // back to rc.3's row.
+        assert!(primitive_performs_no_operation(
+            &rc3,
+            "createOptimisticStore",
+            CallClaimDomain::Reads
+        ));
+        for archive in [&rc6, &rc9] {
+            assert!(
+                !primitive_performs_no_operation(
+                    archive,
+                    "createOptimisticStore",
+                    CallClaimDomain::Reads
+                ),
+                "{} createOptimisticStore reads is withheld",
+                archive.version
+            );
+        }
+        for archive in [&rc3, &rc6, &rc9] {
+            assert!(
+                !primitive_performs_no_operation(archive, "createRoot", CallClaimDomain::Reads),
+                "{} createRoot reads was never read",
+                archive.version
             );
         }
 
@@ -4460,10 +4491,10 @@ mod tests {
                 },
             ),
         ] {
-            for export in granted {
+            for (export, domain) in granted {
                 assert!(
-                    !primitive_performs_no_operation(&archive, export, CallClaimDomain::Creates),
-                    "{why} must deny nothing ({export})"
+                    !primitive_performs_no_operation(&archive, export, domain),
+                    "{why} must deny nothing ({export} {domain:?})"
                 );
             }
         }

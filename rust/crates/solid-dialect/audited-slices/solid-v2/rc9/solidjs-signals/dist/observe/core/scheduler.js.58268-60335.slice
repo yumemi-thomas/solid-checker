@@ -1,0 +1,48 @@
+function flush(e) {
+    // Inside an action body the drain is incoherent (#3333): the action's
+    // writes are held by its transaction until it settles, so a drain can't
+    // reveal them — and the loop below only exits once `activeTransition` is
+    // null, so it would PARK the transaction mid-slice and every write after it
+    // in the body would land as a plain, committed write. The reporter's
+    // "leading flush()" workaround was exactly that leak. Prod: run `fn` if
+    // given (its writes stay in the transaction) and skip the drain.
+    if (actionStepDepth > 0) {
+        return e ? e() : undefined;
+    }
+    if (e) {
+        syncDepth++;
+        try {
+            return e();
+        } finally {
+            // Decrement even if the drain throws (a throwing effect): a leaked
+            // syncDepth would stop `schedule()` from ever queuing a microtask again.
+            try {
+                flush();
+            } finally {
+                syncDepth--;
+            }
+        }
+    }
+    if (globalQueue.Sn) {
+        return;
+    }
+    if (halted) return;
+    // Attribution: whether this call drained anything, so `flushEnd` fires once
+    // per real drain and never for a no-op call. The declaration is dead in
+    // prod (its only write is behind true) and rollup drops it.
+        let t = false;
+    // `flush()` is an explicit drain point, so it must also process an active
+    // transition even if no microtask was scheduled for it yet.
+        while (scheduled || activeTransition) {
+        globalQueue.flush();
+        t = true;
+    }
+    // Provenance ends with the drain: every ambient window (an action's first
+    // slice, a landing's propagation) runs to this flush.
+        origin = 0;
+    // Outside every try in this function (see the rule in attribution-hooks.ts):
+    // the drain loop above is the one place all scheduled work funnels through,
+    // so this is the "committed and effects ran, or parked" instant for
+    // everything the loop processed.
+        if (t && attrHooks !== null) attrHooks.flushEnd();
+}

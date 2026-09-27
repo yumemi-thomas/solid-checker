@@ -1,0 +1,89 @@
+function flush(fn) {
+  // Inside an action body the drain is incoherent (#3333): the action's
+  // writes are held by its transaction until it settles, so a drain can't
+  // reveal them — and the loop below only exits once `activeTransition` is
+  // null, so it would PARK the transaction mid-slice and every write after it
+  // in the body would land as a plain, committed write. The reporter's
+  // "leading flush()" workaround was exactly that leak. Prod: run `fn` if
+  // given (its writes stay in the transaction) and skip the drain.
+  if (actionStepDepth > 0) {
+    {
+      throw new Error(
+        "[FLUSH_IN_ACTION] flush() inside an action body is not allowed. An action's writes are held in its " +
+          "transaction and commit when the action settles: flush() cannot reveal them, and draining here would " +
+          "detach the writes that follow from the transaction. Remove the flush(); to observe the result, read " +
+          "after the action resolves."
+      );
+    }
+  }
+  if (fn) {
+    syncDepth++;
+    try {
+      return fn();
+    } finally {
+      // Decrement even if the drain throws (a throwing effect): a leaked
+      // syncDepth would stop `schedule()` from ever queuing a microtask again.
+      try {
+        flush();
+      } finally {
+        syncDepth--;
+      }
+    }
+  }
+  if (globalQueue._running) {
+    if (inTrackedQueueCallback) {
+      throw new Error(
+        "Cannot call flush() from inside onSettled or createTrackedEffect. flush() is not reentrant there. " +
+          "Writes made here are processed in the same flush's continuation; to force a drain afterwards, defer it: queueMicrotask(() => flush())."
+      );
+    }
+    if (inEffectCallback) {
+      const message =
+        "[FLUSH_IN_EFFECT_CALLBACK] flush() called from inside an effect callback is a no-op: the flush that runs effects is already in progress. " +
+        "Writes made here are processed in the same flush's continuation; to force a drain afterwards, defer it: queueMicrotask(() => flush()).";
+      reportDiagnostic(
+        emitDiagnostic({
+          code: "FLUSH_IN_EFFECT_CALLBACK",
+          kind: "lifecycle",
+          severity: "warn",
+          message
+        })
+      );
+    }
+    return;
+  }
+  if (halted) return;
+  let count = 0;
+  // Attribution: whether this call drained anything, so `flushEnd` fires once
+  // per real drain and never for a no-op call. The declaration is dead in
+  // prod (its only write is behind true) and rollup drops it.
+  let drained = false;
+  // `flush()` is an explicit drain point, so it must also process an active
+  // transition even if no microtask was scheduled for it yet.
+  while (scheduled || activeTransition) {
+    if (++count === 1e5) {
+      // Attribution beats a bare guard (#3140): say what kept the loop alive.
+      // A completed transition being re-activated reads `done=true` here —
+      // the corpse-revival signature — while application-driven runaways
+      // (#2843) usually show staged work naming the culprit node.
+      const t = activeTransition;
+      throw new Error(
+        `Potential Infinite Loop Detected. Kept alive by ${scheduled ? "scheduled work" : "an active transition"}${
+          t
+            ? `; transition: done=${t._done === true}, pending=${t._pendingNodes.length}, optimistic=${t._optimisticNodes.length}, asyncReporters=${t._asyncReporters.size}`
+            : ""
+        }${lastStagedNodeName ? `; last staged node: ${lastStagedNodeName}` : ""}`
+      );
+    }
+    globalQueue.flush();
+    drained = true;
+  }
+  // Provenance ends with the drain: every ambient window (an action's first
+  // slice, a landing's propagation) runs to this flush.
+  origin = 0;
+  // Outside every try in this function (see the rule in attribution-hooks.ts):
+  // the drain loop above is the one place all scheduled work funnels through,
+  // so this is the "committed and effects ran, or parked" instant for
+  // everything the loop processed.
+  if (drained && attrHooks !== null) attrHooks.flushEnd();
+}

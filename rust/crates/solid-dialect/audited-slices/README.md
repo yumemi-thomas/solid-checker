@@ -65,10 +65,12 @@ those under `solid-v2/rc9/` are from `@solidjs/signals@2.0.0-rc.9`
 (`sha512-o3pqiTgpH5NR2DstiKrt9s/6+0YOFtv+MfvLONwLsS247I+EWMMyTu9BkRcgd35UR5Pa1DM16lI1/5uaIMY6Gw==`,
 verified against the registry tarball, `package.json` sha256
 `c612461c9264f2b3509ced91ea91019ed7b1ea0df0d64bba7f0f30c8d00bb1c6`), cited by
-`docs/package-contract-v2/audits/2026-09-26-solid-2-rc9-signals-negative-rows.md`.
-rc.9 splits its development build in two, so its `dist/dev.js` citations are
-`onCleanup`'s alone and the other four cite `dist/dev-shared.js`, the file
-`dist/dev.js` imports them from. All are published by the SolidJS project under the MIT licence. They are reproduced
+`docs/package-contract-v2/audits/2026-09-26-solid-2-rc9-signals-negative-rows.md`
+and `docs/package-contract-v2/audits/2026-09-27-solid-2-rc9-signals-negative-rows-parity.md`.
+rc.9 splits its development build in two, so a development-build citation names
+the file that defines the export: `dist/dev-shared.js` for `getOwner`,
+`createRoot`, `untrack`, `runWithOwner` and `flush`, which `dist/dev.js`
+imports, and `dist/dev.js` for the rest. All are published by the SolidJS project under the MIT licence. They are reproduced
 here as citation evidence only. Do not edit a slice: it is not source, it is a
 quotation, and the test that reads it exists to detect exactly such an edit.
 

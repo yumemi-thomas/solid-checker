@@ -24495,15 +24495,16 @@ mod tests {
         );
     }
 
-    /// `@solidjs/signals@2.0.0-rc.9` binds on the five `creates` rows read on
-    /// its own bytes (2026-09-26 audit), and on nothing rc.6 carries beyond
-    /// them.
+    /// `@solidjs/signals@2.0.0-rc.9` binds on the rows read on its own bytes
+    /// (the 2026-09-26 five-row audit and the 2026-09-27 parity reading).
     ///
-    /// The five terminate for an exact rc.9 snapshot with the rc.9 coordinate
-    /// in the witness. `createSignal` `creates` and `createMemo` `reads` are
-    /// the controls: rc.6 grants both and the same call terminates there, but
-    /// rc.9's audit read neither, so rc.9 stays silent. Gate 8 still binds all
-    /// four fields. And the pinned rc.9 manifest selects, under each condition
+    /// A sample of them terminates for an exact rc.9 snapshot with the rc.9
+    /// coordinate in the witness, in both domains. `createOptimisticStore`
+    /// `reads` is the control: rc.9, like rc.6, withholds it (the export's own
+    /// landing router reads through the proxy it created), so the same call
+    /// that rc.9 answers for `creates` stays silent for `reads` on both. A
+    /// domain no audit read (`createRoot` `reads`) stays silent too. Gate 8
+    /// still binds all four fields. And the pinned rc.9 manifest selects, under each condition
     /// its `exports` map knows, exactly one of the three builds the audit read
     /// (`dist/prod/index.js`, `dist/dev.js`, `dist/observe/index.js`) — rc.9
     /// has no `require` arm, so a `require` consumer lands on the `default`
@@ -24552,40 +24553,46 @@ mod tests {
         );
 
         let granted = [
-            "createRoot",
-            "getOwner",
-            "onCleanup",
-            "runWithOwner",
-            "untrack",
+            ("createRoot", solid_dialect::CallClaimDomain::Creates),
+            ("getOwner", solid_dialect::CallClaimDomain::Creates),
+            ("onCleanup", solid_dialect::CallClaimDomain::Creates),
+            ("runWithOwner", solid_dialect::CallClaimDomain::Creates),
+            ("untrack", solid_dialect::CallClaimDomain::Creates),
+            ("createSignal", solid_dialect::CallClaimDomain::Creates),
+            (
+                "createOptimisticStore",
+                solid_dialect::CallClaimDomain::Creates,
+            ),
+            ("createMemo", solid_dialect::CallClaimDomain::Reads),
+            ("flush", solid_dialect::CallClaimDomain::Reads),
+            ("reconcile", solid_dialect::CallClaimDomain::Reads),
         ];
-        for export in granted {
+        for (export, domain) in granted {
             assert_eq!(
-                terminator(&rc9, export, solid_dialect::CallClaimDomain::Creates)
-                    .unwrap_or_else(|| panic!("rc.9 denies {export}'s creates"))
+                terminator(&rc9, export, domain)
+                    .unwrap_or_else(|| panic!("rc.9 denies {export} {domain:?}"))
                     .witness_site,
                 format!(
-                    "census-dialect-axiom:@solidjs/signals@2.0.0-rc.9#sha512-o3pqiTgpH5NR2Dst:{export}:creates"
+                    "census-dialect-axiom:@solidjs/signals@2.0.0-rc.9#sha512-o3pqiTgpH5NR2Dst:{export}:{}",
+                    domain.wire_name()
                 )
-            );
-            assert!(
-                terminator(&rc9, export, solid_dialect::CallClaimDomain::Reads).is_none(),
-                "rc.9 {export} reads was never read"
             );
         }
 
-        // An rc.6 row does not answer for rc.9 bytes.
+        // Withheld on rc.6 and rc.9 alike, and never read at all.
         for (export, domain) in [
-            ("createSignal", solid_dialect::CallClaimDomain::Creates),
-            ("createMemo", solid_dialect::CallClaimDomain::Reads),
+            (
+                "createOptimisticStore",
+                solid_dialect::CallClaimDomain::Reads,
+            ),
+            ("createRoot", solid_dialect::CallClaimDomain::Reads),
         ] {
-            assert!(
-                terminator(&rc6, export, domain).is_some(),
-                "rc.6 carries {export} {domain:?}"
-            );
-            assert!(
-                terminator(&rc9, export, domain).is_none(),
-                "rc.9's audit did not read {export} {domain:?}; rc.6's row must not stand in"
-            );
+            for (version, snapshot) in [("rc.6", &rc6), ("rc.9", &rc9)] {
+                assert!(
+                    terminator(snapshot, export, domain).is_none(),
+                    "{version} must stay silent for {export} {domain:?}"
+                );
+            }
         }
 
         // Gate 8: rc.9's coordinate is not rc.9's bytes.
@@ -24621,11 +24628,10 @@ mod tests {
                 ),
             ),
         ] {
-            for export in granted {
+            for (export, domain) in granted {
                 assert!(
-                    terminator(&snapshot, export, solid_dialect::CallClaimDomain::Creates)
-                        .is_none(),
-                    "{why} must not receive {export}'s terminator"
+                    terminator(&snapshot, export, domain).is_none(),
+                    "{why} must not receive {export}'s {domain:?} terminator"
                 );
             }
         }
@@ -25648,7 +25654,9 @@ mod tests {
     ///
     /// It terminates for `["browser","import"]` — `.` selects `dist/solid.js`,
     /// the one bundle § 7.3 walked — with the condition, the file, and each
-    /// delegated archive in the witness, on either audited signals prerelease.
+    /// delegated archive in the witness, on every audited signals prerelease:
+    /// rc.3, rc.6, and (since the 2026-09-27 parity reading granted its
+    /// `createSignal` `creates`) rc.9.
     /// Every other premise refuses by name: a set without `browser` (every
     /// case the tier holds), a set whose `.` selects a bundle the audit did not
     /// walk (`development`, `require`, `worker`), no signals in the closure,
@@ -25677,6 +25685,13 @@ mod tests {
             &audited_rc3_manifest("solidjs-signals"),
             "/snapshot/signals-rc3",
         );
+        let rc9 = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.9",
+            SIGNALS_RC9_INTEGRITY,
+            &audited_phase0_manifest("rc9", "solidjs-signals"),
+            "/snapshot/signals-rc9",
+        );
         let answer = |roots: &[SnapshotSourceRoot<'_>], requested: &[&str]| {
             census_dialect_axiom(
                 &solid_js_call("createSignal"),
@@ -25692,6 +25707,7 @@ mod tests {
         for (signals, version, sri) in [
             (&rc6, "2.0.0-rc.6", "sha512-lPqwZNLPq1Z9CBvg"),
             (&rc3, "2.0.0-rc.3", "sha512-/yPhTf3xS1FRR4MX"),
+            (&rc9, "2.0.0-rc.9", "sha512-o3pqiTgpH5NR2Dst"),
         ] {
             let roots = vec![solid_js_root(&solid_js), signals_root(signals)];
             assert_eq!(

@@ -225,7 +225,7 @@ pub(crate) const RELEASE_GATED_NAMES: &[&str] = &["until"];
 ///
 /// Listing an archive extends no row to it. Rows are archive-scoped
 /// ([`NegativeClaimRow::version`]), so rc.6 answers only from the rows read on
-/// rc.6's bytes, rc.9 only from the five read on rc.9's, and rc.3's rows keep
+/// rc.6's bytes, rc.9 only from the rows read on rc.9's, and rc.3's rows keep
 /// answering for rc.3 alone.
 const AUDITED_ARCHIVES: &[AuditedArchive] = &[
     AuditedArchive {
@@ -292,6 +292,16 @@ const RC6_SIGNALS_AUDIT: &str =
 const RC9_SIGNALS_AUDIT: &str =
     "docs/package-contract-v2/audits/2026-09-26-solid-2-rc9-signals-negative-rows.md";
 
+/// The reading of the other 20 rc.3 `@solidjs/signals` rows on the exact bytes
+/// of `@solidjs/signals@2.0.0-rc.9` (2026-09-27), in the same three builds as
+/// [`RC9_SIGNALS_AUDIT`]: 19 granted, `createOptimisticStore` `reads` withheld
+/// for the rc.6 reason (the export's own landing router still reads through
+/// the store proxy it created). The source of every rc.9
+/// [`AuditedCitation::Implementation`] outside the five `creates` rows; for the
+/// repository owner's review, as the earlier audits were.
+const RC9_PARITY_AUDIT: &str =
+    "docs/package-contract-v2/audits/2026-09-27-solid-2-rc9-signals-negative-rows-parity.md";
+
 /// The version each row is keyed to. Spelled once so a row cannot name a
 /// prerelease by a typo that happens to match no archive; a test pins that
 /// every row's `(package, version)` names exactly one [`AUDITED_ARCHIVES`]
@@ -316,7 +326,8 @@ const RC9: &str = "2.0.0-rc.9";
 /// difference and ADR 0007 for why it is stated rather than smoothed over.
 /// Three more rc.3 rows (`runWithOwner`, `createContext`, `useContext`) are
 /// readings of the same kind ([`RC3_OWNER_CONTEXT_AUDIT`]), and every rc.6 and
-/// rc.9 row is one ([`RC6_SIGNALS_AUDIT`], [`RC9_SIGNALS_AUDIT`]).
+/// rc.9 row is one ([`RC6_SIGNALS_AUDIT`], [`RC9_SIGNALS_AUDIT`],
+/// [`RC9_PARITY_AUDIT`]).
 ///
 /// # Rows are archive-scoped, and three `@solidjs/signals` archives carry rows
 ///
@@ -339,23 +350,28 @@ const RC9: &str = "2.0.0-rc.9";
 /// for rc.3, paired with `solid-js@2.0.0-rc.3`'s server bodies (the audit read
 /// those beside rc.6); a different `solid-js` version is not covered.
 ///
-/// The 5 rc.9 rows answer for `@solidjs/signals@2.0.0-rc.9` (solid-primitives'
-/// `next` installs it beside `solid-js@2.0.0-rc.9`): `getOwner`, `onCleanup`,
-/// `createRoot`, `untrack` and `runWithOwner` `creates`, the five the rc.9
-/// vocabulary review named as cheap. Each was read on rc.9's own bytes in all
-/// three builds its `exports` map can select, and nothing else of rc.9 was
-/// read, so no other rc.9 row exists: `createSignal` among them, which is why
-/// the scoped `solid-js` `createSignal` row cannot bind beside rc.9 (its
-/// delegate is unanswered there, and the census refuses). Their `solid-js`
-/// pairing covers `solid-js@2.0.0-rc.9`'s `server.js`, `server.dev.js` and
-/// `server.observe.js` bodies of the four names it re-exports from this archive
-/// (`createRoot` is `solid-js`' own declaration in rc.9) as well as rc.3's.
+/// The 24 rc.9 rows answer for `@solidjs/signals@2.0.0-rc.9`, the release the
+/// owner is making audited (solid-primitives' `next` installs it beside
+/// `solid-js@2.0.0-rc.9`). The five `creates` rows of `getOwner`, `onCleanup`,
+/// `createRoot`, `untrack` and `runWithOwner` are [`RC9_SIGNALS_AUDIT`]'s; the
+/// other nineteen are [`RC9_PARITY_AUDIT`]'s, which read every remaining rc.3
+/// row. Each was read on rc.9's own bytes in all three builds its `exports`
+/// map can select (`dist/prod/**`, `dist/dev.js` with `dist/dev-shared.js`,
+/// `dist/observe/**`). Like rc.6, rc.9 **withholds `createOptimisticStore`
+/// `reads`**: it keeps rc.6's landing router essentially verbatim. So rc.9
+/// grants exactly what rc.6 grants. With `createSignal` `creates` granted,
+/// the scoped `solid-js` `createSignal` row's delegates are answered beside
+/// rc.9 as beside rc.3 and rc.6. The `solid-js` pairing covers
+/// `solid-js@2.0.0-rc.9`'s `server.js`, `server.dev.js` and `server.observe.js`
+/// bodies of every name it re-exports from this archive, as well as rc.3's;
+/// `createRoot`, `createSignal`, `createMemo`, the store constructors and the
+/// optimistic primitives are `solid-js`' own declarations in rc.9.
 ///
 /// # `creates` and `reads`, and only those
 ///
-/// Rows carry [`CallClaimDomain::Creates`] (54: 32 on rc.3, one of them scoped, 17 on rc.6, 5 on
-/// rc.9) and [`CallClaimDomain::Reads`] (26: 19 on rc.3, 7 on rc.6). The other six kinded domains are withheld
-/// wholesale, because the audited documents' closures in them are not yet
+/// Rows carry [`CallClaimDomain::Creates`] (66: 32 on rc.3, one of them scoped, 17 on rc.6, 17 on
+/// rc.9) and [`CallClaimDomain::Reads`] (33: 19 on rc.3, 7 on rc.6, 7 on rc.9). The other six kinded
+/// domains are withheld wholesale, because the audited documents' closures in them are not yet
 /// admissible as negative authority and each counter-example below is a defect
 /// against the *audit*, not against this table:
 ///
@@ -1885,13 +1901,304 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             },
         ],
     },
-    // `@solidjs/signals@2.0.0-rc.9`, read on its own bytes (RC9_SIGNALS_AUDIT):
-    // the five `creates` rows the rc.9 vocabulary review called cheap, and
-    // nothing else. Every row cites all three builds rc.9's `exports` map
-    // can select -- `dist/prod/**` (`default`), the `development`/`test`
-    // build `dist/dev.js`, which imports four of the five definitions from
-    // `dist/dev-shared.js` and defines `onCleanup` itself, and the new
-    // `observe` build `dist/observe/**`. rc.9 ships no CommonJS bundle.
+    // `@solidjs/signals@2.0.0-rc.9`, read on its own bytes: the five `creates`
+    // rows of RC9_SIGNALS_AUDIT (`createRoot`, `getOwner`, `onCleanup`,
+    // `runWithOwner`, `untrack`) and the nineteen of RC9_PARITY_AUDIT, which
+    // reads every other rc.3 row and withholds `createOptimisticStore` `reads`
+    // exactly as rc.6 does. Every row cites all three builds rc.9's `exports`
+    // map can select -- `dist/prod/**` (`default`), the `development`/`test`
+    // build `dist/dev.js` (which imports `flush`, `getOwner`, `createRoot`,
+    // `runWithOwner` and `untrack` from `dist/dev-shared.js` and defines the
+    // rest itself), and the `observe` build `dist/observe/**`. rc.9 ships no
+    // CommonJS bundle.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "action",
+        domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 1. `action` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/core/action.js",
+                file_sha256: "ade163f51610818458e29a7902c3b7042ce1f098ff6be252638857a848d44b77",
+                start_byte: 4429,
+                end_byte: 7642,
+                slice_sha256: "92babceb624fbc7aff9607a87d8bb7d36fd8be20ef96a92d4d3c6f32d594f422",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 1. `action` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 87962,
+                end_byte: 92525,
+                slice_sha256: "6b9bd50c0f6bdfe85705563b2a76f7e146e2db559fce629be832289347893968",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 1. `action` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/core/action.js",
+                file_sha256: "506c5f29d6344334f9eccece2c925dd0b94af4eaf3e0273aed825ed37ded4298",
+                start_byte: 4502,
+                end_byte: 8183,
+                slice_sha256: "a503cb661462aed999de082d197ef9d229bd476655f176a73b1fce20603210ea",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "action",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 2. `action` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/core/action.js",
+                file_sha256: "ade163f51610818458e29a7902c3b7042ce1f098ff6be252638857a848d44b77",
+                start_byte: 4429,
+                end_byte: 7642,
+                slice_sha256: "92babceb624fbc7aff9607a87d8bb7d36fd8be20ef96a92d4d3c6f32d594f422",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 2. `action` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 87962,
+                end_byte: 92525,
+                slice_sha256: "6b9bd50c0f6bdfe85705563b2a76f7e146e2db559fce629be832289347893968",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 2. `action` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/core/action.js",
+                file_sha256: "506c5f29d6344334f9eccece2c925dd0b94af4eaf3e0273aed825ed37ded4298",
+                start_byte: 4502,
+                end_byte: 8183,
+                slice_sha256: "a503cb661462aed999de082d197ef9d229bd476655f176a73b1fce20603210ea",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "createMemo",
+        domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 1. `createMemo` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/signals.js",
+                file_sha256: "d1a61ff0872b42987400100413bdb69e83e1e8e67dad175cf1178c7fb34646b6",
+                start_byte: 3028,
+                end_byte: 3095,
+                slice_sha256: "f0f1d1a80dd61e1c62139a524f277d95e34957723fc71a02d9b9996e26cf5951",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 1. `createMemo` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 98008,
+                end_byte: 98097,
+                slice_sha256: "46130d23b4ce3e9a8bfbe79e6ea1920b95f064c446f61e65327e08305592e3f0",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 1. `createMemo` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/signals.js",
+                file_sha256: "6a338c1513530b9c423c215723b171fda5b23f47a010037f845fd3c467ad41b5",
+                start_byte: 3110,
+                end_byte: 3177,
+                slice_sha256: "f0f1d1a80dd61e1c62139a524f277d95e34957723fc71a02d9b9996e26cf5951",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "createMemo",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 2. `createMemo` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/signals.js",
+                file_sha256: "d1a61ff0872b42987400100413bdb69e83e1e8e67dad175cf1178c7fb34646b6",
+                start_byte: 3028,
+                end_byte: 3095,
+                slice_sha256: "f0f1d1a80dd61e1c62139a524f277d95e34957723fc71a02d9b9996e26cf5951",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 2. `createMemo` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 98008,
+                end_byte: 98097,
+                slice_sha256: "46130d23b4ce3e9a8bfbe79e6ea1920b95f064c446f61e65327e08305592e3f0",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 2. `createMemo` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/signals.js",
+                file_sha256: "6a338c1513530b9c423c215723b171fda5b23f47a010037f845fd3c467ad41b5",
+                start_byte: 3110,
+                end_byte: 3177,
+                slice_sha256: "f0f1d1a80dd61e1c62139a524f277d95e34957723fc71a02d9b9996e26cf5951",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "createOptimistic",
+        domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 3. `createOptimistic` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/signals.js",
+                file_sha256: "d1a61ff0872b42987400100413bdb69e83e1e8e67dad175cf1178c7fb34646b6",
+                start_byte: 26484,
+                end_byte: 27031,
+                slice_sha256: "09fd4865502a92243213a9a3162d7e6a99bed5d6456d0395e5d425d44161f189",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 3. `createOptimistic` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 122783,
+                end_byte: 123391,
+                slice_sha256: "9180aeea6599b0c64fdfb3859e8c1802ace64c405e0d05ff952bc44e63ad7be3",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 3. `createOptimistic` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/signals.js",
+                file_sha256: "6a338c1513530b9c423c215723b171fda5b23f47a010037f845fd3c467ad41b5",
+                start_byte: 26566,
+                end_byte: 27147,
+                slice_sha256: "760ee92d8393a3d2102625aadc0c31e9378285b46bc98c4af9b2e0fa85697fe1",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "createOptimistic",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 4. `createOptimistic` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/signals.js",
+                file_sha256: "d1a61ff0872b42987400100413bdb69e83e1e8e67dad175cf1178c7fb34646b6",
+                start_byte: 26484,
+                end_byte: 27031,
+                slice_sha256: "09fd4865502a92243213a9a3162d7e6a99bed5d6456d0395e5d425d44161f189",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 4. `createOptimistic` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 122783,
+                end_byte: 123391,
+                slice_sha256: "9180aeea6599b0c64fdfb3859e8c1802ace64c405e0d05ff952bc44e63ad7be3",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 4. `createOptimistic` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/signals.js",
+                file_sha256: "6a338c1513530b9c423c215723b171fda5b23f47a010037f845fd3c467ad41b5",
+                start_byte: 26566,
+                end_byte: 27147,
+                slice_sha256: "760ee92d8393a3d2102625aadc0c31e9378285b46bc98c4af9b2e0fa85697fe1",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "createOptimisticStore",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 6. `createOptimisticStore` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/store/next/optimistic.js",
+                file_sha256: "b3a3de0d67305b92c398eca0602f1a72f350e0d6915dc8d12cf486484b4e964c",
+                start_byte: 6996,
+                end_byte: 13900,
+                slice_sha256: "803fcb9cc11f9c2c503c6d6f86a6d82434f3655b8a1264fff1d3ed2d36b6a0a0",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 6. `createOptimisticStore` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 342913,
+                end_byte: 349941,
+                slice_sha256: "bc5b1564c404e2ba7b688f6f44bb56fc3b6a211b0b055c935b1561d9f7474cc6",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 6. `createOptimisticStore` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/store/next/optimistic.js",
+                file_sha256: "3213841e222127d05061bb483e5eb0d7e3b269683023a18525dd5c076a0a55cc",
+                start_byte: 7025,
+                end_byte: 14010,
+                slice_sha256: "ccd36eaea185d28df29b219512185424d91c1688bd6dd7b67efae16123719c30",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "createProjection",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 2. `createProjection` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/store/next/projection.js",
+                file_sha256: "7e2175a020d7d9208211a122164a9c5e8bfe2c3df9aa2ec3441bcc8867982aec",
+                start_byte: 7209,
+                end_byte: 7307,
+                slice_sha256: "bcbe84ac16a3f08d0d7aca97559146257937d7387ca7a0d10af5096c18e045d7",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 2. `createProjection` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 334649,
+                end_byte: 334765,
+                slice_sha256: "e1264ce5581a8fe3610fd0f676925fcb8f30fc2bc21983c0a5b712952b220e32",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 2. `createProjection` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/store/next/projection.js",
+                file_sha256: "8fdf22ff1154b5183d4e1c6fb84b40e5e4decea5c90e34ca1de50fe7930634fd",
+                start_byte: 7303,
+                end_byte: 7401,
+                slice_sha256: "bcbe84ac16a3f08d0d7aca97559146257937d7387ca7a0d10af5096c18e045d7",
+            },
+        ],
+    },
     NegativeClaimRow {
         package: "@solidjs/signals",
         version: RC9,
@@ -1925,6 +2232,222 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
                 start_byte: 11828,
                 end_byte: 11948,
                 slice_sha256: "d266035c22be8514767dbee4fe3aa0c947336ad4da585e24b09ee1722d916259",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "createSignal",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 1. `createSignal` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/signals.js",
+                file_sha256: "d1a61ff0872b42987400100413bdb69e83e1e8e67dad175cf1178c7fb34646b6",
+                start_byte: 2747,
+                end_byte: 3027,
+                slice_sha256: "ce6ade13e9e77463067c7bac3727622e0ac32bd8e9bad801501a28365b9da388",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 1. `createSignal` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 97659,
+                end_byte: 98008,
+                slice_sha256: "d1292c1a9d7a916d932b8e2ae27b22c592daf612cc51ddf7848ecf64f63cd504",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 1. `createSignal` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/signals.js",
+                file_sha256: "6a338c1513530b9c423c215723b171fda5b23f47a010037f845fd3c467ad41b5",
+                start_byte: 2795,
+                end_byte: 3109,
+                slice_sha256: "0366fccdf03f70ca98cd1678d74800abeed9109c5499c65c626ee6868e6f565f",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "createStore",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 1. `createStore` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/store/index.js",
+                file_sha256: "4c0118833a2e8fb1455313398d87b6700aeb7f9a98731f28308ece04823350e8",
+                start_byte: 525,
+                end_byte: 676,
+                slice_sha256: "5ccb92725a12c3fe4c8eacf07bc49e364f976718010a237a995e0794377c7ff4",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 1. `createStore` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 370517,
+                end_byte: 370703,
+                slice_sha256: "5ab024879afe7976504cb2b296f2e44c5f68823cd9cfc7c07c51d1dcba7d80ae",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 1. `createStore` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/store/index.js",
+                file_sha256: "a58b551e6a02e139e89ac04e29b1ef08cfb086c5f55682039a31bb9b3350f324",
+                start_byte: 551,
+                end_byte: 702,
+                slice_sha256: "5ccb92725a12c3fe4c8eacf07bc49e364f976718010a237a995e0794377c7ff4",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "createTrackedEffect",
+        domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 3. `createTrackedEffect` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/signals.js",
+                file_sha256: "d1a61ff0872b42987400100413bdb69e83e1e8e67dad175cf1178c7fb34646b6",
+                start_byte: 9691,
+                end_byte: 9759,
+                slice_sha256: "eb5e053187dd25e3e410d0c6755696fcbd64cf462b00940e7181f6925ee6da30",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 3. `createTrackedEffect` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 105290,
+                end_byte: 105376,
+                slice_sha256: "59effb18726430b691223730bbeffeb8cb7c60f6b546261051389e4ee557154e",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 3. `createTrackedEffect` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/signals.js",
+                file_sha256: "6a338c1513530b9c423c215723b171fda5b23f47a010037f845fd3c467ad41b5",
+                start_byte: 9773,
+                end_byte: 9841,
+                slice_sha256: "eb5e053187dd25e3e410d0c6755696fcbd64cf462b00940e7181f6925ee6da30",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "createTrackedEffect",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 4. `createTrackedEffect` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/signals.js",
+                file_sha256: "d1a61ff0872b42987400100413bdb69e83e1e8e67dad175cf1178c7fb34646b6",
+                start_byte: 9691,
+                end_byte: 9759,
+                slice_sha256: "eb5e053187dd25e3e410d0c6755696fcbd64cf462b00940e7181f6925ee6da30",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 4. `createTrackedEffect` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 105290,
+                end_byte: 105376,
+                slice_sha256: "59effb18726430b691223730bbeffeb8cb7c60f6b546261051389e4ee557154e",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 4. `createTrackedEffect` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/signals.js",
+                file_sha256: "6a338c1513530b9c423c215723b171fda5b23f47a010037f845fd3c467ad41b5",
+                start_byte: 9773,
+                end_byte: 9841,
+                slice_sha256: "eb5e053187dd25e3e410d0c6755696fcbd64cf462b00940e7181f6925ee6da30",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "flush",
+        domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 7. `flush` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/core/scheduler.js",
+                file_sha256: "ac77e8c1c6b44a943310bb3976d41b2e66cdd58a8805dad70d7c5e7c91039cde",
+                start_byte: 57644,
+                end_byte: 59114,
+                slice_sha256: "06c46ce4cc1dfc50fed5772ae6f737788defd6f59d26d9bc1ab81eba2d2e6536",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 7. `flush` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev-shared.js",
+                file_sha256: "70b88ba97dcb1107878ccc161cd00651b3cff09d7e17aee5443f1cbf9689463e",
+                start_byte: 103188,
+                end_byte: 107202,
+                slice_sha256: "b77e8fd032473ce4ab08aadd107ab2d9e56ef76452366d9f7e0151614c538cce",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 7. `flush` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/core/scheduler.js",
+                file_sha256: "3abec8dc70d0ed2834a5b7040ea0e28b0af867c4201ecb4c90b46581020327ca",
+                start_byte: 58268,
+                end_byte: 60335,
+                slice_sha256: "4c7dcc9dedee59eb7249051b3460fbc7a4a537fab9e489aab1293de9d4e387c0",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "flush",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 8. `flush` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/core/scheduler.js",
+                file_sha256: "ac77e8c1c6b44a943310bb3976d41b2e66cdd58a8805dad70d7c5e7c91039cde",
+                start_byte: 57644,
+                end_byte: 59114,
+                slice_sha256: "06c46ce4cc1dfc50fed5772ae6f737788defd6f59d26d9bc1ab81eba2d2e6536",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 8. `flush` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev-shared.js",
+                file_sha256: "70b88ba97dcb1107878ccc161cd00651b3cff09d7e17aee5443f1cbf9689463e",
+                start_byte: 103188,
+                end_byte: 107202,
+                slice_sha256: "b77e8fd032473ce4ab08aadd107ab2d9e56ef76452366d9f7e0151614c538cce",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 8. `flush` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/core/scheduler.js",
+                file_sha256: "3abec8dc70d0ed2834a5b7040ea0e28b0af867c4201ecb4c90b46581020327ca",
+                start_byte: 58268,
+                end_byte: 60335,
+                slice_sha256: "4c7dcc9dedee59eb7249051b3460fbc7a4a537fab9e489aab1293de9d4e387c0",
             },
         ],
     },
@@ -2003,6 +2526,150 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
     NegativeClaimRow {
         package: "@solidjs/signals",
         version: RC9,
+        export: "onSettled",
+        domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 5. `onSettled` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/signals.js",
+                file_sha256: "d1a61ff0872b42987400100413bdb69e83e1e8e67dad175cf1178c7fb34646b6",
+                start_byte: 30911,
+                end_byte: 32079,
+                slice_sha256: "107240ae071701f70c6f27055f0a525fdcffcf0a4f98fc7b655f04758e8a43c9",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 5. `onSettled` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 127274,
+                end_byte: 129069,
+                slice_sha256: "add35758c224c4e5339e7e89db7000bce0b2b92ba37a28df5042414a2719547e",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 5. `onSettled` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/signals.js",
+                file_sha256: "6a338c1513530b9c423c215723b171fda5b23f47a010037f845fd3c467ad41b5",
+                start_byte: 31027,
+                end_byte: 32219,
+                slice_sha256: "7535e81cf25f0d998b1c69401f2225a460c6d4fd453855c905753c6a86471193",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "onSettled",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 6. `onSettled` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/signals.js",
+                file_sha256: "d1a61ff0872b42987400100413bdb69e83e1e8e67dad175cf1178c7fb34646b6",
+                start_byte: 30911,
+                end_byte: 32079,
+                slice_sha256: "107240ae071701f70c6f27055f0a525fdcffcf0a4f98fc7b655f04758e8a43c9",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 6. `onSettled` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 127274,
+                end_byte: 129069,
+                slice_sha256: "add35758c224c4e5339e7e89db7000bce0b2b92ba37a28df5042414a2719547e",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 6. `onSettled` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/signals.js",
+                file_sha256: "6a338c1513530b9c423c215723b171fda5b23f47a010037f845fd3c467ad41b5",
+                start_byte: 31027,
+                end_byte: 32219,
+                slice_sha256: "7535e81cf25f0d998b1c69401f2225a460c6d4fd453855c905753c6a86471193",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "reconcile",
+        domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 7. `reconcile` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/store/index.js",
+                file_sha256: "4c0118833a2e8fb1455313398d87b6700aeb7f9a98731f28308ece04823350e8",
+                start_byte: 678,
+                end_byte: 758,
+                slice_sha256: "d99b5e9158dfd8f7042e5b5b8aa40be80ee52ab0c1e6c95d7f3ea18b0d5d9099",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 7. `reconcile` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 370704,
+                end_byte: 370802,
+                slice_sha256: "572cd0645c23a657a2116f3609d220d042405d28255c1fefb439573572dbfc9c",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 7. `reconcile` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/store/index.js",
+                file_sha256: "a58b551e6a02e139e89ac04e29b1ef08cfb086c5f55682039a31bb9b3350f324",
+                start_byte: 704,
+                end_byte: 784,
+                slice_sha256: "d99b5e9158dfd8f7042e5b5b8aa40be80ee52ab0c1e6c95d7f3ea18b0d5d9099",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "reconcile",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 8. `reconcile` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/store/index.js",
+                file_sha256: "4c0118833a2e8fb1455313398d87b6700aeb7f9a98731f28308ece04823350e8",
+                start_byte: 678,
+                end_byte: 758,
+                slice_sha256: "d99b5e9158dfd8f7042e5b5b8aa40be80ee52ab0c1e6c95d7f3ea18b0d5d9099",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 8. `reconcile` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 370704,
+                end_byte: 370802,
+                slice_sha256: "572cd0645c23a657a2116f3609d220d042405d28255c1fefb439573572dbfc9c",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 8. `reconcile` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/store/index.js",
+                file_sha256: "a58b551e6a02e139e89ac04e29b1ef08cfb086c5f55682039a31bb9b3350f324",
+                start_byte: 704,
+                end_byte: 784,
+                slice_sha256: "d99b5e9158dfd8f7042e5b5b8aa40be80ee52ab0c1e6c95d7f3ea18b0d5d9099",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
         export: "runWithOwner",
         domain: CallClaimDomain::Creates,
         scope: RowScope::EveryCondition,
@@ -2033,6 +2700,42 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
                 start_byte: 89058,
                 end_byte: 89270,
                 slice_sha256: "5c40363ecc6eaf66378b57e0c387103fe67f51706d30dab3cb041fd10f8af3e5",
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "snapshot",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 3. `snapshot` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/store/index.js",
+                file_sha256: "4c0118833a2e8fb1455313398d87b6700aeb7f9a98731f28308ece04823350e8",
+                start_byte: 760,
+                end_byte: 813,
+                slice_sha256: "3bb31686d1eba591133042dd4c7c95515074c440f6d532da34f25cbf6c05bfd2",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 3. `snapshot` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 370803,
+                end_byte: 370862,
+                slice_sha256: "eebc4206bc3509952fd02519f13f9b58ed00bc63da5658c90322c97bd221d6be",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_PARITY_AUDIT,
+                section: "### 3. `snapshot` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/store/index.js",
+                file_sha256: "a58b551e6a02e139e89ac04e29b1ef08cfb086c5f55682039a31bb9b3350f324",
+                start_byte: 786,
+                end_byte: 839,
+                slice_sha256: "3bb31686d1eba591133042dd4c7c95515074c440f6d532da34f25cbf6c05bfd2",
             },
         ],
     },
@@ -4660,6 +5363,12 @@ mod tests {
             "createOptimisticStore",
             CallClaimDomain::Reads,
         ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "createOptimisticStore",
+            CallClaimDomain::Reads,
+        ),
         ("@solidjs/web", RC3, "hydrate", CallClaimDomain::Creates),
         ("solid-js", RC3, "createEffect", CallClaimDomain::Creates),
         ("solid-js", RC3, "createEffect", CallClaimDomain::Reads),
@@ -5133,6 +5842,198 @@ mod tests {
             "### 4. `untrack` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
             ImplementationVerdict::Closed,
         ),
+        // RC9_PARITY_AUDIT (2026-09-27): every other rc.3 `@solidjs/signals`
+        // row, read on rc.9's bytes in the same three builds. 19 granted;
+        // `createOptimisticStore` `reads` withheld for the rc.6 reason.
+        (
+            "@solidjs/signals",
+            RC9,
+            "action",
+            CallClaimDomain::Creates,
+            RC9_PARITY_AUDIT,
+            "### 2. `action` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "action",
+            CallClaimDomain::Reads,
+            RC9_PARITY_AUDIT,
+            "### 1. `action` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "createMemo",
+            CallClaimDomain::Creates,
+            RC9_PARITY_AUDIT,
+            "### 2. `createMemo` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "createMemo",
+            CallClaimDomain::Reads,
+            RC9_PARITY_AUDIT,
+            "### 1. `createMemo` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "createOptimistic",
+            CallClaimDomain::Creates,
+            RC9_PARITY_AUDIT,
+            "### 4. `createOptimistic` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "createOptimistic",
+            CallClaimDomain::Reads,
+            RC9_PARITY_AUDIT,
+            "### 3. `createOptimistic` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "createOptimisticStore",
+            CallClaimDomain::Creates,
+            RC9_PARITY_AUDIT,
+            "### 6. `createOptimisticStore` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "createOptimisticStore",
+            CallClaimDomain::Reads,
+            RC9_PARITY_AUDIT,
+            "### 5. `createOptimisticStore` — `reads` — archive `@solidjs/signals@2.0.0-rc.9` — **WITHHOLD**",
+            ImplementationVerdict::Withheld(
+                "unchanged from rc.6: the export's own landing router (wrapCommit, \
+                 dist/prod/store/next/optimistic.js:194-199, dist/dev.js:7690-7695) \
+                 calls stageLanding -> storeSetterNext(fam.px, draft => \
+                 stagedApply(draft, ...)), and stagedApply performs string-key get, \
+                 length and ownKeys traps on fam.px, the store proxy this invocation \
+                 created, when its derived computation commits under a retaining \
+                 transaction. Untracked reads still count under semantic-model.md \
+                 § reads, and a flat row cannot carry the condition",
+            ),
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "createProjection",
+            CallClaimDomain::Creates,
+            RC9_PARITY_AUDIT,
+            "### 2. `createProjection` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "createSignal",
+            CallClaimDomain::Creates,
+            RC9_PARITY_AUDIT,
+            "### 1. `createSignal` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "createStore",
+            CallClaimDomain::Creates,
+            RC9_PARITY_AUDIT,
+            "### 1. `createStore` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "createTrackedEffect",
+            CallClaimDomain::Creates,
+            RC9_PARITY_AUDIT,
+            "### 4. `createTrackedEffect` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "createTrackedEffect",
+            CallClaimDomain::Reads,
+            RC9_PARITY_AUDIT,
+            "### 3. `createTrackedEffect` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "flush",
+            CallClaimDomain::Creates,
+            RC9_PARITY_AUDIT,
+            "### 8. `flush` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "flush",
+            CallClaimDomain::Reads,
+            RC9_PARITY_AUDIT,
+            "### 7. `flush` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "onSettled",
+            CallClaimDomain::Creates,
+            RC9_PARITY_AUDIT,
+            "### 6. `onSettled` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "onSettled",
+            CallClaimDomain::Reads,
+            RC9_PARITY_AUDIT,
+            "### 5. `onSettled` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "reconcile",
+            CallClaimDomain::Creates,
+            RC9_PARITY_AUDIT,
+            "### 8. `reconcile` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "reconcile",
+            CallClaimDomain::Reads,
+            RC9_PARITY_AUDIT,
+            "### 7. `reconcile` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "snapshot",
+            CallClaimDomain::Creates,
+            RC9_PARITY_AUDIT,
+            "### 3. `snapshot` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
     ];
 
     /// The directory under `benchmarks/package-contract-v2/phase0/` that
@@ -5186,7 +6087,7 @@ mod tests {
         match audit {
             RC3_CORE_PRIMITIVES_AUDIT | RC3_OWNER_CONTEXT_AUDIT => RC3,
             RC6_SIGNALS_AUDIT => RC6,
-            RC9_SIGNALS_AUDIT => RC9,
+            RC9_SIGNALS_AUDIT | RC9_PARITY_AUDIT => RC9,
             other => panic!("{other} is not a known audit document"),
         }
     }
@@ -5201,6 +6102,10 @@ mod tests {
     /// `exports.createProjection = createProjectionNext` /
     /// `exports.createOptimisticStore = createOptimisticStoreNext`
     /// (`dist/node.cjs:11021,11025`).
+    ///
+    /// rc.9: the same two `export { … as … }` forms in every build
+    /// (`dist/prod/index.js:41,43`, `dist/observe/index.js:43,45`,
+    /// `dist/dev.js:9498,9500`).
     const DEFINITION_ALIASES: &[(&str, &str, &str, &str)] = &[
         (
             "@solidjs/signals",
@@ -5211,6 +6116,18 @@ mod tests {
         (
             "@solidjs/signals",
             RC6,
+            "createProjection",
+            "createProjectionNext",
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "createOptimisticStore",
+            "createOptimisticStoreNext",
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
             "createProjection",
             "createProjectionNext",
         ),
@@ -5530,10 +6447,11 @@ mod tests {
         // `solid-js` `createSignal` row. On rc.6 (2026-09-25): 24 rows, three
         // bundles each -- 72. On rc.9 (2026-09-26): 5 rows, three builds each
         // (`dist/prod/**`, `dist/dev.js`/`dist/dev-shared.js`,
-        // `dist/observe/**`) -- 15.
+        // `dist/observe/**`) -- 15; and (2026-09-27) 19 more rows, three
+        // builds each -- 57.
         assert_eq!(
             implementation_citations,
-            30 + 1 + 72 + 15,
+            30 + 1 + 72 + 15 + 57,
             "the Implementation citation arm did not run over the rows that need it"
         );
     }
@@ -5734,17 +6652,20 @@ mod tests {
         // `createOptimisticStore`'s rc.6 `reads` withholdings are derivable
         // only from IMPLEMENTATION_AUDITED, so neither is subtracted here. The
         // 2026-09-26 rc.9 audit adds 5 closed `creates` rows and withholds
-        // nothing: it read only the five it grants.
+        // nothing: it read only the five it grants. The 2026-09-27 rc.9 parity
+        // audit reads the other 20: 19 closed, and `createOptimisticStore`
+        // `reads` withheld as on rc.6 (again derivable only from
+        // IMPLEMENTATION_AUDITED). rc.9 then carries what rc.6 does: 24.
         assert_eq!(from_json.len(), 45);
-        assert_eq!(implementation_closed.len(), 8 + 24 + 5);
-        assert_eq!(implementation_withheld.len(), 3);
+        assert_eq!(implementation_closed.len(), 8 + 24 + 5 + 19);
+        assert_eq!(implementation_withheld.len(), 4);
         let on = |version: &str| shipped.iter().filter(|(_, v, _, _)| v == version).count();
-        assert_eq!((on(RC3), on(RC6), on(RC9)), (50, 24, 5));
-        assert_eq!(shipped.len(), 79);
+        assert_eq!((on(RC3), on(RC6), on(RC9)), (50, 24, 24));
+        assert_eq!(shipped.len(), 98);
 
         // The scoped rows: each is a flat row both sources withhold, read
         // under one host-target condition in a section HOST_TARGET_READINGS
-        // names, and nothing else. 79 flat + 1 scoped = 80 rows.
+        // names, and nothing else. 98 flat + 1 scoped = 99 rows.
         let mut scoped = BTreeSet::new();
         for row in NEGATIVE_ROWS {
             let RowScope::HostTarget(scope) = row.scope else {
@@ -5793,7 +6714,7 @@ mod tests {
             assert!(scoped.insert(key), "{:?} is scoped twice", row.export);
         }
         assert_eq!(scoped.len(), 1);
-        assert_eq!(NEGATIVE_ROWS.len(), 79 + 1);
+        assert_eq!(NEGATIVE_ROWS.len(), 98 + 1);
 
         // The two authorities must not be confusable from the row alone: a row
         // the hand census closed cites runtime bytes, and every other row cites
@@ -6236,16 +7157,14 @@ mod tests {
     /// when that archive carries no every-condition row denying the delegate
     /// ("whose audit carries no every-condition row denying it",
     /// `contract_certification/type_facts.rs`). So an archive listed here makes
-    /// the scoped row fail closed beside it, never bind. Each entry is an
-    /// archive whose reading did not cover the delegate: rc.9's audit
-    /// (`RC9_SIGNALS_AUDIT`) read five exports, and `createSignal` is not one
-    /// of them — its closure (`computed`, `recompute`) was rewritten in rc.9.
-    const DELEGATE_GAPS: &[(&str, &str, &str, CallClaimDomain)] = &[(
-        "@solidjs/signals",
-        RC9,
-        "createSignal",
-        CallClaimDomain::Creates,
-    )];
+    /// the scoped row fail closed beside it, never bind. Each entry would be an
+    /// archive whose reading did not cover the delegate.
+    ///
+    /// Empty since 2026-09-27: rc.9's one gap (`createSignal` `creates`, which
+    /// the five-row `RC9_SIGNALS_AUDIT` did not read) is granted by
+    /// `RC9_PARITY_AUDIT`, so every audited `@solidjs/signals` archive answers
+    /// both delegates of the scoped `solid-js` `createSignal` row.
+    const DELEGATE_GAPS: &[(&str, &str, &str, CallClaimDomain)] = &[];
 
     /// A scoped row's premises are well formed, and nothing but the census
     /// entry reads it.
