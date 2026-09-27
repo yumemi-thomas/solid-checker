@@ -5064,6 +5064,9 @@ struct UnresolvedExportIndex<'a> {
     /// The call graph's answer to "which functions can reach this obligation",
     /// computed where the graph lives (`solid-reactive-ir`).
     obligation_reach: &'a [solid_reactive_ir::ObligationReach],
+    /// The analyzed file the requested entrypoint's runtime target is, under
+    /// the program's own spelling; `None` without an entry file.
+    entry_file: Option<&'a solid_facts::FileFacts>,
 }
 
 /// How an open semantic leaf was attributed to the exports it affects.
@@ -5091,6 +5094,10 @@ enum AttributionMechanism {
     /// The obligation sits on a **re-export specifier**, so it belongs to the
     /// one public name that specifier publishes.
     ReexportSpecifier,
+    /// The obligation sits on an entry-file import binding whose only uses are
+    /// the entry's own export list, so it belongs to the names that list
+    /// publishes for it (ADR 0133).
+    ReexportedImport,
     /// Nothing identified the obligation's function, so every export of the
     /// entrypoint is marked. This is the surviving fail-closed rung.
     FallbackAll,
@@ -5105,6 +5112,7 @@ impl AttributionMechanism {
             Self::Reachability => "reachability",
             Self::ObligationIdentity => "obligation-identity",
             Self::ReexportSpecifier => "reexport-specifier",
+            Self::ReexportedImport => "reexported-import",
             Self::FallbackAll => "fallback-all",
         }
     }
@@ -5428,6 +5436,9 @@ fn attribute_unresolved_obligation(
     if let Some(names) = export_names_at_reexport_specifier(index, location, exports) {
         return (AttributionMechanism::ReexportSpecifier, names);
     }
+    if let Some(names) = export_names_of_reexported_import(index, location, exports) {
+        return (AttributionMechanism::ReexportedImport, names);
+    }
     (
         AttributionMechanism::FallbackAll,
         exports.keys().cloned().collect(),
@@ -5491,6 +5502,53 @@ fn export_names_at_reexport_specifier(
                 && exports.contains_key(specifier.exported.as_str())
         })
         .map(|specifier| vec![specifier.exported.to_string()])
+}
+
+/// The public names an entry-file import binding is published under, when the
+/// obligation was filed at that binding and publishing it is all the entry
+/// does with it (ADR 0133).
+///
+/// `import { x } from "dependency"; export { x };` is the two-statement
+/// spelling of `export { x } from "dependency"`, and bundlers emit it for
+/// every cross-package re-export. The binding is immutable, so an obligation
+/// about what the dependency leaves open for `x` is a fact about the names
+/// that publish `x` and about nothing else -- exactly the argument of
+/// [`export_names_at_reexport_specifier`]. The import specifier encloses no
+/// function and its only references are the export list's, so no earlier rung
+/// could answer and every such obligation marked the whole entrypoint.
+///
+/// Exact, and fail-closed everywhere else:
+///
+/// - the obligation's location is exactly the binding's local identifier, in
+///   the entry file itself -- a sibling module's own export list publishes
+///   names the entry may rename or not publish, so it gets no answer here;
+/// - [`solid_facts::ast::reexport_only_import_names`] proves from the entry's
+///   bytes, by resolved lexical references, that *every* use of the binding
+///   is a value specifier of a module-level `export { … }` -- any call, read,
+///   class heritage or nested use refuses;
+/// - every name it publishes is in this entrypoint's map.
+fn export_names_of_reexported_import(
+    index: UnresolvedExportIndex<'_>,
+    location: &typefacts::Location,
+    exports: &BTreeMap<String, solid_reactive_ir::ContractExport>,
+) -> Option<Vec<String>> {
+    let entry = index.entry_file?;
+    if entry.path.as_str() != location.path.as_ref() {
+        return None;
+    }
+    let binding = solid_facts::core::Span::new(
+        u32::try_from(location.start_byte).ok()?,
+        u32::try_from(location.end_byte).ok()?,
+    );
+    let names = solid_facts::ast::reexport_only_import_names(
+        Path::new(entry.path.as_str()),
+        &entry.source,
+        binding,
+    )?;
+    names
+        .iter()
+        .all(|name| exports.contains_key(name))
+        .then_some(names)
 }
 
 /// Whether the published `parameter-member` reactive-read row already carries
@@ -6255,6 +6313,10 @@ fn emit_package_contract(
             .keys()
             .all(|name| joined_export_names.contains(name)),
         obligation_reach: &program.obligation_reach,
+        entry_file: (!request.contract_entry_file.is_empty())
+            .then(|| Path::new(&request.contract_entry_file).canonicalize().ok())
+            .flatten()
+            .and_then(|entry| files_by_canonical_path.get(&entry).copied()),
     };
     for unresolved in &program.contract_generation_obligations {
         let target_names = contract_generation_obligation_target_names(
