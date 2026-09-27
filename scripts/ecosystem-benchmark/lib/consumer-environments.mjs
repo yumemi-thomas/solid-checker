@@ -230,8 +230,19 @@ export function consumerEnvironmentManifest(manifest, environment, options = {})
   return { ...manifest, rows, supplemental: [], exclusions: [] };
 }
 
+const PATCHED_REASON =
+  "patched by the consumer (pnpm patchedDependencies): the installed bytes are not the published archive";
+
 function stripPeers(version) {
   return typeof version === "string" ? version.split("(")[0] : version;
+}
+
+// The lock key a dependency resolves to. pnpm writes an npm alias
+// (`"h3-v2": "npm:h3@2.0.1-rc.20"`) as `h3-v2: h3@2.0.1-rc.20`: the value names
+// the real package, which is what `packages` is keyed by and what a pin (read
+// back through the installed lock's own `name@version`) is about.
+function dependencyKey(name, version) {
+  return stripPeers(version).includes("@") ? version : `${name}@${version}`;
 }
 
 function nameOf(key) {
@@ -252,7 +263,11 @@ function versionOf(key) {
  * - `runtime`: the one Solid 2 release of each runtime package the lock
  *   records, with its integrity.
  * - `packages`: every package in the dependency closure of `importers` whose
- *   version and integrity equal a `solid2` manifest row.
+ *   version and integrity equal a `solid2` manifest row, unless the consumer
+ *   patches it or anything its own install reaches (pnpm
+ *   `patchedDependencies`): the lock keeps the published integrity for a
+ *   patched package, so identity alone would deliver a contract about bytes
+ *   the consumer does not run.
  * - `pins`: the closure of those packages and of the runtime, minus the
  *   runtime itself, as the lock resolves it.
  * - `unmatched`: every closure package that has a `solid2` manifest row, or is
@@ -275,6 +290,14 @@ export function deriveConsumerEnvironment({ lock, id, source, importers, manifes
     runtime[name] = { version: versionOf(releases[0]), integrity: integrityOf(releases[0]) };
   }
 
+  // pnpm applies `patchedDependencies` to the installed files but keeps the
+  // published archive's integrity in `resolution`, so a patched package matches
+  // its manifest row by version and integrity while the consumer runs other
+  // bytes. The lock names every patch at the top level and in the snapshot key
+  // (`(patch_hash=...)`); either one makes the package patched.
+  const patched = new Set(Object.keys(lock?.patchedDependencies ?? {}).map(stripPeers));
+  for (const key of Object.keys(snapshots)) if (key.includes("(patch_hash=")) patched.add(stripPeers(key));
+
   const closureOf = roots => {
     const seen = new Map();
     const stack = [...roots];
@@ -288,7 +311,7 @@ export function deriveConsumerEnvironment({ lock, id, source, importers, manifes
         ...(snapshot.dependencies ?? {}),
         ...(snapshot.optionalDependencies ?? {})
       })) {
-        if (typeof version === "string" && !version.startsWith("link:")) stack.push(`${dependency}@${version}`);
+        if (typeof version === "string" && !version.startsWith("link:")) stack.push(dependencyKey(dependency, version));
       }
     }
     return seen;
@@ -303,7 +326,7 @@ export function deriveConsumerEnvironment({ lock, id, source, importers, manifes
       ...(entry.optionalDependencies ?? {})
     })) {
       const version = dependency?.version;
-      if (typeof version === "string" && !version.startsWith("link:")) importerRoots.push(`${name}@${version}`);
+      if (typeof version === "string" && !version.startsWith("link:")) importerRoots.push(dependencyKey(name, version));
     }
   }
   const consumerClosure = closureOf(importerRoots);
@@ -314,7 +337,18 @@ export function deriveConsumerEnvironment({ lock, id, source, importers, manifes
     [...rows.keys()].map(name => (name.startsWith("@") ? name.split("/")[0] : null)).filter(Boolean)
   );
 
-  const matched = [];
+  const snapshotKeyOf = base => Object.keys(snapshots).find(candidate => stripPeers(candidate) === base) ?? base;
+
+  // Every delivered package runs against the runtime, so a patch there leaves
+  // nothing this entry could deliver: refuse the lock rather than record it.
+  const runtimePatched = [
+    ...closureOf(SOLID_RUNTIME_PACKAGES.map(name => snapshotKeyOf(`${name}@${runtime[name].version}`))).keys()
+  ].filter(base => patched.has(base));
+  if (runtimePatched.length) {
+    throw new Error(`the consumer patches ${runtimePatched.sort().join(", ")}, which the Solid runtime installs`);
+  }
+
+  const candidates = [];
   const unmatched = [];
   for (const [key, integrity] of [...consumerClosure].sort(([left], [right]) => left.localeCompare(right))) {
     const name = nameOf(key);
@@ -322,7 +356,8 @@ export function deriveConsumerEnvironment({ lock, id, source, importers, manifes
     if (SOLID_RUNTIME_PACKAGES.includes(name)) continue;
     const row = rows.get(name);
     if (row && row.version === version && row.integrity === integrity) {
-      matched.push({ package: name, version, integrity });
+      if (patched.has(key)) unmatched.push({ package: name, version, integrity, reason: PATCHED_REASON });
+      else candidates.push({ package: name, version, integrity });
       continue;
     }
     const scope = name.startsWith("@") ? name.split("/")[0] : null;
@@ -339,15 +374,25 @@ export function deriveConsumerEnvironment({ lock, id, source, importers, manifes
     });
   }
 
+  // A package whose install reaches a patched one would be certified, by a
+  // delivery run, in a tree where that dependency is the published archive --
+  // not the tree the consumer installs -- so it is recorded, not delivered.
+  const matched = [];
+  for (const entry of candidates) {
+    const reached = [...closureOf([snapshotKeyOf(`${entry.package}@${entry.version}`)]).keys()]
+      .filter(base => patched.has(base))
+      .sort();
+    if (reached.length) {
+      unmatched.push({ ...entry, reason: `its dependency closure installs ${reached.join(", ")}, which the consumer patches` });
+    } else {
+      matched.push(entry);
+    }
+  }
+  unmatched.sort((left, right) => left.package.localeCompare(right.package));
+
   const pinClosure = closureOf([
-    ...matched.map(entry => {
-      const key = Object.keys(snapshots).find(candidate => stripPeers(candidate) === `${entry.package}@${entry.version}`);
-      return key ?? `${entry.package}@${entry.version}`;
-    }),
-    ...SOLID_RUNTIME_PACKAGES.map(name => {
-      const base = `${name}@${runtime[name].version}`;
-      return Object.keys(snapshots).find(candidate => stripPeers(candidate) === base) ?? base;
-    })
+    ...matched.map(entry => snapshotKeyOf(`${entry.package}@${entry.version}`)),
+    ...SOLID_RUNTIME_PACKAGES.map(name => snapshotKeyOf(`${name}@${runtime[name].version}`))
   ]);
   const pins = {};
   for (const [key, integrity] of [...pinClosure].sort(([left], [right]) => left.localeCompare(right))) {

@@ -37,13 +37,50 @@ test("the reviewed kobalte environment is admissible against the committed manif
   for (const tier of ["keyed", "platform", "rootless", "trigger", "utils"]) {
     assert.ok(names.includes(`@solid-primitives/${tier}`), `${tier} is delivered in kobalte's tree`);
   }
-  // The two kobalte installs at another release than the manifest row are
-  // recorded, not certified.
-  assert.deepEqual(
-    environment.unmatched.map(entry => `${entry.package}@${entry.version}`),
-    ["@solid-primitives/event-listener@3.0.0-next.5", "@solid-primitives/form@1.0.0-next.3"]
-  );
-  for (const entry of environment.unmatched) assert.ok(!names.includes(entry.package));
+  // The two kobalte installed at another release than the 2026-08-26 manifest
+  // rows are the rows' own releases since the 2026-09-27 rediscovery, so they
+  // are delivered now rather than recorded.
+  for (const tier of ["event-listener@3.0.0-next.5", "form@1.0.0-next.3"]) {
+    const [name, version] = tier.split("@");
+    assert.ok(
+      environment.packages.some(entry => entry.package === `@solid-primitives/${name}` && entry.version === version),
+      `${tier} is delivered in kobalte's tree`
+    );
+  }
+  assert.deepEqual(environment.unmatched, []);
+});
+
+// The rc.9 consumers. Their runtime is the audited Solid 2 release, so the
+// ceiling never refuses them; what admits them is the audited archives, and
+// `solid-js`/`@solidjs/web` rc.9 are audited in a commit of their own. Until it
+// lands these are refused for exactly that and nothing else, and after it they
+// are admissible -- so this holds on both sides of that merge.
+test.each([
+  ["viviana-ui-main-b005c00a", ["@tanstack/solid-router", "@tanstack/solid-start-client", "@tanstack/solid-start-server"]],
+  ["oscartbeaumont-website-main-60823453", ["@solidjs/meta"]]
+])("the reviewed rc.9 environment %s is admitted exactly by the audited archives", (id, delivered) => {
+  const environment = reviewed().find(entry => entry.id === id);
+  assert.ok(environment, `${id} is listed`);
+  for (const name of ["solid-js", "@solidjs/web", "@solidjs/signals"]) {
+    assert.equal(environment.runtime[name].version, AUDITED_SOLID_2, `${name} is the audited release`);
+  }
+  assert.deepEqual(environment.packages.map(entry => entry.package), delivered);
+  const archives = auditedArchives.dialects.find(dialect => dialect.id === "solid-v2").archives;
+  const expected = ["solid-js", "@solidjs/web"]
+    .filter(name => !archives.some(entry => entry.name === name && entry.version === AUDITED_SOLID_2))
+    .map(name => `${id}: runtime ${name}@${AUDITED_SOLID_2} is not an audited archive`);
+  assert.deepEqual(environmentProblems(environment, { manifest, auditedArchives }), expected);
+});
+
+test("viviana's patched @tanstack/solid-start is recorded, not delivered", () => {
+  const environment = reviewed().find(entry => entry.id === "viviana-ui-main-b005c00a");
+  const start = environment.unmatched.find(entry => entry.package === "@tanstack/solid-start");
+  assert.equal(start?.version, "2.0.0-rc.8");
+  assert.match(start.reason, /patched by the consumer/);
+  // The manifest row is that exact artifact: only the patch keeps it out.
+  const row = manifest.rows.find(candidate => candidate.solidTarget === "solid2" && candidate.package === "@tanstack/solid-start");
+  assert.equal(row.version, start.version);
+  assert.equal(row.integrity, start.integrity);
 });
 
 test("every listed package becomes one environment probe cloned from its manifest row", () => {
@@ -68,7 +105,7 @@ test("every listed package becomes one environment probe cloned from its manifes
     assert.equal(pins["@solidjs/signals"].integrity, environment.runtime["@solidjs/signals"].integrity);
     assert.equal(pins.seroval.required, false, "a closure pin is held only where it is installed");
     assert.equal(overrides.seroval, environment.pins.seroval.version);
-    assert.equal(overrides["@solid-primitives/event-listener"], "3.0.0-next.5", "the consumer's own release, not the manifest's");
+    assert.equal(overrides["@solid-primitives/event-listener"], "3.0.0-next.5", "the consumer's own release");
   }
   // The committed manifest is untouched.
   assert.ok(manifest.rows.every(row => row.probes.every(probe => probe.kind !== "environment")));
@@ -244,4 +281,101 @@ test("an entry derived from a pnpm lock takes the consumer's closure and names w
   assert.deepEqual(entry.unmatched.map(item => item.package), ["@solid-primitives/form"]);
   assert.equal(entry.runtime["solid-js"].version, "2.0.0-rc.3", "the Solid 2 release, not the docs app's 1.x");
   assert.deepEqual(environmentProblems(entry, { manifest, auditedArchives }), []);
+});
+
+const rc3Archive = name =>
+  auditedArchives.dialects[0].archives.find(entry => entry.name === name && entry.version === "2.0.0-rc.3").integrity;
+const rc3Runtime = {
+  "solid-js@2.0.0-rc.3": { resolution: { integrity: rc3Archive("solid-js") } },
+  "@solidjs/web@2.0.0-rc.3": { resolution: { integrity: rc3Archive("@solidjs/web") } },
+  "@solidjs/signals@2.0.0-rc.3": { resolution: { integrity: rc3Archive("@solidjs/signals") } }
+};
+const exampleSource = {
+  repository: "https://example.invalid/x",
+  branch: "main",
+  commit: "0".repeat(40),
+  lockfile: "pnpm-lock.yaml",
+  lockfileDigest: `sha256:${"0".repeat(64)}`
+};
+const solid2Row = name => manifest.rows.find(row => row.solidTarget === "solid2" && row.package === name);
+
+test("a patched package, and every package whose install reaches one, is recorded rather than delivered", () => {
+  const utils = solid2Row("@solid-primitives/utils");
+  const keyed = solid2Row("@solid-primitives/keyed");
+  const rootless = solid2Row("@solid-primitives/rootless");
+  const patch = "(patch_hash=abc)";
+  const lock = {
+    patchedDependencies: { [`@solid-primitives/utils@${utils.version}`]: "abc" },
+    importers: {
+      app: {
+        dependencies: {
+          "@solid-primitives/keyed": { specifier: keyed.version, version: keyed.version },
+          "@solid-primitives/rootless": { specifier: rootless.version, version: rootless.version }
+        }
+      }
+    },
+    packages: {
+      [`@solid-primitives/keyed@${keyed.version}`]: { resolution: { integrity: keyed.integrity } },
+      [`@solid-primitives/utils@${utils.version}`]: { resolution: { integrity: utils.integrity } },
+      [`@solid-primitives/rootless@${rootless.version}`]: { resolution: { integrity: rootless.integrity } },
+      ...rc3Runtime
+    },
+    snapshots: {
+      [`@solid-primitives/keyed@${keyed.version}`]: { dependencies: { "@solid-primitives/utils": `${utils.version}${patch}` } },
+      [`@solid-primitives/utils@${utils.version}${patch}`]: {},
+      [`@solid-primitives/rootless@${rootless.version}`]: {}
+    }
+  };
+  const entry = deriveConsumerEnvironment({ lock, id: "patched", source: exampleSource, importers: ["app"], manifest });
+  // rootless reaches no patch; keyed installs the patched utils; utils is patched.
+  assert.deepEqual(entry.packages.map(item => item.package), ["@solid-primitives/rootless"]);
+  assert.deepEqual(
+    entry.unmatched.map(item => [item.package, item.reason]),
+    [
+      ["@solid-primitives/keyed", `its dependency closure installs @solid-primitives/utils@${utils.version}, which the consumer patches`],
+      ["@solid-primitives/utils", "patched by the consumer (pnpm patchedDependencies): the installed bytes are not the published archive"]
+    ]
+  );
+  assert.deepEqual(Object.keys(entry.pins), ["@solid-primitives/rootless"], "nothing only a recorded package installs is pinned");
+});
+
+test("a lock that patches the Solid runtime, or what it installs, is refused outright", () => {
+  const rootless = solid2Row("@solid-primitives/rootless");
+  const lock = {
+    patchedDependencies: { "seroval@1.5.4": "abc" },
+    importers: { app: { dependencies: { "@solid-primitives/rootless": { specifier: rootless.version, version: rootless.version } } } },
+    packages: {
+      [`@solid-primitives/rootless@${rootless.version}`]: { resolution: { integrity: rootless.integrity } },
+      "seroval@1.5.4": { resolution: { integrity: "sha512-seroval" } },
+      ...rc3Runtime
+    },
+    snapshots: {
+      [`@solid-primitives/rootless@${rootless.version}`]: {},
+      "solid-js@2.0.0-rc.3": { dependencies: { seroval: "1.5.4(patch_hash=abc)" } },
+      "seroval@1.5.4(patch_hash=abc)": {}
+    }
+  };
+  assert.throws(
+    () => deriveConsumerEnvironment({ lock, id: "runtime-patched", source: exampleSource, importers: ["app"], manifest }),
+    /the consumer patches seroval@1\.5\.4, which the Solid runtime installs/
+  );
+});
+
+test("an npm alias resolves to the package it names", () => {
+  const rootless = solid2Row("@solid-primitives/rootless");
+  const lock = {
+    importers: { app: { dependencies: { "@solid-primitives/rootless": { specifier: rootless.version, version: rootless.version } } } },
+    packages: {
+      [`@solid-primitives/rootless@${rootless.version}`]: { resolution: { integrity: rootless.integrity } },
+      "h3@2.0.1-rc.20": { resolution: { integrity: "sha512-h3" } },
+      ...rc3Runtime
+    },
+    snapshots: {
+      [`@solid-primitives/rootless@${rootless.version}`]: { dependencies: { "h3-v2": "h3@2.0.1-rc.20" } },
+      "h3@2.0.1-rc.20": {}
+    }
+  };
+  const entry = deriveConsumerEnvironment({ lock, id: "alias", source: exampleSource, importers: ["app"], manifest });
+  assert.deepEqual(entry.pins.h3, { version: "2.0.1-rc.20", integrity: "sha512-h3" });
+  assert.equal(entry.pins["h3-v2@h3"], undefined);
 });

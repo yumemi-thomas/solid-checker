@@ -222,7 +222,22 @@ refuses the run, and `make accepted-bundles` bundles it beside the census run
 (`make consumer-environment-runs` writes
 `rust/target/consumer-environments/<id>/run.json`). Its yield is measured by
 re-sweeping the consumer, never by the census pin. Derive a new entry with
-`derive-consumer-environment.mjs` and review it before adding it.
+`derive-consumer-environment.mjs` and review it before adding it. Derivation
+records, rather than lists, a package the consumer patches (pnpm
+`patchedDependencies`) and any package whose install reaches one: the lock keeps
+the published integrity for patched bytes, so identity alone would deliver a
+contract about code the consumer does not run. An npm alias pins the package it
+names.
+
+Three environments are listed. `kobalte-solid2-e9d426d4` is the rc.3 runtime
+with signals rc.3. The two rc.9 ones are `viviana-ui-main-b005c00a`
+(proyecto-viviana/ui `apps/web`, a TanStack Start app: `@tanstack/solid-router`,
+`solid-start-client` and `solid-start-server` at rc.8; its patched
+`@tanstack/solid-start` is recorded) and `oscartbeaumont-website-main-60823453`
+(`@solidjs/meta@1.0.0-next.2`; its `@solidjs/router@2.0.0-next.26` is not the
+manifest's next.30). Both are refused until `solid-js` and `@solidjs/web` rc.9
+are audited archives, and `make consumer-environment-runs` stops on the first
+refusal.
 
 Certification children run with `SOLID_CHECKER_DURABLE_WRITES=none`: every
 catalog a probe publishes lives in a temporary directory removed seconds
