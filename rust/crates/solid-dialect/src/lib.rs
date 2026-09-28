@@ -4196,15 +4196,16 @@ mod tests {
                 "solid-js re-declares {export}, and that implementation has no row"
             );
         }
-        // A `["browser","import"]` case: `createSignal` alone carries a row
-        // scoped to `browser` (§ 7.3); the five others still have none.
+        // A `["browser","import"]` case: `createSignal` (§ 7.3) and, since
+        // 2026-09-28, `createMemo` (rc.9 only) carry a row scoped to
+        // `browser`; the four others still have none.
         let browser = ["browser", "import"]
             .into_iter()
             .map(str::to_owned)
             .collect::<std::collections::BTreeSet<_>>();
         for (export, scoped) in [
             ("createSignal", true),
-            ("createMemo", false),
+            ("createMemo", true),
             ("createStore", false),
             ("createProjection", false),
             ("createOptimistic", false),
@@ -4687,6 +4688,35 @@ mod tests {
         }
         // The scoped `createSignal` row is not a denial.
         assert!(host_target_row(&js9, "createSignal", CallClaimDomain::Creates).is_some());
+        // 2026-09-28: `createMemo` is `solid-js`' own declaration, withheld
+        // flat for its server body and scoped to `browser`; `omit` is
+        // `@solidjs/signals`' and denied everywhere, and `merge` is withheld
+        // for `solid-js`' server `merge`, which no row can narrow yet.
+        let signals9 = audited_archive("@solidjs/signals", "2.0.0-rc.9");
+        assert!(!primitive_performs_no_operation(
+            &js9,
+            "createMemo",
+            CallClaimDomain::Creates
+        ));
+        let memo = host_target_row(&js9, "createMemo", CallClaimDomain::Creates)
+            .expect("the browser-scoped createMemo row");
+        assert_eq!(memo.condition, HostTargetCondition::Browser);
+        assert!(primitive_performs_no_operation(
+            &signals9,
+            "omit",
+            CallClaimDomain::Creates
+        ));
+        assert!(!primitive_performs_no_operation(
+            &signals9,
+            "merge",
+            CallClaimDomain::Creates
+        ));
+        assert!(host_target_row(&signals9, "merge", CallClaimDomain::Creates).is_none());
+        assert!(!primitive_performs_no_operation(
+            &signals9,
+            "omit",
+            CallClaimDomain::Reads
+        ));
         // rc.3 rows do not stand in for rc.9: the re-exported names.
         for (export, domain) in [
             ("affects", CallClaimDomain::Reads),

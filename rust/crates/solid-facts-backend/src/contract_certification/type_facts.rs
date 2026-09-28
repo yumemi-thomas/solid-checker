@@ -26141,26 +26141,10 @@ mod tests {
         );
     }
 
-    /// The scoped `(solid-js@2.0.0-rc.9, createSignal, creates)` row
-    /// (2026-09-27), replayed against the pinned rc.9 `package.json`.
-    ///
-    /// rc.9 ships three browser builds and the audit walked all three, so the
-    /// row terminates under `browser` for each: `dist/solid.js`, and with
-    /// `development` or `observe` `dist/solid.dev.js` or `dist/solid.observe.js`.
-    /// Its delegates bind beside `@solidjs/signals@2.0.0-rc.9`, whose own
-    /// `createSignal` and `getOwner` `creates` rows the rc.9 signals audits
-    /// granted. A set without `browser`, or one whose `.` selects a server
-    /// build (`worker` precedes `browser`), refuses by name.
-    #[test]
-    fn census_host_target_row_binds_solid_js_rc9_beside_signals_rc9() {
+    /// `solid-js@2.0.0-rc.9`'s pinned `package.json` over placeholder builds:
+    /// the scoped rows' premise 2 replays `.` against the manifest alone.
+    fn solid_js_rc9_snapshot() -> super::super::ArtifactSnapshot {
         const SOLID_JS_RC9_INTEGRITY: &str = "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g==";
-        let certified = archive_snapshot(
-            "consumer",
-            "1.0.0",
-            "sha512-consumer",
-            b"{\"name\":\"consumer\"}",
-            "/snapshot/consumer",
-        );
         let manifest = audited_phase0_manifest("rc9", "solid-js");
         let mut files = [
             "dist/solid.js",
@@ -26184,7 +26168,7 @@ mod tests {
             "package.json".to_owned(),
             std::sync::Arc::<[u8]>::from(manifest.as_slice()),
         );
-        let solid_js = super::super::ArtifactSnapshot {
+        super::super::ArtifactSnapshot {
             package_name: "solid-js".into(),
             package_version: "2.0.0-rc.9".into(),
             package_integrity: SOLID_JS_RC9_INTEGRITY.into(),
@@ -26192,7 +26176,29 @@ mod tests {
             directories: std::sync::Arc::new(std::collections::BTreeSet::new()),
             root: "/snapshot/solid-js-rc9".into(),
             provenance_root: "/snapshot/solid-js-rc9-archive".into(),
-        };
+        }
+    }
+
+    /// The scoped `(solid-js@2.0.0-rc.9, createSignal, creates)` row
+    /// (2026-09-27), replayed against the pinned rc.9 `package.json`.
+    ///
+    /// rc.9 ships three browser builds and the audit walked all three, so the
+    /// row terminates under `browser` for each: `dist/solid.js`, and with
+    /// `development` or `observe` `dist/solid.dev.js` or `dist/solid.observe.js`.
+    /// Its delegates bind beside `@solidjs/signals@2.0.0-rc.9`, whose own
+    /// `createSignal` and `getOwner` `creates` rows the rc.9 signals audits
+    /// granted. A set without `browser`, or one whose `.` selects a server
+    /// build (`worker` precedes `browser`), refuses by name.
+    #[test]
+    fn census_host_target_row_binds_solid_js_rc9_beside_signals_rc9() {
+        let certified = archive_snapshot(
+            "consumer",
+            "1.0.0",
+            "sha512-consumer",
+            b"{\"name\":\"consumer\"}",
+            "/snapshot/consumer",
+        );
+        let solid_js = solid_js_rc9_snapshot();
         let signals = archive_snapshot(
             "@solidjs/signals",
             "2.0.0-rc.9",
@@ -26249,6 +26255,99 @@ mod tests {
             )
             .is_none()
         );
+    }
+
+    /// The scoped `(solid-js@2.0.0-rc.9, createMemo, creates)` row
+    /// (2026-09-28, `2026-09-28-solid-2-rc9-merge-omit-creatememo-creates.md`
+    /// § 4), replayed the same way. It terminates under `browser` in each of
+    /// the three browser builds and binds all three delegates -- signals'
+    /// `createMemo`, `createSignal` and `getOwner` `creates` -- beside
+    /// `@solidjs/signals@2.0.0-rc.9`. A host-free set and a `node` set refuse by
+    /// name; with no conditions nothing answers, because the flat row is
+    /// withheld for the server `createMemo`.
+    #[test]
+    fn census_host_target_row_binds_solid_js_rc9_create_memo_beside_signals_rc9() {
+        let certified = archive_snapshot(
+            "consumer",
+            "1.0.0",
+            "sha512-consumer",
+            b"{\"name\":\"consumer\"}",
+            "/snapshot/consumer",
+        );
+        let solid_js = solid_js_rc9_snapshot();
+        let signals = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.9",
+            SIGNALS_RC9_INTEGRITY,
+            &audited_phase0_manifest("rc9", "solidjs-signals"),
+            "/snapshot/signals-rc9",
+        );
+        let roots = vec![solid_js_root(&solid_js), signals_root(&signals)];
+        let answer = |requested: &[&str]| {
+            census_dialect_axiom(
+                &solid_js_call("createMemo"),
+                solid_dialect::CallClaimDomain::Creates,
+                ReachabilityFloor::MayExecute,
+                &certified,
+                &roots,
+                &conditions(requested),
+            )
+        };
+        let signals9 = "@solidjs/signals@2.0.0-rc.9#sha512-o3pqiTgpH5NR2Dst";
+        for (requested, file) in [
+            (&["browser", "import"][..], "dist/solid.js"),
+            (&["browser", "development", "import"], "dist/solid.dev.js"),
+            (&["browser", "import", "observe"], "dist/solid.observe.js"),
+        ] {
+            assert_eq!(
+                answer(requested).map(|terminator| terminator.witness_site),
+                Ok(format!(
+                    "census-dialect-axiom:solid-js@2.0.0-rc.9#sha512-J/oHWnWqe7S0FeIE:createMemo:\
+                     creates:browser:{file}:delegates={signals9}:createMemo:creates+\
+                     {signals9}:createSignal:creates+{signals9}:getOwner:creates"
+                )),
+                "{requested:?}"
+            );
+        }
+        for (requested, expected) in [
+            (&["import"][..], "which does not name it"),
+            (&["import", "node"], "which does not name it"),
+            (
+                &["browser", "import", "worker"],
+                "\"dist/server.js\", which is not a runtime file",
+            ),
+        ] {
+            match answer(requested) {
+                Err(Some(reason)) => assert!(reason.contains(expected), "{requested:?}: {reason}"),
+                other => panic!("{requested:?} must refuse by name, got {other:?}"),
+            }
+        }
+        assert!(
+            census_dialect_axiom_for_callee(
+                &solid_js_call("createMemo"),
+                solid_dialect::CallClaimDomain::Creates,
+                ReachabilityFloor::MayExecute,
+                &certified,
+                &roots,
+            )
+            .is_none()
+        );
+        // Without signals in the closure the delegates cannot bind.
+        let alone = vec![solid_js_root(&solid_js)];
+        assert!(matches!(
+            census_dialect_axiom(
+                &solid_js_call("createMemo"),
+                solid_dialect::CallClaimDomain::Creates,
+                ReachabilityFloor::MayExecute,
+                &certified,
+                &alone,
+                &conditions(&["browser", "import"]),
+            ),
+            Err(Some(reason)) if reason.contains(
+                "it delegates createMemo creates to @solidjs/signals, which this \
+                 certification's authenticated closure does not carry"
+            )
+        ));
     }
 
     /// The condition replay the scoped row rests on, against the checked-in

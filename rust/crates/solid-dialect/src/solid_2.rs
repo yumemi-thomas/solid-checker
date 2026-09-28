@@ -334,6 +334,16 @@ const RC9_PARITY_AUDIT: &str =
 const RC9_CORE_WEB_AUDIT: &str =
     "docs/package-contract-v2/audits/2026-09-27-solid-2-rc9-core-and-web-negative-rows.md";
 
+/// The reading of `@solidjs/signals`' `merge` and `omit` and of `solid-js`' own
+/// `createMemo`, `creates` only, on the exact bytes of the rc.9 archives
+/// (2026-09-28), in every build each `exports` map can select. `omit` granted
+/// for every condition; `createMemo` granted scoped to `browser`, bound through
+/// rc.9 signals' own `createMemo`, `createSignal` and `getOwner` rows. `merge`
+/// and the flat `createMemo` withheld: `solid-js`' server builds define their
+/// own `merge` and `createMemo`, which reach `ctx.serialize`.
+const RC9_MERGE_OMIT_MEMO_AUDIT: &str =
+    "docs/package-contract-v2/audits/2026-09-28-solid-2-rc9-merge-omit-creatememo-creates.md";
+
 /// The re-reading of `solid-js@2.0.0-rc.3` rows that rested on a
 /// `solid-js.json` summary alone and that rc.3's own runtime bytes contradict
 /// (2026-09-27). Every section there withdraws a row, and none grants one, so
@@ -420,10 +430,19 @@ const RC9: &str = "2.0.0-rc.9";
 /// rc.9 declarations and browser bodies are `@solidjs/signals`', so a
 /// `solid-js` row could neither cite the body nor bind.
 ///
+/// [`RC9_MERGE_OMIT_MEMO_AUDIT`] (2026-09-28) adds two rc.9 `creates` rows:
+/// `@solidjs/signals`' `omit`, for every condition (every `solid-js` build,
+/// server included, re-exports its bytes), and `solid-js`' own `createMemo`
+/// scoped to `browser`, bound through rc.9 signals' `createMemo`,
+/// `createSignal` and `getOwner` rows exactly as the scoped `createSignal` row
+/// is. It withholds `@solidjs/signals`' `merge` and the flat `solid-js`
+/// `createMemo`: `solid-js`' server builds define their own `merge` and
+/// `createMemo`, and both reach `ctx.serialize`.
+///
 /// # `creates` and `reads`, and only those
 ///
-/// Rows carry [`CallClaimDomain::Creates`] (73: 30 on rc.3, one of them scoped, 17 on rc.6, 26 on
-/// rc.9, one of them scoped) and [`CallClaimDomain::Reads`] (36: 16 on rc.3, 7 on rc.6, 13 on rc.9). The other six kinded
+/// Rows carry [`CallClaimDomain::Creates`] (75: 30 on rc.3, one of them scoped, 17 on rc.6, 28 on
+/// rc.9, two of them scoped) and [`CallClaimDomain::Reads`] (36: 16 on rc.3, 7 on rc.6, 13 on rc.9). The other six kinded
 /// domains are withheld wholesale, because the audited documents' closures in them are not yet
 /// admissible as negative authority and each counter-example below is a defect
 /// against the *audit*, not against this table:
@@ -2546,6 +2565,46 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             },
         ],
     },
+    // RC9_MERGE_OMIT_MEMO_AUDIT § 1. Every `solid-js@2.0.0-rc.9` build,
+    // server included, re-exports these bytes, so the row needs no pairing
+    // caveat; its sibling `merge` is withheld because the server builds do not
+    // (§ 2).
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "omit",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_MERGE_OMIT_MEMO_AUDIT,
+                section: "## 1. `omit` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/store/utils.js",
+                file_sha256: "d6c52514b1b1010a648bd01d926f252e6788d96d4ab3cf345879e7af3032cc02",
+                start_byte: 40808,
+                end_byte: 42411,
+                slice_sha256: "8b9a50f9840bd11547765d1269cb10f5f3486b49679852d061f1906408ca9128",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_MERGE_OMIT_MEMO_AUDIT,
+                section: "## 1. `omit` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 192223,
+                end_byte: 194027,
+                slice_sha256: "578fbc1412c64da8a3fa7d5ae5c7a703eb2028cf86ee29c132a1847e91bb737a",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_MERGE_OMIT_MEMO_AUDIT,
+                section: "## 1. `omit` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/store/utils.js",
+                file_sha256: "57bd964e0a80aaf73cc9315105cba2be6a5fd7ef437b7733ed07056107acce2a",
+                start_byte: 40834,
+                end_byte: 42437,
+                slice_sha256: "8b9a50f9840bd11547765d1269cb10f5f3486b49679852d061f1906408ca9128",
+            },
+        ],
+    },
     NegativeClaimRow {
         package: "@solidjs/signals",
         version: RC9,
@@ -4159,6 +4218,63 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
                 start_byte: 52107,
                 end_byte: 52444,
                 slice_sha256: "87cfe46a740a3e2a7e4a35a9df518de40c49d5156a36c310f20a29f120722829",
+            },
+        ],
+    },
+    // RC9_MERGE_OMIT_MEMO_AUDIT § 4, **scoped** like `createSignal` below: the
+    // flat row is withheld (§ 3, the server `createMemo` hands a thenable
+    // result to `processResult`, which reaches `ctx.serialize`). The browser
+    // wrapper and `hydratedCreateMemo` reach exactly the 27-definition closure
+    // RC9_CORE_WEB_AUDIT § 13 walked from `createSignal`, byte-identical in all
+    // three builds `browser` can select. The delegates are every canonical
+    // `@solidjs/signals` call that closure makes: `createMemo$1` (the wrapper,
+    // and `coreFn` through `hydrateSignalLike`), `createSignal$1`
+    // (`withHydrationGate`, `armLiveTakeover`) and `getOwner`.
+    NegativeClaimRow {
+        package: "solid-js",
+        version: RC9,
+        export: "createMemo",
+        domain: CallClaimDomain::Creates,
+        scope: RowScope::HostTarget(HostTargetScope {
+            condition: HostTargetCondition::Browser,
+            runtime: &[
+                "dist/solid.dev.js",
+                "dist/solid.js",
+                "dist/solid.observe.js",
+            ],
+            delegates: &[
+                ("@solidjs/signals", "createMemo", CallClaimDomain::Creates),
+                ("@solidjs/signals", "createSignal", CallClaimDomain::Creates),
+                ("@solidjs/signals", "getOwner", CallClaimDomain::Creates),
+            ],
+        }),
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_MERGE_OMIT_MEMO_AUDIT,
+                section: "## 4. `createMemo` — `creates`, `browser` host target — archive `solid-js@2.0.0-rc.9`",
+                archive_path: "dist/solid.js",
+                file_sha256: "0238f90858359bc71da523cae1c38dc769f6d86502ae37bcf1c7d72cc977794d",
+                start_byte: 23820,
+                end_byte: 23905,
+                slice_sha256: "1528dcd8aeb175ac5dda5fa0477fdbe76d6a7498ef43ce7a0ab6ffc196f982f5",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_MERGE_OMIT_MEMO_AUDIT,
+                section: "## 4. `createMemo` — `creates`, `browser` host target — archive `solid-js@2.0.0-rc.9`",
+                archive_path: "dist/solid.dev.js",
+                file_sha256: "7baf8808f6bd87011707621ab9137a41416a585db3d12c89f7a7efcdec2411de",
+                start_byte: 25516,
+                end_byte: 25601,
+                slice_sha256: "1528dcd8aeb175ac5dda5fa0477fdbe76d6a7498ef43ce7a0ab6ffc196f982f5",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_MERGE_OMIT_MEMO_AUDIT,
+                section: "## 4. `createMemo` — `creates`, `browser` host target — archive `solid-js@2.0.0-rc.9`",
+                archive_path: "dist/solid.observe.js",
+                file_sha256: "c337cd4b1b90e5dda31dccd4373d7d72e3aec07a7d40e1a6fefd903b63b16ffb",
+                start_byte: 24140,
+                end_byte: 24225,
+                slice_sha256: "1528dcd8aeb175ac5dda5fa0477fdbe76d6a7498ef43ce7a0ab6ffc196f982f5",
             },
         ],
     },
@@ -6415,6 +6531,8 @@ mod tests {
         ("solid-js", RC9, "Show", CallClaimDomain::Creates),
         ("solid-js", RC9, "Loading", CallClaimDomain::Creates),
         ("solid-js", RC9, "createSignal", CallClaimDomain::Creates),
+        ("solid-js", RC9, "createMemo", CallClaimDomain::Creates),
+        ("@solidjs/signals", RC9, "merge", CallClaimDomain::Creates),
         ("solid-js", RC9, "affects", CallClaimDomain::Reads),
         ("solid-js", RC9, "affects", CallClaimDomain::Creates),
         ("solid-js", RC9, "isPending", CallClaimDomain::Creates),
@@ -6461,6 +6579,15 @@ mod tests {
             CallClaimDomain::Creates,
             RC9_CORE_WEB_AUDIT,
             "### 13. `createSignal` — `creates`, `browser` host target — archive `solid-js@2.0.0-rc.9`",
+            HostTargetCondition::Browser,
+        ),
+        (
+            "solid-js",
+            RC9,
+            "createMemo",
+            CallClaimDomain::Creates,
+            RC9_MERGE_OMIT_MEMO_AUDIT,
+            "## 4. `createMemo` — `creates`, `browser` host target — archive `solid-js@2.0.0-rc.9`",
             HostTargetCondition::Browser,
         ),
     ];
@@ -7497,6 +7624,51 @@ mod tests {
                  solid.js:563-570, :665-682)",
             ),
         ),
+        // RC9_MERGE_OMIT_MEMO_AUDIT, 2026-09-28: `creates` only. `omit` is
+        // closed for every condition; `merge` and the flat `solid-js`
+        // `createMemo` are withheld for the server bodies below, and the latter
+        // is narrowed by a `browser`-scoped row.
+        (
+            "@solidjs/signals",
+            RC9,
+            "omit",
+            CallClaimDomain::Creates,
+            RC9_MERGE_OMIT_MEMO_AUDIT,
+            "## 1. `omit` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "merge",
+            CallClaimDomain::Creates,
+            RC9_MERGE_OMIT_MEMO_AUDIT,
+            "## 2. `merge` — `creates` — archive `@solidjs/signals@2.0.0-rc.9` — **WITHHOLD**",
+            ImplementationVerdict::Withheld(
+                "the archive's own bodies create nothing, but a solid-js import binds \
+                 this declaration (types/index.d.ts:1) while solid-js' node/worker/deno \
+                 builds run their own merge (server.js:1222-1229), which wraps every \
+                 function source in the server createMemo, whose processResult reaches \
+                 ctx.serialize(id, deferred.promise, deferStream) (server.js:574, :715); \
+                 a guarded reach still counts, and no row scope can yet say which \
+                 solid-js build the import runs",
+            ),
+        ),
+        (
+            "solid-js",
+            RC9,
+            "createMemo",
+            CallClaimDomain::Creates,
+            RC9_MERGE_OMIT_MEMO_AUDIT,
+            "## 3. `createMemo` — `creates` — archive `solid-js@2.0.0-rc.9` — **WITHHOLD**",
+            ImplementationVerdict::Withheld(
+                "the server createMemo (server.js:321-410) runs its compute at creation \
+                 and hands a thenable result to processResult, which reaches \
+                 ctx.serialize (server.js:574) under node/worker/deno ∧ renderToStream \
+                 ∧ an owner id ∧ not NoHydrate; the browser bodies create nothing, and \
+                 the scoped row states exactly that (§ 4)",
+            ),
+        ),
     ];
 
     /// The directory under `benchmarks/package-contract-v2/phase0/` that
@@ -7551,7 +7723,10 @@ mod tests {
         match audit {
             RC3_CORE_PRIMITIVES_AUDIT | RC3_OWNER_CONTEXT_AUDIT | RC3_SHOW_LOADING_AUDIT => RC3,
             RC6_SIGNALS_AUDIT => RC6,
-            RC9_SIGNALS_AUDIT | RC9_PARITY_AUDIT | RC9_CORE_WEB_AUDIT => RC9,
+            RC9_SIGNALS_AUDIT
+            | RC9_PARITY_AUDIT
+            | RC9_CORE_WEB_AUDIT
+            | RC9_MERGE_OMIT_MEMO_AUDIT => RC9,
             other => panic!("{other} is not a known audit document"),
         }
     }
@@ -7915,10 +8090,12 @@ mod tests {
         // `dist/observe/**`) -- 15; and (2026-09-27) 19 more rows, three
         // builds each -- 57. On rc.9 `solid-js` and `@solidjs/web`
         // (2026-09-27): 14 flat rows, six builds each -- 84 -- and the scoped
-        // `createSignal` row's three browser builds.
+        // `createSignal` row's three browser builds. On rc.9 (2026-09-28):
+        // `omit`'s three signals builds and the scoped `createMemo` row's three
+        // browser builds.
         assert_eq!(
             implementation_citations,
-            30 + 1 + 72 + 15 + 57 + 84 + 3,
+            30 + 1 + 72 + 15 + 57 + 84 + 3 + 3 + 3,
             "the Implementation citation arm did not run over the rows that need it"
         );
     }
@@ -8130,15 +8307,18 @@ mod tests {
         // The 2026-09-27 rc.9 `solid-js`/`@solidjs/web` reading closes 14 rows
         // and withholds 12 (the flat `createSignal` among them, which its
         // scoped row narrows).
-        assert_eq!(implementation_closed.len(), 8 + 24 + 5 + 19 + 14);
-        assert_eq!(implementation_withheld.len(), 4 + 5 + 12);
+        // The 2026-09-28 rc.9 `merge`/`omit`/`createMemo` reading closes 1
+        // (`omit`) and withholds 2 (`merge`, and the flat `solid-js`
+        // `createMemo`, which its scoped row narrows).
+        assert_eq!(implementation_closed.len(), 8 + 24 + 5 + 19 + 14 + 1);
+        assert_eq!(implementation_withheld.len(), 4 + 5 + 12 + 2);
         let on = |version: &str| shipped.iter().filter(|(_, v, _, _)| v == version).count();
-        assert_eq!((on(RC3), on(RC6), on(RC9)), (45, 24, 24 + 14));
-        assert_eq!(shipped.len(), 93 + 14);
+        assert_eq!((on(RC3), on(RC6), on(RC9)), (45, 24, 24 + 14 + 1));
+        assert_eq!(shipped.len(), 93 + 14 + 1);
 
         // The scoped rows: each is a flat row both sources withhold, read
         // under one host-target condition in a section HOST_TARGET_READINGS
-        // names, and nothing else. 107 flat + 2 scoped = 109 rows.
+        // names, and nothing else. 108 flat + 3 scoped = 111 rows.
         let mut scoped = BTreeSet::new();
         for row in NEGATIVE_ROWS {
             let RowScope::HostTarget(scope) = row.scope else {
@@ -8186,8 +8366,8 @@ mod tests {
             }
             assert!(scoped.insert(key), "{:?} is scoped twice", row.export);
         }
-        assert_eq!(scoped.len(), 2);
-        assert_eq!(NEGATIVE_ROWS.len(), 107 + 2);
+        assert_eq!(scoped.len(), 3);
+        assert_eq!(NEGATIVE_ROWS.len(), 108 + 3);
 
         // The two authorities must not be confusable from the row alone: a row
         // the hand census closed cites runtime bytes, and every other row cites
@@ -8781,7 +8961,7 @@ mod tests {
                 );
             }
         }
-        assert_eq!(seen, 2);
+        assert_eq!(seen, 3);
 
         // An `EveryCondition` row answers the proposal side under any set,
         // the empty one included.

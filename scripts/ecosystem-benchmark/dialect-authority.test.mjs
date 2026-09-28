@@ -73,8 +73,10 @@ test("the checked-in pins load and name the archives the Rust tables audit", () 
   // `Show` `reads`, `Show` `creates`, `Loading` `creates`,
   // `@solidjs/web@2.0.0-rc.3` `render` `reads`, `hydrate` `reads`.
   // Since 2026-09-27, also 14 every-condition rows and one scoped to the
-  // browser host target on `solid-js`/`@solidjs/web@2.0.0-rc.9`.
-  assert.equal(solid2.negativeRowCount, 109);
+  // browser host target on `solid-js`/`@solidjs/web@2.0.0-rc.9`. Since
+  // 2026-09-28, `@solidjs/signals@2.0.0-rc.9` `omit` `creates` and
+  // `solid-js@2.0.0-rc.9` `createMemo` `creates` scoped to the browser host.
+  assert.equal(solid2.negativeRowCount, 111);
 });
 
 test("a pin file that parses but pins nothing is refused, not read as full coverage", () => {

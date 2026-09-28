@@ -1,0 +1,39 @@
+function omit(e, ...n) {
+    let t = n.length === 1 && typeof n[0] === "function" ? n[0] : n;
+    if (SUPPORTS_PROXY) {
+        // A view over a view folds: one record, both filters, the original
+        // source — so a consumer walks the real object however deep the omits go.
+        // Over a merge() proxy the source is the merge's RECORD (see OmitView):
+        // one record whatever the leaf count, read by function call.
+        let n = e;
+        let r = SOURCE_PLAIN;
+        if (typeof e === "function") r = SOURCE_MEMO; else if ($PROXY in e) {
+            r = SOURCE_PROXY;
+            if (e[$TARGET] === undefined) {
+                const i = e[$OMIT];
+                if (i !== undefined) {
+                    n = i.source;
+                    r = i.kind;
+                    t = combineHidden(i.hidden, t);
+                } else {
+                    const t = e[$VIEW];
+                    if (t !== undefined) {
+                        n = t;
+                        r = SOURCE_MERGE;
+                    }
+                }
+            }
+        }
+        return new Proxy(new OmitView(n, r, t), omitTraps);
+    }
+    const r = {};
+    const i = Object.getOwnPropertyNames(e);
+    const f = typeof t === "function" ? t : t.length > 4 && i.length > t.length ? (e => n => e.has(n))(new Set(t)) : e => t.includes(e);
+    for (const n of i) {
+        if (!f(n)) {
+            const t = Object.getOwnPropertyDescriptor(e, n);
+            !t.get && !t.set && t.enumerable && t.writable && t.configurable ? r[n] = t.value : Object.defineProperty(r, n, t);
+        }
+    }
+    return r;
+}
