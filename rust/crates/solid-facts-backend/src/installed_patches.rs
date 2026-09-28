@@ -239,29 +239,32 @@ fn is_exact_version(version: &str) -> bool {
 /// The keys of the top-level YAML mapping `header`, in the block style pnpm
 /// writes (`header:` then two-space-indented keys). An inline `{}` is empty;
 /// any other inline value is refused rather than guessed at.
+///
+/// Every top-level occurrence is read, not the first: pnpm 11+ leads
+/// `pnpm-lock.yaml` with an env document, so one file can hold the mapping in
+/// each of its documents, and a patch recorded in either one is a patch. The
+/// union is the direction that cannot miss one.
 fn yaml_block_keys(text: &str, header: &str) -> Result<Vec<String>, String> {
     let mut keys = Vec::new();
-    let mut lines = text.lines();
-    let Some(opening) = lines.by_ref().find(|line| {
-        line.strip_prefix(header)
-            .is_some_and(|rest| rest.trim_start().starts_with(':'))
-    }) else {
-        return Ok(keys);
-    };
-    let inline = opening[header.len()..].trim_start()[1..].trim();
-    if !inline.is_empty() && !inline.starts_with('#') {
-        return if inline == "{}" {
-            Ok(keys)
-        } else {
-            Err(format!("an inline {header} mapping"))
-        };
-    }
-    for line in lines {
-        if line.trim().is_empty() || line.trim_start().starts_with('#') {
+    let mut inside = false;
+    for line in text.lines() {
+        if let Some(rest) = line
+            .strip_prefix(header)
+            .filter(|rest| rest.trim_start().starts_with(':'))
+        {
+            let inline = rest.trim_start()[1..].trim();
+            inside = inline.is_empty() || inline.starts_with('#');
+            if !inside && inline != "{}" {
+                return Err(format!("an inline {header} mapping"));
+            }
+            continue;
+        }
+        if !inside || line.trim().is_empty() || line.trim_start().starts_with('#') {
             continue;
         }
         if !line.starts_with(' ') {
-            break;
+            inside = false;
+            continue;
         }
         let Some(rest) = line.strip_prefix("  ") else {
             continue;
@@ -533,6 +536,58 @@ mod tests {
             Some("pnpm-lock.yaml patch_hash")
         );
         assert_eq!(patched(&root, "@tanstack/solid-router", "2.0.0-rc.8"), None);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    fn real_lockfile(name: &str) -> String {
+        fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/lockfiles")
+                .join(name),
+        )
+        .unwrap()
+    }
+
+    /// pnpm 11+ leads the lockfile with an env document. The patch reader and
+    /// the integrity reader parse the same file, so a patch the project
+    /// document records must still be seen behind it (finds.team's real
+    /// lockfile), and a patch recorded in *either* document is a patch.
+    #[test]
+    fn a_pnpm_11_lockfile_with_an_env_document_still_names_its_patches() {
+        let root = scratch("pnpm-env-document");
+        let lock = real_lockfile("finds-team.pnpm-lock.yaml");
+        write(&root, "pnpm-lock.yaml", &lock);
+        assert_eq!(
+            patched(&root, "@tanstack/solid-start", "2.0.0-rc.8").as_deref(),
+            Some("pnpm-lock.yaml patchedDependencies")
+        );
+        assert_eq!(patched(&root, "@tanstack/solid-router", "2.0.0-rc.8"), None);
+        assert_eq!(patched(&root, "pnpm", "12.5.1"), None);
+
+        // Both documents record one: neither may hide the other.
+        let both = lock.replacen(
+            "\nimporters:\n",
+            "\npatchedDependencies:\n  pnpm@12.5.1: 0000\n\nimporters:\n",
+            1,
+        );
+        assert!(both.find("patchedDependencies:") < both.find("\n---\n"));
+        write(&root, "pnpm-lock.yaml", &both);
+        assert!(patched(&root, "pnpm", "12.5.1").is_some());
+        assert!(patched(&root, "@tanstack/solid-start", "2.0.0-rc.8").is_some());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// `bun.lock` `lockfileVersion: 1` keeps `patchedDependencies` where
+    /// version 2 does (Civil's real lockfile).
+    #[test]
+    fn a_bun_lock_version_1_names_its_patches() {
+        let root = scratch("bun-v1");
+        write(&root, "bun.lock", &real_lockfile("civil.bun.lock"));
+        assert_eq!(
+            patched(&root, "@stacksjs/ts-cache", "0.1.5").as_deref(),
+            Some("bun.lock patchedDependencies")
+        );
+        assert_eq!(patched(&root, "@solidjs/meta", "1.0.0-next.2"), None);
         let _ = fs::remove_dir_all(&root);
     }
 

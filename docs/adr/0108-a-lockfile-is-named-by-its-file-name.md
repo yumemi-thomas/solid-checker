@@ -124,3 +124,46 @@ rosters are mirrored case for case.
   importer it writes inside the package, so accepting a certified contract still
   moves no consumer finding. See § 7 of
   `phase21/2026-09-14-which-closures-change-a-consumer-finding.md`.
+
+## Amendment (2026-09-28): pnpm's env document is read past, and nothing else
+
+pnpm 11 and later lead `pnpm-lock.yaml` with an **env document** whenever a
+project pins its package manager or has `configDependencies`. The env document
+is the lockfile of pnpm itself and its config dependencies, which pnpm installs
+outside the project's `node_modules`. The app import metric found this shape in
+6 of 38 real Solid 2 apps, and both readers refused all of them as a "second
+document". That refusal blocked 144 import sites before any contract was
+compared (`phase22/2026-09-28-app-import-metric-baseline.md`, wall 4).
+
+pnpm writes one shape only: `---\n<env>\n---\n<project>`. It reads the project
+lockfile as everything after the first separator (`YAML_DOCUMENT_START`,
+`YAML_DOCUMENT_SEPARATOR` and `extractMainDocument` in pnpm's
+`lockfile/fs/src/yamlDocuments.ts`), and the env document has the four keys of
+its `EnvLockfile` type. Both readers now read exactly that shape and refuse
+every other. The selection is made from the project document, and the digest
+still binds the whole file. These stay refused:
+
+- a document marker anywhere but line 1 and one separator, a `...` end marker,
+  a marker that carries content, and a third document;
+- an env document with nothing after it;
+- a leading document that is not pnpm's env document. Its top-level keys must
+  be `lockfileVersion`, `importers`, `packages` and `snapshots`. Its only
+  importer must be `.`, which may hold only `configDependencies` and
+  `packageManagerDependencies`, and its `lockfileVersion` must be major 9.
+  A leading document that names a project importer would make the choice of
+  integrity-bearing document a guess.
+- a `name@version` that both documents record with different resolutions. The
+  env document's packages never select, but pnpm's own dependencies can be the
+  project's too. Readingroom records `detect-libc@2.1.2` in both documents, and
+  a key both record must record the same registry bytes. A disagreement
+  refuses the whole file on both sides, so the two readers still refuse the
+  same lockfiles.
+
+The patch reader (ADR 0131) now reads `patchedDependencies` from every
+document, not the first one only. A patch recorded in either document is a
+patch.
+
+Tests use trimmed real lockfiles
+(`rust/crates/solid-facts-backend/tests/fixtures/lockfiles/`). The rosters are
+mirrored, as before: `pnpm_selection_*` in `dependencies.rs`, and "the pnpm
+reader …" in `packages/cli/test/published-contract-graph.test.mjs`.

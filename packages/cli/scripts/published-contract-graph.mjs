@@ -93,8 +93,9 @@ const PNPM_INTEGRITY = /^(?:sha512|sha384|sha256|sha1)-[A-Za-z0-9+/]+={0,2}$/;
 
 /** Rejects the YAML features this reader does not implement, rather than
  * ignoring them. An anchor, alias or merge key can move a value from one entry
- * to another, and a second document can redefine `packages:` wholesale; a reader
- * that skipped what it did not understand would answer from the wrong bytes. */
+ * to another; a reader that skipped what it did not understand would answer
+ * from the wrong bytes. Document markers, which can redefine `packages:`
+ * wholesale, are `pnpmDocuments`'s to judge. */
 function refusePnpmYamlBeyondSubset(source) {
   if (source.includes("\t")) {
     throw new PublishedGraphAcquisitionRefusal(
@@ -104,12 +105,6 @@ function refusePnpmYamlBeyondSubset(source) {
   }
   for (const [index, line] of source.split("\n").entries()) {
     const at = `line ${index + 1}`;
-    if (/^(?:---|\.\.\.)\s*$/.test(line)) {
-      throw new PublishedGraphAcquisitionRefusal(
-        "unsupported-lock-syntax",
-        `pnpm lockfile has a document marker at ${at}; only a single document is read`
-      );
-    }
     // No trailing-character requirement: a bare `*` is an alias too, and the
     // Rust twin refuses one. A subset either side reads and the other refuses
     // turns an unsound lockfile into a confusing late refusal instead of an
@@ -237,21 +232,101 @@ function pnpmFlowMapping(text, at) {
   return entries;
 }
 
+const PNPM_ENV_TOP_LEVEL_KEYS = new Set(["lockfileVersion", "importers", "packages", "snapshots"]);
+const PNPM_ENV_IMPORTER_KEYS = new Set(["configDependencies", "packageManagerDependencies"]);
+
+/** A line that opens (`---`) or closes (`...`) a YAML document. */
+const isPnpmDocumentMarker = line => /^(?:---|\.\.\.)(?: |$)/.test(line);
+
+/** The key of one block-mapping line after its indentation, or null. */
+function pnpmMappingKey(rest) {
+  const line = rest.trimEnd();
+  const match = /^('[^']*'|"(?:[^"\\]|\\.)*"|[^'"].*?)(?::(?: .*)?)$/.exec(line);
+  return match ? pnpmScalar(match[1]) : null;
+}
+
 /**
- * Parses the `packages:` block of an untrusted pnpm lockfile into exact
- * `name@version` -> integrity selections.
+ * Splits a pnpm lockfile into its env and project documents; the twin of
+ * `pnpm_documents` in Rust.
  *
- * Deliberately a reader for one block of one lockfile major rather than a YAML
- * parser. It is acquisition material only -- Rust re-reads the same bytes before
- * any receipt -- but it decides which published artifact is fetched, so every
- * shape it does not implement is a refusal. What it accepts is what pnpm writes
- * and what a formatter may have rewritten: either quote style, and `resolution`
- * as an inline or multi-line flow mapping with an optional trailing comma.
+ * pnpm 11+ leads `pnpm-lock.yaml` with an env document (the lockfile of the
+ * project's `configDependencies` and `packageManagerDependencies`, installed
+ * outside its `node_modules`) in exactly one shape, `---\n<env>\n---\n<main>`
+ * (pnpm's `lockfile/fs/src/yamlDocuments.ts`), and reads the project lockfile as
+ * everything after the first separator. Every other arrangement of document
+ * markers is refused, and so is an env document that is not pnpm's
+ * `EnvLockfile` -- one that names a project importer would make the document
+ * that bears the installed integrity a guess.
  */
-export function parsePnpmLockPackages(source) {
-  const text = source.replace(/\r\n/g, "\n");
-  refusePnpmYamlBeyondSubset(text);
+function pnpmDocuments(text) {
   const lines = text.split("\n");
+  const markers = lines.flatMap((line, index) => (isPnpmDocumentMarker(line) ? [index] : []));
+  const unexpected = markers.findIndex(
+    (index, position) => lines[index] !== "---" || position > 1 || (position === 0 && index !== 0)
+  );
+  if (unexpected >= 0) {
+    const index = markers[unexpected];
+    throw new PublishedGraphAcquisitionRefusal(
+      "unsupported-lock-syntax",
+      `pnpm lockfile has a document marker ${JSON.stringify(lines[index])} at line ${index + 1}; ` +
+        "only a single document, or pnpm's env document followed by one project document, is read"
+    );
+  }
+  if (markers.length === 0) return { env: null, main: text };
+  const separator = markers.length === 2 ? markers[1] : lines.length;
+  const main = lines.slice(separator + 1).join("\n");
+  if (!main.trim()) {
+    throw new PublishedGraphAcquisitionRefusal(
+      "missing-lock-selection",
+      "pnpm lockfile holds only an env document; no project lockfile follows it"
+    );
+  }
+  const env = lines.slice(1, separator).join("\n");
+  requirePnpmEnvDocument(env);
+  return { env, main };
+}
+
+function requirePnpmEnvDocument(env) {
+  const refuse = detail => {
+    throw new PublishedGraphAcquisitionRefusal(
+      "unsupported-lock-syntax",
+      `pnpm lockfile's leading document is not pnpm's env document: ${detail}`
+    );
+  };
+  const top = new Set();
+  let inImporters = false;
+  for (const line of env.split("\n")) {
+    if (!line.trim() || line.trimStart().startsWith("#")) continue;
+    if (!line.startsWith(" ")) {
+      const key = pnpmMappingKey(line);
+      if (key === null) refuse(`unreadable top-level line ${JSON.stringify(line)}`);
+      if (!PNPM_ENV_TOP_LEVEL_KEYS.has(key)) refuse(`it has a top-level ${JSON.stringify(key)}`);
+      if (top.has(key)) refuse(`it repeats ${JSON.stringify(key)}`);
+      inImporters = key === "importers";
+      if (inImporters && !["importers:", "importers: {}"].includes(line.trimEnd())) {
+        refuse("its importers are not a block mapping");
+      }
+      top.add(key);
+      continue;
+    }
+    if (!inImporters) continue;
+    const indent = line.length - line.replace(/^ +/, "").length;
+    const key = () => {
+      const parsed = pnpmMappingKey(line.slice(indent));
+      if (parsed === null) refuse(`unreadable importer line ${JSON.stringify(line)}`);
+      return parsed;
+    };
+    if (indent === 2 && key() !== ".") refuse(`it has importer ${JSON.stringify(key())}`);
+    else if (indent === 4 && !PNPM_ENV_IMPORTER_KEYS.has(key())) {
+      refuse(`its importer records ${JSON.stringify(key())}`);
+    } else if (indent !== 2 && indent !== 4 && indent < 6) {
+      refuse(`unexpected indentation in ${JSON.stringify(line)}`);
+    }
+  }
+  requirePnpmLockfileMajor(env.split("\n"));
+}
+
+function requirePnpmLockfileMajor(lines) {
   const version = lines
     .find(line => /^lockfileVersion\s*:/.test(line))
     ?.split(":")
@@ -272,14 +347,18 @@ export function parsePnpmLockPackages(source) {
         "can appear under several keys and exact selection is not decidable here"
     );
   }
+}
+
+/**
+ * One document's `packages:` block as `key -> integrity | null` (null: the key
+ * is present with no registry integrity), or null when the document has no
+ * `packages:` block. An inline `packages: {}` is an empty block.
+ */
+function pnpmPackagesBlock(lines) {
+  if (lines.some(line => line.trimEnd() === "packages: {}")) return new Map();
   const start = lines.findIndex(line => line === "packages:");
-  if (start < 0) {
-    throw new PublishedGraphAcquisitionRefusal(
-      "missing-lock-selection",
-      "pnpm lockfile has no packages block"
-    );
-  }
-  const selections = new Map();
+  if (start < 0) return null;
+  const entries = new Map();
   let key = null;
   for (let index = start + 1; index < lines.length; index += 1) {
     const line = lines[index];
@@ -294,13 +373,13 @@ export function parsePnpmLockPackages(source) {
           `pnpm lockfile has an unreadable packages key on line ${index + 1}`
         );
       }
-      if (selections.has(key)) {
+      if (entries.has(key)) {
         throw new PublishedGraphAcquisitionRefusal(
           "ambiguous-lock-selection",
           `pnpm lockfile repeats packages key ${key}`
         );
       }
-      selections.set(key, null);
+      entries.set(key, null);
       continue;
     }
     const resolution = /^ {4}resolution:\s*(.*)$/.exec(line);
@@ -314,17 +393,53 @@ export function parsePnpmLockPackages(source) {
       body += lines[index].trim();
     }
     const integrity = pnpmFlowMapping(body, `resolution of ${key}`).get("integrity");
-    if (typeof integrity !== "string" || !PNPM_INTEGRITY.test(integrity)) {
-      // A package resolved from a tarball, git or link has no registry
-      // integrity. Leaving it unselected is the fail-closed direction: the
-      // caller then cannot name it and the graph refuses, rather than the
-      // adapter inventing a locator for bytes it cannot authenticate.
-      continue;
-    }
-    selections.set(key, integrity);
+    // A package resolved from a tarball, git or link has no registry
+    // integrity. Leaving it unselected is the fail-closed direction: the
+    // caller then cannot name it and the graph refuses, rather than the
+    // adapter inventing a locator for bytes it cannot authenticate.
+    if (typeof integrity === "string" && PNPM_INTEGRITY.test(integrity)) entries.set(key, integrity);
   }
-  for (const [name, integrity] of [...selections]) {
-    if (integrity === null) selections.delete(name);
+  return entries;
+}
+
+/**
+ * Parses the `packages:` block of an untrusted pnpm lockfile into exact
+ * `name@version` -> integrity selections.
+ *
+ * Deliberately a reader for one block of one lockfile major rather than a YAML
+ * parser. It is acquisition material only -- Rust re-reads the same bytes before
+ * any receipt -- but it decides which published artifact is fetched, so every
+ * shape it does not implement is a refusal. What it accepts is what pnpm writes
+ * and what a formatter may have rewritten: either quote style, and `resolution`
+ * as an inline or multi-line flow mapping with an optional trailing comma.
+ *
+ * A pnpm 11+ lockfile is read from its project document (`pnpmDocuments`). The
+ * env document's packages select nothing, and a key it shares with the project
+ * document must carry the same resolution there, or it is refused.
+ */
+export function parsePnpmLockPackages(source) {
+  const text = source.replace(/\r\n/g, "\n");
+  refusePnpmYamlBeyondSubset(text);
+  const { env, main } = pnpmDocuments(text);
+  const lines = main.split("\n");
+  requirePnpmLockfileMajor(lines);
+  const block = pnpmPackagesBlock(lines);
+  if (block === null) {
+    throw new PublishedGraphAcquisitionRefusal(
+      "missing-lock-selection",
+      "pnpm lockfile has no packages block"
+    );
+  }
+  const shared = env === null ? new Map() : (pnpmPackagesBlock(env.split("\n")) ?? new Map());
+  const selections = new Map();
+  for (const [key, integrity] of block) {
+    if (shared.has(key) && shared.get(key) !== integrity) {
+      throw new PublishedGraphAcquisitionRefusal(
+        "ambiguous-lock-selection",
+        `pnpm lockfile's env document records ${key} with a different resolution than its project document`
+      );
+    }
+    if (integrity !== null) selections.set(key, integrity);
   }
   if (selections.size === 0) {
     throw new PublishedGraphAcquisitionRefusal(

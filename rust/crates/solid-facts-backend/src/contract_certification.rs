@@ -63,6 +63,7 @@ pub use controlled_execution::{
     BROWSER_EXECUTION_PROFILE, ControlledExecution, ControlledExecutionError,
     IMPORT_FREE_EXECUTION_PROFILE, INERT_EXECUTION_PROFILE, RELATIVE_GRAPH_EXECUTION_PROFILE,
 };
+pub(crate) use dependencies::is_sri_integrity;
 pub use dependencies::{
     CanonicalDependencyNodeIdentity, DependencyCompositionError, DependencyCompositionRequirement,
     DependencyCompositionSchedule, DependencyNodeIdentity, DependencyQueueNode,

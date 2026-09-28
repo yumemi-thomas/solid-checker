@@ -116,9 +116,10 @@ impl VerifiedGraphSourcePackage {
 /// Rejects the YAML features the pnpm reader does not implement.
 ///
 /// Not conservatism: an anchor, alias or merge key can move a value from one
-/// entry to another, and a second document can redefine `packages:` wholesale,
-/// so a reader that skipped what it did not understand would answer confidently
-/// from the wrong bytes.
+/// entry to another, so a reader that skipped what it did not understand would
+/// answer confidently from the wrong bytes. Document markers, which can
+/// redefine `packages:` wholesale, are [`pnpm_documents`]'s to judge: it reads
+/// the one multi-document shape pnpm writes and refuses every other.
 fn refuse_pnpm_yaml_beyond_subset(text: &str) -> Result<(), super::ArtifactSnapshotError> {
     let refuse = |detail: String| super::ArtifactSnapshotError::InvalidProvenance(detail);
     if text.contains('\t') {
@@ -128,12 +129,6 @@ fn refuse_pnpm_yaml_beyond_subset(text: &str) -> Result<(), super::ArtifactSnaps
     }
     for (index, line) in text.lines().enumerate() {
         let at = index + 1;
-        let trimmed = line.trim_end();
-        if trimmed == "---" || trimmed == "..." {
-            return Err(refuse(format!(
-                "pnpm lockfile has a document marker at line {at}; only a single document is read"
-            )));
-        }
         if line.trim_start().starts_with("<<")
             && line.trim_start()[2..].trim_start().starts_with(':')
         {
@@ -167,6 +162,169 @@ fn refuse_pnpm_yaml_beyond_subset(text: &str) -> Result<(), super::ArtifactSnaps
         }
     }
     Ok(())
+}
+
+/// A pnpm lockfile split into the documents pnpm writes.
+#[derive(Debug, Eq, PartialEq)]
+struct PnpmDocuments {
+    /// The *env document*: the lockfile of the project's `configDependencies`
+    /// and `packageManagerDependencies` (pnpm itself), installed outside the
+    /// project's `node_modules`. `None` for a single-document lockfile.
+    env: Option<String>,
+    /// The project lockfile: the importers and the packages installed for them.
+    main: String,
+}
+
+/// A line that opens (`---`) or closes (`...`) a YAML document: the marker at
+/// column 0, then nothing or whitespace. `--- {}` starts a document too.
+fn is_pnpm_document_marker(line: &str) -> bool {
+    ["---", "..."].into_iter().any(|marker| {
+        line.strip_prefix(marker)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with(' '))
+    })
+}
+
+/// Splits a pnpm lockfile into its env and project documents.
+///
+/// pnpm 11 and later lead `pnpm-lock.yaml` with an env document whenever the
+/// project records `configDependencies` or `packageManagerDependencies`. The
+/// shape is exact: `---\n<env>\n---\n<main>` (`YAML_DOCUMENT_START` and
+/// `YAML_DOCUMENT_SEPARATOR` in pnpm's `lockfile/fs/src/yamlDocuments.ts`), and
+/// pnpm reads the project lockfile as everything after the first separator
+/// (`extractMainDocument`), loading it as one document. So that is the only
+/// multi-document shape read here, and every other one is refused: a marker
+/// anywhere but line 1 and one separator, a `...` end marker, a marker carrying
+/// content, a third document, or an env document with nothing after it.
+///
+/// Which document bears the installed packages' integrity must not be a guess,
+/// so the env document is also checked to be one: its keys are the four of
+/// pnpm's `EnvLockfile`, its only importer is `.`, and that importer holds only
+/// `configDependencies` and `packageManagerDependencies`. An env document that
+/// names a project dependency would make the choice ambiguous, and is refused.
+fn pnpm_documents(text: &str) -> Result<PnpmDocuments, super::ArtifactSnapshotError> {
+    let refuse = |detail: String| super::ArtifactSnapshotError::InvalidProvenance(detail);
+    let lines: Vec<&str> = text.split('\n').collect();
+    let markers: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| is_pnpm_document_marker(line))
+        .map(|(index, _)| index)
+        .collect();
+    // pnpm's start marker is line 1 and its separator the next marker, each
+    // exactly `---`; any other marker is outside the shape.
+    let unexpected = markers.iter().enumerate().find(|&(position, &index)| {
+        lines[index] != "---" || position > 1 || (position == 0 && index != 0)
+    });
+    if let Some((_, &index)) = unexpected {
+        return Err(refuse(format!(
+            "pnpm lockfile has a document marker {:?} at line {}; only a single document, or \
+             pnpm's env document followed by one project document, is read",
+            lines[index],
+            index + 1
+        )));
+    }
+    let separator = match markers.as_slice() {
+        [] => {
+            return Ok(PnpmDocuments {
+                env: None,
+                main: text.to_owned(),
+            });
+        }
+        [_, separator] => *separator,
+        // Line 1's start marker and no separator: pnpm reads no project
+        // lockfile from this file at all.
+        _ => lines.len(),
+    };
+    let main = lines.get(separator + 1..).unwrap_or_default().join("\n");
+    if main.trim().is_empty() {
+        return Err(refuse(
+            "pnpm lockfile holds only an env document; no project lockfile follows it".into(),
+        ));
+    }
+    let env = lines[1..separator].join("\n");
+    require_pnpm_env_document(&env)?;
+    Ok(PnpmDocuments {
+        env: Some(env),
+        main,
+    })
+}
+
+/// The key of one block-mapping line, after its indentation: a plain or quoted
+/// scalar followed by `:`. `None` for anything else.
+fn pnpm_mapping_key(rest: &str) -> Option<String> {
+    let rest = rest.trim_end();
+    let (key, tail) = match rest.chars().next()? {
+        // The quote is one byte, so the offset after it is a char boundary.
+        quote @ ('\'' | '"') => rest.split_at(rest[1..].find(quote)? + 2),
+        _ => match rest.find(": ") {
+            Some(at) => rest.split_at(at),
+            None => (rest.strip_suffix(':')?, ":"),
+        },
+    };
+    if !(tail == ":" || tail.starts_with(": ")) {
+        return None;
+    }
+    pnpm_scalar(key)
+}
+
+/// Checks that an env document is the `EnvLockfile` pnpm writes; see
+/// [`pnpm_documents`].
+fn require_pnpm_env_document(env: &str) -> Result<(), super::ArtifactSnapshotError> {
+    let refuse = |detail: String| {
+        super::ArtifactSnapshotError::InvalidProvenance(format!(
+            "pnpm lockfile's leading document is not pnpm's env document: {detail}"
+        ))
+    };
+    let mut top: Vec<String> = Vec::new();
+    let mut in_importers = false;
+    for line in env.lines() {
+        if line.trim().is_empty() || line.trim_start().starts_with('#') {
+            continue;
+        }
+        if !line.starts_with(' ') {
+            let key = pnpm_mapping_key(line)
+                .ok_or_else(|| refuse(format!("unreadable top-level line {line:?}")))?;
+            if !matches!(
+                key.as_str(),
+                "lockfileVersion" | "importers" | "packages" | "snapshots"
+            ) {
+                return Err(refuse(format!("it has a top-level {key:?}")));
+            }
+            if top.contains(&key) {
+                return Err(refuse(format!("it repeats {key:?}")));
+            }
+            in_importers = key == "importers";
+            if in_importers && !matches!(line.trim_end(), "importers:" | "importers: {}") {
+                return Err(refuse("its importers are not a block mapping".into()));
+            }
+            top.push(key);
+            continue;
+        }
+        if !in_importers {
+            continue;
+        }
+        let indent = line.len() - line.trim_start_matches(' ').len();
+        let key = || {
+            pnpm_mapping_key(&line[indent..])
+                .ok_or_else(|| refuse(format!("unreadable importer line {line:?}")))
+        };
+        match indent {
+            2 if key()? != "." => {
+                return Err(refuse(format!("it has importer {:?}", key()?)));
+            }
+            4 if !matches!(
+                key()?.as_str(),
+                "configDependencies" | "packageManagerDependencies"
+            ) =>
+            {
+                return Err(refuse(format!("its importer records {:?}", key()?)));
+            }
+            2 | 4 => {}
+            _ if indent < 6 => return Err(refuse(format!("unexpected indentation in {line:?}"))),
+            _ => {}
+        }
+    }
+    require_pnpm_lockfile_major_9(env)
 }
 
 /// Requires `lockfileVersion` to declare major 9; see `from_pnpm_lock`.
@@ -228,15 +386,98 @@ fn pnpm_packages_integrity(
     text: &str,
     exact: &str,
 ) -> Result<String, super::ArtifactSnapshotError> {
+    match pnpm_packages_entry(text, exact)? {
+        None => Err(super::ArtifactSnapshotError::InvalidProvenance(
+            "pnpm lockfile has no packages block".into(),
+        )),
+        Some(PnpmPackageEntry::Integrity(integrity)) => Ok(integrity),
+        Some(PnpmPackageEntry::Absent | PnpmPackageEntry::NoRegistryIntegrity) => {
+            Err(super::ArtifactSnapshotError::InvalidProvenance(format!(
+                "pnpm lockfile has no exact selection for {exact}"
+            )))
+        }
+    }
+}
+
+/// What one document's `packages:` block records for one exact key.
+#[derive(Debug, Eq, PartialEq)]
+enum PnpmPackageEntry {
+    Absent,
+    /// The key is present, with no SRI registry integrity: a tarball, git or
+    /// link resolution.
+    NoRegistryIntegrity,
+    Integrity(String),
+}
+
+/// Every key of one document's `packages:` block, in order.
+fn pnpm_packages_keys(text: &str) -> Result<Vec<String>, super::ArtifactSnapshotError> {
+    let mut lines = text.lines().enumerate();
+    if !lines.by_ref().any(|(_, line)| line == "packages:") {
+        return Ok(Vec::new());
+    }
+    let mut keys = Vec::new();
+    for (index, line) in lines {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if !line.starts_with(' ') {
+            break;
+        }
+        if let Some(rest) = entry_key_line(line) {
+            keys.push(pnpm_scalar(rest).ok_or_else(|| {
+                super::ArtifactSnapshotError::InvalidProvenance(format!(
+                    "pnpm lockfile has an unreadable packages key on line {}",
+                    index + 1
+                ))
+            })?);
+        }
+    }
+    Ok(keys)
+}
+
+/// Requires every package both documents name to be recorded alike in both.
+///
+/// The env document's packages are installed outside the project, so they
+/// never select. pnpm's own dependencies can be the project's too (Readingroom
+/// records `detect-libc@2.1.2` in both), and then both records must name the
+/// same registry bytes; two answers for one key is exactly the ambiguity this
+/// reader refuses. Checked for every shared key, not only the selected one, as
+/// the acquisition twin does, so the two refuse the same lockfiles.
+fn require_pnpm_documents_agree(
+    documents: &PnpmDocuments,
+) -> Result<(), super::ArtifactSnapshotError> {
+    let Some(env) = &documents.env else {
+        return Ok(());
+    };
+    for key in pnpm_packages_keys(env)? {
+        let project = pnpm_packages_entry(&documents.main, &key)?;
+        if matches!(project, None | Some(PnpmPackageEntry::Absent)) {
+            continue;
+        }
+        if pnpm_packages_entry(env, &key)? != project {
+            return Err(super::ArtifactSnapshotError::InvalidProvenance(format!(
+                "pnpm lockfile's env document records {key} with a different resolution than \
+                 its project document"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// The `packages:` entry for `exact` in one document, or `None` when the
+/// document has no `packages:` block. An inline `packages: {}` is an empty
+/// block.
+fn pnpm_packages_entry(
+    text: &str,
+    exact: &str,
+) -> Result<Option<PnpmPackageEntry>, super::ArtifactSnapshotError> {
     let lines: Vec<&str> = text.lines().collect();
-    let start = lines
-        .iter()
-        .position(|line| *line == "packages:")
-        .ok_or_else(|| {
-            super::ArtifactSnapshotError::InvalidProvenance(
-                "pnpm lockfile has no packages block".into(),
-            )
-        })?;
+    if lines.iter().any(|line| line.trim_end() == "packages: {}") {
+        return Ok(Some(PnpmPackageEntry::Absent));
+    }
+    let Some(start) = lines.iter().position(|line| *line == "packages:") else {
+        return Ok(None);
+    };
     let mut selected: Option<String> = None;
     let mut seen = false;
     let mut key: Option<String> = None;
@@ -289,17 +530,17 @@ fn pnpm_packages_integrity(
         if let Some(integrity) = pnpm_flow_mapping(&body, exact)?
             .into_iter()
             .find_map(|(name, value)| (name == "integrity").then_some(value))
-            .filter(|value| is_pnpm_integrity(value))
+            .filter(|value| is_sri_integrity(value))
         {
             selected = Some(integrity);
         }
         index += 1;
     }
-    selected.ok_or_else(|| {
-        super::ArtifactSnapshotError::InvalidProvenance(format!(
-            "pnpm lockfile has no exact selection for {exact}"
-        ))
-    })
+    Ok(Some(match (seen, selected) {
+        (false, _) => PnpmPackageEntry::Absent,
+        (true, None) => PnpmPackageEntry::NoRegistryIntegrity,
+        (true, Some(integrity)) => PnpmPackageEntry::Integrity(integrity),
+    }))
 }
 
 /// A `packages:` entry key line: exactly two spaces, then a scalar, then `:`.
@@ -312,7 +553,10 @@ fn entry_key_line(line: &str) -> Option<&str> {
     trimmed.strip_suffix(':')
 }
 
-fn is_pnpm_integrity(value: &str) -> bool {
+/// A Subresource Integrity string of one of the algorithms npm registries
+/// publish: `<algorithm>-<base64 digest>`. Bun, npm and pnpm all record this
+/// form, and anything else is not a registry integrity.
+pub(crate) fn is_sri_integrity(value: &str) -> bool {
     let Some((algorithm, digest)) = value.split_once('-') else {
         return false;
     };
@@ -507,6 +751,10 @@ impl PublishedGraphLockSelection {
     /// selection would not be decidable. Major 9 keys are exactly
     /// `name@version` and its store is content-addressed, which is why the
     /// locator here is the key itself rather than an install path.
+    ///
+    /// A pnpm 11+ lockfile that leads with an env document is read from its
+    /// project document only ([`pnpm_documents`]); the digest still binds the
+    /// whole file.
     pub fn from_pnpm_lock(
         lockfile: &[u8],
         locator: impl Into<String>,
@@ -528,14 +776,16 @@ impl PublishedGraphLockSelection {
         })?;
         let text = source.replace("\r\n", "\n");
         refuse_pnpm_yaml_beyond_subset(&text)?;
+        let documents = pnpm_documents(&text)?;
         let exact = format!("{package_name}@{package_version}");
         if locator != exact {
             return Err(super::ArtifactSnapshotError::InvalidProvenance(format!(
                 "pnpm lock locator {locator:?} is not the exact key {exact:?}"
             )));
         }
-        require_pnpm_lockfile_major_9(&text)?;
-        let integrity = pnpm_packages_integrity(&text, &exact)?;
+        require_pnpm_lockfile_major_9(&documents.main)?;
+        let integrity = pnpm_packages_integrity(&documents.main, &exact)?;
+        require_pnpm_documents_agree(&documents)?;
         Self::new(
             "pnpm",
             format!("sha256:{:x}", Sha256::digest(lockfile)),
@@ -4798,6 +5048,46 @@ mod tests {
         );
     }
 
+    /// Certification's Bun reader on a real `lockfileVersion: 1` lockfile
+    /// (Civil's): it selects by installed locator, and answers what admission's
+    /// identity-bound reader answers for the same two copies
+    /// (`a_bun_lock_version_1_states_the_exact_installed_integrity`).
+    #[test]
+    fn bun_lock_selection_reads_a_real_version_1_lockfile() {
+        let lock = real_lockfile("civil.bun.lock");
+        for (locator, version, integrity) in [
+            (
+                "@solidjs/meta",
+                "1.0.0-next.2",
+                "sha512-4aqPczFqDdep4JTAUXfh4nyfq7InbTgimd7NuN6ZWWE29UPv0uR5dyr53yFcf2YgVXjFdX+JGhXtsE0njGL+fA==",
+            ),
+            (
+                "@tanstack/solid-router/@solidjs/meta",
+                "0.29.4",
+                "sha512-zdIWBGpR9zGx1p1bzIPqF5Gs+Ks/BH8R6fWhmUa/dcK1L2rUC8BAcZJzNRYBQv74kScf1TSOs0EY//Vd/I0V8g==",
+            ),
+        ] {
+            let selection = PublishedGraphLockSelection::from_bun_lock(
+                lock.as_bytes(),
+                locator,
+                "@solidjs/meta",
+                version,
+            )
+            .unwrap();
+            assert_eq!(selection.integrity, integrity, "{locator}");
+        }
+        assert!(
+            PublishedGraphLockSelection::from_bun_lock(
+                lock.as_bytes(),
+                "@solidjs/meta",
+                "@solidjs/meta",
+                "0.29.4",
+            )
+            .is_err(),
+            "the hoisted locator does not select the nested version"
+        );
+    }
+
     const PNPM_INTEGRITY: &str = "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
 
     fn npm_lock(version: u64, packages: &serde_json::Value) -> Vec<u8> {
@@ -5123,6 +5413,177 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    fn real_lockfile(name: &str) -> String {
+        std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/lockfiles")
+                .join(name),
+        )
+        .unwrap()
+    }
+
+    fn select_pnpm(
+        lock: &str,
+        name: &str,
+        version: &str,
+    ) -> Result<PublishedGraphLockSelection, super::super::ArtifactSnapshotError> {
+        PublishedGraphLockSelection::from_pnpm_lock(
+            lock.as_bytes(),
+            format!("{name}@{version}"),
+            name,
+            version,
+        )
+    }
+
+    const ROUTER_INTEGRITY: &str = "sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA==";
+    const DETECT_LIBC_INTEGRITY: &str = "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==";
+
+    /// pnpm 11+ writes `---\n<env>\n---\n<project>` when the project pins its
+    /// package manager (finds.team's real lockfile). The project document is
+    /// the one that selects; the env document's packages -- pnpm itself -- are
+    /// installed outside the project and select nothing, and the digest still
+    /// binds every byte of the file.
+    #[test]
+    fn pnpm_selection_reads_the_project_document_behind_an_env_document() {
+        let lock = real_lockfile("finds-team.pnpm-lock.yaml");
+        let selection = select_pnpm(&lock, "@tanstack/solid-router", "2.0.0-rc.8").unwrap();
+        assert_eq!(selection.integrity, ROUTER_INTEGRITY);
+        assert_eq!(
+            selection.lockfile_digest,
+            format!("sha256:{:x}", Sha256::digest(lock.as_bytes()))
+        );
+        let error = select_pnpm(&lock, "pnpm", "12.5.1").unwrap_err();
+        assert!(
+            format!("{error}").contains("no exact selection for pnpm@12.5.1"),
+            "{error}"
+        );
+        // pnpm normalizes CRLF before splitting; so does this reader.
+        let crlf = lock.replace('\n', "\r\n");
+        assert_eq!(
+            select_pnpm(&crlf, "@tanstack/solid-router", "2.0.0-rc.8")
+                .unwrap()
+                .integrity,
+            ROUTER_INTEGRITY
+        );
+    }
+
+    /// Readingroom's real lockfile records `detect-libc@2.1.2` in both
+    /// documents (a dependency of `@pnpm/exe` and of the app): the same
+    /// registry bytes, so one answer. Recording it differently in the env
+    /// document is two answers for one key, and the file is refused.
+    #[test]
+    fn pnpm_selection_refuses_a_key_the_two_documents_resolve_differently() {
+        let lock = real_lockfile("readingroom.pnpm-lock.yaml");
+        assert_eq!(
+            select_pnpm(&lock, "detect-libc", "2.1.2")
+                .unwrap()
+                .integrity,
+            DETECT_LIBC_INTEGRITY
+        );
+        assert!(select_pnpm(&lock, "@solidjs/meta", "1.0.0-next.2").is_ok());
+        let separator = lock.find("\n---\n").unwrap();
+        let (env, main) = lock.split_at(separator);
+        for (name, env) in [
+            (
+                "another integrity",
+                env.replacen(
+                    DETECT_LIBC_INTEGRITY,
+                    "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+                    1,
+                ),
+            ),
+            (
+                "no registry integrity",
+                env.replacen(
+                    &format!("{{integrity: {DETECT_LIBC_INTEGRITY}}}"),
+                    "{tarball: https://example.invalid/detect-libc.tgz}",
+                    1,
+                ),
+            ),
+        ] {
+            let conflicting = format!("{env}{main}");
+            assert_ne!(conflicting, lock, "{name}");
+            let error = select_pnpm(&conflicting, "detect-libc", "2.1.2").unwrap_err();
+            assert!(
+                format!("{error}").contains("different resolution"),
+                "{name}: {error}"
+            );
+            // The documents disagree, so the file answers for no key: a key
+            // only the project document holds is refused too, as the
+            // acquisition twin refuses the whole file.
+            assert!(select_pnpm(&conflicting, "@solidjs/meta", "1.0.0-next.2").is_err());
+        }
+    }
+
+    /// pnpm reads exactly one shape of multi-document lockfile (`---` on line
+    /// 1, one `---` separator, the project document after it). Every other
+    /// arrangement makes which document bears the installed integrity a
+    /// guess, so each is refused.
+    #[test]
+    fn pnpm_selection_refuses_every_other_document_arrangement() {
+        let lock = real_lockfile("finds-team.pnpm-lock.yaml");
+        let separator = lock.find("\n---\n").unwrap();
+        let env = &lock["---\n".len()..separator];
+        let main = &lock[separator + "\n---\n".len()..];
+        let refused = [
+            ("a third document", format!("{lock}---\n{main}")),
+            ("no start marker", lock["---\n".len()..].to_owned()),
+            ("an end marker", format!("{lock}...\n")),
+            (
+                "a marker carrying content",
+                lock.replacen("\n---\n", "\n--- {}\n", 1),
+            ),
+            (
+                "a separator with trailing space",
+                lock.replacen("\n---\n", "\n--- \n", 1),
+            ),
+            ("only an env document", format!("---\n{env}\n")),
+            ("only an env document and a separator", format!("---\n{env}\n---\n")),
+            (
+                "the project document first",
+                format!("---\n{main}\n---\n{env}\n"),
+            ),
+            (
+                "an env document naming a project importer",
+                lock.replacen(
+                    "        version: 12.5.1\n",
+                    "        version: 12.5.1\n\n  frontend:\n    dependencies:\n      '@tanstack/solid-router':\n        specifier: 2.0.0-rc.8\n        version: 2.0.0-rc.8\n",
+                    1,
+                ),
+            ),
+            (
+                "an env importer with project dependencies",
+                lock.replacen(
+                    "    configDependencies: {}\n",
+                    "    configDependencies: {}\n    dependencies:\n      '@tanstack/solid-router':\n        specifier: 2.0.0-rc.8\n        version: 2.0.0-rc.8\n",
+                    1,
+                ),
+            ),
+            (
+                "an env document with settings",
+                lock.replacen(
+                    "lockfileVersion: '9.0'\n",
+                    "lockfileVersion: '9.0'\n\nsettings:\n  autoInstallPeers: true\n",
+                    1,
+                ),
+            ),
+            (
+                "an env document of another major",
+                lock.replacen("lockfileVersion: '9.0'", "lockfileVersion: '6.0'", 1),
+            ),
+            (
+                "an env document with no lockfileVersion",
+                lock.replacen("lockfileVersion: '9.0'\n", "", 1),
+            ),
+        ];
+        for (name, lock) in refused {
+            assert!(
+                select_pnpm(&lock, "@tanstack/solid-router", "2.0.0-rc.8").is_err(),
+                "{name} was read instead of refused"
+            );
+        }
     }
 
     /// The file name is the whole format decision, on both sides of the

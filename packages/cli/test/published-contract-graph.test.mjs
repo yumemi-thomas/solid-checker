@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "vitest";
 
 import {
@@ -431,6 +432,101 @@ test("the pnpm reader selects no package without a registry integrity", () => {
       ),
     refusal("missing-lock-selection")
   );
+});
+
+// Real pnpm 11+ lockfiles, trimmed, shared with the Rust twin's tests (see the
+// fixture directory's README for their sources).
+const realLockfile = name =>
+  readFileSync(
+    new URL(`../../../rust/crates/solid-facts-backend/tests/fixtures/lockfiles/${name}`, import.meta.url),
+    "utf8"
+  );
+
+const ROUTER_INTEGRITY =
+  "sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA==";
+const DETECT_LIBC_INTEGRITY =
+  "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==";
+
+test("the pnpm reader reads the project document behind a pnpm 11 env document", () => {
+  // pnpm 11+ writes `---\n<env>\n---\n<project>` when the project pins its
+  // package manager. The env document's packages (pnpm itself) are installed
+  // outside the project and select nothing.
+  const source = realLockfile("finds-team.pnpm-lock.yaml");
+  const selections = parsePnpmLockPackages(source);
+  assert.equal(selections.get("@tanstack/solid-router@2.0.0-rc.8"), ROUTER_INTEGRITY);
+  assert.equal(selections.has("pnpm@12.5.1"), false);
+  assert.equal(
+    parsePnpmLockPackages(source.replace(/\n/g, "\r\n")).get("@tanstack/solid-router@2.0.0-rc.8"),
+    ROUTER_INTEGRITY
+  );
+  // A key both documents record alike is one answer (Readingroom's
+  // `detect-libc@2.1.2`).
+  const shared = parsePnpmLockPackages(realLockfile("readingroom.pnpm-lock.yaml"));
+  assert.equal(shared.get("detect-libc@2.1.2"), DETECT_LIBC_INTEGRITY);
+});
+
+test("the pnpm reader refuses a key the two documents resolve differently", () => {
+  const source = realLockfile("readingroom.pnpm-lock.yaml");
+  const separator = source.indexOf("\n---\n");
+  const env = source.slice(0, separator);
+  const main = source.slice(separator);
+  for (const [name, conflicting] of [
+    ["another integrity", env.replace(DETECT_LIBC_INTEGRITY, PNPM_INTEGRITY)],
+    [
+      "no registry integrity",
+      env.replace(`{integrity: ${DETECT_LIBC_INTEGRITY}}`, "{tarball: https://example.invalid/detect-libc.tgz}")
+    ]
+  ]) {
+    assert.notEqual(conflicting, env, name);
+    assert.throws(
+      () => parsePnpmLockPackages(`${conflicting}${main}`),
+      refusal("ambiguous-lock-selection"),
+      `${name} was read instead of refused`
+    );
+  }
+});
+
+test("the pnpm reader refuses every other document arrangement", () => {
+  const source = realLockfile("finds-team.pnpm-lock.yaml");
+  const separator = source.indexOf("\n---\n");
+  const env = source.slice("---\n".length, separator);
+  const main = source.slice(separator + "\n---\n".length);
+  for (const [name, lock] of [
+    ["a third document", `${source}---\n${main}`],
+    ["no start marker", source.slice("---\n".length)],
+    ["an end marker", `${source}...\n`],
+    ["a marker carrying content", source.replace("\n---\n", "\n--- {}\n")],
+    ["a separator with trailing space", source.replace("\n---\n", "\n--- \n")],
+    ["only an env document", `---\n${env}\n`],
+    ["only an env document and a separator", `---\n${env}\n---\n`],
+    ["the project document first", `---\n${main}\n---\n${env}\n`],
+    [
+      "an env document naming a project importer",
+      source.replace(
+        "        version: 12.5.1\n",
+        "        version: 12.5.1\n\n  frontend:\n    dependencies:\n      '@tanstack/solid-router':\n        specifier: 2.0.0-rc.8\n        version: 2.0.0-rc.8\n"
+      )
+    ],
+    [
+      "an env importer with project dependencies",
+      source.replace(
+        "    configDependencies: {}\n",
+        "    configDependencies: {}\n    dependencies:\n      '@tanstack/solid-router':\n        specifier: 2.0.0-rc.8\n        version: 2.0.0-rc.8\n"
+      )
+    ],
+    [
+      "an env document with settings",
+      source.replace("lockfileVersion: '9.0'\n", "lockfileVersion: '9.0'\n\nsettings:\n  autoInstallPeers: true\n")
+    ],
+    ["an env document of another major", source.replace("lockfileVersion: '9.0'", "lockfileVersion: '6.0'")],
+    ["an env document with no lockfileVersion", source.replace("lockfileVersion: '9.0'\n", "")]
+  ]) {
+    assert.throws(
+      () => parsePnpmLockPackages(lock),
+      error => error instanceof PublishedGraphAcquisitionRefusal,
+      `${name} was read instead of refused`
+    );
+  }
 });
 
 // npm lockfile v2/v3, mirroring `npm_selection_*` in `dependencies.rs`: the

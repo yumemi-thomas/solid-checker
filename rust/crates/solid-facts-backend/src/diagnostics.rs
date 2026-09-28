@@ -3058,9 +3058,31 @@ fn installed_package_name(package_directory: &Path) -> Option<String> {
     }
 }
 
+/// The `bun.lock` `lockfileVersion`s whose npm package records this reader has
+/// checked against Bun's parser (`src/install/lockfile/bun.lock.rs`): the
+/// tuple is `[name@version, registry, info, integrity]` at both. Version 1
+/// stopped listing a workspace package's dependencies; version 2 changed no
+/// content and only made the parser refuse what version 1 tolerated (an
+/// off-registry tarball without an integrity, an unsafe git tag), and Bun keeps
+/// a loaded version 1 at version 1 when it saves. Version 0 lists workspace
+/// packages differently, and version 3 lets `overrides` hold scoped rules;
+/// neither is read until someone checks their records the same way.
+const BUN_LOCKFILE_VERSIONS: [u32; 2] = [1, 2];
+
+/// The integrity `bun.lock` records for the package installed at
+/// `package_directory`, or `None` when it records none unambiguously.
+///
+/// Selection binds the exact installed identity, never the name alone: a
+/// record is this package's only when its identifier is exactly the installed
+/// directory's name at the installed manifest's version, and it is keyed at
+/// that name -- hoisted (`name`), nested (`parent/name`), or by the identity
+/// itself. Hoisting can record one name at several versions, so a key that
+/// matches the name while its identifier names another version describes
+/// another copy. Every selected record must carry an SRI integrity, and all of
+/// them the same one.
 fn bun_package_integrity(package_directory: &Path, data: &[u8]) -> Option<String> {
     let lockfile = parse_json_with_trailing_commas::<BunLockfile>(data)?;
-    if lockfile.lockfile_version != 2 {
+    if !BUN_LOCKFILE_VERSIONS.contains(&lockfile.lockfile_version) {
         return None;
     }
     let name = installed_package_name(package_directory)?;
@@ -3073,20 +3095,18 @@ fn bun_package_integrity(package_directory: &Path, data: &[u8]) -> Option<String
         return None;
     }
     let expected_identifier = format!("{name}@{version}");
+    let nested = format!("/{name}");
     let mut found = None;
     for (key, record) in lockfile.packages {
         let identifier = record.first().and_then(serde_json::Value::as_str);
-        if key != name
-            && key != expected_identifier
-            && identifier != Some(expected_identifier.as_str())
+        if identifier != Some(expected_identifier.as_str())
+            || !(key == name || key.ends_with(&nested) || key == expected_identifier)
         {
             continue;
         }
-        let Some(integrity) = record.get(3).and_then(serde_json::Value::as_str) else {
-            continue;
-        };
-        if integrity.is_empty() {
-            continue;
+        let integrity = record.get(3).and_then(serde_json::Value::as_str)?;
+        if !crate::contract_certification::is_sri_integrity(integrity) {
+            return None;
         }
         match &found {
             None => found = Some(integrity.to_owned()),
@@ -3726,6 +3746,159 @@ mod tests {
         );
 
         std::fs::remove_dir_all(&root).ok();
+    }
+
+    fn real_lockfile(name: &str) -> String {
+        std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/lockfiles")
+                .join(name),
+        )
+        .unwrap()
+    }
+
+    fn install(project: &Path, relative: &str, name: &str, version: &str) -> std::path::PathBuf {
+        let directory = project.join(relative);
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            directory.join("package.json"),
+            format!(r#"{{ "name": "{name}", "version": "{version}" }}"#),
+        )
+        .unwrap();
+        directory
+    }
+
+    const META_NEXT_2: &str = "sha512-4aqPczFqDdep4JTAUXfh4nyfq7InbTgimd7NuN6ZWWE29UPv0uR5dyr53yFcf2YgVXjFdX+JGhXtsE0njGL+fA==";
+    const META_0_29_4: &str = "sha512-zdIWBGpR9zGx1p1bzIPqF5Gs+Ks/BH8R6fWhmUa/dcK1L2rUC8BAcZJzNRYBQv74kScf1TSOs0EY//Vd/I0V8g==";
+
+    /// `bun.lock` `lockfileVersion: 1` writes the same npm package tuple as
+    /// version 2 (Civil's real lockfile), so its integrity is read -- bound to
+    /// the exact installed identity. Civil hoists `@solidjs/meta` at
+    /// `1.0.0-next.2` and nests `0.29.4` under `@tanstack/solid-router`: the
+    /// nested copy's own record answers for it, where matching the hoisted key
+    /// by name alone would hand it the other version's integrity.
+    #[test]
+    fn a_bun_lock_version_1_states_the_exact_installed_integrity() {
+        let project = scratch("bun-lock-v1");
+        let lock = real_lockfile("civil.bun.lock");
+        std::fs::write(project.join("bun.lock"), &lock).unwrap();
+        let hoisted = install(
+            &project,
+            "node_modules/@solidjs/meta",
+            "@solidjs/meta",
+            "1.0.0-next.2",
+        );
+        let nested = install(
+            &project,
+            "node_modules/@tanstack/solid-router/node_modules/@solidjs/meta",
+            "@solidjs/meta",
+            "0.29.4",
+        );
+        let integrity =
+            |directory: &Path| installed_package_integrity(&project, directory).unwrap();
+        assert_eq!(integrity(&hoisted), Some(META_NEXT_2.to_owned()));
+        assert_eq!(integrity(&nested), Some(META_0_29_4.to_owned()));
+        // A version the lockfile never recorded has no record, though the
+        // hoisted key carries the name.
+        let unrecorded = install(
+            &project,
+            "node_modules/@solidjs/meta",
+            "@solidjs/meta",
+            "1.0.0-next.3",
+        );
+        assert_eq!(integrity(&unrecorded), None);
+        install(
+            &project,
+            "node_modules/@solidjs/meta",
+            "@solidjs/meta",
+            "1.0.0-next.2",
+        );
+
+        // Each refusal kept, one change to the real bytes at a time.
+        for (name, changed) in [
+            (
+                "an unknown lockfileVersion",
+                lock.replacen("\"lockfileVersion\": 1,", "\"lockfileVersion\": 3,", 1),
+            ),
+            (
+                "lockfileVersion 0",
+                lock.replacen("\"lockfileVersion\": 1,", "\"lockfileVersion\": 0,", 1),
+            ),
+            (
+                "no lockfileVersion",
+                lock.replacen("  \"lockfileVersion\": 1,\n", "", 1),
+            ),
+            (
+                "a missing integrity",
+                lock.replacen(&format!(", \"{META_NEXT_2}\"]"), "]", 1),
+            ),
+            (
+                "an empty integrity",
+                lock.replacen(META_NEXT_2, "", 1),
+            ),
+            (
+                "an integrity that is not SRI",
+                lock.replacen(META_NEXT_2, "md5-4aqPczFqDdep4JTAUXfh4n==", 1),
+            ),
+            (
+                "a conflicting duplicate record",
+                lock.replacen(
+                    "  \"packages\": {\n",
+                    &format!(
+                        "  \"packages\": {{\n    \"other/@solidjs/meta\": [\"@solidjs/meta@1.0.0-next.2\", \"\", {{}}, \"{META_0_29_4}\"],\n\n"
+                    ),
+                    1,
+                ),
+            ),
+        ] {
+            assert_ne!(changed, lock, "{name}");
+            std::fs::write(project.join("bun.lock"), &changed).unwrap();
+            assert_eq!(integrity(&hoisted), None, "{name} was read instead of refused");
+        }
+        // An agreeing duplicate is one fact.
+        std::fs::write(
+            project.join("bun.lock"),
+            lock.replacen(
+                "  \"packages\": {\n",
+                &format!(
+                    "  \"packages\": {{\n    \"other/@solidjs/meta\": [\"@solidjs/meta@1.0.0-next.2\", \"\", {{}}, \"{META_NEXT_2}\"],\n\n"
+                ),
+                1,
+            ),
+        )
+        .unwrap();
+        assert_eq!(integrity(&hoisted), Some(META_NEXT_2.to_owned()));
+        std::fs::remove_dir_all(&project).ok();
+    }
+
+    /// The pnpm arm reads a pnpm 11+ lockfile's project document, the same
+    /// reader certification uses, so admission and the certified dependency
+    /// environment state one integrity for it (finds.team's real lockfile).
+    #[test]
+    fn a_pnpm_11_lockfile_states_the_project_documents_integrity() {
+        let project = scratch("pnpm-env-document");
+        std::fs::write(
+            project.join("pnpm-lock.yaml"),
+            real_lockfile("finds-team.pnpm-lock.yaml"),
+        )
+        .unwrap();
+        let router = install(
+            &project,
+            "node_modules/@tanstack/solid-router",
+            "@tanstack/solid-router",
+            "2.0.0-rc.8",
+        );
+        let pnpm = install(&project, "node_modules/pnpm", "pnpm", "12.5.1");
+        assert_eq!(
+            installed_package_integrity(&project, &router).unwrap(),
+            Some(
+                "sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA=="
+                    .to_owned()
+            )
+        );
+        // pnpm itself is the env document's, installed outside the project.
+        assert_eq!(installed_package_integrity(&project, &pnpm).unwrap(), None);
+        std::fs::remove_dir_all(&project).ok();
     }
 
     #[test]

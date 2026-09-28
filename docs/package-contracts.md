@@ -182,6 +182,21 @@ importers reach more than one install is never admitted project-wide. A
 refusal is explained from the install that was refused. A project whose
 importers all reach its own installs is admitted exactly as before.
 
+These lockfiles state the installed integrity:
+
+- `package-lock.json` or `node_modules/.package-lock.json` at `lockfileVersion`
+  2 or 3;
+- `bun.lock` at `lockfileVersion` 1 or 2;
+- `pnpm-lock.yaml` major 9, including the pnpm 11+ file that leads with an env
+  document (ADR 0108's amendment);
+- Yarn classic `yarn.lock`.
+
+npm records are selected by install path. Bun, pnpm and Yarn records are
+selected by the installed package's name at its manifest version, never by
+name alone. A Bun or pnpm record must also carry an SRI integrity. Records
+that disagree state nothing. `bun.lockb`, `bun.lock` versions 0 and 3, Yarn Berry
+and every other shape state no integrity, so they admit nothing.
+
 A patched dependency is refused even though its lockfile still states the
 published integrity (ADR 0131). The imported package's installed files must
 reproduce the archive the receipt signs (`snapshotRoot`), whatever changed
