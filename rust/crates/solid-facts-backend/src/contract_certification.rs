@@ -759,6 +759,11 @@ impl CertificationPlan {
         // candidate count.
         let mut withheld_operations: Vec<WithheldOperation> = Vec::new();
         let mut synthesized: Option<synthesized_vetoes::SynthesizedCorpus> = seed;
+        // ADR 0153 part 3: the context premises the census named as the
+        // condition an export's closures hold under. Each pass that adds one
+        // states at least one more name, so the loop stays bounded by the
+        // escaping context names on top of the rungs above.
+        let mut stated_premises: Vec<StatedContextPremise> = Vec::new();
         // Set when a synthesized corpus could not run for this artifact case
         // and its served candidates were withheld by name: the plan then keeps
         // the hand corpus, and synthesis is not attempted a second time.
@@ -768,7 +773,8 @@ impl CertificationPlan {
                 .as_ref()
                 .map(synthesized_vetoes::SynthesizedCorpus::configuration)
                 .or(probes);
-            let gated = self.recipe_gated_with_operations(
+            let premised = self.with_stated_premises(&stated_premises)?;
+            let gated = premised.recipe_gated_with_operations(
                 configuration.map(ProbeHarnessConfiguration::recipe_corpus),
                 &already_withheld,
                 &withheld_operations,
@@ -803,7 +809,17 @@ impl CertificationPlan {
                     // refusal the census recorded, and withdrawing only the
                     // closures here would spend a whole producer acquisition
                     // to rediscover the operations on the next one.
-                    let records = census_refusal_withholding(plan, &error);
+                    // ADR 0153 part 3 first: a closure the census refused only
+                    // for want of a context premise is re-planned under that
+                    // premise rather than withheld. A requirement already
+                    // stated is not progress, and its refusal is withheld
+                    // like any other.
+                    let stated = state_context_premises(
+                        &mut stated_premises,
+                        census_premise_requirements(plan, &error),
+                    );
+                    let mut records = census_refusal_withholding(plan, &error);
+                    records.retain(|record| !premise_restated(record, &stated));
                     // A record already held is not progress — the same refusal
                     // twice means the weakening did not reach it — so the
                     // transaction refuses rather than looping.
@@ -817,7 +833,7 @@ impl CertificationPlan {
                             })
                         })
                         .collect::<Vec<_>>();
-                    if records.is_empty() && operations.is_empty() {
+                    if records.is_empty() && operations.is_empty() && stated.is_empty() {
                         return Err(error.into());
                     }
                     already_withheld.extend(records);
@@ -860,7 +876,7 @@ impl CertificationPlan {
                             && let Some(base) = probes
                             && synthesized_veto_cannot_run(&error)
                         {
-                            let served = self
+                            let served = premised
                                 .recipe_gated_with(Some(base.recipe_corpus()), &already_withheld)?;
                             let records =
                                 synthesized_cannot_run_withholding(plan, served.withheld(), &error);
@@ -932,6 +948,138 @@ impl CertificationPlan {
     ) -> Result<VerifiedCompilerEvidence, CompilerCertificationError> {
         compiler_facts::verify(self, schedule, evidence)
     }
+}
+
+/// ADR 0153 part 3: the context premises one export's claims are certified
+/// under, as the transaction states them after the census names them.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StatedContextPremise {
+    pub artifact_case: String,
+    pub export: String,
+    /// The package export names the context escapes as.
+    pub names: BTreeSet<String>,
+}
+
+/// ADR 0153 part 3: the premises a Type Facts refusal requires, each on the
+/// export whose closure census named it. Only a proposable call-domain
+/// closure's census can name one; every other refusal yields nothing.
+pub(super) fn census_premise_requirements(
+    plan: &CertificationPlan,
+    error: &TypeFactsCertificationError,
+) -> Vec<StatedContextPremise> {
+    let mut error = error;
+    while let TypeFactsCertificationError::TransactionStage { source, .. }
+    | TypeFactsCertificationError::GraphNodeStage { source, .. } = error
+    {
+        error = source;
+    }
+    let refusals: Vec<(&str, &str)> = match error {
+        TypeFactsCertificationError::UnsupportedDemand { demand, reason }
+        | TypeFactsCertificationError::FamilyOpen { demand, reason } => {
+            vec![(demand.as_str(), reason.as_str())]
+        }
+        TypeFactsCertificationError::CensusRefused { refusals } => refusals
+            .iter()
+            .map(|refusal| (refusal.demand.as_str(), refusal.reason.as_str()))
+            .collect(),
+        _ => return Vec::new(),
+    };
+    refusals
+        .into_iter()
+        .filter_map(|(demand_id, reason)| {
+            let names = type_facts::context_premise_requirement(reason)?;
+            let demand = plan
+                .demand_graph()
+                .demands()
+                .iter()
+                .find(|demand| demand.id().as_str() == demand_id)?;
+            let ProofDemandSubject::DomainClosure { subject, .. } = demand.subject() else {
+                return None;
+            };
+            let SemanticClaimPath::Domain(ClaimPath::Call(domain)) = subject.path else {
+                return None;
+            };
+            domain.is_proposable().then(|| StatedContextPremise {
+                artifact_case: subject.artifact_case.clone(),
+                export: subject.export.clone(),
+                names: names.into_iter().collect(),
+            })
+        })
+        .collect()
+}
+
+/// Merges `required` into `stated`, returning the `(artifact case, export)`
+/// pairs that gained a name. A requirement whose every name is already stated
+/// is not progress and is not returned: its census refused under the premise,
+/// so the premise is not what it needs.
+pub(super) fn state_context_premises(
+    stated: &mut Vec<StatedContextPremise>,
+    required: Vec<StatedContextPremise>,
+) -> BTreeSet<(String, String)> {
+    let mut progressed = BTreeSet::new();
+    for requirement in required {
+        let position = stated.iter().position(|premise| {
+            premise.artifact_case == requirement.artifact_case
+                && premise.export == requirement.export
+        });
+        let entry = if let Some(position) = position {
+            &mut stated[position]
+        } else {
+            stated.push(StatedContextPremise {
+                artifact_case: requirement.artifact_case.clone(),
+                export: requirement.export.clone(),
+                names: BTreeSet::new(),
+            });
+            stated.last_mut().expect("just pushed")
+        };
+        let before = entry.names.len();
+        entry.names.extend(requirement.names);
+        if entry.names.len() > before {
+            progressed.insert((requirement.artifact_case, requirement.export));
+        }
+    }
+    stated.retain(|premise| !premise.names.is_empty());
+    progressed
+}
+
+/// Whether a withheld-closure record is a premise refusal this pass answered
+/// by stating the premise instead.
+pub(super) fn premise_restated(
+    record: &WithheldClosure,
+    progressed: &BTreeSet<(String, String)>,
+) -> bool {
+    type_facts::context_premise_requirement(&record.reason).is_some()
+        && progressed.contains(&(record.artifact_case.clone(), record.export.clone()))
+}
+
+/// The candidate with every stated premise attached to its export.
+pub(crate) fn context_premise_statement(
+    candidate: &NormalizedContract,
+    stated: &[StatedContextPremise],
+) -> Result<NormalizedContract, RecipeGatingError> {
+    let mut artifact_cases = candidate.artifact_cases().to_vec();
+    for premise in stated {
+        let export = artifact_cases
+            .iter_mut()
+            .find(|case| case.id == premise.artifact_case)
+            .and_then(|case| case.exports.get_mut(&premise.export))
+            .ok_or_else(|| RecipeGatingError::MissingExport {
+                artifact_case: premise.artifact_case.clone(),
+                export: premise.export.clone(),
+            })?;
+        export.add_context_premises(premise.names.iter().map(|name| {
+            solid_reactive_ir::contract_semantics::ContextPremise {
+                export: name.clone(),
+            }
+        }));
+    }
+    ContractProposal::new(candidate.package().clone(), artifact_cases)
+        .normalize()
+        .map_err(|error| {
+            RecipeGatingError::Replanning(CertificationPlanningError::InvalidCandidate(
+                error.to_string(),
+            ))
+        })
 }
 
 /// ADR 0036 § 1: the proposed closure candidate a Type Facts refusal names,
@@ -2157,6 +2305,21 @@ impl CertificationPlan {
         let weakened = withheld_operation_weakening(&self.selected_candidate, withheld_operations)?;
         self.replanned_with(weakened)?
             .recipe_gated_with(recipe_corpus, already_withheld)
+    }
+
+    /// This plan with the stated context premises attached (ADR 0153 part 3),
+    /// re-derived; the plan itself when none is stated. A premise names no
+    /// claim and moves no claim id, so every recipe and withheld record keyed
+    /// by one still binds.
+    pub fn with_stated_premises(
+        &self,
+        stated: &[StatedContextPremise],
+    ) -> Result<std::borrow::Cow<'_, Self>, RecipeGatingError> {
+        if stated.is_empty() {
+            return Ok(std::borrow::Cow::Borrowed(self));
+        }
+        self.replanned_with(context_premise_statement(&self.selected_candidate, stated)?)
+            .map(std::borrow::Cow::Owned)
     }
 
     /// Re-derives the candidate universe, demand graph and witness bindings for
@@ -4200,6 +4363,70 @@ mod tests {
 
     use std::io::Write as _;
     use std::sync::Arc;
+
+    /// ADR 0153 part 3: stating a premise is progress exactly once per name.
+    /// A requirement whose names are all stated already is not, so its
+    /// refusal is withheld like any other and the loop stays bounded.
+    #[test]
+    fn a_context_premise_is_stated_once_and_a_repeat_is_not_progress() {
+        let requirement = |export: &str, names: &[&str]| super::StatedContextPremise {
+            artifact_case: "case".into(),
+            export: export.into(),
+            names: names.iter().map(|name| (*name).to_owned()).collect(),
+        };
+        let mut stated = Vec::new();
+        let progressed =
+            super::state_context_premises(&mut stated, vec![requirement("useA", &["Ctx"])]);
+        assert_eq!(
+            progressed,
+            BTreeSet::from([("case".to_owned(), "useA".to_owned())])
+        );
+        assert!(
+            super::state_context_premises(&mut stated, vec![requirement("useA", &["Ctx"])])
+                .is_empty()
+        );
+        let progressed = super::state_context_premises(
+            &mut stated,
+            vec![
+                requirement("useA", &["Ctx", "Other"]),
+                requirement("useB", &["Ctx"]),
+            ],
+        );
+        assert_eq!(progressed.len(), 2);
+        assert_eq!(
+            stated,
+            vec![
+                requirement("useA", &["Ctx", "Other"]),
+                requirement("useB", &["Ctx"]),
+            ]
+        );
+        let record = |reason: &str| super::WithheldClosure {
+            artifact_case: "case".into(),
+            export: "useB".into(),
+            domain: "creates".into(),
+            semantic_claim_id: "claim".into(),
+            reason: reason.into(),
+            recipe_address: None,
+        };
+        let premise_reason = format!(
+            "{}{}[\"Ctx\"]{}",
+            super::WITHHELD_CLOSURE_CENSUS_REFUSED_PREFIX,
+            super::type_facts::CONTEXT_PREMISE_REQUIRED_PREFIX,
+            super::type_facts::CONTEXT_PREMISE_REQUIRED_SUFFIX
+        );
+        assert!(super::premise_restated(
+            &record(&premise_reason),
+            &progressed
+        ));
+        assert!(!super::premise_restated(
+            &record(&premise_reason),
+            &BTreeSet::new()
+        ));
+        assert!(!super::premise_restated(
+            &record("census refused: something else"),
+            &progressed
+        ));
+    }
 
     fn archive_bytes(files: &[(&str, &[u8])]) -> Vec<u8> {
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());

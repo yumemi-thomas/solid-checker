@@ -1333,6 +1333,13 @@ pub struct ContractExport {
     /// composition from the dependency's receipt rather than by a census of
     /// bytes this artifact does not contain.
     pub inherited_from: Option<InheritedExportOrigin>,
+    /// ADR 0153 part 3: the package exports whose contexts this export's
+    /// claims assume no value from outside the package for, read from the
+    /// accepted document. A consumer program that provides one of them loses
+    /// every claim of the export at its import (`contracts.rs`,
+    /// `provided_context_premises`). Empty for every summary that states none,
+    /// and for every locally inferred summary.
+    pub context_premises: Vec<String>,
 }
 
 /// The accepted dependency export a re-exported public name was projected

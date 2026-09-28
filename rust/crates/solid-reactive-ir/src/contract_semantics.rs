@@ -68,6 +68,11 @@ pub const SEMANTIC_INVOKE_PROTOCOL_MARKER: &str = "solid-checker:semantic-invoke
 /// (ADR 0139). A stream with no such operation never writes it, so it hashes
 /// exactly as it did before the event existed.
 pub const SEMANTIC_RESULT_ACCESS_MARKER: &str = "solid-checker:semantic-result-access:v1";
+/// The length-prefixed marker a semantic digest writes first when some export
+/// it encodes states a [`ContextPremise`] (ADR 0153 part 3). A contract with
+/// none never writes it, so it hashes exactly as it did before premises
+/// existed.
+pub const SEMANTIC_CONTEXT_PREMISES_MARKER: &str = "solid-checker:semantic-context-premises:v1";
 pub const SEMANTIC_CLAIM_ID_VERSION: u16 = 1;
 /// Version of the byte-only artifact-case identity a [`RecipeAddress`] binds.
 pub const ARTIFACT_CASE_BYTES_VERSION: u16 = 1;
@@ -855,6 +860,13 @@ impl ExportSemantics {
         }
     }
 
+    /// Adds context premises to this export's claims (ADR 0153 part 3). A
+    /// premise only ever weakens: the claims it conditions are the same
+    /// claims, now stated for fewer programs.
+    pub fn add_context_premises(&mut self, premises: impl IntoIterator<Item = ContextPremise>) {
+        self.call.context_premises.extend(premises);
+    }
+
     /// Clears `composed_from` naming any withdrawn `(export, operation)` of
     /// this artifact case.
     ///
@@ -1270,6 +1282,15 @@ pub struct CallSemantics {
     /// same reason `composed_from` is — the two documents mean different
     /// things, and a receipt for one must not authenticate the other.
     proposed_closures: BTreeSet<ClaimDomain>,
+    /// ADR 0153 part 3: the conditions every claim of this export holds under.
+    /// Each names a context this package exports, and the claims hold only in
+    /// a program where that context receives no value from outside the
+    /// package. Empty for every export whose certification needed none.
+    ///
+    /// It is a condition, not a closure: weakening a candidate's closures
+    /// keeps it, and a consumer that cannot show the condition holds reads
+    /// every domain of the export as open.
+    context_premises: BTreeSet<ContextPremise>,
     pub operations: Vec<Operation>,
     pub edges: Vec<OperationEdge>,
     pub resources: Vec<Resource>,
@@ -1288,6 +1309,7 @@ impl CallSemantics {
         Self {
             claims,
             proposed_closures: BTreeSet::new(),
+            context_premises: BTreeSet::new(),
             operations,
             edges,
             resources,
@@ -1311,6 +1333,22 @@ impl CallSemantics {
         &self.proposed_closures
     }
 
+    /// The same call semantics, holding only under the named context
+    /// premises as well (ADR 0153 part 3).
+    #[must_use]
+    pub fn with_context_premises(
+        mut self,
+        premises: impl IntoIterator<Item = ContextPremise>,
+    ) -> Self {
+        self.context_premises.extend(premises);
+        self
+    }
+
+    #[must_use]
+    pub const fn context_premises(&self) -> &BTreeSet<ContextPremise> {
+        &self.context_premises
+    }
+
     #[must_use]
     pub fn claim_state(&self, domain: ClaimDomain) -> KnowledgeState {
         self.claims.state(domain)
@@ -1320,6 +1358,20 @@ impl CallSemantics {
     pub const fn claims(&self) -> &CallClaims {
         &self.claims
     }
+}
+
+/// ADR 0153 part 3: a context this package exports as `export` receives no
+/// value from outside the package in the program the claims are used in.
+///
+/// A context that a package creates and provides itself can only be read as
+/// what the package provided, and a certification may rest a claim on that.
+/// Once the context escapes through an export, a consumer can provide its own
+/// value (`<RouterContext value={mock}>`), so the claim is stated under this
+/// premise, and the consumer discharges it or loses the claim.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+pub struct ContextPremise {
+    /// The package export the context escapes under (`RouterContext`).
+    pub export: String,
 }
 
 #[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]

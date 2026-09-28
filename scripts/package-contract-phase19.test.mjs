@@ -291,7 +291,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // 161 on 2026-09-29 adds implementation-census-callback-lower-bound's
       // main document, the corpus pin of ADR 0159: a direct call of a callback
       // under a condition may run, and is never a lower bound.
-      stableMainDocuments: 161,
+      //
+      // 167 on 2026-09-29 adds the six package-context-premise-* fixtures'
+      // hand-stated router documents, the consumer half of ADR 0153 part 3.
+      stableMainDocuments: 167,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

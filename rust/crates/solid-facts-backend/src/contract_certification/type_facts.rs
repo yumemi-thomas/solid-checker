@@ -11254,6 +11254,11 @@ struct CensusRun<'a> {
     /// The calls this walk dispositioned
     /// [`CensusDisposition::CapturedParameterCall`].
     captured_parameter_calls: Vec<CapturedParameterCall>,
+    /// ADR 0153 part 3: the context premises the export under census states,
+    /// by the package export each context escapes as. An escaping context is
+    /// admitted exactly when every name it escapes under is here. Empty for
+    /// every census that is not a `creates` or `callbacks` closure's.
+    context_premises: std::collections::BTreeSet<String>,
 }
 
 /// ADR 0152: one call of an export argument a returned literal captured, as
@@ -11509,9 +11514,25 @@ fn census_call_walk(
     declared: &typefacts::ExportValueTranscript,
     implementation: &typefacts::ExportImplementationTranscript,
     evidence: CensusEvidence<'_>,
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
 ) -> Result<CensusWalkPass, TypeFactsCertificationError> {
-    census_call_walk_with_dispositions(plan, refuse, declared, implementation, evidence, None, None)
-        .map(|(pass, _)| pass)
+    let premises = export
+        .call
+        .context_premises()
+        .iter()
+        .map(|premise| premise.export.clone())
+        .collect();
+    census_call_walk_with_dispositions(
+        plan,
+        refuse,
+        declared,
+        implementation,
+        evidence,
+        None,
+        None,
+        premises,
+    )
+    .map(|(pass, _)| pass)
 }
 
 /// What a walk recorded beside its pass, which only ADR 0145/0146's
@@ -11532,6 +11553,7 @@ fn census_call_walk_with_dispositions(
     evidence: CensusEvidence<'_>,
     owned_signal_scope: Option<&typefacts::ExportImplementationTranscript>,
     described_literal: Option<&typefacts::Location>,
+    context_premises: std::collections::BTreeSet<String>,
 ) -> Result<(CensusWalkPass, CensusWalkRecord), TypeFactsCertificationError> {
     let mut run = CensusRun {
         certified: &plan.snapshot,
@@ -11552,6 +11574,7 @@ fn census_call_walk_with_dispositions(
         owned_signal_read_calls: Vec::new(),
         described_literal: described_literal.cloned(),
         captured_parameter_calls: Vec::new(),
+        context_premises,
     };
     // Seeded with the demanded export, so a helper calling back into it refuses
     // as a cycle rather than running out of depth.
@@ -11766,7 +11789,7 @@ fn census_creates_domain(
         )));
     }
     let (outcome, sites, requested, _caller_supplied) =
-        census_call_walk(plan, &refuse, declared, implementation, evidence)?;
+        census_call_walk(plan, &refuse, declared, implementation, evidence, export)?;
     Ok((outcome, sites, requested))
 }
 
@@ -11849,7 +11872,7 @@ fn census_callbacks_domain(
         ))
     })?;
     let (outcome, mut sites, requested, caller_supplied) =
-        census_call_walk(plan, &refuse, transcript, implementation, evidence)?;
+        census_call_walk(plan, &refuse, transcript, implementation, evidence, export)?;
     if matches!(outcome, CensusOutcome::Decided { .. }) {
         match &described {
             None => {
@@ -12786,6 +12809,7 @@ fn census_reads_domain(
         owned_signal_read_calls: Vec::new(),
         described_literal: None,
         captured_parameter_calls: Vec::new(),
+        context_premises: std::collections::BTreeSet::new(),
     };
     // ADR 0107: the one premise here whose other half lives in a callee, so
     // the transcripts it needs are demanded before any form is decided.
@@ -13930,6 +13954,7 @@ fn described_callable_body(
             evidence,
             Some(outer),
             Some(literal_location),
+            std::collections::BTreeSet::new(),
         )
         .map_err(|error| match error {
             TypeFactsCertificationError::UnsupportedDemand { reason, .. } => reason,
@@ -15370,9 +15395,12 @@ fn census_parameter_or_own_result_is_bound(
 /// itself, it does:
 ///
 /// 1. the form is a read of a member and states no other derivation;
-/// 2. the context does not escape the package. A consumer could provide an
-///    escaped context, and until admission can see whether it does, this
-///    refuses (ADR 0153 part 3, fail closed);
+/// 2. the context does not escape the package, or the export states a context
+///    premise for every name it escapes under (ADR 0153 part 3). A consumer
+///    could provide an escaped context; the premise makes the claim hold only
+///    where none does, and consumer admission checks that. This clause is
+///    checked last, so a premise is asked for only when every other clause
+///    holds;
 /// 3. each chain call is the one row at its location in the transcript this
 ///    census is walking, its callee is a stable declaration in the
 ///    artifact's own runtime source, and that declaration's transcript --
@@ -15414,20 +15442,6 @@ fn census_context_member_refusal(
             "the form is not a read of a member with no other subject derivation".into(),
         ));
     }
-    if !premise.context.exports.is_empty() {
-        let names = premise
-            .context
-            .exports
-            .iter()
-            .map(|export| format!("`{}`", export.name))
-            .collect::<Vec<_>>()
-            .join(", ");
-        return Ok(Some(format!(
-            "the context escapes the package as {names}, so a consumer could provide it, and \
-             admission cannot yet see whether one does"
-        )));
-    }
-
     let evidence = run.evidence;
     let mut current = implementation;
     for step in &premise.chain {
@@ -15587,11 +15601,51 @@ fn census_context_member_refusal(
             )));
         }
     }
+    // ADR 0153 part 3, checked last so that a premise is only ever asked
+    // for a read every other clause admits: an escaping context is admitted
+    // exactly when the export states a premise for every name it escapes
+    // under. Otherwise the
+    // refusal names them in the one spelling `context_premise_requirement`
+    // reads back, and the transaction re-plans the export under that premise.
+    let unstated = premise
+        .context
+        .exports
+        .iter()
+        .map(|export| export.name.clone())
+        .filter(|name| !run.context_premises.contains(name))
+        .collect::<std::collections::BTreeSet<_>>();
+    if !unstated.is_empty() {
+        return Ok(Some(format!(
+            "{CONTEXT_PREMISE_REQUIRED_PREFIX}{}{CONTEXT_PREMISE_REQUIRED_SUFFIX}",
+            serde_json::to_string(&unstated).expect("native premise names encoding")
+        )));
+    }
     run.sites.push(format!(
         "census-context-member:{}",
         serde_json::to_string(premise).expect("native context member encoding")
     ));
     Ok(None)
+}
+
+/// The spelling a context-member refusal names the premises it needs in (ADR
+/// 0153 part 3): the prefix, a JSON array of package export names, the
+/// suffix. [`context_premise_requirement`] is the only reader.
+pub(crate) const CONTEXT_PREMISE_REQUIRED_PREFIX: &str = "context premise required: ";
+pub(crate) const CONTEXT_PREMISE_REQUIRED_SUFFIX: &str = concat!(
+    " (the context escapes the package, so a consumer could provide it; ",
+    "the claim holds only where none does)"
+);
+
+/// The premise names a census refusal requires, when the refusal is a
+/// context-member one and says so in [`CONTEXT_PREMISE_REQUIRED_PREFIX`]'s
+/// spelling. `None` for every other refusal.
+pub(crate) fn context_premise_requirement(reason: &str) -> Option<Vec<String>> {
+    let start =
+        reason.find(CONTEXT_PREMISE_REQUIRED_PREFIX)? + CONTEXT_PREMISE_REQUIRED_PREFIX.len();
+    let rest = &reason[start..];
+    let end = rest.find(CONTEXT_PREMISE_REQUIRED_SUFFIX)?;
+    let names: Vec<String> = serde_json::from_str(&rest[..end]).ok()?;
+    (!names.is_empty() && names.iter().all(|name| !name.is_empty())).then_some(names)
 }
 
 fn census_location_contains(outer: &typefacts::Location, inner: &typefacts::Location) -> bool {
@@ -27883,6 +27937,7 @@ mod tests {
             owned_signal_read_calls: Vec::new(),
             described_literal: None,
             captured_parameter_calls: Vec::new(),
+            context_premises: std::collections::BTreeSet::new(),
         }
     }
 
@@ -30270,6 +30325,9 @@ mod tests {
         for variant in [
             "exact",
             "escaped",
+            "escaped-stated",
+            "escaped-other-stated",
+            "escaped-stated-broken",
             "subject-root",
             "undialect-read",
             "unrecognized-role",
@@ -30283,10 +30341,15 @@ mod tests {
             let mut form = original.clone();
             let premise = form.context_member.as_mut().unwrap();
             match variant {
-                "escaped" => premise.context.exports.push(typefacts::ContextExport {
-                    location: location("export const useLocation"),
-                    name: "RouterContext".into(),
-                }),
+                "escaped" | "escaped-stated" | "escaped-other-stated" | "escaped-stated-broken" => {
+                    premise.context.exports.push(typefacts::ContextExport {
+                        location: location("export const useLocation"),
+                        name: "RouterContext".into(),
+                    });
+                    if variant == "escaped-stated-broken" {
+                        premise.context.reads[0].call.start_byte += 1;
+                    }
+                }
                 "subject-root" => form.subject_root = "parameter".into(),
                 "undialect-read" => {
                     // A `useContext` declared in the consumer's own file.
@@ -30312,6 +30375,16 @@ mod tests {
                 _ => {}
             }
             let mut run = census_run(&certified, &roots);
+            // ADR 0153 part 3: the premise the export states.
+            match variant {
+                "escaped-stated" | "escaped-stated-broken" => {
+                    run.context_premises.insert("RouterContext".into());
+                }
+                "escaped-other-stated" => {
+                    run.context_premises.insert("OtherContext".into());
+                }
+                _ => {}
+            }
             run.evidence = CensusEvidence {
                 roots: &roots,
                 locals: if variant == "missing-chain-transcript" {
@@ -30322,24 +30395,24 @@ mod tests {
                 dependencies: &[],
             };
             let refusal = census_context_member_refusal(&mut run, &implementation, &form).unwrap();
+            let admitted = matches!(variant, "exact" | "escaped-stated");
+            assert_eq!(refusal.is_none(), admitted, "{variant}: {refusal:?}");
+            // The requirement is spelled so the transaction can read it back,
+            // and only for an escape; a broken leg under a stated premise is
+            // that leg's refusal, never a premise request.
             assert_eq!(
-                refusal.is_none(),
-                variant == "exact",
+                refusal
+                    .as_deref()
+                    .and_then(super::context_premise_requirement),
+                matches!(variant, "escaped" | "escaped-other-stated")
+                    .then(|| vec!["RouterContext".to_owned()]),
                 "{variant}: {refusal:?}"
             );
-            if variant == "escaped" {
-                assert!(
-                    refusal
-                        .as_deref()
-                        .is_some_and(|reason| reason.contains("`RouterContext`")),
-                    "{refusal:?}"
-                );
-            }
             assert_eq!(
                 run.sites
                     .iter()
                     .any(|site| site.starts_with("census-context-member:")),
-                variant == "exact",
+                admitted,
                 "{variant}"
             );
         }

@@ -108,6 +108,19 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                         "Pass the callback to {export} as an inline function literal so the contract's argument claims land on its parameters. A callback passed by name, or a claim shape solid-checker does not model, keeps the call uncertifiable. See docs/package-contracts.md for the format."
                     ),
                 )
+            } else if let Some(contexts) = defect
+                .analysis_context
+                .strip_prefix(crate::contracts::CONTEXT_PREMISE_UNMET_CONTEXT)
+            {
+                (
+                    format!(
+                        "the reactivity contract for {module} states its claims for {} export {export} only in a program where the context it exports as {contexts} receives no value from outside {module}, and this project provides it, passes it where solid-checker cannot follow, or installs another package that depends on {module}; none of the export's claims apply here",
+                        if *reexported { "re-exported" } else { "imported" }
+                    ),
+                    format!(
+                        "Read {contexts} only through useContext({contexts}). A value the project provides itself (<{contexts} value={{…}}>, createComponent({contexts}, …)) replaces the package's, so the certified claims about {export} cannot hold for it. See docs/adr/0153-a-member-of-a-package-owned-context-value.md."
+                    ),
+                )
             } else if let Some(claims) = defect
                 .analysis_context
                 .strip_prefix("unknown-contract-claims:")
@@ -368,6 +381,13 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 .starts_with("unknown-contract-claims:") =>
         {
             "the imported package contract explicitly marks a required effect claim as unknown"
+        }
+        StaticDefectKind::PackageContractExportMissing { .. }
+            if defect
+                .analysis_context
+                .starts_with(crate::contracts::CONTEXT_PREMISE_UNMET_CONTEXT) =>
+        {
+            "the imported package contract states its claims under a context premise this project does not meet"
         }
         // The acceptance gate and the missing-summary case shared this arm, and
         // its wording is only true of the second: at the acceptance gate there

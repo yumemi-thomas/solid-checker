@@ -128,6 +128,13 @@ pub struct AcceptedContractIndex {
     /// sentence -- replayed from another copy -- is not its explanation.
     /// Empty for every project whose importers all reach its own installs.
     admission_refusals_at: BTreeMap<(String, String), Option<String>>,
+    /// ADR 0153 part 3: packages whose installed tree holds another package
+    /// that declares a dependency on them. That package's code may provide a
+    /// context the depended-on package exports, and the analysis does not see
+    /// it, so every context premise of such a package is unmet here. Filled by
+    /// the backend, which reads the installed manifests; empty otherwise. Part
+    /// of the cache fingerprint because it changes findings.
+    context_provided_packages: BTreeSet<String>,
     identity: Vec<AcceptedImportIdentity>,
     /// Project catalogs that apply only to the files below one directory:
     /// the `.solid-checker/` of a directory strictly inside the analysed
@@ -390,6 +397,7 @@ impl AcceptedContractIndex {
             uncertifiable_imports: BTreeMap::new(),
             admission_refusals: BTreeMap::new(),
             admission_refusals_at: BTreeMap::new(),
+            context_provided_packages: BTreeSet::new(),
             identity: Vec::new(),
             scopes: Vec::new(),
         }
@@ -446,6 +454,7 @@ impl AcceptedContractIndex {
             uncertifiable_imports: BTreeMap::new(),
             admission_refusals: BTreeMap::new(),
             admission_refusals_at: BTreeMap::new(),
+            context_provided_packages: BTreeSet::new(),
             identity,
             scopes: Vec::new(),
         })
@@ -538,6 +547,8 @@ impl AcceptedContractIndex {
         for (key, refusal) in fallback.admission_refusals_at {
             self.admission_refusals_at.entry(key).or_insert(refusal);
         }
+        self.context_provided_packages
+            .extend(fallback.context_provided_packages);
         // A fallback's scopes stay scopes: folding them into this index's own
         // tiers would let a nested catalog answer files outside its directory.
         for scope in fallback.scopes {
@@ -558,6 +569,51 @@ impl AcceptedContractIndex {
             self.admission_refusals.entry(specifier).or_insert(refusal);
         }
         self
+    }
+
+    /// ADR 0153 part 3: packages another installed package depends on, so
+    /// their context premises are unmet in this project. See
+    /// `context_provided_packages` on the struct.
+    #[must_use]
+    pub fn with_context_provided_packages(
+        mut self,
+        packages: impl IntoIterator<Item = String>,
+    ) -> Self {
+        self.context_provided_packages.extend(packages);
+        self
+    }
+
+    /// Every package some contract in this index states a context premise
+    /// for (ADR 0153 part 3), in every tier and every scope. The backend asks
+    /// its installed tree about these alone.
+    #[must_use]
+    pub fn context_premise_packages(&self) -> BTreeSet<String> {
+        let mut packages = BTreeSet::new();
+        let mut visit = |contract: &AcceptedContract| {
+            if contract
+                .artifact_case()
+                .exports
+                .values()
+                .any(|export| !export.call.context_premises().is_empty())
+            {
+                packages.insert(contract.package().name.clone());
+            }
+        };
+        self.imports.values().flatten().for_each(&mut visit);
+        self.by_artifact.values().flatten().for_each(&mut visit);
+        self.admitted.values().for_each(&mut visit);
+        self.admitted_at.values().for_each(&mut visit);
+        for scope in &self.scopes {
+            packages.extend(scope.index.context_premise_packages());
+        }
+        packages
+    }
+
+    /// Whether another installed package depends on `package`, so that its
+    /// code may provide a context `package` exports.
+    #[must_use]
+    pub fn context_provided_package(&self, package: &str) -> bool {
+        self.context_provided_packages.contains(package)
     }
 
     /// [`Self::with_admission_refusals`] for single importing files, keyed by
@@ -657,6 +713,15 @@ impl AcceptedContractIndex {
         for (specifier, refusal) in &self.admission_refusals {
             hash_text(&mut hash, specifier);
             hash_text(&mut hash, refusal);
+        }
+        // Nothing is hashed for an index naming no such package, so every
+        // project keeps the fingerprint it always had until one does.
+        if !self.context_provided_packages.is_empty() {
+            hash.update(b"context-provided-packages");
+            hash.update((self.context_provided_packages.len() as u64).to_be_bytes());
+            for package in &self.context_provided_packages {
+                hash_text(&mut hash, package);
+            }
         }
         // Nothing is hashed for an index with no per-importer admission, so a
         // project whose importers all reach its own installs keeps the

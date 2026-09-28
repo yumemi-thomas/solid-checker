@@ -1,0 +1,91 @@
+{
+  "document": "node_modules/@solidjs/router/solid-reactivity.json",
+  "import": {
+    "authority": "host",
+    "closure": {
+      "digest": "sha256:2e094d033c527146787eabaccb15cb5252cf929fcf0f22344175cae4c65cb837",
+      "entries": [
+        {
+          "digest": "sha256:9544ad2aba251be412287b95cdc3bb5cc26be94ce0fb7285791e4fa63997f70e",
+          "path": "./package.json",
+          "role": "manifest"
+        }
+      ]
+    },
+    "declarationTrace": {
+      "branch": ""
+    },
+    "declarations": {
+      "digest": "sha256:9544ad2aba251be412287b95cdc3bb5cc26be94ce0fb7285791e4fa63997f70e",
+      "path": "node_modules/@solidjs/router/package.json"
+    },
+    "exports": {
+      "RouterContext": {
+        "declarations": {
+          "exportName": "RouterContext",
+          "module": {
+            "digest": "sha256:9544ad2aba251be412287b95cdc3bb5cc26be94ce0fb7285791e4fa63997f70e",
+            "path": "node_modules/@solidjs/router/package.json"
+          }
+        },
+        "runtime": {
+          "exportName": "RouterContext",
+          "module": {
+            "digest": "sha256:9544ad2aba251be412287b95cdc3bb5cc26be94ce0fb7285791e4fa63997f70e",
+            "path": "node_modules/@solidjs/router/package.json"
+          }
+        }
+      },
+      "useLocation": {
+        "declarations": {
+          "exportName": "useLocation",
+          "module": {
+            "digest": "sha256:9544ad2aba251be412287b95cdc3bb5cc26be94ce0fb7285791e4fa63997f70e",
+            "path": "node_modules/@solidjs/router/package.json"
+          }
+        },
+        "runtime": {
+          "exportName": "useLocation",
+          "module": {
+            "digest": "sha256:9544ad2aba251be412287b95cdc3bb5cc26be94ce0fb7285791e4fa63997f70e",
+            "path": "node_modules/@solidjs/router/package.json"
+          }
+        }
+      },
+      "useNavigate": {
+        "declarations": {
+          "exportName": "useNavigate",
+          "module": {
+            "digest": "sha256:9544ad2aba251be412287b95cdc3bb5cc26be94ce0fb7285791e4fa63997f70e",
+            "path": "node_modules/@solidjs/router/package.json"
+          }
+        },
+        "runtime": {
+          "exportName": "useNavigate",
+          "module": {
+            "digest": "sha256:9544ad2aba251be412287b95cdc3bb5cc26be94ce0fb7285791e4fa63997f70e",
+            "path": "node_modules/@solidjs/router/package.json"
+          }
+        }
+      }
+    },
+    "importer": "App.tsx",
+    "packageIntegrity": "fixture:sha256:9544ad2aba251be412287b95cdc3bb5cc26be94ce0fb7285791e4fa63997f70e",
+    "packageManifest": {
+      "digest": "sha256:9544ad2aba251be412287b95cdc3bb5cc26be94ce0fb7285791e4fa63997f70e",
+      "path": "node_modules/@solidjs/router/package.json"
+    },
+    "packageName": "@solidjs/router",
+    "packageRoot": "node_modules/@solidjs/router",
+    "packageVersion": "2.0.0-next.26",
+    "requestedEntrypoint": ".",
+    "runtime": {
+      "digest": "sha256:9544ad2aba251be412287b95cdc3bb5cc26be94ce0fb7285791e4fa63997f70e",
+      "path": "node_modules/@solidjs/router/package.json"
+    },
+    "runtimeTrace": {
+      "branch": ""
+    },
+    "specifier": "@solidjs/router"
+  }
+}

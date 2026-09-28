@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-context-premise-reexport/App.tsx",
+      "start": 9,
+      "end": 20,
+      "fixes": 0
+    }
+  ]
+}

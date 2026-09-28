@@ -175,9 +175,50 @@ the claims that rest on the premise in any program that does either of these:
 - installs another package that declares a dependency (of any kind) on the
   certified package.
 
-Until that admission gate exists, **a context that escapes refuses the premise
-at certification.** That is the fail-closed default, and it is what the
-router's `RouterContext` export meets today.
+**How the condition is carried.** The premise is a field of the export's call
+semantics, `contextPremises`: the exported names of each escaping context the
+export's claims rest on. It is a condition, not a claim. It names no claim, so
+no claim id and no recipe address moves, and weakening a closure keeps it. It
+is signed like every other semantic: a document that states one is in its own
+digest family (`solid-checker:semantic-context-premises:v1`), and a document
+that states none hashes as before.
+
+**Certification.** The census admits an escaping context exactly when the
+export states a premise for every name the context escapes under, and checks
+that clause last, so a premise is only ever asked for a read every other
+clause admits. Otherwise it refuses in one spelling, `context premise
+required: [names] (…)`. The transaction reads that spelling back, states the
+premise on the export, and re-plans; the next census admits the read. A
+requirement already stated is not progress, and its refusal is withheld like
+any other, which keeps the loop bounded. In the published-graph lane only a
+node that no other node depends on states a premise: a dependency's receipt is
+composed as its accepted proposal with withheld domains opened, and a premise
+is not an opening, so a premise refusal at a dependency is withheld.
+
+**Consumer admission.** For each package whose accepted contract states a
+premise, the analysis collects, over the whole program, every use of each
+premise name imported from the package. A use is allowed only as the one
+argument of a dialect `useContext` call (by exact call identity, TypeScript
+sugar peeled). Everything else counts as providing the context: a JSX tag
+naming it or dotted from it, `createComponent(C, …)`, an alias, any other
+argument, a re-export (`export { C }`, `export *`), `import … = require`, a
+dynamic `import()` or `require` of the package. Through a namespace import,
+the namespace object escaping or a computed member provides every premise. A
+binding the analysis cannot name provides every premise of its package. The
+backend adds the second clause: it walks every `node_modules` directory Node
+resolution can reach from the project (scoped, nested, and pnpm's store), and
+a package there that declares a dependency of any kind on the certified
+package provides every premise. A manifest it cannot read or parse, and a tree
+deeper than it descends, fail closed the same way.
+
+An import site of an export whose premise is provided loses **every** claim of
+that export and reports `SC9005`, uncertifiable, at error severity (not ADR
+0119's open-claims warning: the claims are unusable here, not partial). Its
+message names the premise. Exports without a premise keep their claims.
+
+`<RouterContext.Provider>` needs no case of its own: against the real
+typings it is `TS2339`, TypeScript's to report. `<RouterContext value={…}>`
+and `createComponent(RouterContext, …)` type-check and are the cases.
 
 ### 4. The member's value (`returns`)
 
@@ -259,8 +300,25 @@ decided** here (see status).
   census does not yet disposition the form: it walks no calls, so it cannot
   bind the chain, and for the router the case-wide hazard withdraws `reads`
   first anyway (item C).
-- **B. Part 3's admission gate** (a signed case premise, consumer-side
-  reference check). Not landed.
+- **B. Part 3's admission gate.** Landed. Model, wire (`contextPremises`,
+  schema), digest family, the census clause, the transaction's re-plan in the
+  value-only and published-graph lanes, the consumer's reference check and
+  the backend's installed-dependents walk. No handshake bump: the producer
+  already stated every escape at protocol 70. Measured on the release binary
+  (host free and `browser`, next.30, next.26, next.18): `useLocation` and
+  `useIsRouting` now close `callbacks` and `creates` under the premise
+  `RouterContext`. `reads` (item C) and `returns` (item D) stay open, so no
+  export is clean yet; `useLocation` moves from degenerate to partial. Under
+  `node` the two domains move from the census refusal to "veto did not
+  complete" at next.26 only. Fixtures: `package-context-premise-met` (clean)
+  and five that each break the premise one way (`-provided`,
+  `-create-component`, `-namespace`, `-reexport`, `-dependent`), against the
+  published router next.26 typings, `tsc` silent against the real rc.9
+  install. Tests: `context_premise_digest_family_is_separate_frozen_and_moves_no_claim`,
+  `context_premises_round_trip_in_their_own_digest_family`,
+  `a_context_premise_is_stated_once_and_a_repeat_is_not_progress`, and the
+  census test's `escaped-stated`, `escaped-other-stated` and
+  `escaped-stated-broken` legs.
 - **C. A per-export bound on `runtime-accessor-installation`** for `reads`.
   It needs a complete enumeration of the member accesses the export executes,
   each on a receiver the census can prove is not a hazard site's object. Not

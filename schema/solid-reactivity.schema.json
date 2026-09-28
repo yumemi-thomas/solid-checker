@@ -191,6 +191,13 @@
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/callDomain" }
         },
+        "contextPremises": {
+          "description": "ADR 0153 part 3: every claim of this export holds only in a program where the context this package exports under each named export receives no value from outside the package. A consumer that cannot show that reads every domain of the export as open.",
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/nonemptyString" }
+        },
         "callbacks": {
           "type": "array",
           "items": { "$ref": "#/$defs/callback" }

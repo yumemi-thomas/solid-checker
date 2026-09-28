@@ -2475,6 +2475,49 @@ fn result_access_digest_family_is_separate_and_frozen() {
     );
 }
 
+/// ADR 0153 part 3: a context premise is its own digest family under a frozen
+/// vector. The premise conditions the export's claims without naming one, so a
+/// claim id and a recipe address stay where they were: a corpus recipe keyed
+/// by either still binds after the transaction states the premise.
+#[test]
+fn context_premise_digest_family_is_separate_frozen_and_moves_no_claim() {
+    assert_eq!(
+        SEMANTIC_CONTEXT_PREMISES_MARKER,
+        "solid-checker:semantic-context-premises:v1"
+    );
+    let plain = result_access_contract("case-a").unwrap();
+    let premised = |names: &[&str]| {
+        let mut cases = plain.artifact_cases().to_vec();
+        cases[0]
+            .exports
+            .get_mut("createResource")
+            .unwrap()
+            .add_context_premises(names.iter().map(|name| ContextPremise {
+                export: (*name).into(),
+            }));
+        ContractProposal::new(plain.package().clone(), cases)
+            .normalize()
+            .unwrap()
+    };
+    let one = premised(&["RouterContext"]);
+    let two = premised(&["RouterContext", "OtherContext"]);
+    assert_ne!(one.semantic_digest(), plain.semantic_digest());
+    assert_ne!(one.semantic_digest(), two.semantic_digest());
+    assert_eq!(
+        one.semantic_digest().as_str(),
+        "sha256:f2cbb8d12d8786923dcc8fac6b0b4714e6efc9983128c46f4f88fbe0140224f6"
+    );
+    assert_eq!(
+        address_of(&one, "case-a", CALLBACKS, "closure"),
+        address_of(&plain, "case-a", CALLBACKS, "closure")
+    );
+    let subject = addressed_subject("case-a", CALLBACKS);
+    assert_eq!(
+        one.claim_id(&subject).unwrap(),
+        plain.claim_id(&subject).unwrap()
+    );
+}
+
 /// A `result-access` operation states exactly one shape, and exactly one
 /// `callbacks` item names it, from a bare parameter.
 #[test]

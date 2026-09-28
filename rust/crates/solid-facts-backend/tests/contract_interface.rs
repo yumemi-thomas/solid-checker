@@ -110,6 +110,7 @@ fn inferred_entrypoint_workflow_refuses_a_same_named_export_from_the_wrong_subpa
             result_access_parameters: Default::default(),
             returned_invocations: Default::default(),
             inherited_from: None,
+            context_premises: Vec::new(),
             merged_props_return: None,
         },
     )]);
@@ -181,6 +182,7 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
             result_access_parameters: Default::default(),
             returned_invocations: Default::default(),
             inherited_from: None,
+            context_premises: Vec::new(),
             merged_props_return: None,
         },
     )]);

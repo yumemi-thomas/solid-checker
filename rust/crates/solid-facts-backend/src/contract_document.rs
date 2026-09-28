@@ -461,6 +461,21 @@ fn compact_call(
             ),
         );
     }
+    // ADR 0153 part 3: the conditions every claim of this export holds
+    // under, by the package export each context escapes as. Additive: a
+    // document that omits the key states its claims unconditionally, which is
+    // what every document said before the key existed.
+    if !call.context_premises().is_empty() {
+        object.insert(
+            "contextPremises".into(),
+            json!(
+                call.context_premises()
+                    .iter()
+                    .map(|premise| premise.export.as_str())
+                    .collect::<Vec<_>>()
+            ),
+        );
+    }
     if !call.operations.is_empty() {
         object.insert(
             "operations".into(),
@@ -1531,6 +1546,10 @@ struct WireCall {
     /// nothing, which is what every document said before the key existed.
     #[serde(default, rename = "proposedClosures")]
     proposed_closures: Vec<WireCallDomain>,
+    /// ADR 0153 part 3: the package exports whose contexts the claims assume
+    /// no value from outside the package for. Additive to `schemaVersion: 1`.
+    #[serde(default, rename = "contextPremises")]
+    context_premises: Vec<String>,
     #[serde(default)]
     callbacks: Option<Vec<WireCallback>>,
     #[serde(default)]
@@ -2817,6 +2836,12 @@ fn expand_call(
         &WireCallDomain::ALL,
         "call.proposedClosures",
     )?;
+    let mut premises = BTreeSet::new();
+    for export in &call.context_premises {
+        if export.is_empty() || !premises.insert(export.clone()) {
+            return invalid_document("call.contextPremises must name distinct, non-empty exports");
+        }
+    }
 
     let callbacks = call
         .callbacks
@@ -2880,7 +2905,12 @@ fn expand_call(
     // Whether the proposal is admissible at all — the domain open, and the
     // domain one the certifier has a proof mode for — is a normalization
     // invariant, refused by name in `validate_proposed_closures`.
-    .with_proposed_closures(proposed.into_iter().map(ClaimDomain::from)))
+    .with_proposed_closures(proposed.into_iter().map(ClaimDomain::from))
+    .with_context_premises(
+        premises
+            .into_iter()
+            .map(|export| solid_reactive_ir::contract_semantics::ContextPremise { export }),
+    ))
 }
 
 impl From<WireCallDomain> for ClaimDomain {
@@ -4201,6 +4231,53 @@ mod tests {
             .is_err(),
             "an unknown event spelling is refused, not ignored"
         );
+    }
+
+    /// ADR 0153 part 3: `contextPremises` survives the round trip, puts the
+    /// document in a digest family of its own, and refuses an empty or
+    /// repeated name rather than ignoring it.
+    #[test]
+    fn context_premises_round_trip_in_their_own_digest_family() {
+        let document = |premises: &str| {
+            format!(
+                r#"{{"format":"solid-reactivity-contract","schemaVersion":1,"semanticModelVersion":1,"package":{{"name":"consumer","version":"1.0.0","integrity":"sha512:test","manifest":{{"path":"package.json","sha256":"{a}"}}}},"summaries":{{"fn":{{"shape":"callable","call":{{"creates":[],"closed":["creates"]{premises}}}}}}},"entrypoints":{{".":{{"artifact":{{"path":"dist/index.js","sha256":"{b}","closureSha256":"{c}"}},"declarations":{{"path":"dist/index.d.ts","sha256":"{d}"}},"exports":{{"useThing":"fn"}}}}}},"sidecars":{{}}}}"#,
+                a = "a".repeat(64),
+                b = "b".repeat(64),
+                c = "c".repeat(64),
+                d = "d".repeat(64),
+            )
+            .into_bytes()
+        };
+        let plain = normalized(&document(""));
+        let kept = normalized(&document(r#","contextPremises":["RouterContext"]"#));
+        let premises = kept.artifact_cases()[0].exports["useThing"]
+            .call
+            .context_premises()
+            .iter()
+            .map(|premise| premise.export.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(premises, ["RouterContext"]);
+        assert_ne!(kept.semantic_digest(), plain.semantic_digest());
+        let encoded = encode(&kept, &SidecarDigests::default(), true).unwrap();
+        assert!(
+            String::from_utf8_lossy(&encoded).contains("\"contextPremises\""),
+            "the encoder dropped the premise"
+        );
+        assert_eq!(normalized(&encoded), kept);
+        // A document stating none writes none.
+        let encoded = encode(&plain, &SidecarDigests::default(), true).unwrap();
+        assert!(!String::from_utf8_lossy(&encoded).contains("contextPremises"));
+        for premises in [
+            r#","contextPremises":[""]"#,
+            r#","contextPremises":["RouterContext","RouterContext"]"#,
+        ] {
+            assert!(
+                decode(&document(premises))
+                    .and_then(|decoded| decoded.normalize())
+                    .is_err(),
+                "{premises} is refused"
+            );
+        }
     }
 
     /// ADR 0114: `computations` round-trips by item only, puts the document in

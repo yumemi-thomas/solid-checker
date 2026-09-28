@@ -1841,6 +1841,7 @@ impl PublishedContractGraphPlan {
             recipe_corpus,
             &BTreeMap::new(),
             &BTreeMap::new(),
+            &BTreeMap::new(),
         )
     }
 
@@ -1854,6 +1855,7 @@ impl PublishedContractGraphPlan {
         base_corpus: Option<&Path>,
         already_withheld: &BTreeMap<String, Vec<super::WithheldClosure>>,
         withheld_operations: &BTreeMap<String, Vec<super::WithheldOperation>>,
+        stated_premises: &BTreeMap<String, Vec<super::StatedContextPremise>>,
     ) -> Result<Self, PublishedGraphCertificationError> {
         // Nodes gate independently, and a wide graph re-gates every one of
         // them on every pass (616 nodes × 12 passes on `corvu@0.7.2`), so the
@@ -1869,11 +1871,14 @@ impl PublishedContractGraphPlan {
                     .or(base_corpus);
                 let (plan, withheld) = node
                     .plan
-                    .recipe_gated_with_operations(
-                        corpus,
-                        already_withheld.get(digest).map_or(&[], Vec::as_slice),
-                        withheld_operations.get(digest).map_or(&[], Vec::as_slice),
-                    )
+                    .with_stated_premises(stated_premises.get(digest).map_or(&[], Vec::as_slice))
+                    .and_then(|plan| {
+                        plan.recipe_gated_with_operations(
+                            corpus,
+                            already_withheld.get(digest).map_or(&[], Vec::as_slice),
+                            withheld_operations.get(digest).map_or(&[], Vec::as_slice),
+                        )
+                    })
                     .map_err(
                         |source| PublishedGraphCertificationError::RecipeGatingAtNode {
                             node: node.identity.digest().into(),
@@ -2187,6 +2192,18 @@ fn certify_graphs_with_recipe_gating(
     // census refused. Each pass withdraws at least one more by name, so the
     // graph loop stays bounded.
     let mut withheld_operations = BTreeMap::<String, Vec<super::WithheldOperation>>::new();
+    // ADR 0153 part 3, per node: the context premises its census named. Only
+    // a node no other node depends on states one. A dependency's receipt is
+    // composed as its accepted proposal with withheld domains opened, and a
+    // premise is not an opening, so a premise refusal at a dependency is
+    // withheld like any other census refusal.
+    let mut stated_premises = BTreeMap::<String, Vec<super::StatedContextPremise>>::new();
+    let depended_on = graphs
+        .iter()
+        .flat_map(|graph| graph.nodes.iter())
+        .flat_map(|node| node.dependencies.iter())
+        .map(|identity| identity.digest().to_owned())
+        .collect::<BTreeSet<_>>();
     let mut synthesized = BTreeMap::<String, super::synthesized_vetoes::SynthesizedCorpus>::new();
     let mut synthesis_attempted = BTreeSet::new();
     let base_corpus = probes.map(super::ProbeHarnessConfiguration::recipe_corpus);
@@ -2212,6 +2229,7 @@ fn certify_graphs_with_recipe_gating(
                     base_corpus,
                     &already_withheld,
                     &withheld_operations,
+                    &stated_premises,
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -2263,7 +2281,17 @@ fn certify_graphs_with_recipe_gating(
                     if !seen.insert(digest.to_owned()) {
                         continue;
                     }
-                    let records = super::census_refusal_withholding(&node.plan, &source);
+                    let stated = if depended_on.contains(digest) {
+                        BTreeSet::new()
+                    } else {
+                        super::state_context_premises(
+                            stated_premises.entry(digest.to_owned()).or_default(),
+                            super::census_premise_requirements(&node.plan, &source),
+                        )
+                    };
+                    withdrawn += stated.len();
+                    let mut records = super::census_refusal_withholding(&node.plan, &source);
+                    records.retain(|record| !super::premise_restated(record, &stated));
                     withdrawn += records.len();
                     if !records.is_empty() {
                         already_withheld

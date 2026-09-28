@@ -97,6 +97,18 @@ pub(super) fn semantic_digest(
     if computations {
         writer.text("solid-checker:semantic-computations:v1");
     }
+    // ADR 0153 part 3's premises are a family of their own on the same
+    // argument: a contract no export of which states one emits the stream it
+    // always did, byte for byte, and keeps its digest and receipts.
+    let context_premises = artifact_cases.iter().any(|case| {
+        case.exports
+            .values()
+            .any(|export| !export.call.context_premises().is_empty())
+    });
+    if context_premises {
+        writer.text(SEMANTIC_CONTEXT_PREMISES_MARKER);
+    }
+    writer.context_premises = context_premises;
     let initialization = artifact_cases
         .iter()
         .any(|case| case.initialization.is_some());
@@ -307,6 +319,10 @@ struct CanonicalWriter {
     /// [`recipe_address`], false everywhere else. When false an operation's
     /// encoding is the one it had before the field existed, byte for byte.
     invoke_protocols: bool,
+    /// Whether this stream belongs to the context-premise family (ADR 0153
+    /// part 3): set from the contract by [`semantic_digest`], false
+    /// everywhere else.
+    context_premises: bool,
 }
 
 impl CanonicalWriter {
@@ -320,6 +336,7 @@ impl CanonicalWriter {
             initialization: false,
             computations: false,
             invoke_protocols: false,
+            context_premises: false,
         }
     }
 
@@ -600,6 +617,15 @@ impl CanonicalWriter {
             self.usize(proposed.len());
             for domain in proposed {
                 self.claim_domain(*domain);
+            }
+        }
+        // Written only in the context-premise family (ADR 0153 part 3). The
+        // set is a `BTreeSet`, so the order is the export names'.
+        if self.context_premises {
+            let premises = call.context_premises();
+            self.usize(premises.len());
+            for premise in premises {
+                self.text(&premise.export);
             }
         }
         self.sequence(&call.operations, Self::operation);

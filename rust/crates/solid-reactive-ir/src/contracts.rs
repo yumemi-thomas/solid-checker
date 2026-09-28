@@ -190,6 +190,12 @@ pub fn project_export_semantics(
         // The projection alone states no acceptance identity;
         // `project_accepted_export` attaches it.
         inherited_from: None,
+        context_premises: export
+            .call
+            .context_premises()
+            .iter()
+            .map(|premise| premise.export.clone())
+            .collect(),
     }
 }
 
@@ -1900,14 +1906,360 @@ fn push_unknown_contract_claims(
     });
 }
 
+/// ADR 0153 part 3: the `(package, export)` contexts this project provides,
+/// or may provide, itself.
+///
+/// An accepted summary may state its claims under a context premise: they hold
+/// only where the context the package exports under that name receives no
+/// value from outside the package. This is the consumer's half of that
+/// premise, and it fails toward "provided". A premise export is provided when
+/// any reference to a binding of it that this project imports from the package
+/// is anything but the one argument of the dialect's `useContext`:
+///
+/// - a JSX element `<RouterContext value={…}>` or `createComponent(RouterContext, …)`,
+///   which is how a value is provided;
+/// - a member access (`RouterContext.Provider`), an alias, an argument of any
+///   other call, a re-export, a return: anything a value could be provided
+///   through, from here or from code this analysis does not follow.
+///
+/// A namespace import of the package counts every premise export of it as
+/// provided unless each reference is a member access naming another export or
+/// a `useContext(ns.Context)` argument. A re-export of a premise export, an
+/// `export * from` the package, `import … = require`, a dynamic `import()` and
+/// a `require` of it all count as provided. Absence of a reference is the only
+/// way a premise holds; nothing here is read as proof that one does not.
+///
+/// Packages other than the one certified may provide the context too, and the
+/// analysis does not see their code. That half is the backend's: it names every
+/// package whose installed tree holds another package depending on it
+/// ([`AcceptedContractIndex::context_provided_packages`]), and every premise
+/// of such a package is provided.
+fn provided_context_premises(
+    facts: &ProjectFacts,
+    exact: &HashMap<(String, String), PackageContract>,
+    accepted: &AcceptedContractIndex,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> BTreeSet<(String, String)> {
+    // Every premise any bound summary states, by package.
+    let mut premises = HashMap::<String, BTreeSet<String>>::new();
+    for contract in exact.values() {
+        for entrypoint in contract.entrypoints.values() {
+            for summary in entrypoint.exports.values() {
+                if !summary.context_premises.is_empty() {
+                    premises
+                        .entry(contract.package.name.clone())
+                        .or_default()
+                        .extend(summary.context_premises.iter().cloned());
+                }
+            }
+        }
+    }
+    let mut provided = BTreeSet::new();
+    if premises.is_empty() {
+        return provided;
+    }
+    for (package, names) in &premises {
+        if accepted.context_provided_package(package) {
+            provided.extend(names.iter().map(|name| (package.clone(), name.clone())));
+        }
+    }
+    let package_of = |file: &solid_facts::FileFacts, module: &str| -> Option<String> {
+        exact
+            .get(&(file.path.to_string(), module.to_owned()))
+            .map(|contract| contract.package.name.clone())
+            .or_else(|| {
+                // Fails toward "provided": a specifier naming the package by
+                // its own name, or one of its subpaths, is the package here.
+                premises
+                    .keys()
+                    .find(|package| {
+                        module == package.as_str()
+                            || module
+                                .strip_prefix(package.as_str())
+                                .is_some_and(|rest| rest.starts_with('/'))
+                    })
+                    .cloned()
+            })
+    };
+    for file in &facts.files {
+        // The allowed reference: the one argument of a dialect `useContext`.
+        let read_arguments: HashSet<(u32, u32)> = file
+            .ast
+            .calls
+            .iter()
+            .filter(|call| {
+                call.arguments.len() == 1
+                    && !call.arguments[0].spread
+                    && crate::known_primitive(&crate::call_primitive_name(
+                        file,
+                        call,
+                        entities,
+                        symbol_names,
+                        dialect,
+                    )) == Some(solid_dialect::Primitive::UseContext)
+            })
+            .map(|call| {
+                let span = file.ast.peel_ts_sugar_span(call.arguments[0].span);
+                (span.start, span.end)
+            })
+            .collect();
+        let references_of = |symbol: &SymbolId| {
+            file.ast
+                .identifiers
+                .iter()
+                .filter(|identifier| identifier.role == solid_facts::ast::IdentifierRole::Reference)
+                .filter(|identifier| {
+                    entities.get(&location(file.path.shared(), identifier.span)) == Some(symbol)
+                })
+                .map(|identifier| identifier.span)
+                .collect::<Vec<_>>()
+        };
+        // A tag naming the binding, or a dotted tag whose object is it
+        // (`<Ctx.Provider>`, a type error in Solid 2 but still a use).
+        let jsx_names_of = |symbol: &SymbolId| {
+            file.ast.jsx_elements.iter().any(|element| {
+                entities.get(&location(file.path.shared(), element.name.span)) == Some(symbol)
+                    || element.member_object.is_some_and(|object| {
+                        entities.get(&location(file.path.shared(), object)) == Some(symbol)
+                    })
+            })
+        };
+        for import in &file.ast.imports {
+            if import.type_only {
+                continue;
+            }
+            let Some(package) = package_of(file, &import.module) else {
+                continue;
+            };
+            let Some(names) = premises.get(&package) else {
+                continue;
+            };
+            for binding in &import.bindings {
+                if binding.type_only {
+                    continue;
+                }
+                let binding_location = location(file.path.shared(), binding.local.span);
+                let Some(symbol) = entities.get(&binding_location) else {
+                    // A binding this analysis cannot name has references it
+                    // cannot classify.
+                    if binding.kind == solid_facts::ast::ImportKind::Namespace
+                        || binding
+                            .imported
+                            .as_deref()
+                            .is_some_and(|name| names.contains(name))
+                    {
+                        provided.extend(names.iter().map(|name| (package.clone(), name.clone())));
+                    }
+                    continue;
+                };
+                if binding.kind == solid_facts::ast::ImportKind::Namespace {
+                    let members: Vec<&solid_facts::ast::MemberFact> = file
+                        .ast
+                        .members
+                        .iter()
+                        .filter(|member| {
+                            entities.get(&location(file.path.shared(), member.object))
+                                == Some(symbol)
+                        })
+                        .collect();
+                    // A dotted tag through the namespace. Its object is matched
+                    // by symbol when the tag is `<ns.Name>`; any deeper or
+                    // unresolved dotted tag spelled from the namespace's local
+                    // name provides every premise, since the name alone cannot
+                    // say which export it reaches.
+                    let local = file.source_text(binding.local.span).unwrap_or_default();
+                    for element in &file.ast.jsx_elements {
+                        let direct = element.member_object.is_some_and(|object| {
+                            entities.get(&location(file.path.shared(), object)) == Some(symbol)
+                        });
+                        let spelled = !local.is_empty()
+                            && file.source_text(element.name.span).is_some_and(|name| {
+                                name.strip_prefix(local)
+                                    .is_some_and(|rest| rest.starts_with('.'))
+                            });
+                        if direct
+                            && let Some(property) = element
+                                .member_property
+                                .and_then(|property| file.source_text(property))
+                        {
+                            if names.contains(property) {
+                                provided.insert((package.clone(), property.to_owned()));
+                            }
+                        } else if direct || spelled {
+                            provided
+                                .extend(names.iter().map(|name| (package.clone(), name.clone())));
+                        }
+                    }
+                    for reference in references_of(symbol) {
+                        let Some(member) = members.iter().find(|member| member.object == reference)
+                        else {
+                            // The namespace object itself escapes.
+                            provided
+                                .extend(names.iter().map(|name| (package.clone(), name.clone())));
+                            continue;
+                        };
+                        let computed = file
+                            .ast
+                            .computed_members
+                            .binary_search(&member.span)
+                            .is_ok();
+                        let property = file.source_text(member.property).unwrap_or_default();
+                        if computed {
+                            provided
+                                .extend(names.iter().map(|name| (package.clone(), name.clone())));
+                        } else if names.contains(property)
+                            && !read_arguments.contains(&(member.span.start, member.span.end))
+                        {
+                            provided.insert((package.clone(), property.to_owned()));
+                        }
+                    }
+                    continue;
+                }
+                let imported = binding.imported.as_deref().or_else(|| {
+                    (binding.kind == solid_facts::ast::ImportKind::Default).then_some("default")
+                });
+                let Some(imported) = imported.filter(|name| names.contains(*name)) else {
+                    continue;
+                };
+                let escapes = jsx_names_of(symbol)
+                    || references_of(symbol)
+                        .into_iter()
+                        .any(|span| !read_arguments.contains(&(span.start, span.end)));
+                if escapes {
+                    provided.insert((package.clone(), imported.to_owned()));
+                }
+            }
+        }
+        // Re-exports, CommonJS and dynamic loads of the package.
+        for export in &file.ast.exports {
+            let Some(module) = export.module.as_deref() else {
+                continue;
+            };
+            let Some(package) = package_of(file, module) else {
+                continue;
+            };
+            let Some(names) = premises.get(&package) else {
+                continue;
+            };
+            let star = export.specifiers.is_empty() || export.namespace.is_some();
+            for name in names {
+                if star
+                    || export.specifiers.iter().any(|specifier| {
+                        file.source_text(specifier.local.span) == Some(name.as_str())
+                    })
+                {
+                    provided.insert((package.clone(), name.clone()));
+                }
+            }
+        }
+        let loaded = file
+            .ast
+            .import_equals
+            .iter()
+            .map(|fact| fact.module.as_str())
+            .chain(
+                file.ast
+                    .module_loads
+                    .iter()
+                    .filter_map(|fact| fact.specifier.as_deref()),
+            )
+            .collect::<Vec<_>>();
+        for module in loaded {
+            if let Some(package) = package_of(file, module)
+                && let Some(names) = premises.get(&package)
+            {
+                provided.extend(names.iter().map(|name| (package.clone(), name.clone())));
+            }
+        }
+    }
+    provided
+}
+
+/// The premises of `summary` this project provides, in order, or none.
+fn unmet_context_premises(
+    summary: &ContractExport,
+    package: &str,
+    provided: &BTreeSet<(String, String)>,
+) -> Vec<String> {
+    summary
+        .context_premises
+        .iter()
+        .filter(|name| provided.contains(&(package.to_owned(), (*name).clone())))
+        .cloned()
+        .collect()
+}
+
+/// `summary` with every claim it states withdrawn: the reading a consumer
+/// gives an export whose context premise this project does not meet.
+fn premise_unmet_summary(summary: &ContractExport) -> ContractExport {
+    ContractExport {
+        reactive_reads: ContractClaim::Open,
+        returns: ContractClaim::Open,
+        callbacks: ContractClaim::Open,
+        owner_requirements: ContractClaim::Open,
+        async_behavior: ContractClaim::Open,
+        open_claims: [
+            ClaimDomain::Callbacks,
+            ClaimDomain::Reads,
+            ClaimDomain::Returns,
+            ClaimDomain::Creates,
+        ]
+        .into_iter()
+        .collect(),
+        creates_closed_empty: false,
+        returns_closed_empty: false,
+        ..summary.clone()
+    }
+}
+
+/// The finding for an import whose premise is unmet: uncertifiable, and an
+/// error rather than ADR 0119's open-claims warning, because the contract's
+/// claims are not partial here, they are unusable.
+fn push_unmet_context_premise(
+    missing_exports: &mut Vec<StaticDefect>,
+    module: &str,
+    export: &str,
+    reexported: bool,
+    location: Location,
+    unmet: &[String],
+) {
+    missing_exports.push(StaticDefect {
+        kind: StaticDefectKind::PackageContractExportMissing {
+            module: module.to_owned(),
+            export: export.to_owned(),
+            reexported,
+            site: crate::ContractDefectSite::Import,
+            admission_refusal: None,
+        },
+        location,
+        analysis_context: format!("{CONTEXT_PREMISE_UNMET_CONTEXT}{}", unmet.join(",")),
+        fixes: vec![],
+        uncertain: false,
+    });
+}
+
+/// The analysis context of [`push_unmet_context_premise`], followed by the
+/// premise exports the project provides.
+pub(crate) const CONTEXT_PREMISE_UNMET_CONTEXT: &str = "context-premise-unmet:";
+
 pub(super) fn resolve_accepted_contract_imports(
     facts: &ProjectFacts,
     contracts: &AcceptedContractIndex,
     entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
     dialect: &dyn Dialect,
 ) -> ResolvedContracts {
     let projected = project_accepted_contracts(facts, contracts);
-    resolve_contract_imports_inner(facts, &projected, contracts, entities, dialect)
+    resolve_contract_imports_inner(
+        facts,
+        &projected,
+        contracts,
+        entities,
+        symbol_names,
+        dialect,
+    )
 }
 
 fn project_accepted_contracts(
@@ -1973,6 +2325,7 @@ fn resolve_contract_imports_inner(
     exact: &HashMap<(String, String), PackageContract>,
     accepted: &AcceptedContractIndex,
     entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
     dialect: &dyn Dialect,
 ) -> ResolvedContracts {
     let mut bindings = Vec::new();
@@ -1980,6 +2333,8 @@ fn resolve_contract_imports_inner(
     let mut missing_exports = Vec::new();
     let mut counts = crate::ContractBindingCounts::default();
     let returns_shed = returns_shed_symbols(facts, entities);
+    let provided_contexts =
+        provided_context_premises(facts, exact, accepted, entities, symbol_names, dialect);
     for file in &facts.files {
         for import in &file.ast.imports {
             if import.type_only {
@@ -2059,7 +2414,25 @@ fn resolve_contract_imports_inner(
                         let Some(symbol) = entities.get(&member_location).cloned() else {
                             continue;
                         };
-                        if !summary.open_claims.is_empty() {
+                        let unmet = unmet_context_premises(
+                            &summary,
+                            &contract.package.name,
+                            &provided_contexts,
+                        );
+                        let summary = if unmet.is_empty() {
+                            summary
+                        } else {
+                            push_unmet_context_premise(
+                                &mut missing_exports,
+                                &import.module,
+                                &imported,
+                                false,
+                                member_location.clone(),
+                                &unmet,
+                            );
+                            premise_unmet_summary(&summary)
+                        };
+                        if unmet.is_empty() && !summary.open_claims.is_empty() {
                             push_unknown_contract_claims(
                                 &mut missing_exports,
                                 &summary,
@@ -2138,7 +2511,22 @@ fn resolve_contract_imports_inner(
                     }
                     continue;
                 };
-                if !summary.open_claims.is_empty() {
+                let unmet =
+                    unmet_context_premises(&summary, &contract.package.name, &provided_contexts);
+                let summary = if unmet.is_empty() {
+                    summary
+                } else {
+                    push_unmet_context_premise(
+                        &mut missing_exports,
+                        &import.module,
+                        imported,
+                        false,
+                        binding_location.clone(),
+                        &unmet,
+                    );
+                    premise_unmet_summary(&summary)
+                };
+                if unmet.is_empty() && !summary.open_claims.is_empty() {
                     push_unknown_contract_claims(
                         &mut missing_exports,
                         &summary,
@@ -2212,7 +2600,22 @@ fn resolve_contract_imports_inner(
                     }
                     continue;
                 };
-                if !summary.open_claims.is_empty() {
+                let unmet =
+                    unmet_context_premises(&summary, &contract.package.name, &provided_contexts);
+                let summary = if unmet.is_empty() {
+                    summary
+                } else {
+                    push_unmet_context_premise(
+                        &mut missing_exports,
+                        module,
+                        imported,
+                        true,
+                        specifier_location.clone(),
+                        &unmet,
+                    );
+                    premise_unmet_summary(&summary)
+                };
+                if unmet.is_empty() && !summary.open_claims.is_empty() {
                     push_unknown_contract_claims(
                         &mut missing_exports,
                         &summary,
@@ -2570,6 +2973,8 @@ fn contract_export_function(
         creates_walk_clean: false,
         // This summary *is* the local inference, so it is never inherited.
         inherited_from: None,
+        // A locally inferred summary is stated unconditionally.
+        context_premises: Vec::new(),
         // Attached at the emit boundary from `Program::merged_props_returns`,
         // beside the other two walk verdicts.
         merged_props_return: None,

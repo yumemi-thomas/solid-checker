@@ -2287,7 +2287,161 @@ pub fn project_accepted_contracts(
             scoped_accepted_contracts(scope, trust, conditions, facts)?,
         );
     }
+    // ADR 0153 part 3: a package whose contract rests a claim on a context
+    // premise, and which the project imports, loses that premise when any
+    // other installed package depends on it -- that package's code may
+    // provide the context, and this analysis does not see it.
+    let imported = facts
+        .files
+        .iter()
+        .flat_map(|file| {
+            file.ast
+                .imports
+                .iter()
+                .map(|import| import.module.as_str())
+                .chain(
+                    file.ast
+                        .exports
+                        .iter()
+                        .filter_map(|export| export.module.as_deref()),
+                )
+        })
+        .filter_map(package_name_of_specifier)
+        .collect::<std::collections::BTreeSet<_>>();
+    let premised = contracts
+        .context_premise_packages()
+        .into_iter()
+        .filter(|package| imported.contains(package))
+        .collect::<std::collections::BTreeSet<_>>();
+    if !premised.is_empty() {
+        let depended = installed_dependents(directory, &premised);
+        if !depended.is_empty() {
+            contracts = contracts.with_context_provided_packages(depended);
+        }
+    }
     Ok(contracts)
+}
+
+/// ADR 0153 part 3: which of `targets` some other installed package declares a
+/// dependency of any kind on (`dependencies`, `devDependencies`,
+/// `peerDependencies` or `optionalDependencies`).
+///
+/// Reads the manifest of every package in every `node_modules` directory from
+/// `directory` up to the filesystem root -- the directories Node resolution
+/// can reach -- including scoped packages, nested `node_modules`, and pnpm's
+/// `.pnpm/<entry>/node_modules` store. A directory with no `package.json` is
+/// not a package and names nothing. Everything this walk cannot answer fails
+/// closed, counting every target as depended on: a manifest that is present
+/// but unreadable or unparsable, and a tree deeper than the walk descends.
+fn installed_dependents(
+    directory: &Path,
+    targets: &std::collections::BTreeSet<String>,
+) -> std::collections::BTreeSet<String> {
+    fn visit_modules(
+        modules: &Path,
+        targets: &std::collections::BTreeSet<String>,
+        seen: &mut std::collections::BTreeSet<PathBuf>,
+        found: &mut std::collections::BTreeSet<String>,
+        depth: usize,
+    ) {
+        if found.len() == targets.len() {
+            return;
+        }
+        if depth > 32 {
+            found.extend(targets.iter().cloned());
+            return;
+        }
+        let Ok(canonical) = std::fs::canonicalize(modules) else {
+            return;
+        };
+        if !seen.insert(canonical) {
+            return;
+        }
+        let Ok(entries) = std::fs::read_dir(modules) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name == ".pnpm" {
+                if let Ok(store) = std::fs::read_dir(&path) {
+                    for entry in store.flatten() {
+                        visit_modules(
+                            &entry.path().join("node_modules"),
+                            targets,
+                            seen,
+                            found,
+                            depth + 1,
+                        );
+                    }
+                }
+            } else if name.starts_with('@') {
+                if let Ok(scoped) = std::fs::read_dir(&path) {
+                    for entry in scoped.flatten() {
+                        visit_package(&entry.path(), targets, seen, found, depth + 1);
+                    }
+                }
+            } else if !name.starts_with('.') {
+                visit_package(&path, targets, seen, found, depth + 1);
+            }
+        }
+    }
+    fn visit_package(
+        package: &Path,
+        targets: &std::collections::BTreeSet<String>,
+        seen: &mut std::collections::BTreeSet<PathBuf>,
+        found: &mut std::collections::BTreeSet<String>,
+        depth: usize,
+    ) {
+        if !package.is_dir() {
+            return;
+        }
+        let manifest_path = package.join("package.json");
+        let manifest = match std::fs::read(&manifest_path) {
+            Ok(bytes) => serde_json::from_slice::<serde_json::Value>(&bytes).ok(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                visit_modules(&package.join("node_modules"), targets, seen, found, depth);
+                return;
+            }
+            Err(_) => None,
+        };
+        let Some(manifest) = manifest.filter(serde_json::Value::is_object) else {
+            found.extend(targets.iter().cloned());
+            return;
+        };
+        {
+            let own = manifest.get("name").and_then(serde_json::Value::as_str);
+            for field in [
+                "dependencies",
+                "devDependencies",
+                "peerDependencies",
+                "optionalDependencies",
+            ] {
+                if let Some(map) = manifest.get(field).and_then(serde_json::Value::as_object) {
+                    for target in targets {
+                        if own != Some(target.as_str()) && map.contains_key(target) {
+                            found.insert(target.clone());
+                        }
+                    }
+                }
+            }
+        }
+        visit_modules(&package.join("node_modules"), targets, seen, found, depth);
+    }
+    let mut found = std::collections::BTreeSet::new();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut current = Some(directory);
+    while let Some(directory) = current {
+        visit_modules(
+            &directory.join("node_modules"),
+            targets,
+            &mut seen,
+            &mut found,
+            0,
+        );
+        current = directory.parent();
+    }
+    found
 }
 
 /// Every catalog read and folded in the one order the project tier uses.
