@@ -63,6 +63,18 @@ const LOCAL = "export function local(handler) {\n  handler();\n}\n";
 const LOCAL_DECLARATION = "export declare function local(handler: () => void): void;\n";
 const SHELL_DECLARATION = "export declare function Shell(props: object): unknown;\n";
 const PANEL = 'import { opaque } from "depkg";\nfunction Panel(props) {\n  return opaque(props);\n}\n';
+const PANEL_MODULE = `${PANEL}export { Panel };\n`;
+
+function splitPanel() {
+  return {
+    "dist/index.js":
+      'import { createComponent } from "@solidjs/web";\nimport { Panel } from "./panel";\n' +
+      `export function Shell(props) {\n  return createComponent(Panel, props);\n}\n${LOCAL}`,
+    "dist/index.d.ts": `${SHELL_DECLARATION}${LOCAL_DECLARATION}`,
+    "dist/panel.js": PANEL_MODULE,
+    "dist/panel.d.ts": "export declare function Panel(props: object): unknown;\n"
+  };
+}
 
 describe("createComponent renders its component as a tag does", () => {
   let directory;
@@ -154,7 +166,14 @@ describe("createComponent renders its component as a tag does", () => {
           "function Frame(Comp, props) {\n  return createComponent(Comp, props);\n}\n" +
           `export function Shell(props) {\n  return Frame(Panel, props);\n}\n${LOCAL}`,
         "dist/index.d.ts": `${SHELL_DECLARATION}${LOCAL_DECLARATION}`
-      }
+      },
+      // ADR 0158 § 1: the component lives in its own module, named the way a
+      // `solid`-condition source build names it (`./panel`), with a sibling
+      // `panel.d.ts` TypeScript binds the import to. One file answers the
+      // specifier, so the render crosses the split.
+      split: splitPanel(),
+      // A second candidate for `./panel`: no exact landing, no edge.
+      ambiguousSplit: { ...splitPanel(), "dist/panel.jsx": PANEL_MODULE }
     };
 
     const dependencyOutput = join(directory, "depkg.json");
@@ -184,7 +203,8 @@ describe("createComponent renders its component as a tag does", () => {
       write(join(packageRoot, "package.json"), manifest(name, { depkg: "1.0.0" }));
       for (const [file, contents] of Object.entries(files)) write(join(packageRoot, file), contents);
       const options = { quiet: true };
-      const importer = join(packageRoot, "dist/index.js");
+      // A split package imports the dependency from its component module.
+      const importer = join(packageRoot, files["dist/panel.js"] ? "dist/panel.js" : "dist/index.js");
       if (name !== "control") {
         const merged = mergeProposalDependencies(
           [
@@ -240,6 +260,13 @@ describe("createComponent renders its component as a tag does", () => {
       expect(closed(documents[name], "local"), name).toEqual(closed(documents.control, "local"));
       expect(closed(documents[name], "Shell"), name).not.toContain("callbacks");
     }
+  });
+
+  test("a component across an extensionless split is rendered when one file answers", () => {
+    expect(closed(documents.split, "local")).toEqual(closed(documents.control, "local"));
+    expect(closed(documents.split, "Shell")).not.toContain("callbacks");
+    expect(closed(documents.ambiguousSplit, "local")).not.toContain("callbacks");
+    expect(closed(documents.ambiguousSplit, "Shell")).not.toContain("callbacks");
   });
 
   test("a renderer by name only, or a rendered parameter, is no edge", () => {

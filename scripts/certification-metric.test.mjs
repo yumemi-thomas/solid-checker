@@ -15,7 +15,8 @@ import {
   renderHostSummary,
   selectCorpus,
   surfaceOf,
-  unlockCurve
+  unlockCurve,
+  wideningFor
 } from "./certification-metric.mjs";
 
 const row = (name, probes, extra = {}) => ({
@@ -122,6 +123,35 @@ test("causes are read from the reason, and the catch-all keeps the obligation's 
   assert.equal(causeOf({ status: "graph: never proposed" }, "reads").class, "graph lane: unrecorded");
   assert.equal(packageOfPath("/x/node_modules/@a/b/c.js"), "@a/b");
   assert.equal(packageOfPath("/x/node_modules/a/c.js"), "a");
+});
+
+// ADR 0158 § 3: an unresolved claim a `fallback-all` widening covers is the
+// widening, not a missing claim form; a namespace-member callee with no
+// package prints a placeholder, never `undefined`.
+test("an attribution widening explains a never-proposed domain", () => {
+  const widenings = [
+    {
+      entrypoint: ".",
+      obligation: "PackageContractExportMissing",
+      location: "<package-root>/dist/esm/routerStores.js:9:38",
+      domains: ["callbacks", "ownerRequirements", "reactiveReads", "returns"],
+      exports: ["createFileRoute", "useNavigate"]
+    }
+  ];
+  const widening = wideningFor(widenings, "createFileRoute", "creates", ".");
+  assert.equal(widening.location, "<package-root>/dist/esm/routerStores.js:9:38");
+  assert.equal(wideningFor(widenings, "createFileRoute", "creates", "./ssr"), null);
+  assert.equal(wideningFor(widenings, "Link", "returns", "."), null);
+  assert.equal(wideningFor([{ ...widenings[0], domains: ["callbacks"] }], "useNavigate", "reads", "."), null);
+  assert.deepEqual(causeOf({ status: "never proposed", widening }, "returns"), {
+    class: "attribution widening",
+    key: "fallback-all: PackageContractExportMissing",
+    location: "<package-root>/dist/esm/routerStores.js:9:38"
+  });
+  assert.deepEqual(causeOf({ status: "declined", declined: { kind: "dialect-silent", callee: "createSignal" } }, "creates"), {
+    class: "dialect-silent",
+    key: "<no package>:createSignal"
+  });
 });
 
 function fixtureRow() {

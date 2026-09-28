@@ -103,6 +103,9 @@ pub fn class_obligation(path: &Path, source: &str, location: Span) -> Option<Cla
     let mut publications = HashMap::<ReferenceId, String>::new();
     let mut declared_publications = HashMap::<SymbolId, Vec<String>>::new();
     let mut import_bindings = HashMap::<(u32, u32), SymbolId>::new();
+    // Value import bindings of another package (a bare specifier): a base
+    // class read from one is that package's code, described by its contract.
+    let mut dependency_bindings = HashSet::<SymbolId>::new();
     for statement in &parsed.program.body {
         match statement {
             Statement::ClassDeclaration(class) => classes.extend(ModuleClass::declared(class)),
@@ -182,6 +185,10 @@ pub fn class_obligation(path: &Path, source: &str, location: Span) -> Option<Cla
                     };
                     if let Some(symbol) = local.symbol_id.get() {
                         import_bindings.insert((local.span.start, local.span.end), symbol);
+                        let specifier = import.source.value.as_str();
+                        if !specifier.starts_with('.') && !specifier.starts_with('/') {
+                            dependency_bindings.insert(symbol);
+                        }
                     }
                 }
             }
@@ -279,6 +286,7 @@ pub fn class_obligation(path: &Path, source: &str, location: Span) -> Option<Cla
         ClassObligationKind::Construction
     } else {
         let mut involved = affected.clone();
+        let mut unseen_base = false;
         for index in &affected {
             let mut current = *index;
             while classes[current].class.super_class.is_some() {
@@ -287,20 +295,47 @@ pub fn class_obligation(path: &Path, source: &str, location: Span) -> Option<Cla
                 // instance, an override included.
                 let reference = classes[current].heritage_reference()?;
                 let base = scoping.get_reference(reference).symbol_id()?;
-                current = classes.iter().position(|class| class.symbol == base)?;
+                let Some(base_index) = classes.iter().position(|class| class.symbol == base) else {
+                    // Only another package's base is unseen in the sense
+                    // below. A local value, a sibling module's class or a
+                    // global is code this rule has no contract boundary for.
+                    if !dependency_bindings.contains(&base) {
+                        return None;
+                    }
+                    unseen_base = true;
+                    break;
+                };
+                current = base_index;
                 if !involved.insert(current) {
                     break;
                 }
             }
         }
-        let reached = construction_reaches(&classes, &involved, &census)?;
-        if positions
-            .iter()
-            .any(|position| matches!(position, Position::Member(key) if reached.contains(key)))
-        {
+        if unseen_base {
+            // ADR 0158 § 2: which members that constructor invokes is not
+            // exact, so every member position may run at construction. That
+            // is the construction answer, whose domains are a superset. It
+            // stays exact about *who* runs it only while no instance escapes
+            // this module's own code: an unseen base that retains the
+            // instance hands it only to dependency calls, which carry their
+            // own obligations (ADR 0134, Soundness).
+            if involved
+                .iter()
+                .any(|index| census.instance_escapes(classes[*index].class.span))
+            {
+                return None;
+            }
             ClassObligationKind::Construction
         } else {
-            ClassObligationKind::InstanceMember
+            let reached = construction_reaches(&classes, &involved, &census)?;
+            if positions
+                .iter()
+                .any(|position| matches!(position, Position::Member(key) if reached.contains(key)))
+            {
+                ClassObligationKind::Construction
+            } else {
+                ClassObligationKind::InstanceMember
+            }
         }
     };
     Some(ClassObligation {
@@ -942,17 +977,53 @@ export { Route, createRoute };\n";
     }
 
     // Amendment of 2026-09-28: a base this module cannot see may invoke any
-    // member during `super(…)`, so no member position of its subclasses is
-    // exact.
+    // member during `super(…)`, so no member position of its subclasses is an
+    // instance member. ADR 0158 § 2: for another package's base, it is the
+    // construction answer instead, while no instance escapes this module.
     #[test]
-    fn a_member_of_a_class_on_an_imported_base_refuses() {
+    fn a_member_of_a_class_on_a_dependency_base_runs_at_construction() {
         for needle in ["notFound(opts)", "notFound(this.id)"] {
-            assert_eq!(classify(ROUTE, needle), None, "{needle}");
+            let found = classify(ROUTE, needle).unwrap();
+            assert_eq!(found.kind, ClassObligationKind::Construction, "{needle}");
+            assert_eq!(
+                found.published,
+                vec!["NotFoundRoute".to_string(), "Route".to_string()]
+            );
         }
-        assert_eq!(
-            class_obligation(Path::new("route.js"), ROUTE, at(ROUTE, "notFound")),
-            None
+        let found = class_obligation(Path::new("route.js"), ROUTE, at(ROUTE, "notFound")).unwrap();
+        assert_eq!(found.kind, ClassObligationKind::Construction);
+        assert_eq!(found.construction_sites.len(), 1);
+    }
+
+    #[test]
+    fn a_member_on_an_unseen_base_refuses_unless_the_base_is_a_dependency() {
+        // The instance escapes to code of this module: another export may
+        // invoke the member outside every construction.
+        let escaping = ROUTE.replace(
+            "\t\tsuper(options);\n",
+            "\t\tsuper(options);\n\t\tregister(this);\n",
         );
+        assert_eq!(classify(&escaping, "notFound(opts)"), None);
+        // A sibling module's class is this package's code, not a contract
+        // boundary.
+        let sibling = ROUTE.replace(
+            "import { BaseRoute, notFound } from \"dep\";",
+            "import { BaseRoute } from \"./base.js\";\nimport { notFound } from \"dep\";",
+        );
+        assert_eq!(classify(&sibling, "notFound(opts)"), None);
+        // A global base, and a local value that is not a module-level class.
+        for base in ["HTMLElement", "makeBase()"] {
+            let source = format!(
+                "import {{ f }} from \"dep\";\nconst Made = {base};\n\
+                 var C = class extends {} {{\n\tm() {{\n\t\tf();\n\t}}\n}};\nexport {{ C }};\n",
+                if base == "HTMLElement" {
+                    "HTMLElement"
+                } else {
+                    "Made"
+                }
+            );
+            assert_eq!(classify(&source, "f()"), None, "{source}");
+        }
     }
 
     // The shape of `@tanstack/router-core@1.171.22`'s `RouterCore`: the

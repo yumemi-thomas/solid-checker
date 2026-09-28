@@ -5176,6 +5176,58 @@ struct UnresolvedExportIndex<'a> {
     /// a base class does with an argument its subclass passes to `super(…)`
     /// (ADR 0139 § 3).
     contracts: &'a solid_reactive_ir::contract_semantics::AcceptedContractIndex,
+    /// The generator's exact runtime edges (ADR 0137), for the relative
+    /// specifiers ESM's rule alone does not land (ADR 0158).
+    runtime_edges: &'a RuntimeEdges,
+    /// The contract document this generation writes (`--emit-contract`), so
+    /// each attribution record says which target of a batch it describes
+    /// (ADR 0158 § 3).
+    document: &'a str,
+}
+
+/// `(canonical importer, specifier) -> canonical runtime target`, from the
+/// `--runtime-module-resolutions` document. A pair the document names twice
+/// with different targets is absent.
+type RuntimeEdges = HashMap<(PathBuf, String), PathBuf>;
+
+/// Reads the generator's runtime edges for the attribution ladder (ADR 0158).
+///
+/// Only the file-to-file answer is taken: which module a specifier written in
+/// an importer loads. Both ends are canonicalized; an end that no longer
+/// exists drops the edge, and two targets for one pair drop both.
+fn read_runtime_edges(path: &str) -> Result<RuntimeEdges, Box<dyn std::error::Error>> {
+    let mut edges = RuntimeEdges::new();
+    if path.is_empty() {
+        return Ok(edges);
+    }
+    let document: RuntimeModuleResolutionDocument = serde_json::from_slice(&fs::read(path)?)?;
+    if document.schema_version != 1 {
+        return Err(format!(
+            "unsupported runtime module resolution schemaVersion {}",
+            document.schema_version
+        )
+        .into());
+    }
+    let mut ambiguous = HashSet::new();
+    for resolution in document.resolutions {
+        let (Ok(importer), Ok(target)) = (
+            Path::new(&resolution.importer).canonicalize(),
+            Path::new(&resolution.target).canonicalize(),
+        ) else {
+            continue;
+        };
+        let key = (importer, resolution.specifier);
+        if ambiguous.contains(&key) {
+            continue;
+        }
+        if edges.get(&key).is_some_and(|existing| existing != &target) {
+            edges.remove(&key);
+            ambiguous.insert(key);
+        } else {
+            edges.insert(key, target);
+        }
+    }
+    Ok(edges)
 }
 
 /// How an open semantic leaf was attributed to the exports it affects.
@@ -5421,10 +5473,28 @@ fn export_names_from_reachability(
     reach: &solid_reactive_ir::ObligationReach,
     exports: &BTreeMap<String, solid_reactive_ir::ContractExport>,
 ) -> Option<Vec<String>> {
-    if !reach.complete {
+    // ADR 0158 § 2: incomplete only through class members is answerable, by
+    // the class rung for each of them; any other gap is not.
+    if !reach.complete && !reach.complete_outside_classes {
         return None;
     }
     let mut names = Vec::new();
+    // ADR 0158 § 2: each call site inside a class member is answered by the
+    // class rung for that exact site -- construction only. An instance member
+    // would open `returns` alone, which this rung, whose answer keeps every
+    // domain, cannot say; it refuses instead, as it does when the class rung
+    // refuses the site.
+    for site in &reach.class_sites {
+        let (kind, creators) = export_names_of_class_obligation(index, site, exports)?;
+        if kind != solid_facts::ast::ClassObligationKind::Construction || creators.is_empty() {
+            return None;
+        }
+        for name in creators {
+            if !names.contains(&name) {
+                names.push(name);
+            }
+        }
+    }
     for body in &reach.reaching {
         let file = file_at(index, body.path.as_ref())?;
         let span = span_of(body);
@@ -5589,7 +5659,12 @@ fn imports_join_the_implementation(
                 .is_ok_and(|path| path.starts_with(root))
         });
         for import in other.ast.imports.iter().filter(|import| !import.type_only) {
-            match relative_landing(other_path, &import.module, &module_path) {
+            match relative_landing(
+                index.runtime_edges,
+                other_path,
+                &import.module,
+                &module_path,
+            ) {
                 Some(false) => continue,
                 None if inside => return false,
                 None => continue,
@@ -5623,7 +5698,7 @@ fn imports_join_the_implementation(
             let Some(specifier) = export.module.as_deref() else {
                 continue;
             };
-            match relative_landing(other_path, specifier, &module_path) {
+            match relative_landing(index.runtime_edges, other_path, specifier, &module_path) {
                 Some(false) => continue,
                 None if inside => return false,
                 None => continue,
@@ -5646,30 +5721,47 @@ fn imports_join_the_implementation(
             match load.specifier.as_deref() {
                 None if inside => return false,
                 None => {}
-                Some(specifier) => match relative_landing(other_path, specifier, &module_path) {
-                    Some(true) => return false,
-                    None if inside => return false,
-                    _ => {}
-                },
+                Some(specifier) => {
+                    match relative_landing(index.runtime_edges, other_path, specifier, &module_path)
+                    {
+                        Some(true) => return false,
+                        None if inside => return false,
+                        _ => {}
+                    }
+                }
             }
         }
     }
     true
 }
 
-/// Where a relative `specifier` written in `importer` lands, by ESM's
-/// relative-URL rule and nothing else: `Some(true)` on `module`,
-/// `Some(false)` elsewhere or for a bare specifier, `None` when it does not
-/// resolve to exactly one existing file.
-fn relative_landing(importer: &Path, specifier: &str, module: &Path) -> Option<bool> {
+/// Where a relative `specifier` written in `importer` lands: `Some(true)` on
+/// `module`, `Some(false)` elsewhere or for a bare specifier, `None` when it
+/// does not resolve to exactly one existing file.
+///
+/// ESM's relative-URL rule first. A specifier it does not land on a file --
+/// `./m` in a bundler-only source build -- answers only through the
+/// generator's runtime edge for that exact `(importer, specifier)`, which the
+/// generator writes only when a single file answers every resolver's probe
+/// list (ADR 0158). No edge is `None`, as before.
+fn relative_landing(
+    edges: &RuntimeEdges,
+    importer: &Path,
+    specifier: &str,
+    module: &Path,
+) -> Option<bool> {
     if !(specifier.starts_with("./") || specifier.starts_with("../")) {
         return Some(false);
     }
-    let target = importer.parent()?.join(specifier).canonicalize().ok()?;
-    if !target.is_file() {
-        return None;
+    if let Ok(target) = importer.parent()?.join(specifier).canonicalize()
+        && target.is_file()
+    {
+        return Some(target == module);
     }
-    Some(target == module)
+    let importer = importer.canonicalize().ok()?;
+    edges
+        .get(&(importer, specifier.to_owned()))
+        .map(|target| target == module)
 }
 
 fn module_surface_is_unaccounted(
@@ -5809,17 +5901,21 @@ fn attribute_unresolved_obligation(
 /// - `C` declares nothing but its constructor, and its instance escapes
 ///   nowhere: an override would change what `D`'s own `this.m(…)` runs, and an
 ///   escaped instance lets code that never received it call `D`'s members;
-/// - `D`'s accepted `callbacks` is closed and has a `result-access` item from
-///   slot `i`, which denies that `D` keeps `F` anywhere but in the instance. A
-///   call item alone does not: storage is not a call, and a closed enumeration
-///   of calls says nothing about what else `D` keeps (ADR 0023). Every other
-///   answer -- open, absent, degenerate, a member path of slot `i`, or no
-///   `result-access` item -- answers nothing here;
-/// - with a call item from `i`, or a constructor that names a member of
-///   `this` or `super` (a construction may then reach `D`'s member that calls
-///   `F`), `F` runs during construction: [`SuperArgumentConstruction`], in every
-///   domain. Otherwise `F` runs only when a member of the instance is invoked:
+/// - `D` has an accepted contract; an absent one, or a member path of slot
+///   `i`, answers nothing here;
+/// - when `D`'s `callbacks` is closed and has a `result-access` item from slot
+///   `i` -- which denies that `D` keeps `F` anywhere but in the instance -- and
+///   no call item from `i`, and the constructor names no member of `this` or
+///   `super`, `F` runs only when a member of the instance is invoked:
 ///   [`SuperArgumentMember`], which opens `returns`, as ADR 0134 § 2 does;
+/// - every other answer -- a call item, a constructor that names a member (a
+///   construction may then reach `D`'s member that calls `F`), and, since
+///   ADR 0158 § 2, an open or degenerate `callbacks` or one with no
+///   `result-access` item -- is [`SuperArgumentConstruction`], in every domain
+///   of `C`'s creators. Storage is not a call (ADR 0023), but a later call of
+///   a stored `F` is `D`'s code running inside a dependency call, and that
+///   call carries its own obligation, as ADR 0134's Soundness argues for an
+///   instance a base retains;
 /// - `C`'s creators are exactly [`export_names_of_class_obligation`]'s for the
 ///   `super(…)` call, with every reference check it makes.
 ///
@@ -5873,7 +5969,9 @@ fn export_names_of_super_argument_obligation(
             let inside = file_path
                 .canonicalize()
                 .is_ok_and(|path| path.starts_with(&package_root));
-            let lands = |specifier: &str| relative_landing(file_path, specifier, &module_path);
+            let lands = |specifier: &str| {
+                relative_landing(index.runtime_edges, file_path, specifier, &module_path)
+            };
             for import in file.ast.imports.iter().filter(|import| !import.type_only) {
                 match lands(&import.module) {
                     Some(false) => continue,
@@ -5952,31 +6050,33 @@ fn export_names_of_super_argument_obligation(
             .ok()?;
         let base = accepted.export();
         let callbacks = base.callbacks();
-        if !callbacks.is_closed() {
-            return None;
-        }
+        // ADR 0158 § 2: a base whose accepted contract leaves `callbacks`
+        // open, or closes it without saying it keeps `F`, may still invoke
+        // `F` during `super(…)` or keep it for later. The construction answer
+        // covers both for `C`'s creators, in every domain; a later invocation
+        // from state the base retained is a dependency call, which carries its
+        // own obligation (ADR 0134, Soundness).
         let (mut kept, mut called) = (false, false);
-        for item in callbacks.items() {
-            let ValueSource::Parameter { index: slot, path } = &item.from else {
-                continue;
-            };
-            if usize::from(*slot) != site.argument_index {
-                continue;
-            }
-            if !path.is_empty() {
-                return None;
-            }
-            let operation = base.operation(&item.operation.0)?;
-            if operation.is_result_access() {
-                kept = true;
-            } else if !operation.is_protocol_invocation() {
-                called = true;
+        if callbacks.is_closed() {
+            for item in callbacks.items() {
+                let ValueSource::Parameter { index: slot, path } = &item.from else {
+                    continue;
+                };
+                if usize::from(*slot) != site.argument_index {
+                    continue;
+                }
+                if !path.is_empty() {
+                    return None;
+                }
+                let operation = base.operation(&item.operation.0)?;
+                if operation.is_result_access() {
+                    kept = true;
+                } else if !operation.is_protocol_invocation() {
+                    called = true;
+                }
             }
         }
-        if !kept {
-            return None;
-        }
-        construction |= called || site.touches_instance;
+        construction |= !kept || called || site.touches_instance;
         let super_call = typefacts::Location {
             path: file.path.to_string().into(),
             start_byte: u64::from(site.super_call.start),
@@ -6198,16 +6298,8 @@ fn classes_stay_in_their_module(
             .is_ok_and(|path| path.starts_with(package_root));
         // `Some(true)`: lands on the module; `Some(false)`: lands elsewhere;
         // `None`: cannot be resolved exactly.
-        let lands = |specifier: &str| -> Option<bool> {
-            if !(specifier.starts_with("./") || specifier.starts_with("../")) {
-                return Some(false);
-            }
-            let joined = file_path.parent()?.join(specifier);
-            let target = joined.canonicalize().ok()?;
-            if !target.is_file() {
-                return None;
-            }
-            Some(target == module_path)
+        let lands = |specifier: &str| {
+            relative_landing(index.runtime_edges, file_path, specifier, module_path)
         };
         let is_entry = file.path.as_str() == entry.path.as_str();
         for import in file.ast.imports.iter().filter(|import| !import.type_only) {
@@ -6369,6 +6461,7 @@ fn mark_unresolved_export_claims(
         })
         .collect::<Vec<_>>();
     report_unknown_claim_attribution(
+        index.document,
         defect.kind.variant_name(),
         &defect.analysis_context,
         &defect.location,
@@ -6380,6 +6473,7 @@ fn mark_unresolved_export_claims(
         let mut independent_domains = domains;
         independent_domains.returns = false;
         report_unknown_claim_attribution(
+            index.document,
             defect.kind.variant_name(),
             &defect.analysis_context,
             &defect.location,
@@ -6473,6 +6567,7 @@ mod dispatch_identity_tests {
 const UNKNOWN_CLAIM_ATTRIBUTION_MARKER: &str = "solid-checker:unknown-claim-attribution=";
 
 fn report_unknown_claim_attribution(
+    document: &str,
     obligation: &str,
     analysis_context: &str,
     location: &typefacts::Location,
@@ -6489,7 +6584,10 @@ fn report_unknown_claim_attribution(
     // obligation, and the reviewer had nothing to check the narrowing against.
     // would make that refusal indistinguishable from an analysis that never
     // observed the obligation.
+    // `document` is the contract this generation writes, so a batch's records
+    // say which of its targets they describe (ADR 0158 § 3).
     let note = serde_json::json!({
+        "document": document,
         "obligation": obligation,
         "analysisContext": analysis_context,
         "path": location.path.as_ref(),
@@ -7083,6 +7181,7 @@ fn emit_package_contract(
     for file in &facts.files {
         files_by_path.entry(file.path.as_str()).or_insert(file);
     }
+    let runtime_edges = read_runtime_edges(&request.runtime_module_resolutions)?;
     // Type Facts should carry one entity per exact span, but attribution's
     // historical linear `find` chose the first if a producer ever repeated a
     // location. Preserve that fail-closed ordering rather than inheriting the
@@ -7129,6 +7228,8 @@ fn emit_package_contract(
             .and_then(|entry| files_by_canonical_path.get(&entry).copied()),
         resolution: (!request.contract_entry_file.is_empty()).then_some(&resolution),
         contracts,
+        runtime_edges: &runtime_edges,
+        document: &request.emit_contract,
     };
     for unresolved in &program.contract_generation_obligations {
         let target_names = contract_generation_obligation_target_names(
@@ -7151,6 +7252,7 @@ fn emit_package_contract(
             marked.push(name);
         }
         report_unknown_claim_attribution(
+            &request.emit_contract,
             "UnknownCallbackExecution",
             "contract-generation-obligation",
             &unresolved.location,

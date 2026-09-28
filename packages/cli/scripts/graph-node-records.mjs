@@ -90,6 +90,7 @@ export function graphNodeAuditRecord({
   limit = GRAPH_NODE_RECORD_LIMIT
 }) {
   const census = readJsonIfPresent(output ? `${output}.refusals.json` : null);
+  const attribution = readJsonIfPresent(output ? `${output}.attribution.json` : null);
   const proposal = readJsonIfPresent(plan);
   const record = {
     package: node?.packageName ?? null,
@@ -134,7 +135,18 @@ export function graphNodeAuditRecord({
     // What the planner could not resolve (never proposed as a closure) and
     // what it proposed; certification decides the second.
     unresolvedClaims: (proposal?.unresolvedClaims ?? []).map(claimRecord),
-    closureCandidates: (proposal?.closureCandidates ?? []).map(claimRecord)
+    closureCandidates: (proposal?.closureCandidates ?? []).map(claimRecord),
+    // ADR 0158 § 3: the obligations the attribution ladder widened to every
+    // export (`fallback-all`), with the domains and exports they marked. An
+    // unresolved claim one of these covers is that widening, not a missing
+    // claim form.
+    attributionWidenings: (attribution?.attributionWidenings ?? []).map(entry => ({
+      obligation: entry.obligation ?? null,
+      analysisContext: entry.analysisContext ?? null,
+      location: entry.location ?? null,
+      domains: [...(entry.domains ?? [])],
+      exports: [...(entry.exports ?? [])]
+    }))
   };
   for (const [name, items] of Object.entries(lists)) {
     const bounded = boundedRecords(items, limit);

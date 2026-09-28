@@ -15,8 +15,13 @@
 //
 // Amendment of 2026-09-28: a member the constructor can invoke runs at
 // construction (`@tanstack/router-core`'s `this.update(...)`), and a member
-// whose invokers at construction are not exact -- a base this module cannot
-// see, an override a base constructor calls -- keeps marking every export.
+// whose invokers at construction are not exact -- an override a base
+// constructor calls -- keeps marking every export.
+//
+// ADR 0158 § 2: a member of a class on another package's base may run while
+// that base constructs the instance, so it is construction, in every domain of
+// the creators -- unless the instance escapes this module's own code, which
+// keeps marking every export.
 
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -119,12 +124,42 @@ describe("a class obligation belongs to the exports that construct or hand out t
         "var Invoked = class {\n  constructor() {\n    this.lookup = (id) => opaque(id);\n    this.lookup(0);\n  }\n};\n" +
         `export { createInvoked };\n${LOCAL}`,
       // A dependency base's constructor may call the member during
-      // `super(...)`, and nothing here says whether it does.
+      // `super(...)`, and nothing here says whether it does: construction.
       inherited:
         'import { Base, opaque } from "depkg";\n' +
         "function createThing(options) {\n  return new Thing(options);\n}\n" +
         "var Thing = class extends Base {\n  constructor(options) {\n    super(options);\n" +
         "    this.lookup = (id) => opaque(id);\n  }\n};\n" +
+        `export { createThing };\n${LOCAL}`,
+      // An export that reaches the `new` site only by calling the creator, as
+      // `createFileRoute` calls `createRoute`: it constructs the class too.
+      wrapped:
+        `${imports}${THING}` +
+        "export function wrapThing(options) {\n  return createThing(options);\n}\n" +
+        `export { createThing };\n${LOCAL}`,
+      // A private helper the constructor calls: the call graph says only the
+      // constructor reaches it, and the constructor runs at construction
+      // (ADR 0158 § 2), as `Router`'s `primeRouterFromRegistry(...)` does.
+      helperFromConstructor:
+        'import { opaque } from "depkg";\nfunction prime(id) {\n  return opaque(id);\n}\n' +
+        "function createPrimed() {\n  return new Primed();\n}\n" +
+        "var Primed = class {\n  constructor() {\n    prime(1);\n  }\n};\n" +
+        `export { createPrimed };\n${LOCAL}`,
+      // The same helper also called from an instance method: that call runs
+      // later, which this rung cannot say, so it keeps marking every export.
+      helperFromMember:
+        'import { opaque } from "depkg";\nfunction prime(id) {\n  return opaque(id);\n}\n' +
+        "function createPrimed() {\n  return new Primed();\n}\n" +
+        "var Primed = class {\n  constructor() {\n    prime(1);\n  }\n  later() {\n    return prime(2);\n  }\n};\n" +
+        `export { createPrimed };\n${LOCAL}`,
+      // The same, with the instance handed to code of this module that
+      // another export can reach: who invokes the member is not exact.
+      inheritedEscaping:
+        'import { Base, opaque } from "depkg";\nconst held = [];\n' +
+        "function createThing(options) {\n  return new Thing(options);\n}\n" +
+        "var Thing = class extends Base {\n  constructor(options) {\n    super(options);\n" +
+        "    held.push(this);\n    this.lookup = (id) => opaque(id);\n  }\n};\n" +
+        "export function first() {\n  return held[0];\n}\n" +
         `export { createThing };\n${LOCAL}`,
       // The base constructor calls a member the subclass overrides, so the
       // override runs while the subclass is constructed.
@@ -145,6 +180,16 @@ describe("a class obligation belongs to the exports that construct or hand out t
         LOCAL_DECLARATION,
       inherited:
         "export declare function createThing(options: unknown): { lookup(id: unknown): unknown };\n" +
+        LOCAL_DECLARATION,
+      wrapped:
+        "export declare function createThing(options: unknown): object;\n" +
+        "export declare function wrapThing(options: unknown): object;\n" +
+        LOCAL_DECLARATION,
+      helperFromConstructor: `export declare function createPrimed(): object;\n${LOCAL_DECLARATION}`,
+      helperFromMember: `export declare function createPrimed(): { later(): unknown };\n${LOCAL_DECLARATION}`,
+      inheritedEscaping:
+        "export declare function createThing(options: unknown): { lookup(id: unknown): unknown };\n" +
+        "export declare function first(): unknown;\n" +
         LOCAL_DECLARATION,
       overridden: `export declare function createSub(): { init(): void };\n${LOCAL_DECLARATION}`
     };
@@ -255,8 +300,30 @@ describe("a class obligation belongs to the exports that construct or hand out t
     expect(closed(documents.invoked, "createInvoked")).not.toContain("callbacks");
   });
 
-  test("a member a base constructor may invoke keeps marking every export", () => {
-    expect(closed(documents.inherited, "local")).not.toContain("callbacks");
+  test("a member a dependency base may invoke is construction (ADR 0158)", () => {
+    expect(closed(documents.inherited, "local")).toEqual(closed(documents.control, "local"));
+    expect(closed(documents.inherited, "createThing")).not.toContain("callbacks");
+    expect(closed(documents.inherited, "createThing")).not.toContain("returns");
+  });
+
+  test("an export that calls a creator constructs the class too", () => {
+    expect(closed(documents.wrapped, "local")).toEqual(closed(documents.control, "local"));
+    expect(closed(documents.wrapped, "createThing")).not.toContain("callbacks");
+    expect(closed(documents.wrapped, "wrapThing")).not.toContain("callbacks");
+    // Known gap, not pinned here (ADR 0158, Consequences): the class rung
+    // gives each `new` site to the export that lexically contains it, so
+    // `wrapThing` still *proposes* `creates` closed while `createThing` does
+    // not. Certification's own `creates` census decides that proposal.
+  });
+
+  test("a helper only a constructor reaches opens the class's creators (ADR 0158)", () => {
+    expect(closed(documents.helperFromConstructor, "local")).toEqual(closed(documents.control, "local"));
+    expect(closed(documents.helperFromConstructor, "createPrimed")).not.toContain("callbacks");
+    expect(closed(documents.helperFromMember, "local")).not.toContain("callbacks");
+  });
+
+  test("an escaping instance on a dependency base, or an override, keeps marking every export", () => {
+    expect(closed(documents.inheritedEscaping, "local")).not.toContain("callbacks");
     expect(closed(documents.overridden, "local")).not.toContain("callbacks");
   });
 });

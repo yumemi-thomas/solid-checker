@@ -3249,6 +3249,33 @@ export function resolvePackageArtifacts({
   };
 }
 
+// Every extension a mainstream resolver probes for an extensionless relative
+// specifier (Vite, esbuild, webpack, Rollup's node-resolve, TypeScript's
+// runtime extensions), so that one existing candidate is the answer of every
+// one of them, whatever its order (ADR 0158 § 1).
+const BUNDLER_PROBE_EXTENSIONS = Object.freeze([
+  ...RUNTIME_EXTENSIONS,
+  ".json",
+  ".css",
+  ".wasm",
+  ".node"
+]);
+
+/// The one file an extensionless relative request `base` (already joined to
+/// the importer's directory) can load, or `undefined`. Only a request whose
+/// own extension is no runtime extension qualifies -- a missing `./m.js` is a
+/// missing file, not a request to guess -- and exactly one of `base + ext` and
+/// `base/index + ext`, over `BUNDLER_PROBE_EXTENSIONS`, may exist.
+function uniqueBundlerLanding(base) {
+  if (RUNTIME_EXTENSIONS.includes(extname(base))) return undefined;
+  const found = [
+    ...BUNDLER_PROBE_EXTENSIONS.map(extension => `${base}${extension}`),
+    ...BUNDLER_PROBE_EXTENSIONS.map(extension => join(base, `index${extension}`))
+  ].filter(isFile);
+  if (found.length !== 1 || isDeclarationFileName(found[0])) return undefined;
+  return found[0];
+}
+
 /// The package-local static ESM edges of one resolved artifact case, as the
 /// runtime loads them (ADR 0137): `{ importer, specifier, target }` for every
 /// import or `export … from` statement of a runtime module in the case's
@@ -3272,6 +3299,15 @@ export function resolvePackageArtifacts({
 ///   guessing, which only a bundler does);
 /// - the landing is not a declaration file, and a type-only statement is no
 ///   runtime edge.
+///
+/// One more landing is exact (ADR 0158 § 1): a specifier with no runtime
+/// extension that ESM's rule does not land -- `./m`, as a package's
+/// bundler-only source build (its `solid` condition) writes it -- when exactly
+/// one file answers the union of every mainstream resolver's probe list
+/// (`uniqueBundlerLanding`). That file is then what any resolver that
+/// resolves the specifier at all loads, and it is the one the closure walk
+/// (`localModuleTarget`) already chose; two candidates, a directory index
+/// beside a file, or a candidate outside the closure write no edge.
 ///
 /// Anything else writes no edge, and the analysis keeps TypeScript's binding.
 export function runtimeModuleResolutions(resolution) {
@@ -3300,8 +3336,10 @@ export function runtimeModuleResolutions(resolution) {
       const specifier = statement.moduleSpecifier.text;
       if (!specifier.startsWith("./") && !specifier.startsWith("../")) continue;
       if (/[?#%\\]/.test(specifier)) continue;
-      const landing = resolve(dirname(real), specifier);
-      if (!isFile(landing)) continue;
+      const landing = isFile(resolve(dirname(real), specifier))
+        ? resolve(dirname(real), specifier)
+        : uniqueBundlerLanding(resolve(dirname(real), specifier));
+      if (landing === undefined) continue;
       const target = modules.get(realpath(landing));
       if (target === undefined) continue;
       edges.set(JSON.stringify([importer, specifier]), { importer, specifier, target });

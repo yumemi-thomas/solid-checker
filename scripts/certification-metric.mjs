@@ -285,6 +285,7 @@ export function readRetainedRow(result) {
     retainedProposalCases: audit?.graphPreparation?.retainedProposalCases ?? 0,
     proposal: read(".proposal.json"),
     refusals: read(".refusals.json"),
+    attribution: read(".attribution.json"),
     generated: generatedPath ? JSON.parse(readFileSync(generatedPath, "utf8")) : null
   };
 }
@@ -311,6 +312,32 @@ function operationDomain(generated, exportName, local) {
     }
   }
   return null;
+}
+
+// The native unresolved-claim domain an open consumer domain comes from:
+// `creates` is withheld whenever owner requirements are open.
+const NATIVE_CLAIM_DOMAIN = {
+  callbacks: "callbacks",
+  reads: "reactiveReads",
+  returns: "returns",
+  creates: "ownerRequirements"
+};
+
+/// The attribution widening (ADR 0158 § 3) that opened `domain` of
+/// `exportName`, when one did: a `fallback-all` record of the generator that
+/// marked the export in that domain. An unresolved claim it covers is the
+/// ladder's refusal to attribute, not a claim form the generator lacks.
+export function wideningFor(widenings, exportName, domain, entrypoint = null) {
+  const native = NATIVE_CLAIM_DOMAIN[domain];
+  if (!native) return null;
+  const covering = (widenings ?? []).filter(
+    entry =>
+      (entrypoint === null || entry.entrypoint === undefined || entry.entrypoint === entrypoint) &&
+      (entry.exports ?? []).includes(exportName) &&
+      (entry.domains ?? []).includes(native)
+  );
+  if (covering.length === 0) return null;
+  return [...covering].sort((left, right) => String(left.location).localeCompare(String(right.location)))[0];
 }
 
 const STATUS_RANK = ["withheld", "withheld operation", "declined", "never proposed", "proposed, not certified"];
@@ -340,7 +367,10 @@ function plainCaseStatus(row, exportName, entrypoint, artifactCase, domain) {
     claim.subject?.artifactCase === artifactCase &&
     claim.subject?.export === exportName &&
     claim.subject?.path?.domain === domain;
-  if ((row.proposal?.unresolvedClaims ?? []).some(about)) return { status: "never proposed" };
+  if ((row.proposal?.unresolvedClaims ?? []).some(about)) {
+    const widening = wideningFor(row.attribution?.attributionWidenings, exportName, domain, entrypoint);
+    return widening ? { status: "never proposed", widening } : { status: "never proposed" };
+  }
   if ((row.proposal?.closureCandidates ?? []).some(about)) return { status: "proposed, not certified" };
   return { status: "no record" };
 }
@@ -416,7 +446,13 @@ function graphStatus(row, where, exportName, entrypoint, domain) {
   }
   if (capped("declinedClosures")) return { status: "graph: record truncated", list: "declinedClosures" };
   const about = claim => claim.export === exportName && claim.path?.domain === domain;
-  if (records.some(record => (record.unresolvedClaims ?? []).some(about))) return { status: "never proposed" };
+  if (records.some(record => (record.unresolvedClaims ?? []).some(about))) {
+    for (const record of records) {
+      const widening = wideningFor(record.attributionWidenings, exportName, domain);
+      if (widening) return { status: "never proposed", widening };
+    }
+    return { status: "never proposed" };
+  }
   if (capped("unresolvedClaims")) return { status: "graph: record truncated", list: "unresolvedClaims" };
   if (records.some(record => (record.closureCandidates ?? []).some(about))) return { status: "proposed, not certified" };
   if (capped("closureCandidates")) return { status: "graph: record truncated", list: "closureCandidates" };
@@ -495,9 +531,18 @@ export function causeOf(status, domain) {
       return { class: "unaccepted dependency", key: dependency };
     }
     if (entry.kind === "dialect-silent") {
-      return { class: "dialect-silent", key: `${entry.package}:${entry.callee}` };
+      // A callee whose package no resolved fact names keeps an explicit
+      // placeholder rather than printing `undefined`.
+      return { class: "dialect-silent", key: `${entry.package || "<no package>"}:${entry.callee}` };
     }
     return { class: "declined", key: entry.kind };
+  }
+  if (status.status === "never proposed" && status.widening) {
+    return {
+      class: "attribution widening",
+      key: `fallback-all: ${status.widening.obligation || "obligation"}`,
+      location: String(status.widening.location ?? "").replace(/^.*node_modules\//, "")
+    };
   }
   if (status.status === "never proposed") return { class: "missing claim form", key: `${domain} never proposed` };
   if (status.status === "graph: never proposed") {

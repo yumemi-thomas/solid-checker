@@ -553,7 +553,12 @@ impl CreatesProposalWalk {
 /// cannot happen in one module; across modules the symbols differ, so the map
 /// is keyed uniquely and the first writer wins only for a symbol some file
 /// re-declares, which is not a case this map is asked about.
-fn imported_modules_by_symbol<'a>(ctx: &AnalysisContext<'a>) -> HashMap<&'a str, &'a str> {
+///
+/// The value says whether the binding is a namespace import
+/// (`import * as Solid from "solid-js"`): only such a binding answers for a
+/// member callee `Solid.createSignal` rooted at it, because the namespace
+/// object's members are exactly the module's exports.
+fn imported_modules_by_symbol<'a>(ctx: &AnalysisContext<'a>) -> HashMap<&'a str, (&'a str, bool)> {
     let mut modules = HashMap::new();
     for file in &ctx.facts.files {
         for import in &file.ast.imports {
@@ -565,12 +570,42 @@ fn imported_modules_by_symbol<'a>(ctx: &AnalysisContext<'a>) -> HashMap<&'a str,
                     continue;
                 }
                 if let Some(symbol) = ctx.semantic_lookup.entity_symbol(file, binding.local.span) {
-                    modules.entry(symbol).or_insert(import.module.as_str());
+                    modules.entry(symbol).or_insert((
+                        import.module.as_str(),
+                        binding.kind == solid_facts::ast::ImportKind::Namespace,
+                    ));
                 }
             }
         }
     }
     modules
+}
+
+/// The specifier of the namespace import a static member callee is rooted at:
+/// `Solid.createSignal` in a module with `import * as Solid from "solid-js"`
+/// answers `solid-js`. Exact or absent: the callee must be a certified static
+/// dotted path of exactly two segments, and its root identifier's own entity
+/// must be the symbol of a namespace import binding.
+fn namespace_root_module<'a>(
+    ctx: &AnalysisContext<'a>,
+    file: &'a solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    imported_modules: &HashMap<&str, (&'a str, bool)>,
+) -> Option<&'a str> {
+    let text = call.static_callee(&file.source)?;
+    let (root, member) = text.split_once('.')?;
+    if root.is_empty() || member.is_empty() || member.contains('.') {
+        return None;
+    }
+    let span = solid_facts::core::Span::new(
+        call.callee.start,
+        call.callee.start + u32::try_from(root.len()).ok()?,
+    );
+    let symbol = ctx.semantic_lookup.entity_symbol(file, span)?;
+    match imported_modules.get(symbol) {
+        Some((module, true)) => Some(module),
+        _ => None,
+    }
 }
 
 /// The per-file tables [`unresolved_callee_shape`] needs and no existing index
@@ -1071,7 +1106,7 @@ fn creates_proposal_decline<'a>(
     file: &'a solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
     primitive: Option<&PrimitiveName>,
-    imported_modules: &HashMap<&str, &str>,
+    imported_modules: &HashMap<&str, (&'a str, bool)>,
     shape_facts: &FileShapeFacts<'a>,
     conditions: &std::collections::BTreeSet<String>,
 ) -> Option<CreatesDeclineKind> {
@@ -1119,10 +1154,11 @@ fn creates_proposal_decline<'a>(
             return None;
         }
         return Some(CreatesDeclineKind::DialectSilent {
-            // Two resolved answers, in order, and no third: the compiler's own
+            // Three resolved answers, in order: the compiler's own
             // `origin_module` for the callee's resolved declaration, then the
             // specifier of the import statement this exact callee *symbol* is
-            // the binding of. Empty where neither answers — a primitive is
+            // the binding of, then the namespace import a two-segment static
+            // member callee is rooted at. Empty where none answers — a primitive is
             // recognized by dialect vocabulary, which says nothing about which
             // archive the callee reached, so guessing one from the spelling
             // would invent the very identity the census exists to bind.
@@ -1132,8 +1168,12 @@ fn creates_proposal_decline<'a>(
                 .or_else(|| {
                     ctx.semantic_lookup
                         .callee_symbol(file, callee)
-                        .and_then(|symbol| imported_modules.get(symbol).copied())
+                        .and_then(|symbol| imported_modules.get(symbol))
+                        .map(|(module, _)| *module)
                 })
+                // ADR 0158 § 3: a namespace member is not the binding of any
+                // import, but its root is.
+                .or_else(|| namespace_root_module(ctx, file, call, imported_modules))
                 .map(package_of_module)
                 .unwrap_or_default(),
             export: (*spelling).to_owned(),

@@ -9,8 +9,11 @@
 // - The base keeps it and the subclass's constructor names a member of `this`
 //   (a construction may reach the member that calls it): the obligation is
 //   construction, in every domain of the creators.
-// - Anything else -- an open base, an escaping instance, a subclass member that
-//   could override what the base's own `this.m(...)` runs, another use of the
+// - A base whose contract leaves `callbacks` open (ADR 0158 § 2): it may call
+//   the argument at construction or keep it, so the obligation is construction
+//   too.
+// - Anything else -- an escaping instance, a subclass member that could
+//   override what the base's own `this.m(...)` runs, another use of the
 //   function -- keeps marking every export.
 //
 // `@tanstack/solid-router@2.0.0-rc.8`'s `Router` is the measured shape:
@@ -227,8 +230,13 @@ describe("a function passed to super(...) belongs to the subclass's creators", (
     expect(closed(documents.touching, "createHolder")).not.toContain("callbacks");
   });
 
-  test("anything the base's contract or the subclass leaves inexact marks every export", () => {
-    for (const name of ["escaping", "overriding", "open", "reused"]) {
+  test("a base whose callbacks are open makes it construction (ADR 0158)", () => {
+    expect(closed(documents.open, "local")).toEqual(closed(documents.control, "local"));
+    expect(closed(documents.open, "createHolder")).not.toContain("callbacks");
+  });
+
+  test("anything the subclass leaves inexact marks every export", () => {
+    for (const name of ["escaping", "overriding", "reused"]) {
       expect(closed(documents[name], "local"), name).not.toContain("callbacks");
     }
   });

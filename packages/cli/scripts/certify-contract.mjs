@@ -4426,6 +4426,15 @@ function reuseEmittedProposal({ options, manifest, certificationImporter, propos
   } catch {
     // The refusal census is a separate, separately validated reuse.
   }
+  try {
+    // ADR 0158 § 3: diagnostic only, reused with the proposal it describes.
+    writeFileSync(
+      `${proposalOutput}.attribution.json`,
+      readFileSync(`${options.proposal}.attribution.json`)
+    );
+  } catch {
+    // A proposal generated before the sidecar existed has none.
+  }
   return {
     package: manifest.name,
     version: manifest.version,

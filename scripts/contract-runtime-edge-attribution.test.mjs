@@ -1,6 +1,8 @@
 // Pins ADR 0137: an importer whose `./m.js` TypeScript binds to a sibling
 // `m.d.ts` is joined to the runtime module Node loads, so the call graph sees
-// its calls -- and only an exact ESM landing makes that join.
+// its calls -- and only an exact landing makes that join. ADR 0158 § 1 adds
+// the extensionless `./m` a bundler-only source build writes, when exactly one
+// file answers every resolver's probe list; two candidates stay refused.
 //
 // `@tanstack/solid-router@2.0.0-rc.8` ships one `.d.ts` beside each runtime
 // module. `Matches.js` imports `Transitioner` through `./Transitioner.js`,
@@ -97,10 +99,16 @@ describe("a .d.ts split is joined to the runtime module Node loads", () => {
       control: { "dist/index.js": LOCAL, "dist/index.d.ts": LOCAL_DECLARATION },
       // The published shape: an explicit `.js` specifier Node loads as written.
       joined: split("./helper.js"),
-      // A bundler-only spelling. Node's ESM loader resolves no extensionless
-      // relative specifier, so no runtime landing is exact and the join stays
-      // refused.
-      extensionless: split("./helper")
+      // A bundler-only spelling, as a `solid`-condition source build writes
+      // it. Node's ESM loader resolves no extensionless relative specifier,
+      // but exactly one file answers every resolver's probe list, so the
+      // landing is exact (ADR 0158 § 1).
+      extensionless: split("./helper"),
+      // The same spelling with two candidates: which one loads is a
+      // resolver's policy, so no landing is exact and the join stays refused.
+      ambiguous: { ...split("./helper"), "dist/helper.jsx": HELPER },
+      // A directory index beside the file is a second candidate too.
+      indexed: { ...split("./helper"), "dist/helper/index.js": HELPER }
     };
 
     const dependencyOutput = join(directory, "depkg.json");
@@ -199,18 +207,28 @@ describe("a .d.ts split is joined to the runtime module Node loads", () => {
       { importer: "dist/index.js", specifier: "./caller.js", target: "dist/caller.js" }
     ]);
     expect(edges.extensionless).toEqual([
+      { importer: "dist/caller.js", specifier: "./helper", target: "dist/helper.js" },
       { importer: "dist/index.js", specifier: "./caller.js", target: "dist/caller.js" }
     ]);
+    for (const name of ["ambiguous", "indexed"]) {
+      expect(edges[name], name).toEqual([
+        { importer: "dist/index.js", specifier: "./caller.js", target: "dist/caller.js" }
+      ]);
+    }
   });
 
   test("a joined split attributes the helper to its exact callers", () => {
     expect(closed(documents.control, "local")).toContain("callbacks");
-    expect(closed(documents.joined, "local")).toEqual(closed(documents.control, "local"));
-    expect(closed(documents.joined, "caller")).not.toContain("callbacks");
+    for (const name of ["joined", "extensionless"]) {
+      expect(closed(documents[name], "local"), name).toEqual(closed(documents.control, "local"));
+      expect(closed(documents[name], "caller"), name).not.toContain("callbacks");
+    }
   });
 
   test("a split with no exact runtime landing still marks every export", () => {
-    expect(closed(documents.extensionless, "local")).not.toContain("callbacks");
-    expect(closed(documents.extensionless, "caller")).not.toContain("callbacks");
+    for (const name of ["ambiguous", "indexed"]) {
+      expect(closed(documents[name], "local"), name).not.toContain("callbacks");
+      expect(closed(documents[name], "caller"), name).not.toContain("callbacks");
+    }
   });
 });

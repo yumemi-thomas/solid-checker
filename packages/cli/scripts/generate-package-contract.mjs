@@ -255,6 +255,52 @@ const DECLINED_CLOSURE_MARKER = "solid-checker:declined-closure=";
 /// They are **appended** columns, so a line written by an emitter that predates
 /// them parses with both empty rather than failing, and `kind` still says
 /// `unresolved-callee` for every shape.
+/// The native emitter's attribution records (`report_unknown_claim_attribution`,
+/// one stderr line per locally unresolved obligation it attributed).
+export const UNKNOWN_CLAIM_ATTRIBUTION_MARKER = "solid-checker:unknown-claim-attribution=";
+
+/// The attribution *widenings* of one emitted document (ADR 0158 § 3): the
+/// records whose obligation no exact rung tied to an export, so the ladder's
+/// last rung (`fallback-all`) marked every export of the case in the record's
+/// domains. These are what a proposal's "never proposed" claim is when it is
+/// not a missing claim form, and the proposal plan does not say so: an open
+/// domain there is only an unresolved claim.
+///
+/// Diagnostic only, like the declines: nothing here is an input to
+/// certification. The location is folded to `<package-root>` for the same
+/// reason. Exact per document: a batch's stderr carries every target's
+/// records, and each names the document it was written for.
+export function attributionWideningsFromEmitterOutput(stderr, documentPath, packageRoot = null) {
+  const relativize = value =>
+    packageRoot ? String(value).replaceAll(packageRoot, "<package-root>") : String(value);
+  const widenings = [];
+  const seen = new Set();
+  for (const line of String(stderr ?? "").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(UNKNOWN_CLAIM_ATTRIBUTION_MARKER)) continue;
+    let record;
+    try {
+      record = JSON.parse(trimmed.slice(UNKNOWN_CLAIM_ATTRIBUTION_MARKER.length));
+    } catch {
+      continue;
+    }
+    if (record?.document !== documentPath || record.mechanism !== "fallback-all") continue;
+    if (!Array.isArray(record.exports) || record.exports.length === 0) continue;
+    const widening = {
+      obligation: String(record.obligation ?? ""),
+      analysisContext: relativize(record.analysisContext ?? ""),
+      location: `${relativize(record.path ?? "")}:${record.startByte}:${record.endByte}`,
+      domains: [...(record.domains ?? [])].map(String).sort(),
+      exports: [...record.exports].map(String).sort()
+    };
+    const key = JSON.stringify(widening);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    widenings.push(widening);
+  }
+  return widenings;
+}
+
 export function declinedClosuresFromEmitterOutput(stdout, documentPath, packageRoot = null) {
   // A blocking call site is a `path:start:end` inside the analyzed package, and
   // the emitter states it absolutely because that is the only path it has. A
@@ -1081,6 +1127,26 @@ function writeCertificationInputs(output, plan, {
 // certifies — so putting it in `refusals` would change every consumer's refusal
 // total. Its own array keeps "never counted as an artifact-case refusal" true
 // by construction.
+/// `<output>.attribution.json` (ADR 0158 § 3): the attribution widenings of
+/// every analyzed case, beside the refusal audit rather than in it, so the
+/// contract corpus's `expected-refusals.json` pins keep their bytes.
+function writeAttributionAudit(output, manifest, attributionWidenings = []) {
+  mkdirSync(dirname(output), { recursive: true });
+  writeFileSync(
+    `${output}.attribution.json`,
+    `${JSON.stringify(
+      {
+        format: "solid-checker-contract-attribution-widenings",
+        attributionVersion: 1,
+        package: { name: manifest.name, version: manifest.version },
+        attributionWidenings
+      },
+      null,
+      2
+    )}\n`
+  );
+}
+
 function writeProposalRefusalAudit(
   output,
   manifest,
@@ -1280,6 +1346,7 @@ async function analyzeArtifact({
     identity,
     withheldClaims: withheldClaimsFromEmitterOutput(emitted.stdout, output),
     declinedClosures: declinedClosuresFromEmitterOutput(emitted.stdout, output, packageRoot),
+    attributionWidenings: attributionWideningsFromEmitterOutput(emitted.stderr, output, packageRoot),
     analysisDurationMs: performance.now() - startedAt
   };
 }
@@ -1409,6 +1476,11 @@ async function analyzeArtifactsBatch({
             withheldClaims: withheldClaimsFromEmitterOutput(emitted.stdout, target.output),
             declinedClosures: declinedClosuresFromEmitterOutput(
               emitted.stdout,
+              target.output,
+              packageRoot
+            ),
+            attributionWidenings: attributionWideningsFromEmitterOutput(
+              emitted.stderr,
               target.output,
               packageRoot
             ),
@@ -1544,6 +1616,7 @@ export async function generatePackageContract(
   // an unmade proposal is invisible in the document, and which blocker it was
   // is what `scripts/dialect-audit-yield.mjs` ranks.
   const declinedClosures = [];
+  const attributionWidenings = [];
   // ADR 0151: which frontier edges a compiled-in acceptance discharged, and
   // which it could not, per case. Audit material; certification re-derives it.
   const citations = [];
@@ -1738,6 +1811,13 @@ export async function generatePackageContract(
             reason: claim.reason
           });
         }
+        for (const record of outcome.proposal.attributionWidenings ?? []) {
+          attributionWidenings.push({
+            entrypoint: outcome.proposal.entrypoint,
+            conditions: outcome.proposal.conditions,
+            ...record
+          });
+        }
         for (const record of outcome.proposal.declinedClosures ?? []) {
           declinedClosures.push({
             entrypoint: outcome.proposal.entrypoint,
@@ -1790,6 +1870,7 @@ export async function generatePackageContract(
         declinedClosures,
         citations
       );
+      writeAttributionAudit(output, manifest, attributionWidenings);
       const first = refusals[0];
       // When nothing refused, the refusal clause names no cause at all and the
       // signature is unclassifiable. Name the first inapplicable class and
@@ -1876,6 +1957,7 @@ export async function generatePackageContract(
         declinedClosures,
         citations
       );
+          writeAttributionAudit(output, manifest, attributionWidenings);
           throw new Error("no independently mergeable artifact case remains");
         }
         emittedArtifactCases = fallback.acceptedCount;
@@ -1900,6 +1982,7 @@ export async function generatePackageContract(
         declinedClosures,
         citations
       );
+    writeAttributionAudit(output, manifest, attributionWidenings);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }

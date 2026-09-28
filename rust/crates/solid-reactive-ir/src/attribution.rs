@@ -52,6 +52,21 @@ pub struct ObligationReach {
     /// into a callee the graph could not resolve. Emission must then mark every
     /// export rather than trust the partial set.
     pub complete: bool,
+    /// Whether `reaching` would be complete but for [`Self::class_sites`]:
+    /// every function on the path outside a class is entered only through
+    /// the calls the graph enumerated (ADR 0158 § 2).
+    #[serde(default)]
+    pub complete_outside_classes: bool,
+    /// The call sites on the path that sit inside a class member -- a
+    /// constructor, a method, an accessor, or a closure one creates. Member
+    /// dispatch enters those, which no reference enumerates, so the walk
+    /// stops at each such site instead of entering its member: a consumer may
+    /// narrow through one only by what constructs or hands out the class
+    /// (ADR 0134), and must treat the reach as incomplete otherwise. The
+    /// obligation's *own* function being a class member is no site; that
+    /// reach stays incomplete, for the class rung proper to answer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub class_sites: Vec<Location>,
 }
 
 /// The reach answer for every distinct unresolved obligation in `defects`.
@@ -222,10 +237,13 @@ impl<'a> CallGraph<'a, '_> {
         let mut queue = uses.functions.into_iter().collect::<VecDeque<_>>();
         let mut reaching = Vec::new();
         let mut complete = uses.complete;
+        let mut complete_outside_classes = uses.complete;
+        let mut class_sites = Vec::new();
         while let Some((path, function, body)) = queue.pop_front() {
             reaching.push(location(path, body));
             if !self.entered_only_through_calls(path, function) {
                 complete = false;
+                complete_outside_classes = false;
             }
             // A render through a dialect renderer (`createComponent(Panel,
             // props)`) enters the function as a JSX tag does (ADR 0136).
@@ -244,19 +262,52 @@ impl<'a> CallGraph<'a, '_> {
                     // A call at module scope runs when the module is imported,
                     // so every consumer of the entrypoint reaches it.
                     complete = false;
+                    complete_outside_classes = false;
                     continue;
                 };
+                // ADR 0158 § 2: a class member is entered by member dispatch,
+                // which only the class's own creators can bring about. Stop
+                // at the site and let the consumer's class rung answer for
+                // it, or refuse.
+                if self.is_class_member(caller.path.as_str(), owner.span) {
+                    complete = false;
+                    class_sites.push(location(caller.path.as_str(), callee));
+                    continue;
+                }
                 if visited.insert((caller.path.as_str(), owner.span)) {
                     queue.push_back((caller.path.as_str(), owner.span, owner.body));
                 }
             }
         }
         reaching.sort_by(crate::location_order);
+        class_sites.sort_by(crate::location_order);
+        class_sites.dedup();
         ObligationReach {
             location: obligation.clone(),
             reaching,
             complete,
+            complete_outside_classes,
+            class_sites,
         }
+    }
+
+    /// Whether `function` is a member of a class: a method or accessor, the
+    /// constructor included, as [`Self::function_symbols`] recognizes one.
+    fn is_class_member(&self, path: &str, function: Span) -> bool {
+        let Some(file) = self.file(path) else {
+            return false;
+        };
+        file.ast
+            .functions
+            .iter()
+            .find(|candidate| candidate.span == function)
+            .is_some_and(|fact| {
+                fact.name.is_none()
+                    && fact.method_name.is_some()
+                    && file.ast.classes.iter().any(|class| {
+                        class.span.start <= fact.span.start && fact.span.end <= class.span.end
+                    })
+            })
     }
 
     /// Whether every way of entering this function is one of the call sites

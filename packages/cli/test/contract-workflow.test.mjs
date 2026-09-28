@@ -156,8 +156,47 @@ import {
   retainIndependentlyMergeableProposals,
   withheldClaimsFromEmitterOutput,
   declinedClosuresFromEmitterOutput,
+  attributionWideningsFromEmitterOutput,
   citableSpecifiers
 } from "../scripts/generate-package-contract.mjs";
+
+// ADR 0158 § 3: the `fallback-all` attribution records of one document of a
+// batch, from the emitter's stderr; exact rungs, other documents, records that
+// marked nothing and malformed lines are not widenings.
+test("attribution widenings are read per document from the emitter's stderr", () => {
+  const marker = "solid-checker:unknown-claim-attribution=";
+  const record = (fields) => `${marker}${JSON.stringify({
+    document: "/scratch/a-proposal.json",
+    obligation: "PackageContractExportMissing",
+    analysisContext: "unknown-contract-claims:returns",
+    path: "/pkg/dist/route.js",
+    startByte: 9,
+    endByte: 18,
+    mechanism: "fallback-all",
+    domains: ["returns", "reactiveReads"],
+    exports: ["b", "a"],
+    ...fields
+  })}`;
+  const stderr = [
+    record({}),
+    record({}),
+    record({ mechanism: "class-construction" }),
+    record({ document: "/scratch/b-proposal.json" }),
+    record({ exports: [] }),
+    `${marker}{malformed`,
+    "warning: ordinary output"
+  ].join("\n");
+  assert.deepEqual(attributionWideningsFromEmitterOutput(stderr, "/scratch/a-proposal.json", "/pkg"), [
+    {
+      obligation: "PackageContractExportMissing",
+      analysisContext: "unknown-contract-claims:returns",
+      location: "<package-root>/dist/route.js:9:18",
+      domains: ["reactiveReads", "returns"],
+      exports: ["a", "b"]
+    }
+  ]);
+  assert.equal(attributionWideningsFromEmitterOutput(stderr, "/scratch/b-proposal.json").length, 1);
+});
 
 test("declaration binding recovery requests only exact refused reexports without granting authority", () => {
   const runtime = { axis: "runtime", kind: "import", specifier: "runtime", importerPath: "./index.js" };
