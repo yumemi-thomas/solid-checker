@@ -150,6 +150,14 @@ pub fn project_export_semantics(
         .operation_claim(ClaimDomain::Creates)
         .expect("creates is an operation domain");
     let creates_closed_empty = creates.is_closed() && creates.items().is_empty();
+    // ADR 0143: the same reading for `returns`. `project_return` answers
+    // `Known(None)` both for `returns: []` and for a closed claim over outputs
+    // that name no reactive leaf, and only the first is a closure a
+    // re-exporting package may restate as empty.
+    let returns_claim = export
+        .operation_claim(ClaimDomain::Returns)
+        .expect("returns is an operation domain");
+    let returns_closed_empty = returns_claim.is_closed() && returns_claim.items().is_empty();
 
     ContractExport {
         kind: kind.into(),
@@ -160,6 +168,7 @@ pub fn project_export_semantics(
         async_behavior,
         open_claims,
         creates_closed_empty,
+        returns_closed_empty,
         creates_walk_clean: false,
         creates_walk_declines: Vec::new(),
         returns_walk_clean: false,
@@ -741,6 +750,44 @@ mod owner_requirement_projection_tests {
             disposals: KnowledgeSet::Unknown,
             computations: KnowledgeSet::Unknown,
         }
+    }
+
+    /// ADR 0143: `returns: []` and a closed claim over one `plain` return both
+    /// project to `Known(None)` -- the consumer's single leaf names neither --
+    /// and only the empty one sets `returns_closed_empty`, which is what the
+    /// inherited premise reads. Before it, a re-exporting package restated a
+    /// dependency's plain return as `returns: []`.
+    #[test]
+    fn only_the_empty_returns_closure_projects_as_closed_empty() {
+        let empty = project_export_semantics(&export(claims(), Vec::new(), Vec::new()));
+        assert_eq!(empty.returns, ContractClaim::Known(None));
+        assert!(empty.returns_closed_empty);
+
+        let mut plain = operation("return", OperationKind::Return, &[]);
+        plain.output = Some(ValueShape::Plain);
+        let projected = project_export_semantics(&export(
+            CallClaims {
+                returns: KnowledgeSet::Complete(vec![OperationId("return".into())]),
+                ..claims()
+            },
+            vec![plain],
+            Vec::new(),
+        ));
+        assert_eq!(projected.returns, ContractClaim::Known(None));
+        assert!(
+            !projected.returns_closed_empty,
+            "a plain return is a value; restating it as `returns: []` is false"
+        );
+
+        let open = project_export_semantics(&export(
+            CallClaims {
+                returns: KnowledgeSet::Unknown,
+                ..claims()
+            },
+            Vec::new(),
+            Vec::new(),
+        ));
+        assert!(!open.returns_closed_empty);
     }
 
     /// Item A of ways-to-improve § 3.3: a closed `callbacks` whose items include
@@ -2296,6 +2343,7 @@ fn contract_export_function(
         // sets it; `creates_walk_clean` is attached at the emit boundary from
         // `Program::creates_proposal_walk`. Both defaults refuse.
         creates_closed_empty: false,
+        returns_closed_empty: false,
         creates_walk_clean: false,
         // This summary *is* the local inference, so it is never inherited.
         inherited_from: None,

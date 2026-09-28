@@ -89,6 +89,7 @@ fn inferred_entrypoint_workflow_refuses_a_same_named_export_from_the_wrong_subpa
             async_behavior: ContractClaim::Known(String::new()),
             open_claims: Default::default(),
             creates_closed_empty: false,
+            returns_closed_empty: false,
             creates_walk_clean: false,
             creates_walk_declines: Vec::new(),
             returns_walk_clean: false,
@@ -153,6 +154,7 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
             async_behavior: ContractClaim::Known(String::new()),
             open_claims: Default::default(),
             creates_closed_empty: false,
+            returns_closed_empty: false,
             creates_walk_clean: false,
             creates_walk_declines: Vec::new(),
             // ADR 0035: the closure this test rebinds is the `returns: []`

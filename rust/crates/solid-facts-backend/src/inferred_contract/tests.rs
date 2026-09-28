@@ -1279,6 +1279,9 @@ fn inherited_summary() -> ContractExport {
             .into_keys()
             .collect(),
         creates_closed_empty: true,
+        // The dependency's `returns` is `[]`, not a closure over a plain
+        // return: both project to `Known(None)` (ADR 0143).
+        returns_closed_empty: true,
         // Silence, and deliberately: no walk reached this export, because this
         // package contains nothing to walk.
         creates_walk_clean: false,
@@ -1343,6 +1346,34 @@ fn an_inherited_summary_proposes_the_dependencys_closure_despite_silent_local_wa
             .all(|record| record.origin.package_name == "dependency"
                 && record.origin.export == "read"),
         "every record names the accepted dependency export it came from"
+    );
+}
+
+/// ADR 0143: the projection of a dependency whose `returns` closes over a
+/// `plain` return is `Known(None)` with `returns_closed_empty` unset. The
+/// inherited premise used to read `Known(None)` alone and propose `returns: []`
+/// for it -- the claim that the export yields no value, which the certifier's
+/// own re-derivation then matched and the empty-return veto contradicted on
+/// `@tanstack/solid-query`'s `hashKey`. It now proposes nothing for `returns`.
+#[test]
+fn an_inherited_plain_return_is_not_restated_as_returns_empty() {
+    let summary = ContractExport {
+        returns_closed_empty: false,
+        ..inherited_summary()
+    };
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(summary),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    assert_eq!(
+        export.call.proposed_closures(),
+        &BTreeSet::from([ClaimDomain::Callbacks, ClaimDomain::Creates])
+    );
+    assert_eq!(
+        export.claim_state(ClaimDomain::Returns),
+        KnowledgeState::Unknown
     );
 }
 

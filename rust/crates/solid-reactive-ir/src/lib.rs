@@ -1148,6 +1148,17 @@ pub struct ContractExport {
     /// nothing about a dependency's `creates`, and the generator's proposal
     /// walk reads it that way.
     pub creates_closed_empty: bool,
+    /// Whether the *accepted* contract this summary was projected from closes
+    /// `returns` with no item (ADR 0143).
+    ///
+    /// Read from the accepted document for the same reason as
+    /// [`Self::creates_closed_empty`]: the projection [`Self::returns`] is the
+    /// consumer's single reactive leaf, and it reads a closed claim over exact
+    /// outputs that name no leaf -- a `plain` return, an argument container --
+    /// as `Known(None)`, exactly as it reads `returns: []`. Only the empty
+    /// closure licenses a re-exporting package to state `returns: []` again.
+    /// `false` is the fail-closed default every locally inferred summary keeps.
+    pub returns_closed_empty: bool,
     /// Whether the generator's own [`crate::CreatesProposalWalk`] found no call
     /// inside this export's implementation that a `creates: []` proposal would
     /// contradict.
@@ -1345,7 +1356,13 @@ impl ContractExport {
         };
         match domain {
             ClaimDomain::Creates => self.creates_closed_empty,
-            ClaimDomain::Returns => closed(!self.returns.is_open(), domain),
+            // ADR 0143: the empty closure only. `Known(None)` is also the
+            // projection of a closed claim over outputs that name no leaf, and
+            // re-emitting that as `returns: []` states the dependency's export
+            // yields no value -- false for every `plain` return.
+            ClaimDomain::Returns => {
+                self.returns_closed_empty && closed(!self.returns.is_open(), domain)
+            }
             ClaimDomain::Reads => closed(!self.reactive_reads.is_open(), domain),
             ClaimDomain::Callbacks => closed(!self.callbacks.is_open(), domain),
             _ => false,
