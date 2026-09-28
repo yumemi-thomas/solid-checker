@@ -467,3 +467,118 @@ about five minutes). This report does not predict which walls it moves; compare
 the class table and the per-package buckets, not only the headline, because a
 fix that moves exports between walls leaves the headline flat, as the
 `lockfile` experiment did.
+
+## 2026-09-28 (later): the graph lane keeps per-node records
+
+Measured at the commit that adds the records, on `caa3d1af` (which fixed the
+retained-proposal `lockfile` key, wall 2), release binary, AC power,
+`powermode 0`, load average 3-12. Recommended step 1 is done; nothing else in
+the product moved.
+
+**What changed.** `packages/cli/scripts/graph-node-records.mjs` reads each
+graph node's own generation sidecars before the certification scratch is
+removed -- the closure declines (kind, package, callee, location), the
+artifact-case refusals with their class, the withheld claims, the unresolved
+claims and the closure candidates -- and the audit keeps them under
+`graphNodes.records`, beside `graphNodes.cases`, which joins each certified
+node digest to its artifact case (read from the per-node recipe-address
+lines the native run already prints). Identical records are deduplicated
+(importer variants of one artifact record once); every list is capped at 2,048
+per node and the remainder is counted under `truncated` (nothing hit the cap in
+this run). The run report carries the same field as
+`certificationAttempt.graphNodes`. Audit only: no proposal, receipt or
+accepted document changed (`make contract-corpus` unchanged, nothing
+regenerated). The metric classifier (`metricVersion` 2) reads a graph answer
+from its node's records in the plain lane's order -- withheld, withheld
+operation, declined, never proposed, proposed but not certified -- and reads a
+retained proposal root (ADR 0073) from the plain lane's records for that
+artifact case, since it is that lane's own case.
+
+**Headline** (unchanged where it should be): 3.4 % per package, 4.4 % by
+downloads, 43 of 957 pooled (4.5 %); buckets 43 / 217 / 697 / 0;
+misuse-capable 157 (invoke 80, argument read 51, returned accessor 38, owner
+25). Three runs of the harness (264 s, 256 s, 335 s) gave identical buckets
+and headline numbers; as in the baseline, one export moved between wall
+classes from run to run (the counts below are from the second run and may
+differ by one from the others). The records cost about 15 MB of compact JSON
+in `run.json` over the 30 rows (80 MB in total), almost all of it the
+`@solid-primitives/utils` dependency node every `@solid-primitives/*` graph
+carries (about 1,700 declines and 900 unresolved claims).
+
+**`@kobalte/core` after `caa3d1af`**: published-graph lane, 136 of 136
+artifact cases, 607 exports, 7 / 41 / 559 clean / partial / degenerate, 1.2 %
+clean, 32 misuse-capable -- the numbers the `lockfile` experiment predicted.
+
+### What the 148 were
+
+The same 148 exports in 19 packages the baseline could not attribute (86
+solely), classified from their graph nodes' own records. An export counts once
+per class its formerly unrecorded domains now carry:
+
+| class | exports | walls |
+| --- | ---: | --- |
+| missing claim form | 131 | `returns` never proposed 118, `creates` 89, `callbacks` 86, `reads` 29 |
+| declined (generator) | 83 | `runtime-accessor-installation` 73, `create-publishing-callee` 9, `unresolved-callee` 7, `refusing-callee-fixpoint` 2 |
+| dialect-silent | 28 | `createSignal` 11, `createMemo` 10, `createEffect` 2, `children` 2, `onCleanup` 2, `createReaction` 1 |
+| no record (proposed, not certified) | 27 | |
+| unaccepted dependency | 1 | `@tauri-apps/plugin-store` (`storage`) |
+
+The 86 that were solely unrecorded are now blocked by a missing claim form
+(83), a generator decline (62), dialect silence (11) and proposed-not-certified
+(4). So the graph lane's degenerate roots are not a tooling mystery: the node
+proposes no `returns`/`creates`/`callbacks` claim at all (the missing claim
+forms of wall 4), or the generator declines on a module that installs
+accessors. The decline concentrates: `@tanstack/solid-query` accounts for 41 of
+the 148 (every one declined, 36 also missing a claim form), its hazard sites
+the `Object.defineProperty` accessors in `build/index.js`, `build/dev.js` and
+`src/use{BaseQuery,Queries,InfiniteQuery}.ts`; `event-bus` (11), `props` (7),
+`media` (6), `map` (4) and `static-store` (3) decline the same way.
+
+`@kobalte/core`'s 593 graph-lane exports (531 solely unrecorded under the old
+classifier) resolve to unaccepted dependency 525, dialect-silent 391 (`merge`
+213, `omit` 80, `createSignal` 62, `merge` via `solid-js` 20, `createMemo`
+16), declined 71 and missing claim form 45. The unaccepted dependencies are
+real, not an artifact: 132 of its 136 cases are retained proposal roots (ADR
+0073), certified through the graph transaction but generated without the
+dependency contracts it accepts, so their declines on `@solid-primitives/utils`,
+`@kobalte/utils`, `@solid-primitives/controlled-signal` and
+`@internationalized/number` stand. Only the 4 frontier cases regenerate against
+accepted dependencies.
+
+### The walls, re-ranked
+
+| class | exports blocked | solely blocked | package-weighted | packages | demanded sites |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| missing claim form | 292 | 46 | **68.0 %** | 28 | **413** |
+| declined (generator) | 225 | 10 | 46.4 % | 22 | 12 |
+| recipe | 97 | 0 | 27.3 % | 15 | 18 |
+| dialect-silent | 440 | 0 | 25.8 % | 18 | 28 |
+| no record (proposed, not certified) | 60 | 2 | 21.0 % | 17 | 70 |
+| withheld operation | 88 | 1 | 20.4 % | 16 | 67 |
+| census refusal | 138 | 3 | 17.8 % | 18 | 168 |
+| unaccepted dependency | 534 | 100 | 6.7 % | 4 | 18 |
+| attribution catch-all | 20 | 0 | 6.1 % | 9 | 48 |
+| graph lane: unrecorded | 0 | 0 | 0 % | 0 | 0 |
+
+By package weight the order of work is now: the missing claim forms
+(`returns` never proposed 242 exports / 53.9 %, `callbacks` 132 / 45.8 %,
+`creates` 177 / 30.9 %, `reads` 39 / 15.6 %); then the
+`runtime-accessor-installation` decline (137 exports in 11 packages, 30.4 %, 10
+solely), which is the bundler-export-helper ADR of the baseline's step 5 and
+now also `@tanstack/solid-query`'s whole surface; then recipes (`reads` 90,
+27.1 %) and dialect silence (`createSignal` 79 in 14 packages, 10.9 %; `merge`
+and `omit` stay pooled-large and weight-small, all in `@kobalte/core`). The
+pooled column is still led by `@kobalte/core`'s unaccepted dependencies
+(534), which the records now show are a retained-root property: clearing them
+means regenerating retained roots against the accepted dependency contracts,
+not accepting more dependencies.
+
+The greedy curve (upper bound, of 914 non-clean): unaccepted dependency 100,
++ dialect-silent 473, + declined 543, + missing claim form 658, + census
+refusal 727, + withheld operation 776, + recipe 839, + no record 894.
+
+The 60 `proposed, not certified` exports (17 packages) are a real class now,
+not an absence: the node proposed the closure, certification did not close it,
+and no withheld record says why. That is the accounting gap the audit's
+`closureCandidates`/`certifiedClosures` pair exists to find, and it is the
+next thing to read before trusting the missing-claim-form ranking above it.

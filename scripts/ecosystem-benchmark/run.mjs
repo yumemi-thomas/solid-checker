@@ -355,6 +355,17 @@ function closureAccounting(audit) {
   };
 }
 
+/// The published-graph lane's per-node records (`graphNodes` in the audit):
+/// each regenerated node's closure declines, refusals, withheld claims,
+/// unresolved claims and closure candidates, and which artifact case each
+/// certified node digest selects. The plain lane's equivalents are the
+/// generated contract's sidecars in the retained output directory; the graph
+/// lane's live in certification scratch and reach the report only through
+/// here. `null` on every other lane. Bounded by the audit writer.
+function graphNodeAccounting(audit) {
+  return { graphNodes: audit?.graphNodes ?? null };
+}
+
 function withheldClosureReasons(audit) {
   const counts = Object.fromEntries(WITHHELD_CLOSURE_REASON_BUCKETS.map((bucket) => [bucket, 0]));
   for (const record of Array.isArray(audit?.withheldClosures) ? audit.withheldClosures : []) {
@@ -958,6 +969,7 @@ export function readCertificationAttempt(
       withheldClosureReasons: withheldClosureReasons(audit),
       withheldClosureDetails: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures : [],
       ...closureAccounting(audit),
+      ...graphNodeAccounting(audit),
       ordinaryAnalysis: audit?.ordinaryAnalysis ?? null
     };
   }
@@ -1002,7 +1014,8 @@ export function readCertificationAttempt(
     withheldClosures: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures.length : 0,
     withheldClosureReasons: withheldClosureReasons(audit),
     withheldClosureDetails: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures : [],
-    ...closureAccounting(audit)
+    ...closureAccounting(audit),
+    ...graphNodeAccounting(audit)
   };
 }
 

@@ -462,7 +462,10 @@ test("complete proposals retain an exact policy-2 certification refusal when att
       // the second is what made a composed row's yield unreadable for as long
       // as it was.
       closureCandidates: null,
-      certifiedClosures: null
+      certifiedClosures: null,
+      // No per-node graph records either: the fixture audit is not a
+      // published-graph certification that wrote them.
+      graphNodes: null
     });
   } finally {
     rmSync(temporary, { recursive: true, force: true });

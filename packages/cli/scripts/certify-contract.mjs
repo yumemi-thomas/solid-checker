@@ -32,6 +32,12 @@ import {
   certifyRetainedProposalSelection,
   selectBySubdivision
 } from "./retained-proposal-graphs.mjs";
+import {
+  graphNodeAuditRecord,
+  graphNodeCasesFromNativeOutput,
+  graphNodeRecordSet,
+  graphNodesAuditField
+} from "./graph-node-records.mjs";
 export { RECOVERY_GRAPH_CASE_BUDGET, recoveryGraphBudgetRefusal };
 
 /// The repository/package root the runtime-probe harness source manifest is
@@ -2158,7 +2164,8 @@ async function executePreparedPublishedGraphs({
     withheldOperations: withheldOperationsFromNativeOutput(child.stdout),
     closureCandidates: closureCandidatesFromNativeOutput(child.stdout),
     certifiedClosures: certifiedClosuresFromNativeOutput(child.stdout),
-    recipeAddresses: recipeAddressesFromNativeOutput(child.stdout)
+    recipeAddresses: recipeAddressesFromNativeOutput(child.stdout),
+    graphNodeCases: graphNodeCasesFromNativeOutput(child.stdout)
   };
 }
 
@@ -3139,6 +3146,9 @@ export async function preparePublishedGraphCases({
               );
             }
           }
+          // The audit reads this node's proposal sidecars once preparation is
+          // over (`graphNodeAuditRecord`); nothing else consults it.
+          state.generatedForAudit = generated;
           const plannings = certificationPlannings(generated, state.artifactSnapshot, options);
           if (plannings.length !== 1) {
             throw new Error(
@@ -3149,6 +3159,7 @@ export async function preparePublishedGraphCases({
           // native case-set transaction independently decodes the proposal and
           // derives every authority-bearing demand.
           const reviewedPlan = reviewGraphProposal(generated);
+          state.auditArtifactCase = reviewedPlan.selectedArtifactCase;
           state.planning = plannings[0];
           state.demandPlan = reviewedPlan;
           proposalGenerations += 1;
@@ -3267,8 +3278,23 @@ export async function preparePublishedGraphCases({
     recovery.preparationRefusals = caseRefusals;
     recovery.cases = recovery.cases.filter(value => survived.has(value));
   }
+  // Every node's own records, read from the sidecars its generation left in
+  // this scratch before the transaction removes it: what the plain lane keeps
+  // beside its generated contract, per node. Audit only.
+  const nodeRecords = graphNodeRecordSet([...byKey.values()].map(state =>
+    graphNodeAuditRecord({
+      node: state.node,
+      isRoot: state.isRoot,
+      artifactCase: state.auditArtifactCase ?? null,
+      output: state.generatedForAudit?.output ?? state.generatedOutput,
+      plan: state.generatedForAudit?.plan ?? null,
+      statesNothing: state.statesNothing === true,
+      refusal: nodeRefusals.get(state.node.key) ?? null
+    })
+  ));
   return {
     preparedCases,
+    nodeRecords,
     demandPlans: demandPlans.filter(Boolean),
     timing: {
       ...(recovery ? { entrypointRecovery: recovery } : {}),
@@ -4060,7 +4086,8 @@ function writeAudit(
   graphPreparation = null,
   withheldClosures = [],
   withheldOperations = [],
-  probeCorpus = null
+  probeCorpus = null,
+  graphNodes = null
 ) {
   if (!path) return;
   const output = resolve(path);
@@ -4096,6 +4123,9 @@ function writeAudit(
         // withheld sets are byte-identical in shape and a reader has no way to
         // tell which one they are holding.
         probeCorpus,
+        // A graph that was prepared and then refused still generated its
+        // nodes; their records say what each proposed. Absent on other lanes.
+        ...(graphNodes ? { graphNodes } : {}),
         demandPlans: demandPlans.map(plan => ({
           policyDigest: plan.policyDigest,
           candidateSemanticDigest: plan.candidateSemanticDigest,
@@ -4154,7 +4184,8 @@ function writeSuccessAudit(
   probeCorpus = null,
   recipeAddresses = [],
   dependencyEnvironment = null,
-  selfAdmission = null
+  selfAdmission = null,
+  graphNodes = null
 ) {
   if (!path) return;
   const output = resolve(path);
@@ -4210,6 +4241,14 @@ function writeSuccessAudit(
     // Every claim's recipe address (ADR 0117), unbounded: what re-keys and
     // scaffolds the recipe corpus.
     recipeAddresses,
+    // Published-graph lane only: each node's own generation records -- the
+    // closure declines, artifact-case refusals, withheld claims, unresolved
+    // claims and closure candidates the plain lane keeps beside its generated
+    // contract -- plus which artifact case each certified node digest selects,
+    // so a node the catalog names only by digest joins its record. The
+    // withheld closures and operations above already carry their node.
+    // Deduplicated and bounded, with every cap's remainder counted.
+    ...(graphNodes ? { graphNodes } : {}),
     demandPlans: demandPlans.map(plan => ({
       policyDigest: plan.policyDigest,
       candidateSemanticDigest: plan.candidateSemanticDigest,
@@ -4324,6 +4363,11 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
   let recipeAddresses = [];
   let dependencyEnvironment = null;
   let selfAdmission = null;
+  // Published-graph lane only, audit only: the prepared graph's per-node
+  // records and the native transaction's node-to-artifact-case mapping.
+  let graphNodeRecords = null;
+  let graphNodeCases = null;
+  const graphNodesAudit = () => graphNodesAuditField(graphNodeRecords, graphNodeCases);
   const stageDurationsMs = {};
   // Returned to the caller, which owns the exit status: `bin/solid-checker.mjs`
   // and the benchmark worker both map it through `outcome.exitCode`.
@@ -4495,6 +4539,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
           recipeAddresses = Array.isArray(witnesses?.recipeAddresses) ? witnesses.recipeAddresses : [];
           dependencyEnvironment = witnesses?.dependencyEnvironment ?? null;
           selfAdmission = witnesses?.selfAdmission ?? null;
+          graphNodeCases = Array.isArray(witnesses?.graphNodeCases) ? witnesses.graphNodeCases : null;
           return { authority: "rust", witnesses };
         })
       },
@@ -4504,6 +4549,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
             const caseRecovery = options.recoverEntrypoints && !openProposal.graph &&
               openProposal.generated?.certificationInputs.length > 1 ? {} : null;
             if (caseRecovery) graphPreparation = { ...(graphPreparation ?? {}), independentCaseRecovery: caseRecovery };
+            graphNodeRecords = openProposal.graph?.nodeRecords ?? null;
             return executeNativeOrGraphCertification({
               options,
               generated: openProposal.generated,
@@ -4529,6 +4575,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
                     dependencyCases: trace.cases
                   });
                   graphPreparation = { ...graph.timing, generatedProposalProofFallback: trace };
+                  graphNodeRecords = graph.nodeRecords ?? null;
                   reusedProposal = false;
                   demandPlans.splice(0, demandPlans.length, ...graph.demandPlans);
                   return graph;
@@ -4564,7 +4611,8 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       options.probeRecipeCorpus ? resolve(options.probeRecipeCorpus) : null,
       recipeAddresses,
       dependencyEnvironment,
-      selfAdmission
+      selfAdmission,
+      graphNodesAudit()
     );
     outcome = certificationOutcome(manifest, dependencyEnvironment, selfAdmission);
     if (outcome.message) process.stderr.write(`${outcome.message}\n`);
@@ -4589,7 +4637,8 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       reusedProposal ? { ...(graphPreparation ?? {}), reusedProposal: true } : graphPreparation,
       withheldClosures,
       withheldOperations,
-      options.probeRecipeCorpus ? resolve(options.probeRecipeCorpus) : null
+      options.probeRecipeCorpus ? resolve(options.probeRecipeCorpus) : null,
+      graphNodesAudit()
     );
     throw refusal;
   } finally {

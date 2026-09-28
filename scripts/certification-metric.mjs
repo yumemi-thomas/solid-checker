@@ -61,6 +61,15 @@
 // withheld for want of a probe recipe was weakened out before its census ran,
 // so a recipe may only uncover the census refusal underneath
 // (probe-recipe-scaffold's two-pass procedure is the check).
+//
+// A published-graph answer is read from the answering node's own records: the
+// native withheld closures and operations (which carry their node), then the
+// node's generation records the audit keeps under `graphNodes` (declines,
+// unresolved claims, closure candidates), joined by artifact case -- directly,
+// or through the node digest the native run mapped to one. The plain lane's
+// sidecars answer only a retained proposal root, which is that lane's own
+// case. `graph lane: unrecorded` is left for an older audit with no node
+// records, an answer no record names, and a capped record list.
 
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
@@ -268,6 +277,10 @@ export function readRetainedRow(result) {
     reconciliation,
     documents,
     audit,
+    // The graph lane's per-node generation records (audit only): the audit's
+    // own copy, else the one the run report carries.
+    graphNodes: audit?.graphNodes ?? result.certificationAttempt?.graphNodes ?? null,
+    retainedProposalCases: audit?.graphPreparation?.retainedProposalCases ?? 0,
     proposal: read(".proposal.json"),
     refusals: read(".refusals.json"),
     generated: generatedPath ? JSON.parse(readFileSync(generatedPath, "utf8")) : null
@@ -344,7 +357,24 @@ function plainStatus(row, exportName, entrypoint, domain) {
   return [...perCase].sort((left, right) => statusRank(left) - statusRank(right))[0];
 }
 
-function graphStatus(row, { node, artifactCase }, exportName, domain) {
+/// The artifact case a graph-attributed answer selects: its own, or the one
+/// the native transaction reported for its node digest (`graphNodes.cases`),
+/// or one a node-attributed audit record pairs with that digest.
+function graphCaseOf(row, { node, artifactCase }) {
+  if (artifactCase) return artifactCase;
+  if (!node) return null;
+  const mapped = (row.graphNodes?.cases ?? []).find(entry => entry.digest === node)?.artifactCase;
+  if (mapped) return mapped;
+  const records = [
+    ...(row.audit?.withheldClosures ?? []),
+    ...(row.audit?.withheldOperations ?? []),
+    ...(row.audit?.certifiedClosures?.closed ?? [])
+  ];
+  return records.find(entry => entry.node?.digest === node && entry.artifactCase)?.artifactCase ?? null;
+}
+
+function graphStatus(row, where, exportName, entrypoint, domain) {
+  const { node, artifactCase } = where;
   if (!node && !artifactCase) return { status: "graph: no attribution" };
   const mine = entry =>
     entry.node?.digest &&
@@ -356,7 +386,39 @@ function graphStatus(row, { node, artifactCase }, exportName, domain) {
     entry => mine(entry) && domainOfOperationId(entry.operation.split(":operation:").pop()) === domain
   );
   if (operation) return { status: "withheld operation", reason: operation.reason };
-  return { status: "graph: never proposed" };
+  // An audit written before the lane kept per-node records: an absence of
+  // records, not a verdict.
+  if (!row.graphNodes) return { status: "graph: never proposed" };
+  const selected = graphCaseOf(row, where);
+  const records = selected ? (row.graphNodes.records ?? []).filter(record => record.artifactCase === selected) : [];
+  if (records.length === 0) {
+    // A retained proposal root (ADR 0073) is the plain lane's own proposal
+    // case, published through the graph transaction without regeneration, so
+    // the plain lane's records for that exact artifact case are its records.
+    if (selected && row.retainedProposalCases > 0) {
+      const plain = plainCaseStatus(row, exportName, entrypoint, selected, domain);
+      if (plain.status !== "no record") return plain;
+    }
+    return { status: "graph: no node record" };
+  }
+  // The same order as the plain lane (`plainCaseStatus`): a decline, then a
+  // claim the planner never resolved, then a candidate certification did not
+  // close. Importer variants of one artifact record identically, so any
+  // matching record answers.
+  // A capped list cannot prove an absence, so a miss in one stops the
+  // search there rather than answering with a lower-ranked status.
+  const capped = list => records.some(record => (record.truncated?.[list] ?? 0) > 0);
+  for (const record of records) {
+    const declined = (record.declinedClosures ?? []).find(entry => entry.export === exportName && entry.domain === domain);
+    if (declined) return { status: "declined", declined };
+  }
+  if (capped("declinedClosures")) return { status: "graph: record truncated", list: "declinedClosures" };
+  const about = claim => claim.export === exportName && claim.path?.domain === domain;
+  if (records.some(record => (record.unresolvedClaims ?? []).some(about))) return { status: "never proposed" };
+  if (capped("unresolvedClaims")) return { status: "graph: record truncated", list: "unresolvedClaims" };
+  if (records.some(record => (record.closureCandidates ?? []).some(about))) return { status: "proposed, not certified" };
+  if (capped("closureCandidates")) return { status: "graph: record truncated", list: "closureCandidates" };
+  return { status: "no record" };
 }
 
 /// The package a path under `node_modules/` belongs to, or null.
@@ -437,10 +499,18 @@ export function causeOf(status, domain) {
   }
   if (status.status === "never proposed") return { class: "missing claim form", key: `${domain} never proposed` };
   if (status.status === "graph: never proposed") {
-    // The graph lane retains no declines and no unresolved claims, so this is
-    // an absence of records, not a verdict; `measureRow` attaches what the
-    // plain lane recorded for the same export and domain as `inferred`.
+    // An audit from before the graph lane kept per-node records: an absence
+    // of records, not a verdict; `measureRow` attaches what the plain lane
+    // recorded for the same export and domain as `inferred`.
     return { class: "graph lane: unrecorded", key: domain };
+  }
+  if (status.status === "graph: no node record") {
+    // The audit keeps per-node records, and none names the artifact case this
+    // answer selects: an attribution gap, reported as one.
+    return { class: "graph lane: unrecorded", key: `${domain} (no node record for the answering case)` };
+  }
+  if (status.status === "graph: record truncated") {
+    return { class: "graph lane: unrecorded", key: `${domain} (node record truncated: ${status.list})` };
   }
   return { class: "no record", key: status.status };
 }
@@ -537,7 +607,7 @@ export function measureRow(result, row) {
     if (answer.bucket !== "clean") {
       for (const domain of CONSUMER_DOMAINS.filter(domain => !answer.closed.has(domain))) {
         const status = answer.graph
-          ? graphStatus(row, answer.graph, exportName, domain)
+          ? graphStatus(row, answer.graph, exportName, entrypoint, domain)
           : plainStatus(row, exportName, entrypoint, domain);
         const cause = { domain, ...causeOf(status, domain) };
         if (cause.class === "graph lane: unrecorded") {
@@ -592,6 +662,16 @@ export function measureRow(result, row) {
     // withheld-operation records. A root that states nothing with zero
     // candidates was never proposed anything, not refused.
     reconciliation: row?.reconciliation ?? null,
+    // Graph lane only: how many per-node records the audit kept, how many it
+    // capped away, and how many node digests the native run mapped to cases.
+    graphNodeRecords: row?.graphNodes
+      ? {
+          records: (row.graphNodes.records ?? []).length,
+          truncatedRecords: row.graphNodes.truncated ?? 0,
+          truncatedLists: (row.graphNodes.records ?? []).filter(record => record.truncated).length,
+          nodeCases: (row.graphNodes.cases ?? []).length
+        }
+      : null,
     withheldClosureReasons: result.certificationAttempt?.withheldClosureReasons ?? null
   };
 }
@@ -782,7 +862,7 @@ export function measure({ run, corpus, rows, demandRows = [] }) {
   for (const entry of packages) for (const [kind, count] of Object.entries(entry.misuse)) misuse[kind] = (misuse[kind] ?? 0) + count;
   return {
     format: "solid-checker-certification-metric",
-    metricVersion: 1,
+    metricVersion: 2,
     run: { startedAt: run.startedAt ?? null, finishedAt: run.finishedAt ?? null, durationMs: run.durationMs ?? null },
     corpus: { measuredOn: corpus.measuredOn, packages: corpus.packages.length },
     missingProbes: missing,

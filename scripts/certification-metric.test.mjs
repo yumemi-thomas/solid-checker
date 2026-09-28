@@ -181,6 +181,108 @@ test("one row: buckets, misuse classes and causes per open domain", () => {
   assert.equal(measured.exports.find(entry => entry.export === "uncertified").bucket, "uncertified");
 });
 
+test("a graph-lane answer is classified from its node's own records", () => {
+  const summaries = {
+    "s-declined": { shape: "callable", call: { closed: ["callbacks", "returns", "creates"] } },
+    "s-unresolved": { shape: "callable", call: { closed: ["callbacks", "reads", "creates"] } },
+    "s-bare": { shape: "callable", call: { closed: ["callbacks", "reads", "returns"] } },
+    "s-other": { shape: "callable", call: { closed: ["callbacks", "reads", "returns"] } }
+  };
+  const document = {
+    package: { name: "@example/g" },
+    entrypoints: {
+      ".": { cases: [{ exports: { declined: "s-declined", unresolved: "s-unresolved", bare: "s-bare" } }] },
+      "./other": { cases: [{ exports: { other: "s-other" } }] }
+    },
+    summaries
+  };
+  const claim = (exportName, domain) => ({ export: exportName, path: { kind: "call", domain }, claimId: `claim:${exportName}` });
+  const row = {
+    lane: "published-graph",
+    generated: document,
+    // The root is named by its digest only (a `graphs/<g>/root/objects/`
+    // document), the second entrypoint's node by nothing the records know.
+    documents: [
+      { document, graph: { node: "sha256:root", artifactCase: null } }
+    ],
+    audit: { withheldClosures: [], withheldOperations: [] },
+    proposal: null,
+    refusals: null,
+    retainedProposalCases: 0,
+    graphNodes: {
+      cases: [{ digest: "sha256:root", package: "@example/g", version: "1.0.0", artifactCase: "case-root" }],
+      records: [
+        {
+          package: "@example/g",
+          version: "1.0.0",
+          entrypoint: ".",
+          conditions: ["import"],
+          root: true,
+          artifactCase: "case-root",
+          declinedClosures: [{ export: "declined", domain: "reads", kind: "unresolved-callee", package: "", callee: "", location: "<package-root>/dist/index.js:1:2" }],
+          refusals: [],
+          withheldClaims: [],
+          unresolvedClaims: [claim("unresolved", "returns")],
+          closureCandidates: []
+        }
+      ]
+    }
+  };
+  const measured = measureRow(
+    { package: "@example/g", version: "1.0.0", probeId: "g|head", class: "success", certificationAttempt: { status: "certified", lane: "published-graph" } },
+    row
+  );
+  const causes = name => measured.exports.find(entry => entry.export === name).causes.map(cause => [cause.domain, cause.class, cause.key]);
+  assert.deepEqual(causes("declined"), [["reads", "declined", "unresolved-callee"]]);
+  assert.deepEqual(causes("unresolved"), [["returns", "missing claim form", "returns never proposed"]]);
+  // Recorded by the node, and in none of its lists: a real "no record".
+  assert.deepEqual(causes("bare"), [["creates", "no record", "no record"]]);
+  assert.deepEqual(measured.graphNodeRecords, { records: 1, truncatedRecords: 0, truncatedLists: 0, nodeCases: 1 });
+
+  // A capped list cannot prove an absence, so it answers as a record gap.
+  row.graphNodes.records[0].truncated = { declinedClosures: 3 };
+  const capped = measureRow(
+    { package: "@example/g", version: "1.0.0", probeId: "g|head", class: "success", certificationAttempt: { status: "certified", lane: "published-graph" } },
+    row
+  );
+  assert.deepEqual(
+    capped.exports.find(entry => entry.export === "bare").causes.map(cause => [cause.class, cause.key]),
+    [["graph lane: unrecorded", "creates (node record truncated: declinedClosures)"]]
+  );
+
+  // An audit from before the lane kept node records stays an absence.
+  const older = measureRow(
+    { package: "@example/g", version: "1.0.0", probeId: "g|head", class: "success", certificationAttempt: { status: "certified", lane: "published-graph" } },
+    { ...row, graphNodes: null }
+  );
+  assert.deepEqual(
+    older.exports.find(entry => entry.export === "unresolved").causes.map(cause => [cause.class, cause.key]),
+    [["graph lane: unrecorded", "returns"]]
+  );
+});
+
+test("a graph answer no node record names is an attribution gap, not a cause", () => {
+  const document = {
+    package: { name: "@example/g" },
+    entrypoints: { ".": { cases: [{ exports: { a: "s-a" } }] } },
+    summaries: { "s-a": { shape: "callable", call: { closed: ["callbacks", "reads", "returns"] } } }
+  };
+  const measured = measureRow(
+    { package: "@example/g", version: "1.0.0", probeId: "g|head", class: "success", certificationAttempt: { status: "certified", lane: "published-graph" } },
+    {
+      lane: "published-graph",
+      generated: document,
+      documents: [{ document, graph: { node: "sha256:unmapped", artifactCase: null } }],
+      audit: {},
+      graphNodes: { cases: [], records: [] },
+      retainedProposalCases: 0
+    }
+  );
+  assert.deepEqual(measured.exports[0].causes.map(cause => [cause.class, cause.key]), [
+    ["graph lane: unrecorded", "creates (no node record for the answering case)"]
+  ]);
+});
+
 test("headline weights per package and by downloads, an uncertifiable package scoring zero", () => {
   const result = headline([
     { counts: { clean: 1 }, total: 2, weeklyDownloads: 300 },
