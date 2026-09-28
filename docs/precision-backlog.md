@@ -1,5 +1,60 @@
 # Precision backlog
 
+## Certification metric, per-host tier and project false positives (2026-09-28)
+
+Status: **implemented**, 103fdc9c through 3d0197b4. `make verify` passed at
+3d0197b4 (800 s). All numbers measured.
+
+- **North-star metric** (f3214c23, `make certification-metric`,
+  `phase22/2026-09-28-certification-metric-baseline.md`): top 30 Solid 2
+  packages, 957 exports: 44 clean (3.4% per package, 4.5% by downloads).
+  Walls, package-weighted: missing claim form 68%, generator declines 46%,
+  recipes 27%, dialect-silent 26%.
+- **Source-analysis experiment** (`phase22/2026-09-28-source-analysis-experiment.md`):
+  certification is 95-99% of the wall, not analysis; the IR's
+  `ContractClaim::default()` is `Known(empty)` (closed-world), so its
+  summaries are not trustworthy without certification; only 4 of 30 packages
+  ship source. Owner decision: make certification cheaper (in progress).
+- **Soundness fixes:** ADR 0134 amended (103fdc9c, a member the constructor
+  invokes is construction); ADR 0143 (a9b97a8b, a re-exported plain return
+  was restated as `returns: []`). Tier regenerated after each.
+- **Attribution:** ADR 0138 (`Dynamic` renders its `component`); ADR 0139
+  (retained constructor arguments, owner-approved claim form); ADR 0142
+  (walk verdicts follow the runtime join: returns-never-proposed 243 -> 181,
+  creates 177 -> 76).
+- **Per host** (ADR 0140): certify browser and node separately; a declared
+  host is admitted only its own cases. Rows: rc.9 `omit` creates, browser
+  `solid-js` `createMemo`. Node certification is blocked at `solid-js` rc.9's
+  server `action` (defined locally, declared as a re-export).
+- **Tier** (3d0197b4): 729 bundles (270 host-free, 270 browser, 189 node);
+  index v3 (0679860b) stores each environment once and reads bindings from
+  receipts: 7.69 MB -> 1.35 MB.
+- **Retained-proposal lockfile key** (caa3d1af): every retained-proposal
+  graph recovery refused ("missing field lockfile") since a1926b71.
+- **Graph-lane records** (95803321): each dependency node's declines and
+  claims are in the audit; no export is left without a named cause.
+- **Project false positives** (86f5e709, b0d0a5d8, 7b57b487), each probed on
+  rc.9 and tsc-clean: `SC2001` on a handler inside a control-flow child;
+  `SC1001` for an arrow handed to a callee (now uncertifiable unless the
+  invocation is proven); `SC4001` behind a `getOwner()` guard. On kobalte and
+  router source 97 violations -> 65, all `SC1001` in kobalte (handlers passed
+  as `on*` props; arrows in object literals).
+
+Open:
+
+- `@kobalte/core` retained roots stay dependency-blind: giving them
+  dependency contracts peaked ~10 GB and exceeded 1800 s in the native
+  transaction (ADR 0073's bound) -- the certification-speed work's target.
+- Returned callables: nested call claims (owner decision, ADR 0145) in
+  progress.
+- Router root still 3 catch-alls (`getStoreFactory` ×2, `RouteApi.notFound`);
+  router-core's instance escapes, so ADR 0139 does not fire.
+- Probe setup note: `babel-preset-solid@2.0.0-rc.2` writes `$$click` while
+  `@solidjs/web` rc.9 reads `_$$click`; rc.9 projects are recorded as
+  compiling with `@dom-expressions/babel-plugin-jsx@0.50.0-next.44`, so this is
+  likely a probe mismatch, not verified as a Solid defect.
+- `createComponent` edge (ADR 0136) is answered on unread releases too.
+
 ## rc.9 is the audited Solid 2 release (2026-09-27)
 
 Status: **implemented**, 68555fea through the phase16 fix after 2a7015d0
