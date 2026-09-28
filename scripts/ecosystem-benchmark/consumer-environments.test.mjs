@@ -12,7 +12,8 @@ import {
   deriveConsumerEnvironment,
   environmentProblems,
   environmentProbeId,
-  loadConsumerEnvironments
+  loadConsumerEnvironments,
+  pnpmProjectLockText
 } from "./lib/consumer-environments.mjs";
 import { loadAuditedArchives } from "./lib/dialect-authority.mjs";
 import { AUDITED_SOLID_2 } from "./lib/families.mjs";
@@ -399,4 +400,18 @@ test("an npm alias resolves to the package it names", () => {
   const entry = deriveConsumerEnvironment({ lock, id: "alias", source: exampleSource, importers: ["app"], manifest });
   assert.deepEqual(entry.pins.h3, { version: "2.0.1-rc.20", integrity: "sha512-h3" });
   assert.equal(entry.pins["h3-v2@h3"], undefined);
+});
+
+// pnpm 11 leads the lock with its env document; the project lock is what
+// follows the separator, under the exact shape the checker's reader enforces.
+test("a pnpm 11 lockfile is read from its project document, and nothing else is guessed", () => {
+  const env = "lockfileVersion: '9.0'\nimporters:\n  .:\n    configDependencies: {}\n    packageManagerDependencies:\n      pnpm:\n        specifier: 12.4.1\n        version: 12.4.1\npackages: {}\nsnapshots: {}";
+  const main = "lockfileVersion: '9.0'\nimporters:\n  console:\n    dependencies: {}\npackages: {}\nsnapshots: {}";
+  const parse = text => Bun.YAML.parse(text);
+  assert.equal(pnpmProjectLockText(main, parse), main);
+  assert.equal(pnpmProjectLockText(`---\n${env}\n---\n${main}`, parse), main);
+  assert.throws(() => pnpmProjectLockText(`---\n${env}\n---\n${main}\n---\n${main}`, parse), /only a single document/);
+  assert.throws(() => pnpmProjectLockText(`---\n${env}\n---\n`, parse), /only an env document/);
+  const projectAsEnv = env.replace("configDependencies: {}", "dependencies: {}");
+  assert.throws(() => pnpmProjectLockText(`---\n${projectAsEnv}\n---\n${main}`, parse), /not pnpm's env document/);
 });

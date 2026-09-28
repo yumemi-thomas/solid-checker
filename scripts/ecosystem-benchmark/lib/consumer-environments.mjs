@@ -256,6 +256,52 @@ export function consumerEnvironmentManifest(manifest, environment, options = {})
   return { ...manifest, rows, supplemental: [], exclusions: [] };
 }
 
+/**
+ * The project document of a `pnpm-lock.yaml`, as text.
+ *
+ * pnpm 11 and later lead the file with an env document (the lock of the
+ * project's `configDependencies` and `packageManagerDependencies`, pnpm
+ * itself) whenever the project records either: `---\n<env>\n---\n<main>`.
+ * pnpm reads the project lockfile as everything after the separator, and so
+ * does this, under the same exact shape the checker's own reader enforces
+ * (`pnpm_documents` in `contract_certification/dependencies.rs`): the start
+ * marker on line 1 and one separator, each exactly `---`, and an env document
+ * whose keys are pnpm's `EnvLockfile` keys, whose only importer is `.`, and
+ * whose importer holds only those two dependency kinds. Anything else throws:
+ * which document bears the installed packages must not be a guess. A file with
+ * no marker is its own project document.
+ *
+ * `parse` is the YAML parser (`Bun.YAML.parse`), passed in so this stays pure.
+ */
+export function pnpmProjectLockText(text, parse) {
+  const lines = text.split("\n");
+  const markers = [];
+  lines.forEach((line, index) => {
+    if (/^(---|\.\.\.)( |$)/.test(line)) markers.push(index);
+  });
+  if (markers.length === 0) return text;
+  if (markers.length !== 2 || markers[0] !== 0 || lines[0] !== "---" || lines[markers[1]] !== "---") {
+    throw new Error(
+      "pnpm lockfile documents: only a single document, or pnpm's env document followed by one project document, is read"
+    );
+  }
+  const env = parse(lines.slice(1, markers[1]).join("\n")) ?? {};
+  const main = lines.slice(markers[1] + 1).join("\n");
+  if (!main.trim()) throw new Error("pnpm lockfile holds only an env document; no project lockfile follows it");
+  const topLevel = Object.keys(env);
+  const importers = Object.keys(env.importers ?? {});
+  const rootKinds = Object.keys(env.importers?.["."] ?? {});
+  if (
+    topLevel.some(key => !["lockfileVersion", "importers", "packages", "snapshots"].includes(key)) ||
+    importers.length !== 1 ||
+    importers[0] !== "." ||
+    rootKinds.some(kind => !["configDependencies", "packageManagerDependencies"].includes(kind))
+  ) {
+    throw new Error("pnpm lockfile's leading document is not pnpm's env document");
+  }
+  return main;
+}
+
 const PATCHED_REASON =
   "patched by the consumer (pnpm patchedDependencies): the installed bytes are not the published archive";
 

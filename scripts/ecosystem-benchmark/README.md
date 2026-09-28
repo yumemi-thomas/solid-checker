@@ -244,9 +244,10 @@ version. `@solidjs/router` has three: next.30 (the corpus row), next.26 on the
 rc.9 triple and next.18 on the rc.3 triple, the two (version, audited runtime)
 pairs the app-import corpus installs
 (`docs/package-contract-v2/phase22/2026-09-28-router-scope.md`). The other
-router apps are on runtimes with no audited triple, or have lockfiles
-`derive-consumer-environment.mjs` does not read (only single-document
-`pnpm-lock.yaml`).
+router apps are on runtimes with no audited triple, have lockfiles
+`derive-consumer-environment.mjs` does not read (it reads `pnpm-lock.yaml`,
+including pnpm 11's env document followed by the project document), or resolve
+two releases of one package in their closure, which an environment cannot pin.
 
 Certification children run with `SOLID_CHECKER_DURABLE_WRITES=none`: every
 catalog a probe publishes lives in a temporary directory removed seconds

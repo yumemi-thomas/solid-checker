@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 // Derives one consumer-environment entry from a consumer's installed pnpm
-// lockfile, for review into scripts/ecosystem-benchmark/consumer-environments.json.
+// lockfile (one document, or pnpm 11's env document followed by the project
+// document), for review into scripts/ecosystem-benchmark/consumer-environments.json.
 //
 //   bun scripts/ecosystem-benchmark/derive-consumer-environment.mjs \
 //     --lock <pnpm-lock.yaml> --id <id> --repository <url> --branch <name> \
@@ -15,7 +16,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { deriveConsumerEnvironment, environmentProblems } from "./lib/consumer-environments.mjs";
+import { deriveConsumerEnvironment, environmentProblems, pnpmProjectLockText } from "./lib/consumer-environments.mjs";
 import { loadAuditedArchives } from "./lib/dialect-authority.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -49,7 +50,9 @@ if (typeof Bun === "undefined" || !Bun.YAML) fail("needs Bun, for Bun.YAML");
 const lockText = readFileSync(resolve(options.lock), "utf8");
 const manifest = JSON.parse(readFileSync(join(HERE, "manifest.json"), "utf8"));
 const entry = deriveConsumerEnvironment({
-  lock: Bun.YAML.parse(lockText),
+  // pnpm 11+ may lead with an env document; the project lock follows it. The
+  // digest stays over the whole file, which is what the consumer commits.
+  lock: Bun.YAML.parse(pnpmProjectLockText(lockText, text => Bun.YAML.parse(text))),
   id: options.id,
   source: {
     repository: options.repository,
