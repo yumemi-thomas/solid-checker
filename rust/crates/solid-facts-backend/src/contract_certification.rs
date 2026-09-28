@@ -64,7 +64,7 @@ pub use controlled_execution::{
     BROWSER_EXECUTION_PROFILE, ControlledExecution, ControlledExecutionError,
     IMPORT_FREE_EXECUTION_PROFILE, INERT_EXECUTION_PROFILE, RELATIVE_GRAPH_EXECUTION_PROFILE,
 };
-pub(crate) use dependencies::is_sri_integrity;
+pub(crate) use dependencies::{BUN_LOCKFILE_VERSIONS, is_sri_integrity};
 pub use dependencies::{
     CanonicalDependencyNodeIdentity, DependencyCompositionError, DependencyCompositionRequirement,
     DependencyCompositionSchedule, DependencyNodeIdentity, DependencyQueueNode,
@@ -10405,7 +10405,7 @@ export const value = phantom;
 
     fn graph_lock(name: &str, version: &str, integrity: &str) -> PublishedGraphLockSelection {
         let lock = format!(
-            r#"{{"packages":{{"{name}@{version}":["{name}@{version}","",{{}},"{integrity}"],}},}}"#
+            r#"{{"lockfileVersion":1,"packages":{{"{name}@{version}":["{name}@{version}","",{{}},"{integrity}"],}},}}"#
         );
         PublishedGraphLockSelection::from_bun_lock(
             lock.as_bytes(),

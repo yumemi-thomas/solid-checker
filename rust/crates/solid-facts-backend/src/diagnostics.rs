@@ -3309,17 +3309,6 @@ fn installed_package_name(package_directory: &Path) -> Option<String> {
     }
 }
 
-/// The `bun.lock` `lockfileVersion`s whose npm package records this reader has
-/// checked against Bun's parser (`src/install/lockfile/bun.lock.rs`): the
-/// tuple is `[name@version, registry, info, integrity]` at both. Version 1
-/// stopped listing a workspace package's dependencies; version 2 changed no
-/// content and only made the parser refuse what version 1 tolerated (an
-/// off-registry tarball without an integrity, an unsafe git tag), and Bun keeps
-/// a loaded version 1 at version 1 when it saves. Version 0 lists workspace
-/// packages differently, and version 3 lets `overrides` hold scoped rules;
-/// neither is read until someone checks their records the same way.
-const BUN_LOCKFILE_VERSIONS: [u32; 2] = [1, 2];
-
 /// The integrity `bun.lock` records for the package installed at
 /// `package_directory`, or `None` when it records none unambiguously.
 ///
@@ -3333,7 +3322,7 @@ const BUN_LOCKFILE_VERSIONS: [u32; 2] = [1, 2];
 /// them the same one.
 fn bun_package_integrity(package_directory: &Path, data: &[u8]) -> Option<String> {
     let lockfile = parse_json_with_trailing_commas::<BunLockfile>(data)?;
-    if !BUN_LOCKFILE_VERSIONS.contains(&lockfile.lockfile_version) {
+    if !crate::contract_certification::BUN_LOCKFILE_VERSIONS.contains(&lockfile.lockfile_version) {
         return None;
     }
     let name = installed_package_name(package_directory)?;
@@ -4119,6 +4108,72 @@ mod tests {
         )
         .unwrap();
         assert_eq!(integrity(&hoisted), Some(META_NEXT_2.to_owned()));
+        std::fs::remove_dir_all(&project).ok();
+    }
+
+    /// Every Bun reader accepts one `lockfileVersion` set: admission's
+    /// integrity reader and certification's `from_bun_lock` both refuse a
+    /// version 0, a version 3 and a missing version, so no receipt can be
+    /// issued from a lockfile admission would refuse. The acquisition twin's
+    /// half is "every Bun reader refuses a lockfileVersion admission refuses"
+    /// in `published-contract-graph.test.mjs`, over the same bytes.
+    #[test]
+    fn every_bun_reader_refuses_the_versions_admission_refuses() {
+        let project = scratch("bun-lock-versions");
+        let lock = real_lockfile("civil.bun.lock");
+        let hoisted = install(
+            &project,
+            "node_modules/@solidjs/meta",
+            "@solidjs/meta",
+            "1.0.0-next.2",
+        );
+        let certify = |bytes: &str| {
+            crate::contract_certification::PublishedGraphLockSelection::from_bun_lock(
+                bytes.as_bytes(),
+                "@solidjs/meta",
+                "@solidjs/meta",
+                "1.0.0-next.2",
+            )
+        };
+        let admit = |bytes: &str| {
+            std::fs::write(project.join("bun.lock"), bytes).unwrap();
+            installed_package_integrity(&project, &hoisted).unwrap()
+        };
+        for accepted in ["1", "2"] {
+            let bytes = lock.replacen(
+                "\"lockfileVersion\": 1,",
+                &format!("\"lockfileVersion\": {accepted},"),
+                1,
+            );
+            assert_eq!(admit(&bytes), Some(META_NEXT_2.to_owned()), "v{accepted}");
+            assert_eq!(
+                certify(&bytes).unwrap().integrity(),
+                META_NEXT_2,
+                "v{accepted}"
+            );
+        }
+        for (name, bytes, reason) in [
+            (
+                "version 0",
+                lock.replacen("\"lockfileVersion\": 1,", "\"lockfileVersion\": 0,", 1),
+                "Bun lockfileVersion 0 is not 1 or 2; only those versions' package records are read",
+            ),
+            (
+                "version 3",
+                lock.replacen("\"lockfileVersion\": 1,", "\"lockfileVersion\": 3,", 1),
+                "Bun lockfileVersion 3 is not 1 or 2; only those versions' package records are read",
+            ),
+            (
+                "a missing version",
+                lock.replacen("  \"lockfileVersion\": 1,\n", "", 1),
+                "Bun lockfile does not declare a lockfileVersion",
+            ),
+        ] {
+            assert_ne!(bytes, lock, "{name}");
+            assert_eq!(admit(&bytes), None, "admission read {name}");
+            let error = certify(&bytes).unwrap_err();
+            assert!(format!("{error}").contains(reason), "{name}: {error}");
+        }
         std::fs::remove_dir_all(&project).ok();
     }
 

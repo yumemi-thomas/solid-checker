@@ -82,6 +82,31 @@ export const UNSUPPORTED_LOCKFILES = Object.freeze([
 // installed copy an entry describes under hoisting.
 const NPM_LOCKFILE_VERSIONS = new Set([2, 3]);
 
+// The `bun.lock` `lockfileVersion`s read, exactly admission's set
+// (`BUN_LOCKFILE_VERSIONS` in the Rust authority): the two whose npm package
+// records were checked against Bun's parser. Certifying from any other version
+// would issue a receipt that admission then refuses.
+const BUN_LOCKFILE_VERSIONS = new Set([1, 2]);
+
+/** Refuses a Bun lockfile whose version is outside `BUN_LOCKFILE_VERSIONS`,
+ * with the Rust twin's reason wording. */
+function requireBunLockfileVersion(document) {
+  const version = document?.lockfileVersion;
+  if (version === undefined) {
+    throw new PublishedGraphAcquisitionRefusal(
+      "unsupported-lock-version",
+      "Bun lockfile does not declare a lockfileVersion"
+    );
+  }
+  if (!BUN_LOCKFILE_VERSIONS.has(version)) {
+    throw new PublishedGraphAcquisitionRefusal(
+      "unsupported-lock-version",
+      `Bun lockfileVersion ${JSON.stringify(version)} is not 1 or 2; only those versions' ` +
+        "package records are read"
+    );
+  }
+}
+
 // Only pnpm lockfile major 9 is read, and the restriction is load-bearing rather
 // than conservative packaging. The selection argument below rests on `packages:`
 // keys being exactly `name@version` and unique; major 6 wrote peer suffixes into
@@ -559,8 +584,10 @@ export function createLockSelectionIndex(lockfile, packageManager) {
  * still authenticates the transported lock bytes and every graph edge.
  */
 export function createBunLockSelectionIndex(lockfile) {
+  const document = parseJsonLike(lockfile);
+  requireBunLockfileVersion(document);
   const recordsByIdentity = new Map();
-  for (const [locator, record] of Object.entries(parseJsonLike(lockfile).packages ?? {})) {
+  for (const [locator, record] of Object.entries(document.packages ?? {})) {
     if (!Array.isArray(record) || typeof record[0] !== "string") continue;
     const indexed = Object.freeze({ locator, integrity: record[3] });
     for (const identity of new Set([locator, record[0]])) {

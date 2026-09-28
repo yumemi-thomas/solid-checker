@@ -553,6 +553,45 @@ fn entry_key_line(line: &str) -> Option<&str> {
     trimmed.strip_suffix(':')
 }
 
+/// The `bun.lock` `lockfileVersion`s every Bun reader accepts -- admission's
+/// (`diagnostics.rs`), certification's (`from_bun_lock`) and the acquisition
+/// twin's (`BUN_LOCKFILE_VERSIONS` in `published-contract-graph.mjs`). One set,
+/// so no receipt can be issued from a lockfile admission would refuse.
+///
+/// These are the versions whose npm package records were checked against Bun's
+/// parser (`src/install/lockfile/bun.lock.rs`): the tuple is
+/// `[name@version, registry, info, integrity]` at both. Version 1 stopped
+/// listing a workspace package's dependencies; version 2 changed no content and
+/// only made the parser refuse what version 1 tolerated (an off-registry
+/// tarball without an integrity, an unsafe git tag), and Bun keeps a loaded
+/// version 1 at version 1 when it saves. Version 0 lists workspace packages
+/// differently, and version 3 lets `overrides` hold scoped rules; neither is
+/// read until someone checks their records the same way.
+pub(crate) const BUN_LOCKFILE_VERSIONS: [u32; 2] = [1, 2];
+
+/// Refuses a Bun lockfile document whose `lockfileVersion` is not in
+/// [`BUN_LOCKFILE_VERSIONS`], in the wording the acquisition twin uses.
+fn require_bun_lockfile_version(
+    document: &serde_json::Value,
+) -> Result<(), super::ArtifactSnapshotError> {
+    let refuse = |detail: String| Err(super::ArtifactSnapshotError::InvalidProvenance(detail));
+    match document.get("lockfileVersion") {
+        None => refuse("Bun lockfile does not declare a lockfileVersion".into()),
+        Some(version)
+            if version
+                .as_u64()
+                .and_then(|version| u32::try_from(version).ok())
+                .is_some_and(|version| BUN_LOCKFILE_VERSIONS.contains(&version)) =>
+        {
+            Ok(())
+        }
+        Some(version) => refuse(format!(
+            "Bun lockfileVersion {version} is not 1 or 2; only those versions' package \
+             records are read"
+        )),
+    }
+}
+
 /// A Subresource Integrity string of one of the algorithms npm registries
 /// publish: `<algorithm>-<base64 digest>`. Bun, npm and pnpm all record this
 /// form, and anything else is not a registry integrity.
@@ -688,6 +727,7 @@ impl PublishedGraphLockSelection {
                 "Bun lockfile cannot be decoded: {error}"
             ))
         })?;
+        require_bun_lockfile_version(&document)?;
         let exact = format!("{package_name}@{package_version}");
         let selections = document
             .get("packages")
@@ -5292,6 +5332,7 @@ mod tests {
     #[test]
     fn bun_lock_selection_is_derived_from_exact_bytes_and_rejects_absence() {
         let lock = br#"{
+          "lockfileVersion": 1,
           "packages": {
             "leaf-package@2.0.0": ["leaf-package@2.0.0", "", {}, "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="],
           },
@@ -5329,6 +5370,7 @@ mod tests {
     #[test]
     fn bun_lock_selection_uses_the_installed_locator_to_disambiguate_same_versions() {
         let lock = br#"{
+          "lockfileVersion": 1,
           "packages": {
             "@corvu/utils": ["@corvu/utils@0.3.2", "", {}, "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="],
             "@corvu/accordion/@corvu/utils": ["@corvu/utils@0.3.2", "", {}, "sha512-AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ=="],
@@ -5892,7 +5934,7 @@ mod tests {
     fn lockfile_dispatch_follows_the_file_name() {
         let pnpm = pnpm_lock(&pnpm_entry());
         let bun = format!(
-            r#"{{"packages":{{"@corvu/utils":["@corvu/utils@0.3.2","",{{}},"{PNPM_INTEGRITY}"],}},}}"#
+            r#"{{"lockfileVersion":1,"packages":{{"@corvu/utils":["@corvu/utils@0.3.2","",{{}},"{PNPM_INTEGRITY}"],}},}}"#
         );
         let read = |path: &str, bytes: &[u8], locator: &str| {
             PublishedGraphLockSelection::from_lockfile(

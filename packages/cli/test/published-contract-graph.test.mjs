@@ -5,6 +5,7 @@ import { test } from "vitest";
 import {
   bunLockLocatorForInstalledPackage,
   createBunLockSelectionIndex,
+  createLockSelectionIndex,
   createNpmLockSelectionIndex,
   createPnpmLockSelectionIndex,
   PublishedGraphAcquisitionRefusal,
@@ -17,6 +18,7 @@ import {
 } from "../scripts/published-contract-graph.mjs";
 
 const lock = `{
+  "lockfileVersion": 1,
   "packages": {
     "root@1.0.0": ["root@1.0.0", "", {}, "sha512-root"],
     "leaf@2.0.0": ["leaf@2.0.0", "", {}, "sha512-leaf"],
@@ -36,6 +38,7 @@ test("exact Bun selection binds the record locator and rejects absence", () => {
 
 test("one parsed Bun lock index preserves exact locator and integrity selection", () => {
   const indexedLock = createBunLockSelectionIndex(`{
+    "lockfileVersion": 1,
     "packages": {
       "parent/leaf": ["leaf@2.0.0", "", {}, "sha512-nested"],
       "other/leaf": ["leaf@2.0.0", "", {}, "sha512-other"],
@@ -62,6 +65,7 @@ test("one parsed Bun lock index preserves exact locator and integrity selection"
 
 test("raw and indexed Bun selection agree for top-level and nested copies", () => {
   const sameVersionLock = `{
+    "lockfileVersion": 1,
     "packages": {
       "leaf": ["leaf@2.0.0", "", {}, "sha512-top-level"],
       "parent/leaf": ["leaf@2.0.0", "", {}, "sha512-nested"],
@@ -93,6 +97,7 @@ test("raw and indexed Bun selection agree for top-level and nested copies", () =
 
 test("exact Bun selection preserves integrity and cardinality refusal precedence", () => {
   const missingIntegrityLock = createBunLockSelectionIndex(`{
+    "lockfileVersion": 1,
     "packages": {
       "parent/leaf": ["leaf@2.0.0", "", {}],
       "leaf": ["leaf@2.0.0", "", {}, "sha512-top-level"],
@@ -116,6 +121,7 @@ test("exact Bun selection preserves integrity and cardinality refusal precedence
   );
 
   const ambiguousLock = createBunLockSelectionIndex(`{
+    "lockfileVersion": 1,
     "packages": {
       "leaf": ["leaf@2.0.0", "", {}, "sha512-top-level"],
       "parent/leaf": ["leaf@2.0.0", "", {}, "sha512-nested"],
@@ -446,6 +452,59 @@ const ROUTER_INTEGRITY =
   "sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA==";
 const DETECT_LIBC_INTEGRITY =
   "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==";
+
+test("every Bun reader refuses a lockfileVersion admission refuses", () => {
+  // The acquisition half of `every_bun_reader_refuses_the_versions_admission_refuses`
+  // in `diagnostics.rs`, over the same real bytes (Civil's bun.lock v1): the
+  // Bun index accepts exactly admission's {1, 2}, with the Rust wording.
+  const source = realLockfile("civil.bun.lock");
+  const select = lock =>
+    exactLockSelection({
+      index: createLockSelectionIndex(lock, "bun"),
+      packageManager: "bun",
+      lockfilePath: "/w/bun.lock",
+      packageRoot: "/w/node_modules/@solidjs/meta",
+      packageName: "@solidjs/meta",
+      packageVersion: "1.0.0-next.2"
+    });
+  for (const accepted of ["1", "2"]) {
+    const lock = source.replace('"lockfileVersion": 1,', `"lockfileVersion": ${accepted},`);
+    assert.equal(
+      select(lock).integrity,
+      "sha512-4aqPczFqDdep4JTAUXfh4nyfq7InbTgimd7NuN6ZWWE29UPv0uR5dyr53yFcf2YgVXjFdX+JGhXtsE0njGL+fA==",
+      `v${accepted}`
+    );
+  }
+  for (const [name, lock, reason] of [
+    [
+      "version 0",
+      source.replace('"lockfileVersion": 1,', '"lockfileVersion": 0,'),
+      "Bun lockfileVersion 0 is not 1 or 2; only those versions' package records are read"
+    ],
+    [
+      "version 3",
+      source.replace('"lockfileVersion": 1,', '"lockfileVersion": 3,'),
+      "Bun lockfileVersion 3 is not 1 or 2; only those versions' package records are read"
+    ],
+    [
+      "a missing version",
+      source.replace('  "lockfileVersion": 1,\n', ""),
+      "Bun lockfile does not declare a lockfileVersion"
+    ]
+  ]) {
+    assert.notEqual(lock, source, name);
+    for (const read of [() => select(lock), () => createBunLockSelectionIndex(lock), () => exactBunLockSelection(lock, "@solidjs/meta", "1.0.0-next.2")]) {
+      assert.throws(
+        read,
+        error =>
+          error instanceof PublishedGraphAcquisitionRefusal &&
+          error.kind === "unsupported-lock-version" &&
+          error.message.includes(reason),
+        `${name} was read instead of refused`
+      );
+    }
+  }
+});
 
 test("the pnpm reader reads the project document behind a pnpm 11 env document", () => {
   // pnpm 11+ writes `---\n<env>\n---\n<project>` when the project pins its
