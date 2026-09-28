@@ -604,6 +604,17 @@ pub struct ResolvedImport {
     /// archive and refuses a disagreement in either direction.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub unbound_declaration_exports: BTreeSet<String>,
+    /// Names on the runtime/declaration intersection whose runtime binding is
+    /// exact and this package's own definition, while their declaration
+    /// binding is exact and another package's declaration (ADR 0150). The two
+    /// axes describe different entities, so neither describes the export: it
+    /// leaves the contract surface exactly as an unbound declaration export
+    /// does, and every other export keeps its exact binding. Additive
+    /// resolution evidence, replayed by certification from the archive and
+    /// the planned dependencies' snapshots; a disagreement in either
+    /// direction refuses.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub foreign_declaration_exports: BTreeSet<String>,
     pub authority: ResolutionAuthority,
 }
 
@@ -665,6 +676,24 @@ impl ResolvedImport {
             if !self.declaration_exports.contains(name) {
                 return invalid_resolution(format!(
                     "unbound declaration export {name:?} is absent from the declaration export census"
+                ));
+            }
+        }
+        for name in &self.foreign_declaration_exports {
+            validate_identifier(name, "foreign declaration export name")?;
+            if self.exports.contains_key(name) {
+                return invalid_resolution(format!(
+                    "export {name:?} is both bound and declared foreign"
+                ));
+            }
+            if self.unbound_declaration_exports.contains(name) {
+                return invalid_resolution(format!(
+                    "export {name:?} is declared both unbound and foreign"
+                ));
+            }
+            if !self.declaration_exports.contains(name) {
+                return invalid_resolution(format!(
+                    "foreign declaration export {name:?} is absent from the declaration export census"
                 ));
             }
         }
@@ -1676,6 +1705,7 @@ mod tests {
             exports: BTreeMap::from([("value".into(), binding.clone()), ("other".into(), binding)]),
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
+            foreign_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         }
     }

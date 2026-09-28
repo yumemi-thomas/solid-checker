@@ -5819,6 +5819,7 @@ mod tests {
             exports,
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
+            foreign_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -6015,6 +6016,7 @@ mod tests {
             exports,
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
+            foreign_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -6218,6 +6220,7 @@ mod tests {
             )]),
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
+            foreign_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -7707,6 +7710,292 @@ mod tests {
         );
     }
 
+    const DECLARING_MANIFEST: &[u8] = br#"{"name":"declaring-package","version":"1.0.0","exports":{".":{"types":"./index.d.ts","import":"./index.js"}}}"#;
+    const DECLARING_RUNTIME: &[u8] = b"export const SHARED = 1;\n";
+    const DECLARING_DECLARATIONS: &[u8] = b"export declare const SHARED: number;\n";
+    const DECLARING_ROOT: &str = "/project/node_modules/declaring-package";
+    const DEFINING_MANIFEST: &[u8] = br#"{"name":"defining-package","version":"1.0.0","exports":{".":{"types":"./types/index.d.ts","import":"./dist/index.js"}}}"#;
+    const DEFINING_ROOT: &str = "/project/node_modules/defining-package";
+    const DEFINING_IMPORTER: &str = "/project/node_modules/defining-package/dist/index.js";
+    const DEFINING_DECLARATIONS: &[u8] =
+        b"export { SHARED } from \"declaring-package\";\nexport declare const own: number;\n";
+
+    /// The package that owns `SHARED`'s declaration, planned as a dependency
+    /// of `defining-package`.
+    fn plan_declaring_package() -> CertificationPlan {
+        let archive = published_archive_for(
+            "declaring-package",
+            "1.0.0",
+            &[
+                ("package/package.json", DECLARING_MANIFEST),
+                ("package/index.js", DECLARING_RUNTIME),
+                ("package/index.d.ts", DECLARING_DECLARATIONS),
+            ],
+        );
+        plan_for_test_package_from_importer(
+            &archive,
+            "declaring-package",
+            "1.0.0",
+            DECLARING_ROOT,
+            DECLARING_MANIFEST,
+            &["import"],
+            &[(
+                "SHARED",
+                ("index.js", DECLARING_RUNTIME),
+                ("index.d.ts", DECLARING_DECLARATIONS),
+                DECLARING_ROOT,
+            )],
+            &[],
+            DEFINING_IMPORTER,
+        )
+    }
+
+    /// `defining-package`, whose declarations re-export `SHARED` from
+    /// `declaring-package` while its runtime (chosen by the caller) binds
+    /// `SHARED` however it does. `solid-js@2.0.0-rc.9`'s server build is this
+    /// shape for `action` and 25 more names (ADR 0150).
+    fn defining_archive(runtime: &[u8]) -> PublishedArchive {
+        published_archive_for(
+            "defining-package",
+            "1.0.0",
+            &[
+                ("package/package.json", DEFINING_MANIFEST),
+                ("package/dist/index.js", runtime),
+                ("package/types/index.d.ts", DEFINING_DECLARATIONS),
+            ],
+        )
+    }
+
+    fn plan_defining_package(
+        archive: &PublishedArchive,
+        foreign: &[&str],
+        extra_candidate_exports: &[&str],
+        dependencies: &[&CertificationPlan],
+        importer: &str,
+    ) -> Result<CertificationPlan, super::CertificationPlanningError> {
+        let snapshot =
+            ArtifactSnapshot::from_published(archive, SnapshotLimits::policy_2()).unwrap();
+        let runtime = snapshot.read("dist/index.js").unwrap().to_vec();
+        let foreign = foreign
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect::<BTreeSet<_>>();
+        try_plan_adjusted_for_test_package(
+            archive,
+            "defining-package",
+            "1.0.0",
+            DEFINING_ROOT,
+            DEFINING_MANIFEST,
+            &["import"],
+            &[(
+                "own",
+                ("dist/index.js", runtime.as_slice()),
+                ("types/index.d.ts", DEFINING_DECLARATIONS),
+                DEFINING_ROOT,
+            )],
+            dependencies,
+            importer,
+            &[],
+            &|_| ValueShape::Plain,
+            extra_candidate_exports,
+            &|resolved| {
+                if !foreign.is_empty() {
+                    resolved.declaration_exports = BTreeSet::from(["SHARED".into(), "own".into()]);
+                }
+                resolved.foreign_declaration_exports.clone_from(&foreign);
+            },
+        )
+    }
+
+    const DEFINING_RUNTIME: &[u8] = b"export const SHARED = 2;\nexport const own = 1;\n";
+
+    // ADR 0150: a runtime definition of this package's own, declared by
+    // another package's declaration, binds two different entities and costs
+    // that export alone. Before, the emitter published it and `bind_exports`
+    // refused the whole artifact case -- `solid-js@2.0.0-rc.9 [import,node]`'s
+    // `action`, and with it every graph composed through that node.
+    #[test]
+    fn a_local_definition_declared_by_another_package_costs_only_that_export() {
+        let declaring = plan_declaring_package();
+        let archive = defining_archive(DEFINING_RUNTIME);
+        let plan = plan_defining_package(
+            &archive,
+            &["SHARED"],
+            &[],
+            &[&declaring],
+            "/project/src/app.ts",
+        )
+        .unwrap();
+        assert_eq!(plan.verified_exports.binding_count(), 1);
+        assert!(plan.verified_exports.declaration_binding("own").is_some());
+        assert!(
+            plan.verified_exports
+                .declaration_binding("SHARED")
+                .is_none()
+        );
+
+        // The same through a local re-export chain inside this package.
+        let chained = published_archive_for(
+            "defining-package",
+            "1.0.0",
+            &[
+                ("package/package.json", DEFINING_MANIFEST),
+                (
+                    "package/dist/index.js",
+                    b"export { SHARED } from \"./impl.js\";\nexport const own = 1;\n".as_slice(),
+                ),
+                ("package/dist/impl.js", b"export const SHARED = 2;\n"),
+                ("package/types/index.d.ts", DEFINING_DECLARATIONS),
+            ],
+        );
+        let plan = plan_defining_package(
+            &chained,
+            &["SHARED"],
+            &[],
+            &[&declaring],
+            "/project/src/app.ts",
+        )
+        .unwrap();
+        assert_eq!(plan.verified_exports.binding_count(), 1);
+
+        // Replayed, not trusted, in both directions: a resolver that does not
+        // name the export disagrees with the bytes...
+        let unnamed = refusal_text(plan_defining_package(
+            &archive,
+            &[],
+            &[],
+            &[&declaring],
+            "/project/src/app.ts",
+        ));
+        assert!(
+            unnamed.contains("supplied foreign declaration exports do not equal archive replay"),
+            "{unnamed}"
+        );
+        // ...and a document that still names the unavailable export refuses
+        // at the binding, exactly as before (`bind_exports` stays strict).
+        let named = refusal_text(plan_defining_package(
+            &archive,
+            &["SHARED"],
+            &["SHARED"],
+            &[&declaring],
+            "/project/src/app.ts",
+        ));
+        assert!(
+            named.contains("no exact runtime/declaration binding for export \"SHARED\""),
+            "{named}"
+        );
+    }
+
+    #[test]
+    fn a_foreign_declaration_is_never_claimed_where_both_axes_bind_one_entity() {
+        let declaring = plan_declaring_package();
+        for runtime in [
+            // Both axes cross the same edge: one entity, bound as before.
+            b"export { SHARED } from \"declaring-package\";\nexport const own = 1;\n".as_slice(),
+            b"import { SHARED } from \"declaring-package\";\nexport { SHARED };\nexport const own = 1;\n",
+            // The runtime does not export the name at all: not on the
+            // intersection, so nothing to withhold.
+            b"export const own = 1;\n",
+        ] {
+            let archive = defining_archive(runtime);
+            let refusal = refusal_text(plan_defining_package(
+                &archive,
+                &["SHARED"],
+                &[],
+                &[&declaring],
+                "/project/src/app.ts",
+            ));
+            assert!(
+                refusal.contains("supplied foreign declaration exports do not equal archive replay"),
+                "{}: {refusal}",
+                String::from_utf8_lossy(runtime)
+            );
+        }
+
+        // No planned dependency owns the declaration: its binding is not
+        // exact, so the name is not proven foreign and keeps its refusal.
+        let archive = defining_archive(DEFINING_RUNTIME);
+        let refusal = refusal_text(plan_defining_package(
+            &archive,
+            &["SHARED"],
+            &[],
+            &[],
+            "/project/src/app.ts",
+        ));
+        assert!(
+            refusal.contains("supplied foreign declaration exports do not equal archive replay"),
+            "{refusal}"
+        );
+    }
+
+    // What reaches the unavailable export from a dependent package stays
+    // refused; what does not reach it binds.
+    #[test]
+    fn a_dependent_binds_around_a_foreign_declaration_and_refuses_through_it() {
+        let dependent_root = "/project/node_modules/defining-dependent";
+        let dependent_importer = "/project/node_modules/defining-dependent/dist/index.js";
+        let declaring = plan_declaring_package();
+        let archive = defining_archive(DEFINING_RUNTIME);
+        let defining = plan_defining_package(
+            &archive,
+            &["SHARED"],
+            &[],
+            &[&declaring],
+            dependent_importer,
+        )
+        .unwrap();
+        let dependent_manifest = br#"{"name":"defining-dependent","version":"1.0.0","exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.js"}}}"#;
+        let own_binding = [(
+            "own",
+            ("dist/index.js", DEFINING_RUNTIME),
+            ("types/index.d.ts", DEFINING_DECLARATIONS),
+            DEFINING_ROOT,
+        )];
+        let dependent = |source: &[u8]| {
+            let archive = published_archive_for(
+                "defining-dependent",
+                "1.0.0",
+                &[
+                    ("package/package.json", dependent_manifest.as_slice()),
+                    ("package/dist/index.js", source),
+                    ("package/dist/index.d.ts", source),
+                ],
+            );
+            try_plan_for_test_package_from_importer(
+                &archive,
+                "defining-dependent",
+                "1.0.0",
+                dependent_root,
+                dependent_manifest,
+                &["import"],
+                &own_binding,
+                &[&defining],
+                "/project/src/app.ts",
+            )
+        };
+
+        // A named re-export of a sibling export binds, and so does `export *`,
+        // which forwards exactly the dependency's verified surface.
+        for source in [
+            b"export { own } from \"defining-package\";\n".as_slice(),
+            b"export * from \"defining-package\";\n",
+        ] {
+            let plan = dependent(source)
+                .unwrap_or_else(|error| panic!("{}: {error}", String::from_utf8_lossy(source)));
+            assert_eq!(plan.verified_exports.binding_count(), 1);
+        }
+
+        // A named re-export of the unavailable export reaches it, and refuses.
+        let refusal = refusal_text(dependent(
+            b"export { own, SHARED } from \"defining-package\";\n",
+        ));
+        assert!(
+            refusal.contains("do not equal the runtime/declaration intersection")
+                || refusal.contains("has no exact binding"),
+            "{refusal}"
+        );
+    }
+
     // Regression: `external_dependency` selected a planned dependency by its
     // bare specifier across the *whole* authenticated descendant set. That set
     // repeats a specifier as soon as two packages of one graph depend on the
@@ -8530,6 +8819,7 @@ mod tests {
                 .collect(),
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
+            foreign_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         (request, resolved)
@@ -9333,6 +9623,7 @@ export const value = phantom;
                 "shared".into(),
             ]),
             unbound_declaration_exports: BTreeSet::new(),
+            foreign_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -9467,6 +9758,7 @@ export const value = phantom;
             exports: BTreeMap::new(),
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
+            foreign_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -9630,6 +9922,7 @@ export const value = phantom;
             exports,
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
+            foreign_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         let (package, mut artifact_case) =
@@ -9950,6 +10243,7 @@ export const value = phantom;
             exports: BTreeMap::new(),
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
+            foreign_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         let (package, mut artifact_case) =
@@ -10819,6 +11113,7 @@ export const value = phantom;
                 exports,
                 declaration_exports: BTreeSet::new(),
                 unbound_declaration_exports: BTreeSet::new(),
+                foreign_declaration_exports: BTreeSet::new(),
                 authority: ResolutionAuthority::Host,
             };
             let (package, mut artifact_case) =
@@ -11847,6 +12142,7 @@ export const value = phantom;
             )]),
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
+            foreign_declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         let (package, mut artifact_case) =

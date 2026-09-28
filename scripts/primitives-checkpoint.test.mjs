@@ -219,6 +219,12 @@ test("refusals, published-package defects and graph-lane refusals are named with
     'graph node solid-js@2.0.0-rc.9 [import,node]: export "action" re-exported from @solidjs/signals, which no planned dependency binds'
   );
   assert.equal(
+    graph(
+      "published dependency graph prepared no artifact case: graph node @solidjs/web@2.0.0-rc.9 . [import,node] refused: published dependency graph node @solidjs/web@2.0.0-rc.9 . [import,node] refused: no certifiable artifact case; 1 case(s) refused; first refusal: .: accepted dependency solid-js has no exact runtime binding for export getOwner"
+    ).key,
+    'graph node @solidjs/web@2.0.0-rc.9 [import,node]: export "getOwner" has no exact runtime binding in solid-js'
+  );
+  assert.equal(
     graph("published dependency graph prepared no artifact case: @tauri-apps/api is not installed above /private/tmp/x/node_modules/@solid-primitives/filesystem/dist/a.d.ts").key,
     "@tauri-apps/api is not installed (imported by @solid-primitives/filesystem)"
   );

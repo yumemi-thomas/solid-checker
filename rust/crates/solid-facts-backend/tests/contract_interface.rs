@@ -65,6 +65,7 @@ fn resolved() -> ResolvedImport {
         )]),
         declaration_exports: std::collections::BTreeSet::new(),
         unbound_declaration_exports: std::collections::BTreeSet::new(),
+        foreign_declaration_exports: std::collections::BTreeSet::new(),
         authority: ResolutionAuthority::Host,
     }
 }

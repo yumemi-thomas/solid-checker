@@ -6783,10 +6783,20 @@ fn emit_package_contract(
     // archive bytes and refuses any disagreement, so an omitted bindable name
     // still refuses. (Validation requires the census whenever the resolver
     // names such an export.)
+    //
+    // ADR 0150 leaves a foreign declaration export off the same way: its
+    // runtime binding is this package's own definition and its declaration
+    // binding another package's declaration, so no one entity carries both
+    // identities. Emitting it cost the whole artifact case at `bind_exports`
+    // (`solid-js@2.0.0-rc.9`'s server build and `action`).
     let declaration_surface = (!resolution.declaration_exports.is_empty()).then(|| {
         resolution
             .declaration_exports
-            .difference(&resolution.unbound_declaration_exports)
+            .iter()
+            .filter(|name| {
+                !resolution.unbound_declaration_exports.contains(*name)
+                    && !resolution.foreign_declaration_exports.contains(*name)
+            })
             .cloned()
             .collect::<BTreeSet<_>>()
     });

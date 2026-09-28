@@ -34,6 +34,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/props-split-vocabulary/node_modules/**
 !fixtures/package-contracts/external-reexport/node_modules/
 !fixtures/package-contracts/external-reexport/node_modules/**
+!fixtures/package-contracts/foreign-declaration-reexport/node_modules/
+!fixtures/package-contracts/foreign-declaration-reexport/node_modules/**
 !fixtures/package-contracts/class-expression-kind/node_modules/
 !fixtures/package-contracts/class-expression-kind/node_modules/**
 !fixtures/package-contracts/carried-value-kind/node_modules/

@@ -1840,6 +1840,107 @@ describe("exact artifact records and closure", () => {
     expect(record.exports.default).toBeUndefined();
   });
 
+  test("a local runtime definition declared by another package's declaration is foreign, alone", () => {
+    // ADR 0150. `solid-js@2.0.0-rc.9`'s server build `dist/server.js` defines
+    // `action` itself while `types/index.d.ts` re-exports `@solidjs/signals`'
+    // `action`: two different entities. The census names exactly that shape
+    // -- runtime bound inside this package, declaration bound to another
+    // package's accepted declaration -- and the name leaves `exports`.
+    const dependencyRoot = fixture(
+      { name: "declaring", version: "1.0.0" },
+      {
+        "index.js": "export const shared = 1; export const both = 2;\n",
+        "index.d.ts": "export declare const shared: number; export declare const both: number;\n"
+      }
+    );
+    const target = (axis, name) => ({
+      module: {
+        path: join(dependencyRoot, axis === "runtime" ? "index.js" : "index.d.ts"),
+        digest: `sha256:${(axis === "runtime" ? "2" : "3").repeat(64)}`
+      },
+      exportName: name
+    });
+    const exports = Object.fromEntries(
+      ["shared", "both"].map(name => [
+        name,
+        { runtime: target("runtime", name), declarations: target("declarations", name) }
+      ])
+    );
+    const accepted = (packageName = "declaring") => ({
+      declaring: {
+        packageName,
+        artifactCase: "artifact-case:declaring",
+        acceptedContractDigest: `sha256:${"1".repeat(64)}`,
+        exports
+      }
+    });
+    const resolveWith = (files, acceptedDependencies = accepted(), name = "defining") => {
+      const root = fixture(
+        {
+          name,
+          version: "1.0.0",
+          type: "module",
+          exports: { ".": { types: "./types/index.d.ts", import: "./dist/index.js" } }
+        },
+        files
+      );
+      return resolvePackageArtifacts({
+        importer: join(root, "consumer.mjs"),
+        specifier: name,
+        packageRoot: root,
+        integrity: "sha512:test",
+        acceptedDependencies
+      });
+    };
+    const declarations =
+      'export { shared, both } from "declaring";\nexport declare const own: number;\n';
+    const runtime = {
+      "dist/index.js":
+        'export { both } from "declaring";\nexport { shared } from "./impl.js";\nexport const own = 1;\n',
+      "dist/impl.js": "export const shared = 3;\n",
+      "types/index.d.ts": declarations
+    };
+
+    const record = resolveWith(runtime);
+    expect(record.foreignDeclarationExports).toEqual(["shared"]);
+    // `both` crosses the same edge on both axes: one entity, still bound.
+    expect(Object.keys(record.exports)).toEqual(["both", "own"]);
+    expect(record.exports.both).toEqual(exports.both);
+    expect(record.declarationExports).toEqual(["both", "own", "shared"]);
+
+    // A local definition in the entry module itself is the same shape.
+    expect(resolveWith({
+      ...runtime,
+      "dist/index.js":
+        'export { both } from "declaring";\nexport const shared = 3;\nexport const own = 1;\n'
+    }).foreignDeclarationExports).toEqual(["shared"]);
+
+    // A self-package edge (ADR 0012) is this package's own declaration, and
+    // an owner that is not exactly one named package proves nothing: the name
+    // stays bound, and any disagreement is the certifier's to refuse.
+    for (const dependencies of [accepted("defining"), accepted("")]) {
+      const bound = resolveWith(runtime, dependencies);
+      expect(bound.foreignDeclarationExports).toBeUndefined();
+      expect(Object.keys(bound.exports)).toEqual(["both", "own", "shared"]);
+    }
+
+    // The converse, a local declaration of a name the runtime forwards from
+    // another package, is not this shape: it binds as before.
+    const converse = resolveWith({
+      "dist/index.js": 'export { shared } from "declaring";\nexport const own = 1;\n',
+      "types/index.d.ts":
+        "export declare const shared: number;\nexport declare const own: number;\n"
+    });
+    expect(converse.foreignDeclarationExports).toBeUndefined();
+    expect(Object.keys(converse.exports)).toEqual(["own", "shared"]);
+
+    // The resolution of a package without such a name is byte-unchanged.
+    expect(resolveWith({
+      ...runtime,
+      "dist/index.js": 'export { shared, both } from "declaring";\nexport const own = 1;\n'
+    })).not.toHaveProperty("foreignDeclarationExports");
+  });
+
   test("never grants an external namespace binding from accepted dependency names", () => {
     const dependencyRoot = fixture(
       { name: "accepted", version: "1.0.0" },

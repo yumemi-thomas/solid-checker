@@ -43,6 +43,7 @@
     "export-identity-join",
     "exported-class",
     "external-reexport",
+    "foreign-declaration-reexport",
     "forwarded-local-untrack-wrapper",
     "function-supertype-kind",
     "implementation-census-argument-returns",

@@ -217,6 +217,49 @@ pub(super) fn verify_snapshot_exports_with_dependencies(
         ));
     }
     let names = names.difference(&unbound).cloned().collect::<BTreeSet<_>>();
+    // ADR 0150: a name whose runtime binding is exact and this package's own
+    // definition, while its declaration binding is exact and another
+    // package's declaration, binds two different entities. The types describe
+    // different code, so neither axis describes the export, and it is
+    // unavailable exactly as an ADR 0128 gap is. The census is the
+    // generator's `foreignDeclarationOwner`, replayed here over the archive
+    // and the planned dependencies' snapshots; the two must agree exactly.
+    let mut foreign = BTreeSet::new();
+    for name in &names {
+        let Some(runtime) = replay.bind_export(
+            resolution.runtime_path(),
+            name,
+            ModuleAxis::Runtime,
+            &mut BTreeSet::new(),
+        )?
+        else {
+            continue;
+        };
+        let Some(declarations) = replay.bind_export(
+            resolution.declarations_path(),
+            name,
+            ModuleAxis::Declarations,
+            &mut BTreeSet::new(),
+        )?
+        else {
+            continue;
+        };
+        let own = snapshot.package_name();
+        if replay.target_package(&runtime) == Some(own)
+            && replay
+                .target_package(&declarations)
+                .is_some_and(|owner| owner != own)
+        {
+            foreign.insert(name.clone());
+        }
+    }
+    if foreign != resolved.foreign_declaration_exports {
+        return export_mismatch(format!(
+            "supplied foreign declaration exports do not equal archive replay; replayed {foreign:?}; supplied {:?}",
+            resolved.foreign_declaration_exports,
+        ));
+    }
+    let names = names.difference(&foreign).cloned().collect::<BTreeSet<_>>();
     let supplied_names = resolved.exports.keys().cloned().collect::<BTreeSet<_>>();
     if names != supplied_names {
         let replayed_only = names
@@ -1176,6 +1219,27 @@ impl ExportReplay<'_> {
         });
         let dependency = owned.next()?;
         owned.next().is_none().then_some(dependency)
+    }
+
+    /// The package a replayed target belongs to: this package for a target in
+    /// its own snapshot, the planned dependency's package for one in that
+    /// dependency's snapshot, and `None` for a snapshot no planned dependency
+    /// owns (which then refuses at `verify_target`).
+    ///
+    /// The generator's `bindingOwner` mirror: package identity, not snapshot
+    /// identity, so a self-package edge (ADR 0012) counts as this package's own
+    /// on both sides.
+    fn target_package(&self, target: &BindingTarget) -> Option<&str> {
+        if target.snapshot_root == self.snapshot.root() {
+            return Some(self.snapshot.package_name());
+        }
+        let mut owners = self
+            .dependencies
+            .iter()
+            .filter(|dependency| dependency.snapshot.root() == target.snapshot_root)
+            .map(|dependency| dependency.snapshot.package_name());
+        let owner = owners.next()?;
+        owners.all(|other| other == owner).then_some(owner)
     }
 
     fn external_binding(

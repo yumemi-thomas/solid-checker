@@ -446,6 +446,12 @@ export function graphRefusalOf(result) {
   if (unbound) {
     return { key: `graph node ${unbound[1]} [${unbound[2]}]: export "${unbound[3]}" re-exported from ${unbound[4]}, which no planned dependency binds` };
   }
+  // A dependent node whose re-export reaches a name its dependency's contract
+  // withholds (ADR 0128's unbound, ADR 0150's foreign declaration exports).
+  const withheld = /graph node (\S+) \S+ \[([^\]]*)\] refused:.*accepted dependency (\S+) has no exact (runtime|declarations) binding for export (\S+)/.exec(text);
+  if (withheld) {
+    return { key: `graph node ${withheld[1]} [${withheld[2]}]: export "${withheld[5]}" has no exact ${withheld[4]} binding in ${withheld[3]}` };
+  }
   const notExported = /prepared no artifact case: (\S+) is not exported by the package/.exec(text);
   if (notExported) return { key: `${notExported[1]} is not exported by the imported package` };
   const notInstalled = /prepared no artifact case: (\S+) is not installed above \S*node_modules\/((?:@[^/]+\/)?[^/]+)\//.exec(text);

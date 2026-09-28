@@ -130,6 +130,7 @@ fn resolved_import() -> ResolvedImport {
         exports,
         declaration_exports: std::collections::BTreeSet::new(),
         unbound_declaration_exports: std::collections::BTreeSet::new(),
+        foreign_declaration_exports: std::collections::BTreeSet::new(),
         authority: ResolutionAuthority::Host,
     }
 }
@@ -1019,6 +1020,45 @@ fn resolved_import_root_binds_the_unbound_declaration_export_census() {
     both.declaration_exports.insert(bound.clone());
     both.unbound_declaration_exports.insert(bound);
     assert!(policy2_resolved_import_root(&both).is_err());
+}
+
+#[test]
+fn resolved_import_root_binds_the_foreign_declaration_export_census() {
+    let resolved = resolved_import();
+    let mut changed = resolved.clone();
+    changed.declaration_exports.insert("ForeignName".into());
+    let census_only = policy2_resolved_import_root(&changed).unwrap();
+    changed
+        .foreign_declaration_exports
+        .insert("ForeignName".into());
+    assert_ne!(
+        census_only,
+        policy2_resolved_import_root(&changed).unwrap(),
+        "an export ADR 0150 withholds as foreign is receipt identity"
+    );
+
+    // The census it is a subset of is required.
+    let mut uncensused = resolved.clone();
+    uncensused
+        .foreign_declaration_exports
+        .insert("ForeignName".into());
+    assert!(policy2_resolved_import_root(&uncensused).is_err());
+
+    // A name is neither bound nor unbound as well as foreign.
+    let mut bound = resolved.clone();
+    let name = bound.exports.keys().next().expect("a bound export").clone();
+    bound.declaration_exports.insert(name.clone());
+    bound.foreign_declaration_exports.insert(name);
+    assert!(policy2_resolved_import_root(&bound).is_err());
+    let mut unbound = resolved;
+    unbound.declaration_exports.insert("ForeignName".into());
+    unbound
+        .unbound_declaration_exports
+        .insert("ForeignName".into());
+    unbound
+        .foreign_declaration_exports
+        .insert("ForeignName".into());
+    assert!(policy2_resolved_import_root(&unbound).is_err());
 }
 
 /// The whole point of the acceptance root: two consumers that resolved the same

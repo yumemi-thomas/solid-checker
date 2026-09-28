@@ -2387,6 +2387,9 @@ function exactExportBindings(
   const names = [...runtimeNames].filter(name => declarationNames.has(name)).sort();
   const exports = {};
   const unboundDeclarationExports = [];
+  const foreignDeclarationExports = [];
+  const ownerPackages = acceptedBindingOwners(acceptedDependencies);
+  const packageName = ownPackageName(packageRoot, cache);
   for (const name of names) {
     const runtimeTarget = bindExport(
       runtime.path,
@@ -2415,14 +2418,89 @@ function exactExportBindings(
       unboundDeclarationExports.push(name);
     }
     if (!runtimeTarget || !declarationTarget) continue;
+    // ADR 0150: the runtime binding is this package's own definition while
+    // the declaration binding is another package's declaration. The two are
+    // different entities -- `solid-js@2.0.0-rc.9`'s `dist/server.js` defines
+    // `action` itself while `types/index.d.ts` re-exports `@solidjs/signals`'
+    // -- so the types describe different code and neither axis describes the
+    // export. It leaves the surface alone; every other export keeps its exact
+    // binding. The certifier replays this census from the archive and refuses
+    // a disagreement (`export_bindings.rs`'s `foreign_declaration_owner`).
+    if (
+      packageName !== undefined &&
+      bindingOwner(runtimeTarget, ownerPackages, packageName) === packageName &&
+      foreignDeclarationOwner(declarationTarget, ownerPackages, packageName)
+    ) {
+      foreignDeclarationExports.push(name);
+      continue;
+    }
     exports[name] = { runtime: runtimeTarget, declarations: declarationTarget };
   }
   return {
     exports,
     declarationExports: [...declarationNames].sort(),
     unboundDeclarationExports,
+    foreignDeclarationExports,
     cache
   };
+}
+
+/// Every accepted dependency binding object, mapped to the package names of
+/// the dependencies that supply it. `bindExport` returns an accepted binding
+/// by identity (`acceptedExternalBinding`), and a local binding as a fresh
+/// object, so this map is exactly the set of targets that crossed a package
+/// edge -- no path prefix is consulted, because a nested install lies
+/// lexically below the package root it is not a member of.
+function acceptedBindingOwners(acceptedDependencies) {
+  const owners = new Map();
+  for (const dependency of Object.values(acceptedDependencies)) {
+    for (const binding of Object.values(dependency?.exports ?? {})) {
+      for (const target of [binding?.runtime, binding?.declarations]) {
+        if (!target || typeof target !== "object") continue;
+        const names = owners.get(target) ?? new Set();
+        names.add(dependency.packageName);
+        owners.set(target, names);
+      }
+    }
+  }
+  return owners;
+}
+
+/// The package a bound target belongs to: this package for a target reached
+/// without crossing an accepted dependency edge, the dependency's package for
+/// one that did, and `undefined` when that is not exactly one named package.
+function bindingOwner(target, owners, packageName) {
+  const names = owners.get(target);
+  if (!names) return packageName;
+  if (names.size !== 1) return undefined;
+  const [name] = names;
+  return typeof name === "string" && name ? name : undefined;
+}
+
+/// Whether a declaration target is exactly another package's declaration. A
+/// self-package edge (ADR 0012) is this package's own, and an owner that is
+/// not exactly one named package proves nothing, which keeps the name bound
+/// and leaves any disagreement to the certifier's replay.
+function foreignDeclarationOwner(target, owners, packageName) {
+  const owner = bindingOwner(target, owners, packageName);
+  return owner !== undefined && owner !== packageName;
+}
+
+/// The resolved package's own manifest name, memoized like `ownPackageIsCore`.
+function ownPackageName(packageRoot, cache) {
+  cache.ownPackageName ??= new Map();
+  const key = String(packageRoot);
+  if (!cache.ownPackageName.has(key)) {
+    let name;
+    try {
+      const manifest = JSON.parse(readFileSync(join(key, "package.json"), "utf8"));
+      name = typeof manifest.name === "string" && manifest.name ? manifest.name : undefined;
+    } catch {
+      name = undefined;
+    }
+    cache.ownPackageName.set(key, name);
+  }
+  return cache.ownPackageName.get(key);
 }
 
 // Member names that install a property accessor, or a prototype carrying one,
@@ -2946,7 +3024,13 @@ export function resolvePackageArtifacts({
   ]);
   let semantic = session?.[SESSION_LOOKUP](semanticKey, logicalRoot);
   if (!semantic) {
-    const { exports, declarationExports, unboundDeclarationExports, cache } = exactExportBindings(
+    const {
+      exports,
+      declarationExports,
+      unboundDeclarationExports,
+      foreignDeclarationExports,
+      cache
+    } = exactExportBindings(
       runtime.file,
       declarations.file,
       logicalRoot,
@@ -2963,7 +3047,13 @@ export function resolvePackageArtifacts({
       cache,
       acceptedDependencies
     );
-    semantic = { exports, declarationExports, unboundDeclarationExports, closure };
+    semantic = {
+      exports,
+      declarationExports,
+      unboundDeclarationExports,
+      foreignDeclarationExports,
+      closure
+    };
     session?.[SESSION_STORE](semanticKey, semantic);
   }
   const realRoot = realpath(logicalRoot);
@@ -2992,6 +3082,10 @@ export function resolvePackageArtifacts({
     // name keeps its exact bytes (and its receipt identity).
     ...(semantic.unboundDeclarationExports.length > 0
       ? { unboundDeclarationExports: semantic.unboundDeclarationExports }
+      : {}),
+    // ADR 0150, additive in the same way.
+    ...(semantic.foreignDeclarationExports.length > 0
+      ? { foreignDeclarationExports: semantic.foreignDeclarationExports }
       : {}),
     authority: "standalonePackageResolver"
   };
