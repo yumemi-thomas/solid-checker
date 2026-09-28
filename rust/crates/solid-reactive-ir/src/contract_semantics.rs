@@ -2064,15 +2064,86 @@ pub enum ValueShape {
 
 /// ADR 0145: what one invocation of a [`ValueShape::DescribedCallable`] does.
 ///
-/// Both lists are exact enumerations, canonically sorted and without
+/// Every list is an exact enumeration, canonically sorted and without
 /// duplicates. `returns` admits only exact outputs whose meaning does not
-/// depend on who calls: `plain`, and (ADR 0146) [`ValueShape::ReadValue`].
-/// Every read is performed on the invoking caller's stack, in that caller's
-/// tracking context.
+/// depend on who calls: `plain`, (ADR 0146) [`ValueShape::ReadValue`], and
+/// (ADR 0152) [`ValueShape::InvocationResult`] of an argument one of
+/// `callbacks` names. Every read is performed on the invoking caller's stack,
+/// in that caller's tracking context.
 #[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct DescribedCall {
     pub reads: Vec<DescribedRead>,
     pub returns: Vec<ValueShape>,
+    /// ADR 0152: the callables one invocation of the described callable runs
+    /// that it did not itself define -- each an argument the **export** was
+    /// handed and the returned callable captured. Empty is ADR 0145's
+    /// `callbacks: []`, and it is how every document before ADR 0152 reads.
+    pub callbacks: Vec<DescribedCallback>,
+}
+
+/// ADR 0152: one invocation a described callable performs of a callable its
+/// export was handed, in the top-level `callbacks` vocabulary: a `from` (the
+/// export's own argument, a bare [`ValueSource::Parameter`]) and the
+/// invocation's execution point, schedule, tracking, owner and count, spelled
+/// as an `invoke` operation spells them. Stated inside a described callable,
+/// every `call` is the invocation of the described callable, not the export's.
+///
+/// Validation admits exactly one invocation today
+/// (`validate::normalize_described_callable`): triggered by and at that call,
+/// on the same stack, in the invoking caller's tracking context and under its
+/// owner, exactly once per invocation, unguarded, a call. That is the one the
+/// census can prove -- a call of the captured argument in the returned
+/// literal's own frame that runs on every normal completion of it; a deferred,
+/// conditional or repeated invocation is not stated at all, and the `return`
+/// carrying it is withdrawn instead.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct DescribedCallback {
+    pub from: ValueSource,
+    pub trigger: Option<Trigger>,
+    pub at: Option<Event>,
+    pub schedule: Option<Schedule>,
+    pub tracking: Tracking,
+    pub owner: OwnerRelation,
+    pub cardinality: Cardinality,
+}
+
+impl DescribedCallback {
+    /// The one invocation ADR 0152 admits, of the export's argument `index`.
+    #[must_use]
+    pub fn same_stack_once(index: u16) -> Self {
+        Self {
+            from: ValueSource::Parameter {
+                index,
+                path: Vec::new(),
+            },
+            trigger: Some(Trigger::Event(Event::Call)),
+            at: Some(Event::Call),
+            schedule: Some(Schedule::SameStack),
+            tracking: Tracking::AmbientAtExecution,
+            owner: OwnerRelation {
+                source: OwnerSource::AmbientAtExecution,
+                requirements: OwnerRequirements::default(),
+                capabilities: OwnerCapabilities::default(),
+                lifetime: None,
+                productions: KnowledgeSet::Unknown,
+            },
+            cardinality: Cardinality {
+                scope: Some(CardinalityScope::Call),
+                min: Some(1),
+                max: Some(UpperBound::Finite(1)),
+            },
+        }
+    }
+
+    /// The export argument this item invokes, when it is the bare parameter
+    /// the one admitted shape names.
+    #[must_use]
+    pub fn parameter(&self) -> Option<u16> {
+        match &self.from {
+            ValueSource::Parameter { index, path } if path.is_empty() => Some(*index),
+            _ => None,
+        }
+    }
 }
 
 /// ADR 0145/0146: one reactive read a described callable performs when it is

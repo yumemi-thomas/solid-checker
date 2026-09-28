@@ -499,6 +499,19 @@ impl<'a> SemanticLookup<'a> {
             })
     }
 
+    /// ADR 0152: the argument slots the value the contract export bound to
+    /// `symbol` returns invokes on its own invoker's stack, or `None` when no
+    /// contract is bound to it.
+    pub(super) fn contract_returned_invocations(
+        &self,
+        symbol: &str,
+    ) -> Option<&std::collections::BTreeSet<usize>> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .map(|binding| &binding.summary.returned_invocations)
+    }
+
     /// The package and imported export name a symbol's contract binding
     /// carries, whatever its claim status. Consumer-side obligations name the
     /// export whose claim could not be applied, which is the same identity the

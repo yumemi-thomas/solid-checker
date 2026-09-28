@@ -896,6 +896,30 @@ the creating call's declaration in an audited dialect archive among the
 certified package's authenticated dependencies. The consumer reads it as an
 accessor: calling it is a reactive read in whatever scope calls it.
 
+**[Decision 2026-09-28, ADR 0152]** a described callable may state
+`callbacks`: the callables one invocation of it runs that it did not define,
+each an argument the **export** was handed and the returned callable captured.
+An item is spelled as a top-level `callbacks` item, `{from, operation}`, with
+the operation written inline (nothing references it, so it carries no id), and
+every `call` in it is the invocation of the described callable. One invocation
+is admitted: `{"from": {"arg": i, "path": []}, "operation": {"kind":
+"invoke", "trigger": {"event": "call"}, "at": {"event": "call", "schedule":
+"same-stack"}, "tracking": "ambient-at-execution", "owner": {"source":
+"ambient-at-execution"}, "count": {"scope": "call", "min": 1, "max": 1}}}` --
+argument `i` runs exactly once on every normal completion of the invocation,
+before it returns, on the invoker's stack, in the invoker's tracking context
+and under its owner. At most one item names an argument. `returns` may then
+name `{"kind": "invocation-result", "parameter": i}`, exactly what that
+invocation returned. Absent, `callbacks` is `[]`, which is how every document
+before the field reads, and such a described callable keeps its encoding and
+digest byte for byte. The export's own `callbacks` states each such argument at
+ADR 0139's `result-access` event: its call runs none of them and keeps them
+only in the value it returns. `pipe(a, b) { return (raw) => b(a(raw)); }`
+publishes both. A captured argument the literal calls conditionally, more than
+once, from a callable nested in it, or through a defaulted parameter states no
+item; the `return` is withdrawn instead. A consumer composes a callback written
+at such a slot with the proven invocations of the returned value.
+
 **[Decision 2026-09-28, amendment to ADR 0113]** a `plain` return -- the
 export's own or a described callable's -- is proved by a primitive *type* and,
 beside it, evidence no reassignable binding's declaration can fake: a primitive

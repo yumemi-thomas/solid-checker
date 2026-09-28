@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:b69fe17d35a94e711cfe67c6f199bce7cc0b04403501e59529b00672253385a7";
+    "sha256:3dda600c56eab89b1b57e880b388022baaf02f92c43a9a55d2ccc813f08bdd0a";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -384,7 +384,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // value the expression itself makes -- never a binding whose declared type is
 // all that names the built-in. A protocol-67 consumer decodes with
 // `deny_unknown_fields` and would reject the new field, so the number moves.
-// Protocol 70 (ADR 0153; 69 is reserved for ADR 0152) states a member read of a
+// Protocol 70 (ADR 0153; 69 was never issued) states a member read of a
 // package-owned context value:
 // `UncensusedInvokingForm::context_member` names the chain of local calls that
 // reaches a dialect `useContext` read, the context's provision census (reads,
@@ -392,7 +392,14 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // provide, exports), and every call in the program's runtime source that could
 // turn the member into an accessor. A protocol-69 consumer decodes with
 // `deny_unknown_fields` and would reject the new field, so the number moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 70;
+// Protocol 71 (ADR 0152) states, per implementation call, the parameter of
+// the censused implementation its callee is by binding identity
+// (`ImplementationCall::callee_unwritten_parameter`, at any depth of nesting)
+// and whether it runs exactly once on every normal completion of its flow
+// owner (`ImplementationCall::unconditional`). A protocol-70 consumer decodes
+// with `deny_unknown_fields` and would reject the new fields, so the number
+// moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 71;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

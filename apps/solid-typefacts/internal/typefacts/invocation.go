@@ -1379,6 +1379,33 @@ type ImplementationCall struct {
 	// malformed one, and a consumer must refuse it rather than read it as a
 	// fact that needs nothing.
 	CalleePendingInvocations []CalleePendingInvocation `cbor:"calleePendingInvocations,omitempty" json:"calleePendingInvocations,omitempty"`
+	// CalleeUnwrittenParameter is the index of the censused implementation's
+	// parameter this call's callee *is*, by binding identity (ADR 0152,
+	// handshake protocol 71): the callee, after identity-preserving wrappers,
+	// is an identifier resolving to a plain identifier parameter of the
+	// implementation -- no initializer, not a rest or destructured binding,
+	// declared once, never written anywhere in the implementation, nested
+	// callables included, and neither `arguments` nor `eval` mentioned. It is
+	// stated at any depth of nesting, so a call inside a closure the
+	// implementation returns names the implementation's own parameter it
+	// captured. The predicate is the one a returned parameter's identity uses
+	// (unwrittenParameterIdentityLocked). Absent for a construction, and
+	// whenever the callee is anything else; absence is never "not a parameter".
+	CalleeUnwrittenParameter *int `cbor:"calleeUnwrittenParameter,omitempty" json:"calleeUnwrittenParameter,omitempty"`
+	// Unconditional states that the call runs exactly once on every normal
+	// completion of its flow owner -- the innermost callable containing it
+	// (EnclosingCallable), or the implementation itself (ADR 0152, handshake
+	// protocol 71). It is true only when the call's Reach is reachable, its
+	// flow owner is neither async nor a generator, the call is no optional
+	// call, and no node between the call and its flow owner's body evaluates
+	// it conditionally or repeatedly: an `if` arm, a conditional expression's
+	// arm, the right operand of `&&`, `||`, `??` or a logical assignment, any
+	// part of an optional chain, a loop, `switch`, `try`, labelled statement,
+	// class, parameter or binding default; and no statement before it in any
+	// enclosing block may leave the flow owner early by `return`, `break` or
+	// `continue`. A `throw` before it is admitted: a completion that throws is
+	// not a normal one. False claims nothing.
+	Unconditional bool `cbor:"unconditional,omitempty" json:"unconditional,omitempty"`
 }
 
 // CalleePendingInvocation is one conditional callee-parameter claim: parameter

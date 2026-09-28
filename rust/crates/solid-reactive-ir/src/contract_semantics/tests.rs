@@ -2599,6 +2599,7 @@ fn a_described_callable_output_is_an_appended_tag_with_a_frozen_vector() {
         returned.output = Some(ValueShape::DescribedCallable(Box::new(DescribedCall {
             reads: Vec::new(),
             returns,
+            callbacks: Vec::new(),
         })));
         let mut behavior = call(vec![returned.clone()], vec![]);
         behavior.claims.returns = KnowledgeSet::Complete(vec![returned.id]);
@@ -2622,7 +2623,11 @@ fn a_described_callable_output_is_an_appended_tag_with_a_frozen_vector() {
 #[test]
 fn a_described_callable_is_validated_to_its_one_position_and_vocabulary() {
     let callable = |reads: Vec<DescribedRead>, returns: Vec<ValueShape>| {
-        ValueShape::DescribedCallable(Box::new(DescribedCall { reads, returns }))
+        ValueShape::DescribedCallable(Box::new(DescribedCall {
+            reads,
+            returns,
+            callbacks: Vec::new(),
+        }))
     };
     let with_output = |kind: OperationKind, output: ValueShape| {
         let mut operation = operation("subject", kind);
@@ -2686,4 +2691,91 @@ fn a_described_callable_is_validated_to_its_one_position_and_vocabulary() {
     .unwrap_err()
     .to_string();
     assert!(error.contains("whole output of a return"), "{error}");
+}
+
+/// ADR 0152: a described callable's callback items are the one invocation the
+/// census proves, of a bare export argument, one item per argument; its
+/// returns may name what such an argument returned; and only a described
+/// callable that states an item moves off ADR 0145's encoding.
+#[test]
+fn a_described_callables_callback_items_are_validated_and_hashed_apart() {
+    use crate::contract_semantics::DescribedCallback;
+    let normalized = |callbacks: Vec<DescribedCallback>, returns: Vec<ValueShape>| {
+        let mut returned = operation("return", OperationKind::Return);
+        returned.output = Some(ValueShape::DescribedCallable(Box::new(DescribedCall {
+            reads: Vec::new(),
+            returns,
+            callbacks,
+        })));
+        let mut behavior = call(vec![returned.clone()], vec![]);
+        behavior.claims.returns = KnowledgeSet::Complete(vec![returned.id]);
+        proposal_with(ValueShape::Callable, behavior).normalize()
+    };
+    let pipe = normalized(
+        vec![
+            DescribedCallback::same_stack_once(1),
+            DescribedCallback::same_stack_once(0),
+        ],
+        vec![ValueShape::InvocationResult { parameter: 1 }],
+    )
+    .expect("pipe's claim is the admitted shape");
+    let without = normalized(Vec::new(), vec![ValueShape::Plain]).unwrap();
+    assert_eq!(
+        without.semantic_digest().as_str(),
+        "sha256:76ff18f124569912553ecc6480fe2cf494923280c61dee04db4dcfa15dd8bc97",
+        "a described callable with no item keeps ADR 0145's vector byte for byte"
+    );
+    assert_ne!(pipe.semantic_digest(), without.semantic_digest());
+    let reordered = normalized(
+        vec![
+            DescribedCallback::same_stack_once(0),
+            DescribedCallback::same_stack_once(1),
+        ],
+        vec![ValueShape::InvocationResult { parameter: 1 }],
+    )
+    .unwrap();
+    assert_eq!(
+        pipe.semantic_digest(),
+        reordered.semantic_digest(),
+        "items are canonically sorted"
+    );
+
+    let mut deferred = DescribedCallback::same_stack_once(0);
+    deferred.schedule = Some(Schedule::Queued);
+    let mut possible = DescribedCallback::same_stack_once(0);
+    possible.cardinality.min = Some(0);
+    let mut untracked = DescribedCallback::same_stack_once(0);
+    untracked.tracking = Tracking::Untracked;
+    let mut member = DescribedCallback::same_stack_once(0);
+    member.from = ValueSource::Parameter {
+        index: 0,
+        path: vec!["run".into()],
+    };
+    for (callbacks, returns, needle) in [
+        (vec![deferred], Vec::new(), "on the same stack"),
+        (vec![possible], Vec::new(), "exactly once per call"),
+        (vec![untracked], Vec::new(), "tracking context"),
+        (vec![member], Vec::new(), "bare argument of its export"),
+        (
+            vec![
+                DescribedCallback::same_stack_once(0),
+                DescribedCallback::same_stack_once(0),
+            ],
+            Vec::new(),
+            "at most one callback item",
+        ),
+        (
+            vec![DescribedCallback::same_stack_once(0)],
+            vec![ValueShape::InvocationResult { parameter: 1 }],
+            "may return only `plain`",
+        ),
+        (
+            Vec::new(),
+            vec![ValueShape::InvocationResult { parameter: 0 }],
+            "may return only `plain`",
+        ),
+    ] {
+        let error = normalized(callbacks, returns).unwrap_err().to_string();
+        assert!(error.contains(needle), "{needle}: {error}");
+    }
 }

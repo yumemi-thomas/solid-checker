@@ -986,7 +986,15 @@ func (p *project) implementationCallCensusLocked(
 					call.CalleeStronglyInvokedParameters,
 					call.CalleePendingInvocations =
 					p.calleeParameterInvocationFactsLocked(node.Expression())
+				// ADR 0152 (handshake protocol 71): the parameter the callee
+				// is by binding identity, at any depth of nesting, and whether
+				// the call runs once on every completion of its flow owner.
+				if identity := p.unwrittenParameterIdentityLocked(implementation, node.Expression()); identity != nil && len(identity.Path) == 0 {
+					index := identity.ParameterIndex
+					call.CalleeUnwrittenParameter = &index
+				}
 			}
+			call.Unconditional = callRunsOnEveryCompletion(node, flowOwner, reach)
 			calls = append(calls, call)
 		},
 	)

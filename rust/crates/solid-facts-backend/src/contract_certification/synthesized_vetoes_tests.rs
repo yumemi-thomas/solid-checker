@@ -1734,17 +1734,22 @@ fn a_described_callable_claim_selects_its_own_observation() {
     let plain = DescribedCall {
         reads: Vec::new(),
         returns: vec![ValueShape::Plain],
+        callbacks: Vec::new(),
     };
     assert_eq!(
         observe(vec![described("return", DescribedCall::default())]),
         Some(Observation::DescribedCallable {
-            nested: NestedReturns::Undefined
+            nested: NestedReturns::Undefined,
+            always: 0,
+            ever: 0,
         })
     );
     assert_eq!(
         observe(vec![described("return", plain.clone())]),
         Some(Observation::DescribedCallable {
-            nested: NestedReturns::Primitive
+            nested: NestedReturns::Primitive,
+            always: 0,
+            ever: 0,
         })
     );
     assert_eq!(
@@ -1753,7 +1758,9 @@ fn a_described_callable_claim_selects_its_own_observation() {
             described("return-1", plain),
         ]),
         Some(Observation::DescribedCallable {
-            nested: NestedReturns::Primitive
+            nested: NestedReturns::Primitive,
+            always: 0,
+            ever: 0,
         })
     );
     // ADR 0146: a read is not observed, and the value it returns is not
@@ -1764,10 +1771,13 @@ fn a_described_callable_claim_selects_its_own_observation() {
             DescribedCall {
                 reads: vec![DescribedRead::OwnedSignal],
                 returns: Vec::new(),
+                callbacks: Vec::new(),
             }
         )]),
         Some(Observation::DescribedCallable {
-            nested: NestedReturns::Undefined
+            nested: NestedReturns::Undefined,
+            always: 0,
+            ever: 0,
         })
     );
     assert_eq!(
@@ -1776,10 +1786,13 @@ fn a_described_callable_claim_selects_its_own_observation() {
             DescribedCall {
                 reads: vec![DescribedRead::OwnedSignal],
                 returns: vec![ValueShape::ReadValue],
+                callbacks: Vec::new(),
             }
         )]),
         Some(Observation::DescribedCallable {
-            nested: NestedReturns::Any
+            nested: NestedReturns::Any,
+            always: 0,
+            ever: 0,
         })
     );
 }
@@ -1793,9 +1806,13 @@ fn the_described_callable_module_emits_only_outside_the_described_call() {
     let signatures = [signature(&[])];
     let valueless = Observation::DescribedCallable {
         nested: NestedReturns::Undefined,
+        always: 0,
+        ever: 0,
     };
     let plain = Observation::DescribedCallable {
         nested: NestedReturns::Primitive,
+        always: 0,
+        ever: 0,
     };
     for (implementation, observation) in [
         ("export function subject() { return () => {}; }", valueless),
@@ -1840,4 +1857,106 @@ fn the_described_callable_module_emits_only_outside_the_described_call() {
     );
     assert!(!nothing.contradicted(), "{nothing:?}");
     assert!(nothing.error.is_some(), "{nothing:?}");
+}
+
+/// ADR 0152: a claim whose described callable invokes export arguments
+/// selects the counting module -- the slots every claimed one invokes, and
+/// the slots some claimed one does -- and an invocation result leaves the
+/// nested completion unchecked.
+#[test]
+fn a_described_callable_claim_with_callback_items_selects_the_counting_observation() {
+    use solid_reactive_ir::contract_semantics::{DescribedCall, DescribedCallback};
+    let described = |id: &str, call: DescribedCall| Operation {
+        id: OperationId(id.into()),
+        output: Some(ValueShape::DescribedCallable(Box::new(call))),
+        ..return_operation()
+    };
+    let observe = |operations: Vec<Operation>| {
+        let claim = KnowledgeSet::complete(
+            operations
+                .iter()
+                .map(|operation| operation.id.clone())
+                .collect(),
+        );
+        candidate_observation("returns", &export_with_returns(claim, operations))
+    };
+    let pipe = DescribedCall {
+        reads: Vec::new(),
+        returns: vec![ValueShape::InvocationResult { parameter: 1 }],
+        callbacks: vec![
+            DescribedCallback::same_stack_once(0),
+            DescribedCallback::same_stack_once(1),
+        ],
+    };
+    assert_eq!(
+        observe(vec![described("return", pipe)]),
+        Some(Observation::DescribedCallable {
+            nested: NestedReturns::Any,
+            always: 0b11,
+            ever: 0b11,
+        })
+    );
+    let once = DescribedCall {
+        reads: Vec::new(),
+        returns: vec![ValueShape::Plain],
+        callbacks: vec![DescribedCallback::same_stack_once(0)],
+    };
+    assert_eq!(
+        observe(vec![
+            described("return-0", once),
+            described("return-1", DescribedCall::default()),
+        ]),
+        Some(Observation::DescribedCallable {
+            nested: NestedReturns::Primitive,
+            always: 0,
+            ever: 0b1,
+        })
+    );
+}
+
+/// ADR 0152: the counting module stays quiet on a returned literal that runs
+/// each named export argument exactly once during every nested call, and
+/// fires when one runs conditionally, twice, later, or unnamed.
+#[test]
+fn the_counting_described_callable_module_fires_on_every_other_invocation() {
+    let mut callable = value_fact(json!({"mayBeObject": true}));
+    callable["callability"] = json!("callable");
+    let two = [signature(&[callable.clone(), callable.clone()])];
+    let pipe = Observation::DescribedCallable {
+        nested: NestedReturns::Any,
+        always: 0b11,
+        ever: 0b11,
+    };
+    let first = Observation::DescribedCallable {
+        nested: NestedReturns::Primitive,
+        always: 0b1,
+        ever: 0b1,
+    };
+    for (implementation, observation) in [
+        (
+            "export function subject(a, b) { return (raw) => b(a(raw)); }",
+            pipe,
+        ),
+        (
+            "export function subject(source, times) { return () => { source(); return 1; }; }",
+            first,
+        ),
+    ] {
+        let observed = execute(implementation, observation, &two);
+        assert!(!observed.contradicted(), "{implementation}: {observed:?}");
+        assert!(observed.error.is_none(), "{implementation}: {observed:?}");
+    }
+    for implementation in [
+        // Conditionally, and here never.
+        "export function subject(source) { return (flag) => { if (flag === true) source(); return 1; }; }",
+        // Twice.
+        "export function subject(source) { return () => { source(); source(); return 1; }; }",
+        // Later, from a queue.
+        "export function subject(source) { return () => { queueMicrotask(source); return 1; }; }",
+        // A slot no item names.
+        "export function subject(source, other) { return () => { source(); other(); return 1; }; }",
+    ] {
+        let observed = execute(implementation, first, &two);
+        assert!(observed.contradicted(), "{implementation}: {observed:?}");
+    }
 }

@@ -628,6 +628,20 @@ impl CanonicalWriter {
         self.operation_id(&callback.operation);
     }
 
+    /// ADR 0152: a nested item, in the encodings an `invoke` operation's own
+    /// fields use, in the same order.
+    fn described_callback(&mut self, callback: &super::DescribedCallback) {
+        self.value_source(&callback.from);
+        self.option(callback.trigger.as_ref(), Self::trigger);
+        self.option(callback.at.as_ref(), |writer, event| writer.event(*event));
+        self.option(callback.schedule.as_ref(), |writer, schedule| {
+            writer.schedule(*schedule);
+        });
+        self.tracking(callback.tracking);
+        self.owner(&callback.owner);
+        self.cardinality(&callback.cardinality);
+    }
+
     fn value_source(&mut self, source: &ValueSource) {
         match source {
             ValueSource::Parameter { index, path } => {
@@ -1158,14 +1172,22 @@ impl CanonicalWriter {
             // ADR 0145. Appended, and no document before it carries the tag,
             // so it needs no digest family. Both lists are canonically sorted
             // by normalization before this runs.
+            // ADR 0152: a described callable that invokes a callable its
+            // export was handed takes tag 23, appended, with the items after
+            // the two lists. One that invokes none keeps tag 21 and ADR
+            // 0145's stream byte for byte, so no document stating one before
+            // the items existed moves its digest or a receipt.
             ValueShape::DescribedCallable(call) => {
-                self.u8(21);
+                self.u8(if call.callbacks.is_empty() { 21 } else { 23 });
                 self.sequence(&call.reads, |writer, read| {
                     writer.u8(match read {
                         super::DescribedRead::OwnedSignal => 0,
                     });
                 });
                 self.sequence(&call.returns, Self::value);
+                if !call.callbacks.is_empty() {
+                    self.sequence(&call.callbacks, Self::described_callback);
+                }
             }
             // ADR 0146. Appended; no document before it carries the tag.
             ValueShape::ReadValue => self.u8(22),

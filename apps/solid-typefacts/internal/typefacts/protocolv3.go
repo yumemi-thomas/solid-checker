@@ -4,7 +4,17 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 70 (ADR 0153): **a member read of a
+// TypeFactsHandshakeProtocol is 71 (ADR 0152): **a call states the parameter
+// its callee is and whether it runs on every completion.**
+// ImplementationCall.CalleeUnwrittenParameter names the censused
+// implementation's parameter a callee is by binding identity, at any depth of
+// nesting, so a call inside a returned closure names the export's argument it
+// captured; ImplementationCall.Unconditional states that the call runs exactly
+// once on every normal completion of its flow owner, the lower bound the
+// optimistic Reach never gave. A protocol-70 consumer decodes with
+// `deny_unknown_fields` and would reject the new fields, so the number moves.
+//
+// Protocol 70 (ADR 0153): **a member read of a
 // package-owned context value states its provision census.**
 // UncensusedInvokingForm.ContextMember names, for an accessor form in read
 // position whose subject is the value a dialect `useContext` of a module
@@ -473,8 +483,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 70
-	TypeFactsSchemaSHA256             = "sha256:b69fe17d35a94e711cfe67c6f199bce7cc0b04403501e59529b00672253385a7"
+	TypeFactsHandshakeProtocol uint64 = 71
+	TypeFactsSchemaSHA256             = "sha256:3dda600c56eab89b1b57e880b388022baaf02f92c43a9a55d2ccc813f08bdd0a"
 )
 
 type ServiceHandshake struct {

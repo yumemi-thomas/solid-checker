@@ -184,12 +184,74 @@ pub fn project_export_semantics(
         direct_member_callback_parameters: BTreeSet::new(),
         iterated_parameters: BTreeSet::new(),
         result_access_parameters: BTreeSet::new(),
+        returned_invocations: project_returned_invocations(export),
         // A projected dependency export has no body here to walk.
         merged_props_return: None,
         // The projection alone states no acceptance identity;
         // `project_accepted_export` attaches it.
         inherited_from: None,
     }
+}
+
+/// ADR 0152: the export argument slots the returned value invokes on its own
+/// invoker's stack, exactly once per invocation, and that the export invokes
+/// nowhere else.
+///
+/// Three things must hold together, each read from the accepted document: the
+/// `returns` domain is closed and every one of its items is a described
+/// callable naming the slot (a union in which one alternative does not invoke
+/// it says only "may run"); the `callbacks` domain is closed; and every
+/// top-level item from the slot is ADR 0139's `result-access` item, so the
+/// export's own call never runs it and keeps it only in the value it returns.
+/// Anything else answers nothing for the slot, which leaves the consumer's
+/// existing reading -- a callback of unproven timing -- in place.
+fn project_returned_invocations(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> BTreeSet<usize> {
+    let returns = export
+        .operation_claim(ClaimDomain::Returns)
+        .expect("returns is an operation domain");
+    if !returns.is_closed() || returns.items().is_empty() || !export.callbacks().is_closed() {
+        return BTreeSet::new();
+    }
+    let mut invoked: Option<BTreeSet<usize>> = None;
+    for id in returns.items() {
+        let Some(ValueShape::DescribedCallable(call)) = export
+            .operation(&id.0)
+            .and_then(|operation| operation.output.as_ref())
+        else {
+            return BTreeSet::new();
+        };
+        let slots = call
+            .callbacks
+            .iter()
+            .filter_map(crate::contract_semantics::DescribedCallback::parameter)
+            .map(usize::from)
+            .collect::<BTreeSet<_>>();
+        invoked = Some(match invoked {
+            None => slots,
+            Some(previous) => previous.intersection(&slots).copied().collect(),
+        });
+    }
+    let mut invoked = invoked.unwrap_or_default();
+    invoked.retain(|slot| {
+        let items = export
+            .callbacks()
+            .items()
+            .iter()
+            .filter(|callback| {
+                matches!(&callback.from, ValueSource::Parameter { index, .. } if usize::from(*index) == *slot)
+            })
+            .collect::<Vec<_>>();
+        !items.is_empty()
+            && items.iter().all(|callback| {
+                matches!(&callback.from, ValueSource::Parameter { path, .. } if path.is_empty())
+                    && export
+                        .operation(&callback.operation.0)
+                        .is_some_and(crate::contract_semantics::Operation::is_result_access)
+            })
+    });
+    invoked
 }
 
 fn project_callbacks(
@@ -781,6 +843,7 @@ mod owner_requirement_projection_tests {
             returned.output = Some(ValueShape::DescribedCallable(Box::new(DescribedCall {
                 reads,
                 returns: vec![ValueShape::Plain],
+                callbacks: Vec::new(),
             })));
             project_export_semantics(&export(
                 CallClaims {
@@ -1028,6 +1091,107 @@ mod owner_requirement_projection_tests {
         assert!(row.invokes_argument());
         assert!(!row.clears_tracking);
         assert_eq!(row.owner.as_deref(), Some("inherited"));
+    }
+
+    /// ADR 0152: a slot is a returned invocation exactly when the closed
+    /// `returns` is described callables every one of which invokes it and the
+    /// closed `callbacks` keeps it at `result-access` and nowhere else.
+    #[test]
+    fn a_returned_invocation_needs_both_closures_and_every_alternative() {
+        use crate::contract_semantics::{
+            CallbackInvocation, DescribedCall, DescribedCallback, OwnerRelation, OwnerSource,
+            ValueSource,
+        };
+        let kept = |slot: u16| {
+            let mut kept = operation(&format!("callback-{slot}"), OperationKind::Invoke, &[]);
+            kept.trigger = Some(Trigger::Event(Event::ResultAccess));
+            kept.at = Some(Event::ResultAccess);
+            kept.schedule = Some(Schedule::External);
+            kept.tracking = Tracking::AmbientAtExecution;
+            kept.owner = OwnerRelation {
+                source: OwnerSource::AmbientAtExecution,
+                ..OwnerRelation::default()
+            };
+            kept.cardinality.scope = Some(CardinalityScope::Trigger);
+            kept
+        };
+        let returned = |id: &str, slots: &[u16]| {
+            let mut returned = operation(id, OperationKind::Return, &[]);
+            returned.output = Some(ValueShape::DescribedCallable(Box::new(DescribedCall {
+                reads: Vec::new(),
+                returns: Vec::new(),
+                callbacks: slots
+                    .iter()
+                    .copied()
+                    .map(DescribedCallback::same_stack_once)
+                    .collect(),
+            })));
+            returned
+        };
+        let project = |callbacks: KnowledgeSet<CallbackInvocation>,
+                       returns: Vec<Operation>,
+                       mut operations: Vec<Operation>| {
+            let ids = returns
+                .iter()
+                .map(|operation| operation.id.clone())
+                .collect();
+            operations.extend(returns);
+            project_export_semantics(&export(
+                CallClaims {
+                    callbacks,
+                    returns: KnowledgeSet::Complete(ids),
+                    ..claims()
+                },
+                operations,
+                Vec::new(),
+            ))
+            .returned_invocations
+        };
+        let item = |slot: u16| CallbackInvocation {
+            from: ValueSource::Parameter {
+                index: slot,
+                path: Vec::new(),
+            },
+            operation: OperationId(format!("callback-{slot}")),
+        };
+        let both = || KnowledgeSet::Complete(vec![item(0), item(1)]);
+        assert_eq!(
+            project(
+                both(),
+                vec![returned("return", &[0, 1])],
+                vec![kept(0), kept(1)]
+            ),
+            BTreeSet::from([0, 1])
+        );
+        // One alternative that does not invoke slot 1 leaves it "may run".
+        assert_eq!(
+            project(
+                both(),
+                vec![returned("return-0", &[0, 1]), returned("return-1", &[0])],
+                vec![kept(0), kept(1)]
+            ),
+            BTreeSet::from([0])
+        );
+        // An open `callbacks`, or a slot the export also invokes inline.
+        assert!(
+            project(
+                KnowledgeSet::Partial(vec![item(0), item(1)]),
+                vec![returned("return", &[0, 1])],
+                vec![kept(0), kept(1)]
+            )
+            .is_empty()
+        );
+        let mut inline = operation("callback-1", OperationKind::Invoke, &[]);
+        inline.at = Some(Event::Call);
+        inline.schedule = Some(Schedule::SameStack);
+        assert_eq!(
+            project(
+                both(),
+                vec![returned("return", &[0, 1])],
+                vec![kept(0), inline]
+            ),
+            BTreeSet::from([0])
+        );
     }
 
     /// ADR 0113: a closed `returns` whose every operation hands back a `plain`
@@ -2443,6 +2607,8 @@ fn contract_export_function(
         // A function node is not a construction; ADR 0139's walk is attached
         // to a class export at the emit boundary.
         result_access_parameters: BTreeSet::new(),
+        // ADR 0152: a projection of an accepted contract only.
+        returned_invocations: BTreeSet::new(),
     }
 }
 

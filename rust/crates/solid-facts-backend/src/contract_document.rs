@@ -536,6 +536,51 @@ fn compact_callback(
     }))
 }
 
+/// ADR 0152: a nested item in the top-level item's shape, `{from,
+/// operation}`, with the operation written inline -- it is referenced by
+/// nothing, so it carries no id -- in the spellings an `invoke` operation's
+/// own fields use.
+fn compact_described_callback(
+    callback: &solid_reactive_ir::contract_semantics::DescribedCallback,
+    ids: &CompactIds,
+) -> Result<JsonValue, ContractFailure> {
+    let mut operation = JsonMap::new();
+    operation.insert("kind".into(), json!(operation_kind(OperationKind::Invoke)));
+    if let Some(trigger) = &callback.trigger {
+        operation.insert("trigger".into(), compact_trigger(trigger, ids)?);
+    }
+    match (callback.at, callback.schedule) {
+        (Some(event), Some(schedule)) => {
+            operation.insert(
+                "at".into(),
+                json!({"event": event_name(event), "schedule": schedule_name(schedule)}),
+            );
+        }
+        (None, None) => {}
+        _ => {
+            return invalid_model(
+                "a described callback's execution point and schedule must be known together",
+            );
+        }
+    }
+    if callback.tracking != Tracking::Unknown {
+        operation.insert("tracking".into(), json!(tracking_name(callback.tracking)));
+    }
+    if callback.owner != OwnerRelation::default() {
+        operation.insert("owner".into(), compact_owner(&callback.owner, ids)?);
+    }
+    if callback.cardinality != Cardinality::default() {
+        operation.insert(
+            "count".into(),
+            compact_cardinality(&callback.cardinality, ids)?,
+        );
+    }
+    Ok(json!({
+        "from": compact_value_source(&callback.from, ids)?,
+        "operation": JsonValue::Object(operation),
+    }))
+}
+
 fn compact_value_source(
     source: &ValueSource,
     ids: &CompactIds,
@@ -1048,15 +1093,29 @@ fn compact_value(value: &ValueShape, ids: &CompactIds) -> Result<JsonValue, Cont
         ValueShape::Undefined => json!("undefined"),
         // ADR 0145: both lists always written, so an absent one is never read
         // as a closed empty enumeration.
-        ValueShape::DescribedCallable(call) => json!({
-            "kind": "described-callable",
-            "reads": call.reads.iter().map(|read| read.wire_name()).collect::<Vec<_>>(),
-            "returns": call
-                .returns
-                .iter()
-                .map(|returned| compact_value(returned, ids))
-                .collect::<Result<Vec<_>, _>>()?,
-        }),
+        // ADR 0152: `callbacks` is written only when it names an item, so every
+        // document stating a described callable that invokes nothing keeps its
+        // bytes; absent, it reads as ADR 0145's `callbacks: []`.
+        ValueShape::DescribedCallable(call) => {
+            let mut node = json!({
+                "kind": "described-callable",
+                "reads": call.reads.iter().map(|read| read.wire_name()).collect::<Vec<_>>(),
+                "returns": call
+                    .returns
+                    .iter()
+                    .map(|returned| compact_value(returned, ids))
+                    .collect::<Result<Vec<_>, _>>()?,
+            });
+            if !call.callbacks.is_empty() {
+                node["callbacks"] = JsonValue::Array(
+                    call.callbacks
+                        .iter()
+                        .map(|callback| compact_described_callback(callback, ids))
+                        .collect::<Result<_, _>>()?,
+                );
+            }
+            node
+        }
         // ADR 0146: a shorthand, like `undefined`, with a detailed spelling.
         ValueShape::ReadValue => json!("read-value"),
         ValueShape::Action { transition } => {
@@ -1523,6 +1582,34 @@ enum WireCallDomain {
 struct WireCallback {
     from: WireValueSource,
     operation: String,
+}
+
+/// ADR 0152: one nested item of a described callable, `{from, operation}` as a
+/// top-level item is, with its operation inline.
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WireDescribedCallback {
+    from: WireValueSource,
+    operation: WireDescribedInvocation,
+}
+
+/// The inline operation of a nested item: an `invoke` operation's own fields,
+/// less an id (nothing references it) and less everything validation refuses
+/// for a nested item anyway, which `deny_unknown_fields` then refuses here.
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WireDescribedInvocation {
+    kind: WireOperationKind,
+    #[serde(default)]
+    trigger: Option<WireTrigger>,
+    #[serde(default)]
+    at: Option<WireExecutionPoint>,
+    #[serde(default)]
+    tracking: Option<WireTracking>,
+    #[serde(default)]
+    owner: Option<WireOwner>,
+    #[serde(default)]
+    count: Option<WireCardinality>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -2198,10 +2285,15 @@ enum WireValueNode {
     /// variant of an internally tagged enum ignores them).
     Undefined {},
     /// ADR 0145. Both lists are required: an absent one would read as `[]`,
-    /// the strongest claim each can make.
+    /// the strongest claim each can make. ADR 0152's `callbacks` is the one
+    /// exception, and deliberately: every document before it states a
+    /// described callable without the field, and meant `callbacks: []` by it,
+    /// so absence keeps exactly that meaning.
     DescribedCallable {
         reads: Vec<String>,
         returns: Vec<WireValue>,
+        #[serde(default)]
+        callbacks: Vec<WireDescribedCallback>,
     },
     /// ADR 0146. Carries no field, as `undefined` does not.
     ReadValue {},
@@ -2845,6 +2937,42 @@ fn expand_callback(
     })
 }
 
+/// ADR 0152: a nested item, through the same expansions a top-level `invoke`
+/// operation's fields go through. Only an `invoke` is an item; validation
+/// then admits the one invocation the census proves.
+fn expand_described_callback(
+    callback: &WireDescribedCallback,
+    ids: &IdScope,
+) -> Result<solid_reactive_ir::contract_semantics::DescribedCallback, ContractFailure> {
+    let operation = callback.operation.clone();
+    if !matches!(operation.kind, WireOperationKind::Invoke) {
+        return invalid_document("a described callable's callback item is an invoke operation");
+    }
+    let (at, schedule) = operation.at.map_or((None, None), |at| {
+        (Some(at.event.into()), Some(at.schedule.into()))
+    });
+    Ok(solid_reactive_ir::contract_semantics::DescribedCallback {
+        from: expand_value_source(callback.from.clone(), ids)?,
+        trigger: operation
+            .trigger
+            .map(|trigger| expand_trigger(trigger, ids))
+            .transpose()?,
+        at,
+        schedule,
+        tracking: operation.tracking.map_or(Tracking::Unknown, Into::into),
+        owner: operation
+            .owner
+            .map(|owner| expand_owner(owner, ids))
+            .transpose()?
+            .unwrap_or_default(),
+        cardinality: operation
+            .count
+            .map(|count| expand_cardinality(count, ids))
+            .transpose()?
+            .unwrap_or_default(),
+    })
+}
+
 fn expand_value_source(
     source: WireValueSource,
     ids: &IdScope,
@@ -3482,8 +3610,12 @@ fn expand_value_node(
         }),
         WireValueNode::Undefined {} => Ok(ValueShape::Undefined),
         WireValueNode::ReadValue {} => Ok(ValueShape::ReadValue),
-        WireValueNode::DescribedCallable { reads, returns } => Ok(ValueShape::DescribedCallable(
-            Box::new(solid_reactive_ir::contract_semantics::DescribedCall {
+        WireValueNode::DescribedCallable {
+            reads,
+            returns,
+            callbacks,
+        } => Ok(ValueShape::DescribedCallable(Box::new(
+            solid_reactive_ir::contract_semantics::DescribedCall {
                 reads: reads
                     .iter()
                     .map(|read| {
@@ -3497,8 +3629,12 @@ fn expand_value_node(
                     .iter()
                     .map(|returned| expand_value_at(returned, ids, depth + 1))
                     .collect::<Result<Vec<_>, _>>()?,
-            }),
-        )),
+                callbacks: callbacks
+                    .iter()
+                    .map(|callback| expand_described_callback(callback, ids))
+                    .collect::<Result<Vec<_>, _>>()?,
+            },
+        ))),
         WireValueNode::Action { transition } => Ok(ValueShape::Action {
             transition: transition.as_ref().map(|resource| ids.resource(resource)),
         }),
@@ -4635,6 +4771,7 @@ mod tests {
             solid_reactive_ir::contract_semantics::DescribedCall {
                 reads: vec![solid_reactive_ir::contract_semantics::DescribedRead::OwnedSignal],
                 returns: vec![ValueShape::Plain],
+                callbacks: Vec::new(),
             },
         ));
         let compact =
@@ -4645,6 +4782,39 @@ mod tests {
         );
         let wire: WireValue = serde_json::from_value(compact).unwrap();
         assert_eq!(expand_value(&wire, &ids).unwrap(), described);
+        // ADR 0152: a nested item round-trips in the top-level item's shape,
+        // its operation inline; absent, `callbacks` reads as `[]`, and an
+        // inline operation carrying an id or a guard is refused.
+        let piped = ValueShape::DescribedCallable(Box::new(
+            solid_reactive_ir::contract_semantics::DescribedCall {
+                reads: Vec::new(),
+                returns: vec![ValueShape::InvocationResult { parameter: 1 }],
+                callbacks: vec![
+                    solid_reactive_ir::contract_semantics::DescribedCallback::same_stack_once(0),
+                    solid_reactive_ir::contract_semantics::DescribedCallback::same_stack_once(1),
+                ],
+            },
+        ));
+        let compact = compact_value(&piped, &CompactIds::new("case", "case", "export")).unwrap();
+        assert_eq!(
+            compact["callbacks"][0],
+            serde_json::json!({
+                "from": {"arg": 0, "path": []},
+                "operation": {
+                    "kind": "invoke",
+                    "trigger": {"event": "call"},
+                    "at": {"event": "call", "schedule": "same-stack"},
+                    "tracking": "ambient-at-execution",
+                    "owner": {"source": "ambient-at-execution"},
+                    "count": {"scope": "call", "min": 1, "max": 1}
+                }
+            })
+        );
+        let wire: WireValue = serde_json::from_value(compact.clone()).unwrap();
+        assert_eq!(expand_value(&wire, &ids).unwrap(), piped);
+        let mut with_id = compact;
+        with_id["callbacks"][0]["operation"]["id"] = serde_json::json!("callback-0");
+        assert!(serde_json::from_value::<WireValue>(with_id).is_err());
         // And it is emitted as the shorthand, which reads back as itself.
         assert_eq!(
             compact_value(

@@ -169,7 +169,8 @@ handed over, and creates nothing. One that reads (ADR 0146) is an `accessor`.
   captured parameters (`pipe`, `chain`, `composeEventHandlers`), a local
   helper, a dependency or dialect primitive. A nested `callbacks` item from a
   captured argument is the next vocabulary, and ADR 0139's `result-access` is
-  its outer half.
+  its outer half: ADR 0152 adds both, for a captured argument the literal calls
+  exactly once on every completion.
 - A literal that reads anything: a signal it captured is ADR 0146's; a store,
   props or a member of a captured value refuses.
 - A return of a binding naming a function, an object or tuple of functions, a

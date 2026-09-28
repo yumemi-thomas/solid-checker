@@ -15684,9 +15684,14 @@ export const value = phantom;
                     .err()
                     .unwrap_or_else(|| panic!("forged {name} callback must refuse"));
                 let reason = error.to_string();
+                // ADR 0152: `Direct`'s generated claim keeps its argument at
+                // `result-access`, so the forged copy is refused by the
+                // returned-literal evidence: `Dormant`'s call sits in a
+                // function its literal nests.
                 assert!(
                     reason.contains("callback parameter has no exact direct-call or resolved-argument flow")
-                    || reason.contains("callback parameter has neither an exact direct call nor an exact dialect callback flow"),
+                    || reason.contains("callback parameter has neither an exact direct call nor an exact dialect callback flow")
+                    || reason.contains("is not in the own frame of a literal a return of the export hands back"),
                     "{name}: {error}"
                 );
             } else {
@@ -18145,6 +18150,7 @@ export const value = phantom;
         let plain = || DescribedCall {
             reads: Vec::new(),
             returns: vec![ValueShape::Plain],
+            callbacks: Vec::new(),
         };
         let valueless = DescribedCall::default;
         // `throughMutableBinding` is bound with no proposal: the plan binds
@@ -18277,6 +18283,7 @@ export const value = phantom;
             ValueShape::DescribedCallable(Box::new(DescribedCall {
                 reads: Vec::new(),
                 returns,
+                callbacks: Vec::new(),
             }))
         };
         for (export, expected) in [
@@ -18297,7 +18304,7 @@ export const value = phantom;
             );
         }
         for (export, needle) in [
-            ("invokesCaptured", "a parameter of a nested callable"),
+            ("invokesCaptured", "which the claim does not enumerate"),
             ("invokesOwnArgument", "runs code its caller supplied"),
             ("returnsObject", "by its syntax alone"),
             ("readsCapturedMember", "uncensused invoking form"),
@@ -18322,6 +18329,290 @@ export const value = phantom;
             finalized.bindings().probe_gate_root,
             super::finalization::empty_probe_gate_root(&plan),
             "the synthesized veto must run before a described callable closes"
+        );
+    }
+
+    /// ADR 0152's tracer, `implementation-census-described-callbacks`, planned
+    /// from hand-stated summaries: each export's described callables as the
+    /// generator's walk proposes them (`expected.json`), and its `callbacks` a
+    /// `result-access` item per slot in `kept` -- stated for `defaulted` too,
+    /// which the walk does not propose, so the census has to refuse it. Reads
+    /// and creates stay open, so the candidates are the `callbacks` and
+    /// `returns` closures under test, each served by its synthesized veto.
+    fn described_callback_fixture_certify(
+        label: &str,
+    ) -> Option<(
+        CertificationPlan,
+        Result<super::FinalizedPolicy2Contract, super::Policy2FinalizationError>,
+    )> {
+        use solid_reactive_ir::contract_semantics::{
+            DescribedCall, DescribedCallback, InvokeProtocol,
+        };
+        use solid_reactive_ir::{
+            CallbackSchedule, ContractCallback, ContractClaim, ContractEntrypoint, ContractExport,
+            ContractPackage, PackageContract,
+        };
+        let described = |returns: Vec<ValueShape>, invoked: &[u16]| DescribedCall {
+            reads: Vec::new(),
+            returns,
+            callbacks: invoked
+                .iter()
+                .copied()
+                .map(DescribedCallback::same_stack_once)
+                .collect(),
+        };
+        let exports: [(&str, DescribedCall, &[usize]); 9] = [
+            (
+                "pipe",
+                described(vec![ValueShape::InvocationResult { parameter: 1 }], &[0, 1]),
+                &[0, 1],
+            ),
+            ("changed", described(vec![ValueShape::Plain], &[0]), &[0]),
+            ("required", described(Vec::new(), &[0]), &[0]),
+            ("guarded", described(Vec::new(), &[0]), &[0]),
+            ("twice", described(Vec::new(), &[0]), &[0]),
+            ("deferred", described(Vec::new(), &[]), &[0]),
+            ("early", described(Vec::new(), &[0]), &[0]),
+            ("defaulted", described(Vec::new(), &[0]), &[0]),
+            ("registered", described(Vec::new(), &[0]), &[0]),
+        ];
+        let name = "implementation-census-described-callbacks";
+        let pin = pinned_producer_for_test()?;
+        let root = format!("/project/node_modules/{name}");
+        let root = root.as_str();
+        let fixture = repository_root()
+            .join("fixtures/package-contracts")
+            .join(name);
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let bindings = exports
+            .iter()
+            .map(|(export, _, _)| {
+                (
+                    *export,
+                    ("index.js", runtime.as_slice()),
+                    ("index.d.ts", declarations.as_slice()),
+                    root,
+                )
+            })
+            .collect::<Vec<_>>();
+        let (_, resolved) = test_package_resolution(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[],
+            "/project/src/app.ts",
+        );
+        let kept_row = |parameter: usize| ContractCallback {
+            parameter,
+            execution: "deferred".into(),
+            schedule: Some(CallbackSchedule::ResultAccess),
+            clears_tracking: false,
+            arguments: Vec::new(),
+            owner: Some("inherited".into()),
+            protocol: InvokeProtocol::Call,
+            path: Vec::new(),
+        };
+        let inferred = PackageContract {
+            package: ContractPackage {
+                name: name.into(),
+                version: "1.0.0".into(),
+                integrity: String::new(),
+            },
+            entrypoints: BTreeMap::from([(
+                ".".into(),
+                ContractEntrypoint {
+                    exports: exports
+                        .iter()
+                        .map(|(export, call, kept)| {
+                            (
+                                (*export).into(),
+                                ContractExport {
+                                    kind: "function".into(),
+                                    reactive_reads: ContractClaim::Open,
+                                    callbacks: ContractClaim::Known(
+                                        kept.iter().map(|parameter| kept_row(*parameter)).collect(),
+                                    ),
+                                    owner_requirements: ContractClaim::Open,
+                                    returns: ContractClaim::Known(None),
+                                    async_behavior: ContractClaim::Known(String::new()),
+                                    returns_described_callables: vec![call.clone()],
+                                    result_access_parameters: kept.iter().copied().collect(),
+                                    ..ContractExport::default()
+                                },
+                            )
+                        })
+                        .collect(),
+                },
+            )]),
+            source_path: String::new(),
+        };
+        let candidate =
+            crate::inferred_contract::normalize_inferred_contract(&inferred, &resolved).unwrap();
+        let plan = try_plan_supplied_candidate_for_test_package(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            candidate,
+        )
+        .expect("the generator's proposal plans against its own artifact");
+        let scratch = TracerScratch::new(label);
+        let probes = tracer_configuration_from(&fixture, scratch.path(), label, &[])?;
+        let outcome = tracer_certify(&plan, &pin, &probes);
+        Some((plan, outcome))
+    }
+
+    /// ADR 0152 end to end: a returned literal that calls, exactly once on
+    /// every completion, an argument its export captured certifies its nested
+    /// `callbacks` item -- and a completion that is that call, the item's
+    /// invocation result -- through the described-callable census, each
+    /// return's positive fact and the counting veto; the export's own
+    /// `callbacks` certifies the argument at `result-access` through the
+    /// returned-literal evidence and the constructed-value veto. A call the
+    /// literal makes conditionally, twice, from a nested callable or after an
+    /// early return withdraws the `return` by name; a defaulted argument and
+    /// one the export also stores refuse the `result-access` item by name.
+    #[test]
+    fn the_described_callback_census_certifies_exactly_the_unconditional_captured_calls() {
+        use solid_reactive_ir::contract_semantics::{
+            DescribedCall, DescribedCallback, InvokeProtocol,
+        };
+        let Some((plan, outcome)) = described_callback_fixture_certify("described-callbacks")
+        else {
+            return;
+        };
+        let finalized = outcome.unwrap_or_else(|error| {
+            panic!("every refusal here withholds by name and the row certifies: {error}")
+        });
+        let main = finalized.canonical_main();
+        let described = |returns: Vec<ValueShape>, invoked: &[u16]| {
+            ValueShape::DescribedCallable(Box::new(DescribedCall {
+                reads: Vec::new(),
+                returns,
+                callbacks: invoked
+                    .iter()
+                    .copied()
+                    .map(DescribedCallback::same_stack_once)
+                    .collect(),
+            }))
+        };
+        for (export, expected) in [
+            (
+                "pipe",
+                described(vec![ValueShape::InvocationResult { parameter: 1 }], &[0, 1]),
+            ),
+            ("changed", described(vec![ValueShape::Plain], &[0])),
+            ("required", described(Vec::new(), &[0])),
+            // The export stores its argument elsewhere too, which is the
+            // `callbacks` domain's question, not this one's.
+            ("registered", described(Vec::new(), &[0])),
+        ] {
+            assert_eq!(
+                closed_containers_in(main, export),
+                Some(vec![expected]),
+                "{export}: {:?} {:?}",
+                finalized.withheld_closures(),
+                finalized.withheld_operations()
+            );
+        }
+        for (export, needle) in [
+            ("guarded", "not stated to run exactly once"),
+            ("early", "not stated to run exactly once"),
+            ("twice", "more than once"),
+            ("deferred", "a parameter of a nested callable"),
+            ("defaulted", "a parameter of a nested callable"),
+        ] {
+            assert!(
+                finalized.withheld_operations().iter().any(|record| {
+                    record.export == export
+                        && record.operation.ends_with(":operation:return")
+                        && record.reason.contains(needle)
+                }) || finalized.withheld_closures().iter().any(|record| {
+                    record.export == export
+                        && record.domain == "returns"
+                        && record.reason.contains(needle)
+                }),
+                "{export}: {:?} {:?}",
+                finalized.withheld_operations(),
+                finalized.withheld_closures()
+            );
+            assert_eq!(closed_containers_in(main, export), None, "{export}");
+        }
+        let kept = |slots: &[u16]| {
+            slots
+                .iter()
+                .map(|slot| (InvokeProtocol::Call, *slot))
+                .collect::<Vec<_>>()
+        };
+        for (export, expected) in [
+            ("pipe", kept(&[0, 1])),
+            ("changed", kept(&[0])),
+            ("required", kept(&[0])),
+            ("twice", kept(&[0])),
+            ("early", kept(&[0])),
+        ] {
+            assert_eq!(
+                closed_callbacks_in(main, export),
+                Some(expected),
+                "{export}: {:?} {:?}",
+                finalized.withheld_closures(),
+                finalized.withheld_operations()
+            );
+        }
+        for (export, needle) in [
+            (
+                "guarded",
+                "no call the producer states is of that parameter",
+            ),
+            ("deferred", "not in the own frame of a literal"),
+            (
+                "defaulted",
+                "no call the producer states is of that parameter",
+            ),
+            ("registered", "not a direct call of it"),
+        ] {
+            assert!(
+                finalized
+                    .withheld_closures()
+                    .iter()
+                    .filter(|record| record.export == export && record.domain == "callbacks")
+                    .map(|record| record.reason.as_str())
+                    .chain(
+                        finalized
+                            .withheld_operations()
+                            .iter()
+                            .filter(|record| record.export == export)
+                            .map(|record| record.reason.as_str())
+                    )
+                    .any(|reason| reason.contains(needle)),
+                "{export}: {:?} {:?}",
+                finalized.withheld_closures(),
+                finalized.withheld_operations()
+            );
+            assert_eq!(closed_callbacks_in(main, export), None, "{export}");
+        }
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan),
+            "the synthesized vetoes must run before a nested item closes"
         );
     }
 

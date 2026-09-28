@@ -1589,6 +1589,30 @@ pub struct ImplementationCall {
     /// does not recognize proves nothing.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub callee_pending_invocations: Vec<CalleePendingInvocation>,
+    /// The index of the censused implementation's parameter this call's
+    /// callee *is*, by binding identity (ADR 0152, handshake protocol 71): an
+    /// identifier, after identity-preserving wrappers, resolving to a plain
+    /// identifier parameter with no initializer, not rest or destructured,
+    /// declared once and written nowhere in the implementation -- nested
+    /// callables included -- which mentions neither `arguments` nor `eval`.
+    ///
+    /// Stated at any depth of nesting, which is what `callee_parameter` is not
+    /// asked to be: a call inside a closure the implementation returns names
+    /// the implementation's own parameter that closure captured. Absent for a
+    /// construction and for every other callee; absence is never "not a
+    /// parameter".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub callee_unwritten_parameter: Option<usize>,
+    /// Whether the call runs exactly once on every normal completion of its
+    /// flow owner -- `enclosing_callable`, or the implementation when that is
+    /// absent (ADR 0152, handshake protocol 71). The lower bound `reach` never
+    /// states: `reach` keeps both arms of an `if` reachable, and this is true
+    /// only when no node between the call and its flow owner's body evaluates
+    /// it conditionally or repeatedly and no earlier statement of an enclosing
+    /// block can leave the owner by `return`, `break` or `continue`. False
+    /// claims nothing, and so does an absent field below protocol 71.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub unconditional: bool,
 }
 
 /// One conditional callee-parameter claim: parameter `parameter` of this call's

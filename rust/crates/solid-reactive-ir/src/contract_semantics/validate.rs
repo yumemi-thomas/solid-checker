@@ -879,15 +879,51 @@ pub(super) fn normalize_described_callable(
     if call.returns.windows(2).any(|pair| pair[0] == pair[1]) {
         return contradiction(format!("{path}.returns"), "a described return is repeated");
     }
-    if let Some(unsupported) = call
-        .returns
-        .iter()
-        .find(|returned| !matches!(returned, ValueShape::Plain | ValueShape::ReadValue))
+    // ADR 0152: each nested item is the one invocation the census can prove,
+    // of a bare export argument, at most one item per argument.
+    call.callbacks.sort();
+    for (index, callback) in call.callbacks.iter().enumerate() {
+        let item = format!("{path}.callbacks.{index}");
+        let Some(parameter) = callback.parameter() else {
+            return contradiction(
+                format!("{item}.from"),
+                "a described callable's callback item invokes a bare argument of its export",
+            );
+        };
+        if *callback != super::DescribedCallback::same_stack_once(parameter) {
+            return contradiction(
+                item,
+                "a described callable's callback item is triggered by and happens at the \
+                 described call, on the same stack, in the invoking caller's tracking context and \
+                 under its owner (ambient-at-execution, unconstrained), exactly once per call, \
+                 unguarded",
+            );
+        }
+    }
+    if call
+        .callbacks
+        .windows(2)
+        .any(|pair| pair[0].parameter() == pair[1].parameter())
     {
+        return contradiction(
+            format!("{path}.callbacks"),
+            "a described callable names one export argument in at most one callback item",
+        );
+    }
+    let invoked = |parameter: u16| {
+        call.callbacks
+            .iter()
+            .any(|callback| callback.parameter() == Some(parameter))
+    };
+    if let Some(unsupported) = call.returns.iter().find(|returned| {
+        !matches!(returned, ValueShape::Plain | ValueShape::ReadValue)
+            && !matches!(returned, ValueShape::InvocationResult { parameter } if invoked(*parameter))
+    }) {
         return contradiction(
             format!("{path}.returns"),
             format!(
-                "a described callable may return only `plain` or a read value, not {unsupported:?}"
+                "a described callable may return only `plain`, a read value, or what an export \
+                 argument one of its callback items invokes returned, not {unsupported:?}"
             ),
         );
     }

@@ -739,7 +739,7 @@
       }
     },
     "describedCallableValue": {
-      "description": "ADR 0145. A callable the export hands back together with what one invocation of it does, stated exactly: it invokes no callable it did not define, creates nothing, registers nothing on an owner, performs exactly `reads` (on the invoking caller's stack, in that caller's tracking context) and hands back exactly one of `returns` (none: it completes without a value). ADR 0146: `owned-signal` is a read of a signal the export created with the dialect's `createSignal` over primitive arguments, and `read-value` is exactly the value such a read observed. Valid only as the whole output of a `return` operation; carries no closure of its own.",
+      "description": "ADR 0145. A callable the export hands back together with what one invocation of it does, stated exactly: it invokes no callable it did not define, creates nothing, registers nothing on an owner, performs exactly `reads` (on the invoking caller's stack, in that caller's tracking context) and hands back exactly one of `returns` (none: it completes without a value). ADR 0146: `owned-signal` is a read of a signal the export created with the dialect's `createSignal` over primitive arguments, and `read-value` is exactly the value such a read observed. ADR 0152: `callbacks` names the export arguments one invocation runs, and `invocation-result` in `returns` is exactly what one of them returned. Valid only as the whole output of a `return` operation; carries no closure of its own.",
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "reads", "returns"],
@@ -753,7 +753,39 @@
         "returns": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "enum": ["plain", "read-value"] }
+          "items": {
+            "oneOf": [
+              { "enum": ["plain", "read-value"] },
+              { "$ref": "#/$defs/invocationResultValue" }
+            ]
+          }
+        },
+        "callbacks": {
+          "description": "ADR 0152. The callables one invocation runs that it did not define, each an argument the export was handed and the returned callable captured, in the top-level item's shape with its operation inline. Absent is `[]`, which is how every document before ADR 0152 reads. Validation admits exactly one invocation: triggered by and at the described call, on the same stack, in the invoking caller's tracking context and under its owner, exactly once per call, unguarded. An `invocation-result` in `returns` names an argument one of these items invokes.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/describedCallback" }
+        }
+      }
+    },
+    "describedCallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "operation"],
+      "properties": {
+        "from": { "$ref": "#/$defs/valueSource" },
+        "operation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": { "const": "invoke" },
+            "trigger": { "$ref": "#/$defs/trigger" },
+            "at": { "$ref": "#/$defs/executionPoint" },
+            "tracking": { "enum": ["tracked", "untracked", "ambient-at-execution"] },
+            "owner": { "$ref": "#/$defs/owner" },
+            "count": { "$ref": "#/$defs/cardinality" }
+          }
         }
       }
     },

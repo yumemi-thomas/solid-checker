@@ -534,6 +534,11 @@ enum Observation {
     /// running. A described read (ADR 0146) is not observed.
     DescribedCallable {
         nested: NestedReturns,
+        /// ADR 0152: the export argument slots every claimed described
+        /// callable invokes (as bits), and the slots some claimed one does.
+        /// Both zero is ADR 0145's module, byte for byte.
+        always: u64,
+        ever: u64,
     },
     /// The `callbacks: []` claim. Observed from inside the sampled callback
     /// rather than at a checkpoint after the sample loop: a synthesized entry
@@ -732,25 +737,50 @@ fn candidate_observation(domain: &str, export: &ExportSemantics) -> Option<Obser
                         Some(ValueShape::DescribedCallable(call))
                             if operation.kind == OperationKind::Return =>
                         {
-                            Some(call.returns.clone())
+                            Some(call.as_ref().clone())
                         }
                         _ => None,
                     }
                 })
                 .collect::<Option<Vec<_>>>();
-            if let Some(returns) = described {
-                let nested = if returns
-                    .iter()
-                    .flatten()
-                    .any(|returned| *returned == ValueShape::ReadValue)
-                {
+            if let Some(calls) = described {
+                // ADR 0152: what an export argument's invocation returned is
+                // anything the caller's callable hands back, so it leaves the
+                // nested completion unchecked as a read's value does.
+                let nested = if calls.iter().flat_map(|call| &call.returns).any(|returned| {
+                    matches!(
+                        returned,
+                        ValueShape::ReadValue | ValueShape::InvocationResult { .. }
+                    )
+                }) {
                     NestedReturns::Any
-                } else if returns.iter().all(Vec::is_empty) {
+                } else if calls.iter().all(|call| call.returns.is_empty()) {
                     NestedReturns::Undefined
                 } else {
                     NestedReturns::Primitive
                 };
-                return Some(Observation::DescribedCallable { nested });
+                let mut always = u64::MAX;
+                let mut ever = 0u64;
+                for call in &calls {
+                    let mut mask = 0u64;
+                    for callback in &call.callbacks {
+                        let slot = callback.parameter()?;
+                        if u32::from(slot) >= u64::BITS {
+                            return None;
+                        }
+                        mask |= 1 << slot;
+                    }
+                    always &= mask;
+                    ever |= mask;
+                }
+                if ever == 0 {
+                    always = 0;
+                }
+                return Some(Observation::DescribedCallable {
+                    nested,
+                    always,
+                    ever,
+                });
             }
             let [id] = claim.items() else {
                 // ADR 0115 is the one multi-return claim with a reviewed
@@ -1212,9 +1242,14 @@ impl Observation {
                 observation: "exact on a normal completion for the argument returns: the result is not the argument at any claimed index by SameValue; for the array returns, not exact: an object whose length and elements equal the claimed arguments in order by SameValue satisfies it whether or not it is a fresh array; throwing calls are not observed",
                 emit: "",
             },
-            Self::DescribedCallable { .. } => ReviewedObservation {
+            Self::DescribedCallable { ever: 0, .. } => ReviewedObservation {
                 marker: "described-callable-contradicted",
                 observation: "exact on a normal completion: the result's typeof is not \"function\"; then, for each nested call of it that completes normally, its result is not undefined (every claim valueless) or is an object other than null or a function (every claim plain), and is not checked where a claim returns a read's value; and, at any time up to the end of the session's drain, a recording callable handed to a nested call ran; callables handed to the export itself, reactive reads and throwing calls are not observed",
+                emit: "",
+            },
+            Self::DescribedCallable { .. } => ReviewedObservation {
+                marker: "described-callable-contradicted",
+                observation: "exact on a normal completion: the result's typeof is not \"function\"; then, for each nested call of it that completes normally, its result is not undefined (every claim valueless) or is an object other than null or a function (every claim plain), and is not checked where a claim returns a read's or an argument's invocation's value; a callable handed to the export at a slot no claimed item names ran during that nested call, one at a slot every claimed item names did not run exactly once during it, or one at a slot some claimed item names ran more than once during it; and, at any time up to the end of the session's drain, a recording callable handed to a nested call ran; a callable handed to the export running outside a nested call, reactive reads and throwing calls are not observed",
                 emit: "",
             },
             Self::PrimitiveReturn => ReviewedObservation {
@@ -1338,8 +1373,11 @@ impl Observation {
             Self::PrimitiveReturn => {
                 "at most six tuples per overload, no variadic tail or structural object construction; an input outside the sample that makes the export return an object is not observed; throwing-only runs are incomplete and cannot satisfy the veto"
             }
-            Self::DescribedCallable { .. } => {
+            Self::DescribedCallable { ever: 0, .. } => {
                 "at most six tuples per overload for the export and four nested samples per result (no argument, a recording callable, an empty object, a number); an input outside the sample, a callable handed to the export itself running later, and a reactive read are not observed; a run in which no nested call completes normally is incomplete and cannot satisfy the veto"
+            }
+            Self::DescribedCallable { .. } => {
+                "at most six tuples per overload for the export, each callable slot a counting callable of its own, and four nested samples per result (no argument, a recording callable, an empty object, a number); an input outside the sample, a callable handed to the export running outside a nested call or after it returned, and a reactive read are not observed; a run in which no nested call completes normally is incomplete and cannot satisfy the veto"
             }
             Self::ArgumentContainers(set) if set.reads_members() => {
                 "identity samples for each claimed index, distinct object/callable identities per slot; a claimed invocation slot's callables replaced by recording functions of the same arity (zero, and one sample of one) whose returned tokens are the only values the invocation result admits; a claimed member's slot also sampled with an object holding a fresh token at the claimed key, and with undefined and null where the claim enumerates undefined; the member is read after the call, so a getter the export installs there runs again and a key longer than 32 bytes is not synthesized; at most twelve tuples per index and overload before those variants, no variadic tail or structural object construction; an input outside the sample that selects another completion is not observed; throwing-only runs are incomplete and cannot satisfy the veto"
@@ -1508,7 +1546,17 @@ fn module_source(
     if observation == Observation::PrimitiveReturn {
         return primitive_return_module_source(specifier, export, signatures);
     }
-    if let Observation::DescribedCallable { nested } = observation {
+    if let Observation::DescribedCallable {
+        nested,
+        always,
+        ever,
+    } = observation
+    {
+        if ever != 0 {
+            return invoking_described_callable_module_source(
+                specifier, export, nested, always, ever, signatures,
+            );
+        }
         return described_callable_module_source(specifier, export, nested, signatures);
     }
     if let Observation::ArgumentContainers(set) = observation {
@@ -2466,6 +2514,106 @@ export async function runProbeSession(_session, harness) {{
 "#,
         specifier = serde_json::to_string(specifier).unwrap(),
         export = serde_json::to_string(export).unwrap(),
+    )
+}
+
+/// ADR 0152: [`described_callable_module_source`] for claims whose described
+/// callables invoke callables the export was handed. Each callable slot of
+/// the export's samples is a counting callable of its own (`callbackAt`), so
+/// during each nested call the module knows which slot ran and how often. A
+/// slot no claimed item names running during a nested call contradicts, and
+/// so does, for a nested call that completes normally, a slot every claimed
+/// item names not running exactly once during it, or one some claimed item
+/// names running more than once. What such a slot's invocation returns is
+/// undefined, which the nested completion check (`NestedReturns::Any` beside
+/// an invocation result) does not read. Every other observation is ADR
+/// 0145's, unchanged.
+fn invoking_described_callable_module_source(
+    specifier: &str,
+    export: &str,
+    nested: NestedReturns,
+    always: u64,
+    ever: u64,
+    signatures: &[typefacts::SelectedSignature],
+) -> String {
+    let tuples = sample_tuples_with(signatures, true)
+        .into_iter()
+        .map(|arguments| format!("  [{}],", arguments.join(", ")))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let slots = |mask: u64| {
+        (0..u64::BITS)
+            .filter(|bit| mask & (1 << bit) != 0)
+            .map(|bit| bit.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let outside = match nested {
+        NestedReturns::Undefined => "nested !== undefined",
+        NestedReturns::Primitive => {
+            "typeof nested === \"function\" || (typeof nested === \"object\" && nested !== null)"
+        }
+        NestedReturns::Any => "false",
+    };
+    format!(
+        r#"// Synthesized described-callable veto (ADR 0145, ADR 0152).
+// Finite observations only falsify; the authenticated census proves closure.
+import * as subjectModule from {specifier};
+const subject = subjectModule[{export}];
+const always = new Set([{always}]);
+const ever = new Set([{ever}]);
+let emitter = null;
+let nesting = 0;
+const counts = new Map();
+const contradict = () => {{
+  if (emitter) emitter.emit({{ marker: "described-callable-contradicted", kind: "call", phase: "enter" }});
+}};
+const callbackAt = (slot) => () => {{
+  if (nesting === 0) return undefined;
+  counts.set(slot, (counts.get(slot) ?? 0) + 1);
+  if (!ever.has(slot)) contradict();
+  return undefined;
+}};
+const recording = () => {{
+  contradict();
+}};
+const samples = [
+{tuples}
+];
+export async function runProbeSession(_session, harness) {{
+  harness.emit({{ marker: "call", kind: "call", phase: "enter" }});
+  if (typeof subject !== "function") throw new Error("synthesized veto: export is not callable");
+  emitter = harness;
+  let completed = 0;
+  let threw = 0;
+  for (const args of samples) {{
+    let result;
+    try {{ result = subject(...args); }} catch {{ threw += 1; continue; }}
+    if (typeof result !== "function") {{
+      contradict();
+      continue;
+    }}
+    for (const inner of [[], [recording], [{{}}], [1]]) {{
+      let nested;
+      counts.clear();
+      nesting += 1;
+      try {{ nested = result(...inner); }} catch {{ nesting -= 1; threw += 1; continue; }}
+      nesting -= 1;
+      completed += 1;
+      for (const slot of always) if ((counts.get(slot) ?? 0) !== 1) contradict();
+      for (const slot of ever) if ((counts.get(slot) ?? 0) > 1) contradict();
+      if ({outside}) contradict();
+    }}
+  }}
+  if (threw > 0) harness.emit({{ marker: "sample-threw", kind: "call", phase: "enter" }});
+  if (completed === 0) throw new Error("synthesized described-callable veto: no nested call completed normally");
+  harness.emit({{ marker: "call", kind: "call", phase: "exit" }});
+}}
+"#,
+        specifier = serde_json::to_string(specifier).unwrap(),
+        export = serde_json::to_string(export).unwrap(),
+        always = slots(always),
+        ever = slots(ever),
     )
 }
 

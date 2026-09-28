@@ -1294,6 +1294,16 @@ pub struct ContractExport {
     /// empty is "do not propose"; the Type Facts producer's own census of the
     /// class decides the item.
     pub result_access_parameters: BTreeSet<usize>,
+    /// ADR 0152: the export's argument slots whose callable the value this
+    /// export returns invokes, on the stack of whoever invokes that value,
+    /// exactly once per invocation -- read from an accepted contract whose
+    /// closed `returns` is described callables every one of which names the
+    /// slot, and whose closed `callbacks` invokes the slot at `result-access`
+    /// and nowhere else. The consumer composes a callback written at such a
+    /// slot with the proven invocations of the returned value
+    /// (`execution_role::contract_returned_invoker_callback_role`). Empty for
+    /// every locally inferred summary: never encoded, and a projection only.
+    pub returned_invocations: BTreeSet<usize>,
     /// ADR 0109: the parameter whose reactivity a props merge this export
     /// returns carries, when the generator's own walk cleared the body
     /// ([`crate::returns_walk::MergedPropsReturns`]).

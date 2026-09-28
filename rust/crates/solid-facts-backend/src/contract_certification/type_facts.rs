@@ -3919,10 +3919,12 @@ fn verify_export_value_family(
                 let source = callback_parameter_source(export, proof)?;
                 let before = sites.len();
                 require_retained_argument(implementation, &source, &open, &mut sites)?;
-                if !sites[before..]
-                    .iter()
-                    .any(|site| site.starts_with("retained-argument-invocation:"))
-                {
+                // ADR 0152: a function export's kept value is called by the
+                // literal it returns, at each of the sites its evidence names.
+                if !sites[before..].iter().any(|site| {
+                    site.starts_with("retained-argument-invocation:")
+                        || site.starts_with("returned-literal-capture:")
+                }) {
                     return Err(open(
                         "a result-access item names a kept value no member of the class calls",
                     ));
@@ -10736,6 +10738,14 @@ enum CensusDisposition {
     /// `createSignal` over arguments that are primitives by grammar: a read
     /// that runs no code. Only a described-callable walk admits it.
     OwnedSignalRead,
+    /// ADR 0152: a call, in a described callable's own frame, whose callee is
+    /// an argument the **export** was handed and the literal captured -- by
+    /// the export transcript's `calleeUnwrittenParameter` (protocol 71). It
+    /// runs the export's caller's code, which is exactly the nested
+    /// `callbacks` item the claim states; recorded apart from the
+    /// parameter-rooted family because it is the literal's item, not the
+    /// literal's own caller's. Only a described-callable walk admits it.
+    CapturedParameterCall,
 }
 
 impl CensusDisposition {
@@ -10802,6 +10812,7 @@ impl CensusDisposition {
             Self::LocalRecursion => "local-recursion",
             Self::LocalRecursionBackedge => "local-recursion-backedge",
             Self::OwnedSignalRead => "owned-signal-read",
+            Self::CapturedParameterCall => "captured-parameter-call",
         }
     }
 }
@@ -11202,6 +11213,26 @@ struct CensusRun<'a> {
     owned_signal_scope: Option<&'a typefacts::ExportImplementationTranscript>,
     /// The calls this walk dispositioned [`CensusDisposition::OwnedSignalRead`].
     owned_signal_read_calls: Vec<typefacts::Location>,
+    /// ADR 0152: the literal a described-callable walk reads, set only by that
+    /// census, beside `owned_signal_scope`. A call of an export argument the
+    /// literal captured is its nested item only when the export transcript
+    /// states this literal as the call's innermost enclosing callable.
+    described_literal: Option<typefacts::Location>,
+    /// The calls this walk dispositioned
+    /// [`CensusDisposition::CapturedParameterCall`].
+    captured_parameter_calls: Vec<CapturedParameterCall>,
+}
+
+/// ADR 0152: one call of an export argument a returned literal captured, as
+/// the export's own transcript states it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct CapturedParameterCall {
+    parameter: usize,
+    location: typefacts::Location,
+    /// The export transcript's `unconditional` for the call, with its `reach`
+    /// reachable: it runs exactly once on every normal completion of the
+    /// literal.
+    unconditional: bool,
 }
 
 impl CensusRun<'_> {
@@ -11446,7 +11477,7 @@ fn census_call_walk(
     implementation: &typefacts::ExportImplementationTranscript,
     evidence: CensusEvidence<'_>,
 ) -> Result<CensusWalkPass, TypeFactsCertificationError> {
-    census_call_walk_with_dispositions(plan, refuse, declared, implementation, evidence, None)
+    census_call_walk_with_dispositions(plan, refuse, declared, implementation, evidence, None, None)
         .map(|(pass, _)| pass)
 }
 
@@ -11455,6 +11486,7 @@ fn census_call_walk(
 struct CensusWalkRecord {
     dispositions: std::collections::BTreeSet<&'static str>,
     owned_signal_read_calls: Vec<typefacts::Location>,
+    captured_parameter_calls: Vec<CapturedParameterCall>,
 }
 
 /// [`census_call_walk`], also answering every disposition the walk recorded
@@ -11466,6 +11498,7 @@ fn census_call_walk_with_dispositions(
     implementation: &typefacts::ExportImplementationTranscript,
     evidence: CensusEvidence<'_>,
     owned_signal_scope: Option<&typefacts::ExportImplementationTranscript>,
+    described_literal: Option<&typefacts::Location>,
 ) -> Result<(CensusWalkPass, CensusWalkRecord), TypeFactsCertificationError> {
     let mut run = CensusRun {
         certified: &plan.snapshot,
@@ -11484,6 +11517,8 @@ fn census_call_walk_with_dispositions(
         dispositions: std::collections::BTreeSet::new(),
         owned_signal_scope,
         owned_signal_read_calls: Vec::new(),
+        described_literal: described_literal.cloned(),
+        captured_parameter_calls: Vec::new(),
     };
     // Seeded with the demanded export, so a helper calling back into it refuses
     // as a cycle rather than running out of depth.
@@ -11532,6 +11567,7 @@ fn census_call_walk_with_dispositions(
         CensusWalkRecord {
             dispositions: run.dispositions,
             owned_signal_read_calls: run.owned_signal_read_calls,
+            captured_parameter_calls: run.captured_parameter_calls,
         },
     ))
 }
@@ -11817,6 +11853,7 @@ fn census_callbacks_domain(
                         .iter()
                         .map(|binding| binding.parameter_index)
                         .collect(),
+                    construction: implementation.invocation.as_deref() == Some("construct"),
                 };
                 sites.push(
                     confirm_described_callbacks(
@@ -11971,6 +12008,10 @@ struct ProtocolCensusFrame {
     /// rooted by syntax, and a written binding -- or its member (item B) -- is
     /// not the caller's.
     unwritten: std::collections::BTreeSet<usize>,
+    /// Whether the transcript censused a construction (ADR 0139) rather than a
+    /// call. A kept slot of a *call* is kept by a returned literal (ADR 0152),
+    /// whose captured calls are that item's evidence, not call items.
+    construction: bool,
 }
 
 /// What a described `callbacks` enumeration names, by kind: the parameters it
@@ -12039,10 +12080,13 @@ fn confirm_retained_arguments(
     kept: &std::collections::BTreeSet<usize>,
     implementation: &typefacts::ExportImplementationTranscript,
 ) -> Result<String, String> {
+    // ADR 0152: a function export keeps a slot only in a literal it returns.
     if implementation.invocation.as_deref() != Some("construct") {
-        return Err(format!(
-            "describes result-access item(s) for parameter(s) {}, and the transcript censused a \
-             call rather than a construction",
+        for index in kept {
+            returned_literal_capture_evidence(implementation, *index)?;
+        }
+        return Ok(format!(
+            "typefacts-implementation-census:callbacks:returned-literal-captures:{}",
             index_list(kept)
         ));
     }
@@ -12130,6 +12174,19 @@ fn require_retained_argument(
     if !path.is_empty() {
         return Err(open("a result-access item keeps a bare parameter only"));
     }
+    // ADR 0152: a function export keeps the argument only in the literal it
+    // returns, which is the value whose invocation runs it.
+    if implementation.invocation.as_deref() != Some("construct") {
+        let calls = returned_literal_capture_evidence(implementation, usize::from(*index))
+            .map_err(|reason| open(&reason))?;
+        for call in calls {
+            sites.push(format!(
+                "returned-literal-capture:{index}:{}:{}:{}",
+                call.path, call.start_byte, call.end_byte
+            ));
+        }
+        return Ok(());
+    }
     let argument = retained_argument_evidence(implementation, usize::from(*index))
         .map_err(|reason| open(&reason))?;
     sites.push(format!(
@@ -12143,6 +12200,113 @@ fn require_retained_argument(
         ));
     }
     Ok(())
+}
+
+/// ADR 0152: the evidence that a **function** export keeps parameter `index`
+/// only in a literal it returns, which is what a `result-access` item from the
+/// slot says of a call: every use of the parameter the use census records is a
+/// direct call of it, and each is the callee of a call the export's transcript
+/// states is of that very parameter by binding identity
+/// (`calleeUnwrittenParameter`, protocol 71) and whose innermost enclosing
+/// callable is a function or arrow literal one of the export's returns hands
+/// back (`ReturnSite::callable`). The literal is created by the `return` that
+/// hands it over and is referenced by nothing else, so the argument runs only
+/// when the returned value is invoked, on that invoker's stack; what one
+/// invocation does with it is the returned described callable's claim.
+///
+/// A use is never read as a call by position alone: it is identified with a
+/// call of the same parameter that *starts* at the use, because a call
+/// expression begins at its callee. Anything else -- a store, an argument, a
+/// property read, a return, a write of the binding, a use in the export's own
+/// frame or in a callable the returned literal nests -- refuses.
+fn returned_literal_capture_evidence(
+    implementation: &typefacts::ExportImplementationTranscript,
+    index: usize,
+) -> Result<Vec<typefacts::Location>, String> {
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_CAPTURED_CALLBACK_PROTOCOL {
+        return Err(format!(
+            "describes parameter {index} as kept by a returned literal, and a call states the \
+             parameter its callee is at handshake protocol {CENSUS_CAPTURED_CALLBACK_PROTOCOL}, \
+             which this build does not speak"
+        ));
+    }
+    let literals = implementation
+        .control_flow
+        .as_ref()
+        .map(|flow| {
+            flow.returns
+                .iter()
+                .flat_map(|site| {
+                    site.callable
+                        .iter()
+                        .chain(site.arms.iter().filter_map(|arm| arm.callable.as_ref()))
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if literals.is_empty() {
+        return Err(format!(
+            "describes parameter {index} as kept by a returned literal, and no return of the \
+             export hands back a function or arrow literal the producer names"
+        ));
+    }
+    let mut calls = Vec::new();
+    for used in implementation
+        .parameter_uses
+        .iter()
+        .filter(|used| used.parameter_index == index)
+    {
+        let at = format!(
+            "{}:{}..{}",
+            used.location.path, used.location.start_byte, used.location.end_byte
+        );
+        // A reference inside a nested callable is recorded as a capture
+        // whatever it does there, so the use kind alone cannot say it is a
+        // call; the call identified with it below is what does.
+        if !used.binding_path.is_empty()
+            || used.alias
+            || !matches!(
+                used.kind,
+                typefacts::ParameterUseKind::DirectCall | typefacts::ParameterUseKind::Capture
+            )
+        {
+            return Err(format!(
+                "describes parameter {index} as kept by a returned literal, and the use census \
+                 records a {:?} use at {at} that is not a direct call of it",
+                used.kind
+            ));
+        }
+        let Some(call) = implementation.calls.iter().find(|call| {
+            call.location.path == used.location.path
+                && call.location.start_byte == used.location.start_byte
+                && call.kind == CallKind::Call
+                && call.callee_unwritten_parameter == Some(index)
+        }) else {
+            return Err(format!(
+                "describes parameter {index} as kept by a returned literal, and the use at {at} \
+                 is the callee of no call the producer states is of that parameter by binding \
+                 identity"
+            ));
+        };
+        if !call
+            .enclosing_callable
+            .as_ref()
+            .is_some_and(|enclosing| literals.contains(&enclosing))
+        {
+            return Err(format!(
+                "describes parameter {index} as kept by a returned literal, and the call at {at} \
+                 is not in the own frame of a literal a return of the export hands back"
+            ));
+        }
+        calls.push(call.location.clone());
+    }
+    if calls.is_empty() {
+        return Err(format!(
+            "describes parameter {index} as kept by a returned literal, and the use census \
+             records no use of it"
+        ));
+    }
+    Ok(calls)
 }
 
 /// Whether the callback binding a demand names is a `result-access` item.
@@ -12335,6 +12499,17 @@ fn confirm_described_callbacks(
                 site.location,
                 site.depth
             ));
+        }
+        // ADR 0152: a kept slot of a call is kept by a literal the export
+        // returns, and its captured calls are what `confirm_retained_arguments`
+        // reads as that item's evidence -- each one inside a returned literal's
+        // own frame, or the item refuses there.
+        if site.captured
+            && path.is_empty()
+            && !frame.construction
+            && enumeration.kept.contains(&index)
+        {
+            continue;
         }
         if site.captured {
             return Err(format!(
@@ -12576,6 +12751,8 @@ fn census_reads_domain(
         dispositions: std::collections::BTreeSet::new(),
         owned_signal_scope: None,
         owned_signal_read_calls: Vec::new(),
+        described_literal: None,
+        captured_parameter_calls: Vec::new(),
     };
     // ADR 0107: the one premise here whose other half lives in a callee, so
     // the transcripts it needs are demanded before any form is decided.
@@ -13483,7 +13660,7 @@ fn described_callable_claim(
 /// refused: each would either invoke code this claim denies, or perform a
 /// read, a creation or an owner registration the claim would have to state and
 /// does not.
-const DESCRIBED_CALLABLE_DISPOSITIONS: [CensusDisposition; 7] = [
+const DESCRIBED_CALLABLE_DISPOSITIONS: [CensusDisposition; 8] = [
     CensusDisposition::Unreachable,
     CensusDisposition::StandardLibrary,
     CensusDisposition::PrimitiveCoercion,
@@ -13491,6 +13668,8 @@ const DESCRIBED_CALLABLE_DISPOSITIONS: [CensusDisposition; 7] = [
     CensusDisposition::OwnLiteralAccessorWrite,
     CensusDisposition::DefaultLibraryHasInstance,
     CensusDisposition::OwnedSignalRead,
+    // ADR 0152: admitted here and stated as the literal's nested item.
+    CensusDisposition::CapturedParameterCall,
 ];
 
 /// What one described-callable census pass reached.
@@ -13661,21 +13840,31 @@ fn described_callable_transcripts_wanted(
 ///   invoking form in the literal's body, at depth 0 and following nothing,
 ///   with `outer` -- the export's own implementation -- as the scope an owned
 ///   signal must have been created in, and every disposition it records is one
-///   of [`DESCRIBED_CALLABLE_DISPOSITIONS`]. That is `callbacks: []` (no
-///   parameter-rooted site: the literal runs none of its caller's code, and a
-///   call of a parameter it *captured* is refused by the walk itself),
-///   `creates: []` and no owner requirement (no dialect primitive, dependency
-///   or helper is called at all), and `reads` exactly the owned-signal reads
-///   (ADR 0146): any other reactive read arrives as a call or as a proxy
-///   property access, and neither is admitted.
+///   of [`DESCRIBED_CALLABLE_DISPOSITIONS`]. That is `creates: []` and no
+///   owner requirement (no dialect primitive, dependency or helper is called
+///   at all), `reads` exactly the owned-signal reads (ADR 0146) -- any other
+///   reactive read arrives as a call or as a proxy property access, and
+///   neither is admitted -- and `callbacks` exactly the calls of export
+///   arguments the literal captured (ADR 0152): no parameter-rooted site, so
+///   the literal runs none of its own caller's code; every call of a captured
+///   export argument one the export's transcript states unconditional in this
+///   literal's frame, and at most one per argument, each the item
+///   [`DescribedCallback::same_stack_once`]. A captured argument the literal
+///   calls conditionally, repeatedly, from a nested callable, or through any
+///   other form is refused, never stated as a weaker item.
 /// * Each live value-carrying completion hands back a primitive both by type
-///   and by grammar (`plain`) or, when the body reads, exactly the value one of
-///   its owned-signal read calls returned (`read-value`); a body with no such
-///   completion hands back nothing (`[]`).
+///   and by grammar (`plain`), exactly the value one of its owned-signal read
+///   calls returned (`read-value`), or exactly what one of its calls of a
+///   captured argument returned (`invocation-result`, ADR 0152); a body with
+///   no such completion hands back nothing (`[]`).
+///
+/// [`DescribedCallback::same_stack_once`]:
+///     solid_reactive_ir::contract_semantics::DescribedCallback::same_stack_once
 fn described_callable_body(
     plan: &CertificationPlan,
     declared: &typefacts::ExportValueTranscript,
     outer: &typefacts::ExportImplementationTranscript,
+    literal_location: &typefacts::Location,
     literal: &typefacts::ExportImplementationTranscript,
     evidence: CensusEvidence<'_>,
 ) -> Result<
@@ -13700,11 +13889,19 @@ fn described_callable_body(
         reason,
     };
     let ((outcome, mut sites, requested, caller_supplied), record) =
-        census_call_walk_with_dispositions(plan, &refuse, declared, literal, evidence, Some(outer))
-            .map_err(|error| match error {
-                TypeFactsCertificationError::UnsupportedDemand { reason, .. } => reason,
-                other => other.to_string(),
-            })?;
+        census_call_walk_with_dispositions(
+            plan,
+            &refuse,
+            declared,
+            literal,
+            evidence,
+            Some(outer),
+            Some(literal_location),
+        )
+        .map_err(|error| match error {
+            TypeFactsCertificationError::UnsupportedDemand { reason, .. } => reason,
+            other => other.to_string(),
+        })?;
     if outcome == CensusOutcome::NeedsTranscripts || !requested.is_empty() {
         return Err(format!(
             "described callable census refuses the literal at {at}: its body calls a local \
@@ -13733,6 +13930,18 @@ fn described_callable_body(
     } else {
         vec![DescribedRead::OwnedSignal]
     };
+    // ADR 0152: each captured export argument the literal calls is one item,
+    // stated only when that is exactly what happens on every invocation.
+    let callbacks = described_callable_callbacks(&record.captured_parameter_calls, &at)?;
+    for captured in &record.captured_parameter_calls {
+        sites.push(format!(
+            "census-described-callback:{}:{}:{}:{}",
+            captured.parameter,
+            captured.location.path,
+            captured.location.start_byte,
+            captured.location.end_byte
+        ));
+    }
     let control_flow = require_plain_classified_completion(literal, &at)?;
     let mut returns = std::collections::BTreeSet::new();
     for site in control_flow
@@ -13751,6 +13960,24 @@ fn described_callable_body(
             .is_some_and(|call| record.owned_signal_read_calls.contains(call))
         {
             ValueShape::ReadValue
+        } else if let Some(captured) = site.call.as_ref().and_then(|call| {
+            record
+                .captured_parameter_calls
+                .iter()
+                .find(|captured| captured.location == *call)
+        }) {
+            // ADR 0152: exactly what the captured argument's invocation
+            // returned, handed back unchanged: the return's own expression is
+            // that call (`ReturnSite::call`).
+            ValueShape::InvocationResult {
+                parameter: u16::try_from(captured.parameter).map_err(|_| {
+                    format!(
+                        "described callable census refuses the literal at {at}: parameter {} \
+                         is past the model's argument range",
+                        captured.parameter
+                    )
+                })?,
+            }
         } else {
             // The checker's type is not enough on its own. A returned literal
             // usually reads bindings it captured, and in a JavaScript file such
@@ -13763,7 +13990,8 @@ fn described_callable_body(
                 "described callable census refuses the literal at {at}: its return at \
                  {}:{}..{}, reach {}, hands back neither a value that is a primitive both by \
                  type and by its syntax alone (or by a reviewed default-library call, or in \
-                 TypeScript source), nor exactly what one of its owned-signal reads returned",
+                 TypeScript source), nor exactly what one of its owned-signal reads or one of \
+                 its calls of a captured argument returned",
                 site.location.path,
                 site.location.start_byte,
                 site.location.end_byte,
@@ -13785,10 +14013,74 @@ fn described_callable_body(
         DescribedCall {
             reads,
             returns: returns.into_iter().collect(),
+            callbacks,
         },
         sites,
     ))
 }
+
+/// ADR 0152: the nested `callbacks` items a literal's calls of captured export
+/// arguments state, or a refusal naming the first call that is not exactly
+/// one invocation on every completion. The empty list is ADR 0145's
+/// `callbacks: []`.
+fn described_callable_callbacks(
+    captured: &[CapturedParameterCall],
+    at: &str,
+) -> Result<Vec<solid_reactive_ir::contract_semantics::DescribedCallback>, String> {
+    use solid_reactive_ir::contract_semantics::DescribedCallback;
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_CAPTURED_CALLBACK_PROTOCOL
+        && !captured.is_empty()
+    {
+        return Err(format!(
+            "described callable census premise required: a captured argument's call states \
+             whether it runs on every completion at handshake protocol \
+             {CENSUS_CAPTURED_CALLBACK_PROTOCOL}, and this build speaks {}",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        ));
+    }
+    let mut parameters = std::collections::BTreeSet::new();
+    for call in captured {
+        let site = format!(
+            "{}:{}..{}",
+            call.location.path, call.location.start_byte, call.location.end_byte
+        );
+        if !call.unconditional {
+            return Err(format!(
+                "described callable census refuses the literal at {at}: its call of export \
+                 argument {} at {site} is not stated to run exactly once on every completion \
+                 of the literal, and a nested invocation is stated only when it does",
+                call.parameter
+            ));
+        }
+        if !parameters.insert(call.parameter) {
+            return Err(format!(
+                "described callable census refuses the literal at {at}: it calls export \
+                 argument {} more than once (again at {site}), and a nested invocation is \
+                 stated only once per argument",
+                call.parameter
+            ));
+        }
+    }
+    parameters
+        .into_iter()
+        .map(|parameter| {
+            u16::try_from(parameter)
+                .map(DescribedCallback::same_stack_once)
+                .map_err(|_| {
+                    format!(
+                        "described callable census refuses the literal at {at}: parameter \
+                         {parameter} is past the model's argument range"
+                    )
+                })
+        })
+        .collect()
+}
+
+/// The handshake protocol at which a call states the export parameter its
+/// callee is at any depth of nesting and whether it runs on every completion
+/// of its flow owner (ADR 0152). Below it an absent `unconditional` is a
+/// producer that never looked.
+const CENSUS_CAPTURED_CALLBACK_PROTOCOL: u64 = 71;
 
 /// ADR 0145/0146's evidence, shared by the closure census and each operation's
 /// positive fact so the two cannot drift: every live value the export hands
@@ -13840,8 +14132,14 @@ fn described_callable_return_sites(
                 let transcript = evidence
                     .local(literal, &[])
                     .expect("every literal's transcript was checked above");
-                let (call, body) =
-                    described_callable_body(plan, declared, implementation, transcript, evidence)?;
+                let (call, body) = described_callable_body(
+                    plan,
+                    declared,
+                    implementation,
+                    literal,
+                    transcript,
+                    evidence,
+                )?;
                 (
                     call,
                     body,
@@ -13852,6 +14150,7 @@ fn described_callable_return_sites(
                 DescribedCall {
                     reads: vec![DescribedRead::OwnedSignal],
                     returns: vec![ValueShape::ReadValue],
+                    callbacks: Vec::new(),
                 },
                 witness.clone(),
                 "owned-accessor".to_owned(),
@@ -15901,6 +16200,35 @@ fn census_call_disposition(
         return Ok(Some((
             CensusDisposition::OwnedSignalRead,
             census_call_site(call, CensusDisposition::OwnedSignalRead),
+        )));
+    }
+    // ADR 0152: inside a described callable's own frame, a call the export's
+    // own transcript states is of an export argument this literal captured --
+    // the call at the same location, its innermost enclosing callable this
+    // literal, its callee the export's unwritten parameter by binding
+    // identity. Only a call: a construction of the caller's value is no item
+    // the claim can state.
+    if depth == 0
+        && call.kind == CallKind::Call
+        && !call.captured
+        && let (Some(scope), Some(literal)) =
+            (run.owned_signal_scope, run.described_literal.as_ref())
+        && let Some(outer) = scope.calls.iter().find(|outer| {
+            outer.location == call.location
+                && outer.kind == CallKind::Call
+                && outer.captured
+                && outer.enclosing_callable.as_ref() == Some(literal)
+        })
+        && let Some(parameter) = outer.callee_unwritten_parameter
+    {
+        run.captured_parameter_calls.push(CapturedParameterCall {
+            parameter,
+            location: call.location.clone(),
+            unconditional: outer.unconditional && outer.reach == Reachability::Reachable,
+        });
+        return Ok(Some((
+            CensusDisposition::CapturedParameterCall,
+            census_call_site(call, CensusDisposition::CapturedParameterCall),
         )));
     }
     // Arguments do not matter for `creates`. A call is dispositioned by its
@@ -27441,6 +27769,8 @@ mod tests {
             dispositions: std::collections::BTreeSet::new(),
             owned_signal_scope: None,
             owned_signal_read_calls: Vec::new(),
+            described_literal: None,
+            captured_parameter_calls: Vec::new(),
         }
     }
 

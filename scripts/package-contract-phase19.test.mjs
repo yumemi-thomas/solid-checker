@@ -280,7 +280,14 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // accessor proposes a described callable reading a signal it created.
       // 158 adds package-described-callable-consumer's hand-stated document,
       // the consumer half of ADRs 0145 and 0146.
-      stableMainDocuments: 158,
+      //
+      // 159 on 2026-09-28 adds implementation-census-described-callbacks'
+      // main document, the corpus pin of ADR 0152: a returned literal that
+      // calls an argument its export captured states a nested `callbacks`
+      // item, and the export keeps the argument at `result-access`. 160 adds
+      // package-described-callback-consumer's hand-stated document, its
+      // consumer half.
+      stableMainDocuments: 160,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

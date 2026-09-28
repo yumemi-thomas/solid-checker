@@ -154,19 +154,83 @@ fn value_completion_in(ast: &AstFacts, function: &FunctionFact) -> bool {
 /// `return;` beside a literal hands back `undefined`, which is no `return`
 /// operation, and contributes nothing. Every other shape is `None`: "do not
 /// propose".
+///
+/// ADR 0152: a literal that calls, in its own frame, an identifier parameter of
+/// `function` it captured proposes one `callbacks` item per such parameter,
+/// and a completion that is exactly such a call proposes `invocation-result`
+/// of it rather than `plain`. The parameter is matched by the spelling of the
+/// callee against the export's own plain parameters, which the literal does
+/// not redeclare -- a proposal input only; the census reads each item from the
+/// producer's binding identity and refuses every one that is conditional,
+/// repeated or not the export's argument after all.
 #[must_use]
 pub fn described_callable_returns(
     file: &FileFacts,
     function: &FunctionFact,
 ) -> Option<Vec<crate::contract_semantics::DescribedCall>> {
-    described_callable_returns_in(&file.ast, function)
+    described_callable_returns_in(&file.ast, function, |span| file.source_text(span))
 }
 
-fn described_callable_returns_in(
+/// ADR 0152's proposal input for one returned literal: the export parameters
+/// it calls in its own frame, each by the span of the call.
+fn captured_parameter_calls<'s>(
     ast: &AstFacts,
     function: &FunctionFact,
+    literal: &FunctionFact,
+    text: &impl Fn(solid_facts::core::Span) -> Option<&'s str>,
+) -> Vec<(solid_facts::core::Span, u16)> {
+    let named = |bindings: &[solid_facts::ast::BindingFact]| {
+        bindings
+            .iter()
+            .enumerate()
+            .filter(|(_, binding)| {
+                binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.initializer.is_none()
+            })
+            .filter_map(|(index, binding)| {
+                Some((
+                    text(binding.names.first()?.span)?,
+                    u16::try_from(index).ok()?,
+                ))
+            })
+            .collect::<Vec<_>>()
+    };
+    let parameters = named(&function.parameters);
+    let shadowed = literal
+        .parameters
+        .iter()
+        .flat_map(|binding| &binding.names)
+        .filter_map(|name| text(name.span))
+        .collect::<Vec<_>>();
+    ast.calls
+        .iter()
+        .filter(|call| !call.construct && call.static_callee)
+        .filter(|call| {
+            ast.functions
+                .iter()
+                .filter(|candidate| candidate.span.contains(call.span))
+                .min_by_key(|candidate| candidate.span.end - candidate.span.start)
+                .is_some_and(|owner| owner.span == literal.span)
+        })
+        .filter_map(|call| {
+            let callee = text(call.callee)?;
+            if shadowed.contains(&callee) {
+                return None;
+            }
+            parameters
+                .iter()
+                .find(|(name, _)| *name == callee)
+                .map(|(_, index)| (call.span, *index))
+        })
+        .collect()
+}
+
+fn described_callable_returns_in<'s>(
+    ast: &AstFacts,
+    function: &FunctionFact,
+    text: impl Fn(solid_facts::core::Span) -> Option<&'s str>,
 ) -> Option<Vec<crate::contract_semantics::DescribedCall>> {
-    use crate::contract_semantics::{DescribedCall, ValueShape};
+    use crate::contract_semantics::{DescribedCall, DescribedCallback, ValueShape};
     if function.r#async || function.generator {
         return None;
     }
@@ -206,16 +270,50 @@ fn described_callable_returns_in(
             candidate.span == span && !candidate.r#async && !candidate.generator
         })?;
         literals += 1;
+        let captured = captured_parameter_calls(ast, function, literal, &text);
         let returns = if valueless_completion_in(ast, literal).is_ok() {
             Vec::new()
         } else if value_completion_in(ast, literal) {
-            vec![ValueShape::Plain]
+            // ADR 0152: a completion that is exactly a call of a captured
+            // parameter hands back what that call returned.
+            let completions = if literal.expression_body {
+                literal
+                    .expression_return
+                    .iter()
+                    .map(|returned| returned.span)
+                    .collect::<Vec<_>>()
+            } else {
+                own_returns(ast, literal)
+                    .filter_map(|returned| returned.argument)
+                    .collect()
+            };
+            completions
+                .into_iter()
+                .map(|span| {
+                    captured.iter().find(|(call, _)| *call == span).map_or(
+                        ValueShape::Plain,
+                        |(_, parameter)| ValueShape::InvocationResult {
+                            parameter: *parameter,
+                        },
+                    )
+                })
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect()
         } else {
             return None;
         };
+        let callbacks = captured
+            .iter()
+            .map(|(_, parameter)| *parameter)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .map(DescribedCallback::same_stack_once)
+            .collect();
         calls.insert(DescribedCall {
             reads: Vec::new(),
             returns,
+            callbacks,
         });
     }
     Some(calls.into_iter().collect())
@@ -277,6 +375,7 @@ fn reading_callable_returns_in(
             calls.insert(DescribedCall {
                 reads: vec![DescribedRead::OwnedSignal],
                 returns: vec![ValueShape::ReadValue],
+                callbacks: Vec::new(),
             });
             continue;
         }
@@ -318,6 +417,7 @@ fn reading_callable_returns_in(
         calls.insert(DescribedCall {
             reads: vec![DescribedRead::OwnedSignal],
             returns: returns.into_iter().collect(),
+            callbacks: Vec::new(),
         });
     }
     Some(calls.into_iter().collect())
@@ -875,6 +975,7 @@ mod tests {
         let reading = |returns: Vec<ValueShape>| DescribedCall {
             reads: vec![DescribedRead::OwnedSignal],
             returns,
+            callbacks: Vec::new(),
         };
         for (source, expected) in [
             (
@@ -918,11 +1019,14 @@ mod tests {
                 .min_by_key(|function| (function.span.start, std::cmp::Reverse(function.span.end)))
                 .expect("the source declares a function")
                 .clone();
-            described_callable_returns_in(&facts, &function)
+            described_callable_returns_in(&facts, &function, |span| {
+                source.get(span.start as usize..span.end as usize)
+            })
         };
         let plain = DescribedCall {
             reads: Vec::new(),
             returns: vec![ValueShape::Plain],
+            callbacks: Vec::new(),
         };
         for (source, expected) in [
             (
@@ -961,6 +1065,65 @@ mod tests {
             "function f() { return () => ({ a: 1 }); }",
         ] {
             assert_eq!(outer(source), None, "{source}");
+        }
+    }
+
+    /// ADR 0152: a returned literal's own calls of the export's captured plain
+    /// parameters propose one callback item each, and a completion that is
+    /// exactly one hands back its invocation's result. A call nested one
+    /// callable deeper, a defaulted or shadowed parameter, and a call of
+    /// anything else propose no item.
+    #[test]
+    fn a_described_callable_proposes_its_calls_of_captured_parameters() {
+        use crate::contract_semantics::DescribedCallback;
+        let outer = |source: &str| {
+            let facts = ast::extract("test.js", source).unwrap();
+            let function = facts
+                .functions
+                .iter()
+                .min_by_key(|function| (function.span.start, std::cmp::Reverse(function.span.end)))
+                .expect("the source declares a function")
+                .clone();
+            described_callable_returns_in(&facts, &function, |span| {
+                source.get(span.start as usize..span.end as usize)
+            })
+        };
+        let call = |returns: Vec<ValueShape>, callbacks: &[u16]| DescribedCall {
+            reads: Vec::new(),
+            returns,
+            callbacks: callbacks
+                .iter()
+                .copied()
+                .map(DescribedCallback::same_stack_once)
+                .collect(),
+        };
+        for (source, expected) in [
+            (
+                "function pipe(a, b) { return (raw) => b(a(raw)); }",
+                call(vec![ValueShape::InvocationResult { parameter: 1 }], &[0, 1]),
+            ),
+            (
+                "function changed(source, times = 1) { times += 1; return () => { source(); return !--times; }; }",
+                call(vec![ValueShape::Plain], &[0]),
+            ),
+            (
+                "function f(cb) { return () => { cb(); }; }",
+                call(Vec::new(), &[0]),
+            ),
+            (
+                "function f(cb) { return () => { queueMicrotask(() => cb()); }; }",
+                call(Vec::new(), &[]),
+            ),
+            (
+                "function f(cb = g) { return () => cb(); }",
+                call(vec![ValueShape::Plain], &[]),
+            ),
+            (
+                "function f(cb) { return (cb) => cb(); }",
+                call(vec![ValueShape::Plain], &[]),
+            ),
+        ] {
+            assert_eq!(outer(source), Some(vec![expected]), "{source}");
         }
     }
 

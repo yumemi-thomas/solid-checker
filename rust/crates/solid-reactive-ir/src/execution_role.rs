@@ -774,6 +774,9 @@ fn semantic_execution_role_within(
     if let Some(role) = returned_factory_callback_execution_role(file, span, lookup, classifying) {
         return role;
     }
+    if let Some(role) = contract_returned_invoker_callback_role(file, span, lookup, classifying) {
+        return role;
+    }
     if let Some(role) = inline_callback_execution_role(file, span, allowed, lookup, classifying) {
         return role;
     }
@@ -1036,6 +1039,20 @@ pub(crate) fn callee_callback_timing(
     execution: ExecutionRole,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
+    callee_callback_timing_within(file, span, execution, lookup, &mut HashSet::new())
+}
+
+/// [`callee_callback_timing`], carrying the invocation sites ADR 0152's arm
+/// has already followed: a returned value invoked from inside the very
+/// callback it runs has no timing of its own to contribute, and is read as
+/// unproven rather than followed forever.
+fn callee_callback_timing_within(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    execution: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
+    following: &mut HashSet<(String, Span)>,
+) -> bool {
     use crate::runtime_semantics::RuntimeArgumentBehavior;
     if !execution.reports_untracked_read() {
         return false;
@@ -1101,6 +1118,33 @@ pub(crate) fn callee_callback_timing(
                 }
                 _ => return false,
             }
+        }
+        // ADR 0152: the contract's returned value runs the argument on its own
+        // invoker's stack. The literal's role was read from the returned
+        // value's proven invocations, so its timing is proven exactly when
+        // each of them is; with none there is no role to have proven.
+        if contract_returned_invoker_slot(file, span, lookup)
+            .is_some_and(|invoker| invoker.span == call.span)
+        {
+            let sites = returned_callback_invocation_sites(file, call, lookup);
+            return sites.is_empty()
+                || sites.iter().any(|site| {
+                    if site.inherited_execution.is_some() {
+                        return false;
+                    }
+                    if !following.insert((site.path.clone(), site.span)) {
+                        return true;
+                    }
+                    lookup
+                        .files()
+                        .iter()
+                        .find(|candidate| candidate.path.as_str() == site.path)
+                        .is_none_or(|use_file| {
+                            callee_callback_timing_within(
+                                use_file, site.span, execution, lookup, following,
+                            )
+                        })
+                });
         }
         // A callee with no body in the project: a package export seen through
         // its declarations, or a callee nothing resolves. Only an accepted
@@ -1267,54 +1311,125 @@ fn returned_factory_callback_execution_role(
                 return None;
             }
 
-            let mut roles = Vec::new();
-            for site in returned_callback_invocation_sites(file, factory_call, lookup) {
-                let role = match site.inherited_execution {
-                    Some(Execution::Tracked) => Some(ExecutionRole::TrackedJsx),
-                    Some(Execution::Deferred) => Some(ExecutionRole::DeferredCallback),
-                    Some(Execution::Inline) | None => {
-                        let key = (site.path.clone(), site.span);
-                        if classifying.contains(&key) {
-                            // A cyclic invocation site — the adapter calling
-                            // itself through its own callback — has no context
-                            // of its own to contribute.
-                            None
-                        } else {
-                            lookup
-                                .files()
-                                .iter()
-                                .find(|candidate| candidate.path.as_str() == site.path)
-                                .map(|use_file| {
-                                    classifying.insert(key.clone());
-                                    let role = semantic_execution_role_within(
-                                        use_file,
-                                        site.span,
-                                        &[],
-                                        lookup.entities(),
-                                        lookup.symbol_names(),
-                                        lookup,
-                                        classifying,
-                                    );
-                                    classifying.remove(&key);
-                                    role
-                                })
-                        }
-                    }
-                };
-                roles.extend(role);
-            }
-            roles.sort_by_key(|role| *role as u8);
-            roles.dedup();
-            match roles.as_slice() {
-                [] => None,
-                [role] => Some(*role),
-                // The same returned adapter is used in incompatible execution
-                // contexts. A single diagnostic site cannot truthfully claim one
-                // dominates, so preserve uncertainty instead of manufacturing a
-                // false positive in either direction.
-                _ => Some(ExecutionRole::DeferredCallback),
-            }
+            role_at_returned_invocations(
+                returned_callback_invocation_sites(file, factory_call, lookup),
+                lookup,
+                classifying,
+            )
         })
+}
+
+/// The one execution role the proven invocations of a returned function give
+/// the callbacks it runs on its invoker's stack, or `None` when there is no
+/// proven invocation. Shared by the dialect's returned-callback composition and
+/// ADR 0152's contract composition, so the two cannot read the same sites
+/// differently.
+fn role_at_returned_invocations(
+    sites: Vec<crate::owners::ReturnedCallbackInvocationSite>,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> Option<ExecutionRole> {
+    let mut roles = Vec::new();
+    for site in sites {
+        let role = match site.inherited_execution {
+            Some(Execution::Tracked) => Some(ExecutionRole::TrackedJsx),
+            Some(Execution::Deferred) => Some(ExecutionRole::DeferredCallback),
+            Some(Execution::Inline) | None => {
+                let key = (site.path.clone(), site.span);
+                if classifying.contains(&key) {
+                    // A cyclic invocation site — the adapter calling
+                    // itself through its own callback — has no context
+                    // of its own to contribute.
+                    None
+                } else {
+                    lookup
+                        .files()
+                        .iter()
+                        .find(|candidate| candidate.path.as_str() == site.path)
+                        .map(|use_file| {
+                            classifying.insert(key.clone());
+                            let role = semantic_execution_role_within(
+                                use_file,
+                                site.span,
+                                &[],
+                                lookup.entities(),
+                                lookup.symbol_names(),
+                                lookup,
+                                classifying,
+                            );
+                            classifying.remove(&key);
+                            role
+                        })
+                }
+            }
+        };
+        roles.extend(role);
+    }
+    roles.sort_by_key(|role| *role as u8);
+    roles.dedup();
+    match roles.as_slice() {
+        [] => None,
+        [role] => Some(*role),
+        // The same returned adapter is used in incompatible execution
+        // contexts. A single diagnostic site cannot truthfully claim one
+        // dominates, so preserve uncertainty instead of manufacturing a
+        // false positive in either direction.
+        _ => Some(ExecutionRole::DeferredCallback),
+    }
+}
+
+/// ADR 0152: the call and argument slot at which `span`'s own function is
+/// handed, directly, to an accepted contract export whose returned value
+/// invokes that slot on its invoker's stack
+/// ([`crate::ContractExport::returned_invocations`]).
+///
+/// The literal must *be* the argument -- not an element of an array or object
+/// written there, and not a spread -- and `span` must sit in the literal's own
+/// body rather than in a function nested in it, which is what
+/// [`direct_callback_contains`] answers.
+pub(super) fn contract_returned_invoker_slot<'f>(
+    file: &'f solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'f solid_facts::ast::CallFact> {
+    file.ast
+        .arguments_containing(span)
+        .find_map(|(call, index)| {
+            let argument = &call.arguments[index];
+            if argument.spread || !direct_callback_contains(file, argument.span, span) {
+                return None;
+            }
+            let literal = containing_ast_function(&file.ast, span)?;
+            if file.ast.peel_ts_sugar_span(argument.span) != literal.span {
+                return None;
+            }
+            let symbol = lookup.callee_symbol(file, call.callee)?;
+            lookup
+                .contract_returned_invocations(symbol)?
+                .contains(&index)
+                .then_some(call)
+        })
+}
+
+/// ADR 0152: a callback handed to a contract export whose returned value runs
+/// it on its invoker's stack runs wherever that value is invoked, so its role
+/// is the role of the value's proven invocations -- the composition
+/// [`returned_factory_callback_execution_role`] makes for a dialect primitive,
+/// read here from the accepted contract's nested claim instead of the
+/// dialect. With no proven invocation it answers nothing, and the callback
+/// stays one of unproven timing ([`callee_callback_timing`]).
+fn contract_returned_invoker_callback_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> Option<ExecutionRole> {
+    let factory_call = contract_returned_invoker_slot(file, span, lookup)?;
+    role_at_returned_invocations(
+        returned_callback_invocation_sites(file, factory_call, lookup),
+        lookup,
+        classifying,
+    )
 }
 
 fn returned_callback_execution_role(

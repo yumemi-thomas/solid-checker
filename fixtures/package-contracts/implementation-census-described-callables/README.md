@@ -27,7 +27,7 @@ producer with the synthesized described-callable veto as the only probe:
 | `choose` | certifies `returns: [plain]` | both arms of the conditional are literals showing the same claims |
 | `makeCounter` | withdrawn | `return count` is typed `number` from the binding's declaration, which an unchecked JavaScript write never widens, so the type is no proof |
 | `makeSilent` | withdrawn | claimed `returns: [plain]`; its literal completes without a value |
-| `invokesCaptured` | withdrawn | the literal calls a parameter it captured: its caller's code |
+| `invokesCaptured` | withdrawn | claimed `returns: [plain]`; since ADR 0152 its literal shows a nested `callbacks` item for the parameter it captured and hands back that call's result, which the claim does not enumerate (`../implementation-census-described-callbacks` is that claim's tracer) |
 | `invokesOwnArgument` | withdrawn | the literal calls its own argument |
 | `returnsObject` | withdrawn | the literal hands back an object |
 | `readsCapturedMember` | withdrawn | the literal reads a member of a value the caller handed the export, which may run a getter |

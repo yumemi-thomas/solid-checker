@@ -14,7 +14,7 @@
           },
           "exports": {
             "contradictOnZeroOnly": "summary-7a943f0957989b2b0705ab104be3a80392bda70c167d0aad7dc7254876a47744",
-            "inlineAndReturned": "summary-5193bd57094e309b057a67be81b7f8051877b2df2f27b222e0fdf1e45324c76e",
+            "inlineAndReturned": "summary-ca619123127e1de07fa2e389652ad6b68b219061c6429d67dce3f8535893d5e3",
             "inlineAndTracked": "summary-7a943f0957989b2b0705ab104be3a80392bda70c167d0aad7dc7254876a47744",
             "oneInlineSite": "summary-ea96fbaa3a4079a39da9fa829076dc4d73bb87fa736dbb1dbfb552938ca68959",
             "oneTrackedSite": "summary-7123c8fdc02e24e87156c456c8f7d1161b291f29036c8d8656d188a2b0327429",
@@ -43,52 +43,6 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-5193bd57094e309b057a67be81b7f8051877b2df2f27b222e0fdf1e45324c76e": {
-      "call": {
-        "closed": [
-          "reads",
-          "creates",
-          "returns"
-        ],
-        "creates": [],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "described-callable",
-              "reads": [],
-              "returns": [
-                "plain"
-              ]
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "reads",
-          "creates",
-          "returns"
-        ],
-        "reads": [],
-        "returns": [
-          "return"
-        ]
-      },
-      "shape": "callable"
-    },
     "summary-55471cdce82b9b668b6a2170c22ba314b672770bc30e3697f3efef04f1b1b1bf": {
       "call": {
         "callbacks": [
@@ -288,6 +242,79 @@
         ],
         "reads": [],
         "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-ca619123127e1de07fa2e389652ad6b68b219061c6429d67dce3f8535893d5e3": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "callbacks": [
+                {
+                  "from": {
+                    "arg": 0,
+                    "path": []
+                  },
+                  "operation": {
+                    "at": {
+                      "event": "call",
+                      "schedule": "same-stack"
+                    },
+                    "count": {
+                      "max": 1,
+                      "min": 1,
+                      "scope": "call"
+                    },
+                    "kind": "invoke",
+                    "owner": {
+                      "source": "ambient-at-execution"
+                    },
+                    "tracking": "ambient-at-execution",
+                    "trigger": {
+                      "event": "call"
+                    }
+                  }
+                }
+              ],
+              "kind": "described-callable",
+              "reads": [],
+              "returns": [
+                "plain"
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
       },
       "shape": "callable"
     },

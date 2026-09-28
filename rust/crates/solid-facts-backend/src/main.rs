@@ -9041,6 +9041,53 @@ fn default_export_function_key(
     ))
 }
 
+/// ADR 0152: the outer half of a described callable's callback items. Every
+/// export argument a proposed described callable invokes is kept, as far as
+/// the export's own call goes, only in the literal it returns, which is ADR
+/// 0139's `result-access` item from that slot: the argument runs when the
+/// returned value is invoked, on that invoker's stack. The reactive analysis
+/// reads a call inside a returned closure as a deferred row of its own (or as
+/// nothing), and those rows are replaced by the item; a slot the analysis
+/// also saw invoked another way (inline, tracked) is left as it was, and the
+/// census refuses the pair. A proposal input only, like the class walk's: the
+/// producer's binding identity and use census decide the item.
+fn propose_returned_literal_captures(summary: &mut solid_reactive_ir::ContractExport) {
+    let invoked = summary
+        .returns_described_callables
+        .iter()
+        .flat_map(|call| &call.callbacks)
+        .filter_map(solid_reactive_ir::contract_semantics::DescribedCallback::parameter)
+        .map(usize::from)
+        .collect::<BTreeSet<_>>();
+    if invoked.is_empty() {
+        return;
+    }
+    let solid_reactive_ir::ContractClaim::Known(rows) = &mut summary.callbacks else {
+        return;
+    };
+    for parameter in invoked {
+        if rows
+            .iter()
+            .any(|row| row.parameter == parameter && row.execution != "deferred")
+        {
+            continue;
+        }
+        rows.retain(|row| row.parameter != parameter);
+        rows.push(solid_reactive_ir::ContractCallback {
+            parameter,
+            execution: "deferred".into(),
+            schedule: Some(solid_reactive_ir::CallbackSchedule::ResultAccess),
+            clears_tracking: false,
+            arguments: Vec::new(),
+            owner: Some("inherited".into()),
+            protocol: solid_reactive_ir::contract_semantics::InvokeProtocol::Call,
+            path: Vec::new(),
+        });
+        summary.result_access_parameters.insert(parameter);
+    }
+    rows.sort_by_key(|row| row.parameter);
+}
+
 /// Adds exact owner requirements observed inside the exact exported function
 /// to the generated package summary. The source project may report the
 /// function as open-world/uncertain because its callers are not enumerable;
@@ -9127,6 +9174,7 @@ fn attach_generated_owner_requirements(
         })
         .cloned()
         .unwrap_or_default();
+    propose_returned_literal_captures(&mut summary);
     summary.returns_reading_callables = symbol
         .as_ref()
         .and_then(|symbol| generated.reading_callables_by_symbol.get(symbol))
