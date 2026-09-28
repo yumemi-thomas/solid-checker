@@ -344,6 +344,18 @@ const RC9_CORE_WEB_AUDIT: &str =
 const RC9_MERGE_OMIT_MEMO_AUDIT: &str =
     "docs/package-contract-v2/audits/2026-09-28-solid-2-rc9-merge-omit-creatememo-creates.md";
 
+/// The reading of `solid-js`' own `createSignal` and `createMemo` in the rc.9
+/// server builds (`dist/server{,.dev,.observe}.js`, what `node` selects), for
+/// `creates` and `reads`, asking whether a `node`-scoped or a host-free row is
+/// sound (2026-09-28). It grants nothing: `creates` reaches `ctx.serialize`
+/// under `renderToStream` (probed), and host-free `reads` falls on the browser
+/// builds' hydration-gate read; the `node` `reads` reading is clean but the
+/// scope has no premise pinning the signals archive it constructs error
+/// classes from. Every section withholds, so nothing but the derivation test
+/// names it.
+#[cfg(test)]
+const RC9_SERVER_BUILDS_AUDIT: &str = "docs/package-contract-v2/audits/2026-09-28-solid-2-rc9-server-builds-createsignal-creatememo.md";
+
 /// The re-reading of `solid-js@2.0.0-rc.3` rows that rested on a
 /// `solid-js.json` summary alone and that rc.3's own runtime bytes contradict
 /// (2026-09-27). Every section there withdraws a row, and none grants one, so
@@ -438,6 +450,17 @@ const RC9: &str = "2.0.0-rc.9";
 /// is. It withholds `@solidjs/signals`' `merge` and the flat `solid-js`
 /// `createMemo`: `solid-js`' server builds define their own `merge` and
 /// `createMemo`, and both reach `ctx.serialize`.
+///
+/// `RC9_SERVER_BUILDS_AUDIT` (2026-09-28) read those server bodies as the
+/// subject of a `node` row and grants none. `createSignal` and `createMemo`
+/// `creates` hand a thenable or async-iterable result to `ctx.serialize` under
+/// `renderToStream` in all three server builds (probed; `renderToString` and
+/// no context reach nothing), so no `node` row and no host-free row. `reads`
+/// is clean on the server bytes, but host free is withheld for the browser
+/// builds' gate read (`withHydrationGate`'s signal, read by the export's own
+/// compute on the call's stack), and a `node` row would need a premise pinning
+/// the `@solidjs/signals` archive whose error classes the closure constructs,
+/// which a delegate-less [`HostTargetScope`] cannot state.
 ///
 /// # `creates` and `reads`, and only those
 ///
@@ -6551,6 +6574,8 @@ mod tests {
         ("solid-js", RC9, "Loading", CallClaimDomain::Creates),
         ("solid-js", RC9, "createSignal", CallClaimDomain::Creates),
         ("solid-js", RC9, "createMemo", CallClaimDomain::Creates),
+        ("solid-js", RC9, "createSignal", CallClaimDomain::Reads),
+        ("solid-js", RC9, "createMemo", CallClaimDomain::Reads),
         ("@solidjs/signals", RC9, "merge", CallClaimDomain::Creates),
         ("solid-js", RC9, "affects", CallClaimDomain::Reads),
         ("solid-js", RC9, "affects", CallClaimDomain::Creates),
@@ -7688,6 +7713,42 @@ mod tests {
                  the scoped row states exactly that (§ 4)",
             ),
         ),
+        // RC9_SERVER_BUILDS_AUDIT, 2026-09-28: the server bodies read as the
+        // subject of a `node` row. Its `creates` sections withhold the tuples
+        // already withheld above (so they are not repeated here); its `reads`
+        // sections withhold the two flat `reads` rows.
+        (
+            "solid-js",
+            RC9,
+            "createSignal",
+            CallClaimDomain::Reads,
+            RC9_SERVER_BUILDS_AUDIT,
+            "## 3. `createSignal` — `reads` — archive `solid-js@2.0.0-rc.9` — **WITHHOLD**",
+            ImplementationVerdict::Withheld(
+                "under hydration with ssrSource client or hybrid, the browser builds' \
+                 hydrateSignalLike hands coreFn an export-authored compute that reads \
+                 hydrated(), the signal withHydrationGate created on the same call, and \
+                 signals' createMemo runs it at creation (solid.js:563-595, measured); \
+                 the server bodies read nothing of their own, but a node row would \
+                 need a premise pinning the signals archive whose NotReadyError, \
+                 NoOwnerError and ContextNotFoundError the closure constructs, and a \
+                 delegate-less host-target scope cannot state one",
+            ),
+        ),
+        (
+            "solid-js",
+            RC9,
+            "createMemo",
+            CallClaimDomain::Reads,
+            RC9_SERVER_BUILDS_AUDIT,
+            "## 4. `createMemo` — `reads` — archive `solid-js@2.0.0-rc.9` — **WITHHOLD**",
+            ImplementationVerdict::Withheld(
+                "hydratedCreateMemo (solid.js:596-601) enters the same hydrateSignalLike \
+                 whenever hydrating and not transparent, so the export's own gate compute \
+                 reads the signal it created on the call's stack (§ 3.2); the server \
+                 bodies are clean, and a node row is unbindable for § 3.3's reason",
+            ),
+        ),
     ];
 
     /// The directory under `benchmarks/package-contract-v2/phase0/` that
@@ -7745,7 +7806,8 @@ mod tests {
             RC9_SIGNALS_AUDIT
             | RC9_PARITY_AUDIT
             | RC9_CORE_WEB_AUDIT
-            | RC9_MERGE_OMIT_MEMO_AUDIT => RC9,
+            | RC9_MERGE_OMIT_MEMO_AUDIT
+            | RC9_SERVER_BUILDS_AUDIT => RC9,
             other => panic!("{other} is not a known audit document"),
         }
     }
@@ -8329,8 +8391,11 @@ mod tests {
         // The 2026-09-28 rc.9 `merge`/`omit`/`createMemo` reading closes 1
         // (`omit`) and withholds 2 (`merge`, and the flat `solid-js`
         // `createMemo`, which its scoped row narrows).
+        // The 2026-09-28 rc.9 server-builds reading closes nothing and
+        // withholds 2 (the flat `solid-js` `createSignal` and `createMemo`
+        // `reads`); its `creates` verdicts restate withholdings counted above.
         assert_eq!(implementation_closed.len(), 8 + 24 + 5 + 19 + 14 + 1);
-        assert_eq!(implementation_withheld.len(), 4 + 5 + 12 + 2);
+        assert_eq!(implementation_withheld.len(), 4 + 5 + 12 + 2 + 2);
         let on = |version: &str| shipped.iter().filter(|(_, v, _, _)| v == version).count();
         assert_eq!((on(RC3), on(RC6), on(RC9)), (45, 24, 24 + 14 + 1));
         assert_eq!(shipped.len(), 93 + 14 + 1);
@@ -8415,6 +8480,69 @@ mod tests {
             assert!(
                 cites_implementation != cites_summary,
                 "{key:?} mixes citation kinds; a row has one authority"
+            );
+        }
+    }
+
+    /// `solid-js@2.0.0-rc.9`'s own `createSignal` and `createMemo` carry no
+    /// `node` row and no host-free row in either domain
+    /// (`RC9_SERVER_BUILDS_AUDIT`): the server builds' `creates` reaches
+    /// `ctx.serialize` under `renderToStream`, and host-free `reads` falls on
+    /// the browser builds' gate read. Pinned by answer, so a future row that
+    /// narrows either export to `node` has to come through that reading.
+    #[test]
+    fn rc9_solid_js_signal_and_memo_carry_no_server_row() {
+        use std::collections::BTreeSet;
+
+        let set = |conditions: &[&str]| {
+            conditions
+                .iter()
+                .map(|condition| (*condition).to_owned())
+                .collect::<BTreeSet<_>>()
+        };
+        let solid_js = archive("solid-js", RC9);
+        let authority = Solid2.negative_claim_authority();
+        for export in ["createSignal", "createMemo"] {
+            for domain in [CallClaimDomain::Creates, CallClaimDomain::Reads] {
+                assert!(
+                    !authority.denies(solid_js, export, domain),
+                    "{export} {domain:?}"
+                );
+                assert!(
+                    !crate::primitive_performs_no_operation(solid_js, export, domain),
+                    "{export} {domain:?}"
+                );
+                for conditions in [
+                    set(&[]),
+                    set(&["import"]),
+                    set(&["import", "node"]),
+                    set(&["development", "import", "node"]),
+                    set(&["import", "node", "observe"]),
+                ] {
+                    assert!(
+                        !crate::some_audit_denies_primitive(
+                            "solid-js",
+                            export,
+                            domain,
+                            &conditions
+                        ),
+                        "{export} {domain:?} proposed under {conditions:?}"
+                    );
+                }
+            }
+            // `reads` has no scoped row at all; `creates` has exactly the
+            // `browser` one, which lists no server file.
+            assert!(crate::host_target_row(solid_js, export, CallClaimDomain::Reads).is_none());
+            let scope = crate::host_target_row(solid_js, export, CallClaimDomain::Creates)
+                .unwrap_or_else(|| panic!("{export} keeps its browser-scoped creates row"));
+            assert_eq!(scope.condition, HostTargetCondition::Browser);
+            assert!(
+                scope
+                    .runtime
+                    .iter()
+                    .all(|file| !file.starts_with("dist/server")),
+                "{export}'s scoped row lists a server build: {:?}",
+                scope.runtime
             );
         }
     }
