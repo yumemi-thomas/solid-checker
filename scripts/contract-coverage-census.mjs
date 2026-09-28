@@ -145,6 +145,13 @@ export function censusTarget(run) {
   // would read a change of artifact as a change of coverage -- the same
   // mistake the cross-major refusal above exists to prevent. Measure with it
   // freely; pin without it.
+  // A host run (ADR 0140) is the same: every case carries the host condition.
+  if (run?.scope?.host) {
+    fail(
+      `this run certified for the ${run.scope.host} host, so it is certified about different ` +
+        "bytes than the pinned baseline; re-run without --host to pin"
+    );
+  }
   const conditions = run?.scope?.conditions ?? [];
   if (conditions.length) {
     fail(

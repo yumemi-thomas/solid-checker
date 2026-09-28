@@ -979,6 +979,7 @@ function describeScope(scope) {
   if (scope.probeIds?.length) filters.push(`${scope.probeIds.length} exact probe id(s)`);
   if (scope.packages?.length) filters.push(`packages ${scope.packages.join(", ")}`);
   if (scope.conditions?.length) filters.push(`conditions ${scope.conditions.join(", ")}`);
+  if (scope.host) filters.push(`host ${scope.host}`);
   if (scope.consumerEnvironment) {
     filters.push(`consumer environment ${scope.consumerEnvironment} (delivery only, not a census run)`);
   }
@@ -1089,6 +1090,7 @@ export function buildReport({
       // refusals silently. Written only when set, so an unconditioned corpus
       // run's report is unchanged byte for byte.
       ...(scope?.conditions?.length ? { conditions: scope.conditions } : {}),
+      ...(scope?.host ? { host: scope.host } : {}),
       ...(scope?.consumerEnvironment ? { consumerEnvironment: scope.consumerEnvironment } : {}),
       includeSupplemental: scope?.includeSupplemental ?? false,
       probesRun: everyResult.length

@@ -543,6 +543,7 @@ export function runScope({
   probeIds = [],
   packages = [],
   conditions = [],
+  host = null,
   includeSupplemental = false,
   consumerEnvironment = null
 } = {}) {
@@ -556,6 +557,9 @@ export function runScope({
   // filter does, and the scope carries the set so a pin cannot silently claim
   // a denominator the run did not use.
   for (const condition of [...conditions].sort()) filters.push(`cond-${condition}`);
+  // A host certification (ADR 0140) is the same kind of artifact change: every
+  // case carries the host condition and resolves that host's closure.
+  if (host) filters.push(`host-${host}`);
   // A consumer-environment run certifies rows cloned into one real consumer's
   // installed tree (lib/consumer-environments.mjs), not manifest probes. It is a
   // delivery run: the census refuses it as a measurement, so the scope has to
@@ -579,6 +583,7 @@ export function runScope({
     solidTargets: [...solidTargets].sort(),
     probeIds: [...probeIds].sort(),
     conditions: [...conditions].sort(),
+    ...(host ? { host } : {}),
     ...(packages.length ? { packages: [...packages].sort() } : {}),
     ...(consumerEnvironment ? { consumerEnvironment } : {}),
     includeSupplemental,
@@ -1809,6 +1814,13 @@ function usage() {
                          which bytes every row is certified about, so the run's
                          scope records it, it earns its own report path, and
                          the coverage census refuses to pin a run that used one
+  --host <browser|node>  certify every row for one host (ADR 0140): generation
+                         and certification both receive --host, so every
+                         artifact case carries the host condition while the
+                         package's other condition axes are still enumerated.
+                         A consumer receives such a case only when it declares
+                         that host. Like --conditions, it earns its own report
+                         path and the coverage census refuses to pin it
   --consumer-environment <ID>
                          a delivery run: certify, instead of the manifest's
                          probes, one probe per package of the reviewed
@@ -1866,6 +1878,7 @@ function parseArgs(argv) {
     recoverProbeIds: [],
     probeRecipeCorpus: null,
     conditions: [],
+    host: null,
     consumerEnvironment: null,
     printConsumerEnvironments: false,
     keepTemp: false,
@@ -1966,6 +1979,14 @@ function parseArgs(argv) {
             ...value.split(",").map(item => item.trim()).filter(Boolean)
           );
         }
+        break;
+      }
+      case "--host": {
+        const value = takeValue(argv, index++, arg);
+        if (value !== undefined && !["browser", "node"].includes(value)) {
+          errors.push(`--host ${JSON.stringify(value)}: expected browser or node`);
+        }
+        options.host = value ?? null;
         break;
       }
       case "--consumer-environment":
@@ -2118,7 +2139,8 @@ function buildRealHooks({
   installLockfileCache = null,
   materializedStore = null,
   probeRecipeCorpus = null,
-  conditions = []
+  conditions = [],
+  host = null
 }) {
   // Generation and certification run inside a pool of long-lived CLI workers
   // (lib/cli-worker.mjs) instead of one CLI process per probe and phase. The
@@ -2225,6 +2247,7 @@ function buildRealHooks({
           // place, and generation and certification must be handed the same
           // set or the proposal describes bytes the certification did not read.
           ...(conditions.length ? ["--conditions", conditions.join(",")] : []),
+          ...(host ? ["--host", host] : []),
           ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])
         ],
         env: generationEnvironment,
@@ -2282,6 +2305,7 @@ function buildRealHooks({
           // of certifying it unvetoed.
           ...(probeRecipeCorpus ? ["--probe-recipe-corpus", probeRecipeCorpus] : []),
           ...(conditions.length ? ["--conditions", conditions.join(",")] : []),
+          ...(host ? ["--host", host] : []),
           ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])
         ],
         env: certificationEnvironment,
@@ -2411,6 +2435,7 @@ async function main(argv = process.argv.slice(2)) {
     solidTargets: options.solidTargets,
     probeIds: options.probeIds,
     conditions: options.conditions,
+    host: options.host,
     includeSupplemental: options.includeSupplemental,
     consumerEnvironment: options.consumerEnvironment
   });
@@ -2504,7 +2529,8 @@ async function main(argv = process.argv.slice(2)) {
     probeRecipeCorpus: options.probeRecipeCorpus
       ? resolve(options.probeRecipeCorpus)
       : null,
-    conditions: options.conditions
+    conditions: options.conditions,
+    host: options.host
   });
   const scheduleCosts = historicalScheduleCosts();
 

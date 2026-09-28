@@ -424,23 +424,37 @@ contract-coverage-census: build-checker-release
 # measurement to read the certified catalogs, then --clean-retained removes
 # them; pass CERTIFICATION_METRIC_KEEP=1 to keep them for investigation.
 # Same flags as the census run; not in `make verify` (registry, minutes).
+#
+# ADR 0140: the corpus is certified once host-free (`run.json`, `metric.json`,
+# what a consumer that declares no host receives) and once per host in
+# CERTIFICATION_METRIC_HOSTS (`run-<host>.json`, `metric-<host>.json`, what a
+# consumer declaring that host receives); `metric-hosts.md` puts them side by
+# side. Pass CERTIFICATION_METRIC_HOSTS= to measure the host-free run alone.
 CERTIFICATION_METRIC_OUT := $(CURDIR)/rust/target/certification-metric
+CERTIFICATION_METRIC_HOSTS ?= browser node
 
 certification-metric: build-checker-release
 	mkdir -p "$(CERTIFICATION_METRIC_OUT)"
 	@probes="$$($(BUN) scripts/certification-metric.mjs --print-probes)" || exit 1; \
-	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
-	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
-	  $(BUN) scripts/ecosystem-benchmark/run.mjs --solid 2 --timeout 1800 \
-	  --attempt-certification --recover-entrypoints \
-	  --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" --keep-temp \
-	  $$(printf '%s\n' "$$probes" | sed 's/^/--probe /' | tr '\n' ' ') \
-	  --json "$(CERTIFICATION_METRIC_OUT)/run.json" \
-	  --markdown "$(CERTIFICATION_METRIC_OUT)/run.md"
-	$(BUN) scripts/certification-metric.mjs --run "$(CERTIFICATION_METRIC_OUT)/run.json" \
-	  --json "$(CERTIFICATION_METRIC_OUT)/metric.json" \
-	  --markdown "$(CERTIFICATION_METRIC_OUT)/metric.md" \
-	  $(if $(CERTIFICATION_METRIC_KEEP),,--clean-retained)
+	summary=""; \
+	for host in none $(CERTIFICATION_METRIC_HOSTS); do \
+	  if [ "$$host" = none ]; then suffix=""; hostflag=""; else suffix="-$$host"; hostflag="--host $$host"; fi; \
+	  SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
+	    SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
+	    $(BUN) scripts/ecosystem-benchmark/run.mjs --solid 2 --timeout 1800 \
+	    --attempt-certification --recover-entrypoints \
+	    --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" --keep-temp $$hostflag \
+	    $$(printf '%s\n' "$$probes" | sed 's/^/--probe /' | tr '\n' ' ') \
+	    --json "$(CERTIFICATION_METRIC_OUT)/run$$suffix.json" \
+	    --markdown "$(CERTIFICATION_METRIC_OUT)/run$$suffix.md" || exit 1; \
+	  $(BUN) scripts/certification-metric.mjs --run "$(CERTIFICATION_METRIC_OUT)/run$$suffix.json" \
+	    --json "$(CERTIFICATION_METRIC_OUT)/metric$$suffix.json" \
+	    --markdown "$(CERTIFICATION_METRIC_OUT)/metric$$suffix.md" \
+	    $(if $(CERTIFICATION_METRIC_KEEP),,--clean-retained) > /dev/null || exit 1; \
+	  summary="$$summary$${summary:+,}$(CERTIFICATION_METRIC_OUT)/metric$$suffix.json"; \
+	done; \
+	$(BUN) scripts/certification-metric.mjs --summarize-hosts "$$summary" \
+	  --markdown "$(CERTIFICATION_METRIC_OUT)/metric-hosts.md"
 
 .PHONY: certification-metric
 

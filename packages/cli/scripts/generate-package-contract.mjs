@@ -381,6 +381,9 @@ Options:
   --integrity <SRI>      Exact installed package tarball integrity (required)
   --entrypoint <SUBPATH> Exact exported subpath (repeatable; default: all finite subpaths)
   --conditions <LIST>    Exact runtime conditions, e.g. browser,development
+  --host <browser|node>  Certify for one host (ADR 0140): every artifact case
+                         carries the host condition, and the other condition
+                         axes are enumerated as usual
   -h, --help             Show this help
 `;
 
@@ -391,6 +394,7 @@ function parseArguments(arguments_) {
     integrity: "",
     entrypoints: [],
     conditions: [],
+    host: null,
     certificationImporter: ""
   };
   for (let index = 0; index < arguments_.length; index += 1) {
@@ -408,6 +412,8 @@ function parseArguments(arguments_) {
     else if (key === "--entrypoint") options.entrypoints.push(value);
     else if (key === "--conditions") {
       options.conditions.push(...value.split(",").map(item => item.trim()).filter(Boolean));
+    } else if (key === "--host") {
+      options.host = certificationHost(value);
     } else if (key === "--certification-importer") {
       options.certificationImporter = resolve(value);
     } else {
@@ -585,8 +591,48 @@ function specifierFor(packageName, entrypoint) {
 // standard condition vocabulary; both read the resolver's lists.
 const mutuallyExclusiveConditionAxes = MUTUALLY_EXCLUSIVE_CONDITION_AXES;
 
-export function finiteConditionPartitions(manifest, requested) {
-  if (requested.length) return [[...new Set(requested)].sort()];
+/// The hosts a package is certified for, one certification each (ADR 0140).
+/// The first axis of `MUTUALLY_EXCLUSIVE_CONDITION_AXES` is the host axis;
+/// `deno` and `worker` are on it too, but nothing certifies for them, so a
+/// consumer declaring one receives no host case.
+export const CERTIFICATION_HOSTS = Object.freeze(["browser", "node"]);
+const HOST_AXIS = mutuallyExclusiveConditionAxes[0];
+
+/// The host a certification is scoped to, or `null` for the host-free
+/// certification (`--host` absent). Refuses anything but a certified host.
+export function certificationHost(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (!CERTIFICATION_HOSTS.includes(value)) {
+    throw new Error(
+      `--host ${JSON.stringify(value)} is not a certified host; expected one of ${CERTIFICATION_HOSTS.join(", ")}`
+    );
+  }
+  return value;
+}
+
+/// The finite condition partitions an artifact-case census enumerates.
+///
+/// `host` (ADR 0140) fixes the host axis for the whole certification: every
+/// partition carries exactly that host condition, including where the
+/// package's own `exports` map never names it, because the closure it
+/// resolves (`solid-js`' own `exports` map, any dependency's) does. The other
+/// axes are enumerated exactly as without a host. An explicit `requested` list
+/// stays exact; with a host it must not name another host, and gains `host`.
+export function finiteConditionPartitions(manifest, requested, host = null) {
+  host = certificationHost(host);
+  if (requested.length) {
+    const exact = new Set(requested);
+    if (host !== null) {
+      const other = [...exact].filter(condition => HOST_AXIS.includes(condition) && condition !== host);
+      if (other.length) {
+        throw new Error(
+          `--conditions ${[...exact].sort().join(",")} names host ${other.join(", ")}, which --host ${host} excludes`
+        );
+      }
+      exact.add(host);
+    }
+    return [[...exact].sort()];
+  }
   const conditions = new Set();
   const visit = value => {
     if (Array.isArray(value)) {
@@ -606,6 +652,7 @@ export function finiteConditionPartitions(manifest, requested) {
   const grouped = new Set(mutuallyExclusiveConditionAxes.flat());
   const axes = [
     ...mutuallyExclusiveConditionAxes
+      .filter(axis => host === null || axis !== HOST_AXIS)
       .map(axis => axis.filter(condition => conditions.has(condition)))
       .filter(axis => axis.length > 0)
       .map(axis => [null, ...axis]),
@@ -617,7 +664,7 @@ export function finiteConditionPartitions(manifest, requested) {
       `package exports select ${partitionCount} valid condition partitions; pass an exact --conditions list because the finite partition would exceed 256 cases`
     );
   }
-  let partitions = [[]];
+  let partitions = [host === null ? [] : [host]];
   for (const axis of axes) {
     partitions = partitions.flatMap(partition =>
       axis.map(condition => condition === null ? partition : [...partition, condition])
@@ -860,6 +907,7 @@ function writeCertificationInputs(output, plan, {
   certificationImporter,
   entrypoints,
   conditions,
+  host = null,
   certificationInputs,
   inapplicableCases = []
 }) {
@@ -876,6 +924,9 @@ function writeCertificationInputs(output, plan, {
         certificationImporter: certificationImporter || null,
         entrypoints,
         conditions,
+        // ADR 0140: which host the cases were enumerated for. Absent for the
+        // host-free certification, so its inputs keep their former bytes.
+        ...(host ? { host } : {}),
         document: { path: output, sha256: digest(output) },
         plan: { path: plan, sha256: digest(plan) },
         certificationInputs,
@@ -1308,7 +1359,7 @@ export async function generatePackageContract(
   }
   const censusStartedAt = performance.now();
   const partitions = exactConditions === null
-    ? finiteConditionPartitions(manifest, options.conditions)
+    ? finiteConditionPartitions(manifest, options.conditions, options.host)
     : [[...new Set(exactConditions)].sort()];
   const {
     entrypoints,
@@ -1705,6 +1756,7 @@ export async function generatePackageContract(
     certificationImporter: options.certificationImporter,
     entrypoints: options.entrypoints,
     conditions: options.conditions,
+    host: options.host,
     certificationInputs: result.certificationInputs,
     inapplicableCases: result.inapplicableCases
   });

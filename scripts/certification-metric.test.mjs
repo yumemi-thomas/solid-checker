@@ -12,6 +12,7 @@ import {
   measureRow,
   packageOfPath,
   rankWalls,
+  renderHostSummary,
   selectCorpus,
   surfaceOf,
   unlockCurve
@@ -325,4 +326,20 @@ test("the unlock curve adds the class that leaves the most exports with no remai
     ["a", 1, 3],
     ["b", 3, 3]
   ]);
+});
+
+// ADR 0140: each host is its own measurement; the summary sets them side by
+// side and names the host-free run "none".
+test("the per-host summary lists every host measurement with its dialect-silent class", () => {
+  const measured = (host, clean, silent) => ({
+    host,
+    headline: { perPackage: 0.1, byDownloads: 0.2, pooled: clean / 10, cleanExports: clean, exports: 10 },
+    totals: { clean, partial: 10 - clean, degenerate: 0, uncertified: 0, misuseCapable: 1 },
+    classes: [{ class: "dialect-silent", exports: silent }],
+    walls: [{ class: "dialect-silent", key: "solid-js:createSignal", exports: silent, packages: ["a", "b"] }]
+  });
+  const markdown = renderHostSummary([measured(null, 1, 4), measured("browser", 3, 1)]);
+  assert.match(markdown, /\| none \| 10\.0% \| 20\.0% \| 1 \(10\.0%\) \| 10 \| 1 \/ 9 \/ 0 \/ 0 \| 4 \| 1 \|/);
+  assert.match(markdown, /\| browser \| 10\.0% \| 20\.0% \| 3 \(30\.0%\) \| 10 \| 3 \/ 7 \/ 0 \/ 0 \| 1 \| 1 \|/);
+  assert.match(markdown, /\| browser \| solid-js:createSignal \| 1 \| 2 \|/);
 });

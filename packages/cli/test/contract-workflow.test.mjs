@@ -2745,6 +2745,38 @@ test("condition census enumerates compatible axes without contradictory cases", 
   ));
 });
 
+// ADR 0140: a host certification fixes the host axis for every partition --
+// including where the package's own map names no host, because its closure
+// (`solid-js`) does -- and enumerates the other axes exactly as before.
+test("a host certification carries its host in every partition and keeps the other axes", () => {
+  const manifest = {
+    exports: {
+      ".": {
+        browser: { development: "./browser-dev.js", production: "./browser.js" },
+        node: "./node.js",
+        solid: "./index.jsx",
+        default: "./index.js"
+      }
+    }
+  };
+  const hostFree = finiteConditionPartitions(manifest, []);
+  const browser = finiteConditionPartitions(manifest, [], "browser");
+  assert.ok(browser.every(partition => partition.includes("browser")));
+  assert.ok(browser.every(partition => !partition.includes("node")));
+  // The host axis is gone, every other axis survives: 3 (build) x 2 (solid).
+  assert.equal(browser.length, 6);
+  assert.deepEqual(browser[0], ["browser"]);
+  assert.ok(browser.some(partition => JSON.stringify(partition) === JSON.stringify(["browser", "development", "solid"])));
+  assert.equal(hostFree.length, 18);
+  // A map with no host key still carries the host.
+  assert.deepEqual(finiteConditionPartitions({ exports: { ".": "./index.js" } }, [], "node"), [["node"]]);
+  assert.deepEqual(finiteConditionPartitions({ exports: { ".": "./index.js" } }, []), [[]]);
+  // An explicit list stays exact and gains the host; another host refuses.
+  assert.deepEqual(finiteConditionPartitions(manifest, ["development"], "browser"), [["browser", "development"]]);
+  assert.throws(() => finiteConditionPartitions(manifest, ["node"], "browser"), /names host node/);
+  assert.throws(() => finiteConditionPartitions(manifest, [], "deno"), /not a certified host/);
+});
+
 test("a merge contradiction refuses only its exact artifact candidate", async () => {
   const candidates = ["known-a", "contradictory-b", "known-c"].map(entrypoint => ({
     entrypoint
@@ -4201,6 +4233,10 @@ test("an emitted proposal is refused for reuse on any parameter or byte mismatch
     attempt({ inputs: { package: { name: "root-package", version: "1.0.1" } } }, "version differs");
     attempt({ current: { entrypoints: ["./extra"] } }, "entrypoint census differs");
     attempt({ current: { conditions: ["solid"] } }, "conditions differ");
+    // ADR 0140: a host-free proposal is not a browser certification's, nor
+    // the other way round.
+    attempt({ current: { host: "browser" } }, "host requested, proposal host-free");
+    attempt({ inputs: { host: "node" } }, "proposal certified for another host");
     attempt(
       { current: { certificationImporter: join(dirname(importer), ".solid-checker-certification-ffff.mjs") } },
       "importer differs"

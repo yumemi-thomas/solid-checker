@@ -9,6 +9,8 @@
 //   bun scripts/certification-metric.mjs --print-probes         probe ids, one per line
 //   bun scripts/certification-metric.mjs --run <run.json> [--json <out>] [--markdown <out>]
 //                                        [--clean-retained] [--corpus <file>]
+//   bun scripts/certification-metric.mjs --summarize-hosts <metric.json,...> [--markdown <out>]
+//                                        one row per host measurement (ADR 0140)
 //
 // `make certification-metric` runs the ecosystem benchmark's certification
 // pipeline over exactly the corpus probes and then this script's measurement.
@@ -864,6 +866,9 @@ export function measure({ run, corpus, rows, demandRows = [] }) {
     format: "solid-checker-certification-metric",
     metricVersion: 2,
     run: { startedAt: run.startedAt ?? null, finishedAt: run.finishedAt ?? null, durationMs: run.durationMs ?? null },
+    // ADR 0140: the host every case of the run was certified for, or null for
+    // the host-free certification. Each host is its own measurement.
+    host: run.scope?.host ?? null,
     corpus: { measuredOn: corpus.measuredOn, packages: corpus.packages.length },
     missingProbes: missing,
     headline: headline(packages),
@@ -896,6 +901,12 @@ export function renderMarkdown(result) {
   lines.push("# Certification metric");
   lines.push("");
   lines.push(`Run ${result.run.startedAt ?? "?"} .. ${result.run.finishedAt ?? "?"}, harness wall ${Math.round((result.run.durationMs ?? 0) / 1000)} s. Corpus pinned ${result.corpus.measuredOn}, ${result.corpus.packages} packages.`);
+  lines.push("");
+  lines.push(
+    result.host
+      ? `Host: **${result.host}** (ADR 0140). Every case carries the \`${result.host}\` condition, so these answers reach only a consumer that declares that host.`
+      : "Host: none (the host-free certification, what a consumer that declares no host receives; ADR 0140)."
+  );
   lines.push("");
   lines.push(`- exports certified clean, per-package mean: **${percent(head.perPackage)}**`);
   lines.push(`- exports certified clean, weighted by weekly downloads: **${percent(head.byDownloads)}**`);
@@ -1096,18 +1107,52 @@ async function select(size, corpusPath, downloadsFile = null) {
   console.log(`pinned ${packages.length} packages to ${corpusPath}`);
 }
 
+/// One row per host measurement (ADR 0140): the headline, the buckets, and
+/// the dialect-silent class, side by side. `results` are `measure()` outputs.
+export function renderHostSummary(results) {
+  const lines = [];
+  lines.push("# Certification metric, per host");
+  lines.push("");
+  lines.push("Each host is its own certification of the same 30 packages (ADR 0140); a consumer receives the cases of the host it declares, and a consumer that declares none receives the host-free ones.");
+  lines.push("");
+  lines.push("| host | clean, per-package mean | clean, by downloads | clean, pooled | exports | clean / partial / degenerate / uncertified | dialect-silent exports | misuse-capable |");
+  lines.push("| --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |");
+  for (const result of results) {
+    const head = result.headline;
+    const totals = result.totals;
+    const silent = (result.classes ?? []).find(entry => entry.class === "dialect-silent")?.exports ?? 0;
+    lines.push(
+      `| ${result.host ?? "none"} | ${percent(head.perPackage)} | ${percent(head.byDownloads)} | ${head.cleanExports} (${percent(head.pooled)}) | ${head.exports} | ${totals.clean} / ${totals.partial} / ${totals.degenerate} / ${totals.uncertified} | ${silent} | ${totals.misuseCapable} |`
+    );
+  }
+  lines.push("");
+  lines.push("## Dialect-silent walls by host");
+  lines.push("");
+  lines.push("| host | wall | exports blocked | packages |");
+  lines.push("| --- | --- | ---: | ---: |");
+  for (const result of results) {
+    for (const wall of (result.walls ?? []).filter(entry => entry.class === "dialect-silent")) {
+      const packages = Array.isArray(wall.packages) ? wall.packages.length : wall.packages;
+      lines.push(`| ${result.host ?? "none"} | ${wall.key} | ${wall.exports} | ${packages} |`);
+    }
+  }
+  lines.push("");
+  return `${lines.join("\n")}\n`;
+}
+
 // ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
 
 function parseArguments(argv) {
-  const options = { select: false, printProbes: false, run: null, json: null, markdown: null, cleanRetained: false, size: 30, corpus: CORPUS_PATH, downloads: null };
+  const options = { select: false, printProbes: false, run: null, json: null, markdown: null, cleanRetained: false, size: 30, corpus: CORPUS_PATH, downloads: null, summarizeHosts: null };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--select") options.select = true;
     else if (argument === "--print-probes") options.printProbes = true;
     else if (argument === "--clean-retained") options.cleanRetained = true;
     else if (argument === "--run") options.run = argv[++index];
+    else if (argument === "--summarize-hosts") options.summarizeHosts = argv[++index].split(",").map(path => resolve(path));
     else if (argument === "--json") options.json = argv[++index];
     else if (argument === "--markdown") options.markdown = argv[++index];
     else if (argument === "--size") options.size = Number(argv[++index]);
@@ -1125,6 +1170,12 @@ async function main() {
   const options = parseArguments(process.argv.slice(2));
   if (options.select) {
     await select(options.size, options.corpus, options.downloads);
+    return;
+  }
+  if (options.summarizeHosts) {
+    const markdown = renderHostSummary(options.summarizeHosts.map(path => JSON.parse(readFileSync(path, "utf8"))));
+    if (options.markdown) writeFileSync(resolve(options.markdown), markdown);
+    console.log(markdown);
     return;
   }
   const corpus = JSON.parse(readFileSync(options.corpus, "utf8"));

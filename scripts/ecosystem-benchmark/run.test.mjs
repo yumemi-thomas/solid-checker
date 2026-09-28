@@ -1366,6 +1366,23 @@ test("a requested export-condition set is part of the scope, not a filter over r
   );
 });
 
+// ADR 0140: a host certification is the same kind of artifact change, so it
+// leaves the same trace -- a recorded host, a filtered kind, its own path.
+test("a host certification is part of the scope, not a filter over rows", () => {
+  const browser = runScope({ solidTargets: ["2"], host: "browser" });
+  assert.equal(browser.kind, "filtered");
+  assert.equal(browser.host, "browser");
+  assert.equal(runScope({}).host, undefined);
+  assert.notEqual(
+    defaultReportPaths(browser, "/reports").json,
+    defaultReportPaths(runScope({ solidTargets: ["2"], host: "node" }), "/reports").json
+  );
+  assert.notEqual(
+    defaultReportPaths(browser, "/reports").json,
+    defaultReportPaths(runScope({ solidTargets: ["2"] }), "/reports").json
+  );
+});
+
 // ---------------------------------------------------------------------------
 // Lane routing: which proposal lane a probe asks certification for, and which
 // one the audit says produced the proposal.

@@ -67,6 +67,7 @@ import {
   CERTIFICATION_INPUTS_FORMAT,
   REFUSAL_CLASSES,
   artifactCaseDisposition,
+  certificationHost,
   declaredApplicabilityClaims,
   finiteArtifactCandidates,
   finiteConditionPartitions,
@@ -107,6 +108,9 @@ Options:
   --registry-origin <URL> Exact HTTPS registry origin (default: npm registry)
   --entrypoint <SUBPATH>  Exact exported subpath (repeatable)
   --conditions <LIST>     Exact runtime conditions, comma-separated
+  --host <browser|node>   Certify for one host (ADR 0140): every artifact case
+                          carries the host condition, so the contract applies
+                          only to a consumer that declares that host
   --proposal-refusal-audit <FILE>
                           Reuse a complete current dependency-refusal census
                           after authenticated artifact acquisition
@@ -426,6 +430,7 @@ export function parseCertifyArguments(arguments_) {
     registryOrigin: "https://registry.npmjs.org",
     entrypoints: [],
     conditions: [],
+    host: null,
     proposalRefusalAudit: "",
     proposal: "",
     dependencyGraphLane: false,
@@ -462,7 +467,8 @@ export function parseCertifyArguments(arguments_) {
     else if (key === "--entrypoint") options.entrypoints.push(value);
     else if (key === "--conditions") {
       options.conditions.push(...value.split(",").map(item => item.trim()).filter(Boolean));
-    } else if (key === "--audit-output") options.auditOutput = value;
+    } else if (key === "--host") options.host = certificationHost(value);
+    else if (key === "--audit-output") options.auditOutput = value;
     else if (key === "--proposal-refusal-audit") options.proposalRefusalAudit = value;
     else if (key === "--proposal") options.proposal = value;
     else if (key === "--probe-recipe-corpus") options.probeRecipeCorpus = value;
@@ -1514,7 +1520,8 @@ export function isReusableDependencyRefusalAudit({
   integrity,
   certificationImporter,
   entrypoints = [],
-  conditions = []
+  conditions = [],
+  host = null
 }) {
   if (
     audit?.format !== "solid-checker-contract-proposal-refusals" ||
@@ -1544,7 +1551,7 @@ export function isReusableDependencyRefusalAudit({
     candidates = finiteArtifactCandidates(
       manifest,
       currentEntrypoints.entrypoints,
-      finiteConditionPartitions(manifest, conditions),
+      finiteConditionPartitions(manifest, conditions, host),
       packageRoot
     ).filter(candidate =>
       // Re-derived here rather than read from the untrusted audit: a case the
@@ -1763,7 +1770,8 @@ export function reusableProposalInputs({
   integrity,
   certificationImporter,
   entrypoints = [],
-  conditions = []
+  conditions = [],
+  host = null
 }) {
   const digest = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
   const sameList = (left, right) =>
@@ -1787,6 +1795,9 @@ export function reusableProposalInputs({
     !samePathIdentity(inputs.certificationImporter, certificationImporter) ||
     !sameList(inputs?.entrypoints, entrypoints) ||
     !sameList(inputs?.conditions, conditions) ||
+    // ADR 0140: a proposal enumerated for another host (or for none) describes
+    // other cases and another closure.
+    (inputs?.host ?? null) !== (host ?? null) ||
     inputs?.document?.sha256 !== digest(documentBytes) ||
     inputs?.plan?.sha256 !== digest(planBytes) ||
     !Array.isArray(inputs?.certificationInputs) ||
@@ -1801,7 +1812,7 @@ export function reusableProposalInputs({
     const candidates = finiteArtifactCandidates(
       manifest,
       current.entrypoints,
-      finiteConditionPartitions(manifest, conditions),
+      finiteConditionPartitions(manifest, conditions, host),
       packageRoot
     ).map(candidate => ({
       ...candidate,
@@ -4285,7 +4296,8 @@ function reuseEmittedProposal({ options, manifest, certificationImporter, propos
     integrity: options.integrity,
     certificationImporter,
     entrypoints: options.entrypoints,
-    conditions: options.conditions
+    conditions: options.conditions,
+    host: options.host
   });
   if (!admitted) return null;
   writeFileSync(proposalOutput, documentBytes);
@@ -4408,6 +4420,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
           if (options.conditions.length) {
             generationArguments.push("--conditions", options.conditions.join(","));
           }
+          if (options.host) generationArguments.push("--host", options.host);
           if (options.proposalRefusalAudit && !options.recoverEntrypoints) {
             // Retain the exact bytes that were parsed and validated. Re-reading
             // the path for the scratch copy would let a concurrent replacement
@@ -4419,7 +4432,8 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
               integrity: options.integrity,
               certificationImporter,
               entrypoints: options.entrypoints,
-              conditions: options.conditions
+              conditions: options.conditions,
+              host: options.host
             });
             if (existingAuditBytes) {
               // The authenticated archive has already been acquired by the
