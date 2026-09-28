@@ -3030,6 +3030,49 @@ test("root certification names only the declaration-only packages the lockfile s
   }
 });
 
+test("root certification also supplies what a source package's runtime imports", async () => {
+  // `@solidjs/web@2.0.0-rc.9`'s node build imports `seroval`, which no
+  // declaration reaches. Without it the probe worker cannot load the package
+  // under test. A runtime-only package is lock-selected and acquired like any
+  // other source; one that is not installed is skipped, never withheld, so it
+  // cannot poison a name the declarations need or unstate the environment.
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-runtime-sources-"));
+  try {
+    writeRootSourceInstall(project, { lockedNames: ["alpha", "beta", "gamma"] });
+    writeFileSync(
+      join(project, "node_modules/alpha/dist/index.js"),
+      'import "gamma";\nimport "not-installed";\nexport {};\n'
+    );
+    mkdirSync(join(project, "node_modules/gamma/dist"), { recursive: true });
+    writeFileSync(
+      join(project, "node_modules/gamma/package.json"),
+      '{"name":"gamma","version":"1.0.0","exports":{".":"./dist/index.js"}}\n'
+    );
+    writeFileSync(join(project, "node_modules/gamma/dist/index.js"), "export const g = 1;\n");
+    const scratch = join(project, "scratch");
+    mkdirSync(scratch, { recursive: true });
+    const archive = new TextEncoder().encode("not a real tarball").buffer;
+    const { sourcesByInput, environmentNotAcquired } =
+      await acquireRootCompilerSourcesWithEnvironment({
+        options: {
+          packageRoot: join(project, "node_modules/root-package"),
+          registryOrigin: "https://registry.npmjs.org",
+          integrity: "sha512-root-package"
+        },
+        generated: rootSourceGenerated(project),
+        scratch,
+        fetch_: registryStub({ alpha: { archive }, beta: { archive }, gamma: { archive } })
+      });
+    assert.deepEqual(
+      sourcesByInput[0].map(source => source.packageName).sort(),
+      ["alpha", "beta", "gamma"]
+    );
+    assert.equal(environmentNotAcquired, null);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
 test("repeated root source acquisition preserves identities without reusing scratch files", async () => {
   const project = mkdtempSync(join(tmpdir(), "solid-checker-root-source-retries-"));
   try {

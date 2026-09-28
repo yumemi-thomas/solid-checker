@@ -1224,7 +1224,19 @@ function createCompilerSourceCollector({
   // is not installed (an absent optional peer). Nothing is supplied for it,
   // which is fail-closed for the proof; the caller decides what it means for
   // the stated environment.
-  onUnlocated = null
+  onUnlocated = null,
+  // Also follow each source package's *runtime* imports under the case's
+  // conditions, so the probe workspace carries what that runtime loads. Node's
+  // `node` condition selects `@solidjs/web`'s `dist/server.js`, which imports
+  // `seroval` and `seroval-plugins`; neither is reached through declarations,
+  // so a probe importing the package under test failed with
+  // `ERR_MODULE_NOT_FOUND` before any gate could run. A runtime-only package
+  // is supplied exactly like any other source (lock-selected, archive
+  // integrity-checked), but it is never evidence the proof relies on: one that
+  // cannot be located or named is skipped rather than withheld, because
+  // withholding poisons a name the declarations may still need, and a missing
+  // runtime package already fails its probe closed.
+  followRuntimeDependencies = false
 }) {
   const sourceArtifacts = new Map();
   const compilerSourceClosures = new Map();
@@ -1397,6 +1409,38 @@ function createCompilerSourceCollector({
       throw error;
     }
     const transitive = [source];
+    if (followRuntimeDependencies) {
+      const declared = new Set(
+        closure.externalDependencies
+          .filter(dependency => dependency.axis === "declarations")
+          .map(dependency => packageNameOfSpecifier(dependency.specifier))
+      );
+      for (const dependency of closure.externalDependencies.filter(
+        dependency =>
+          dependency.axis === "runtime" &&
+          !declared.has(packageNameOfSpecifier(dependency.specifier))
+      )) {
+        let child;
+        try {
+          child = locateExternalFrom(closure.packageRoot, dependency);
+        } catch {
+          continue;
+        }
+        if (!child) continue;
+        try {
+          transitive.push(
+            ...await collectCompilerSources(
+              child,
+              sourceConditions,
+              semanticRoots,
+              nextVisiting
+            )
+          );
+        } catch {
+          continue;
+        }
+      }
+    }
     for (const dependency of closure.externalDependencies.filter(
       dependency => dependency.axis === "declarations"
     )) {
@@ -3589,7 +3633,8 @@ export async function acquireRootCompilerSourcesWithEnvironment({
     scratchPrefix: "root",
     onUnnameable: (name, error) =>
       withhold(name, error instanceof Error ? error.message : String(error ?? "unnameable")),
-    onUnlocated: name => notAcquired(`${name} is reached by the closure but is not installed`)
+    onUnlocated: name => notAcquired(`${name} is reached by the closure but is not installed`),
+    followRuntimeDependencies: true
   });
   const perInput = [];
   for (const { input, conditions, resolved } of perInputResolution) {
