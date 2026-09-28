@@ -513,6 +513,30 @@ primitives-checkpoint: build-checker-release
 
 .PHONY: primitives-checkpoint
 
+# The primary package-contract metric (owner decision 2026-09-28): of the
+# third-party import sites of real Solid 2 applications, the share the checker
+# certifies, per app, pooled and per package, with every other site ranked by
+# what blocks it. The corpus is pinned in
+# scripts/ecosystem-benchmark/app-import-corpus.json (re-pin with
+# `bun scripts/app-import-metric.mjs --pin <draft.json>`). Each app is fetched
+# at its commit, installed frozen with scripts off (reused while the lockfile
+# digest is unchanged), and analysed one-shot with the release checker as
+# shipped and with --no-bundled-contracts. Pass
+# APP_IMPORT_PACKAGE_METRIC=<metric.json> (a `make certification-metric`
+# output) to join open domains to the package side's causes, and
+# APP_IMPORT_CLEAN=1 to delete the clones afterwards (the extracted sites stay,
+# so `--measure` still works). Network; not in `make verify`.
+APP_IMPORT_METRIC_OUT := $(CURDIR)/rust/target/app-import-metric
+
+app-import-metric: build-checker-release
+	$(BUN) scripts/app-import-metric.mjs --run --work "$(APP_IMPORT_METRIC_OUT)" \
+	  --checker "$(CURDIR)/rust/target/release/solid-checker-rust" \
+	  --typefacts "$(CURDIR)/bin/solid-typefacts" \
+	  $(if $(APP_IMPORT_PACKAGE_METRIC),--package-metric "$(APP_IMPORT_PACKAGE_METRIC)",) \
+	  $(if $(APP_IMPORT_CLEAN),--clean,) > /dev/null
+
+.PHONY: app-import-metric
+
 # Delivery-only certification runs, one per reviewed consumer environment in
 # scripts/ecosystem-benchmark/consumer-environments.json: each certifies the
 # listed packages, cloned from their solid2 manifest rows, in the exact tree
