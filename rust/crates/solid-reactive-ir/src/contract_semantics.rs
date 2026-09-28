@@ -2037,6 +2037,69 @@ pub enum ValueShape {
     ServerFunctionReference {
         resource: Option<ResourceId>,
     },
+    /// ADR 0145: a callable the export hands its caller, **together with what
+    /// one invocation of it does** -- its own call claims, stated exactly.
+    ///
+    /// Exact by construction, like [`ValueShape::ArgumentArray`]: it carries
+    /// no knowledge set and so no closure of its own for a census to decide.
+    /// Stated, it says that one invocation of the value, by whoever holds it,
+    /// invokes no callable it did not itself define -- neither its own
+    /// arguments nor any value the export was handed (`callbacks: []`),
+    /// creates nothing and registers nothing on an owner (`creates: []`),
+    /// performs exactly [`DescribedCall::reads`], and hands back exactly one of
+    /// [`DescribedCall::returns`] (none: it completes without a value). It says
+    /// nothing about the other domains. Where the census cannot establish all
+    /// of that, the `return` stating it is withdrawn and the domain opens: a
+    /// nested claim is never partially stated.
+    ///
+    /// Valid only as the whole output of a `return` operation
+    /// (`validate::normalize_described_callable`).
+    DescribedCallable(Box<DescribedCall>),
+    /// ADR 0146: exactly the value one of the enclosing described callable's
+    /// own [`DescribedCall::reads`] observed, handed back unchanged --
+    /// `() => count()`. Valid only as an item of a described callable's
+    /// `returns` whose `reads` is not empty (`validate::normalize_described_callable`).
+    ReadValue,
+}
+
+/// ADR 0145: what one invocation of a [`ValueShape::DescribedCallable`] does.
+///
+/// Both lists are exact enumerations, canonically sorted and without
+/// duplicates. `returns` admits only exact outputs whose meaning does not
+/// depend on who calls: `plain`, and (ADR 0146) [`ValueShape::ReadValue`].
+/// Every read is performed on the invoking caller's stack, in that caller's
+/// tracking context.
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+pub struct DescribedCall {
+    pub reads: Vec<DescribedRead>,
+    pub returns: Vec<ValueShape>,
+}
+
+/// ADR 0145/0146: one reactive read a described callable performs when it is
+/// invoked.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum DescribedRead {
+    /// ADR 0146: a read of a signal accessor the export's own invocation
+    /// created through a dialect primitive and captured, whose read runs no
+    /// code of anyone's.
+    OwnedSignal,
+}
+
+impl DescribedRead {
+    #[must_use]
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::OwnedSignal => "owned-signal",
+        }
+    }
+
+    #[must_use]
+    pub fn from_wire(value: &str) -> Option<Self> {
+        match value {
+            "owned-signal" => Some(Self::OwnedSignal),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]

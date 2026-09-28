@@ -14889,6 +14889,41 @@ export const value = phantom;
         }
     }
 
+    /// `call` with every described-callable `return` removed and `returns`
+    /// left unknown, and with no other change.
+    fn without_described_callable_returns(
+        call: &solid_reactive_ir::contract_semantics::CallSemantics,
+    ) -> solid_reactive_ir::contract_semantics::CallSemantics {
+        let described = call
+            .operations
+            .iter()
+            .filter(|operation| matches!(operation.output, Some(ValueShape::DescribedCallable(_))))
+            .map(|operation| operation.id.clone())
+            .collect::<Vec<_>>();
+        if described.is_empty() {
+            return call.clone();
+        }
+        let mut claims = call.claims().clone();
+        claims.returns = KnowledgeSet::Unknown;
+        solid_reactive_ir::contract_semantics::CallSemantics::new(
+            claims,
+            call.operations
+                .iter()
+                .filter(|operation| !described.contains(&operation.id))
+                .cloned()
+                .collect(),
+            call.edges.clone(),
+            call.resources.clone(),
+            call.guards.clone(),
+        )
+        .with_proposed_closures(
+            call.proposed_closures()
+                .iter()
+                .copied()
+                .filter(|domain| *domain != ClaimDomain::Returns),
+        )
+    }
+
     fn assert_unknown_callback_fixture(name: &str, unknown: &[&str], forged_exports: &[&str]) {
         let Some(pin) = pinned_producer_for_test() else {
             return;
@@ -14932,6 +14967,16 @@ export const value = phantom;
             .collect::<Vec<_>>();
         for forged in std::iter::once(None).chain(forged_exports.iter().copied().map(Some)) {
             let mut cases = decoded.artifact_cases().to_vec();
+            // ADR 0145: the generated document now also proposes a described
+            // callable for exports that return a literal, and this fixture's
+            // literals invoke the callbacks they captured, which the census
+            // refuses. That claim is not what this test is about, and it is
+            // pinned by the described-callable tracer; it is taken back out,
+            // exactly as the generator stated it before, so the transaction
+            // verifies the callbacks claims alone.
+            for semantics in cases[0].exports.values_mut() {
+                semantics.call = without_described_callable_returns(&semantics.call);
+            }
             for name in unknown {
                 let callbacks = &cases[0].exports[*name].call.claims().callbacks;
                 assert!(!callbacks.is_closed());
@@ -17403,6 +17448,206 @@ export const value = phantom;
         container_returns_fixture_certify("implementation-census-member-returns", &exports, label)
     }
 
+    /// ADR 0145's tracer, `implementation-census-described-callables`, planned
+    /// through the generator's normalization with each export's described
+    /// callables set by hand: the walk's own answer for every export but
+    /// `makeSilent`, which is claimed `returns: [plain]` where its literal
+    /// completes without a value. Every other domain stays open, so the only
+    /// candidates are the `returns` closures under test, and no hand recipe
+    /// ships: each is served by the synthesized described-callable veto.
+    fn described_callable_fixture_certify(
+        label: &str,
+    ) -> Option<(
+        CertificationPlan,
+        Result<super::FinalizedPolicy2Contract, super::Policy2FinalizationError>,
+    )> {
+        use solid_reactive_ir::contract_semantics::DescribedCall;
+        use solid_reactive_ir::{
+            ContractClaim, ContractEntrypoint, ContractExport, ContractPackage, PackageContract,
+        };
+        let plain = || DescribedCall {
+            reads: Vec::new(),
+            returns: vec![ValueShape::Plain],
+        };
+        let valueless = DescribedCall::default;
+        // `throughMutableBinding` is bound with no proposal: the plan binds
+        // every export the package has, and the walk proposes it nothing.
+        let exports: [(&str, Vec<DescribedCall>); 11] = [
+            ("throughMutableBinding", Vec::new()),
+            ("createIdGenerator", vec![plain()]),
+            ("makeNoop", vec![valueless()]),
+            ("makeSilent", vec![plain()]),
+            ("makeTicker", vec![plain()]),
+            ("makeCounter", vec![plain()]),
+            ("choose", vec![plain()]),
+            ("invokesCaptured", vec![plain()]),
+            ("invokesOwnArgument", vec![plain()]),
+            ("returnsObject", vec![plain()]),
+            ("readsCapturedMember", vec![plain()]),
+        ];
+        let name = "implementation-census-described-callables";
+        let pin = pinned_producer_for_test()?;
+        let root = format!("/project/node_modules/{name}");
+        let root = root.as_str();
+        let fixture = repository_root()
+            .join("fixtures/package-contracts")
+            .join(name);
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let bindings = exports
+            .iter()
+            .map(|(export, _)| {
+                (
+                    *export,
+                    ("index.js", runtime.as_slice()),
+                    ("index.d.ts", declarations.as_slice()),
+                    root,
+                )
+            })
+            .collect::<Vec<_>>();
+        let (_, resolved) = test_package_resolution(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[],
+            "/project/src/app.ts",
+        );
+        let inferred = PackageContract {
+            package: ContractPackage {
+                name: name.into(),
+                version: "1.0.0".into(),
+                integrity: String::new(),
+            },
+            entrypoints: BTreeMap::from([(
+                ".".into(),
+                ContractEntrypoint {
+                    exports: exports
+                        .iter()
+                        .map(|(export, calls)| {
+                            (
+                                (*export).into(),
+                                ContractExport {
+                                    kind: "function".into(),
+                                    reactive_reads: ContractClaim::Open,
+                                    callbacks: ContractClaim::Open,
+                                    owner_requirements: ContractClaim::Open,
+                                    returns: ContractClaim::Known(None),
+                                    async_behavior: ContractClaim::Known(String::new()),
+                                    returns_described_callables: calls.clone(),
+                                    ..ContractExport::default()
+                                },
+                            )
+                        })
+                        .collect(),
+                },
+            )]),
+            source_path: String::new(),
+        };
+        let candidate =
+            crate::inferred_contract::normalize_inferred_contract(&inferred, &resolved).unwrap();
+        let plan = try_plan_supplied_candidate_for_test_package(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            candidate,
+        )
+        .expect("the generator's proposal plans against its own artifact");
+        let scratch = TracerScratch::new(label);
+        let probes = tracer_configuration_from(&fixture, scratch.path(), label, &[])?;
+        let outcome = tracer_certify(&plan, &pin, &probes);
+        Some((plan, outcome))
+    }
+
+    /// ADR 0145 end to end: an export whose every live completion is a
+    /// function or arrow literal certifies `returns` closed over the literal's
+    /// own call claims -- through the census over each literal's transcript,
+    /// each return's positive fact and the synthesized veto -- and the wrong
+    /// claims withdraw the operation by name while the row certifies: a
+    /// literal that calls a parameter it captured, one that calls its own
+    /// argument, one that hands back an object, one that reads a member of a
+    /// value its caller handed the export, and one claimed to return a value
+    /// its body never does.
+    #[test]
+    fn the_described_callable_census_certifies_exactly_the_literals_own_claims() {
+        use solid_reactive_ir::contract_semantics::DescribedCall;
+        let Some((plan, outcome)) = described_callable_fixture_certify("described-callables")
+        else {
+            return;
+        };
+        let finalized = outcome.unwrap_or_else(|error| {
+            panic!("every refusal here withholds by name and the row certifies: {error}")
+        });
+        let main = finalized.canonical_main();
+        let described = |returns: Vec<ValueShape>| {
+            ValueShape::DescribedCallable(Box::new(DescribedCall {
+                reads: Vec::new(),
+                returns,
+            }))
+        };
+        for (export, expected) in [
+            (
+                "createIdGenerator",
+                vec![described(vec![ValueShape::Plain])],
+            ),
+            ("makeNoop", vec![described(Vec::new())]),
+            ("makeTicker", vec![described(vec![ValueShape::Plain])]),
+            ("choose", vec![described(vec![ValueShape::Plain])]),
+        ] {
+            assert_eq!(
+                closed_containers_in(main, export),
+                Some(expected),
+                "{export}: {:?} {:?}",
+                finalized.withheld_closures(),
+                finalized.withheld_operations()
+            );
+        }
+        for (export, needle) in [
+            ("invokesCaptured", "a parameter of a nested callable"),
+            ("invokesOwnArgument", "runs code its caller supplied"),
+            ("returnsObject", "by its syntax alone"),
+            ("readsCapturedMember", "uncensused invoking form"),
+            ("makeSilent", "which the claim does not enumerate"),
+            ("makeCounter", "by its syntax alone"),
+        ] {
+            assert!(
+                finalized.withheld_operations().iter().any(|record| {
+                    record.export == export
+                        && record.operation.ends_with(":operation:return")
+                        && record
+                            .reason
+                            .starts_with(super::WITHHELD_OPERATION_CENSUS_REFUSED_PREFIX)
+                        && record.reason.contains(needle)
+                }),
+                "{export}: {:?}",
+                finalized.withheld_operations()
+            );
+            assert_eq!(closed_containers_in(main, export), None, "{export}");
+        }
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan),
+            "the synthesized veto must run before a described callable closes"
+        );
+    }
+
     /// `member-alias-proposals` planned from the generator's own summaries of
     /// its reviewed member aliases -- raised to functions, marked as aliases,
     /// with their spelling -- and certified against the real producer with the
@@ -19561,11 +19806,15 @@ export const value = phantom;
             })
             .collect::<BTreeSet<_>>();
         assert_eq!(proposing_plain.len(), 102);
+        // ADR 0145: the two whose every completion is a function literal
+        // propose a described callable instead; only the `async` one proposes
+        // nothing.
         assert_eq!(
             returns_candidates,
             CENSUS_FIXTURE_VALUELESS_EXPORTS
                 .into_iter()
                 .chain(proposing_plain)
+                .chain(["chainCallbacks", "returnedCallbackCoercion"])
                 .collect::<BTreeSet<_>>()
         );
         // One mandatory contradiction veto per candidate, and one

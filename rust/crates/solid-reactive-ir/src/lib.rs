@@ -31,7 +31,10 @@ pub use attribution::ObligationReach;
 pub use creates_walk::{CreatesDecline, CreatesDeclineKind, CreatesProposalWalk};
 pub use owners::function_binding_name;
 pub use pipeline::{build, build_with_accepted_contracts_measured};
-pub use returns_walk::{ArgumentContainer, ReturnsDecline, value_completion, valueless_completion};
+pub use returns_walk::{
+    ArgumentContainer, ReturnsDecline, described_callable_returns, reading_callable_returns,
+    value_completion, valueless_completion,
+};
 
 pub use upstream_compat::rule_options::{RuleOptions, RuleOverride};
 
@@ -1207,6 +1210,19 @@ pub struct ContractExport {
     /// census decides that from the producer's types. `false` is "do not
     /// propose", including for a summary no walk reached.
     pub returns_value_completion: bool,
+    /// ADR 0145's proposal input: when every value-carrying completion of this
+    /// export's own body is a function or arrow literal, the call claims each
+    /// literal's syntax does not already rule out, one per distinct shape
+    /// (`returns_walk::described_callable_returns`). Empty is "do not
+    /// propose", including for a summary no walk reached; the certifier's
+    /// census decides every one of them from the producer's facts.
+    pub returns_described_callables: Vec<contract_semantics::DescribedCall>,
+    /// ADR 0146's proposal input: the described callables this export's
+    /// completions would hand back if they read a signal it created
+    /// (`returns_walk::reading_callable_returns`), which the generator proposes
+    /// where its reactive analysis described the return as an accessor. Empty
+    /// is "do not propose".
+    pub returns_reading_callables: Vec<contract_semantics::DescribedCall>,
     /// Whether this export is a `const` binding of one identifier whose
     /// initializer is exactly a non-computed member access --
     /// `const entries = Object.entries` -- and whose summary no body produced.

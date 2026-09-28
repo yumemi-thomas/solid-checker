@@ -2566,3 +2566,124 @@ fn a_result_access_operation_is_validated_to_its_one_shape() {
         "{error}"
     );
 }
+
+/// ADR 0145: a described callable is appended to the canonical value encoding
+/// as tag 21, both of its lists written in canonical order. No document before
+/// it carries the tag, so it needs no digest family: every other document keeps
+/// its bytes (the legacy vector, asserted again here), and one that states it
+/// hashes to this frozen vector.
+#[test]
+fn a_described_callable_output_is_an_appended_tag_with_a_frozen_vector() {
+    let read = operation("read", OperationKind::Read);
+    let write = operation("write", OperationKind::Write);
+    let owner = resource("owner", ResourceKind::Owner);
+    let cleanup = resource("cleanup", ResourceKind::Cleanup);
+    let mut legacy = call(vec![read.clone(), write.clone()], vec![owner, cleanup]);
+    legacy.edges = vec![OperationEdge {
+        kind: EdgeKind::Data,
+        from: read.id,
+        to: write.id,
+    }];
+    assert_eq!(
+        proposal_with(ValueShape::Plain, legacy)
+            .normalize()
+            .unwrap()
+            .semantic_digest()
+            .as_str(),
+        "sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9",
+        "a contract stating no described callable keeps the legacy vector byte for byte"
+    );
+
+    let described = |returns: Vec<ValueShape>| {
+        let mut returned = operation("return", OperationKind::Return);
+        returned.output = Some(ValueShape::DescribedCallable(Box::new(DescribedCall {
+            reads: Vec::new(),
+            returns,
+        })));
+        let mut behavior = call(vec![returned.clone()], vec![]);
+        behavior.claims.returns = KnowledgeSet::Complete(vec![returned.id]);
+        proposal_with(ValueShape::Callable, behavior).normalize()
+    };
+    let plain = described(vec![ValueShape::Plain]).unwrap();
+    assert_eq!(
+        plain.semantic_digest().as_str(),
+        "sha256:76ff18f124569912553ecc6480fe2cf494923280c61dee04db4dcfa15dd8bc97"
+    );
+    let valueless = described(Vec::new()).unwrap();
+    assert_ne!(
+        valueless.semantic_digest(),
+        plain.semantic_digest(),
+        "what the returned callable hands back is part of the claim"
+    );
+}
+
+/// ADR 0145: a described callable is valid only as the whole output of a
+/// `return`, its returns are drawn from `plain` alone and neither list repeats.
+#[test]
+fn a_described_callable_is_validated_to_its_one_position_and_vocabulary() {
+    let callable = |reads: Vec<DescribedRead>, returns: Vec<ValueShape>| {
+        ValueShape::DescribedCallable(Box::new(DescribedCall { reads, returns }))
+    };
+    let with_output = |kind: OperationKind, output: ValueShape| {
+        let mut operation = operation("subject", kind);
+        operation.output = Some(output);
+        let mut behavior = call(vec![operation.clone()], vec![]);
+        match kind {
+            OperationKind::Return => {
+                behavior.claims.returns = KnowledgeSet::Complete(vec![operation.id]);
+            }
+            OperationKind::Invoke => {
+                behavior.claims.callbacks = KnowledgeSet::Unknown;
+            }
+            _ => {}
+        }
+        proposal_with(ValueShape::Callable, behavior).normalize()
+    };
+    assert!(with_output(OperationKind::Return, callable(Vec::new(), Vec::new())).is_ok());
+    assert!(
+        with_output(
+            OperationKind::Return,
+            callable(vec![DescribedRead::OwnedSignal], vec![ValueShape::Plain])
+        )
+        .is_ok()
+    );
+    for (kind, output, needle) in [
+        (
+            OperationKind::Return,
+            callable(Vec::new(), vec![ValueShape::Undefined]),
+            "may return only `plain`",
+        ),
+        (
+            OperationKind::Return,
+            callable(Vec::new(), vec![ValueShape::Plain, ValueShape::Plain]),
+            "a described return is repeated",
+        ),
+        (
+            OperationKind::Return,
+            callable(
+                vec![DescribedRead::OwnedSignal, DescribedRead::OwnedSignal],
+                Vec::new(),
+            ),
+            "a described read is repeated",
+        ),
+        (
+            OperationKind::Return,
+            ValueShape::Tuple(KnowledgeSet::Complete(vec![callable(
+                Vec::new(),
+                Vec::new(),
+            )])),
+            "whole output of a return",
+        ),
+    ] {
+        let error = with_output(kind, output).unwrap_err().to_string();
+        assert!(error.contains(needle), "{error}");
+    }
+    let error = proposal_with(
+        callable(Vec::new(), Vec::new()),
+        call(Vec::new(), Vec::new()),
+    )
+    .normalize()
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("whole output of a return"), "{error}");
+}

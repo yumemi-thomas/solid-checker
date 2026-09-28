@@ -568,6 +568,7 @@
         { "$ref": "#/$defs/argumentArrayValue" },
         { "$ref": "#/$defs/invocationResultValue" },
         { "$ref": "#/$defs/undefinedValue" },
+        { "$ref": "#/$defs/describedCallableValue" },
         { "$ref": "#/$defs/actionValue" },
         { "$ref": "#/$defs/componentValue" },
         { "$ref": "#/$defs/cleanupValue" },
@@ -735,6 +736,25 @@
       "properties": {
         "kind": { "const": "invocation-result" },
         "parameter": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "describedCallableValue": {
+      "description": "ADR 0145. A callable the export hands back together with what one invocation of it does, stated exactly: it invokes no callable it did not define, creates nothing, registers nothing on an owner, performs exactly `reads` (on the invoking caller's stack, in that caller's tracking context) and hands back exactly one of `returns` (none: it completes without a value). ADR 0146: `owned-signal` is a read of a signal the export created with the dialect's `createSignal` over primitive arguments, and `read-value` is exactly the value such a read observed. Valid only as the whole output of a `return` operation; carries no closure of its own.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "reads", "returns"],
+      "properties": {
+        "kind": { "const": "described-callable" },
+        "reads": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["owned-signal"] }
+        },
+        "returns": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["plain", "read-value"] }
+        }
       }
     },
     "capabilityClaims": {

@@ -795,6 +795,35 @@ fn acquire_census_local_transcripts(
                 continue;
             };
             for proof in &scheduled.proof_demands {
+                // ADR 0145: a described callable's census reads each returned
+                // literal's own transcript, for the closure and for each
+                // operation's positive fact alike, so both ask here. The
+                // literal is asked for unpremised: it is the caller's value
+                // now, called with whatever its holder passes.
+                {
+                    let (artifact_case, export_name) = proof_artifact_export(&proof.subject);
+                    if let Some(export) = plan
+                        .candidates
+                        .proposal()
+                        .artifact_case(artifact_case)
+                        .and_then(|case| case.exports.get(export_name))
+                    {
+                        for literal in
+                            described_callable_transcripts_wanted(export, implementation, &locals)
+                        {
+                            let pending = requested.iter().any(|(_, location, premises)| {
+                                *location == literal && premises.is_empty()
+                            });
+                            if !pending {
+                                requested.push((
+                                    scheduled.demand.location.clone(),
+                                    literal,
+                                    Vec::new(),
+                                ));
+                            }
+                        }
+                    }
+                }
                 let ProofDemandSubject::DomainClosure { subject, .. } = &proof.subject else {
                     continue;
                 };
@@ -3786,6 +3815,7 @@ fn verify_export_value_family(
                     proof,
                     transcript,
                     transcripts,
+                    census,
                     &open,
                     &mut sites,
                 )?
@@ -3999,6 +4029,7 @@ fn verify_export_value_family(
                     proof,
                     transcript,
                     transcripts,
+                    census,
                     &open,
                     &mut sites,
                 )?;
@@ -4186,7 +4217,45 @@ fn verify_export_value_family(
                     &subject.path,
                     ClosureCensus::Implementation,
                 )?;
-                sites.extend(census_returns_domain(proof, export, implementation)?);
+                // ADR 0145: a claim of described callables reads each returned
+                // literal's own transcript, which the other arms never need.
+                if let Some(claimed) = export
+                    .operation_claim(ClaimDomain::Returns)
+                    .and_then(|proposed| described_callable_claim(export, proposed))
+                {
+                    let refuse = |reason: String| TypeFactsCertificationError::UnsupportedDemand {
+                        demand: proof.id.clone(),
+                        reason,
+                    };
+                    match described_callable_return_sites(
+                        plan,
+                        transcript,
+                        implementation,
+                        &claimed,
+                        census,
+                    )
+                    .map_err(refuse)?
+                    {
+                        DescribedCallableStep::Decided(census_sites) => sites.extend(census_sites),
+                        DescribedCallableStep::NeedsTranscripts(missing) => {
+                            return Err(refuse(format!(
+                                "described callable returns census premise required: no \
+                                 implementation transcript was acquired for the returned \
+                                 literal(s) {}",
+                                missing
+                                    .iter()
+                                    .map(|location| format!(
+                                        "{}:{}..{}",
+                                        location.path, location.start_byte, location.end_byte
+                                    ))
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            )));
+                        }
+                    }
+                } else {
+                    sites.extend(census_returns_domain(proof, export, implementation)?);
+                }
             } else {
                 // This census is the exported value's own observation and
                 // nothing else: no control-flow branch census, so no guard
@@ -5521,6 +5590,8 @@ fn value_shape_constructor(value: &ValueShape) -> &'static str {
         ValueShape::ArgumentArray { .. } => "argument-array",
         ValueShape::InvocationResult { .. } => "invocation-result",
         ValueShape::Undefined => "undefined",
+        ValueShape::DescribedCallable(_) => "described-callable",
+        ValueShape::ReadValue => "read-value",
         ValueShape::Action { .. } => "action",
         ValueShape::Component => "component",
         ValueShape::Cleanup { .. } => "cleanup",
@@ -8281,6 +8352,7 @@ fn require_operation_recursive_subject(
     proof: &ScheduledProofDemand,
     transcript: &ExportValueTranscript,
     transcripts: ExportTranscripts<'_>,
+    census: CensusEvidence<'_>,
     open: &impl Fn(&str) -> TypeFactsCertificationError,
     sites: &mut Vec<String>,
 ) -> Result<(), TypeFactsCertificationError> {
@@ -8470,6 +8542,63 @@ fn require_operation_recursive_subject(
         let operation = exported
             .operation(&operation.0)
             .ok_or_else(|| open("recursive output operation is absent"))?;
+        // ADR 0145: a described callable output is proved by the evidence the
+        // closure census reads, over the whole enumeration the claim makes --
+        // every live value a literal showing one of them, and this one handed
+        // back by some literal -- with no declared signature contradicting
+        // the value's callability. The operation stands on its own: a refused
+        // closure would leave it a partial claim that still describes what
+        // invoking the returned value does.
+        if let Some(ValueShape::DescribedCallable(call)) = &operation.output {
+            if operation.kind != OperationKind::Return || !path.0.is_empty() {
+                return Err(open(
+                    "a described callable output is proved only as the whole value an export's \
+                     return hands back",
+                ));
+            }
+            let claimed = exported
+                .operation_claim(ClaimDomain::Returns)
+                .filter(|returns| returns.items().iter().any(|id| id.0 == operation.id.0))
+                .and_then(|returns| described_callable_claim(exported, returns))
+                .ok_or_else(|| {
+                    open(
+                        "a described callable output is proved only inside a returns claim \
+                         whose every item is one",
+                    )
+                })?;
+            if !claimed.contains(call.as_ref()) {
+                return Err(open(
+                    "the described callable output is absent from its claim",
+                ));
+            }
+            for signature in require_export_call_signatures(proof, transcript, open)? {
+                if signature.result.callability == Callability::NonCallable {
+                    return Err(open(
+                        "a described callable output is refused where a declared signature's \
+                         result is not callable",
+                    ));
+                }
+            }
+            let (_, implementation) = require_export_implementation(plan, proof, transcript, open)?;
+            return match described_callable_return_sites(
+                plan,
+                transcript,
+                implementation,
+                &claimed,
+                census,
+            )
+            .map_err(|reason| open(&reason))?
+            {
+                DescribedCallableStep::Decided(evidence) => {
+                    sites.extend(evidence);
+                    sites.push("recursive-operation-value:described-callable".into());
+                    Ok(())
+                }
+                DescribedCallableStep::NeedsTranscripts(_) => Err(open(
+                    "a described callable output's returned literal has no acquired transcript",
+                )),
+            };
+        }
         // ADR 0115: one return of an argument-container claim. Each return's
         // output is proved by the evidence the closure census reads, which
         // requires every container the claim enumerates to be handed back by
@@ -10507,6 +10636,11 @@ enum CensusDisposition {
     DependencyClaim,
     LocalRecursion,
     LocalRecursionBackedge,
+    /// ADR 0146: a call, inside a described callable's own body, of a signal
+    /// accessor the export's own invocation created with the dialect's
+    /// `createSignal` over arguments that are primitives by grammar: a read
+    /// that runs no code. Only a described-callable walk admits it.
+    OwnedSignalRead,
 }
 
 impl CensusDisposition {
@@ -10571,6 +10705,7 @@ impl CensusDisposition {
             Self::DependencyClaim => "dependency-claim",
             Self::LocalRecursion => "local-recursion",
             Self::LocalRecursionBackedge => "local-recursion-backedge",
+            Self::OwnedSignalRead => "owned-signal-read",
         }
     }
 }
@@ -10961,6 +11096,16 @@ struct CensusRun<'a> {
     /// `callbacks` domain's items. Counted for every domain because the walk
     /// is shared; only the callbacks census reads it.
     caller_supplied_invocations: CallerSuppliedInvocations,
+    /// Every disposition this walk recorded, by wire name. Only ADR 0145's
+    /// described-callable census reads it: a returned literal's claims close
+    /// only when every site in its body is of a reviewed, code-free kind.
+    dispositions: std::collections::BTreeSet<&'static str>,
+    /// ADR 0146: the export implementation whose calls created the signals a
+    /// described callable's body may read, set only by that census. `None`
+    /// admits no owned-signal read, which every other census keeps.
+    owned_signal_scope: Option<&'a typefacts::ExportImplementationTranscript>,
+    /// The calls this walk dispositioned [`CensusDisposition::OwnedSignalRead`].
+    owned_signal_read_calls: Vec<typefacts::Location>,
 }
 
 impl CensusRun<'_> {
@@ -10979,6 +11124,7 @@ impl CensusRun<'_> {
     /// getter. The site and the count now cannot disagree about what the walk
     /// saw.
     fn record(&mut self, disposition: CensusDisposition, site: String) {
+        self.dispositions.insert(disposition.wire_name());
         if disposition.runs_caller_supplied_code() {
             self.caller_supplied_invocations.record(disposition);
         }
@@ -11204,6 +11350,27 @@ fn census_call_walk(
     implementation: &typefacts::ExportImplementationTranscript,
     evidence: CensusEvidence<'_>,
 ) -> Result<CensusWalkPass, TypeFactsCertificationError> {
+    census_call_walk_with_dispositions(plan, refuse, declared, implementation, evidence, None)
+        .map(|(pass, _)| pass)
+}
+
+/// What a walk recorded beside its pass, which only ADR 0145/0146's
+/// described-callable census reads.
+struct CensusWalkRecord {
+    dispositions: std::collections::BTreeSet<&'static str>,
+    owned_signal_read_calls: Vec<typefacts::Location>,
+}
+
+/// [`census_call_walk`], also answering every disposition the walk recorded
+/// (ADR 0145's described-callable census reads them).
+fn census_call_walk_with_dispositions(
+    plan: &CertificationPlan,
+    refuse: &dyn Fn(String) -> TypeFactsCertificationError,
+    declared: &typefacts::ExportValueTranscript,
+    implementation: &typefacts::ExportImplementationTranscript,
+    evidence: CensusEvidence<'_>,
+    owned_signal_scope: Option<&typefacts::ExportImplementationTranscript>,
+) -> Result<(CensusWalkPass, CensusWalkRecord), TypeFactsCertificationError> {
     let mut run = CensusRun {
         certified: &plan.snapshot,
         plan: Some(plan),
@@ -11218,6 +11385,9 @@ fn census_call_walk(
         sources: std::collections::BTreeMap::new(),
         frame: None,
         caller_supplied_invocations: CallerSuppliedInvocations::default(),
+        dispositions: std::collections::BTreeSet::new(),
+        owned_signal_scope,
+        owned_signal_read_calls: Vec::new(),
     };
     // Seeded with the demanded export, so a helper calling back into it refuses
     // as a cycle rather than running out of depth.
@@ -11257,10 +11427,16 @@ fn census_call_walk(
     sites.sort();
     sites.dedup();
     Ok((
-        outcome,
-        sites,
-        run.requested,
-        run.caller_supplied_invocations,
+        (
+            outcome,
+            sites,
+            run.requested,
+            run.caller_supplied_invocations,
+        ),
+        CensusWalkRecord {
+            dispositions: run.dispositions,
+            owned_signal_read_calls: run.owned_signal_read_calls,
+        },
     ))
 }
 
@@ -12301,6 +12477,9 @@ fn census_reads_domain(
         sources: std::collections::BTreeMap::new(),
         frame: None,
         caller_supplied_invocations: CallerSuppliedInvocations::default(),
+        dispositions: std::collections::BTreeSet::new(),
+        owned_signal_scope: None,
+        owned_signal_read_calls: Vec::new(),
     };
     // ADR 0107: the one premise here whose other half lives in a callee, so
     // the transcripts it needs are demanded before any form is decided.
@@ -13021,6 +13200,593 @@ fn argument_container_return_sites(
     sites.dedup();
     Ok(sites)
 }
+
+/// ADR 0146: the witness that one traced value is a signal accessor the
+/// certified export's own invocation created with the dialect's `createSignal`
+/// over arguments that are primitives by grammar -- a value whose invocation is
+/// a read that runs no code -- or why not.
+///
+/// Every premise is stated rather than inherited:
+///
+/// * the trace is a call result (`ImplementationValueSource`, protocol 66)
+///   rooted at the value itself, with a resolved target, whose written module
+///   and name are a dialect export, at a result slot every dialect exporting
+///   the name states an inert accessor read for
+///   (`solid_dialect::unambiguous_inert_accessor_read`);
+/// * every written argument of that call is a primitive by grammar: no
+///   callable first argument, which turns `createSignal` into a writable memo
+///   whose read runs its function, and no options object, whose `equals` and
+///   `unobserved` callbacks the signal keeps;
+/// * the creating call is in the export's own implementation (`scope`), and
+///   every call of that target there resolves to a declaration inside an
+///   authenticated dependency snapshot that is an audited dialect archive --
+///   never the certified artifact itself. A signal created at module scope, in
+///   a helper, or through a spelling nothing resolves stays unproved.
+fn inert_owned_accessor_witness(
+    source: &typefacts::ImplementationValueSource,
+    scope: &typefacts::ExportImplementationTranscript,
+    certified: &super::ArtifactSnapshot,
+    roots_longest_first: &[SnapshotSourceRoot<'_>],
+) -> Result<String, String> {
+    if source.kind != typefacts::ImplementationValueSourceKind::CallResult
+        || !source.path.is_empty()
+        || source.target.is_empty()
+        || !solid_dialect::exports_value_from(&source.target_module, &source.target_name)
+    {
+        return Err("the value does not trace to a dialect call's result".into());
+    }
+    let slot = traced_result_slot(source).ok_or("the traced result slot is not addressable")?;
+    if !solid_dialect::unambiguous_inert_accessor_read(&source.target_name, slot) {
+        return Err(format!(
+            "no dialect states an inert accessor read at {}'s traced slot",
+            source.target_name
+        ));
+    }
+    if !source
+        .arguments_primitive_syntax
+        .iter()
+        .all(|primitive| *primitive)
+    {
+        return Err(format!(
+            "an argument of the {} call is not a primitive by its grammar",
+            source.target_name
+        ));
+    }
+    let creating = scope
+        .calls
+        .iter()
+        .filter(|call| call.target == source.target)
+        .collect::<Vec<_>>();
+    if creating.is_empty() {
+        return Err(format!(
+            "no call of {} in the export's own implementation created the signal",
+            source.target_name
+        ));
+    }
+    let root_paths = roots_longest_first
+        .iter()
+        .map(|root| root.path.clone())
+        .collect::<Vec<_>>();
+    let mut witness = None;
+    for call in creating {
+        let declaration = call
+            .declaration
+            .as_ref()
+            .filter(|declaration| {
+                is_call_expression(call)
+                    && !declaration.source_file.is_empty()
+                    && declaration.name.as_ref() == source.target_name.as_ref()
+                    && solid_dialect::canonical_primitive_name(&source.target_name)
+            })
+            .ok_or_else(|| {
+                format!(
+                    "the {} call at {}:{}..{} resolves to no dialect declaration",
+                    source.target_name,
+                    call.location.path,
+                    call.location.start_byte,
+                    call.location.end_byte
+                )
+            })?;
+        let source_file = declaration.source_file.replace('\\', "/");
+        let (index, relative) = strip_materialized_source_root(&source_file, &root_paths)
+            .ok_or("the dialect declaration is under no authenticated snapshot root")?;
+        let root = roots_longest_first
+            .get(index)
+            .filter(|root| root.dependency)
+            .ok_or("the dialect declaration is not in an authenticated dependency")?;
+        root.snapshot
+            .read(relative)
+            .ok_or("the dialect declaration is not a member of its snapshot")?;
+        if root.snapshot.root() == certified.root()
+            || root.snapshot.provenance_root() == certified.provenance_root()
+            || audited_archive_for_snapshot(certified).is_ok()
+        {
+            return Err("the certified artifact cannot answer about its own dialect".into());
+        }
+        let archive = audited_archive_for_snapshot(root.snapshot)
+            .map_err(|_| "the dialect declaration's snapshot is no audited archive")?;
+        witness = Some(format!(
+            "inert-owned-accessor:{}@{}#{}:{}:{}:{}..{}",
+            archive.name,
+            archive.version,
+            sri_prefix(archive.integrity),
+            source.target_name,
+            call.location.path,
+            call.location.start_byte,
+            call.location.end_byte
+        ));
+    }
+    witness.ok_or_else(|| "no creating call was witnessed".into())
+}
+
+/// ADR 0146: [`inert_owned_accessor_witness`] for a call's callee: the call is
+/// a read of an owned, inert signal when every rooted trace of its callee
+/// proves one, and there is at least one.
+fn owned_signal_read_witness(
+    call: &typefacts::ImplementationCall,
+    scope: &typefacts::ExportImplementationTranscript,
+    certified: &super::ArtifactSnapshot,
+    roots_longest_first: &[SnapshotSourceRoot<'_>],
+) -> Result<Vec<String>, String> {
+    let rooted = call
+        .callee_sources
+        .iter()
+        .filter(|source| source.path.is_empty())
+        .collect::<Vec<_>>();
+    if rooted.is_empty() {
+        return Err("the callee traces to nothing".into());
+    }
+    rooted
+        .into_iter()
+        .map(|source| inert_owned_accessor_witness(source, scope, certified, roots_longest_first))
+        .collect()
+}
+
+/// ADR 0145: the described callables a `returns` claim enumerates, when every
+/// item is a `return` whose output is one, no two alike. `None` for every other
+/// claim, an empty one included.
+fn described_callable_claim(
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    proposed: &KnowledgeSet<solid_reactive_ir::contract_semantics::OperationId>,
+) -> Option<Vec<solid_reactive_ir::contract_semantics::DescribedCall>> {
+    let mut calls = Vec::new();
+    for id in proposed.items() {
+        let operation = export.operation(&id.0)?;
+        let Some(ValueShape::DescribedCallable(call)) = &operation.output else {
+            return None;
+        };
+        if operation.kind != OperationKind::Return || calls.contains(call.as_ref()) {
+            return None;
+        }
+        calls.push(call.as_ref().clone());
+    }
+    (!calls.is_empty()).then_some(calls)
+}
+
+/// ADR 0145: the dispositions a described callable's body may carry, and
+/// nothing else. Each is a site that runs no code but the default library's
+/// and this body's own: an unreachable call, a reviewed standard-library
+/// member (whose callable arguments, if any, are literals inside this body
+/// and so its own rows), a coercion of primitives, a data property of a
+/// literal this program built, `instanceof` against a default-library
+/// constructor, and (ADR 0146) a read of a signal the export created, whose
+/// read runs no code and is the one read the claim states. A caller-supplied
+/// callable (the returned literal's own argument, or one it captured), a
+/// dialect primitive, a dependency's export and a local helper are all
+/// refused: each would either invoke code this claim denies, or perform a
+/// read, a creation or an owner registration the claim would have to state and
+/// does not.
+const DESCRIBED_CALLABLE_DISPOSITIONS: [CensusDisposition; 7] = [
+    CensusDisposition::Unreachable,
+    CensusDisposition::StandardLibrary,
+    CensusDisposition::PrimitiveCoercion,
+    CensusDisposition::OwnLiteralAccessor,
+    CensusDisposition::OwnLiteralAccessorWrite,
+    CensusDisposition::DefaultLibraryHasInstance,
+    CensusDisposition::OwnedSignalRead,
+];
+
+/// What one described-callable census pass reached.
+enum DescribedCallableStep {
+    /// Every claim was decided, with these witness sites.
+    Decided(Vec<String>),
+    /// These returned literals' own transcripts are still to be acquired,
+    /// each unpremised.
+    NeedsTranscripts(Vec<typefacts::Location>),
+}
+
+/// One value an export's live completion hands back that a described callable
+/// can state.
+enum DescribedReturnedValue {
+    /// A function or arrow literal at this location (ADR 0145), whose own
+    /// transcript says what invoking it does.
+    Literal(typefacts::Location),
+    /// A signal accessor the export's own invocation created, inert by the
+    /// dialect's row (ADR 0146): invoking it is one owned-signal read that
+    /// hands back the value read, and nothing else. The witness sites say why.
+    OwnedAccessor(Vec<String>),
+}
+
+/// ADR 0145/0146: every value the export's live completions hand back is
+/// exactly a function or arrow literal, by the producer's `callable` fact
+/// (handshake protocol 66) -- the site's own, or each arm's when the producer
+/// decomposed the returned conditional -- or, for a whole site, an inert signal
+/// accessor the export created, by the site's own traced source. Answers each
+/// value's location and what it is.
+fn described_callable_returned_values(
+    implementation: &typefacts::ExportImplementationTranscript,
+    at: &str,
+    certified: &super::ArtifactSnapshot,
+    roots_longest_first: &[SnapshotSourceRoot<'_>],
+) -> Result<Vec<(typefacts::Location, DescribedReturnedValue, Reachability)>, String> {
+    let control_flow = require_plain_classified_completion(implementation, at)?;
+    let mut values = Vec::new();
+    for site in control_flow
+        .returns
+        .iter()
+        .filter(|site| site.reach != Reachability::Unreachable && site.value.is_some())
+    {
+        if site.arms.is_empty() {
+            if let Some(callable) = &site.callable {
+                values.push((
+                    site.location.clone(),
+                    DescribedReturnedValue::Literal(callable.clone()),
+                    site.reach,
+                ));
+                continue;
+            }
+            let rooted = site
+                .sources
+                .iter()
+                .filter(|source| source.path.is_empty())
+                .collect::<Vec<_>>();
+            let witnessed = if rooted.is_empty() {
+                Err("the returned value traces to nothing".to_owned())
+            } else {
+                rooted
+                    .into_iter()
+                    .map(|source| {
+                        inert_owned_accessor_witness(
+                            source,
+                            implementation,
+                            certified,
+                            roots_longest_first,
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            };
+            match witnessed {
+                Ok(witness) => values.push((
+                    site.location.clone(),
+                    DescribedReturnedValue::OwnedAccessor(witness),
+                    site.reach,
+                )),
+                Err(reason) => {
+                    return Err(format!(
+                        "described callable returns census refuses a value at {}:{}..{}, reach \
+                         {}, that the producer did not state is a function or arrow literal, \
+                         and that is no inert signal accessor this export created ({reason}), \
+                         for {at}",
+                        site.location.path,
+                        site.location.start_byte,
+                        site.location.end_byte,
+                        reachability_name(site.reach)
+                    ));
+                }
+            }
+            continue;
+        }
+        for arm in &site.arms {
+            let callable = arm.callable.as_ref().ok_or_else(|| {
+                format!(
+                    "described callable returns census refuses a value at {}:{}..{}, reach {}, \
+                     that the producer did not state is a function or arrow literal, for {at}",
+                    arm.location.path,
+                    arm.location.start_byte,
+                    arm.location.end_byte,
+                    reachability_name(site.reach)
+                )
+            })?;
+            values.push((
+                arm.location.clone(),
+                DescribedReturnedValue::Literal(callable.clone()),
+                site.reach,
+            ));
+        }
+    }
+    if values.is_empty() {
+        return Err(format!(
+            "described callable returns census refuses an implementation at {at} with no \
+             value-carrying completion the producer did not prove unreachable"
+        ));
+    }
+    Ok(values)
+}
+
+/// The returned literals whose own transcripts a described-callable census of
+/// this implementation still needs: empty when the claim is not one, when the
+/// census would refuse before reading any literal, or when every transcript is
+/// already in hand. A literal is found from the producer's `callable` facts
+/// alone, which is all acquisition may read.
+fn described_callable_transcripts_wanted(
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    implementation: &typefacts::ExportImplementationTranscript,
+    locals: &[LocalDeclarationTranscript],
+) -> Vec<typefacts::Location> {
+    let Some(proposed) = export.operation_claim(ClaimDomain::Returns) else {
+        return Vec::new();
+    };
+    if described_callable_claim(export, proposed).is_none() {
+        return Vec::new();
+    }
+    let Some(control_flow) = implementation.control_flow.as_ref() else {
+        return Vec::new();
+    };
+    let mut wanted = Vec::new();
+    for site in control_flow
+        .returns
+        .iter()
+        .filter(|site| site.reach != Reachability::Unreachable && site.value.is_some())
+    {
+        let literals = site
+            .callable
+            .iter()
+            .chain(site.arms.iter().filter_map(|arm| arm.callable.as_ref()));
+        for literal in literals {
+            let known = locals
+                .iter()
+                .any(|local| local.location == *literal && local.premises.is_empty());
+            if !known && !wanted.contains(literal) {
+                wanted.push(literal.clone());
+            }
+        }
+    }
+    wanted
+}
+
+/// ADR 0145/0146: what one invocation of a returned literal does, derived from
+/// its own transcript -- or a refusal naming the first thing the claim cannot
+/// state.
+///
+/// * The transcript is the literal's exact node, unpremised, and passes the
+///   same censusability every walked frame passes.
+/// * The shared call walk dispositions every call and every uncensused
+///   invoking form in the literal's body, at depth 0 and following nothing,
+///   with `outer` -- the export's own implementation -- as the scope an owned
+///   signal must have been created in, and every disposition it records is one
+///   of [`DESCRIBED_CALLABLE_DISPOSITIONS`]. That is `callbacks: []` (no
+///   parameter-rooted site: the literal runs none of its caller's code, and a
+///   call of a parameter it *captured* is refused by the walk itself),
+///   `creates: []` and no owner requirement (no dialect primitive, dependency
+///   or helper is called at all), and `reads` exactly the owned-signal reads
+///   (ADR 0146): any other reactive read arrives as a call or as a proxy
+///   property access, and neither is admitted.
+/// * Each live value-carrying completion hands back a primitive both by type
+///   and by grammar (`plain`) or, when the body reads, exactly the value one of
+///   its owned-signal read calls returned (`read-value`); a body with no such
+///   completion hands back nothing (`[]`).
+fn described_callable_body(
+    plan: &CertificationPlan,
+    declared: &typefacts::ExportValueTranscript,
+    outer: &typefacts::ExportImplementationTranscript,
+    literal: &typefacts::ExportImplementationTranscript,
+    evidence: CensusEvidence<'_>,
+) -> Result<
+    (
+        solid_reactive_ir::contract_semantics::DescribedCall,
+        Vec<String>,
+    ),
+    String,
+> {
+    use solid_reactive_ir::contract_semantics::{DescribedCall, DescribedRead};
+    let at = format!(
+        "{}:{}..{}",
+        literal.location.path, literal.location.start_byte, literal.location.end_byte
+    );
+    if !literal.parameter_premises.is_empty() {
+        return Err(format!(
+            "described callable census refuses a premised transcript of the literal at {at}"
+        ));
+    }
+    let refuse = |reason: String| TypeFactsCertificationError::UnsupportedDemand {
+        demand: "described-callable-census".into(),
+        reason,
+    };
+    let ((outcome, mut sites, requested, caller_supplied), record) =
+        census_call_walk_with_dispositions(plan, &refuse, declared, literal, evidence, Some(outer))
+            .map_err(|error| match error {
+                TypeFactsCertificationError::UnsupportedDemand { reason, .. } => reason,
+                other => other.to_string(),
+            })?;
+    if outcome == CensusOutcome::NeedsTranscripts || !requested.is_empty() {
+        return Err(format!(
+            "described callable census refuses the literal at {at}: its body calls a local \
+             declaration, which a described callable does not follow"
+        ));
+    }
+    if caller_supplied.total != 0 {
+        return Err(format!(
+            "described callable census refuses the literal at {at}: invoking it runs code its \
+             caller supplied ({caller_supplied})"
+        ));
+    }
+    if let Some(disposition) = record.dispositions.iter().find(|name| {
+        !DESCRIBED_CALLABLE_DISPOSITIONS
+            .iter()
+            .any(|admitted| admitted.wire_name() == **name)
+    }) {
+        return Err(format!(
+            "described callable census refuses the literal at {at}: its body has a \
+             {disposition} site, which runs code a described callable's claims would have to \
+             state"
+        ));
+    }
+    let reads = if record.owned_signal_read_calls.is_empty() {
+        Vec::new()
+    } else {
+        vec![DescribedRead::OwnedSignal]
+    };
+    let control_flow = require_plain_classified_completion(literal, &at)?;
+    let mut returns = std::collections::BTreeSet::new();
+    for site in control_flow
+        .returns
+        .iter()
+        .filter(|site| site.reach != Reachability::Unreachable)
+    {
+        let Some(value) = &site.value else {
+            continue;
+        };
+        let shape = if value_is_primitive_alone(value) && site.primitive_syntax {
+            ValueShape::Plain
+        } else if site
+            .call
+            .as_ref()
+            .is_some_and(|call| record.owned_signal_read_calls.contains(call))
+        {
+            ValueShape::ReadValue
+        } else {
+            // The checker's type is not enough on its own. A returned literal
+            // usually reads bindings it captured, and in a JavaScript file such
+            // a read is typed by the binding's declaration whatever was written
+            // to it since: `let n = 0; … n = {}` still reads `number`. So a
+            // primitive must also be one by grammar (handshake protocol 66),
+            // which no binding's contents can change.
+            return Err(format!(
+                "described callable census refuses the literal at {at}: its return at \
+                 {}:{}..{}, reach {}, hands back neither a value that is a primitive both by \
+                 type and by its syntax alone, nor exactly what one of its owned-signal reads \
+                 returned",
+                site.location.path,
+                site.location.start_byte,
+                site.location.end_byte,
+                reachability_name(site.reach)
+            ));
+        };
+        sites.push(format!(
+            "census-described-return:{}:{}:{}:{}:{}",
+            site.location.path,
+            site.location.start_byte,
+            site.location.end_byte,
+            reachability_name(site.reach),
+            value_shape_kind_name(&shape)
+        ));
+        returns.insert(shape);
+    }
+    sites.push(format!("described-callable-body:{at}"));
+    Ok((
+        DescribedCall {
+            reads,
+            returns: returns.into_iter().collect(),
+        },
+        sites,
+    ))
+}
+
+/// ADR 0145/0146's evidence, shared by the closure census and each operation's
+/// positive fact so the two cannot drift: every live value the export hands
+/// back is a function or arrow literal whose own body shows exactly one of the
+/// claimed described callables, or an inert signal accessor the export created
+/// (which shows `reads: [owned-signal]`, `returns: [read-value]`), and every
+/// claimed one is shown by some such value.
+fn described_callable_return_sites(
+    plan: &CertificationPlan,
+    declared: &typefacts::ExportValueTranscript,
+    implementation: &typefacts::ExportImplementationTranscript,
+    claimed: &[solid_reactive_ir::contract_semantics::DescribedCall],
+    evidence: CensusEvidence<'_>,
+) -> Result<DescribedCallableStep, String> {
+    use solid_reactive_ir::contract_semantics::{DescribedCall, DescribedRead};
+    let at = format!(
+        "{}:{}..{}",
+        implementation.location.path,
+        implementation.location.start_byte,
+        implementation.location.end_byte
+    );
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_RETURNED_CALLABLE_PROTOCOL {
+        return Err(format!(
+            "described callable returns census premise required: a returned literal's location \
+             arrived at handshake protocol {CENSUS_RETURNED_CALLABLE_PROTOCOL} and this build \
+             speaks {}",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        ));
+    }
+    let values =
+        described_callable_returned_values(implementation, &at, &plan.snapshot, evidence.roots)?;
+    let mut missing = Vec::new();
+    for (_, value, _) in &values {
+        if let DescribedReturnedValue::Literal(literal) = value
+            && evidence.local(literal, &[]).is_none()
+            && !missing.contains(literal)
+        {
+            missing.push(literal.clone());
+        }
+    }
+    if !missing.is_empty() {
+        return Ok(DescribedCallableStep::NeedsTranscripts(missing));
+    }
+    let mut sites = Vec::new();
+    let mut produced = Vec::new();
+    for (location, value, reach) in &values {
+        let (call, mut body, described) = match value {
+            DescribedReturnedValue::Literal(literal) => {
+                let transcript = evidence
+                    .local(literal, &[])
+                    .expect("every literal's transcript was checked above");
+                let (call, body) =
+                    described_callable_body(plan, declared, implementation, transcript, evidence)?;
+                (
+                    call,
+                    body,
+                    format!("literal:{}..{}", literal.start_byte, literal.end_byte),
+                )
+            }
+            DescribedReturnedValue::OwnedAccessor(witness) => (
+                DescribedCall {
+                    reads: vec![DescribedRead::OwnedSignal],
+                    returns: vec![ValueShape::ReadValue],
+                },
+                witness.clone(),
+                "owned-accessor".to_owned(),
+            ),
+        };
+        if !claimed.contains(&call) {
+            return Err(format!(
+                "described callable returns census refuses the value at {}:{}..{} ({described}): \
+                 it shows {call:?}, which the claim does not enumerate, for {at}",
+                location.path, location.start_byte, location.end_byte
+            ));
+        }
+        sites.append(&mut body);
+        sites.push(format!(
+            "census-return-described-callable:{}:{}:{}:{}:{described}",
+            location.path,
+            location.start_byte,
+            location.end_byte,
+            reachability_name(*reach),
+        ));
+        if !produced.contains(&call) {
+            produced.push(call);
+        }
+    }
+    if let Some(missing) = claimed.iter().find(|call| !produced.contains(*call)) {
+        return Err(format!(
+            "described callable returns census refuses a claim enumerating {missing:?} that no \
+             completion the producer did not prove unreachable hands back, for {at}"
+        ));
+    }
+    sites.push(format!(
+        "census-returns-described-callable-total:{}",
+        values.len()
+    ));
+    sites.sort();
+    sites.dedup();
+    Ok(DescribedCallableStep::Decided(sites))
+}
+
+/// The handshake protocol at which a return site and each of its arms state
+/// the exact function or arrow literal they are (ADR 0145). Below it an absent
+/// `callable` is a producer that never looked, and the census refuses.
+const CENSUS_RETURNED_CALLABLE_PROTOCOL: u64 = 66;
 
 fn census_parameter_returns_transcript(
     implementation: &typefacts::ExportImplementationTranscript,
@@ -14559,6 +15325,21 @@ fn census_call_disposition(
             "creates census refuses a call of unknown kind at {}",
             at()
         ));
+    }
+    // ADR 0146: only inside a described callable's own body, never in a
+    // nested callable of it, and only a call (a construction of an accessor
+    // is not a read).
+    if depth == 0
+        && call.kind == CallKind::Call
+        && !call.captured
+        && let Some(scope) = run.owned_signal_scope
+        && owned_signal_read_witness(call, scope, run.certified, run.evidence.roots).is_ok()
+    {
+        run.owned_signal_read_calls.push(call.location.clone());
+        return Ok(Some((
+            CensusDisposition::OwnedSignalRead,
+            census_call_site(call, CensusDisposition::OwnedSignalRead),
+        )));
     }
     // Arguments do not matter for `creates`. A call is dispositioned by its
     // *callee*: what a spread carries, what a slot proves, and whether a
@@ -16354,6 +17135,8 @@ const fn value_shape_kind_name(shape: &ValueShape) -> &'static str {
         ValueShape::ArgumentArray { .. } => "argument-array",
         ValueShape::InvocationResult { .. } => "invocation-result",
         ValueShape::Undefined => "undefined",
+        ValueShape::DescribedCallable(_) => "described-callable",
+        ValueShape::ReadValue => "read-value",
         ValueShape::Action { .. } => "action",
         ValueShape::Component => "component",
         ValueShape::Cleanup { .. } => "cleanup",
@@ -24429,6 +25212,140 @@ mod tests {
         }
     }
 
+    /// ADR 0146: a traced value is an inert owned accessor exactly when it is
+    /// slot 0 of a `createSignal` call over arguments that are primitives by
+    /// grammar, made in the export's own implementation, whose declaration is
+    /// inside an audited dialect archive that is a dependency -- and every
+    /// other shape refuses by name.
+    #[test]
+    fn an_owned_signal_is_witnessed_only_for_an_inert_audited_accessor() {
+        let manifest = audited_rc3_manifest("solidjs-signals");
+        let dependency = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.3",
+            SIGNALS_INTEGRITY,
+            &manifest,
+            "/snapshot/signals",
+        );
+        let certified = archive_snapshot(
+            "consumer",
+            "1.0.0",
+            "sha512-consumer",
+            b"{\"name\":\"consumer\"}",
+            "/snapshot/consumer",
+        );
+        let root = |dependency_root: bool| SnapshotSourceRoot {
+            path: "/project/node_modules/@solidjs/signals/".to_owned(),
+            evidence_prefix: "/node_modules/@solidjs/signals/".to_owned(),
+            snapshot: &dependency,
+            dependency: dependency_root,
+        };
+        let roots = vec![root(true)];
+        let scope = |calls: Vec<typefacts::ImplementationCall>| {
+            let mut transcript: typefacts::ExportImplementationTranscript =
+                serde_json::from_value(json!({
+                    "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 0, "endByte": 200},
+                    "completionForm": "plain",
+                }))
+                .unwrap();
+            transcript.calls = calls;
+            transcript
+        };
+        let source = |overrides: serde_json::Value| {
+            let mut value = json!({
+                "kind": "callResult",
+                "target": "symbol:createSignal",
+                "targetName": "createSignal",
+                "targetModule": "solid-js",
+                "targetPath": [{"kind": "tuple", "index": 0}],
+                "argumentsPrimitiveSyntax": [true],
+            });
+            let object = value.as_object_mut().unwrap();
+            for (key, replacement) in overrides.as_object().unwrap() {
+                if replacement.is_null() {
+                    object.remove(key);
+                } else {
+                    object.insert(key.clone(), replacement.clone());
+                }
+            }
+            serde_json::from_value::<typefacts::ImplementationValueSource>(value).unwrap()
+        };
+        let own = scope(vec![signals_call("createSignal", json!({}))]);
+        let witness = inert_owned_accessor_witness(&source(json!({})), &own, &certified, &roots)
+            .expect("slot 0 of an audited createSignal over a primitive is inert");
+        assert!(
+            witness.starts_with("inert-owned-accessor:@solidjs/signals@2.0.0-rc.3#"),
+            "{witness}"
+        );
+        // No argument at all is a primitive `undefined` initial value.
+        assert!(
+            inert_owned_accessor_witness(
+                &source(json!({"argumentsPrimitiveSyntax": null})),
+                &own,
+                &certified,
+                &roots
+            )
+            .is_ok()
+        );
+        for (why, traced, transcript, roots, needle) in [
+            (
+                "a function or an options object may be the argument",
+                source(json!({"argumentsPrimitiveSyntax": [true, false]})),
+                own.clone(),
+                vec![root(true)],
+                "not a primitive by its grammar",
+            ),
+            (
+                "the setter is not an accessor",
+                source(json!({"targetPath": [{"kind": "tuple", "index": 1}]})),
+                own.clone(),
+                vec![root(true)],
+                "no dialect states an inert accessor read",
+            ),
+            (
+                "a memo's read runs its function",
+                source(
+                    json!({"targetName": "createMemo", "target": "symbol:createMemo", "targetPath": null}),
+                ),
+                scope(vec![signals_call("createMemo", json!({}))]),
+                vec![root(true)],
+                "no dialect states an inert accessor read",
+            ),
+            (
+                "a local createSignal is not the dialect's",
+                source(json!({"targetModule": ""})),
+                own.clone(),
+                vec![root(true)],
+                "does not trace to a dialect call's result",
+            ),
+            (
+                "a literal callable is not a call result",
+                source(json!({"kind": "directCallable"})),
+                own.clone(),
+                vec![root(true)],
+                "does not trace to a dialect call's result",
+            ),
+            (
+                "the signal was not created by the export",
+                source(json!({})),
+                scope(Vec::new()),
+                vec![root(true)],
+                "no call of createSignal",
+            ),
+            (
+                "the declaration is in no authenticated dependency",
+                source(json!({})),
+                own.clone(),
+                vec![root(false)],
+                "not in an authenticated dependency",
+            ),
+        ] {
+            let error = inert_owned_accessor_witness(&traced, &transcript, &certified, &roots)
+                .expect_err(why);
+            assert!(error.contains(needle), "{why}: {error}");
+        }
+    }
+
     /// The terminator, and every gate that must refuse it.
     ///
     /// The one that matters most is the last: `targetModule` says `solid-js`
@@ -25652,6 +26569,9 @@ mod tests {
             sources: std::collections::BTreeMap::new(),
             frame: None,
             caller_supplied_invocations: CallerSuppliedInvocations::default(),
+            dispositions: std::collections::BTreeSet::new(),
+            owned_signal_scope: None,
+            owned_signal_read_calls: Vec::new(),
         }
     }
 

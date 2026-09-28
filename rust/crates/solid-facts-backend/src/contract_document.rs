@@ -1046,6 +1046,19 @@ fn compact_value(value: &ValueShape, ids: &CompactIds) -> Result<JsonValue, Cont
         // Item B round 2 of ways-to-improve § 3.3: exactly `undefined`, a
         // shorthand like `plain`, with a detailed spelling beside it.
         ValueShape::Undefined => json!("undefined"),
+        // ADR 0145: both lists always written, so an absent one is never read
+        // as a closed empty enumeration.
+        ValueShape::DescribedCallable(call) => json!({
+            "kind": "described-callable",
+            "reads": call.reads.iter().map(|read| read.wire_name()).collect::<Vec<_>>(),
+            "returns": call
+                .returns
+                .iter()
+                .map(|returned| compact_value(returned, ids))
+                .collect::<Result<Vec<_>, _>>()?,
+        }),
+        // ADR 0146: a shorthand, like `undefined`, with a detailed spelling.
+        ValueShape::ReadValue => json!("read-value"),
         ValueShape::Action { transition } => {
             let mut node = json!({"kind": "action"});
             if let Some(transition) = transition {
@@ -2098,6 +2111,7 @@ enum WireValueKind {
     Unknown,
     Plain,
     Undefined,
+    ReadValue,
     Callable,
     Component,
     RefApplication,
@@ -2183,6 +2197,14 @@ enum WireValueNode {
     /// variant so that `deny_unknown_fields` refuses one it was given (a unit
     /// variant of an internally tagged enum ignores them).
     Undefined {},
+    /// ADR 0145. Both lists are required: an absent one would read as `[]`,
+    /// the strongest claim each can make.
+    DescribedCallable {
+        reads: Vec<String>,
+        returns: Vec<WireValue>,
+    },
+    /// ADR 0146. Carries no field, as `undefined` does not.
+    ReadValue {},
     Action {
         #[serde(default)]
         transition: Option<String>,
@@ -3300,6 +3322,7 @@ fn expand_value_at(
             WireValueKind::Unknown => ValueShape::Unknown,
             WireValueKind::Plain => ValueShape::Plain,
             WireValueKind::Undefined => ValueShape::Undefined,
+            WireValueKind::ReadValue => ValueShape::ReadValue,
             WireValueKind::Callable => ValueShape::Callable,
             WireValueKind::Component => ValueShape::Component,
             WireValueKind::RefApplication => ValueShape::RefApplication,
@@ -3458,6 +3481,24 @@ fn expand_value_node(
             parameter: *parameter,
         }),
         WireValueNode::Undefined {} => Ok(ValueShape::Undefined),
+        WireValueNode::ReadValue {} => Ok(ValueShape::ReadValue),
+        WireValueNode::DescribedCallable { reads, returns } => Ok(ValueShape::DescribedCallable(
+            Box::new(solid_reactive_ir::contract_semantics::DescribedCall {
+                reads: reads
+                    .iter()
+                    .map(|read| {
+                        solid_reactive_ir::contract_semantics::DescribedRead::from_wire(read)
+                            .ok_or_else(|| ContractFailure::DocumentDecode {
+                                message: format!("unknown described read {read:?}"),
+                            })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                returns: returns
+                    .iter()
+                    .map(|returned| expand_value_at(returned, ids, depth + 1))
+                    .collect::<Result<Vec<_>, _>>()?,
+            }),
+        )),
         WireValueNode::Action { transition } => Ok(ValueShape::Action {
             transition: transition.as_ref().map(|resource| ids.resource(resource)),
         }),
@@ -4552,6 +4593,8 @@ mod tests {
             serde_json::json!({"kind": "invocation-result", "parameter": 0}),
             serde_json::json!("undefined"),
             serde_json::json!({"kind": "undefined"}),
+            serde_json::json!({"kind": "described-callable", "reads": [], "returns": ["plain"]}),
+            serde_json::json!({"kind": "described-callable", "reads": ["owned-signal"], "returns": []}),
         ];
         for value in values {
             let value: WireValue = serde_json::from_value(value).unwrap();
@@ -4575,6 +4618,33 @@ mod tests {
             )
             .is_err()
         );
+        // ADR 0145: both lists are required, and a read outside the reviewed
+        // vocabulary is refused rather than dropped.
+        for missing in [
+            serde_json::json!({"kind": "described-callable", "returns": []}),
+            serde_json::json!({"kind": "described-callable", "reads": []}),
+        ] {
+            assert!(serde_json::from_value::<WireValue>(missing).is_err());
+        }
+        let unknown: WireValue = serde_json::from_value(
+            serde_json::json!({"kind": "described-callable", "reads": ["store"], "returns": []}),
+        )
+        .unwrap();
+        assert!(expand_value(&unknown, &ids).is_err());
+        let described = ValueShape::DescribedCallable(Box::new(
+            solid_reactive_ir::contract_semantics::DescribedCall {
+                reads: vec![solid_reactive_ir::contract_semantics::DescribedRead::OwnedSignal],
+                returns: vec![ValueShape::Plain],
+            },
+        ));
+        let compact =
+            compact_value(&described, &CompactIds::new("case", "case", "export")).unwrap();
+        assert_eq!(
+            compact,
+            serde_json::json!({"kind": "described-callable", "reads": ["owned-signal"], "returns": ["plain"]})
+        );
+        let wire: WireValue = serde_json::from_value(compact).unwrap();
+        assert_eq!(expand_value(&wire, &ids).unwrap(), described);
         // And it is emitted as the shorthand, which reads back as itself.
         assert_eq!(
             compact_value(

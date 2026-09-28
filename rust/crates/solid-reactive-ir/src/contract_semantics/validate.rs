@@ -429,7 +429,17 @@ fn normalize_operation(
         normalize_value(input, resources, &format!("{op_path}.input.{index}"))?;
     }
     if let Some(output) = &mut operation.output {
-        normalize_value(output, resources, &format!("{op_path}.output"))?;
+        if let ValueShape::DescribedCallable(call) = output {
+            if operation.kind != OperationKind::Return {
+                return contradiction(
+                    format!("{op_path}.output"),
+                    "a described callable is valid only as the output of a return operation",
+                );
+            }
+            normalize_described_callable(call, &format!("{op_path}.output"))?;
+        } else {
+            normalize_value(output, resources, &format!("{op_path}.output"))?;
+        }
     }
     // One meaning for a call: a stated `call` is the absent protocol.
     if operation.protocol == Some(InvokeProtocol::Call) {
@@ -852,6 +862,44 @@ fn contradiction<T>(path: impl Into<String>, reason: impl Into<String>) -> Resul
     })
 }
 
+/// ADR 0145/0146: a described callable's two exact lists, canonically sorted
+/// and without duplicates, each drawn from its reviewed vocabulary. A `returns`
+/// entry is an exact output whose meaning does not depend on who calls:
+/// `plain`, or (ADR 0146) the value a stated read observed. Nothing nests: a
+/// described callable returning one is a claim no census decides.
+pub(super) fn normalize_described_callable(
+    call: &mut super::DescribedCall,
+    path: &str,
+) -> Result<(), ModelError> {
+    call.reads.sort();
+    if call.reads.windows(2).any(|pair| pair[0] == pair[1]) {
+        return contradiction(format!("{path}.reads"), "a described read is repeated");
+    }
+    call.returns.sort();
+    if call.returns.windows(2).any(|pair| pair[0] == pair[1]) {
+        return contradiction(format!("{path}.returns"), "a described return is repeated");
+    }
+    if let Some(unsupported) = call
+        .returns
+        .iter()
+        .find(|returned| !matches!(returned, ValueShape::Plain | ValueShape::ReadValue))
+    {
+        return contradiction(
+            format!("{path}.returns"),
+            format!(
+                "a described callable may return only `plain` or a read value, not {unsupported:?}"
+            ),
+        );
+    }
+    if call.reads.is_empty() && call.returns.contains(&ValueShape::ReadValue) {
+        return contradiction(
+            format!("{path}.returns"),
+            "a described callable that reads nothing cannot return a read value",
+        );
+    }
+    Ok(())
+}
+
 fn normalize_value(
     value: &mut ValueShape,
     resources: &BTreeMap<ResourceId, ResourceInfo>,
@@ -870,6 +918,22 @@ fn normalize_value(
         | ValueShape::InvocationResult { .. }
         | ValueShape::Undefined
         | ValueShape::RefApplication => {}
+        // ADR 0145: only as the whole output of a `return`, which
+        // `normalize_operation` validates before any value walk reaches it.
+        // Anywhere else -- an input, an export's shape, inside a tuple -- it
+        // would state a callable's call claims no census decides there.
+        ValueShape::DescribedCallable(_) => {
+            return contradiction(
+                path,
+                "a described callable is valid only as the whole output of a return operation",
+            );
+        }
+        ValueShape::ReadValue => {
+            return contradiction(
+                path,
+                "a read value is valid only as a return of a described callable that reads",
+            );
+        }
         ValueShape::Tuple(items) => {
             validate_open_nonempty(items, &format!("{path}.tuple-items"))?;
             if !matches!(items, KnowledgeSet::Unknown) {
@@ -1903,6 +1967,8 @@ fn visit_closed_value(
         | ValueShape::ArgumentArray { .. }
         | ValueShape::InvocationResult { .. }
         | ValueShape::Undefined
+        | ValueShape::DescribedCallable(_)
+        | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
     }
@@ -2312,6 +2378,8 @@ fn open_value_closure(
         | ValueShape::ArgumentArray { .. }
         | ValueShape::InvocationResult { .. }
         | ValueShape::Undefined
+        | ValueShape::DescribedCallable(_)
+        | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
     }
@@ -2341,6 +2409,8 @@ fn visit_value(value: &ValueShape, root: ValueRoot, path: ValuePath, claims: &mu
         | ValueShape::ArgumentArray { .. }
         | ValueShape::InvocationResult { .. }
         | ValueShape::Undefined
+        | ValueShape::DescribedCallable(_)
+        | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
         ValueShape::Tuple(items) => {

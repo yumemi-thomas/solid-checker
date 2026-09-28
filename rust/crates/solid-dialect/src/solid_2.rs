@@ -5071,6 +5071,25 @@ impl Dialect for Solid2 {
             _ => None,
         }
     }
+    /// ADR 0146. Source: `@solidjs/signals@2.0.0-rc.9`, the audited release
+    /// (`dist/prod/signals.js` `createSignal`, `dist/prod/core/core.js`
+    /// `signal` and `read`). `createSignal(e, t)` takes the memo path only when
+    /// `typeof e === "function"`; otherwise it builds a plain `signal` node,
+    /// whose only callbacks are `t?.equals` (called by the setter) and
+    /// `t?.unobserved` (called when the last observer unlinks), both read off
+    /// the options object. Its accessor is `read.bind(null, node)`, and `read`
+    /// of a node with no compute function (`ce`), no firewall owner (`Te`) and
+    /// no pending status serves the committed or staged value, linking the
+    /// current observer when tracking: it runs no code. With every argument a
+    /// primitive by grammar there is neither a function first argument nor an
+    /// options object, so no path through it runs any. `createMemo`'s accessor
+    /// recomputes its caller's function and is not stated.
+    fn inert_accessor_read(&self, primitive: Primitive, slot: ResultSlot) -> bool {
+        matches!(
+            (primitive, slot),
+            (Primitive::CreateSignal, ResultSlot::TupleItem(0))
+        )
+    }
 
     /// Source: the match this replaced in `solid-reactive-ir/src/static_api.rs`,
     /// which was 2.0-shaped and correct here. Unchanged on purpose — the point

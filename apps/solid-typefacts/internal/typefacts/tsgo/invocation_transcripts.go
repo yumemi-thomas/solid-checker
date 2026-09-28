@@ -1816,6 +1816,7 @@ func (p *project) returnArmsLocked(implementation, expression *ast.Node) []typef
 			Value:     &value,
 			Parameter: p.unwrittenParameterIdentityLocked(implementation, node),
 			Invoked:   p.invokedParameterLocked(implementation, node),
+			Callable:  returnedCallableLiteral(node),
 		}
 		if ast.IsArrayLiteralExpression(node) {
 			arm.ArrayLiteral = true
@@ -1840,6 +1841,22 @@ func (p *project) returnArmsLocked(implementation, expression *ast.Node) []typef
 		return nil
 	}
 	return arms
+}
+
+// returnedCallableLiteral answers the exact location of the function or arrow
+// expression a returned expression is, after identity-preserving wrappers
+// (ADR 0145, handshake protocol 66). Every evaluation of such an expression
+// creates a fresh closure whose code is exactly that node's, so a consumer that
+// censuses the node's own transcript censuses what the returned value runs.
+// Nil for every other expression: an identifier naming a function is a binding
+// whose value this answer does not trace.
+func returnedCallableLiteral(expression *ast.Node) *typefacts.Location {
+	node := identityPreservingUnwrap(expression)
+	if node == nil || !(ast.IsArrowFunction(node) || ast.IsFunctionExpression(node)) {
+		return nil
+	}
+	location := nodeLocation(node)
+	return &location
 }
 
 // invokedParameterLocked names the unchanged whole input binding a call
@@ -1943,6 +1960,9 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 			CarryReach:       &reachable,
 			Sources:          p.returnValueSourcesLocked(body),
 			Arms:             p.returnArmsLocked(implementation, body),
+			Callable:         returnedCallableLiteral(body),
+			PrimitiveSyntax:  primitiveBySyntax(body, 0),
+			Call:             returnedCallExpression(body),
 		})
 		return census
 	}
@@ -2010,8 +2030,11 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 				Location: nodeLocation(node), Reach: state.reach, Value: value,
 				Parameter:        p.returnedParameterIdentityLocked(implementation, node.Expression()),
 				CarriedCallables: carried, CarryReach: carryReach,
-				Sources: p.returnValueSourcesLocked(node.Expression()),
-				Arms:    p.returnArmsLocked(implementation, node.Expression()),
+				Sources:         p.returnValueSourcesLocked(node.Expression()),
+				Arms:            p.returnArmsLocked(implementation, node.Expression()),
+				Callable:        returnedCallableLiteral(node.Expression()),
+				PrimitiveSyntax: node.Expression() != nil && primitiveBySyntax(node.Expression(), 0),
+				Call:            returnedCallExpression(node.Expression()),
 			})
 			return flowState{reach: typefacts.Unreachable, carryReach: typefacts.Unreachable}
 		}

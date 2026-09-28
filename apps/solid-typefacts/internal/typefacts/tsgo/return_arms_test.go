@@ -263,3 +263,79 @@ func TestReturnArmsDecomposeConditionalsAndArrayLiterals(t *testing.T) {
 		})
 	}
 }
+
+// ADR 0145, handshake protocol 66: a return whose whole value is a function or
+// arrow expression, after identity-preserving wrappers, names that node's exact
+// location, and so does each arm of a returned conditional. An identifier that
+// names a function is a binding and states nothing.
+func TestReturnedCallableLiteralsStateTheirLocation(t *testing.T) {
+	cases := []struct {
+		name, code string
+		site       string   // the site's callable text; "" for none
+		arms       []string // each arm's callable text; nil for no arms
+	}{
+		{name: "arrow", code: `export const check = () => () => 1;`, site: "() => 1"},
+		{name: "functionExpression", code: `export function check() { return function () { return 1; }; }`, site: "function () { return 1; }"},
+		{name: "wrapped", code: `export const check = () => ((() => 1) as any);`, site: "() => 1"},
+		{
+			name: "conditional",
+			code: `export function check(c: any) { return c ? () => 1 : () => 2; }`,
+			arms: []string{"() => 1", "() => 2"},
+		},
+		{
+			name: "conditionalWithAValue",
+			code: `export function check(c: any) { return c ? () => 1 : c; }`,
+			arms: []string{"() => 1", ""},
+		},
+		{name: "localBinding", code: `export function check() { const f = () => 1; return f; }`},
+		{name: "call", code: `export const check = (f: any) => f();`, arms: []string{""}},
+		{name: "object", code: `export const check = () => ({ run: () => 1 });`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			source := tc.code + "\nvoid check;\n"
+			writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+			p, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer p.Close()
+			path := filepath.Join(dir, "facts.ts")
+			start := strings.LastIndex(source, "check")
+			impl := strings.Index(source, "check")
+			answer, err := p.(typefacts.ExportValueAnalyzer).ExportValueTranscripts(context.Background(), []typefacts.ExportValueDemand{{
+				Location:               typefacts.Location{Path: path, StartByte: start, EndByte: start + 5},
+				ImplementationLocation: &typefacts.Location{Path: path, StartByte: impl, EndByte: impl + 5},
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(answer.Transcripts) != 1 || answer.Transcripts[0].Implementation == nil {
+				t.Fatal("missing implementation census")
+			}
+			flow := answer.Transcripts[0].Implementation.ControlFlow
+			if flow == nil || len(flow.Returns) != 1 {
+				t.Fatalf("returns = %+v", flow)
+			}
+			spelled := func(location *typefacts.Location) string {
+				if location == nil {
+					return ""
+				}
+				return source[location.StartByte:location.EndByte]
+			}
+			site := flow.Returns[0]
+			if got := spelled(site.Callable); got != tc.site {
+				t.Fatalf("site callable = %q, want %q", got, tc.site)
+			}
+			if len(site.Arms) != len(tc.arms) {
+				t.Fatalf("arms = %+v, want %d", site.Arms, len(tc.arms))
+			}
+			for index, want := range tc.arms {
+				if got := spelled(site.Arms[index].Callable); got != want {
+					t.Fatalf("arm %d callable = %q, want %q", index, got, want)
+				}
+			}
+		})
+	}
+}

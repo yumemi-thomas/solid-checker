@@ -14,7 +14,7 @@
           },
           "exports": {
             "awaitThenableForm": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
-            "capturedTaggedForm": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "capturedTaggedForm": "summary-8ad7845f607926d10c901a4e2cf089a91c81b18fe9fea8e99482b53215a9e9c2",
             "coercionForm": "summary-6460fca012a4977602bcbc73e8b056678ac4ac1997275168f988a54b569fe108",
             "forOfForm": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
             "getAccessorForm": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
@@ -202,6 +202,55 @@
           "creates"
         ],
         "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-8ad7845f607926d10c901a4e2cf089a91c81b18fe9fea8e99482b53215a9e9c2": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "described-callable",
+              "reads": [],
+              "returns": [
+                "plain"
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
       },
       "shape": "callable"
     },

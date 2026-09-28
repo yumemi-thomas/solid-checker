@@ -8618,6 +8618,18 @@ struct GeneratedOwnerRequirements {
     /// census's to decide.
     value_returns_walk_by_symbol: HashSet<String>,
     value_returns_walk_by_function: HashSet<FunctionKey>,
+    /// ADR 0145: the call claims the described callable walk proposes for the
+    /// function literals a function's every value-carrying completion returns,
+    /// by the same two identities. Absence is "do not propose".
+    described_callables_by_symbol:
+        HashMap<String, Vec<solid_reactive_ir::contract_semantics::DescribedCall>>,
+    described_callables_by_function:
+        HashMap<FunctionKey, Vec<solid_reactive_ir::contract_semantics::DescribedCall>>,
+    /// ADR 0146: the reading walk's proposals, by the same two identities.
+    reading_callables_by_symbol:
+        HashMap<String, Vec<solid_reactive_ir::contract_semantics::DescribedCall>>,
+    reading_callables_by_function:
+        HashMap<FunctionKey, Vec<solid_reactive_ir::contract_semantics::DescribedCall>>,
     /// ADR 0109: the parameter a props merge the function returns carries the
     /// reactivity of, by the same two identities. Absence is "do not propose".
     merged_props_return_by_symbol: HashMap<String, usize>,
@@ -8787,6 +8799,30 @@ fn generated_owner_requirements_by_symbol(
                     indexed.value_returns_walk_by_symbol.insert(symbol.clone());
                 }
                 indexed.value_returns_walk_by_function.insert(key.clone());
+            }
+            // ADR 0145: the walk's third positive answer, independent of the
+            // two above -- a function whose every value-carrying completion is
+            // a function literal is also one the value-completion walk
+            // declines (a literal is never a primitive).
+            if let Some(calls) = solid_reactive_ir::described_callable_returns(file, function) {
+                if let Some(Some(symbol)) = function_symbols.get(&key) {
+                    indexed
+                        .described_callables_by_symbol
+                        .insert(symbol.clone(), calls.clone());
+                }
+                indexed
+                    .described_callables_by_function
+                    .insert(key.clone(), calls);
+            }
+            if let Some(calls) = solid_reactive_ir::reading_callable_returns(file, function) {
+                if let Some(Some(symbol)) = function_symbols.get(&key) {
+                    indexed
+                        .reading_callables_by_symbol
+                        .insert(symbol.clone(), calls.clone());
+                }
+                indexed
+                    .reading_callables_by_function
+                    .insert(key.clone(), calls);
             }
             // ADR 0109's walk, indexed the same way. It resolves a callee to a
             // dialect primitive, so unlike the one above it is computed inside
@@ -9001,6 +9037,27 @@ fn attach_generated_owner_requirements(
         || default_function
             .as_ref()
             .is_some_and(|key| generated.value_returns_walk_by_function.contains(key));
+    // ADR 0145: the described callable walk's answer, read the same way.
+    summary.returns_described_callables = symbol
+        .as_ref()
+        .and_then(|symbol| generated.described_callables_by_symbol.get(symbol))
+        .or_else(|| {
+            default_function
+                .as_ref()
+                .and_then(|key| generated.described_callables_by_function.get(key))
+        })
+        .cloned()
+        .unwrap_or_default();
+    summary.returns_reading_callables = symbol
+        .as_ref()
+        .and_then(|symbol| generated.reading_callables_by_symbol.get(symbol))
+        .or_else(|| {
+            default_function
+                .as_ref()
+                .and_then(|key| generated.reading_callables_by_function.get(key))
+        })
+        .cloned()
+        .unwrap_or_default();
     // The negative half, carried for measurement only: which blockers the walk
     // named for this export. Attached whichever identity resolved it, in the
     // same order the two `clean` sets are consulted.

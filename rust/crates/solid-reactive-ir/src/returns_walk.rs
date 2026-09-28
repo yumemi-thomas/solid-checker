@@ -127,6 +127,202 @@ fn value_completion_in(ast: &AstFacts, function: &FunctionFact) -> bool {
     }
 }
 
+/// The generator's **described callable** walk (ADR 0145): whether every
+/// completion of `function` that carries a value hands back a function or
+/// arrow literal, and, for each, the call claims its own body's syntax does not
+/// already rule out.
+///
+/// A proposal input, never a proof. The certifier's census decides each claim
+/// from the producer's facts: that each live return *is* that literal
+/// (`ReturnSite::callable`), and what the literal's own transcript shows one
+/// invocation of it doing. What this answers is the earlier question, whether
+/// there is anything for that census to decide:
+///
+/// * `function` is not `async` and not a generator, and at least one of its
+///   own completions carries a value -- an expression body, or a `return`
+///   with an argument in its own body -- and every such completion is a
+///   function or arrow literal the facts list, or a conditional whose every
+///   branch is one, to the producer's own bounds (depth eight, sixteen
+///   literals);
+/// * each literal is itself neither `async` nor a generator, and its own
+///   completions are either valueless (ADR 0035's walk clears it: `returns:
+///   []`) or carry a value its syntax does not already rule out as a primitive
+///   (ADR 0113's walk: `returns: [plain]`).
+///
+/// Reads are proposed empty: whether the literal reads anything is the
+/// census's to decide, and ADR 0146 is where a read is stated. A bare
+/// `return;` beside a literal hands back `undefined`, which is no `return`
+/// operation, and contributes nothing. Every other shape is `None`: "do not
+/// propose".
+#[must_use]
+pub fn described_callable_returns(
+    file: &FileFacts,
+    function: &FunctionFact,
+) -> Option<Vec<crate::contract_semantics::DescribedCall>> {
+    described_callable_returns_in(&file.ast, function)
+}
+
+fn described_callable_returns_in(
+    ast: &AstFacts,
+    function: &FunctionFact,
+) -> Option<Vec<crate::contract_semantics::DescribedCall>> {
+    use crate::contract_semantics::{DescribedCall, ValueShape};
+    if function.r#async || function.generator {
+        return None;
+    }
+    // The value-carrying completions, by the span of the value each hands
+    // back: an expression body's expression, or a `return`'s argument.
+    let mut pending = Vec::new();
+    if function.expression_body {
+        pending.push((function.expression_return.as_ref()?.span, 0usize));
+    } else {
+        pending.extend(
+            own_returns(ast, function)
+                .filter_map(|returned| returned.argument)
+                .map(|argument| (argument, 0usize)),
+        );
+    }
+    if pending.is_empty() {
+        return None;
+    }
+    let mut calls = std::collections::BTreeSet::new();
+    let mut literals = 0usize;
+    while let Some((span, depth)) = pending.pop() {
+        // The producer's own bounds for a conditional's arms: past them it
+        // states none, and the census could only refuse.
+        if depth > 8 || literals > 16 {
+            return None;
+        }
+        if let Some(conditional) = ast
+            .conditional_expressions
+            .iter()
+            .find(|conditional| conditional.span == span)
+        {
+            pending.push((conditional.consequent, depth + 1));
+            pending.push((conditional.alternate, depth + 1));
+            continue;
+        }
+        let literal = ast.functions.iter().find(|candidate| {
+            candidate.span == span && !candidate.r#async && !candidate.generator
+        })?;
+        literals += 1;
+        let returns = if valueless_completion_in(ast, literal).is_ok() {
+            Vec::new()
+        } else if value_completion_in(ast, literal) {
+            vec![ValueShape::Plain]
+        } else {
+            return None;
+        };
+        calls.insert(DescribedCall {
+            reads: Vec::new(),
+            returns,
+        });
+    }
+    Some(calls.into_iter().collect())
+}
+
+/// ADR 0146's proposal input: the described callables an export would hand
+/// back if what it returns reads a signal it created, for the generator to
+/// propose where its reactive analysis described the return as an accessor.
+///
+/// Every value-carrying completion must be a function or arrow literal, a
+/// conditional of them, or an identifier (the accessor itself, whose
+/// invocation reads the signal and hands back its value). A literal proposes
+/// `reads: [owned-signal]` and, per own value-carrying completion, `read-value`
+/// for a call -- the read it most likely is -- and `plain` otherwise; `[]` when
+/// it completes without a value. A proposal input only: the census decides
+/// every one of these from the producer's facts, the read above all.
+#[must_use]
+pub fn reading_callable_returns(
+    file: &FileFacts,
+    function: &FunctionFact,
+) -> Option<Vec<crate::contract_semantics::DescribedCall>> {
+    reading_callable_returns_in(&file.ast, function)
+}
+
+fn reading_callable_returns_in(
+    ast: &AstFacts,
+    function: &FunctionFact,
+) -> Option<Vec<crate::contract_semantics::DescribedCall>> {
+    use crate::contract_semantics::{DescribedCall, DescribedRead, ValueShape};
+    if function.r#async || function.generator {
+        return None;
+    }
+    let mut pending = Vec::new();
+    if function.expression_body {
+        let returned = function.expression_return.as_ref()?;
+        pending.push((
+            returned.span,
+            returned.value == ReturnValueKind::Identifier,
+            0usize,
+        ));
+    } else {
+        pending.extend(own_returns(ast, function).filter_map(|returned| {
+            returned
+                .argument
+                .map(|argument| (argument, returned.value == ReturnValueKind::Identifier, 0))
+        }));
+    }
+    if pending.is_empty() {
+        return None;
+    }
+    let mut calls = std::collections::BTreeSet::new();
+    let mut values = 0usize;
+    while let Some((span, identifier, depth)) = pending.pop() {
+        if depth > 8 || values > 16 {
+            return None;
+        }
+        values += 1;
+        if identifier {
+            calls.insert(DescribedCall {
+                reads: vec![DescribedRead::OwnedSignal],
+                returns: vec![ValueShape::ReadValue],
+            });
+            continue;
+        }
+        if let Some(conditional) = ast
+            .conditional_expressions
+            .iter()
+            .find(|conditional| conditional.span == span)
+        {
+            for branch in [conditional.consequent, conditional.alternate] {
+                let identifier = ast.identifiers.iter().any(|identifier| {
+                    identifier.span == branch
+                        && identifier.role == solid_facts::ast::IdentifierRole::Reference
+                });
+                pending.push((branch, identifier, depth + 1));
+            }
+            continue;
+        }
+        let literal = ast.functions.iter().find(|candidate| {
+            candidate.span == span && !candidate.r#async && !candidate.generator
+        })?;
+        let mut returns = std::collections::BTreeSet::new();
+        if literal.expression_body {
+            let returned = literal.expression_return.as_ref()?;
+            returns.insert(if returned.value == ReturnValueKind::Call {
+                ValueShape::ReadValue
+            } else {
+                ValueShape::Plain
+            });
+        } else {
+            for returned in own_returns(ast, literal).filter(|returned| returned.argument.is_some())
+            {
+                returns.insert(if returned.value == ReturnValueKind::Call {
+                    ValueShape::ReadValue
+                } else {
+                    ValueShape::Plain
+                });
+            }
+        }
+        calls.insert(DescribedCall {
+            reads: vec![DescribedRead::OwnedSignal],
+            returns: returns.into_iter().collect(),
+        });
+    }
+    Some(calls.into_iter().collect())
+}
+
 /// Whether a return's own syntax hands back an object on every run.
 fn never_primitive(returned: &ReturnFact) -> bool {
     returned.value == ReturnValueKind::Function || returned.structure.is_some()
@@ -655,8 +851,118 @@ pub(crate) fn collect_merged_props_returns(
 
 #[cfg(test)]
 mod tests {
-    use super::{ReturnsDecline, value_completion_in, valueless_completion_in};
+    use super::{
+        ReturnsDecline, described_callable_returns_in, value_completion_in, valueless_completion_in,
+    };
+    use crate::contract_semantics::{DescribedCall, ValueShape};
     use solid_facts::ast;
+
+    /// ADR 0146: the reading walk proposes an owned-signal read for every
+    /// returned literal, and the accessor itself for a returned identifier.
+    #[test]
+    fn a_reading_callable_is_proposed_for_returned_literals_and_identifiers() {
+        use crate::contract_semantics::DescribedRead;
+        let outer = |source: &str| {
+            let facts = ast::extract("test.js", source).unwrap();
+            let function = facts
+                .functions
+                .iter()
+                .min_by_key(|function| (function.span.start, std::cmp::Reverse(function.span.end)))
+                .expect("the source declares a function")
+                .clone();
+            super::reading_callable_returns_in(&facts, &function)
+        };
+        let reading = |returns: Vec<ValueShape>| DescribedCall {
+            reads: vec![DescribedRead::OwnedSignal],
+            returns,
+        };
+        for (source, expected) in [
+            (
+                "function f() { const [s] = createSignal(0); return () => s(); }",
+                vec![reading(vec![ValueShape::ReadValue])],
+            ),
+            (
+                "function f() { const [s] = createSignal(0); return s; }",
+                vec![reading(vec![ValueShape::ReadValue])],
+            ),
+            (
+                "function f() { const [s] = createSignal(0); return () => s() + 1; }",
+                vec![reading(vec![ValueShape::Plain])],
+            ),
+            (
+                "function f() { const [s] = createSignal(0); return () => { s(); }; }",
+                vec![reading(Vec::new())],
+            ),
+        ] {
+            assert_eq!(outer(source), Some(expected), "{source}");
+        }
+        for source in [
+            "function f() { return { s: 1 }; }",
+            "async function f() { return () => 1; }",
+            "function f() { return g(); }",
+        ] {
+            assert_eq!(outer(source), None, "{source}");
+        }
+    }
+
+    /// ADR 0145: the described callable walk proposes one shape per distinct
+    /// literal the function's value-carrying completions hand back, and
+    /// nothing for any other completion.
+    #[test]
+    fn a_described_callable_is_proposed_only_for_returned_literals() {
+        let outer = |source: &str| {
+            let facts = ast::extract("test.js", source).unwrap();
+            let function = facts
+                .functions
+                .iter()
+                .min_by_key(|function| (function.span.start, std::cmp::Reverse(function.span.end)))
+                .expect("the source declares a function")
+                .clone();
+            described_callable_returns_in(&facts, &function)
+        };
+        let plain = DescribedCall {
+            reads: Vec::new(),
+            returns: vec![ValueShape::Plain],
+        };
+        for (source, expected) in [
+            (
+                "function f() { return () => {}; }",
+                vec![DescribedCall::default()],
+            ),
+            ("const f = () => () => 1;", vec![plain.clone()]),
+            (
+                "function f() { let n = 0; return function () { return ++n; }; }",
+                vec![plain.clone()],
+            ),
+            (
+                "function f(c) { if (c) return; return () => 1; }",
+                vec![plain.clone()],
+            ),
+            (
+                "function f(c) { return c ? () => {} : () => 1; }",
+                vec![DescribedCall::default(), plain.clone()],
+            ),
+            (
+                "function f(c) { return c ? () => 1 : () => 2; }",
+                vec![plain],
+            ),
+        ] {
+            assert_eq!(outer(source), Some(expected), "{source}");
+        }
+        for source in [
+            "function f() { return; }",
+            "function f() {}",
+            "function f() { const g = () => 1; return g; }",
+            "function f(c) { return c ? () => 1 : 1; }",
+            "function f() { return { run: () => 1 }; }",
+            "async function f() { return () => 1; }",
+            "function f() { return async () => 1; }",
+            "function f() { return () => () => 1; }",
+            "function f() { return () => ({ a: 1 }); }",
+        ] {
+            assert_eq!(outer(source), None, "{source}");
+        }
+    }
 
     /// Both walks' answers for the outermost function `source` declares.
     fn answers(source: &str) -> (Result<(), ReturnsDecline>, bool) {

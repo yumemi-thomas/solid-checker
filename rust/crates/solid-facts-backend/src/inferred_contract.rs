@@ -207,6 +207,24 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                                         && matches!(&operation.output, Some(ValueShape::Array { element, .. }) if **element == ValueShape::Plain)
                                 }))
                             })
+                        // ADR 0145: returns that each hand back a described
+                        // callable, which the census decides from the
+                        // producer's `callable` fact and the literal's own
+                        // transcript.
+                        || export
+                            .operation_claim(ClaimDomain::Returns)
+                            .is_some_and(|claim| {
+                                !claim.items().is_empty()
+                                    && claim.items().iter().all(|id| {
+                                        export.operation(&id.0).is_some_and(|operation| {
+                                            operation.kind == OperationKind::Return
+                                                && matches!(
+                                                    operation.output,
+                                                    Some(ValueShape::DescribedCallable(_))
+                                                )
+                                        })
+                                    })
+                            })
                         // ADR 0115: returns that each hand back an argument
                         // container, which the census decides from the
                         // producer's arms of every return -- since ADR 0116
@@ -738,9 +756,42 @@ fn normalize_export(
         ));
         Some(KnowledgeSet::Complete(vec![id]))
     };
+    // ADR 0145: one `return` per distinct described callable the walk saw --
+    // every value-carrying completion a function literal, each with the call
+    // claims its own syntax does not rule out. Read wherever the reactive
+    // analysis left the return undescribed, never over a described one, and
+    // after the argument-container and alias proposals, which never overlap
+    // it (a literal is neither a parameter nor a member alias).
+    let described_returns = |operations: &mut Vec<Operation>| {
+        (scope.publishes_bootstrapped_reactive_domains()
+            && summary.kind == "function"
+            && !summary.returns_described_callables.is_empty()
+            && summary.inherited_from.is_none()
+            && matches!(&summary.async_behavior, ContractClaim::Known(protocol) if protocol.is_empty()))
+        .then(|| {
+            let single = summary.returns_described_callables.len() == 1;
+            let mut ids = Vec::new();
+            for (index, call) in summary.returns_described_callables.iter().enumerate() {
+                let id = if single {
+                    OperationId(format!("{prefix}return"))
+                } else {
+                    OperationId(format!("{prefix}return-{index}"))
+                };
+                operations.push(operation(
+                    id.clone(),
+                    OperationKind::Return,
+                    Vec::new(),
+                    Some(ValueShape::DescribedCallable(Box::new(call.clone()))),
+                ));
+                ids.push(id);
+            }
+            KnowledgeSet::Complete(ids)
+        })
+    };
     let returns = match &summary.returns {
         ContractClaim::Open => container_returns(&mut operations)
             .or_else(|| alias_return(&mut operations))
+            .or_else(|| described_returns(&mut operations))
             .unwrap_or(KnowledgeSet::Unknown),
         // ADR 0109, before the empty closure and deliberately: a body that
         // returns a props merge *does* yield a value, so the two are mutually
@@ -796,6 +847,10 @@ fn normalize_export(
                 // An alias's summary describes no return because it has no
                 // body, which is where this arm reads it.
                 reviewed
+            } else if let Some(described) = described_returns(&mut operations) {
+                // ADR 0145, before ADR 0113's plain return: a function literal
+                // is never a primitive, so the two walks never both answer.
+                described
             } else if scope.publishes_bootstrapped_reactive_domains()
                 && summary.kind == "function"
                 && summary.returns_value_completion
@@ -821,6 +876,37 @@ fn normalize_export(
             } else {
                 KnowledgeSet::Unknown
             }
+        }
+        // ADR 0146: the reactive analysis described the return as an accessor,
+        // and every value-carrying completion is a literal or an identifier:
+        // propose what invoking it does -- an owned-signal read -- and let the
+        // census decide whether the signal is one this export created, inert,
+        // and exactly what is read.
+        ContractClaim::Known(Some(returned))
+            if returned.kind == "accessor"
+                && scope.publishes_bootstrapped_reactive_domains()
+                && summary.kind == "function"
+                && !summary.returns_reading_callables.is_empty()
+                && summary.inherited_from.is_none()
+                && matches!(&summary.async_behavior, ContractClaim::Known(protocol) if protocol.is_empty()) =>
+        {
+            let single = summary.returns_reading_callables.len() == 1;
+            let mut ids = Vec::new();
+            for (index, call) in summary.returns_reading_callables.iter().enumerate() {
+                let id = if single {
+                    OperationId(format!("{prefix}return"))
+                } else {
+                    OperationId(format!("{prefix}return-{index}"))
+                };
+                operations.push(operation(
+                    id.clone(),
+                    OperationKind::Return,
+                    Vec::new(),
+                    Some(ValueShape::DescribedCallable(Box::new(call.clone()))),
+                ));
+                ids.push(id);
+            }
+            KnowledgeSet::Complete(ids)
         }
         ContractClaim::Known(Some(returned)) => {
             let id = OperationId(format!("{prefix}return"));

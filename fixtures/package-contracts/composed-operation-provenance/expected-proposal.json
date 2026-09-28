@@ -2,7 +2,7 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:8182d762137f3e1b015318511383858536786b6107b86edd6bbdf1513da2c425",
+  "semanticDigest": "sha256:5e7fc57516025283e80445c70e13a74065eb79f61703707545c42750e81db194",
   "closureCandidates": [
     {
       "claimId": "claim:v1:sha256:0547189d74f77a0661960b1527a4a952424544e9a927223a1e6a5bccc1f065cd",
@@ -2367,30 +2367,6 @@
           "kind": "operation-axis",
           "operation": "artifact-case:9c690bf9bbb32b6cb02742ddd92ef720af8f43465774ba7179db952004319fa5:readsItsOwnSignalAndComposesTheSameShape:operation:read-1",
           "domain": "owner-source"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:af601ba0e25b35de6f0dd059892a74a7c026537ac445e10ec8deaaecb0700a62",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.js",
-        "runtimeDigest": "sha256:67b70606618af55b65a51fdf2d3b1626cc5007327b4eee577a0a1efb0eb8ff3f",
-        "declarationsPath": "./index.js",
-        "declarationsDigest": "sha256:67b70606618af55b65a51fdf2d3b1626cc5007327b4eee577a0a1efb0eb8ff3f",
-        "closureDigest": "sha256:419c085a52ceb17b282ab680e4e36f89be058f4c4de06a21eb1a6f31a9e78a48"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:9c690bf9bbb32b6cb02742ddd92ef720af8f43465774ba7179db952004319fa5",
-        "export": "readsThroughAReturnedClosure",
-        "path": {
-          "kind": "value",
-          "root": {
-            "kind": "operation-output",
-            "operation": "artifact-case:9c690bf9bbb32b6cb02742ddd92ef720af8f43465774ba7179db952004319fa5:readsThroughAReturnedClosure:operation:return"
-          },
-          "path": [],
-          "domain": "capabilities"
         }
       }
     },

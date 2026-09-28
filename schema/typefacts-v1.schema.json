@@ -457,7 +457,10 @@
         "carriedCallables": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/location" } },
         "carryReach": { "enum": ["reachable", "unreachable", "unknown"] },
         "sources": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/implementationValueSource" } },
-        "arms": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/returnArm" } }
+        "arms": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/returnArm" } },
+        "callable": { "$ref": "#/$defs/location" },
+        "primitiveSyntax": { "type": "boolean" },
+        "call": { "$ref": "#/$defs/location" }
       }
     },
     "returnArm": {
@@ -471,7 +474,8 @@
         "arrayLiteral": { "type": "boolean" },
         "elements": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/returnArmElement" } },
         "invoked": { "$ref": "#/$defs/parameterValueSource" },
-        "undefined": { "type": "boolean" }
+        "undefined": { "type": "boolean" },
+        "callable": { "$ref": "#/$defs/location" }
       }
     },
     "returnArmElement": {
@@ -649,7 +653,8 @@
         "target": { "type": "string" },
         "targetName": { "type": "string" },
         "targetModule": { "type": "string" },
-        "targetPath": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/pathSegment" } }
+        "targetPath": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/pathSegment" } },
+        "argumentsPrimitiveSyntax": { "type": "array", "maxItems": 1000000, "items": { "type": "boolean" } }
       }
     },
     "declaredTypeReference": {

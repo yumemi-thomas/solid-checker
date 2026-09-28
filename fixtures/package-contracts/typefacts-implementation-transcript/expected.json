@@ -14,7 +14,7 @@
           },
           "exports": {
             "direct": "summary-091b1d9c2b5cda13367902440e8f50e3789630c614638926e6136ca3e4c0861c",
-            "retained": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "retained": "summary-6b8e61f8c5d82b9071b2da64ef19d2dbbf836f8201633d17353c3b159d522aa9",
             "returned": "summary-7f6695a9f44fbaaa1f5e3146fc2c82663147a0b7a91f6487af041a6caef2abe3"
           },
           "resolution": {
@@ -87,6 +87,50 @@
       },
       "shape": "callable"
     },
+    "summary-6b8e61f8c5d82b9071b2da64ef19d2dbbf836f8201633d17353c3b159d522aa9": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "described-callable",
+              "reads": [],
+              "returns": []
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
     "summary-7f6695a9f44fbaaa1f5e3146fc2c82663147a0b7a91f6487af041a6caef2abe3": {
       "call": {
         "callbacks": [
@@ -150,21 +194,6 @@
         "returns": [
           "return"
         ]
-      },
-      "shape": "callable"
-    },
-    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
-      "call": {
-        "closed": [
-          "reads",
-          "creates"
-        ],
-        "creates": [],
-        "proposedClosures": [
-          "reads",
-          "creates"
-        ],
-        "reads": []
       },
       "shape": "callable"
     }

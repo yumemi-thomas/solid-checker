@@ -94,6 +94,8 @@ fn inferred_entrypoint_workflow_refuses_a_same_named_export_from_the_wrong_subpa
             creates_walk_declines: Vec::new(),
             returns_walk_clean: false,
             returns_value_completion: false,
+            returns_described_callables: Vec::new(),
+            returns_reading_callables: Vec::new(),
             member_alias_initializer: false,
             member_alias_spelling: None,
             returns_argument_containers: Vec::new(),
@@ -162,6 +164,8 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
             // export publishes — so the package below is not a dialect one.
             returns_walk_clean: true,
             returns_value_completion: false,
+            returns_described_callables: Vec::new(),
+            returns_reading_callables: Vec::new(),
             member_alias_initializer: false,
             member_alias_spelling: None,
             returns_argument_containers: Vec::new(),

@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:513bf2df187285b39f94953e2186a9b71348cc1cf533fdad9b9ae67fa874bc53";
+    "sha256:5d6c78af7351bfd6cc50129352feb4bcbd90dbcff0bf660e8badd9625fc49eb6";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -361,7 +361,14 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // under a fixed key whose only readers are member calls no construction
 // reaches. A protocol-64 consumer decodes with `deny_unknown_fields` and would
 // reject the new field, so the number moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 65;
+// Protocol 66 states the location of a returned function or arrow expression
+// (ADR 0145): `ReturnSite::callable` and `ReturnArm::callable`, so a consumer
+// can demand that node's transcript and census what the returned value runs,
+// and `ReturnSite::primitive_syntax`, a returned value primitive by grammar;
+// ADR 0146 adds `ReturnSite::call` and a call-result source's
+// `arguments_primitive_syntax`. A protocol-65 consumer decodes with `deny_unknown_fields` and would reject
+// the new field, so the number moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 66;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

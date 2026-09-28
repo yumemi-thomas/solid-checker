@@ -729,6 +729,10 @@ fn inventory_value_shape(
         | ValueShape::ArgumentArray { .. }
         | ValueShape::InvocationResult { .. }
         | ValueShape::Undefined
+        // ADR 0145: exact, with no child shape of its own to inventory. The
+        // one fact its root pushes above is the whole claim.
+        | ValueShape::DescribedCallable(_)
+        | ValueShape::ReadValue
         | ValueShape::Callable
         | ValueShape::Reactive { .. }
         | ValueShape::Store { .. }
@@ -760,7 +764,11 @@ fn inventory_value_shape(
 /// disagree, so a shape derived from one cannot assert about the other.
 const fn recursive_value_callability(shape: &ValueShape) -> DemandedCallability {
     match shape {
-        ValueShape::Callable | ValueShape::Component => DemandedCallability::Callable,
+        // ADR 0145: the claim is that the value is invoked, and what that does,
+        // so the demand asserts callability; the census proves the rest.
+        ValueShape::Callable | ValueShape::Component | ValueShape::DescribedCallable(_) => {
+            DemandedCallability::Callable
+        }
         ValueShape::Plain => DemandedCallability::NonCallable,
         ValueShape::Unknown
         | ValueShape::Parameter { .. }
@@ -776,6 +784,7 @@ const fn recursive_value_callability(shape: &ValueShape) -> DemandedCallability 
         | ValueShape::ArgumentArray { .. }
         | ValueShape::InvocationResult { .. }
         | ValueShape::Undefined
+        | ValueShape::ReadValue
         | ValueShape::Action { .. }
         | ValueShape::Cleanup { .. }
         | ValueShape::RefApplication

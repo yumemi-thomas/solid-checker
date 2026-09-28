@@ -602,6 +602,25 @@ pub fn unambiguous_reactive_result_slot(name: &str, slot: ResultSlot) -> Option<
         .flatten()
 }
 
+/// Whether every dialect that canonically exports `name` states that reading
+/// the accessor at `slot` of its result runs no code when every argument of the
+/// creating call is a primitive by grammar ([`Dialect::inert_accessor_read`],
+/// ADR 0146). Silence in any one of them answers `false`, as it does for
+/// [`unambiguous_reactive_result_slot`].
+#[must_use]
+pub fn unambiguous_inert_accessor_read(name: &str, slot: ResultSlot) -> bool {
+    let answers = DIALECTS
+        .iter()
+        .copied()
+        .filter_map(|dialect| {
+            let primitive = dialect.primitive(name)?;
+            (dialect.name_of(primitive) == Some(name))
+                .then(|| dialect.inert_accessor_read(primitive, slot))
+        })
+        .collect::<Vec<_>>();
+    !answers.is_empty() && answers.into_iter().all(|answer| answer)
+}
+
 /// Whether some dialect exports `name` from `origin_module` in value position.
 ///
 /// This is a dialect answer about *where a name can come from*, not a resolved
@@ -2325,6 +2344,20 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// Whether invoking the accessor at `slot` of what `primitive` returns runs
+    /// no code at all -- not the caller's, not the package's, not a callback's
+    /// -- when **every argument of the creating call is a primitive by its
+    /// grammar** (ADR 0146): a read that observes the source's current value
+    /// and does nothing else. `false` is the silence every unaudited row keeps.
+    ///
+    /// The precondition is the dialect's to state because it is what makes the
+    /// answer true: a callable first argument, or an options object whose
+    /// callbacks the source keeps, is exactly how a read comes to run code.
+    fn inert_accessor_read(&self, primitive: Primitive, slot: ResultSlot) -> bool {
+        let _ = (primitive, slot);
+        false
+    }
+
     /// Which argument holds `primitive`'s options object.
     ///
     /// A separate index vocabulary from [`Dialect::callback_positions`], and it
@@ -3958,6 +3991,24 @@ mod tests {
             None,
             "a store slot has no accessor row"
         );
+    }
+
+    /// ADR 0146: only the plain signal's accessor is inert, and only its slot.
+    #[test]
+    fn only_the_plain_signal_accessor_read_is_inert() {
+        assert!(unambiguous_inert_accessor_read(
+            "createSignal",
+            ResultSlot::TupleItem(0)
+        ));
+        for (name, slot) in [
+            ("createSignal", ResultSlot::TupleItem(1)),
+            ("createMemo", ResultSlot::Whole),
+            ("createStore", ResultSlot::TupleItem(0)),
+            ("createOptimistic", ResultSlot::TupleItem(0)),
+            ("notADialectName", ResultSlot::TupleItem(0)),
+        ] {
+            assert!(!unambiguous_inert_accessor_read(name, slot), "{name}");
+        }
     }
 
     /// The audited archive answers for the exact bytes it names, and a

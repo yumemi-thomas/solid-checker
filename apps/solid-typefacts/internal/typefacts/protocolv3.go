@@ -4,7 +4,19 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 65 (ADR 0139): **a construction states what it
+// TypeFactsHandshakeProtocol is 66 (ADR 0145): **a returned function or arrow
+// expression states its location.** ReturnSite.Callable and ReturnArm.Callable
+// name the exact function-like node a returned expression is, after
+// identity-preserving wrappers, so a consumer can demand that node's own
+// transcript and census what the returned value runs when it is invoked; and
+// ReturnSite.PrimitiveSyntax states a returned value that is a primitive by
+// its grammar alone, whatever the bindings it reads hold (ADR 0145); and
+// (ADR 0146) ReturnSite.Call names a returned call expression and a
+// call-result ImplementationValueSource states ArgumentsPrimitiveSyntax for
+// the traced call's arguments. A protocol-65 consumer decodes with `deny_unknown_fields` and would reject the
+// new field, so the number moves.
+//
+// Protocol 65 (ADR 0139): **a construction states what it
 // keeps for its members.** ExportImplementationTranscript.RetainedArguments,
 // beside invocation `construct`, names each constructor parameter stored once
 // on the instance under a fixed key, whose every other use is a direct call in
@@ -431,8 +443,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 65
-	TypeFactsSchemaSHA256             = "sha256:513bf2df187285b39f94953e2186a9b71348cc1cf533fdad9b9ae67fa874bc53"
+	TypeFactsHandshakeProtocol uint64 = 66
+	TypeFactsSchemaSHA256             = "sha256:5d6c78af7351bfd6cc50129352feb4bcbd90dbcff0bf660e8badd9625fc49eb6"
 )
 
 type ServiceHandshake struct {

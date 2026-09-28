@@ -19,7 +19,7 @@
             "readsItsOwnSignalAndComposesTheSameShape": "summary-8f11286bcb3f78bc1d9afcd626d364472e9dc4d60ae16c2edf63a172011ecd37",
             "readsThroughADirectCall": "summary-97925bedfea1ef57855a3347e2f31020be793785aab3b879583588e7e45da649",
             "readsThroughAPrivateHelper": "summary-944bfd32fd5946deacd7e71e2359cfc622cb1e436892e6e0b05f85b875fa8cf2",
-            "readsThroughAReturnedClosure": "summary-e0a85f36421ff614ee6b9ba3ff7797c403042528759656dc3bfc3bdda47b0a2a",
+            "readsThroughAReturnedClosure": "summary-be0de89f03ce247f11a8bc8dcd0d1aa862990baf242c69dc177c5d7b89c8b946",
             "readsUnderTwoNames": "summary-8c61f167705139d82990a01b36de363075f459575f386de37c2d45fed732641d"
           },
           "resolution": {
@@ -305,12 +305,13 @@
       },
       "shape": "callable"
     },
-    "summary-e0a85f36421ff614ee6b9ba3ff7797c403042528759656dc3bfc3bdda47b0a2a": {
+    "summary-be0de89f03ce247f11a8bc8dcd0d1aa862990baf242c69dc177c5d7b89c8b946": {
       "call": {
         "callbacks": [],
         "closed": [
           "callbacks",
-          "reads"
+          "reads",
+          "returns"
         ],
         "operations": [
           {
@@ -326,8 +327,13 @@
             "id": "return",
             "kind": "return",
             "output": {
-              "kind": "reactive",
-              "role": "accessor"
+              "kind": "described-callable",
+              "reads": [
+                "owned-signal"
+              ],
+              "returns": [
+                "read-value"
+              ]
             },
             "tracking": "untracked",
             "trigger": {
@@ -337,7 +343,8 @@
         ],
         "proposedClosures": [
           "callbacks",
-          "reads"
+          "reads",
+          "returns"
         ],
         "reads": [],
         "returns": [

@@ -852,6 +852,50 @@ the member nowhere -- the caller's literal at the call does not determine what
 the argument holds at return time -- and reads it, alone or beside anything
 else, as no reactive return: never as the argument itself.
 
+**[Decision 2026-09-28, ADR 0145]** a `return` may hand back a **described
+callable**: output `{"kind": "described-callable", "reads": […], "returns":
+[…]}` states, beside "the value is callable", what *one invocation of that
+value* does, whoever holds it and whenever it is called. It is a separate
+invocation, and none of its operations is one of this export's: the export's
+own domains keep their meaning, which the audited `createMemo` already fixes by
+closing `reads: []` while it hands back an accessor. Stated, the shape claims,
+for one invocation of the returned value: it invokes no callable it did not
+itself define -- neither its own arguments nor anything the export was handed
+(`callbacks: []`); it creates nothing and registers nothing on an owner
+(`creates: []`, no owner requirement); it performs exactly `reads`, each on the
+invoking caller's stack in that caller's tracking context; and it hands back
+exactly one of `returns` (none: it completes without a value). It says nothing
+of the other domains. The shape is exact, with no knowledge set of its own, and
+valid only as the whole output of a `return`: a nested claim the census cannot
+establish whole is never stated partially -- the `return` is withdrawn and the
+domain opens.
+
+`createIdGenerator` publishes one `return` whose output is a described callable
+with `reads: []` and `returns: [plain]`, and closes `returns` over it. The
+census reads the producer's `callable` fact -- the returned value *is* a
+function or arrow literal, after identity-preserving wrappers (handshake
+protocol 66) -- demands that literal's own transcript, and walks it: every
+site must be unreachable, a reviewed standard-library member, a coercion of
+primitives, a data property of a literal the program built, or `instanceof`
+against a default-library constructor; its completions must all be valueless,
+or all primitives both by type and by grammar (`primitiveSyntax`, since a
+captured binding's read is typed by its declaration whatever was written to it
+in a JavaScript file). A consumer reads a described callable that reads nothing
+as no reactive return, and one that reads a signal as an accessor (ADR 0146).
+
+**[Decision 2026-09-28, ADR 0146]** a described callable's `reads` may name
+`owned-signal`: one invocation observes the current value of a signal the
+export's own invocation created with the dialect's `createSignal` over
+arguments that are primitives by grammar, whose read the dialect states runs no
+code; and its `returns` may name `read-value`, exactly the value such a read
+observed. `const [count] = createSignal(0); return count;` publishes one
+`return` of `{"kind": "described-callable", "reads": ["owned-signal"],
+"returns": ["read-value"]}`. The census proves the signal from the traced
+source of the returned value, or of a call inside a returned literal, and from
+the creating call's declaration in an audited dialect archive among the
+certified package's authenticated dependencies. The consumer reads it as an
+accessor: calling it is a reactive read in whatever scope calls it.
+
 ### cleanups
 
 `cleanups: [] closed` denies that one invocation of this export gives rise to

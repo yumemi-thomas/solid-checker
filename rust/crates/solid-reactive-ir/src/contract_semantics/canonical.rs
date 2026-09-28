@@ -1155,6 +1155,20 @@ impl CanonicalWriter {
             // Item B round 2 of ways-to-improve § 3.3. Appended, and no
             // document before it carries the tag, so it needs no digest family.
             ValueShape::Undefined => self.u8(20),
+            // ADR 0145. Appended, and no document before it carries the tag,
+            // so it needs no digest family. Both lists are canonically sorted
+            // by normalization before this runs.
+            ValueShape::DescribedCallable(call) => {
+                self.u8(21);
+                self.sequence(&call.reads, |writer, read| {
+                    writer.u8(match read {
+                        super::DescribedRead::OwnedSignal => 0,
+                    });
+                });
+                self.sequence(&call.returns, Self::value);
+            }
+            // ADR 0146. Appended; no document before it carries the tag.
+            ValueShape::ReadValue => self.u8(22),
         }
     }
 

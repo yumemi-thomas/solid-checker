@@ -1189,6 +1189,7 @@ func (p *project) returnValueSourcesLocked(expression *ast.Node) []typefacts.Imp
 				sources = append(sources, typefacts.ImplementationValueSource{
 					Path: append([]typefacts.PathSegment(nil), path...), Kind: typefacts.ImplementationValueCallResult,
 					Target: target, TargetName: name, TargetModule: module,
+					ArgumentsPrimitiveSyntax: argumentsPrimitiveSyntax(node),
 				})
 			}
 			return
@@ -1270,7 +1271,8 @@ func (p *project) returnValueSourcesLocked(expression *ast.Node) []typefacts.Imp
 			sources = append(sources, typefacts.ImplementationValueSource{
 				Path: append([]typefacts.PathSegment(nil), path...), Kind: typefacts.ImplementationValueCallResult,
 				Target: target, TargetName: name, TargetModule: module,
-				TargetPath: []typefacts.PathSegment{{Kind: typefacts.PathSegmentTuple, Index: &item}},
+				TargetPath:               []typefacts.PathSegment{{Kind: typefacts.PathSegmentTuple, Index: &item}},
+				ArgumentsPrimitiveSyntax: argumentsPrimitiveSyntax(variable.AsVariableDeclaration().Initializer),
 			})
 			return
 		}

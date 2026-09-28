@@ -1597,6 +1597,14 @@ pub struct ImplementationValueSource {
     pub target_module: Arc<str>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub target_path: Vec<PathSegment>,
+    /// For a call-result source, whether each written argument of the call
+    /// whose result this is traced to is a primitive by its grammar alone
+    /// (ADR 0146, handshake protocol 66); a spread is not one. Empty is "not
+    /// stated", or a call with no argument -- a consumer requiring every
+    /// argument primitive reads the two alike, and both are true of an empty
+    /// argument list, so it must also require the source to be a call result.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arguments_primitive_syntax: Vec<bool>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1719,6 +1727,26 @@ pub struct ReturnSite {
     /// this site's own fields describe.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub arms: Vec<ReturnArm>,
+    /// The exact location of the function or arrow expression this site's
+    /// whole value is, after identity-preserving wrappers (ADR 0145, handshake
+    /// protocol 66): every evaluation hands back a fresh closure of exactly
+    /// that code. Absent for every other expression. Absence is no claim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub callable: Option<Location>,
+    /// The returned expression's value is a primitive by its grammar alone
+    /// (ADR 0145, handshake protocol 66), whatever any binding it reads holds:
+    /// a non-object literal, an untagged template, a unary, arithmetic,
+    /// relational or equality operator, and conditionals and logical operators
+    /// of them. `false` is no claim. A checker type is not this proof in a
+    /// JavaScript file, where an unchecked write does not widen a
+    /// declaration's type.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub primitive_syntax: bool,
+    /// The exact location of the call expression the returned expression is,
+    /// after identity-preserving wrappers (ADR 0146, handshake protocol 66).
+    /// Absence is no claim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call: Option<Location>,
 }
 
 /// One value a return site can hand back (ADR 0115).
@@ -1752,6 +1780,9 @@ pub struct ReturnArm {
     /// the chain's member arm, with no value fact and no other field.
     #[serde(default, skip_serializing_if = "is_false")]
     pub undefined: bool,
+    /// [`ReturnSite::callable`] for one arm (ADR 0145, handshake protocol 66).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub callable: Option<Location>,
 }
 
 /// One element of an array-literal [`ReturnArm`].

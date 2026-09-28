@@ -1345,6 +1345,11 @@ type ImplementationValueSource struct {
 	TargetName   string                        `cbor:"targetName,omitempty" json:"targetName,omitempty"`
 	TargetModule string                        `cbor:"targetModule,omitempty" json:"targetModule,omitempty"`
 	TargetPath   []PathSegment                 `cbor:"targetPath,omitempty" json:"targetPath,omitempty"`
+	// ArgumentsPrimitiveSyntax states, for a call-result source, whether each
+	// written argument of the call whose result this is traced to is a
+	// primitive by its grammar alone (primitiveBySyntax; ADR 0146, handshake
+	// protocol 66). A spread is not one. Absent for every other source.
+	ArgumentsPrimitiveSyntax []bool `cbor:"argumentsPrimitiveSyntax,omitempty" json:"argumentsPrimitiveSyntax,omitempty"`
 }
 
 type DeclaredTypeReference struct {
@@ -1446,6 +1451,23 @@ type ReturnSite struct {
 	// too wide states no arms rather than some. Absent for every other
 	// expression, which the site's own fields describe.
 	Arms []ReturnArm `cbor:"arms,omitempty" json:"arms,omitempty"`
+	// Callable is the exact location of the function or arrow expression this
+	// site's whole value is, after identity-preserving wrappers (ADR 0145,
+	// handshake protocol 66): every evaluation of the return hands back a
+	// fresh closure of exactly that code. Absent for every other expression,
+	// an identifier naming a function included.
+	Callable *Location `cbor:"callable,omitempty" json:"callable,omitempty"`
+	// PrimitiveSyntax states that the returned expression's value is a
+	// primitive by its grammar alone (ADR 0145, handshake protocol 66),
+	// whatever any binding it reads holds: see primitiveBySyntax. Absent is no
+	// claim; a checker type is not this proof in a JavaScript file, where an
+	// unchecked write does not widen a declaration's type.
+	PrimitiveSyntax bool `cbor:"primitiveSyntax,omitempty" json:"primitiveSyntax,omitempty"`
+	// Call is the exact location of the call expression the returned
+	// expression is, after identity-preserving wrappers (ADR 0146, handshake
+	// protocol 66): the site hands back what that call returned. Absent for
+	// every other expression.
+	Call *Location `cbor:"call,omitempty" json:"call,omitempty"`
 }
 
 // ReturnArm is one value a return site can hand back (ADR 0115).
@@ -1475,6 +1497,10 @@ type ReturnArm struct {
 	// carries no value fact and no other field, and is stated for nothing
 	// else.
 	Undefined bool `cbor:"undefined,omitempty" json:"undefined,omitempty"`
+	// Callable is ReturnSite.Callable for one arm (ADR 0145, handshake
+	// protocol 66): the arm is, after identity-preserving wrappers, a function
+	// or arrow expression at exactly this location.
+	Callable *Location `cbor:"callable,omitempty" json:"callable,omitempty"`
 }
 
 // ReturnArmElement is one element of an array-literal ReturnArm.

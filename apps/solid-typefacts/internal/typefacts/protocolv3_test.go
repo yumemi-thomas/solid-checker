@@ -74,9 +74,9 @@ func TestTypeFactsSchemaHashMatchesFrozenSchema(t *testing.T) {
 // and the fact that the digest above is the schema file's. The third, the build
 // id, is stamped at link time and is covered by the Rust process tests.
 func TestHandshakeDeclaresTheOperationSetsProtocol(t *testing.T) {
-	if typefacts.TypeFactsHandshakeProtocol != 65 {
+	if typefacts.TypeFactsHandshakeProtocol != 66 {
 		t.Fatalf(
-			"handshake protocol = %d, want 65: a construction states what it keeps for its members",
+			"handshake protocol = %d, want 66: a returned function or arrow expression states its location",
 			typefacts.TypeFactsHandshakeProtocol,
 		)
 	}

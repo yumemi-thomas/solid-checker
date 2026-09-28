@@ -173,6 +173,8 @@ pub fn project_export_semantics(
         creates_walk_declines: Vec::new(),
         returns_walk_clean: false,
         returns_value_completion: false,
+        returns_described_callables: Vec::new(),
+        returns_reading_callables: Vec::new(),
         member_alias_initializer: false,
         member_alias_spelling: None,
         returns_argument_containers: Vec::new(),
@@ -423,6 +425,7 @@ fn project_return(
                             | ValueShape::ArgumentArray { .. }
                             | ValueShape::InvocationResult { .. }
                             | ValueShape::Undefined
+                            | ValueShape::DescribedCallable(_)
                     )
                 ) || matches!(
                     &operation.output,
@@ -541,6 +544,20 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
         ValueShape::Promise(value) | ValueShape::AsyncIterable(value) => {
             project_return_shape(value)
         }
+        // ADR 0145/0146: a callable whose every call claim is stated. One that
+        // reads a signal when invoked is what the consumer calls an accessor
+        // -- calling it is a reactive read, in whatever scope calls it -- so it
+        // stays one. One that reads nothing names no leaf: calling it
+        // observes nothing reactive, invokes nothing the caller handed over and
+        // creates nothing, which is what describing no reactive return says.
+        ValueShape::DescribedCallable(call) if !call.reads.is_empty() => Some(ContractReturn {
+            kind: "accessor".into(),
+            label: "described callable read".into(),
+            ..ContractReturn::default()
+        }),
+        ValueShape::DescribedCallable(_) => None,
+        // ADR 0146: only ever an item of a described callable's returns.
+        ValueShape::ReadValue => None,
         ValueShape::Unknown
         | ValueShape::Plain
         | ValueShape::ArgumentArray { .. }
@@ -750,6 +767,48 @@ mod owner_requirement_projection_tests {
             disposals: KnowledgeSet::Unknown,
             computations: KnowledgeSet::Unknown,
         }
+    }
+
+    /// ADR 0145/0146: a closed claim over one described callable projects to
+    /// no reactive return when invoking it reads nothing, and to an accessor
+    /// when it reads a signal -- a returned accessor stays one. Neither is a
+    /// closed-empty claim, and an open one opens the domain.
+    #[test]
+    fn a_described_callable_projects_as_no_return_or_as_an_accessor() {
+        use crate::contract_semantics::{DescribedCall, DescribedRead};
+        let project = |reads: Vec<DescribedRead>, returns: KnowledgeSet<OperationId>| {
+            let mut returned = operation("return", OperationKind::Return, &[]);
+            returned.output = Some(ValueShape::DescribedCallable(Box::new(DescribedCall {
+                reads,
+                returns: vec![ValueShape::Plain],
+            })));
+            project_export_semantics(&export(
+                CallClaims {
+                    returns,
+                    ..claims()
+                },
+                vec![returned],
+                Vec::new(),
+            ))
+        };
+        let closed = || KnowledgeSet::Complete(vec![OperationId("return".into())]);
+        let inert = project(Vec::new(), closed());
+        assert_eq!(inert.returns, ContractClaim::Known(None));
+        assert!(!inert.open_claims.contains(&ClaimDomain::Returns));
+        assert!(!inert.returns_closed_empty);
+
+        let reading = project(vec![DescribedRead::OwnedSignal], closed());
+        let ContractClaim::Known(Some(returned)) = &reading.returns else {
+            panic!("a described read projects to a leaf: {:?}", reading.returns);
+        };
+        assert_eq!(returned.kind, "accessor");
+        assert!(!reading.open_claims.contains(&ClaimDomain::Returns));
+
+        let open = project(
+            Vec::new(),
+            KnowledgeSet::Partial(vec![OperationId("return".into())]),
+        );
+        assert!(open.open_claims.contains(&ClaimDomain::Returns));
     }
 
     /// ADR 0143: `returns: []` and a closed claim over one `plain` return both
@@ -2353,6 +2412,8 @@ fn contract_export_function(
         creates_walk_declines: Vec::new(),
         returns_walk_clean: false,
         returns_value_completion: false,
+        returns_described_callables: Vec::new(),
+        returns_reading_callables: Vec::new(),
         member_alias_initializer: false,
         member_alias_spelling: None,
         returns_argument_containers: Vec::new(),

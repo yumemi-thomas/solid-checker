@@ -270,7 +270,17 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // 155 on 2026-09-28 adds declaration-sibling-proposal's main document,
       // the corpus pin of ADR 0142: an export re-exported across a `.d.ts`
       // split proposes what the same body declared in the entry file does.
-      stableMainDocuments: 155,
+      //
+      // 156 on 2026-09-28 adds implementation-census-described-callables' main
+      // document, the corpus pin of ADR 0145: an export that returns a fresh
+      // function literal states the literal's own call claims.
+      //
+      // 157 on 2026-09-28 adds implementation-census-owned-signal-reads' main
+      // document, the corpus pin of ADR 0146: an export that returns an
+      // accessor proposes a described callable reading a signal it created.
+      // 158 adds package-described-callable-consumer's hand-stated document,
+      // the consumer half of ADRs 0145 and 0146.
+      stableMainDocuments: 158,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

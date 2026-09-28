@@ -63,6 +63,7 @@ impl ObservationResult {
                     | "return-outside-identity"
                     | "return-not-primitive"
                     | "return-outside-containers"
+                    | "described-callable-contradicted"
             )
         })
     }
@@ -1708,4 +1709,135 @@ fn the_constructed_callbacks_module_samples_new_and_never_runs_a_kept_slot() {
         &signatures,
     );
     assert!(!called.contains("new subject"), "{called}");
+}
+
+/// ADR 0145: a claim of described callables selects its own observation --
+/// valueless only when every claimed literal is -- and a described read's
+/// value is never checked.
+#[test]
+fn a_described_callable_claim_selects_its_own_observation() {
+    use solid_reactive_ir::contract_semantics::{DescribedCall, DescribedRead};
+    let described = |id: &str, call: DescribedCall| Operation {
+        id: OperationId(id.into()),
+        output: Some(ValueShape::DescribedCallable(Box::new(call))),
+        ..return_operation()
+    };
+    let observe = |operations: Vec<Operation>| {
+        let claim = KnowledgeSet::complete(
+            operations
+                .iter()
+                .map(|operation| operation.id.clone())
+                .collect(),
+        );
+        candidate_observation("returns", &export_with_returns(claim, operations))
+    };
+    let plain = DescribedCall {
+        reads: Vec::new(),
+        returns: vec![ValueShape::Plain],
+    };
+    assert_eq!(
+        observe(vec![described("return", DescribedCall::default())]),
+        Some(Observation::DescribedCallable {
+            nested: NestedReturns::Undefined
+        })
+    );
+    assert_eq!(
+        observe(vec![described("return", plain.clone())]),
+        Some(Observation::DescribedCallable {
+            nested: NestedReturns::Primitive
+        })
+    );
+    assert_eq!(
+        observe(vec![
+            described("return-0", DescribedCall::default()),
+            described("return-1", plain),
+        ]),
+        Some(Observation::DescribedCallable {
+            nested: NestedReturns::Primitive
+        })
+    );
+    // ADR 0146: a read is not observed, and the value it returns is not
+    // checked.
+    assert_eq!(
+        observe(vec![described(
+            "return",
+            DescribedCall {
+                reads: vec![DescribedRead::OwnedSignal],
+                returns: Vec::new(),
+            }
+        )]),
+        Some(Observation::DescribedCallable {
+            nested: NestedReturns::Undefined
+        })
+    );
+    assert_eq!(
+        observe(vec![described(
+            "return",
+            DescribedCall {
+                reads: vec![DescribedRead::OwnedSignal],
+                returns: vec![ValueShape::ReadValue],
+            }
+        )]),
+        Some(Observation::DescribedCallable {
+            nested: NestedReturns::Any
+        })
+    );
+}
+
+/// ADR 0145: the described-callable module stays quiet on a returned literal
+/// that does what the claim says and fires on everything it denies: a result
+/// that is not a function, a nested completion outside the claimed returns,
+/// and a nested call that runs a callable it was handed -- now or later.
+#[test]
+fn the_described_callable_module_emits_only_outside_the_described_call() {
+    let signatures = [signature(&[])];
+    let valueless = Observation::DescribedCallable {
+        nested: NestedReturns::Undefined,
+    };
+    let plain = Observation::DescribedCallable {
+        nested: NestedReturns::Primitive,
+    };
+    for (implementation, observation) in [
+        ("export function subject() { return () => {}; }", valueless),
+        (
+            "export function subject() { return () => undefined; }",
+            valueless,
+        ),
+        (
+            "export function subject() { let n = 0; return () => ++n; }",
+            plain,
+        ),
+        ("export function subject() { return () => 'text'; }", plain),
+        ("export function subject() { return () => null; }", plain),
+        ("export function subject() { return () => {}; }", plain),
+    ] {
+        let observed = execute(implementation, observation, &signatures);
+        assert!(!observed.contradicted(), "{implementation}: {observed:?}");
+        assert!(observed.error.is_none(), "{implementation}: {observed:?}");
+    }
+    for (implementation, observation) in [
+        ("export function subject() { return 1; }", plain),
+        ("export function subject() { return {}; }", plain),
+        ("export function subject() { return () => 1; }", valueless),
+        ("export function subject() { return () => ({}); }", plain),
+        ("export function subject() { return () => () => 1; }", plain),
+        (
+            "export function subject() { return (f) => { if (typeof f === 'function') f(); }; }",
+            plain,
+        ),
+        (
+            "export function subject() { return (f) => { if (typeof f === 'function') queueMicrotask(f); }; }",
+            plain,
+        ),
+    ] {
+        let observed = execute(implementation, observation, &signatures);
+        assert!(observed.contradicted(), "{implementation}: {observed:?}");
+    }
+    let nothing = execute(
+        "export function subject() { return () => { throw new Error('rejected'); }; }",
+        plain,
+        &signatures,
+    );
+    assert!(!nothing.contradicted(), "{nothing:?}");
+    assert!(nothing.error.is_some(), "{nothing:?}");
 }

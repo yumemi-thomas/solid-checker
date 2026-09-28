@@ -422,6 +422,18 @@ by the semantic normalizer. A resource-bound capability may be written as
 `closed: ["capabilities"]` convention applies to reactive and store values.
 Projection and snapshot are not nominal wire kinds.
 
+ADR 0145 adds `described-callable`, valid only as the whole `output` of a
+`return` operation: `{ "kind": "described-callable", "reads": [], "returns":
+["plain"] }`. Both lists are required -- an absent one would read as the
+strongest claim it can make -- canonically sorted, and without duplicates.
+`reads` items are drawn from `owned-signal` (ADR 0146), `returns` items from
+`plain` and (ADR 0146, only beside a read) `read-value`, a shorthand whose
+detailed spelling is `{ "kind": "read-value" }` and which is valid nowhere
+else; its canonical tag is 22. It carries no `closed` list: the shape is exact, and states what one
+invocation of the returned value does in `callbacks`, `reads`, `creates` and
+`returns` (see `semantic-model.md` § returns). Its canonical tag is 21, appended;
+no earlier document can carry it, so it needs no digest family.
+
 ## Guarded behavior
 
 ```json
