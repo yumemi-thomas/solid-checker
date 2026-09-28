@@ -106,6 +106,18 @@ and clean (`fixtures/reactive-ir/package-described-callable-consumer`, `tsc
 - Five exports in two other corpus fixtures that returned an accessor now
   propose the reading shape instead of the undecidable `reactive` output
   (`callback-slot-derived-store`, `composed-operation-provenance`).
+- Measured with `make certification-metric` against ADR 0145 alone: no
+  owned-signal read certifies in the corpus yet. Clean stays 45, "`returns`
+  never proposed" 154 → 153, misuse-capable exports 166 → 165. The accessor
+  exports that now propose the reading shape (`createEventSignal` in seven
+  packages, `createTagName`, `createPolled`, `createWSMessage`, `createWSState`,
+  `createSwitchTransition`, `createPropsPredicate`, `createScheduled`) are
+  withdrawn by name by the described-callable census instead of standing as
+  the undecidable `reactive` output; which premise refuses each one is not yet
+  classified.
+  One export moves from partial to degenerate
+  (`@solid-primitives/event-listener`'s `createEventSignal`: proposed but not
+  certified becomes the named `recursive-value-shape` refusal).
 
 ## What still refuses
 
