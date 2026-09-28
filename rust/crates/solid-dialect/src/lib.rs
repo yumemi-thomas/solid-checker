@@ -930,36 +930,58 @@ pub struct HostTargetScope {
     pub delegates: &'static [(&'static str, &'static str, CallClaimDomain)],
 }
 
-/// A host-target export condition a [`HostTargetScope`] may name.
+/// A host-target export condition: the runtime a package is certified for and
+/// a consumer runs in, and the condition a [`HostTargetScope`] may name.
+///
+/// The four are the resolver's mutually exclusive host axis
+/// (`MUTUALLY_EXCLUSIVE_CONDITION_AXES` in `packages/cli/scripts/
+/// artifact-resolution.mjs`). Package certification runs once per host it
+/// certifies for (ADR 0140: `browser` and `node`), and a case carrying one of
+/// these is a claim about that host's runtime bodies only.
 ///
 /// An enum rather than a string so that adding a host is a compile error at
-/// every match, including the consumer's admission rule, which drops every
-/// case scoped by one of these for a host that declared none.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// every match, including the consumer's admission rule: a host that declared
+/// none of these never receives a case carrying one, and a host that declared
+/// one receives only cases certified under exactly its hosts
+/// (`contract_interface::admissible_cases`). Only [`Self::Browser`] scopes a
+/// negative row today; `node`, `deno` and `worker` carry none.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum HostTargetCondition {
     Browser,
+    Node,
+    Deno,
+    Worker,
 }
 
 impl HostTargetCondition {
-    /// Every host-target condition a row can be scoped by.
-    pub const ALL: [Self; 1] = [Self::Browser];
+    /// Every host-target condition.
+    pub const ALL: [Self; 4] = [Self::Browser, Self::Node, Self::Deno, Self::Worker];
 
     /// The export-condition spelling.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Browser => "browser",
+            Self::Node => "node",
+            Self::Deno => "deno",
+            Self::Worker => "worker",
         }
     }
 
-    /// Whether `condition` is the spelling of some host-target condition a
-    /// row can be scoped by. A consumer host that declared no conditions never
-    /// receives an artifact case carrying one.
+    /// The host-target condition spelled `condition`, if it is one.
     #[must_use]
-    pub fn names(condition: &str) -> bool {
+    pub fn from_condition(condition: &str) -> Option<Self> {
         Self::ALL
             .into_iter()
-            .any(|scoped| scoped.as_str() == condition)
+            .find(|host| host.as_str() == condition)
+    }
+
+    /// Whether `condition` is the spelling of some host-target condition. A
+    /// consumer host that declared no conditions never receives an artifact
+    /// case carrying one.
+    #[must_use]
+    pub fn names(condition: &str) -> bool {
+        Self::from_condition(condition).is_some()
     }
 }
 

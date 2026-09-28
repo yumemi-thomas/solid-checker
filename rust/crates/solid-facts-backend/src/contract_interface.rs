@@ -1211,35 +1211,61 @@ fn package_relative_targets(
 /// the semantics, so the index is where the comparison belongs, and handing it
 /// the candidates is all this can soundly do.
 ///
-/// **Except a host-scoped case, which an undeclared host never receives.** A
-/// case certified under a host-target condition a dialect row can be scoped by
-/// (`browser`, [`solid_dialect::HostTargetCondition`]) may have closed a domain
-/// on a reading that holds only for that host's runtime body — `solid-js`'
-/// `createSignal` performs no `create` in `dist/solid.js` and reaches
-/// `ctx.serialize` in `dist/server.js`. A linter host does not know whether the
-/// code it checks runs in a browser or renders on a server, so it is handed no
-/// such case at all, before `agreed_admissions` compares what is left: agreement
-/// with an unscoped case must not smuggle a scoped claim in. A host opts in by
-/// declaring the condition (`--runtime-target browser`, or the condition
-/// itself), and then the subset rule below applies unchanged.
+/// **And a case is certified for one host, or for none (ADR 0140).** A case
+/// certified under a host-target condition ([`solid_dialect::HostTargetCondition`]:
+/// `browser`, `node`, `deno`, `worker`) describes the closure that host
+/// resolves: `solid-js`' own bodies differ by host (`createSignal` and
+/// `createMemo` perform no `create` in `dist/solid.js` and reach
+/// `ctx.serialize` in `dist/server.js`), a scoped dialect row may have closed a
+/// domain on the browser reading alone, and any dependency's `exports` map may
+/// select a different file per host. So the host partition is decided before
+/// the subset rule, and it is equality, never inclusion:
+///
+/// - **A host that declared no host condition** — every ESLint and Oxlint run,
+///   and a declaration naming only `import`, `solid`, `development` and the
+///   like — receives only the host-free cases, whatever it declared besides. It
+///   does not know whether the code it checks runs in a browser or renders on
+///   a server, so it is handed no host's case at all, before
+///   `agreed_admissions` compares what is left: agreement with a host-free case
+///   must not smuggle a host's claim in.
+/// - **A host that declared host conditions** (`--runtime-target browser`, or
+///   the condition itself) receives only cases certified under exactly those
+///   hosts, and then the subset rule below applies unchanged. A host-free case
+///   is **not** admitted to it, even where its conditions are a subset of the
+///   declaration: `["import"]` resolved the closure the way no real host does
+///   (`solid-js`' `default` arm, the browser bundle, beside every dependency's
+///   default target), so for a declared host it is a guess, and a host with no
+///   case certified for it gets no contract rather than that guess.
+///
+/// The consumer's declaration is the only source of truth for its host: the
+/// checker reads no `tsconfig` `customConditions`, bundler configuration or
+/// compiler target to infer one, and a host it cannot state exactly is the
+/// undeclared host above.
 pub(crate) fn admissible_cases<'a>(
     reaching: &[&'a AuthenticCase],
     declared: &[String],
 ) -> Vec<&'a AuthenticCase> {
+    let declared_hosts = host_targets(declared);
+    let same_hosts = reaching
+        .iter()
+        .copied()
+        .filter(|case| host_targets(&case.conditions) == declared_hosts)
+        .collect::<Vec<_>>();
     if declared.is_empty() {
-        return reaching
-            .iter()
-            .copied()
-            .filter(|case| {
-                !case
-                    .conditions
-                    .iter()
-                    .any(|condition| solid_dialect::HostTargetCondition::names(condition))
-            })
-            .collect();
+        return same_hosts;
     }
-    select_declared_case(reaching, declared)
+    select_declared_case(&same_hosts, declared)
         .into_iter()
+        .collect()
+}
+
+/// The host-target conditions a condition set names (ADR 0140).
+fn host_targets(
+    conditions: &[String],
+) -> std::collections::BTreeSet<solid_dialect::HostTargetCondition> {
+    conditions
+        .iter()
+        .filter_map(|condition| solid_dialect::HostTargetCondition::from_condition(condition))
         .collect()
 }
 
@@ -2177,9 +2203,16 @@ mod tests {
             "the most specific applicable case wins, not the first"
         );
         assert_eq!(
-            selected(&cases, &["browser", "import", "development"]).as_deref(),
+            selected(&cases, &["import", "development"]).as_deref(),
             Some("root-import"),
             "a host declaring more than a case needs still matches it"
+        );
+        // ADR 0140: a declared host is handed only cases certified for it. A
+        // browser host matches neither a host-free case nor a node one.
+        assert_eq!(
+            selected(&cases, &["browser", "import", "development"]),
+            None,
+            "a browser host has no case certified for it here"
         );
         // A host whose conditions contain none of a case's is not that case.
         assert_eq!(selected(&cases, &["require"]), None);
@@ -2204,7 +2237,8 @@ mod tests {
             case("root-import", "dist/index.js", &["import"]),
             case("root-node", "dist/index.js", &["node", "import"]),
         ];
-        assert_eq!(admissible(&same, &[]), ["root-import", "root-node"]);
+        // A node case is a host's case, so it does not travel (ADR 0140).
+        assert_eq!(admissible(&same, &[]), ["root-import"]);
         // One `.d.ts` shared by branches that run *different* files. Both are
         // still candidates here: whether they can both apply depends on whether
         // they claim the same thing, which is not knowable from these records.
@@ -2247,13 +2281,9 @@ mod tests {
             "a host declaring more than the case needs still matches it"
         );
         // Two real artifacts and no declaration is not something *this* can
-        // decide, so what may travel on does, and the index compares it. The
-        // browser case may not: it can rest on a dialect row scoped to the
-        // browser host (2026-09-25), so an undeclared host never receives it,
-        // and the server case travels alone. It is still no *selection*: a
-        // lone candidate under no declaration is a candidate, not an answer
-        // about the host.
-        assert_eq!(admissible(&cases, &[]), ["server"]);
+        // decide, and neither case may travel: each describes one host's
+        // closure (ADR 0140), so an undeclared host receives neither.
+        assert!(admissible(&cases, &[]).is_empty());
     }
 
     /// The owner's rule for a host-scoped case: an undeclared host never
@@ -2289,13 +2319,59 @@ mod tests {
             "the most specific applicable case wins for a browser host"
         );
         assert_eq!(selected(&pair, &["import"]).as_deref(), Some("plain"));
-        // Only the conditions a dialect row can be scoped by are dropped: a
-        // `solid` or `node` case still travels to the index as before.
+        // Every host condition is dropped for an undeclared host, `node`
+        // included (ADR 0140); a `solid` case is host-free and still travels.
         let unscoped = [
             case("solid", "dist/index.js", &["import", "solid"]),
             case("server", "dist/index.js", &["import", "node"]),
+            case("edge", "dist/index.js", &["import", "worker"]),
         ];
-        assert_eq!(admissible(&unscoped, &[]), ["solid", "server"]);
+        assert_eq!(admissible(&unscoped, &[]), ["solid"]);
+    }
+
+    /// ADR 0140: a case is certified for one host or for none, and a host is
+    /// handed only the cases certified for exactly its hosts. Host-free cases
+    /// go to hosts that declared no host; a declared host never falls back to
+    /// one, and a host no certification covered gets no contract.
+    #[test]
+    fn a_declared_host_receives_only_cases_certified_for_it() {
+        let cases = [
+            case("plain", "dist/index.js", &["import"]),
+            case("plain-solid", "dist/index.js", &["import", "solid"]),
+            case("client", "dist/index.js", &["browser", "import"]),
+            case(
+                "client-solid",
+                "dist/index.js",
+                &["browser", "import", "solid"],
+            ),
+            case("server", "dist/index.js", &["import", "node"]),
+        ];
+        assert_eq!(
+            selected(&cases, &["browser", "import"]).as_deref(),
+            Some("client")
+        );
+        assert_eq!(
+            selected(&cases, &["browser", "development", "import", "solid"]).as_deref(),
+            Some("client-solid"),
+            "the subset rule still picks the most specific case within the host"
+        );
+        assert_eq!(
+            selected(&cases, &["import", "node", "string-ssr"]).as_deref(),
+            Some("server")
+        );
+        assert_eq!(
+            selected(&cases, &["import", "solid"]).as_deref(),
+            Some("plain-solid"),
+            "a declaration naming no host is the host-free partition"
+        );
+        // Hosts nothing was certified for: no contract, never a fallback.
+        assert_eq!(selected(&cases, &["deno", "import"]), None);
+        assert_eq!(selected(&cases, &["import", "worker"]), None);
+        let host_free_only = [case("plain", "dist/index.js", &["import"])];
+        assert_eq!(selected(&host_free_only, &["browser", "import"]), None);
+        assert_eq!(selected(&host_free_only, &["import", "node"]), None);
+        // Two hosts at once is a declaration no single-host case answers.
+        assert_eq!(selected(&cases, &["browser", "import", "node"]), None);
     }
 
     /// Nothing resolved, or nothing certified about what was resolved.

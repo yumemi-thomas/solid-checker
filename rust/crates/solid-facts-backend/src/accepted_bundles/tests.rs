@@ -482,10 +482,11 @@ fn an_undeclared_host_never_receives_a_browser_scoped_case() {
         vec![identities[0].clone()],
         "a `--runtime-target browser` host gets the most specific applicable case"
     );
-    assert_eq!(
-        admitted(&both(), &host(solid_reactive_ir::RuntimeTarget::Node)),
-        vec![identities[1].clone()],
-        "a node host never gets the browser case"
+    // ADR 0140: a declared host receives only cases certified for its host,
+    // so a node host gets neither the browser case nor the host-free one.
+    assert!(
+        admitted(&both(), &host(solid_reactive_ir::RuntimeTarget::Node)).is_empty(),
+        "a node host never gets the browser case, nor a host-free one"
     );
 }
 
