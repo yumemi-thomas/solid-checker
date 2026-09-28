@@ -316,16 +316,22 @@ fn withdrawn_citation(citing: &[LoadedBundle], tier: &[LoadedBundle]) -> Option<
 
 fn citation_withdrawn(citation: &CitedAcceptance, tier: &[LoadedBundle]) -> bool {
     !tier.iter().any(|bundle| {
-        bundle.receipt_digest == citation.receipt_digest
-            && bundle.package_name == citation.package_name
-            && bundle.package_version == citation.package_version
+        bundle.environment.is_some()
+            && citation.is_stated_by(
+                &bundle.package_name,
+                &bundle.package_version,
+                &bundle.bindings,
+            )
     })
 }
 
 fn describe_citation(citation: &CitedAcceptance) -> String {
     format!(
-        "{}@{} (receipt {})",
-        citation.package_name, citation.package_version, citation.receipt_digest
+        "{}@{} (contract {}, receipt {})",
+        citation.package_name,
+        citation.package_version,
+        citation.semantic_digest,
+        citation.receipt_digest
     )
 }
 
@@ -832,6 +838,9 @@ fn cite_from<'a>(
         citation: CitedAcceptance {
             package_name: bundle.package_name.clone(),
             package_version: bundle.package_version.clone(),
+            artifact_acceptance_root: bundle.bindings.artifact_acceptance_root.clone(),
+            dependency_environment_root: bundle.bindings.dependency_environment_root.clone(),
+            semantic_digest: bundle.bindings.semantic_digest.clone(),
             receipt_digest: bundle.receipt_digest.clone(),
         },
         receipt,

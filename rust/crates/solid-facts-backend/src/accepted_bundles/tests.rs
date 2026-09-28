@@ -1804,16 +1804,24 @@ fn a_version_3_index_reads_bindings_only_from_the_receipt_its_digest_pins() {
 /// `tier()`, plus one bundle that cites the first one's receipt.
 fn tier_with_citing() -> (Vec<BundleEntry>, BTreeMap<String, Vec<u8>>) {
     let (mut entries, mut objects) = tier();
-    let cited = CitedAcceptance {
-        package_name: entries[0].package_name.clone(),
-        package_version: entries[0].package_version.clone(),
-        receipt_digest: entries[0].receipt_digest.clone(),
-    };
+    let cited = citation_of(&entries[0]);
     let (entry, document, receipt) = citing_bundle(vec![cited]);
     objects.insert(entry.document.clone(), document);
     objects.insert(entry.receipt.clone(), receipt);
     entries.push(entry);
     (entries, objects)
+}
+
+/// The citation of `entry`'s claim, as certification writes it.
+fn citation_of(entry: &BundleEntry) -> CitedAcceptance {
+    CitedAcceptance {
+        package_name: entry.package_name.clone(),
+        package_version: entry.package_version.clone(),
+        artifact_acceptance_root: entry.bindings.artifact_acceptance_root.clone(),
+        dependency_environment_root: entry.bindings.dependency_environment_root.clone(),
+        semantic_digest: entry.bindings.semantic_digest.clone(),
+        receipt_digest: entry.receipt_digest.clone(),
+    }
 }
 
 /// A dependent package certified by citing `citations`.
@@ -2077,6 +2085,9 @@ fn an_acceptance_citing_a_receipt_the_tier_no_longer_carries_is_withdrawn() {
     let withdrawn = CitedAcceptance {
         package_name: "gone-package".into(),
         package_version: "1.0.0".into(),
+        artifact_acceptance_root: stand_in(78),
+        dependency_environment_root: stand_in(79),
+        semantic_digest: stand_in(80),
         receipt_digest: stand_in(77),
     };
     let (entry, document, receipt) = citing_bundle(vec![withdrawn.clone()]);
@@ -2141,4 +2152,27 @@ fn an_acceptance_citing_a_receipt_the_tier_no_longer_carries_is_withdrawn() {
     // receipt this build's tier does not carry always is.
     assert_eq!(withdrawn_compiled_in_citation(&[]), None);
     assert!(withdrawn_compiled_in_citation(&[withdrawn]).is_some());
+}
+
+/// ADR 0155's amendment: a citation names the claim, not the receipt bytes. A
+/// re-certification of the same artifact in the same environment proving the
+/// same contract issues a new receipt (its importer path is the new run's), and
+/// the tier that carries it still carries the cited claim. Another contract
+/// about the same artifact and environment does not.
+#[test]
+fn a_citation_survives_a_re_issued_receipt_of_the_same_claim_only() {
+    let (entries, objects) = tier_with_citing();
+    let mut reissued = citation_of(&entries[0]);
+    reissued.receipt_digest = stand_in(91);
+    let loaded = load_from(&indexed_index(&entries), &objects).expect("the tier loads");
+    assert!(!citation_withdrawn(&reissued, &loaded));
+    let mut other_claim = citation_of(&entries[0]);
+    other_claim.semantic_digest = stand_in(92);
+    assert!(citation_withdrawn(&other_claim, &loaded));
+    let mut other_environment = citation_of(&entries[0]);
+    other_environment.dependency_environment_root = stand_in(93);
+    assert!(citation_withdrawn(&other_environment, &loaded));
+    let mut other_version = citation_of(&entries[0]);
+    other_version.package_version = "1.0.1".into();
+    assert!(citation_withdrawn(&other_version, &loaded));
 }

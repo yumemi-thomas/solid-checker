@@ -258,3 +258,16 @@ adapter (`contract-workflow.test.mjs`, "ADR 0151") and the bundler
   because a citation carries no per-export bindings.
 - **The graph lane does not cite**: it composes in its own transaction, and a
   dependency node whose tier bundle is admitted is still re-certified there.
+
+## Amendment (2026-09-28): ADR 0155
+
+A citation now names the claim by content, not by receipt digest:
+`citedAcceptances` entries carry the cited receipt's `artifactAcceptanceRoot`,
+`dependencyEnvironmentRoot` and `semanticDigest` beside its digest (frame
+`cited-acceptances:v2`), and a tier carries the citation while some bundle
+states those three for the same package and version. Measured on two local
+regenerations of the tier from the checkpoint corpus: every one of the 466
+content triples reappeared and none of the utils receipt digests did, because a
+receipt binds the certifying run's own importer path, so the digest identity
+withdrew all 44 citing bundles at every regeneration. With the content identity
+a third regeneration kept all 44 and dropped none.

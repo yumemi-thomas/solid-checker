@@ -4413,6 +4413,89 @@ impl VerifiedDependencyComposition {
                 receipt.verifier_build_digest().as_str()
             ));
         }
+        // ADR 0155: a dependent's `plain` return that is exactly a call of a
+        // dependency export rests on that export's closed `returns`. The
+        // obligation names the dependency claim; it is met only where the
+        // contract the dependency's receipt certifies closes it with the same
+        // shape and the receipt lists it among its closed claims.
+        for claim in type_facts
+            .map(super::type_facts::VerifiedTypeFactsEvidence::dependency_returns_claims)
+            .unwrap_or_default()
+        {
+            // A withheld dependency claim is refused through the parent's own
+            // `returns` closure demand on that dependency, which
+            // `composed_from_withheld_dependency` turns into the parent's
+            // withholding: the census built the obligation only beside that
+            // closure (`composed_return_context`).
+            let parent_subject = solid_reactive_ir::contract_semantics::SemanticClaimSubject {
+                artifact_case: claim.parent_artifact_case.clone(),
+                export: claim.parent_export.clone(),
+                path: solid_reactive_ir::contract_semantics::SemanticClaimPath::Domain(
+                    solid_reactive_ir::contract_semantics::ClaimPath::Call(
+                        solid_reactive_ir::contract_semantics::ClaimDomain::Returns,
+                    ),
+                ),
+            };
+            let parent_claim = parent
+                .candidates
+                .proposal()
+                .claim_id(&parent_subject)
+                .ok()
+                .map(|claim| claim.as_str().to_owned());
+            let demand_id = schedule
+                .requirements()
+                .iter()
+                .find(|requirement| {
+                    requirement.dependency().package == claim.package
+                        && requirement.dependency().artifact_case == claim.artifact_case
+                        && requirement.dependency().accepted_contract_digest
+                            == claim.accepted_contract_digest
+                        && requirement.parent_export() == Some(claim.parent_export.as_str())
+                        && requirement.semantic_claim_id() == parent_claim.as_deref()
+                })
+                .map_or_else(
+                    || format!("dependency-return:{}:{}", claim.package, claim.export),
+                    |requirement| requirement.demand_id().to_owned(),
+                );
+            let missing = || DependencyReceiptCompositionError::MissingClosedClaim {
+                demand_id: demand_id.clone(),
+                semantic_claim_id: claim.semantic_claim_id.clone(),
+            };
+            let dependency = expected_dependencies
+                .iter()
+                .find(|identity| {
+                    identity.package_name == claim.package
+                        && identity.artifact_case == claim.artifact_case
+                        && identity.semantic_digest == claim.accepted_contract_digest
+                })
+                .ok_or_else(missing)?;
+            let receipt = receipt_map.get(dependency.digest()).ok_or_else(|| {
+                DependencyReceiptCompositionError::MissingReceipt {
+                    dependency: dependency.digest().into(),
+                }
+            })?;
+            let dependency_gating = gating.get(dependency.digest()).ok_or_else(|| {
+                DependencyReceiptCompositionError::DependencyOutsideGraph {
+                    dependency: dependency.digest().into(),
+                }
+            })?;
+            let closed = dependency_gating
+                .certified_candidate
+                .artifact_case(&claim.artifact_case)
+                .and_then(|case| case.exports.get(&claim.export))
+                .is_some_and(|export| claim.is_closed_in(export));
+            if !closed || !receipt.contains_closed_claim_id(&claim.semantic_claim_id) {
+                return Err(missing());
+            }
+            receipt_rows.push(format!(
+                "dependency-return-discharge:{}:{}:{}:{}:{}",
+                claim.export,
+                claim.shape,
+                claim.semantic_claim_id,
+                dependency.digest(),
+                receipt.receipt_digest()
+            ));
+        }
         for source in source_dependencies {
             trust_rows.push(format!(
                 "source:{}:{}:{}:{}",
@@ -4695,6 +4778,45 @@ impl VerifiedDependencyComposition {
                 receipt.issuer_kind(),
                 receipt.issuer_scope(),
                 receipt.verifier_build_digest().as_str()
+            ));
+        }
+        // ADR 0155, exactly as the graph discharges it (see `authenticate`).
+        for claim in type_facts
+            .map(super::type_facts::VerifiedTypeFactsEvidence::dependency_returns_claims)
+            .unwrap_or_default()
+        {
+            let missing = || DependencyReceiptCompositionError::MissingClosedClaim {
+                demand_id: format!("dependency-return:{}:{}", claim.package, claim.export),
+                semantic_claim_id: claim.semantic_claim_id.clone(),
+            };
+            let cited = citations
+                .iter()
+                .find(|cited| {
+                    cited.edge.package_name == claim.package
+                        && cited.edge.artifact_case == claim.artifact_case
+                        && cited.edge.accepted_contract_digest == claim.accepted_contract_digest
+                })
+                .ok_or_else(missing)?;
+            let closed = cited
+                .cited
+                .contract
+                .artifact_case(&claim.artifact_case)
+                .and_then(|case| case.exports.get(&claim.export))
+                .is_some_and(|export| claim.is_closed_in(export));
+            if !closed
+                || !cited
+                    .cited
+                    .receipt
+                    .contains_closed_claim_id(&claim.semantic_claim_id)
+            {
+                return Err(missing());
+            }
+            receipt_rows.push(format!(
+                "compiled-in-dependency-return-discharge:{}:{}:{}:{}",
+                claim.export,
+                claim.shape,
+                claim.semantic_claim_id,
+                cited.cited.citation.receipt_digest
             ));
         }
         receipt_rows.sort();

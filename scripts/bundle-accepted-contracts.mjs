@@ -545,8 +545,10 @@ export function collectBundles(results, options = {}) {
 /**
  * ADR 0151: the bundles a tier may carry together. A bundle whose receipt
  * cites a compiled-in acceptance rests on it, so it is kept only while the
- * tier carries a bundle with exactly that receipt digest, package and
- * version; dropping one can withdraw another that cited it, so this runs to a
+ * tier carries a bundle stating that claim: the same package and version,
+ * artifact acceptance root, dependency environment root and semantic digest
+ * (ADR 0155; a re-certification's new receipt digest does not withdraw it).
+ * Dropping one can withdraw another that cited it, so this runs to a
  * fixpoint. The loader refuses an index that breaks the rule whole, so a
  * bundle is dropped here, by name, rather than shipping an index that does
  * not load.
@@ -557,14 +559,25 @@ export function withdrawUncarriedCitations(ordered, objects) {
   let kept = [...ordered];
   const withdrawn = [];
   for (;;) {
+    const claimOf = (name, version, payload) => JSON.stringify([
+      name,
+      version,
+      payload?.artifactAcceptanceRoot ?? "",
+      payload?.dependencyEnvironmentRoot ?? "",
+      payload?.semanticDigest ?? ""
+    ]);
     const carried = new Set(
-      kept.map(entry => JSON.stringify([entry.receiptDigest, entry.packageName, entry.packageVersion]))
+      kept.map(entry => claimOf(
+        entry.packageName,
+        entry.packageVersion,
+        JSON.parse(objects.get(entry.receipt) ?? "null")?.payload
+      ))
     );
     const next = [];
     for (const entry of kept) {
       const citations = JSON.parse(objects.get(entry.receipt) ?? "null")?.payload?.citedAcceptances ?? [];
       const missing = citations.find(citation =>
-        !carried.has(JSON.stringify([citation.receiptDigest, citation.packageName, citation.packageVersion]))
+        !carried.has(claimOf(citation.packageName, citation.packageVersion, citation))
       );
       if (missing) withdrawn.push({ entry, citation: missing });
       else next.push(entry);

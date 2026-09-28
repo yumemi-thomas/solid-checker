@@ -11962,6 +11962,12 @@ export const value = phantom;
                     citation: super::CitedAcceptance {
                         package_name: "leaf-package".into(),
                         package_version: "2.0.0".into(),
+                        artifact_acceptance_root: receipt
+                            .bindings()
+                            .artifact_acceptance_root
+                            .clone(),
+                        dependency_environment_root: format!("sha256:{:064x}", 5),
+                        semantic_digest: receipt.semantic_digest().as_str().into(),
                         receipt_digest: receipt.receipt_digest().into(),
                     },
                     acceptance_root: receipt.bindings().artifact_acceptance_root.clone(),
@@ -23654,6 +23660,208 @@ export const value = phantom;
                         .any(|closure| closure.reason.contains("coercion"))
                 );
             }
+        }
+    }
+
+    /// A graph node request whose proposal is the generator's own for
+    /// `exports` -- every domain open, `returns` described as nothing and the
+    /// value-completion and valueless-completion walks' answers per export --
+    /// normalized against the
+    /// node's resolved import exactly as the emit boundary does, with
+    /// `dependencies` as its closure's accepted edges (ADR 0155's fixture).
+    #[allow(clippy::too_many_arguments)]
+    fn inferred_graph_request(
+        name: &str,
+        version: &str,
+        package_root: &str,
+        importer: &str,
+        runtime: &[u8],
+        declarations: &[u8],
+        exports: &[(&str, bool, bool)],
+        dependencies: Vec<AcceptedDependencyEdge>,
+    ) -> (CertificationRequest, PublishedArchive, String) {
+        use solid_reactive_ir::{
+            ContractClaim, ContractEntrypoint, ContractExport, ContractPackage, PackageContract,
+        };
+        let (shaped, archive, integrity) = synthetic_graph_certification_request_shaped(
+            name,
+            version,
+            package_root,
+            importer,
+            runtime,
+            declarations,
+            dependencies,
+            ValueShape::Callable,
+            CallClaims::default(),
+        );
+        let mut resolved = shaped.resolved_import.clone();
+        let binding = resolved.exports["value"].clone();
+        resolved.exports = exports
+            .iter()
+            .map(|(export, _, _)| {
+                let mut binding = binding.clone();
+                binding.runtime.export_name = (*export).into();
+                binding.declarations.export_name = (*export).into();
+                ((*export).to_owned(), binding)
+            })
+            .collect();
+        let inferred = PackageContract {
+            package: ContractPackage {
+                name: name.into(),
+                version: version.into(),
+                integrity: String::new(),
+            },
+            entrypoints: BTreeMap::from([(
+                ".".into(),
+                ContractEntrypoint {
+                    exports: exports
+                        .iter()
+                        .map(|(export, value_completion, walk_clean)| {
+                            (
+                                (*export).into(),
+                                ContractExport {
+                                    kind: "function".into(),
+                                    reactive_reads: ContractClaim::Open,
+                                    callbacks: ContractClaim::Open,
+                                    owner_requirements: ContractClaim::Open,
+                                    returns: ContractClaim::Known(None),
+                                    async_behavior: ContractClaim::Known(String::new()),
+                                    returns_value_completion: *value_completion,
+                                    returns_walk_clean: *walk_clean,
+                                    ..ContractExport::default()
+                                },
+                            )
+                        })
+                        .collect(),
+                },
+            )]),
+            source_path: String::new(),
+        };
+        let candidate =
+            crate::inferred_contract::normalize_inferred_contract(&inferred, &resolved).unwrap();
+        (
+            CertificationRequest::new(candidate, shaped.import_request.clone(), resolved),
+            archive,
+            integrity,
+        )
+    }
+
+    /// ADR 0155 end to end in the published graph: a root export whose whole
+    /// returned value is exactly a call of a dependency export closes
+    /// `returns` over one plain return exactly when the dependency's own
+    /// certified contract closes it plain (or over nothing), and the claim is
+    /// discharged against the dependency's receipt. Conditional and partial
+    /// forwarding, and a dependency claim that did not close, stay open.
+    #[test]
+    fn a_return_of_a_composed_dependency_call_restates_its_closed_plain_return() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let fixture = repository_root().join("fixtures/package-contracts/dependency-plain-return");
+        let bytes = |file: &str| std::fs::read(fixture.join(file)).unwrap();
+        let mut outcomes = Vec::new();
+        for (runtime, types, expected) in [
+            ("forward.js", "root.d.ts", true),
+            ("nothing.js", "nothing.d.ts", true),
+            ("conditional.js", "root.d.ts", false),
+            ("bound.js", "root.d.ts", false),
+            ("unclosed.js", "root.d.ts", false),
+        ] {
+            let (leaf, leaf_archive, leaf_integrity) = inferred_graph_request(
+                "leaf-package",
+                "2.0.0",
+                "/project/node_modules/root-package/node_modules/leaf-package",
+                "/project/node_modules/root-package/dist/index.js",
+                &bytes("leaf.js"),
+                &bytes("leaf.d.ts"),
+                &[
+                    ("count", true, false),
+                    ("reset", false, true),
+                    ("widened", true, false),
+                ],
+                vec![],
+            );
+            let leaf_plan = plan_certification(
+                leaf.clone(),
+                UntrustedArtifactEnvelope::Published(leaf_archive.clone()),
+            )
+            .unwrap();
+            let edge = AcceptedDependencyEdge {
+                specifier: "leaf-package".into(),
+                package_name: "leaf-package".into(),
+                artifact_case: leaf_plan.selected_artifact_case_id().into(),
+                accepted_contract_digest: leaf_plan
+                    .demand_graph()
+                    .candidate_semantic_digest()
+                    .as_str()
+                    .into(),
+            };
+            let (root, root_archive, root_integrity) = inferred_graph_request(
+                "root-package",
+                "1.0.0",
+                "/project/node_modules/root-package",
+                "/project/src/app.ts",
+                &bytes(runtime),
+                &bytes(types),
+                &[("value", true, false)],
+                vec![edge],
+            );
+            let graph = plan_published_contract_graph(
+                PublishedGraphNodeRequest::new(
+                    root,
+                    root_archive,
+                    graph_lock("root-package", "1.0.0", &root_integrity),
+                ),
+                [PublishedGraphNodeRequest::new(
+                    leaf,
+                    leaf_archive,
+                    graph_lock("leaf-package", "2.0.0", &leaf_integrity),
+                )],
+            )
+            .unwrap();
+            let scratch = TracerScratch::new("dependency-plain-return");
+            let Some(probes) =
+                tracer_configuration_from(&fixture, scratch.path(), "dependency-plain-return", &[])
+            else {
+                return;
+            };
+            let issuer =
+                ConfiguredReceiptIssuer::persistent_local("dependency-plain-return", [67; 32])
+                    .unwrap();
+            let finalized = graph
+                .certify_value_only(&pin, &issuer, 1, Some(&probes))
+                .unwrap_or_else(|error| panic!("{runtime}: the graph certifies: {error}"));
+            let leaf_node = finalized
+                .nodes()
+                .iter()
+                .find(|node| node.identity().package_name == "leaf-package")
+                .expect("the leaf node is finalized");
+            let leaf_main = leaf_node.finalized().canonical_main();
+            assert!(
+                plain_return_is_closed_in(leaf_main, "count"),
+                "{runtime}: the leaf's count closes plain"
+            );
+            assert!(
+                !plain_return_is_closed_in(leaf_main, "widened"),
+                "{runtime}: the leaf's widened stays open"
+            );
+            outcomes.push((
+                runtime,
+                expected,
+                plain_return_is_closed_in(finalized.root().canonical_main(), "value"),
+                format!(
+                    "{:?} {:?}",
+                    finalized.root().withheld_closures(),
+                    finalized.root().withheld_operations()
+                ),
+            ));
+        }
+        for (runtime, expected, actual, withheld) in &outcomes {
+            assert_eq!(
+                actual, expected,
+                "{runtime}: the root's plain return closes only through an exact, closed \
+                 dependency claim: {withheld}"
+            );
         }
     }
 

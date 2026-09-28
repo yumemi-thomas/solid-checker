@@ -333,3 +333,14 @@ primitive through evidence the rule does not yet admit -- a `let` every write
 of which is a primitive by grammar, a reviewed global conversion (`Number`), a
 method of a literal the function built (`/re/.test`, a module `Set`'s `has`) --
 and each would need its own evidence to return.
+
+## Amendment 2026-09-28: ADR 0155
+
+A fourth evidence kind stands beside the three above: **`dependency`**, a
+return whose whole value is exactly the result of a call of a composed
+dependency export whose certified `returns` closes over one unguarded `plain`
+return or over nothing. The witness names the dependency claim
+(`primitive:dependency:<package>:<export>:<plain|nothing>:<claim>`), and the
+claim is discharged against the dependency's receipt at composition, so the
+return is never stronger than the claim it cites. It reaches only where a
+dependency plan is in the census (the graph lanes). See ADR 0155.

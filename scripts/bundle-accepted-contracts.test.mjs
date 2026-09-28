@@ -336,17 +336,33 @@ describe("writing the index", () => {
 });
 
 describe("ADR 0151: a tier carries what its bundles cite", () => {
-  const bundle = (name, receiptDigest, citedAcceptances = []) => ({
+  // A claim is named by content: acceptance root, environment root and
+  // semantic digest. `contract` stands for all three here.
+  const bundle = (name, receiptDigest, citedAcceptances = [], contract = `${name}-contract`) => ({
     entry: {
       packageName: name,
       packageVersion: "1.0.0",
       requestedEntrypoint: ".",
-      receipt: `objects/${name}.receipt.json`,
+      receipt: `objects/${name}-${receiptDigest}.receipt.json`,
       receiptDigest
     },
-    receipt: JSON.stringify({ payload: citedAcceptances.length ? { citedAcceptances } : {} })
+    receipt: JSON.stringify({
+      payload: {
+        artifactAcceptanceRoot: `${name}-artifact`,
+        dependencyEnvironmentRoot: `${name}-environment`,
+        semanticDigest: contract,
+        ...(citedAcceptances.length ? { citedAcceptances } : {})
+      }
+    })
   });
-  const cite = (name, receiptDigest) => ({ packageName: name, packageVersion: "1.0.0", receiptDigest });
+  const cite = (name, receiptDigest, contract = `${name}-contract`) => ({
+    packageName: name,
+    packageVersion: "1.0.0",
+    artifactAcceptanceRoot: `${name}-artifact`,
+    dependencyEnvironmentRoot: `${name}-environment`,
+    semanticDigest: contract,
+    receiptDigest
+  });
 
   test("a bundle whose citation the tier carries is kept, and one whose citation it dropped is withdrawn, transitively", () => {
     const utils = bundle("utils", "sha256:u");
@@ -364,11 +380,19 @@ describe("ADR 0151: a tier carries what its bundles cite", () => {
     );
   });
 
-  test("a citation names the exact receipt: another receipt of the same package does not carry it", () => {
-    const utils = bundle("utils", "sha256:new");
+  test("a citation names the claim: a re-issued receipt of the same claim carries it, another contract does not", () => {
+    const reissued = bundle("utils", "sha256:new");
     const media = bundle("media", "sha256:m", [cite("utils", "sha256:old")]);
-    const objects = new Map([utils, media].map(({ entry, receipt }) => [entry.receipt, receipt]));
-    const { kept } = withdrawUncarriedCitations([utils.entry, media.entry], objects);
-    assert.deepEqual(kept.map(entry => entry.packageName), ["utils"]);
+    const objects = new Map([reissued, media].map(({ entry, receipt }) => [entry.receipt, receipt]));
+    assert.deepEqual(
+      withdrawUncarriedCitations([reissued.entry, media.entry], objects).kept.map(entry => entry.packageName),
+      ["utils", "media"]
+    );
+    const weaker = bundle("utils", "sha256:weaker", [], "utils-weaker-contract");
+    const others = new Map([weaker, media].map(({ entry, receipt }) => [entry.receipt, receipt]));
+    assert.deepEqual(
+      withdrawUncarriedCitations([weaker.entry, media.entry], others).kept.map(entry => entry.packageName),
+      ["utils"]
+    );
   });
 });

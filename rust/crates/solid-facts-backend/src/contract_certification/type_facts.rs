@@ -505,6 +505,29 @@ impl VerifiedTypeFactsEvidence {
             .collect()
     }
 
+    /// Every dependency-return obligation (ADR 0155) any demand's witness
+    /// recorded, the closure census's and the operation's positive fact's
+    /// alike: each is discharged against the dependency's receipt, whichever
+    /// demand it came from.
+    pub(super) fn dependency_returns_claims(&self) -> Vec<DependencyReturnsClaim> {
+        let mut claims = self
+            .bindings
+            .iter()
+            .flat_map(|binding| binding.site_ids())
+            .filter_map(|site| site.strip_prefix(CENSUS_DEPENDENCY_RETURNS_PREFIX))
+            .map(|json| serde_json::from_str(json).expect("native dependency-return encoding"))
+            .collect::<Vec<DependencyReturnsClaim>>();
+        claims.sort_by(|left, right| {
+            (&left.package, &left.export, &left.semantic_claim_id).cmp(&(
+                &right.package,
+                &right.export,
+                &right.semantic_claim_id,
+            ))
+        });
+        claims.dedup();
+        claims
+    }
+
     /// The inherited-closure obligations recorded for one parent closure
     /// claim: the dependency claims a re-exported name's closure rests on.
     ///
@@ -553,6 +576,7 @@ impl VerifiedTypeFactsEvidence {
                     .filter(|site| {
                         site.starts_with(CENSUS_DEPENDENCY_CLAIM_PREFIX)
                             || site.starts_with(INHERITED_CLOSURE_CLAIM_PREFIX)
+                            || site.starts_with(CENSUS_DEPENDENCY_RETURNS_PREFIX)
                     })
                     .map(|site| format!("{}:{site}", binding.demand_id()))
             })
@@ -4293,7 +4317,13 @@ fn verify_export_value_family(
                         }
                     }
                 } else {
-                    sites.extend(census_returns_domain(proof, export, implementation)?);
+                    sites.extend(census_returns_domain(
+                        plan,
+                        proof,
+                        export,
+                        implementation,
+                        census,
+                    )?);
                 }
             } else {
                 // This census is the exported value's own observation and
@@ -8705,7 +8735,14 @@ fn require_operation_recursive_subject(
                 ));
             }
             let (_, implementation) = require_export_implementation(plan, proof, transcript, open)?;
-            return require_primitive_return_output(proof, transcript, implementation, open, sites);
+            return require_primitive_return_output_composed(
+                Some(composed_return_context(plan, census, artifact_case, export)),
+                proof,
+                transcript,
+                implementation,
+                open,
+                sites,
+            );
         }
     }
     // An overloaded export is proved by proving every overload. Nothing here
@@ -8720,7 +8757,7 @@ fn require_operation_recursive_subject(
 }
 
 /// ADR 0113: the positive half of a `plain` return, proved from the same
-/// evidence the closure census reads ([`primitive_return_sites`]) and from
+/// evidence the closure census reads ([`primitive_return_sites_in`]) and from
 /// every declared overload stating a primitive result alone.
 ///
 /// The facts are independent -- the checker's types for the body, and the
@@ -8732,7 +8769,21 @@ fn require_operation_recursive_subject(
 /// on its own here, not on the closure: a refused census leaves it a partial
 /// claim, and a partial `plain` return is still a claim about every value the
 /// export hands back.
+#[cfg(test)]
 fn require_primitive_return_output(
+    proof: &ScheduledProofDemand,
+    transcript: &ExportValueTranscript,
+    implementation: &typefacts::ExportImplementationTranscript,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    require_primitive_return_output_composed(None, proof, transcript, implementation, open, sites)
+}
+
+/// [`require_primitive_return_output`], with the dependency plans and census
+/// roots ADR 0155's dependency route binds through, when there are any.
+fn require_primitive_return_output_composed(
+    composed: Option<ComposedReturn<'_>>,
     proof: &ScheduledProofDemand,
     transcript: &ExportValueTranscript,
     implementation: &typefacts::ExportImplementationTranscript,
@@ -8745,7 +8796,8 @@ fn require_primitive_return_output(
         implementation.location.start_byte,
         implementation.location.end_byte
     );
-    let returned = primitive_return_sites(implementation, &at).map_err(|reason| open(&reason))?;
+    let returned =
+        primitive_return_sites_in(implementation, &at, composed).map_err(|reason| open(&reason))?;
     for signature in require_export_call_signatures(proof, transcript, open)? {
         if !value_is_primitive_alone(&signature.result) {
             return Err(open(
@@ -12942,9 +12994,11 @@ fn confirm_described_reads(
 }
 
 fn census_returns_domain(
+    plan: &CertificationPlan,
     proof: &ScheduledProofDemand,
     export: &solid_reactive_ir::contract_semantics::ExportSemantics,
     implementation: &typefacts::ExportImplementationTranscript,
+    census: CensusEvidence<'_>,
 ) -> Result<Vec<String>, TypeFactsCertificationError> {
     let refuse = |reason: String| TypeFactsCertificationError::UnsupportedDemand {
         demand: proof.id.clone(),
@@ -12995,7 +13049,16 @@ fn census_returns_domain(
         && operation.kind == OperationKind::Return
         && matches!(operation.output, Some(ValueShape::Plain))
     {
-        return census_primitive_returns_transcript(implementation).map_err(refuse);
+        let composed = match &proof.subject {
+            ProofDemandSubject::DomainClosure { subject, .. } => Some(composed_return_context(
+                plan,
+                census,
+                &subject.artifact_case,
+                &subject.export,
+            )),
+            _ => None,
+        };
+        return primitive_return_sites_composed(implementation, composed).map_err(refuse);
     }
     // ADR 0115: returns that each hand back the caller's own argument or a
     // fresh array of the caller's arguments. After the single-operation arms,
@@ -14032,8 +14095,19 @@ fn census_merged_props_returns_transcript(
 
 /// ADR 0113: one `return` whose output is `plain`, decided from the producer's
 /// primitive completion (ADR 0045) and from every return site's own value.
+#[cfg(test)]
 fn census_primitive_returns_transcript(
     implementation: &typefacts::ExportImplementationTranscript,
+) -> Result<Vec<String>, String> {
+    primitive_return_sites_composed(implementation, None)
+}
+
+/// [`census_primitive_returns_transcript`] with ADR 0155's dependency route:
+/// a return that is exactly a call of a dependency export whose composed
+/// contract closes `returns` over one `plain` return, or over nothing.
+fn primitive_return_sites_composed(
+    implementation: &typefacts::ExportImplementationTranscript,
+    composed: Option<ComposedReturn<'_>>,
 ) -> Result<Vec<String>, String> {
     let at = format!(
         "{}:{}..{}",
@@ -14041,7 +14115,7 @@ fn census_primitive_returns_transcript(
         implementation.location.start_byte,
         implementation.location.end_byte
     );
-    primitive_return_sites(implementation, &at)
+    primitive_return_sites_in(implementation, &at, composed)
 }
 
 /// The evidence one `plain` return rests on, shared by the closure census and
@@ -14069,9 +14143,15 @@ fn census_primitive_returns_transcript(
 /// value-carrying completion the producer did not prove unreachable, so the
 /// one operation the closure enumerates can occur. A body that yields nothing
 /// closes `returns: []` instead (ADR 0035).
-fn primitive_return_sites(
+///
+/// ADR 0155 adds the dependency route: with `composed` -- the dependency plans
+/// and census roots of this certification -- a live return that is exactly a
+/// call of a composed dependency export whose `returns` closes plain, or over
+/// nothing, has that claim as its evidence ([`dependency_plain_return`]).
+fn primitive_return_sites_in(
     implementation: &typefacts::ExportImplementationTranscript,
     at: &str,
+    composed: Option<ComposedReturn<'_>>,
 ) -> Result<Vec<String>, String> {
     let control_flow = require_plain_classified_completion(implementation, at)?;
     if !implementation.primitive_completion {
@@ -14099,17 +14179,32 @@ fn primitive_return_sites(
                 reachability_name(site.reach)
             ));
         }
-        let Some(evidence) = plain_return_evidence(site) else {
-            return Err(format!(
-                "primitive returns census refuses a return at {}:{}..{}, reach {}, for {at}: its \
-                 value is typed a primitive, but in a JavaScript file that type may be only a \
-                 reassignable binding's declaration, and the value is not a primitive by its \
-                 syntax alone nor what a reviewed default-library member returns",
-                site.location.path,
-                site.location.start_byte,
-                site.location.end_byte,
-                reachability_name(site.reach)
-            ));
+        let evidence = match plain_return_evidence(site) {
+            Some(evidence) => evidence,
+            None => match composed
+                .map(|composed| dependency_plain_return(&composed, implementation, site))
+                .transpose()?
+                .flatten()
+            {
+                Some((evidence, obligation)) => {
+                    sites.push(obligation);
+                    evidence
+                }
+                None => {
+                    return Err(format!(
+                        "primitive returns census refuses a return at {}:{}..{}, reach {}, for \
+                         {at}: its value is typed a primitive, but in a JavaScript file that \
+                         type may be only a reassignable binding's declaration, and the value \
+                         is not a primitive by its syntax alone, nor what a reviewed \
+                         default-library member returns, nor exactly the result of a call of a \
+                         composed dependency export whose `returns` closes plain",
+                        site.location.path,
+                        site.location.start_byte,
+                        site.location.end_byte,
+                        reachability_name(site.reach)
+                    ));
+                }
+            },
         };
         sites.push(format!(
             "census-return:{}:{}:{}:{}:primitive:{evidence}",
@@ -15971,6 +16066,190 @@ fn census_call_disposition(
 
 const CENSUS_DEPENDENCY_CLAIM_PREFIX: &str = "census-dependency-creates:";
 
+/// Where ADR 0155's dependency route may bind a return: the certification's
+/// plan and census evidence, and the export whose `returns` is being decided,
+/// which each obligation names so composition can withhold that export's
+/// `returns` closure when the dependency withholds the claim.
+#[derive(Clone, Copy)]
+struct ComposedReturn<'a> {
+    plan: &'a CertificationPlan,
+    census: CensusEvidence<'a>,
+    artifact_case: &'a str,
+    export: &'a str,
+}
+
+/// The [`ComposedReturn`] for `export` of `artifact_case`.
+///
+/// If the dependency later withholds the claim an obligation names,
+/// composition refuses through the parent's `returns` closure demand on that
+/// dependency, which the graph turns into withholding that closure by name
+/// (`composed_from_withheld_dependency`); the next pass re-decides the plain
+/// return without the claim, and the operation is withdrawn by its own
+/// refusal. Where the parent has no such closure candidate the refusal has no
+/// candidate to withhold and fails the graph closed: never a receipt resting
+/// on a withdrawn claim.
+fn composed_return_context<'a>(
+    plan: &'a CertificationPlan,
+    census: CensusEvidence<'a>,
+    artifact_case: &'a str,
+    export: &'a str,
+) -> ComposedReturn<'a> {
+    ComposedReturn {
+        plan,
+        census,
+        artifact_case,
+        export,
+    }
+}
+
+/// The site prefix ADR 0155's dependency-return obligation travels under.
+const CENSUS_DEPENDENCY_RETURNS_PREFIX: &str = "census-dependency-returns:";
+
+/// A dependency-return obligation (ADR 0155): the dependent's `plain` return
+/// rests on this dependency export's `returns` closing exactly `shape` in the
+/// contract the dependency's receipt certifies. Never authority on its own.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub(super) struct DependencyReturnsClaim {
+    /// The dependent's artifact case and export whose `returns` closure this
+    /// obligation is withheld through when the dependency withholds its claim.
+    pub parent_artifact_case: String,
+    pub parent_export: String,
+    pub package: String,
+    pub artifact_case: String,
+    pub accepted_contract_digest: String,
+    pub export: String,
+    pub semantic_claim_id: String,
+    /// `plain` (one `return` whose output is plain) or `nothing` (`returns:
+    /// []`, a valueless completion, so the call's result is `undefined`).
+    pub shape: String,
+}
+
+impl DependencyReturnsClaim {
+    /// Whether `export`'s `returns` closes exactly this claim's shape.
+    pub(super) fn is_closed_in(
+        &self,
+        export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    ) -> bool {
+        dependency_returns_shape(export, true).as_deref() == Some(self.shape.as_str())
+    }
+}
+
+/// The shape of `export`'s `returns` a dependent may restate as a `plain`
+/// return (ADR 0155), or `None`: exactly one `return` operation whose output is
+/// `plain` (`plain`), or none at all (`nothing`). With `closed`, the domain
+/// must be closed; otherwise the enumeration alone is read, for a candidate
+/// whose closure is still to be certified.
+fn dependency_returns_shape(
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    closed: bool,
+) -> Option<String> {
+    let returns = export.operation_claim(ClaimDomain::Returns)?;
+    if closed && !returns.is_closed() {
+        return None;
+    }
+    match returns.items() {
+        [] => Some("nothing".into()),
+        [id] => export
+            .operation(&id.0)
+            .filter(|operation| {
+                operation.kind == OperationKind::Return
+                    && operation.output == Some(ValueShape::Plain)
+                    && operation.guard.is_none()
+            })
+            .map(|_| "plain".into()),
+        _ => None,
+    }
+}
+
+/// ADR 0155: the evidence a live `plain` return site has when its value is
+/// exactly the result of a call of a composed dependency export whose
+/// `returns` closes over one `plain` return or over nothing, as
+/// `(evidence, obligation site)`; `None` when it is not that.
+///
+/// Exactly means: the producer states the site's whole value is one call
+/// expression (`ReturnSite::call`, after identity-preserving wrappers only),
+/// the implementation records a call -- not a construction -- at exactly that
+/// location, and its resolved callee declaration is one dependency export by
+/// the same binding the `creates` census uses. A conditional, a member of the
+/// result, an operator over it, or a binding holding it is not a call site of
+/// the dependency, and stays with the other evidence or refuses. The claim is
+/// as strong as the dependency's: its closed `returns` holds for every
+/// invocation, so it holds for this one, and the obligation is discharged
+/// against the dependency's receipt at composition.
+fn dependency_plain_return(
+    composed: &ComposedReturn<'_>,
+    implementation: &typefacts::ExportImplementationTranscript,
+    site: &typefacts::ReturnSite,
+) -> Result<Option<(String, String)>, String> {
+    let Some(location) = site.call.as_ref() else {
+        return Ok(None);
+    };
+    let mut calls = implementation.calls.iter().filter(|call| {
+        call.location.path == location.path
+            && call.location.start_byte == location.start_byte
+            && call.location.end_byte == location.end_byte
+    });
+    let (Some(call), None) = (calls.next(), calls.next()) else {
+        return Ok(None);
+    };
+    if call.kind != CallKind::Call {
+        return Ok(None);
+    }
+    let mut claims = Vec::new();
+    for callee in dependency_export_callees(composed.plan, &composed.census, call)? {
+        let Some(shape) = dependency_returns_shape(callee.export, false) else {
+            continue;
+        };
+        let subject = callee.subject(ClaimDomain::Returns);
+        let closed = callee
+            .export
+            .operation_claim(ClaimDomain::Returns)
+            .is_some_and(KnowledgeSet::is_closed);
+        if !closed
+            && !callee
+                .child
+                .candidates
+                .closure_candidates()
+                .contains(&subject)
+        {
+            continue;
+        }
+        let Ok(claim_id) = callee.child.candidates.proposal().claim_id(&subject) else {
+            continue;
+        };
+        claims.push(DependencyReturnsClaim {
+            parent_artifact_case: composed.artifact_case.to_owned(),
+            parent_export: composed.export.to_owned(),
+            package: callee.dependency.package.clone(),
+            artifact_case: callee.dependency.artifact_case.clone(),
+            accepted_contract_digest: callee.dependency.accepted_contract_digest.clone(),
+            export: callee.export_name.clone(),
+            semantic_claim_id: claim_id.as_str().to_owned(),
+            shape,
+        });
+    }
+    let claim = match claims.len() {
+        0 => return Ok(None),
+        1 => claims.pop().expect("one claim"),
+        _ => {
+            return Err(format!(
+                "primitive returns census cannot bind the call at {}:{}..{} to one exact \
+                 dependency export and artifact case",
+                location.path, location.start_byte, location.end_byte
+            ));
+        }
+    };
+    let evidence = format!(
+        "dependency:{}:{}:{}:{}",
+        claim.package, claim.export, claim.shape, claim.semantic_claim_id
+    );
+    let obligation = format!(
+        "{CENSUS_DEPENDENCY_RETURNS_PREFIX}{}",
+        serde_json::to_string(&claim).expect("native dependency-return claim encoding")
+    );
+    Ok(Some((evidence, obligation)))
+}
+
 /// The site prefix an inherited-closure obligation travels under, beside
 /// [`CENSUS_DEPENDENCY_CLAIM_PREFIX`] and discharged the same way.
 const INHERITED_CLOSURE_CLAIM_PREFIX: &str = "inherited-closure-dependency:";
@@ -15996,34 +16275,103 @@ fn census_dependency_claim(
     let Some(parent) = run.plan else {
         return Ok(None);
     };
+    let mut matches = Vec::new();
+    for callee in dependency_export_callees(parent, &run.evidence, call)? {
+        let Some(creates) = callee.export.operation_claim(ClaimDomain::Creates) else {
+            continue;
+        };
+        if !creates.items().is_empty() {
+            continue;
+        }
+        let subject = callee.subject(ClaimDomain::Creates);
+        if !creates.is_closed()
+            && !callee
+                .child
+                .candidates
+                .closure_candidates()
+                .contains(&subject)
+        {
+            continue;
+        }
+        let Ok(claim_id) = callee.child.candidates.proposal().claim_id(&subject) else {
+            continue;
+        };
+        matches.push(CensusDependencyClaim {
+            package: callee.dependency.package.clone(),
+            artifact_case: callee.dependency.artifact_case.clone(),
+            accepted_contract_digest: callee.dependency.accepted_contract_digest.clone(),
+            export: callee.export_name.clone(),
+            semantic_claim_id: claim_id.as_str().to_owned(),
+        });
+    }
+    match matches.len() {
+        0 => Ok(None),
+        1 => Ok(matches.pop()),
+        _ => Err("creates census cannot bind the callee to one exact dependency export and artifact case".into()),
+    }
+}
+
+/// One exact dependency export a call's resolved callee declaration is, found
+/// through the dependency plan's own verified export bindings.
+struct DependencyExportCallee<'a> {
+    dependency: &'a solid_reactive_ir::contract_semantics::certification::DependencyDemandInput,
+    child: &'a CertificationPlan,
+    artifact_case: String,
+    export_name: String,
+    export: &'a solid_reactive_ir::contract_semantics::ExportSemantics,
+}
+
+impl DependencyExportCallee<'_> {
+    fn subject(
+        &self,
+        domain: ClaimDomain,
+    ) -> solid_reactive_ir::contract_semantics::SemanticClaimSubject {
+        solid_reactive_ir::contract_semantics::SemanticClaimSubject {
+            artifact_case: self.artifact_case.clone(),
+            export: self.export_name.clone(),
+            path: SemanticClaimPath::Domain(ClaimPath::Call(domain)),
+        }
+    }
+}
+
+/// Every dependency export `call`'s resolved callee declaration is exactly:
+/// the declaration the producer resolved lies in a dependency root of this
+/// census, and a dependency plan of this certification binds one of its
+/// exports' declarations to exactly that name and span. Shared by the
+/// `creates` census's dependency disposition and ADR 0155's dependency
+/// return, so the two bind a callee the same way.
+fn dependency_export_callees<'a>(
+    parent: &'a CertificationPlan,
+    evidence: &CensusEvidence<'a>,
+    call: &typefacts::ImplementationCall,
+) -> Result<Vec<DependencyExportCallee<'a>>, String> {
     let Some(declaration) = call.declaration.as_ref().filter(|d| !d.symbol.is_empty()) else {
-        return Ok(None);
+        return Ok(Vec::new());
     };
-    let paths = run
-        .evidence
+    let paths = evidence
         .roots
         .iter()
         .map(|r| r.path.clone())
         .collect::<Vec<_>>();
     let normalized = declaration.location.path.replace('\\', "/");
     let Some((index, relative)) = strip_materialized_source_root(&normalized, &paths) else {
-        return Ok(None);
+        return Ok(Vec::new());
     };
-    let root = &run.evidence.roots[index];
+    let root = &evidence.roots[index];
     if !root.dependency {
-        return Ok(None);
+        return Ok(Vec::new());
     }
     let Some(bytes) = root.snapshot.read(relative) else {
-        return Ok(None);
+        return Ok(Vec::new());
     };
     let Ok(source) = std::str::from_utf8(bytes) else {
-        return Ok(None);
+        return Ok(Vec::new());
     };
     let source = source.strip_prefix('\u{feff}').unwrap_or(source);
     let Ok(facts) = solid_facts::ast::extract(relative.to_owned(), source) else {
-        return Ok(None);
+        return Ok(Vec::new());
     };
-    let mut matches = Vec::new();
+    let mut callees = Vec::new();
     for dependency in
         parent
             .demand_graph()
@@ -16034,7 +16382,7 @@ fn census_dependency_claim(
                 _ => None,
             })
     {
-        for child in run.evidence.dependencies {
+        for child in evidence.dependencies {
             if child.snapshot.package_name() != dependency.package {
                 continue;
             }
@@ -16063,39 +16411,17 @@ fn census_dependency_claim(
                 {
                     continue;
                 }
-                let Some(creates) = export.operation_claim(ClaimDomain::Creates) else {
-                    continue;
-                };
-                if !creates.items().is_empty() {
-                    continue;
-                }
-                let subject = solid_reactive_ir::contract_semantics::SemanticClaimSubject {
+                callees.push(DependencyExportCallee {
+                    dependency,
+                    child,
                     artifact_case: case.id.clone(),
-                    export: export_name.clone(),
-                    path: SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates)),
-                };
-                if !creates.is_closed() && !child.candidates.closure_candidates().contains(&subject)
-                {
-                    continue;
-                }
-                let Ok(claim_id) = child.candidates.proposal().claim_id(&subject) else {
-                    continue;
-                };
-                matches.push(CensusDependencyClaim {
-                    package: dependency.package.clone(),
-                    artifact_case: dependency.artifact_case.clone(),
-                    accepted_contract_digest: dependency.accepted_contract_digest.clone(),
-                    export: export_name.clone(),
-                    semantic_claim_id: claim_id.as_str().to_owned(),
+                    export_name: export_name.clone(),
+                    export,
                 });
             }
         }
     }
-    match matches.len() {
-        0 => Ok(None),
-        1 => Ok(matches.pop()),
-        _ => Err("creates census cannot bind the callee to one exact dependency export and artifact case".into()),
-    }
+    Ok(callees)
 }
 
 /// The source text of a call the census refuses, read from the authenticated

@@ -151,18 +151,45 @@ pub struct Policy2ReceiptBindings {
     pub cited_acceptances: Vec<CitedAcceptance>,
 }
 
-/// One compiled-in acceptance a certification cited (ADR 0151).
+/// One compiled-in acceptance a certification cited (ADR 0151, as amended
+/// by ADR 0155).
 ///
-/// `receipt_digest` is the whole identity: the tier pins a receipt by the
-/// digest of its bytes, and the receipt signs the artifact, the environment and
-/// every claim. Name and version travel beside it so a refusal can say what was
-/// withdrawn; they are compared with the tier's bundle, never trusted alone.
+/// The claim is named by its content: the artifact (`artifact_acceptance_root`),
+/// the environment its proof read (`dependency_environment_root`) and the
+/// certified contract (`semantic_digest`), each exactly as the cited receipt
+/// signs it. A tier carries the citation while some bundle states those three
+/// for the same package and version. The receipt digest is recorded too, for
+/// audit, but it is not the identity: a receipt also binds the certification's
+/// own importer path, so every re-certification of the same bytes in the same
+/// environment issues a new digest for the same claim, and a digest identity
+/// withdrew every citing contract at every tier regeneration.
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CitedAcceptance {
     pub package_name: String,
     pub package_version: String,
+    pub artifact_acceptance_root: String,
+    pub dependency_environment_root: String,
+    pub semantic_digest: String,
     pub receipt_digest: String,
+}
+
+impl CitedAcceptance {
+    /// Whether `bindings`, the bindings of a bundle's receipt for `package`
+    /// at `version`, state exactly this cited claim.
+    #[must_use]
+    pub fn is_stated_by(
+        &self,
+        package: &str,
+        version: &str,
+        bindings: &Policy2ReceiptBindings,
+    ) -> bool {
+        self.package_name == package
+            && self.package_version == version
+            && self.artifact_acceptance_root == bindings.artifact_acceptance_root
+            && self.dependency_environment_root == bindings.dependency_environment_root
+            && self.semantic_digest == bindings.semantic_digest
+    }
 }
 
 /// One installed package, besides the certified one, whose bytes a
@@ -558,6 +585,9 @@ impl Policy2ReceiptBindings {
             .any(|pair| pair[0].receipt_digest >= pair[1].receipt_digest)
             || self.cited_acceptances.iter().any(|citation| {
                 validate_digest(&citation.receipt_digest).is_err()
+                    || validate_digest(&citation.artifact_acceptance_root).is_err()
+                    || validate_digest(&citation.dependency_environment_root).is_err()
+                    || validate_digest(&citation.semantic_digest).is_err()
                     || citation.package_name.is_empty()
                     || citation.package_version.is_empty()
             })
@@ -1695,7 +1725,7 @@ fn payload(
 const ARTIFACT_ACCEPTANCE_ROOT_FRAME: &[u8] = b"artifact-acceptance-root:v1";
 
 /// Tags the cited-acceptances frame (ADR 0151).
-const CITED_ACCEPTANCES_FRAME: &[u8] = b"cited-acceptances:v1";
+const CITED_ACCEPTANCES_FRAME: &[u8] = b"cited-acceptances:v2";
 
 /// Whether the signed payload carries `artifactAcceptanceRoot`.
 ///
@@ -1788,6 +1818,9 @@ fn canonical_payload(payload: &ReceiptPayload) -> Vec<u8> {
         for citation in &payload.cited_acceptances {
             frame(&mut bytes, citation.package_name.as_bytes());
             frame(&mut bytes, citation.package_version.as_bytes());
+            frame(&mut bytes, citation.artifact_acceptance_root.as_bytes());
+            frame(&mut bytes, citation.dependency_environment_root.as_bytes());
+            frame(&mut bytes, citation.semantic_digest.as_bytes());
             frame(&mut bytes, citation.receipt_digest.as_bytes());
         }
     }

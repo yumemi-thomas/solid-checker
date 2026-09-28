@@ -1898,6 +1898,9 @@ fn cited_acceptances_are_signed_and_citing_nothing_keeps_the_older_bytes() {
     let citation = |digit: u8| CitedAcceptance {
         package_name: "@solid-primitives/utils".into(),
         package_version: "7.0.0-next.4".into(),
+        artifact_acceptance_root: root("cited-artifact"),
+        dependency_environment_root: root("cited-environment"),
+        semantic_digest: root("cited-contract"),
         receipt_digest: format!("sha256:{}", format!("{digit:x}").repeat(64)),
     };
     let mut cited = uncited.clone();
