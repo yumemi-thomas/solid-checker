@@ -291,6 +291,23 @@ sites would then match a bundle's recorded environment, and 66 would stop at
 the Solid runtime (*estimated*). An admitted bundle then leaves the site open,
 not certified, unless its export is closed (see the ceiling above).
 
+**Walls 4 and 8 removed (2026-09-28, later the same day).** The pnpm reader now
+reads pnpm 11's env document, and admission's Bun reader now reads `bun.lock`
+version 1 (ADR 0108's amendment). The same release-checker commands were
+rerun on the 12 affected apps, before (`227a7360`) and after the fix. The
+before run reproduced this report's 144 + 74 sites exactly. After the fix,
+none of the 218 sites stops at a lockfile, and **none is certified**:
+
+| where the 218 sites went | sites | apps |
+| --- | ---: | --- |
+| **open**: `@tanstack/solid-router` rc.8 (31), `@solidjs/meta` next.2 (11); `ownerRequirements`, `reactiveReads` and (except one site) `returns` stay open | 42 | finds-team, solid-validation-site, lutra-console, helge-dev |
+| no contract: the dependency environment differs (`@tanstack/router-core` installed 1.171.32, certified 1.171.22) | 64 | sefer |
+| no contract: no bundle on the installed Solid runtime (`@solidjs/meta`, `@kobalte/core` alpha.2, four `@solid-primitives`) | 64 | readingroom, raybend-website, civil, solid-groove, jibe-run, solid-validation-site, lutra-console |
+| no contract: the installed version is not in the tier (`@kobalte/core` alpha.0/alpha.1, `@tanstack/solid-router` beta.29) | 48 | readingroom, compass-ui, openbot, jibe-run, civil |
+
+The only lockfile shape still unread in the corpus is beacon-web's binary
+`bun.lockb` (2 sites).
+
 The other open wall is `@solidjs/meta` in oscar (7 sites). Here the package
 side did measure the installed version, so each domain has a cause:
 
