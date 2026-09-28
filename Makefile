@@ -414,6 +414,36 @@ contract-coverage-census: build-checker-release
 	$(BUN) scripts/probe-recipe-addressing.mjs \
 	  --run "$(CURDIR)/rust/target/coverage-census/run.json"
 
+# The north-star certification metric: the share of the export surface of the
+# top 30 Solid 2 packages by weekly downloads that certifies clean, per package
+# and download-weighted, with every other export ranked by what blocks it.
+# The corpus is pinned in scripts/ecosystem-benchmark/certification-metric-corpus.json
+# (re-pin with `bun scripts/certification-metric.mjs --select`, network); the
+# probe list is derived from it, and --print-probes refuses a manifest that no
+# longer agrees with the pin. The run keeps its trees only long enough for the
+# measurement to read the certified catalogs, then --clean-retained removes
+# them; pass CERTIFICATION_METRIC_KEEP=1 to keep them for investigation.
+# Same flags as the census run; not in `make verify` (registry, minutes).
+CERTIFICATION_METRIC_OUT := $(CURDIR)/rust/target/certification-metric
+
+certification-metric: build-checker-release
+	mkdir -p "$(CERTIFICATION_METRIC_OUT)"
+	@probes="$$($(BUN) scripts/certification-metric.mjs --print-probes)" || exit 1; \
+	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
+	  $(BUN) scripts/ecosystem-benchmark/run.mjs --solid 2 --timeout 1800 \
+	  --attempt-certification --recover-entrypoints \
+	  --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" --keep-temp \
+	  $$(printf '%s\n' "$$probes" | sed 's/^/--probe /' | tr '\n' ' ') \
+	  --json "$(CERTIFICATION_METRIC_OUT)/run.json" \
+	  --markdown "$(CERTIFICATION_METRIC_OUT)/run.md"
+	$(BUN) scripts/certification-metric.mjs --run "$(CERTIFICATION_METRIC_OUT)/run.json" \
+	  --json "$(CERTIFICATION_METRIC_OUT)/metric.json" \
+	  --markdown "$(CERTIFICATION_METRIC_OUT)/metric.md" \
+	  $(if $(CERTIFICATION_METRIC_KEEP),,--clean-retained)
+
+.PHONY: certification-metric
+
 # Delivery-only certification runs, one per reviewed consumer environment in
 # scripts/ecosystem-benchmark/consumer-environments.json: each certifies the
 # listed packages, cloned from their solid2 manifest rows, in the exact tree
