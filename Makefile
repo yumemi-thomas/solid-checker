@@ -398,17 +398,28 @@ ecosystem-regression: build-checker-release
 # measured it -- so the first run fails until it is re-pinned deliberately with
 # `--update`, and the 1.x-era numbers stay in git history as the evidence they
 # are.
+# The compiled-in tier is certified once host-free and once per host in
+# TIER_HOSTS (ADR 0140): a consumer that declares a host is admitted only a
+# case certified for it. The census and recipe-addressing pins gate the
+# host-free run alone; the per-host runs feed accepted-bundles. Pass
+# TIER_HOSTS= for the host-free run alone.
+TIER_HOSTS ?= browser node
+
 contract-coverage-census: build-checker-release
 	mkdir -p "$(CURDIR)/rust/target/coverage-census"
-	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
-	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
-	  $(BUN) scripts/ecosystem-benchmark/run.mjs --solid 2 --timeout 1800 \
-	  --attempt-certification --recover-entrypoints \
-	  --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" --keep-temp \
-	  $$($(BUN) scripts/contract-coverage-census.mjs --print-packages \
-	    | sed 's/^/--package /' | tr '\n' ' ') \
-	  --json "$(CURDIR)/rust/target/coverage-census/run.json" \
-	  --markdown "$(CURDIR)/rust/target/coverage-census/run.md"
+	@set -e; packages="$$($(BUN) scripts/contract-coverage-census.mjs --print-packages \
+	    | sed 's/^/--package /' | tr '\n' ' ')"; \
+	for host in none $(TIER_HOSTS); do \
+	  if [ "$$host" = none ]; then suffix=""; hostflag=""; else suffix="-$$host"; hostflag="--host $$host"; fi; \
+	  SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
+	    SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
+	    $(BUN) scripts/ecosystem-benchmark/run.mjs --solid 2 --timeout 1800 \
+	    --attempt-certification --recover-entrypoints $$hostflag \
+	    --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" --keep-temp \
+	    $$packages \
+	    --json "$(CURDIR)/rust/target/coverage-census/run$$suffix.json" \
+	    --markdown "$(CURDIR)/rust/target/coverage-census/run$$suffix.md"; \
+	done
 	$(BUN) scripts/contract-coverage-census.mjs \
 	  --run "$(CURDIR)/rust/target/coverage-census/run.json"
 	$(BUN) scripts/probe-recipe-addressing.mjs \
@@ -471,13 +482,16 @@ consumer-environment-runs: build-checker-release
 	@set -e; \
 	for id in $$($(BUN) scripts/ecosystem-benchmark/run.mjs --print-consumer-environments); do \
 	  mkdir -p "$(CONSUMER_ENVIRONMENT_RUNS)/$$id"; \
-	  SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
-	    SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
-	    $(BUN) scripts/ecosystem-benchmark/run.mjs --consumer-environment "$$id" \
-	    --timeout 1800 --attempt-certification --recover-entrypoints \
-	    --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" --keep-temp \
-	    --json "$(CONSUMER_ENVIRONMENT_RUNS)/$$id/run.json" \
-	    --markdown "$(CONSUMER_ENVIRONMENT_RUNS)/$$id/run.md"; \
+	  for host in none $(TIER_HOSTS); do \
+	    if [ "$$host" = none ]; then suffix=""; hostflag=""; else suffix="-$$host"; hostflag="--host $$host"; fi; \
+	    SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
+	      SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
+	      $(BUN) scripts/ecosystem-benchmark/run.mjs --consumer-environment "$$id" \
+	      --timeout 1800 --attempt-certification --recover-entrypoints $$hostflag \
+	      --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" --keep-temp \
+	      --json "$(CONSUMER_ENVIRONMENT_RUNS)/$$id/run$$suffix.json" \
+	      --markdown "$(CONSUMER_ENVIRONMENT_RUNS)/$$id/run$$suffix.md"; \
+	  done; \
 	done
 
 # Regenerates the compiled-in accepted-contract tier from the census run and
@@ -504,10 +518,14 @@ consumer-environment-runs: build-checker-release
 # (`every_bundle_this_build_carries_authenticates`) still passes.
 accepted-bundles: build-checker-debug
 	$(BUN) scripts/bundle-accepted-contracts.mjs \
-	  --run "$(CURDIR)/rust/target/coverage-census/run.json" \
-	  $$(for id in $$($(BUN) scripts/ecosystem-benchmark/run.mjs --print-consumer-environments); do \
-	    run="$(CONSUMER_ENVIRONMENT_RUNS)/$$id/run.json"; \
+	  $$(for host in none $(TIER_HOSTS); do \
+	    if [ "$$host" = none ]; then suffix=""; else suffix="-$$host"; fi; \
+	    run="$(CURDIR)/rust/target/coverage-census/run$$suffix.json"; \
 	    if [ -f "$$run" ]; then printf -- '--run %s ' "$$run"; fi; \
+	    for id in $$($(BUN) scripts/ecosystem-benchmark/run.mjs --print-consumer-environments); do \
+	      run="$(CONSUMER_ENVIRONMENT_RUNS)/$$id/run$$suffix.json"; \
+	      if [ -f "$$run" ]; then printf -- '--run %s ' "$$run"; fi; \
+	    done; \
 	  done)
 
 .PHONY: contract-coverage-census consumer-environment-runs accepted-bundles
