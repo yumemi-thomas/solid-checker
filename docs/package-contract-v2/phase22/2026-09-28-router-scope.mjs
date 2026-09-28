@@ -3,12 +3,13 @@
 //
 // Read-only: it certifies nothing and runs no checker. Three modes:
 //
-//   bun docs/package-contract-v2/phase22/2026-09-28-router-scope.mjs --prepare <dir>
-//       writes <dir>/manifest.json (the benchmark manifest plus a next.26 row
-//       on the rc.9 triple and a next.21 row on the rc.6 triple, the runtimes
-//       those versions' apps install) and <dir>/corpus.json (a three-row
-//       certification-metric corpus for next.30, next.26 and next.21). Feed
-//       them to `scripts/ecosystem-benchmark/run.mjs --manifest` with the
+//   bun docs/package-contract-v2/phase22/2026-09-28-router-scope.mjs --prepare <dir> [--no-scratch]
+//       writes <dir>/manifest.json (the benchmark manifest, whose router rows
+//       are next.30, next.26 on the rc.9 triple and next.18 on the rc.3 triple,
+//       plus a scratch next.21 row on the rc.6 triple its apps install) and
+//       <dir>/corpus.json (a certification-metric corpus naming each router
+//       row; `--no-scratch` leaves next.21 out of both). Feed them to
+//       `scripts/ecosystem-benchmark/run.mjs --manifest` with the
 //       certification-metric flags, then `scripts/certification-metric.mjs
 //       --run … --corpus <dir>/corpus.json`.
 //
@@ -24,6 +25,7 @@
 //
 //   bun … --join --sites <app-import metric.json> --closures <json>
 //            --metric <dir> [--hosts "none browser node"] [--exact]
+//            [--measured 2.0.0-next.30,2.0.0-next.26,…]
 //       joins app sites to per-host certification-metric exports
 //       (<dir>/metric{,-browser,-node}.json) and prints the walls table and the
 //       greedy unlock curve. A site at a measured version reads that version's
@@ -42,38 +44,45 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const argv = process.argv.slice(2);
 const arg = name => { const i = argv.indexOf(name); return i < 0 ? undefined : argv[i + 1]; };
 
-// Registry integrities, `npm view @solidjs/router@<v> dist.integrity`, 2026-09-28.
-const INTEGRITY = {
-  "2.0.0-next.26": "sha512-Zjho0HI095mxSMu8tyfuqoq8vTeYML0mWJj1iQar298MrhtT2itGiEgF2C7ndE2mzKeXRQ/DLf1tr37Gax5bsg==",
-  "2.0.0-next.21": "sha512-sU9n6HsWpkHN0EmT5/r7z2uXzqlIWFJEJMe3V0MXCe19S4Gc8j33sSNZzrF431uOXwUQ+/KPKU4ChzcPQPDoEw=="
+// next.21 has no committed row: its apps run rc.6, and `solid-js` and
+// `@solidjs/web` rc.6 are not audited archives, so it is measured for its
+// bytes only. Integrity: `npm view @solidjs/router@2.0.0-next.21
+// dist.integrity`, 2026-09-28.
+const SCRATCH = {
+  version: "2.0.0-next.21",
+  integrity: "sha512-sU9n6HsWpkHN0EmT5/r7z2uXzqlIWFJEJMe3V0MXCe19S4Gc8j33sSNZzrF431uOXwUQ+/KPKU4ChzcPQPDoEw==",
+  peer: "^2.0.0-rc.5",
+  solid: { "@solidjs/web": "2.0.0-rc.6", "solid-js": "2.0.0-rc.6", "@solidjs/signals": "2.0.0-rc.6" }
 };
-const EXTRA = [
-  { version: "2.0.0-next.26", peer: "^2.0.0-rc.9", solid: { "@solidjs/web": "2.0.0-rc.9", "solid-js": "2.0.0-rc.9" } },
-  { version: "2.0.0-next.21", peer: "^2.0.0-rc.5", solid: { "@solidjs/web": "2.0.0-rc.6", "solid-js": "2.0.0-rc.6", "@solidjs/signals": "2.0.0-rc.6" } }
-];
 
 if (argv.includes("--prepare")) {
+  // The manifest's own router rows (next.30, next.26 on rc.9, next.18 on
+  // rc.3) plus the scratch next.21 row, and a certification-metric corpus
+  // naming each of them.
   const out = resolve(arg("--prepare")); mkdirSync(out, { recursive: true });
   const manifest = JSON.parse(readFileSync(`${ROOT}/scripts/ecosystem-benchmark/manifest.json`, "utf8"));
-  const at = manifest.rows.findIndex(r => r.package === "@solidjs/router" && r.version === "2.0.0-next.30");
-  const base = manifest.rows[at];
-  const rows = EXTRA.map(({ version, peer, solid }) => ({
-    ...base, version, integrity: INTEGRITY[version], distTags: [],
+  const routerRows = manifest.rows.filter(r => r.package === "@solidjs/router" && r.solidTarget === "solid2");
+  const last = manifest.rows.indexOf(routerRows[routerRows.length - 1]);
+  const { version, integrity, peer, solid } = SCRATCH;
+  const scratch = {
+    ...routerRows[0], version, integrity, distTags: [],
     peerDependencies: { "solid-js": peer, "@solidjs/web": peer },
     compatibleSolidVersions: Object.fromEntries(Object.entries(solid).map(([k, v]) => [k, [v]])),
     probes: [{ id: `@solidjs/router@${version}|solid2|only`, kind: "only", channel: "rc", solid }]
-  }));
-  manifest.rows.splice(at + 1, 0, ...rows);
+  };
+  const withScratch = !argv.includes("--no-scratch");
+  if (withScratch) manifest.rows.splice(last + 1, 0, scratch);
   writeFileSync(`${out}/manifest.json`, JSON.stringify(manifest, null, 2));
   const corpus = JSON.parse(readFileSync(`${ROOT}/scripts/ecosystem-benchmark/certification-metric-corpus.json`, "utf8"));
   const row = corpus.packages.find(p => p.package === "@solidjs/router");
-  corpus.packages = [row, ...EXTRA.map(({ version, solid }, i) => ({
-    ...row, rank: 1000 + i, version, integrity: INTEGRITY[version], probe: `@solidjs/router@${version}|solid2|only`, solid
-  }))];
+  corpus.packages = [...routerRows, ...(withScratch ? [scratch] : [])].map((manifestRow, i) => ({
+    ...row, rank: i === 0 ? row.rank : 1000 + i, version: manifestRow.version, integrity: manifestRow.integrity,
+    probe: manifestRow.probes[0].id, solid: manifestRow.probes[0].solid
+  }));
   corpus.selection.size = corpus.packages.length;
   writeFileSync(`${out}/corpus.json`, JSON.stringify(corpus, null, 2));
   console.log(`wrote ${out}/manifest.json and ${out}/corpus.json; probes:`);
-  for (const v of ["2.0.0-next.30", ...EXTRA.map(e => e.version)]) console.log(`  @solidjs/router@${v}|solid2|only`);
+  for (const entry of corpus.packages) console.log(`  ${entry.probe}`);
 }
 
 const VERSIONS = [16, 17, 18, 19, 20, 21, 23, 24, 26, 30].map(n => `next.${n}`);
@@ -158,7 +167,7 @@ if (argv.includes("--join")) {
   const metricDir = resolve(arg("--metric"));
   const hosts = (arg("--hosts") ?? "none browser node").split(" ");
   const exactOnly = argv.includes("--exact");
-  const measured = ["2.0.0-next.30", "2.0.0-next.26", "2.0.0-next.21"];
+  const measured = (arg("--measured") ?? "2.0.0-next.30,2.0.0-next.26,2.0.0-next.21").split(",");
   const demand = new Map();
   for (const s of app.sites) {
     if (s.package !== "@solidjs/router" || s.role !== "app" || !s.version.startsWith("2.0.0-next.")) continue;
@@ -176,7 +185,10 @@ if (argv.includes("--join")) {
     // Nearest first: an export's own closure can be identical while the case
     // around it is not (next.30's dist/fs.js imports a peer next.26's does
     // not), and case-wide hazards follow the case.
-    const order = (n <= 21 ? [21, 26, 30] : n <= 26 ? [26, 21, 30] : [30, 26, 21]).map(m => `2.0.0-next.${m}`);
+    const order = measured
+      .map(m => [m, Number(m.split(".").pop())])
+      .sort((a, b) => Math.abs(a[1] - n) - Math.abs(b[1] - n) || b[1] - a[1])
+      .map(([m]) => m);
     if (by && by[tag] && by[tag] !== "absent") {
       const same = order.find(m => by[m.slice("2.0.0-".length)] === by[tag]);
       if (same) { stats.identical++; return records[same]?.get(key); }

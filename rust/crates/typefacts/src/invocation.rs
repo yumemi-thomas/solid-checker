@@ -1148,6 +1148,130 @@ pub struct UncensusedInvokingForm {
     /// literal allocation. The consumer must bind and census that exact call.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local_literal_result: Option<LocalLiteralResultPremise>,
+    /// Protocol 70 (ADR 0153): the form reads a data member of every object
+    /// this program provides for a package-owned context. Positions only, and
+    /// never beside a subject root: the consumer binds every chain call to a
+    /// row its census walked, asks the audited dialect about every named call,
+    /// and refuses a context that escapes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_member: Option<ContextMemberPremise>,
+}
+
+/// ADR 0153's premise for one member read. See
+/// [`UncensusedInvokingForm::context_member`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextMemberPremise {
+    /// The member the form reads, by its literal name.
+    pub member: String,
+    /// How the subject reaches the dialect read, outermost first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chain: Vec<ContextChainStep>,
+    /// The dialect `useContext` call the chain ends at; one of the
+    /// provision's reads.
+    pub read: Location,
+    pub context: ContextProvision,
+    /// Every call in the program's runtime source that could turn a data
+    /// member into an accessor or delete it, with the literal key(s) it names.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub installations: Vec<ContextInstallation>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ContextChainStepKind {
+    /// A call to a local function whose one completion expression is reduced
+    /// next, in that function's body.
+    Result,
+    /// A call to a local function whose every completion hands back its
+    /// unwritten first parameter; the call's first argument is reduced next,
+    /// in the same body.
+    Identity,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextChainStep {
+    pub kind: ContextChainStepKind,
+    pub call: Location,
+    pub callee: Location,
+    pub returns: Vec<Location>,
+}
+
+/// A call whose callee the producer resolved to a declaration-file binding
+/// named `target_name`. Whether that is the dialect's is the consumer's
+/// question.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextDialectCall {
+    pub call: Location,
+    pub target_name: String,
+    pub declaration: ResolvedDeclaration,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextProvision {
+    /// The `const C = createContext()` declarator.
+    pub declaration: Location,
+    /// Its `createContext()` call, with no arguments.
+    pub initializer: ContextDialectCall,
+    /// Every dialect `useContext` call whose argument is the context, directly
+    /// or through a read helper.
+    pub reads: Vec<ContextDialectCall>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub helpers: Vec<ContextReadHelper>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub providers: Vec<ContextProvider>,
+    /// The names the context escapes the package under.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exports: Vec<ContextExport>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextReadHelper {
+    pub call: Location,
+    pub callee: Location,
+    pub argument: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextProvider {
+    pub render: ContextDialectCall,
+    pub value: Location,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub factory: Option<ContextFactory>,
+    pub literals: Vec<ContextLiteral>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextFactory {
+    pub call: Location,
+    pub callee: Location,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextLiteral {
+    pub literal: Location,
+    pub member: Location,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextExport {
+    pub location: Location,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextInstallation {
+    pub location: Location,
+    pub keys: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

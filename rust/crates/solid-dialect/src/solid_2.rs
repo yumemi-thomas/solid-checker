@@ -12,9 +12,9 @@
 
 use crate::{
     AuditedArchive, AuditedCitation, Boundary, CallClaimDomain, CallbackOwner, CleanupRule,
-    Dialect, DialectNegativeAuthority, Execution, HostTargetCondition, HostTargetScope,
-    NegativeClaimRow, Primitive, ReactiveRole, ResultSlot, RowScope, TrackedCallbackTiming,
-    Version, lookup, reverse,
+    ContextRole, Dialect, DialectNegativeAuthority, Execution, HostTargetCondition,
+    HostTargetScope, NegativeClaimRow, Primitive, ReactiveRole, ResultSlot, RowScope,
+    TrackedCallbackTiming, Version, lookup, reverse,
 };
 
 mod releases;
@@ -5682,6 +5682,47 @@ impl Dialect for Solid2 {
     /// never again.
     fn renders_component_argument(&self, name: &str) -> Option<usize> {
         (name == "createComponent").then_some(0)
+    }
+
+    /// ADR 0153, read on every bundle of the audited `solid-js` archives
+    /// (rc.3 and rc.9: `dist/solid.js`, `dist/dev.js`, `dist/server.js`, and
+    /// rc.9's observe variants) and on `@solidjs/signals` rc.3, rc.6 and rc.9
+    /// (`dist/prod/core/context.js`):
+    ///
+    /// ```js
+    /// function createContext(defaultValue, options) {
+    ///   const id = Symbol(options && options.name || "");
+    ///   function provider(props) {
+    ///     return createRoot(() => {
+    ///       setContext(provider, props.value);
+    ///       return children(() => props.children);
+    ///     });
+    ///   }
+    ///   provider.id = id;
+    ///   provider.defaultValue = defaultValue;
+    ///   return provider;
+    /// }
+    /// function useContext(context) { return getContext(context); }
+    /// function createComponent(Comp, props) { return untrack(() => Comp(props || {})); }
+    /// ```
+    ///
+    /// `getContext(e, t = getOwner())` throws `NoOwnerError` without an owner,
+    /// answers the owner's map at `e.id` (rc.9 `t.ze[e.id]`, rc.3 `hasContext`
+    /// then `t.we[e.id]`) or else `e.defaultValue`, and throws
+    /// `ContextNotFoundError` when that is `undefined`; the server bundle's
+    /// `useContext` rethrows the same error. `setContext(e, t, r = getOwner())`
+    /// stores `t`, or `e.defaultValue` when `t` is `undefined`, under `e.id` in a
+    /// copy of the owner's map. The server `createComponent` is
+    /// `Comp(props || {})` without `untrack`. So a context made with no
+    /// arguments reads only values stored under its fresh symbol, and storing
+    /// one takes the context object itself.
+    fn context_role(&self, name: &str) -> Option<ContextRole> {
+        match name {
+            "createContext" => Some(ContextRole::Create),
+            "useContext" => Some(ContextRole::Read),
+            "createComponent" => Some(ContextRole::Render),
+            _ => None,
+        }
     }
 
     /// `Dynamic`'s `component`, on every release the reviews read. `Dynamic`

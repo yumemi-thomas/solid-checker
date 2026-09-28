@@ -1069,6 +1069,121 @@ type UncensusedInvokingForm struct {
 	// identity fact, not a structural return-type assertion. Its callee must
 	// still receive a complete execution census before a consumer uses it.
 	LocalLiteralResult *LocalLiteralResultPremise `cbor:"localLiteralResult,omitempty" json:"localLiteralResult,omitempty"`
+	// ContextMember states that the form's subject is the value of a
+	// package-owned context and that the member it reads is a data property of
+	// every object this package provides for that context (ADR 0153,
+	// handshake protocol 70). Stated only for a get-accessor, set-accessor or
+	// property-access-unknown-accessor form in read position whose subject
+	// states no other derivation, and never beside a subject root. It is a
+	// statement of positions a consumer binds, never a disposition: the chain's
+	// calls must be rows the consumer's own census walked, the dialect calls
+	// must resolve into an audited archive, and a context that escapes the
+	// package refuses until the consumer can see whether it is provided.
+	ContextMember *ContextMemberPremise `cbor:"contextMember,omitempty" json:"contextMember,omitempty"`
+}
+
+// ContextMemberPremise is ADR 0153's premise for one member read.
+type ContextMemberPremise struct {
+	// Member is the property the form reads, by its literal name.
+	Member string `cbor:"member" json:"member"`
+	// Chain is how the subject reaches the dialect read, outermost first. A
+	// `result` step is a call to a local function whose one completion
+	// expression is reduced next, in that function's body; an `identity` step
+	// is a call to a local function whose every completion hands back its
+	// unwritten first parameter, whose first argument is reduced next in the
+	// same body. Empty when the subject is the read itself.
+	Chain []ContextChainStep `cbor:"chain,omitempty" json:"chain,omitempty"`
+	// Read is the dialect `useContext` call the chain ends at. It is one of
+	// Context.Reads.
+	Read Location `cbor:"read" json:"read"`
+	// Context is the provision census of the context the read names.
+	Context ContextProvision `cbor:"context" json:"context"`
+	// Installations are every call in the program's runtime source that can
+	// turn a data property into an accessor after creation, each with the
+	// literal key(s) it names; none names Member.
+	Installations []ContextInstallation `cbor:"installations,omitempty" json:"installations,omitempty"`
+}
+
+type ContextChainStepKind string
+
+const (
+	ContextChainResult   ContextChainStepKind = "result"
+	ContextChainIdentity ContextChainStepKind = "identity"
+)
+
+type ContextChainStep struct {
+	Kind    ContextChainStepKind `cbor:"kind" json:"kind"`
+	Call    Location             `cbor:"call" json:"call"`
+	Callee  Location             `cbor:"callee" json:"callee"`
+	Returns []Location           `cbor:"returns" json:"returns"`
+}
+
+// ContextDialectCall is a call whose callee the producer resolved to a
+// declaration-file binding named TargetName. Whether that declaration is the
+// dialect's is the consumer's question.
+type ContextDialectCall struct {
+	Call        Location            `cbor:"call" json:"call"`
+	TargetName  string              `cbor:"targetName" json:"targetName"`
+	Declaration ResolvedDeclaration `cbor:"declaration" json:"declaration"`
+}
+
+// ContextProvision is every reference to one context binding in the
+// program's runtime source, classified. A reference fitting none of these
+// classes means the producer states no premise at all.
+type ContextProvision struct {
+	// Declaration is the `const C = createContext()` declarator.
+	Declaration Location `cbor:"declaration" json:"declaration"`
+	// Initializer is its `createContext()` call, with no arguments.
+	Initializer ContextDialectCall `cbor:"initializer" json:"initializer"`
+	// Reads are the dialect `useContext` calls whose argument is the context,
+	// directly or through a read helper, deduplicated.
+	Reads []ContextDialectCall `cbor:"reads" json:"reads"`
+	// Helpers are local read helpers the context is passed to: a function
+	// whose parameter at Argument is unwritten and whose every reference is
+	// the argument of one of Reads.
+	Helpers []ContextReadHelper `cbor:"helpers,omitempty" json:"helpers,omitempty"`
+	// Providers are the dialect `createComponent(C, { value })` sites.
+	Providers []ContextProvider `cbor:"providers,omitempty" json:"providers,omitempty"`
+	// Exports are the names the context escapes the package under.
+	Exports []ContextExport `cbor:"exports,omitempty" json:"exports,omitempty"`
+}
+
+type ContextReadHelper struct {
+	Call     Location `cbor:"call" json:"call"`
+	Callee   Location `cbor:"callee" json:"callee"`
+	Argument int      `cbor:"argument" json:"argument"`
+}
+
+type ContextProvider struct {
+	Render ContextDialectCall `cbor:"render" json:"render"`
+	// Value is the provided `value` member's expression.
+	Value Location `cbor:"value" json:"value"`
+	// Factory is the local call the value is the result of, when it is not a
+	// literal itself.
+	Factory *ContextFactory `cbor:"factory,omitempty" json:"factory,omitempty"`
+	// Literals are the object literals the value can be, each with the one
+	// non-accessor member named Member.
+	Literals []ContextLiteral `cbor:"literals" json:"literals"`
+}
+
+type ContextFactory struct {
+	Call   Location `cbor:"call" json:"call"`
+	Callee Location `cbor:"callee" json:"callee"`
+}
+
+type ContextLiteral struct {
+	Literal Location `cbor:"literal" json:"literal"`
+	Member  Location `cbor:"member" json:"member"`
+}
+
+type ContextExport struct {
+	Location Location `cbor:"location" json:"location"`
+	Name     string   `cbor:"name" json:"name"`
+}
+
+type ContextInstallation struct {
+	Location Location `cbor:"location" json:"location"`
+	Keys     []string `cbor:"keys" json:"keys"`
 }
 
 // ImportedModuleMember names a binding a module imports: the specifier

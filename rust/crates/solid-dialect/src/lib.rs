@@ -602,6 +602,37 @@ pub fn unambiguous_reactive_result_slot(name: &str, slot: ResultSlot) -> Option<
         .flatten()
 }
 
+/// ADR 0153: the part an export plays in a dialect's context mechanism. See
+/// [`Dialect::context_role`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ContextRole {
+    /// `createContext(defaultValue?)`: a fresh context whose provider stores
+    /// its `value` prop, and whose default is the first argument.
+    Create,
+    /// `useContext(context)`: the value stored for `context` on the nearest
+    /// owner, else its default; it throws when that is `undefined`.
+    Read,
+    /// `createComponent(Comp, props)`: runs `Comp(props)` once, on the
+    /// caller's stack.
+    Render,
+}
+
+/// The context role every dialect that states one gives `name`, when they all
+/// agree and at least one does ([`Dialect::context_role`]). Silence in one
+/// dialect while another answers is disagreement, and answers `None`.
+#[must_use]
+pub fn unambiguous_context_role(name: &str) -> Option<ContextRole> {
+    let answers = DIALECTS
+        .iter()
+        .map(|dialect| dialect.context_role(name))
+        .collect::<Vec<_>>();
+    let first = (*answers.first()?)?;
+    answers
+        .into_iter()
+        .all(|answer| answer == Some(first))
+        .then_some(first)
+}
+
 /// Whether every dialect that canonically exports `name` states that reading
 /// the accessor at `slot` of its result runs no code when every argument of the
 /// creating call is a primitive by grammar ([`Dialect::inert_accessor_read`],
@@ -2184,6 +2215,22 @@ pub trait Dialect: Sync {
     /// Solid 2.0's `createComponent(Comp, props)` is the case. The default is
     /// `None`.
     fn renders_component_argument(&self, name: &str) -> Option<usize> {
+        let _ = name;
+        None
+    }
+
+    /// The part the export declared as `name` plays in this vocabulary's
+    /// context mechanism (ADR 0153), or `None`.
+    ///
+    /// Three facts, and a census of a package-owned context rests on all
+    /// three together: a [`ContextRole::Create`] call with no arguments makes a
+    /// context whose only values are the ones its provider stores, a
+    /// [`ContextRole::Read`] call hands back one of those values or throws,
+    /// and a [`ContextRole::Render`] call runs its first argument with its
+    /// second as props, which is how a compiled provider stores `props.value`.
+    /// The engine asks it only of a callee whose exact declaration sits in an
+    /// audited archive of this dialect. The default is `None`.
+    fn context_role(&self, name: &str) -> Option<ContextRole> {
         let _ = name;
         None
     }

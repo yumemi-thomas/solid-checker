@@ -4488,6 +4488,7 @@ mod tests {
             subject_declaration: None,
             coercion_premise: None,
             local_literal_result: None,
+            context_member: None,
         }
     }
 

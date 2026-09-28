@@ -336,6 +336,9 @@ func (p *project) uncensusedInvokingFormCensusLocked(
 				if premise := p.localLiteralResultLocked(subject); premise != nil {
 					form.LocalLiteralResult = premise
 					form.SubjectWrite = write
+				} else if !write && subject != nil {
+					// ADR 0153: a member of a package-owned context value.
+					form.ContextMember = p.contextMemberPremiseLocked(node, subject)
 				}
 				// Diagnostic only, and stated only where nothing rooted: which
 				// leg the subject fell off. A consumer counts these to choose

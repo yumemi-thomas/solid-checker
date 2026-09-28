@@ -10662,6 +10662,10 @@ enum CensusDisposition {
     OwnLiteralAccessorWrite,
     LocalLiteralResultAccessor,
     LocalLiteralResultAccessorWrite,
+    /// ADR 0153: a read of a data member of every object this package
+    /// provides for a package-owned context that does not escape. No code
+    /// runs.
+    ContextMemberAccessor,
     ParameterOrOwnResultAccessor,
     ParameterOrOwnResultAccessorWrite,
     OwnLiteralIterable,
@@ -10731,6 +10735,7 @@ impl CensusDisposition {
             Self::OwnLiteralAccessorWrite => "own-literal-accessor-write",
             Self::LocalLiteralResultAccessor => "local-literal-result-accessor",
             Self::LocalLiteralResultAccessorWrite => "local-literal-result-accessor-write",
+            Self::ContextMemberAccessor => "context-member-accessor",
             Self::ParameterOrOwnResultAccessor => "parameter-or-own-result-accessor",
             Self::ParameterOrOwnResultAccessorWrite => "parameter-or-own-result-accessor-write",
             Self::OwnLiteralIterable => "own-literal-iterable",
@@ -14690,6 +14695,12 @@ fn census_transcript_calls(
             deferred.push(form);
             continue;
         }
+        // ADR 0153: the chain the premise names is bound to transcripts the
+        // call walk below demands, exactly as ADR 0044's single premise is.
+        if form.context_member.is_some() {
+            deferred.push(form);
+            continue;
+        }
         // ADR 0093: the own-result arm rests on callee transcripts too, so the
         // form waits for the same call walk ADR 0044's single premise waits
         // for. `census_form_disposition` answers `None` for the derivation
@@ -14728,6 +14739,16 @@ fn census_transcript_calls(
         return Ok(step);
     }
     for form in deferred {
+        if form.context_member.is_some() {
+            if let Some(reason) = census_context_member_refusal(run, implementation, form)? {
+                return Err(format!("{} (ADR 0153: {reason})", refuse_form(form)));
+            }
+            run.record(
+                CensusDisposition::ContextMemberAccessor,
+                census_form_site(form, CensusDisposition::ContextMemberAccessor),
+            );
+            continue;
+        }
         if form.local_literal_result.is_some() {
             if !census_local_literal_result_is_bound(run, implementation, form)? {
                 return Err(refuse_form(form));
@@ -14912,6 +14933,293 @@ fn census_parameter_or_own_result_is_bound(
         }
     }
     Ok(true)
+}
+
+/// ADR 0153: why a `context-member` form's premise does not bind, or `None`
+/// when it does.
+///
+/// Nothing is re-derived. The producer enumerated every reference to the
+/// context and every accessor installation; what this side can check for
+/// itself, it does:
+///
+/// 1. the form is a read of a member and states no other derivation;
+/// 2. the context does not escape the package. A consumer could provide an
+///    escaped context, and until admission can see whether it does, this
+///    refuses (ADR 0153 part 3, fail closed);
+/// 3. each chain call is the one row at its location in the transcript this
+///    census is walking, its callee is a stable declaration in the
+///    artifact's own runtime source, and that declaration's transcript --
+///    which this census demanded because the call is a row -- is the named
+///    callee. A `result` step moves the walk into that transcript, an
+///    `identity` step stays;
+/// 4. the read is a row of the transcript the chain ends in, and one of the
+///    provision's reads;
+/// 5. `createContext`, every read, and every provider's render resolve into an
+///    audited archive of the dialect, under the role the dialect gives the name
+///    ([`solid_dialect::unambiguous_context_role`]);
+/// 6. every position the premise names lies in the artifact's own runtime
+///    source, each literal's member inside its literal, each literal inside its
+///    factory, and no installation names the member.
+fn census_context_member_refusal(
+    run: &mut CensusRun<'_>,
+    implementation: &typefacts::ExportImplementationTranscript,
+    form: &typefacts::UncensusedInvokingForm,
+) -> Result<Option<String>, String> {
+    let Some(premise) = &form.context_member else {
+        return Ok(Some("the form states no context-member premise".into()));
+    };
+    if !form.subject_root.is_empty()
+        || form.subject_parameter.is_some()
+        || form.subject_declaration.is_some()
+        || form.subject_write
+        || form.local_literal_result.is_some()
+        || !form.subject_local_literal_results.is_empty()
+        || form.coercion_premise.is_some()
+        || premise.member.is_empty()
+        || !census_form_shape_reads_the_subject(form)
+        || !matches!(
+            form.kind,
+            typefacts::UncensusedInvokingFormKind::GetAccessor
+                | typefacts::UncensusedInvokingFormKind::PropertyAccessUnknownAccessor
+        )
+    {
+        return Ok(Some(
+            "the form is not a read of a member with no other subject derivation".into(),
+        ));
+    }
+    if !premise.context.exports.is_empty() {
+        let names = premise
+            .context
+            .exports
+            .iter()
+            .map(|export| format!("`{}`", export.name))
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Ok(Some(format!(
+            "the context escapes the package as {names}, so a consumer could provide it, and \
+             admission cannot yet see whether one does"
+        )));
+    }
+
+    let evidence = run.evidence;
+    let mut current = implementation;
+    for step in &premise.chain {
+        let mut rows = current
+            .calls
+            .iter()
+            .filter(|call| call.location == step.call);
+        let (Some(call), None) = (rows.next(), rows.next()) else {
+            return Ok(Some(format!(
+                "the chain call at {}:{}..{} is not exactly one row of the transcript it is in",
+                step.call.path, step.call.start_byte, step.call.end_byte
+            )));
+        };
+        if call.kind != CallKind::Call {
+            return Ok(Some("a chain step is not a call".into()));
+        }
+        let Some(declaration) = &call.declaration else {
+            return Ok(Some("a chain call names no declaration".into()));
+        };
+        let Some((_, relative)) = census_local_declaration_identity(run, declaration) else {
+            return Ok(Some(
+                "a chain call's callee is not in the artifact's own runtime source".into(),
+            ));
+        };
+        let Ok(node) = census_local_declaration_node(run, &relative, declaration) else {
+            return Ok(Some(
+                "a chain call's callee declaration is not placed".into(),
+            ));
+        };
+        if census_local_binding_is_stable(run, &relative, &node, declaration).is_err() {
+            return Ok(Some("a chain call's callee binding is not stable".into()));
+        }
+        let Some(transcript) = evidence.local(&node, census_call_premises(current, call)) else {
+            return Ok(Some(
+                "a chain call's callee transcript was not censused by this walk".into(),
+            ));
+        };
+        let inside = |location: &typefacts::Location| {
+            location.path == step.callee.path
+                && location.start_byte < location.end_byte
+                && location.start_byte >= step.callee.start_byte
+                && location.end_byte <= step.callee.end_byte
+        };
+        if transcript.location != step.callee
+            || step.returns.is_empty()
+            || !step.returns.iter().all(inside)
+        {
+            return Ok(Some(
+                "a chain call's callee or its returns are not the censused declaration".into(),
+            ));
+        }
+        if step.kind == typefacts::ContextChainStepKind::Result {
+            current = transcript;
+        }
+    }
+    let mut rows = current
+        .calls
+        .iter()
+        .filter(|call| call.location == premise.read);
+    let (Some(read_row), None) = (rows.next(), rows.next()) else {
+        return Ok(Some(
+            "the context read is not exactly one row of the transcript the chain ends in".into(),
+        ));
+    };
+    let Some(read) = premise
+        .context
+        .reads
+        .iter()
+        .find(|read| read.call == premise.read)
+    else {
+        return Ok(Some(
+            "the context read is not one of the provision's reads".into(),
+        ));
+    };
+    if read_row.kind != CallKind::Call
+        || read_row.target_name.as_ref() != read.target_name
+        || read_row
+            .declaration
+            .as_ref()
+            .is_none_or(|declaration| declaration.location != read.declaration.location)
+    {
+        return Ok(Some(
+            "the context read's row disagrees with the provision's read".into(),
+        ));
+    }
+
+    let dialect_calls = std::iter::once((
+        &premise.context.initializer,
+        solid_dialect::ContextRole::Create,
+    ))
+    .chain(
+        premise
+            .context
+            .reads
+            .iter()
+            .map(|read| (read, solid_dialect::ContextRole::Read)),
+    )
+    .chain(
+        premise
+            .context
+            .providers
+            .iter()
+            .map(|provider| (&provider.render, solid_dialect::ContextRole::Render)),
+    );
+    for (call, role) in dialect_calls {
+        if let Some(reason) = census_context_dialect_call(run, call, role) {
+            return Ok(Some(reason));
+        }
+    }
+
+    let mut positions = vec![&premise.context.declaration, &premise.read];
+    positions.extend(premise.context.reads.iter().map(|read| &read.call));
+    for helper in &premise.context.helpers {
+        positions.push(&helper.call);
+        positions.push(&helper.callee);
+    }
+    for provider in &premise.context.providers {
+        positions.push(&provider.render.call);
+        positions.push(&provider.value);
+        if let Some(factory) = &provider.factory {
+            positions.push(&factory.call);
+            positions.push(&factory.callee);
+        }
+        if provider.literals.is_empty() {
+            return Ok(Some("a provider names no literal".into()));
+        }
+        for literal in &provider.literals {
+            positions.push(&literal.literal);
+            positions.push(&literal.member);
+            if !census_location_contains(&literal.literal, &literal.member)
+                || provider.factory.as_ref().is_some_and(|factory| {
+                    !census_location_contains(&factory.callee, &literal.literal)
+                })
+            {
+                return Ok(Some(
+                    "a provided literal's member or factory does not contain it".into(),
+                ));
+            }
+        }
+    }
+    for installation in &premise.installations {
+        positions.push(&installation.location);
+        if installation.keys.contains(&premise.member) {
+            return Ok(Some(format!(
+                "an accessor installation names the member `{}`",
+                premise.member
+            )));
+        }
+    }
+    for location in positions {
+        let placed = census_certified_relative_path(run, &location.path)
+            .is_some_and(|(_, relative)| run.runtime_sources.contains(&relative));
+        if !placed {
+            return Ok(Some(format!(
+                "{}:{}..{} is not in the artifact's own runtime source",
+                location.path, location.start_byte, location.end_byte
+            )));
+        }
+    }
+    run.sites.push(format!(
+        "census-context-member:{}",
+        serde_json::to_string(premise).expect("native context member encoding")
+    ));
+    Ok(None)
+}
+
+fn census_location_contains(outer: &typefacts::Location, inner: &typefacts::Location) -> bool {
+    outer.path == inner.path
+        && inner.start_byte < inner.end_byte
+        && inner.start_byte >= outer.start_byte
+        && inner.end_byte <= outer.end_byte
+}
+
+/// Whether a premise's dialect call is what the dialect says the name is: the
+/// target and the declaration agree on the name, every dialect gives that name
+/// `role`, and the declaration is a member of an authenticated, audited
+/// dependency archive other than the artifact under certification. `None` when
+/// it holds; the refusal otherwise.
+fn census_context_dialect_call(
+    run: &CensusRun<'_>,
+    call: &typefacts::ContextDialectCall,
+    role: solid_dialect::ContextRole,
+) -> Option<String> {
+    let refuse = |why: &str| {
+        Some(format!(
+            "the {:?} call at {}:{}..{} {why}",
+            call.target_name, call.call.path, call.call.start_byte, call.call.end_byte
+        ))
+    };
+    if call.target_name.is_empty()
+        || call.declaration.name.as_ref() != call.target_name
+        || solid_dialect::unambiguous_context_role(&call.target_name) != Some(role)
+    {
+        return refuse("is not the dialect's context role it is named for");
+    }
+    let source_file = call.declaration.source_file.replace('\\', "/");
+    let root_paths = run
+        .evidence
+        .roots
+        .iter()
+        .map(|root| root.path.clone())
+        .collect::<Vec<_>>();
+    let Some((root_index, relative)) = strip_materialized_source_root(&source_file, &root_paths)
+    else {
+        return refuse("resolves outside every authenticated source root");
+    };
+    let Some(root) = run.evidence.roots.get(root_index) else {
+        return refuse("resolves outside every authenticated source root");
+    };
+    if !root.dependency
+        || root.snapshot.read(relative).is_none()
+        || root.snapshot.root() == run.certified.root()
+        || root.snapshot.provenance_root() == run.certified.provenance_root()
+        || audited_archive_for_snapshot(run.certified).is_ok()
+        || audited_archive_for_snapshot(root.snapshot).is_err()
+    {
+        return refuse("does not resolve into an audited dialect archive");
+    }
+    None
 }
 
 /// Whether every call a `coercion` form's premise names hands back a value the
@@ -29040,6 +29348,224 @@ mod tests {
                 run.sites
                     .iter()
                     .any(|site| site.starts_with("census-local-literal-result:")),
+                variant == "exact",
+                "{variant}"
+            );
+        }
+    }
+
+    /// ADR 0153: a context-member premise binds only when its chain is the
+    /// walk's own rows, its dialect calls resolve into an audited archive, the
+    /// context does not escape, and every position is the artifact's runtime
+    /// source. Each variant breaks exactly one of those.
+    #[test]
+    fn creates_census_binds_a_context_member_premise_and_refuses_each_broken_leg() {
+        let path = "/project/node_modules/consumer/dist/index.js";
+        let source = "const Ctx = createContext();\n\
+            function invariant(value, message) { if (value == null) throw new Error(message); return value; }\n\
+            const useThing = () => invariant(useContext(Ctx), \"missing\");\n\
+            export const useLocation = () => useThing().location;\n\
+            function createState() { return { location: {}, get pending() { return 1; } }; }\n\
+            export function Provider(props) { const state = createState(); return createComponent(Ctx, { value: state }); }\n";
+        let location = |needle: &str| {
+            let start = source.find(needle).unwrap() as u64;
+            typefacts::Location {
+                path: path.into(),
+                start_byte: start,
+                end_byte: start + needle.len() as u64,
+            }
+        };
+        let certified = super::super::ArtifactSnapshot {
+            package_name: "consumer".into(),
+            package_version: "1.0.0".into(),
+            package_integrity: "sha512-consumer".into(),
+            files: std::sync::Arc::new(
+                [(
+                    "dist/index.js".to_owned(),
+                    std::sync::Arc::<[u8]>::from(source.as_bytes()),
+                )]
+                .into_iter()
+                .collect(),
+            ),
+            directories: std::sync::Arc::new(std::collections::BTreeSet::new()),
+            root: "/snapshot/consumer".into(),
+            provenance_root: "/snapshot/consumer".into(),
+        };
+        let solid = solid_js_rc9_snapshot();
+        let roots = vec![
+            SnapshotSourceRoot {
+                path: "/project/node_modules/consumer/".into(),
+                evidence_prefix: "/node_modules/consumer/".into(),
+                snapshot: &certified,
+                dependency: false,
+            },
+            SnapshotSourceRoot {
+                path: "/project/node_modules/solid-js/".into(),
+                evidence_prefix: "/node_modules/solid-js/".into(),
+                snapshot: &solid,
+                dependency: true,
+            },
+        ];
+        let dialect = |name: &str, call: &str| {
+            let types = "/project/node_modules/solid-js/types/index.d.ts";
+            json!({"call": location(call), "targetName": name, "declaration": {
+                "symbol": format!("symbol:{name}"), "name": name, "kind": "FunctionDeclaration",
+                "sourceFile": types, "location": {"path": types, "startByte": 1, "endByte": 5}}})
+        };
+        let use_thing = location("() => invariant(useContext(Ctx), \"missing\")");
+        let use_thing_declaration = json!({"symbol":"symbol:useThing", "name":"useThing", "kind":"VariableDeclaration",
+            "sourceFile":path, "location":use_thing});
+        let invariant = location(
+            "function invariant(value, message) { if (value == null) throw new Error(message); return value; }",
+        );
+        let invariant_declaration = json!({"symbol":"symbol:invariant", "name":"invariant", "kind":"FunctionDeclaration",
+            "sourceFile":path, "location":{"path":path,"startByte":invariant.start_byte+9,"endByte":invariant.start_byte+18}});
+        let implementation = census_transcript_with(
+            vec![signals_call(
+                "useThing",
+                json!({"location": location("useThing()"), "targetModule": "", "declaration": use_thing_declaration}),
+            )],
+            json!([]),
+        );
+        let read_call: typefacts::ContextDialectCall =
+            serde_json::from_value(dialect("useContext", "useContext(Ctx)")).unwrap();
+        let mut thing = census_transcript_with(
+            vec![
+                signals_call(
+                    "invariant",
+                    json!({"location": location("invariant(useContext(Ctx), \"missing\")"), "targetModule": "",
+                        "declaration": invariant_declaration}),
+                ),
+                signals_call(
+                    "useContext",
+                    json!({"location": read_call.call, "declaration": read_call.declaration}),
+                ),
+            ],
+            json!([]),
+        );
+        thing.location = use_thing.clone();
+        thing.declaration = Some(serde_json::from_value(use_thing_declaration.clone()).unwrap());
+        thing.query_name = "useThing".into();
+        let mut invariant_transcript = census_transcript_with(vec![], json!([]));
+        invariant_transcript.location = invariant.clone();
+        invariant_transcript.declaration =
+            Some(serde_json::from_value(invariant_declaration.clone()).unwrap());
+        invariant_transcript.query_name = "invariant".into();
+        let locals = vec![
+            LocalDeclarationTranscript {
+                location: use_thing.clone(),
+                premises: vec![],
+                transcript: thing,
+            },
+            LocalDeclarationTranscript {
+                location: invariant.clone(),
+                premises: vec![],
+                transcript: invariant_transcript,
+            },
+        ];
+        let factory = location(
+            "function createState() { return { location: {}, get pending() { return 1; } }; }",
+        );
+        let original: typefacts::UncensusedInvokingForm = serde_json::from_value(json!({
+            "kind": "property-access-unknown-accessor", "nodeKind": "PropertyAccessExpression",
+            "location": location("useThing().location"), "reach": "reachable",
+            "contextMember": {
+                "member": "location",
+                "chain": [
+                    {"kind": "result", "call": location("useThing()"), "callee": use_thing,
+                        "returns": [location("invariant(useContext(Ctx), \"missing\")")]},
+                    {"kind": "identity", "call": location("invariant(useContext(Ctx), \"missing\")"),
+                        "callee": invariant, "returns": [location("return value;")]}
+                ],
+                "read": location("useContext(Ctx)"),
+                "context": {
+                    "declaration": location("Ctx = createContext()"),
+                    "initializer": dialect("createContext", "createContext()"),
+                    "reads": [dialect("useContext", "useContext(Ctx)")],
+                    "providers": [{
+                        "render": dialect("createComponent", "createComponent(Ctx, { value: state })"),
+                        "value": location("state })"),
+                        "factory": {"call": location("createState()"), "callee": factory},
+                        "literals": [{"literal": location("{ location: {}, get pending() { return 1; } }"),
+                            "member": location("location: {}")}]
+                    }]
+                },
+                "installations": [{"location": location("new Error(message)"), "keys": ["name"]}]
+            }
+        }))
+        .unwrap();
+        for variant in [
+            "exact",
+            "escaped",
+            "subject-root",
+            "undialect-read",
+            "unrecognized-role",
+            "chain-call-moved",
+            "missing-chain-transcript",
+            "read-not-listed",
+            "member-outside-literal",
+            "installation-names-member",
+            "declaration-outside-runtime",
+        ] {
+            let mut form = original.clone();
+            let premise = form.context_member.as_mut().unwrap();
+            match variant {
+                "escaped" => premise.context.exports.push(typefacts::ContextExport {
+                    location: location("export const useLocation"),
+                    name: "RouterContext".into(),
+                }),
+                "subject-root" => form.subject_root = "parameter".into(),
+                "undialect-read" => {
+                    // A `useContext` declared in the consumer's own file.
+                    for read in &mut premise.context.reads {
+                        read.declaration.source_file = path.into();
+                    }
+                }
+                "unrecognized-role" => {
+                    premise.context.initializer.target_name = "createSignal".into()
+                }
+                "chain-call-moved" => premise.chain[0].call.start_byte += 1,
+                "read-not-listed" => premise.context.reads[0].call.start_byte += 1,
+                "member-outside-literal" => {
+                    premise.context.providers[0].literals[0].member = location("{ value: state }");
+                }
+                "installation-names-member" => {
+                    premise.installations[0].keys = vec!["location".into()]
+                }
+                "declaration-outside-runtime" => {
+                    premise.context.declaration.path =
+                        "/project/node_modules/other/index.js".into();
+                }
+                _ => {}
+            }
+            let mut run = census_run(&certified, &roots);
+            run.evidence = CensusEvidence {
+                roots: &roots,
+                locals: if variant == "missing-chain-transcript" {
+                    &[]
+                } else {
+                    &locals
+                },
+                dependencies: &[],
+            };
+            let refusal = census_context_member_refusal(&mut run, &implementation, &form).unwrap();
+            assert_eq!(
+                refusal.is_none(),
+                variant == "exact",
+                "{variant}: {refusal:?}"
+            );
+            if variant == "escaped" {
+                assert!(
+                    refusal
+                        .as_deref()
+                        .is_some_and(|reason| reason.contains("`RouterContext`")),
+                    "{refusal:?}"
+                );
+            }
+            assert_eq!(
+                run.sites
+                    .iter()
+                    .any(|site| site.starts_with("census-context-member:")),
                 variant == "exact",
                 "{variant}"
             );

@@ -4,7 +4,18 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 68 (ADR 0149):
+// TypeFactsHandshakeProtocol is 70 (ADR 0153): **a member read of a
+// package-owned context value states its provision census.**
+// UncensusedInvokingForm.ContextMember names, for an accessor form in read
+// position whose subject is the value a dialect `useContext` of a module
+// `const` context returns, the chain of local calls that reaches the read, every
+// reference to the context classified (reads, read helpers, `createComponent`
+// providers with the object literals they provide, exports), and every call in
+// the program's runtime source that could turn the member into an accessor. A
+// protocol-69 consumer decodes with `deny_unknown_fields` and would reject the
+// new field, so the number moves.
+//
+// Protocol 68 (ADR 0149):
 // **a default-library call states whether it invokes its declaration by
 // identity.** ImplementationCall.StandardLibraryIdentity holds for a callee
 // whose receiver is nothing, an unshadowed default-library global the file
@@ -462,8 +473,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 68
-	TypeFactsSchemaSHA256             = "sha256:92d9f0d279171c394001a025ab32668e86d29e518f09b101c3e2e0dd03da03b7"
+	TypeFactsHandshakeProtocol uint64 = 70
+	TypeFactsSchemaSHA256             = "sha256:b69fe17d35a94e711cfe67c6f199bce7cc0b04403501e59529b00672253385a7"
 )
 
 type ServiceHandshake struct {

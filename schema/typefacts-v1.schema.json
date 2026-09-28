@@ -722,7 +722,106 @@
         "subjectDeclaration": { "$ref": "#/$defs/location" },
         "subjectImport": { "$ref": "#/$defs/importedModuleMember" },
         "coercionPremise": { "$ref": "#/$defs/coercionPremise" },
-        "localLiteralResult": { "$ref": "#/$defs/localLiteralResultPremise" }
+        "localLiteralResult": { "$ref": "#/$defs/localLiteralResultPremise" },
+        "contextMember": { "$ref": "#/$defs/contextMemberPremise" }
+      }
+    },
+    "contextMemberPremise": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["member", "read", "context"],
+      "description": "ADR 0153 (protocol 70): the form reads a data member of every object this program provides for a package-owned context. Positions only: a consumer binds every chain call to a row it censused, asks the audited dialect about every named call, and refuses an escaping context it cannot see the consumer of.",
+      "properties": {
+        "member": { "type": "string", "minLength": 1 },
+        "chain": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/contextChainStep" } },
+        "read": { "$ref": "#/$defs/location" },
+        "context": { "$ref": "#/$defs/contextProvision" },
+        "installations": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/contextInstallation" } }
+      }
+    },
+    "contextChainStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "call", "callee", "returns"],
+      "properties": {
+        "kind": { "enum": ["result", "identity"] },
+        "call": { "$ref": "#/$defs/location" },
+        "callee": { "$ref": "#/$defs/location" },
+        "returns": { "type": "array", "minItems": 1, "maxItems": 1000000, "items": { "$ref": "#/$defs/location" } }
+      }
+    },
+    "contextDialectCall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["call", "targetName", "declaration"],
+      "properties": {
+        "call": { "$ref": "#/$defs/location" },
+        "targetName": { "type": "string", "minLength": 1 },
+        "declaration": { "$ref": "#/$defs/resolvedDeclaration" }
+      }
+    },
+    "contextProvision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["declaration", "initializer", "reads"],
+      "properties": {
+        "declaration": { "$ref": "#/$defs/location" },
+        "initializer": { "$ref": "#/$defs/contextDialectCall" },
+        "reads": { "type": "array", "minItems": 1, "maxItems": 1000000, "items": { "$ref": "#/$defs/contextDialectCall" } },
+        "helpers": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/contextReadHelper" } },
+        "providers": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/contextProvider" } },
+        "exports": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/contextExport" } }
+      }
+    },
+    "contextReadHelper": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["call", "callee", "argument"],
+      "properties": {
+        "call": { "$ref": "#/$defs/location" },
+        "callee": { "$ref": "#/$defs/location" },
+        "argument": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "contextProvider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["render", "value", "literals"],
+      "properties": {
+        "render": { "$ref": "#/$defs/contextDialectCall" },
+        "value": { "$ref": "#/$defs/location" },
+        "factory": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["call", "callee"],
+          "properties": { "call": { "$ref": "#/$defs/location" }, "callee": { "$ref": "#/$defs/location" } }
+        },
+        "literals": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["literal", "member"],
+            "properties": { "literal": { "$ref": "#/$defs/location" }, "member": { "$ref": "#/$defs/location" } }
+          }
+        }
+      }
+    },
+    "contextExport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location", "name"],
+      "properties": { "location": { "$ref": "#/$defs/location" }, "name": { "type": "string", "minLength": 1 } }
+    },
+    "contextInstallation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location", "keys"],
+      "properties": {
+        "location": { "$ref": "#/$defs/location" },
+        "keys": { "type": "array", "maxItems": 1000000, "items": { "type": "string" } }
       }
     },
     "localLiteralResultPremise": {

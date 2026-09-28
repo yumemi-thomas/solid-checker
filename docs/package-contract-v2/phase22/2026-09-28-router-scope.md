@@ -211,14 +211,15 @@ all three runtime packages to be audited archives (`AUDITED_ARCHIVES`), and
 only the rc.3 and rc.9 triples are; rc.6 has an audited `@solidjs/signals`
 alone:
 
-| version × runtime | apps | sites | lockfile not behind a refusing reader |
+| version × runtime | apps | sites | lockfile readable at admission (after `6ca77fb2` and `e10e58c7`) |
 | --- | ---: | ---: | --- |
-| next.26 × rc.9 | 7 | 47 | 30 (npm, yarn, pnpm one document); 17 behind wall 4 or 8 of the baseline (pnpm `---`, `bun.lock` v1) |
-| next.18 × rc.3 (beacon-web, solid-groove) | 2 | 17 | 0 (`bun.lockb`, `bun.lock` v1) |
+| next.26 × rc.9 | 7 | 47 | 47 (npm, yarn, pnpm one or two documents, `bun.lock` v1) |
+| next.18 × rc.3 (beacon-web, solid-groove) | 2 | 17 | 7 (solid-groove's `bun.lock` v1; beacon-web's `bun.lockb` is not read) |
 | everything else: next.21 × rc.6 (6 apps, 47 sites: `solid-js` and `@solidjs/web` rc.6 are not audited), next.18 × rc.3 with signals rc.8 and × rc.4 (27), and the rc.0/rc.1/rc.4/rc.5/rc.7/rc.8 runtimes | 17 | 199 | not certifiable: no audited triple, and ADR 0127 schedules no new work on older rcs |
 
-The ceiling for the router is therefore **64 sites (24 %)**, and 30 of them
-are not behind the two refusing lockfile readers. This assumes every export were
+The ceiling for the router is therefore **64 sites (24 %)**. When this scope
+was measured, 30 of them had a lockfile the checker could read at admission;
+since the lead's lockfile fixes (`6ca77fb2`, `e10e58c7`), 54 do. This assumes every export were
 clean.
 
 ## Walls ranked by the sites they unblock
@@ -327,7 +328,12 @@ together with returns forms for `location` (a literal of tracked getters),
 `params` (a `createMemoObject` proxy) and `navigate` (a returned callable,
 ADR 0145, with its own writes).
 
-## Proposal (ADR 0153, not written)
+## Proposal (as submitted; now ADR 0153)
+
+The owner approved this proposal on 2026-09-28. It is now
+[ADR 0153](../../adr/0153-a-member-of-a-package-owned-context-value.md), and its
+first slice has landed (see *After ADR 0153's first slice* below). The text is
+kept as submitted.
 
 **ADR 0153 (proposed): a member of a package-owned context value.**
 
@@ -380,11 +386,82 @@ recipe. It unblocks 2 sites that sit on an audited runtime (next.26 × rc.9) and
 archive. It needs a tier bundle for next.26 as well, and the lead regenerates
 the tier.
 
+## After ADR 0153's first slice and the installed versions
+
+Measured 2026-09-28 on `router-scope`, on the release binary, with the same
+flags, host free, `browser` and `node`.
+
+**Certification inputs.** The benchmark manifest now carries a `solid2` row
+for each (router version, audited runtime) pair the app-import corpus
+installs:
+
+- next.26 on the rc.9 triple, installed by 7 apps (47 sites);
+- next.18 on the rc.3 triple, installed by beacon-web and solid-groove
+  (17 sites);
+- next.30, the corpus row, which no app installs.
+
+Consumer environments match a package by its version, so a package may have
+several rows. oscartbeaumont-website's environment, re-derived from its pinned
+`pnpm-lock.yaml`, now delivers `@solidjs/router@2.0.0-next.26` beside
+`@solidjs/meta`, and its delivery run certifies both.
+
+These pairs are excluded, each for the reason given:
+
+- next.21 × rc.6 (6 apps, 47 sites): `solid-js` and `@solidjs/web` rc.6 are
+  not audited archives; only `@solidjs/signals` rc.6 is;
+- next.18 with signals rc.8 (error-menu-web) or on rc.4 (app-game);
+- next.16, next.17, next.19, next.20, next.23 and next.24: their runtimes (rc.0
+  to rc.8) have no audited triple;
+- consumer environments for the other next.26 and next.18 apps:
+  - `derive-consumer-environment.mjs` reads `pnpm-lock.yaml` only. It now also
+    reads pnpm 11's env document followed by the project document, under the
+    checker's own reader's exact shape;
+  - lutra-console and solid-validation-site write such pnpm 12 locks, but
+    derivation still refuses both: each closure resolves two releases of
+    `@solid-primitives/event-listener` (next.3 and next.5), and an environment
+    pins one release per name;
+  - en-passant (npm), jandibat-web (yarn), expenses-app, helge-dev and
+    solid-groove (`bun.lock` v1) use formats the deriver does not read;
+  - beacon-web uses the binary `bun.lockb`, which no reader reads.
+
+**ADR 0153, slice A** (parts 1 and 2 plus part 3's fail-closed default, for
+`creates` and `callbacks`). On the real router bytes at next.26 and next.18,
+the producer states the context-member premise for `useLocation` and
+`useIsRouting`. The chain is `useRouter()` then `invariant(useContext(RouterContextObj), …)`,
+the provider is `createComponent(RouterContextObj, { value: routerState })`,
+and the provided literal is `createRouterContext`'s. The census refuses both
+exports with "the context escapes the package as `RouterContext`", as intended
+until the admission gate (part 3) exists.
+
+`useNavigate`'s refusal moves one leg deeper. Its form is now deferred, so the
+walk first meets the member call `useRouter().navigatorFactory()`, whose callee
+resolves to an interface member: `census refusal: unresolved callee`, 20 sites.
+
+| | before | after |
+| --- | ---: | ---: |
+| exports clean, next.30 / next.26 / next.18, any host | 0 / 0 / 0 | 0 / 0 / 0 |
+| app sites certified (package side, all versions, *estimated* by bytes) | 0 of 259 | 0 of 259 |
+| app sites on a certifiable (version, runtime) pair | 47 (next.26) | 64 (next.26 + next.18) |
+
+**Sites unblocked: 0.** No wall closes alone. The `useRouter()` hooks need all
+of the following before any site is certified, in this order:
+
+1. the admission gate (ADR 0153 part 3): a signed case premise, and a check
+   that the consumer program never provides `RouterContext`;
+2. a per-export bound on `runtime-accessor-installation` (item C): a complete
+   enumeration of the member accesses an export executes, each on a receiver
+   the census can prove is not a hazard site's object;
+3. the `returns` shapes (part 4): a tracked-getter object for `location`, a
+   memo-object proxy for `params`, and a described callable for `navigate`.
+
+The app-import metric cannot move on this branch either way. It measures the
+compiled-in tier, which the lead regenerates from these inputs.
+
 ## Reproducing
 
 ```sh
 make build-checker-release
-bun docs/package-contract-v2/phase22/2026-09-28-router-scope.mjs --prepare <dir>
+bun docs/package-contract-v2/phase22/2026-09-28-router-scope.mjs --prepare <dir>   # --no-scratch: committed rows only
 for host in none browser node; do   # --host browser|node for the two hosts
   SOLID_CHECKER_NATIVE_BIN=$PWD/rust/target/release/solid-checker-rust \
   SOLID_TYPEFACTS_BIN=$PWD/bin/solid-typefacts \
@@ -393,6 +470,7 @@ for host in none browser node; do   # --host browser|node for the two hosts
     --probe-recipe-corpus scripts/ecosystem-benchmark/probe-recipes --keep-temp [--host $host] \
     --probe '@solidjs/router@2.0.0-next.30|solid2|only' \
     --probe '@solidjs/router@2.0.0-next.26|solid2|only' \
+    --probe '@solidjs/router@2.0.0-next.18|solid2|only' \
     --probe '@solidjs/router@2.0.0-next.21|solid2|only' \
     --json <out>/run[-$host].json --markdown <out>/run[-$host].md
   bun scripts/certification-metric.mjs --run <out>/run[-$host].json --corpus <dir>/corpus.json \
@@ -402,11 +480,11 @@ done
 bun docs/package-contract-v2/phase22/2026-09-28-router-scope.mjs --closures <tarballs> \
   --sites rust/target/app-import-metric/metric.json --json <closures.json>
 bun docs/package-contract-v2/phase22/2026-09-28-router-scope.mjs --join \
-  --sites rust/target/app-import-metric/metric.json --closures <closures.json> --metric <out> [--exact]
+  --sites rust/target/app-import-metric/metric.json --closures <closures.json> --metric <out> [--exact] \
+  [--measured 2.0.0-next.30,2.0.0-next.26,2.0.0-next.18]
 ```
 
-The next.26 and next.21 manifest rows are clones of next.30's row, with the
-registry integrities recorded in the script. Their runtime triples are the
-ones their apps install. They are not added to the checked-in manifest,
-because that manifest pins one row per package and target, and the
-certification metric's corpus pins next.30.
+The next.26 and next.18 rows are committed manifest rows, each on the runtime
+triple its apps install. The next.21 row is a scratch clone of next.30's row,
+because its rc.6 triple is not audited; its integrity is recorded in the
+script. The certification metric's corpus still pins next.30 alone.

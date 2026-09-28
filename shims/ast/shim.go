@@ -242,6 +242,10 @@ const KindFirstNode = ast.KindFirstNode
 // `await using x = …`; the latter additionally sets NodeFlagsConst, which is
 // why testing this one bit covers both spellings.
 const NodeFlagsUsing = ast.NodeFlagsUsing
+
+// NodeFlagsConst marks a `const` declaration list (ADR 0153 asks it of a
+// context binding).
+const NodeFlagsConst = ast.NodeFlagsConst
 const KindQuestionQuestionToken = ast.KindQuestionQuestionToken
 const KindTrueKeyword = ast.KindTrueKeyword
 const KindUndefinedKeyword = ast.KindUndefinedKeyword

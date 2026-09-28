@@ -96,6 +96,13 @@ type project struct {
 	// use site, so the declaration is behind an alias. A premise twin is a
 	// different program with different symbols and never shares entries.
 	ownLiteralSymbols map[*ast.Symbol]*ast.Node
+	// contextProvisions memoizes ADR 0153's provision census per context
+	// symbol (nil when a reference fitted no class), and the installation scan
+	// once per package directory of the accepted program. Symbol-keyed like ownLiteralSymbols: a new
+	// generation's symbols never share an entry.
+	contextProvisions          map[*ast.Symbol]*contextProvisionResult
+	contextInstallationProgram *compiler.Program
+	contextInstallationScans   map[string]contextInstallationScan
 	// formTwin is set for exactly the duration of an uncensused-form census
 	// classified under a declared-signature premise (ADR 0038): the checked
 	// twin of the implementation's file whose checker answers every type and
