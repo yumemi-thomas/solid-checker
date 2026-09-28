@@ -203,7 +203,7 @@ use crate::{
     runtime_probe_wire::{self, ReportedResolution, RuntimeProbeWireError},
     runtime_probes::{
         ArtifactModeMatrix, DrainStep, ProbeAuthority, ProbeEventClass, ProbeEventMatch, ProbeMode,
-        ProbePolicy, ProbeRecipe, ProbeRun, ProbeScenario, RuntimeProbeError,
+        ProbePolicy, ProbeRecipe, ProbeRun, ProbeRunOutcome, ProbeScenario, RuntimeProbeError,
         RuntimeProbeEvaluation, RuntimeProbePlan, evaluate_runtime_probes,
     },
 };
@@ -422,6 +422,11 @@ pub struct ProbeHarnessConfiguration {
     /// Node profile ignores it, and a request for the browser profile without
     /// it refuses by name.
     browser_executable: Option<PathBuf>,
+    /// ADR 0144: the completed session runs of this certification transaction,
+    /// keyed by everything the session read. Shared by every clone, so the
+    /// merged corpus of [`Self::with_recipe_corpus`] reuses what the hand
+    /// corpus already ran. Not part of the configuration's identity.
+    session_runs: ProbeSessionRuns,
     /// A pin supplied by an in-crate test instead of the build.
     ///
     /// Private, and settable only through a `#[cfg(test)]` constructor, so a
@@ -447,6 +452,7 @@ impl ProbeHarnessConfiguration {
             node_executable: node_executable.into(),
             recipe_corpus: recipe_corpus.into(),
             browser_executable: None,
+            session_runs: ProbeSessionRuns::default(),
             #[cfg(test)]
             pin: None,
             #[cfg(test)]
@@ -525,6 +531,12 @@ impl ProbeHarnessConfiguration {
         self = self.with_browser_executable(browser_executable)?;
         self.browser_pin = Some(browser_bundle_sha256.to_owned());
         Ok(self)
+    }
+
+    /// The transaction's completed session runs (ADR 0144), for tests.
+    #[cfg(test)]
+    pub(crate) fn session_runs(&self) -> &ProbeSessionRuns {
+        &self.session_runs
     }
 
     /// The directory holding `recipes.json` and its modules — the corpus
@@ -848,6 +860,7 @@ fn run_probe_gates_inner(
         &configuration.node_executable,
         &node_version,
         &plan.resolved_import.specifier,
+        &configuration.session_runs,
         &mut timing,
     );
     let final_census_started = Instant::now();
@@ -919,6 +932,12 @@ fn run_probe_gates_inner(
 ///
 /// Launches are sequential, so without the intermediate census session N could
 /// tamper with what session N+1 reads and restore it before the final check.
+///
+/// ADR 0144: a session whose every input equals one this transaction already
+/// ran to completion is not launched again; the completed run is reused under
+/// this plan's session id. It reads nothing, so it needs no census of its own:
+/// the run it reuses was followed by a census in its own workspace.
+#[allow(clippy::too_many_arguments)]
 fn launch_every_session(
     workspace: &PrivateProbeWorkspace,
     corpus: &RecipeCorpus,
@@ -926,19 +945,13 @@ fn launch_every_session(
     node_executable: &Path,
     node_version: &str,
     specifier: &str,
+    session_runs: &ProbeSessionRuns,
     timing: &mut ProbeGateBatchTiming,
 ) -> Result<Vec<ProbeRun>, ProbeHarnessError> {
     let mut runs = Vec::with_capacity(runtime_plan.sessions().len());
-    let session_count = runtime_plan.sessions().len();
-    // The one worker booted ahead, under the previous session's census. At
-    // most one exists at a time, and it is dropped — killing its process
-    // group — if this function returns early.
-    let mut parked: Option<ParkedWorker> = None;
-    // An escape hatch for measuring the pool against itself, and for a host
-    // where booting alongside the census is not wanted. Unset means on.
-    let preboot = std::env::var_os("SOLID_CHECKER_PROBE_NO_PREBOOT").is_none();
-    for (index, session) in runtime_plan.sessions().iter().enumerate() {
-        timing.sessions += 1;
+    let scope = workspace.session_reuse_scope(node_version, specifier)?;
+    let mut prepared = Vec::with_capacity(runtime_plan.sessions().len());
+    for session in runtime_plan.sessions() {
         let claim_id = session.claim_id().as_str();
         let recipe = corpus.recipe_for(claim_id).ok_or_else(|| {
             ProbeHarnessError::RecipeProvenance(format!(
@@ -958,21 +971,54 @@ fn launch_every_session(
             .iter()
             .map(|request| request.specifier.clone())
             .collect::<Vec<_>>();
-        let subject = ResolutionSubject {
-            specifier,
-            import_kind: recipe.import_kind(),
-            dependencies: &requested,
-        };
         let session_bytes = runtime_probe_wire::encode_probe_session(
             session,
             relative,
             recipe.construction(),
             Some(runtime_probe_wire::ProbeResolutionRequest {
-                specifier: subject.specifier,
-                import_kind: subject.import_kind.as_str(),
+                specifier,
+                import_kind: recipe.import_kind().as_str(),
                 dependencies: &requested_specifiers,
             }),
         )?;
+        let key = session_reuse_key(&scope, &session_bytes, relative, recipe)?;
+        prepared.push(PreparedSession {
+            session,
+            recipe,
+            module,
+            requested,
+            bytes: session_bytes,
+            key,
+        });
+    }
+    // The one worker booted ahead, under the previous session's census. At
+    // most one exists at a time, and it is dropped — killing its process
+    // group — if this function returns early.
+    let mut parked: Option<ParkedWorker> = None;
+    // An escape hatch for measuring the pool against itself, and for a host
+    // where booting alongside the census is not wanted. Unset means on.
+    let preboot = std::env::var_os("SOLID_CHECKER_PROBE_NO_PREBOOT").is_none();
+    for (index, prepared_session) in prepared.iter().enumerate() {
+        let PreparedSession {
+            session,
+            recipe,
+            module,
+            requested,
+            bytes: session_bytes,
+            key,
+        } = prepared_session;
+        timing.sessions += 1;
+        let claim_id = session.claim_id().as_str();
+        if let Some(reused) = session_runs.completed(key, session.id()) {
+            timing.reused_sessions += 1;
+            runs.push(reused);
+            continue;
+        }
+        let subject = ResolutionSubject {
+            specifier,
+            import_kind: recipe.import_kind(),
+            dependencies: requested,
+        };
         let launch_started = Instant::now();
         // Either the worker booted under the previous session's census, or —
         // first session, a refused pre-boot, or the pool disabled — one is
@@ -985,7 +1031,7 @@ fn launch_every_session(
         let launched = workspace.run_parked(
             worker,
             module,
-            &session_bytes,
+            session_bytes,
             session.policy().timeout_millis,
             subject,
         );
@@ -1022,10 +1068,14 @@ fn launch_every_session(
         // ordering property `verify_unchanged` exists for is unchanged.
         //
         // Booting costs about as much as the census it hides inside, so the
-        // pool removes most of a launch without adding a phase.
+        // pool removes most of a launch without adding a phase. No worker is
+        // booted when every later session will reuse a completed run.
+        let launches_remain = prepared[index + 1..]
+            .iter()
+            .any(|later| !session_runs.contains(&later.key));
         let census_started = Instant::now();
         let (census, next) = std::thread::scope(|scope| {
-            let booting = (preboot && index + 1 < session_count)
+            let booting = (preboot && launches_remain)
                 .then(|| scope.spawn(|| workspace.spawn_parked(node_executable, node_version)));
             let census = workspace.verify_unchanged();
             // A pre-boot that failed or panicked is discarded rather than
@@ -1040,9 +1090,146 @@ fn launch_every_session(
         timing.census_ns += elapsed_ns(census_started);
         census?;
         parked = next;
+        // Only after the census that followed it held: a run whose workspace
+        // did not stay unchanged is never recorded, and never used.
+        session_runs.record(key, &run);
         runs.push(run);
     }
     Ok(runs)
+}
+
+/// One planned session, encoded once, with the key [`ProbeSessionRuns`] reads.
+struct PreparedSession<'a> {
+    session: &'a crate::ProbeSessionRequest,
+    recipe: &'a CorpusRecipe,
+    module: &'a Path,
+    requested: Vec<RequestedDependency>,
+    bytes: Vec<u8>,
+    key: String,
+}
+
+/// ADR 0144: the completed probe-session runs of one certification
+/// transaction.
+///
+/// A graph's recipe-gating loop and the plain lane's per-plan loop both run a
+/// node's whole veto batch again whenever a pass moves that node's demand
+/// graph, so one withdrawn claim re-launches every other session of the batch
+/// with byte-identical inputs: `@solid-primitives/utils`'s 77-claim batch ran
+/// twice in every row that depends on it. A session is reused only when its
+/// [`session_reuse_key`] is equal, which covers the session frame minus its
+/// plan-derived id, the recipe module's bytes, and every watched input of the
+/// workspace except the *other* scheduled recipe modules
+/// ([`PrivateProbeWorkspace::session_reuse_scope`]). Only `Completed` runs are
+/// kept: a timeout, a throw, or a refusal is launched again, never replayed.
+///
+/// The memo lives in the transaction's [`ProbeHarnessConfiguration`] and dies
+/// with it. Nothing is persisted and no run crosses a process: a recovery
+/// trial and the final transaction after it each run their own sessions, as
+/// ADR 0073 requires.
+#[derive(Clone, Default)]
+pub(crate) struct ProbeSessionRuns(std::sync::Arc<SessionRunMemo>);
+
+#[derive(Default)]
+struct SessionRunMemo {
+    runs: Mutex<BTreeMap<String, ProbeRun>>,
+    reused: std::sync::atomic::AtomicUsize,
+}
+
+impl ProbeSessionRuns {
+    fn runs(&self) -> std::sync::MutexGuard<'_, BTreeMap<String, ProbeRun>> {
+        self.0.runs.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn completed(&self, key: &str, session: &Digest) -> Option<ProbeRun> {
+        let reused = self.runs().get(key).map(|run| ProbeRun {
+            session: session.clone(),
+            ..run.clone()
+        });
+        if reused.is_some() {
+            self.0.reused.fetch_add(1, Ordering::Relaxed);
+        }
+        reused
+    }
+
+    /// How many completed runs the transaction holds, and how many sessions
+    /// it answered with one instead of a launch, for tests.
+    #[cfg(test)]
+    pub(crate) fn counts(&self) -> (usize, usize) {
+        (self.runs().len(), self.0.reused.load(Ordering::Relaxed))
+    }
+
+    fn contains(&self, key: &str) -> bool {
+        self.runs().contains_key(key)
+    }
+
+    fn record(&self, key: &str, run: &ProbeRun) {
+        if matches!(run.outcome, ProbeRunOutcome::Completed { .. }) {
+            self.runs()
+                .entry(key.to_owned())
+                .or_insert_with(|| run.clone());
+        }
+    }
+}
+
+/// The memo is transaction state, not configuration: two configurations that
+/// name the same harness, Node, and corpus are equal whatever either has run.
+impl PartialEq for ProbeSessionRuns {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for ProbeSessionRuns {}
+
+impl std::fmt::Debug for ProbeSessionRuns {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let runs = self.runs().len();
+        formatter
+            .debug_struct("ProbeSessionRuns")
+            .field("runs", &runs)
+            .finish()
+    }
+}
+
+fn hash_reuse_field(hasher: &mut Sha256, value: &[u8]) {
+    hasher.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_le_bytes());
+    hasher.update(value);
+}
+
+/// ADR 0144: one session's reuse key within its workspace's `scope`.
+///
+/// The frame is the exact one the worker would read, with its `id` removed:
+/// the id hashes the whole runtime-probe plan, so it moves whenever any other
+/// claim of the batch is withdrawn while nothing this session executes does.
+/// The recipe is identified by the bytes copied for it.
+fn session_reuse_key(
+    scope: &str,
+    session_bytes: &[u8],
+    relative_module: &str,
+    recipe: &CorpusRecipe,
+) -> Result<String, ProbeHarnessError> {
+    let mut frame: serde_json::Value = serde_json::from_slice(session_bytes)
+        .map_err(|error| ProbeHarnessError::Protocol(error.to_string()))?;
+    let Some(object) = frame.as_object_mut() else {
+        return Err(ProbeHarnessError::Protocol(
+            "an encoded probe session is not a JSON object".into(),
+        ));
+    };
+    if object.remove("id").is_none() {
+        return Err(ProbeHarnessError::Protocol(
+            "an encoded probe session carries no id".into(),
+        ));
+    }
+    let frame = serde_json::to_vec(&frame)
+        .map_err(|error| ProbeHarnessError::Protocol(error.to_string()))?;
+    let mut hasher = Sha256::new();
+    hash_reuse_field(&mut hasher, b"solid-checker-probe-session-reuse-key-v1");
+    hash_reuse_field(&mut hasher, scope.as_bytes());
+    hash_reuse_field(&mut hasher, &frame);
+    hash_reuse_field(&mut hasher, relative_module.as_bytes());
+    hash_reuse_field(&mut hasher, recipe.file_name.as_bytes());
+    hash_reuse_field(&mut hasher, &Sha256::digest(&recipe.bytes));
+    Ok(format!("sha256:{:x}", hasher.finalize()))
 }
 
 /// What one probe-gate batch cost, by phase, reported under
@@ -1055,6 +1242,8 @@ struct ProbeGateBatchTiming {
     conditions_ns: u64,
     workspace_ns: u64,
     sessions: usize,
+    /// Sessions answered by a completed run of this transaction (ADR 0144).
+    reused_sessions: usize,
     launch_ns: u64,
     census_ns: u64,
     total_ns: u64,
@@ -1071,6 +1260,7 @@ impl ProbeGateBatchTiming {
                 "mode": "probe-gate-batch",
                 "specifier": plan.resolved_import.specifier,
                 "sessions": self.sessions,
+                "reusedSessions": self.reused_sessions,
                 "pinVerificationNs": self.pin_verification_ns,
                 "conditionsNs": self.conditions_ns,
                 "workspaceNs": self.workspace_ns,
@@ -3227,7 +3417,7 @@ impl PrivateProbeWorkspace {
                 WatchedInput::Contents(harness_directory),
             ),
             (
-                "recipe-modules".to_owned(),
+                RECIPE_MODULES_LABEL.to_owned(),
                 WatchedInput::Contents(recipes_directory),
             ),
             // `HOME` is the private directory, so these two are CommonJS
@@ -3356,6 +3546,80 @@ impl PrivateProbeWorkspace {
         self.recipes
             .get(claim_id)
             .map(|(path, relative)| (path.as_path(), relative.as_str()))
+    }
+
+    /// ADR 0144: everything a session launched here reads besides its own
+    /// frame and recipe module, as one digest.
+    ///
+    /// That is the baseline census of every watched input — the private copy
+    /// of the package and its authenticated dependency closure, the harness
+    /// image, the pinned Node, Type Facts and verifier images, and every
+    /// location outside the tree a bare specifier could reach — except
+    /// `recipe-modules`, which holds the *other* scheduled recipes and moves
+    /// whenever the batch loses a claim. Beside it: the Node version, the
+    /// planned specifier, the `--conditions=` flags, the runtime targets the
+    /// launches must resolve to, the closure's requested edges, and the
+    /// execution and JSX-free premises the frame carries. Paths are taken
+    /// relative to the private directory, whose location is the one input
+    /// that differs between two workspaces of equal content.
+    fn session_reuse_scope(
+        &self,
+        node_version: &str,
+        specifier: &str,
+    ) -> Result<String, ProbeHarnessError> {
+        let private = self.directory.to_string_lossy().into_owned();
+        let canonical = fs::canonicalize(&self.directory).map_or_else(
+            |_| private.clone(),
+            |path| path.to_string_lossy().into_owned(),
+        );
+        let relative = |value: &str| {
+            value
+                .replace(&canonical, "<private>")
+                .replace(&private, "<private>")
+        };
+        let protocol = |error: serde_json::Error| ProbeHarnessError::Protocol(error.to_string());
+        let execution = relative(&serde_json::to_string(&self.execution).map_err(protocol)?);
+        let jsx_free = relative(&serde_json::to_string(&self.jsx_free_modules).map_err(protocol)?);
+        let mut hasher = Sha256::new();
+        hash_reuse_field(&mut hasher, b"solid-checker-probe-session-reuse-scope-v1");
+        hash_reuse_field(&mut hasher, node_version.as_bytes());
+        hash_reuse_field(&mut hasher, specifier.as_bytes());
+        for (label, digest) in &self.before {
+            if label == RECIPE_MODULES_LABEL {
+                continue;
+            }
+            hash_reuse_field(&mut hasher, label.as_bytes());
+            hash_reuse_field(&mut hasher, digest.as_bytes());
+        }
+        hash_reuse_field(&mut hasher, b"conditions");
+        for flag in &self.condition_flags {
+            hash_reuse_field(&mut hasher, flag.as_bytes());
+        }
+        hash_reuse_field(&mut hasher, b"runtime-target");
+        hash_reuse_field(
+            &mut hasher,
+            relative(&self.runtime_target.to_string_lossy()).as_bytes(),
+        );
+        hash_reuse_field(&mut hasher, b"dependency-runtime-targets");
+        for (dependency, target) in &self.dependency_runtime_targets {
+            hash_reuse_field(&mut hasher, dependency.as_bytes());
+            hash_reuse_field(&mut hasher, relative(&target.to_string_lossy()).as_bytes());
+        }
+        hash_reuse_field(&mut hasher, b"dependency-roots");
+        for (name, root) in &self.dependency_roots {
+            hash_reuse_field(&mut hasher, name.as_bytes());
+            hash_reuse_field(&mut hasher, relative(&root.to_string_lossy()).as_bytes());
+        }
+        hash_reuse_field(&mut hasher, b"closure-dependencies");
+        for request in &self.closure_dependencies {
+            hash_reuse_field(&mut hasher, request.specifier.as_bytes());
+            hash_reuse_field(&mut hasher, request.package_name.as_bytes());
+        }
+        hash_reuse_field(&mut hasher, b"execution");
+        hash_reuse_field(&mut hasher, execution.as_bytes());
+        hash_reuse_field(&mut hasher, b"jsx-free-modules");
+        hash_reuse_field(&mut hasher, jsx_free.as_bytes());
+        Ok(format!("sha256:{:x}", hasher.finalize()))
     }
 
     /// One census of every watched path, keyed by label.
@@ -4551,6 +4815,9 @@ fn hash_file(path: &Path) -> Result<String, std::io::Error> {
 /// The census label of the whole private `node_modules` tree, whose single walk
 /// also yields every `private-dependency:*` digest.
 const PRIVATE_NODE_MODULES_LABEL: &str = "private-node-modules";
+/// The watched label of the scheduled recipe modules, the one census entry a
+/// session-reuse scope leaves out (ADR 0144).
+const RECIPE_MODULES_LABEL: &str = "recipe-modules";
 const PRIVATE_DEPENDENCY_LABEL_PREFIX: &str = "private-dependency:";
 
 /// What one census read produced: a digest, or — for the private

@@ -19243,6 +19243,69 @@ export const value = phantom;
         assert_eq!(batch.gate_ids().len(), 1);
     }
 
+    /// ADR 0144: a batch whose sessions this transaction already ran to
+    /// completion is answered from those runs, and the answer is the one a
+    /// fresh launch gives. The configuration carries the transaction's memo,
+    /// so the second batch on the same configuration launches nothing, while
+    /// a fresh configuration (another transaction) launches everything again.
+    #[test]
+    fn the_probe_gate_tracer_reuses_the_completed_runs_of_its_transaction() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("session-reuse");
+        let plan = dependency_consumer_plan(true);
+        let schedule = plan.probe_gate_schedule().unwrap();
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        let recipes = [(
+            claim_id.as_str(),
+            "dependency-consumer.mjs",
+            &["solid-js"] as &[&str],
+        )];
+        let Some(configuration) = tracer_configuration_with_dependencies(
+            &census_fixture(),
+            scratch.path(),
+            "session-reuse",
+            &recipes,
+        ) else {
+            return;
+        };
+        plan.acquire_and_verify_export_value_type_facts(&pin)
+            .expect("the census proves the consumer's closure");
+
+        let first =
+            super::probe_harness::run_probe_gates(&plan, &schedule, &configuration, &pin, &[])
+                .expect("the first batch launches and authenticates");
+        let (recorded, reused) = configuration.session_runs().counts();
+        assert!(recorded > 0, "a completed batch records its runs");
+        assert_eq!(reused, 0, "nothing was there to reuse");
+
+        let second =
+            super::probe_harness::run_probe_gates(&plan, &schedule, &configuration, &pin, &[])
+                .expect("the repeated batch authenticates");
+        assert_eq!(
+            configuration.session_runs().counts(),
+            (recorded, recorded),
+            "every session of the repeated batch is answered by a recorded run"
+        );
+        assert_eq!(first.0, second.0, "the evaluation is the fresh launch's");
+        assert_eq!(first.1, second.1, "and so is the bound harness identity");
+
+        // Another transaction starts with nothing.
+        let Some(fresh) = tracer_configuration_with_dependencies(
+            &census_fixture(),
+            scratch.path(),
+            "session-reuse-fresh",
+            &recipes,
+        ) else {
+            return;
+        };
+        let third = super::probe_harness::run_probe_gates(&plan, &schedule, &fresh, &pin, &[])
+            .expect("a fresh transaction launches again");
+        assert_eq!(fresh.session_runs().counts(), (recorded, 0));
+        assert_eq!(first.0, third.0);
+    }
+
     /// The negative half, and the refusal direction this whole mechanism is
     /// built around: the same package, the same recipe, the same accepted
     /// dependency edge — but no authenticated snapshot for `solid-js`. The gate
