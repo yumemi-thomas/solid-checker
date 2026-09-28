@@ -2349,6 +2349,7 @@ impl GraphGatingPassTiming {
                 "gateNs": self.gate_ns,
                 "withdrawn": self.withdrawn,
                 "passNs": elapsed_ns(pass_started),
+                "peakRssMiB": crate::phase16_benchmark::resident_kib().map(|kib| kib / 1024),
             })
         );
     }

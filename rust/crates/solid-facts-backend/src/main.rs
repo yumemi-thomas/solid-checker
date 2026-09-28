@@ -2083,10 +2083,21 @@ fn execute_contract_graph_case_set_certification(
     revocation_epoch: u64,
     probes: Option<&solid_facts_backend::ProbeHarnessConfiguration>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let planning_started = std::time::Instant::now();
     let graph_requests = match request.graph_case_set {
         Some(case_set) => expand_deduplicated_graph_case_set(case_set)?,
         None => request.graphs,
     };
+    let node_references = graph_requests
+        .iter()
+        .map(|graph| 1 + graph.dependencies.len())
+        .sum::<usize>();
+    solid_facts_backend::report_certification_timing(
+        "graph-case-set-expansion",
+        planning_started,
+        serde_json::json!({ "graphs": graph_requests.len(), "nodeReferences": node_references }),
+    );
+    let planning_started = std::time::Instant::now();
     let mut graphs = Vec::with_capacity(graph_requests.len());
     let mut case_bindings = Vec::with_capacity(graph_requests.len());
     {
@@ -2103,6 +2114,12 @@ fn execute_contract_graph_case_set_certification(
             case_bindings.push((importer, specifier, resolved_import_root));
         }
     }
+    solid_facts_backend::report_certification_timing(
+        "graph-case-set-planning",
+        planning_started,
+        serde_json::json!({ "graphs": graphs.len() }),
+    );
+    let finalization_started = std::time::Instant::now();
     let finalized = solid_facts_backend::certify_published_contract_graph_case_set(
         &graphs,
         pin,
@@ -2111,6 +2128,11 @@ fn execute_contract_graph_case_set_certification(
         probes,
     )
     .map_err(|error| format!("published graph case-set finalization failed: {error}"))?;
+    solid_facts_backend::report_certification_timing(
+        "graph-case-set-finalization",
+        finalization_started,
+        serde_json::json!({ "graphs": graphs.len() }),
+    );
 
     let catalog_root = Path::new(&request.catalog_root);
     fs::create_dir_all(catalog_root)?;

@@ -202,7 +202,7 @@ fn resident_delta(before: Option<u64>, after: Option<u64>) -> Option<u64> {
 }
 
 #[cfg(unix)]
-fn resident_kib() -> Option<u64> {
+pub(crate) fn resident_kib() -> Option<u64> {
     // SAFETY: `usage` points to a valid writable `rusage`, and RUSAGE_SELF
     // requires no caller-owned lifetime. The OS initializes the full value.
     let usage = unsafe {
@@ -221,7 +221,7 @@ fn resident_kib() -> Option<u64> {
 }
 
 #[cfg(not(unix))]
-fn resident_kib() -> Option<u64> {
+pub(crate) fn resident_kib() -> Option<u64> {
     None
 }
 

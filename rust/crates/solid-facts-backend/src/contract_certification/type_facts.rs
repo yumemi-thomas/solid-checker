@@ -1075,6 +1075,9 @@ pub fn report_certification_timing(
     let mut line = serde_json::json!({
         "certificationStage": stage,
         "elapsedNs": started.elapsed().as_nanos(),
+        // The process's peak resident set so far, so a stage that grows the
+        // native transaction is attributable (null where getrusage is absent).
+        "peakRssMiB": crate::phase16_benchmark::resident_kib().map(|kib| kib / 1024),
     });
     if let (Some(object), Some(extra)) = (line.as_object_mut(), detail.as_object()) {
         for (key, value) in extra {
