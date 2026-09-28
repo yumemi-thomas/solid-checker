@@ -1943,19 +1943,27 @@ fn certify_graphs_with_recipe_gating(
             probes.map(|_| &synthesis_attempted),
         );
         timing.acquisition_ns = elapsed_ns(acquisition_started);
-        match acquired {
-            Ok(fresh) => {
-                timing.acquired = fresh.len();
-                for (digest, evidence) in fresh {
-                    let root = gated
-                        .iter()
-                        .find_map(|graph| graph.node(&digest))
-                        .map(|node| node.plan.demand_graph().root().as_str().to_owned())
-                        .expect("fresh evidence names a gated node");
-                    evidence_roots.insert(digest.clone(), root);
-                    evidence_by_node.insert(digest, evidence);
-                }
+        // ADR 0148: every node that verified keeps its evidence, keyed by the
+        // demand-graph root it verified under, even in a pass where another
+        // node's census refused. A withdrawal moves only the refusing node's
+        // root, so the next pass re-acquires that node and not the others:
+        // before, one refusal discarded every node's answer and the next pass
+        // acquired the whole graph again.
+        let acquired = acquired.and_then(|(fresh, census_refusal)| {
+            timing.acquired = fresh.len();
+            for (digest, evidence) in fresh {
+                let root = gated
+                    .iter()
+                    .find_map(|graph| graph.node(&digest))
+                    .map(|node| node.plan.demand_graph().root().as_str().to_owned())
+                    .expect("fresh evidence names a gated node");
+                evidence_roots.insert(digest.clone(), root);
+                evidence_by_node.insert(digest, evidence);
             }
+            census_refusal.map_or(Ok(()), Err)
+        });
+        match acquired {
+            Ok(()) => {}
             Err(PublishedGraphCertificationError::TypeFactsForGraph { source, .. }) => {
                 // Every node's census refusals at once (`CensusRefused`
                 // carries them all), each withheld at its own node.
@@ -2367,7 +2375,10 @@ fn acquire_case_set_evidence(
     held: &BTreeMap<String, String>,
     synthesis_attempted: Option<&BTreeSet<String>>,
 ) -> Result<
-    BTreeMap<String, super::type_facts::VerifiedTypeFactsEvidence>,
+    (
+        BTreeMap<String, super::type_facts::VerifiedTypeFactsEvidence>,
+        Option<PublishedGraphCertificationError>,
+    ),
     PublishedGraphCertificationError,
 > {
     let first_graph = graphs
@@ -2438,18 +2449,17 @@ fn acquire_case_set_evidence(
         .into_iter()
         .map(|(digest, (_, request))| (digest, request))
         .unzip();
-    let evidence =
+    let for_graph = |source| PublishedGraphCertificationError::TypeFactsForGraph {
+        graph: "published-graph-case-set".into(),
+        source,
+    };
+    let answer =
         super::type_facts::acquire_and_verify_graph_export_values(root_plan, &request_values, pin)
-            .map_err(
-                |source| PublishedGraphCertificationError::TypeFactsForGraph {
-                    graph: "published-graph-case-set".into(),
-                    source,
-                },
-            )?;
-    Ok(request_keys
+            .map_err(for_graph)?;
+    let fresh = request_keys
         .into_iter()
         .zip(request_values)
-        .zip(evidence)
+        .zip(answer.evidence)
         // Importer-variant grouping can return reused evidence even for a
         // deferred request. Its dependencies must finish their own initial
         // synthesis before this canonical node may retain that evidence.
@@ -2458,7 +2468,8 @@ fn acquire_case_set_evidence(
                 .filter(|_| request.acquire)
                 .map(|evidence| (digest, evidence))
         })
-        .collect())
+        .collect();
+    Ok((fresh, answer.census_refusal.map(for_graph)))
 }
 
 /// The coordinates one case-set Type Facts request is ordered by, most

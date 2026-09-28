@@ -1208,12 +1208,27 @@ pub(super) struct GraphExportValueRequest<'a> {
 /// graph bytes, while verification still receives only each node's reachable
 /// dependencies and source packages; run-wide batching therefore does not
 /// widen any node's authority.
+///
+/// A census refusal at some nodes does not discard the evidence of the others
+/// (ADR 0148): the answer carries every node that verified beside the one
+/// `CensusRefused` naming every refusal. Any other error still fails the whole
+/// acquisition.
 pub(super) fn acquire_and_verify_graph_export_values(
     project_root: &CertificationPlan,
     requests: &[GraphExportValueRequest<'_>],
     pin: &TypeFactsProducerPin,
-) -> Result<Vec<Option<VerifiedTypeFactsEvidence>>, TypeFactsCertificationError> {
+) -> Result<GraphExportValues, TypeFactsCertificationError> {
     acquire_graph_export_values_in_contexts(project_root, requests, pin, true)
+}
+
+/// One graph acquisition's answer, one entry per request.
+pub(super) struct GraphExportValues {
+    /// The verified evidence of each request that verified; `None` for a
+    /// request that was not acquired or whose census refused.
+    pub(super) evidence: Vec<Option<VerifiedTypeFactsEvidence>>,
+    /// One `CensusRefused` carrying every refusing node's refusals, when any
+    /// node's census refused.
+    pub(super) census_refusal: Option<TypeFactsCertificationError>,
 }
 
 #[cfg(test)]
@@ -1230,7 +1245,11 @@ pub(super) fn shared_graph_export_values_for_test(
             acquire: true,
         })
         .collect::<Vec<_>>();
-    acquire_graph_export_values_in_contexts(plans[0], &requests, pin, false)
+    let answer = acquire_graph_export_values_in_contexts(plans[0], &requests, pin, false)?;
+    match answer.census_refusal {
+        Some(refusal) => Err(refusal),
+        None => Ok(answer.evidence),
+    }
 }
 
 fn acquire_graph_export_values_in_contexts(
@@ -1238,9 +1257,12 @@ fn acquire_graph_export_values_in_contexts(
     requests: &[GraphExportValueRequest<'_>],
     pin: &TypeFactsProducerPin,
     isolate_contexts: bool,
-) -> Result<Vec<Option<VerifiedTypeFactsEvidence>>, TypeFactsCertificationError> {
+) -> Result<GraphExportValues, TypeFactsCertificationError> {
     if requests.is_empty() {
-        return Ok(Vec::new());
+        return Ok(GraphExportValues {
+            evidence: Vec::new(),
+            census_refusal: None,
+        });
     }
     // Importer variants share one acquisition. Discovery keys a graph node by
     // the module that imported it, so one package's many entrypoints put the
@@ -1401,21 +1423,24 @@ fn acquire_graph_export_values_in_contexts(
     );
     // Back to one answer per requested node, importer variants sharing their
     // representative's evidence.
-    evidence.map(|evidence| {
-        representative_of
+    let (evidence, census_refusal) = evidence?;
+    Ok(GraphExportValues {
+        evidence: representative_of
             .iter()
             .map(|position| evidence[*position].clone())
-            .collect()
+            .collect(),
+        census_refusal,
     })
 }
 
-/// Every node's verification result as one result: the evidence of every
-/// node when every node verified; otherwise the first error that is not a
-/// census refusal; otherwise one `CensusRefused` carrying every node's census
-/// refusals, so the caller withholds them all in one pass.
+/// Every node's verification result as one result: the first error that is
+/// not a census refusal, when there is one; otherwise the evidence of every
+/// node that verified (`None` where its census refused) and, when any census
+/// refused, one `CensusRefused` carrying every node's census refusals, so the
+/// caller withholds them all in one pass and keeps the rest (ADR 0148).
 fn merge_graph_census_refusals<T>(
-    results: Vec<Result<T, TypeFactsCertificationError>>,
-) -> Result<Vec<T>, TypeFactsCertificationError> {
+    results: Vec<Result<Option<T>, TypeFactsCertificationError>>,
+) -> Result<(Vec<Option<T>>, Option<TypeFactsCertificationError>), TypeFactsCertificationError> {
     let mut evidence = Vec::with_capacity(results.len());
     let mut refusals = Vec::new();
     for result in results {
@@ -1433,17 +1458,16 @@ fn merge_graph_census_refusals<T>(
                         refusals: node_refusals,
                     } => {
                         refusals.extend(node_refusals.iter().cloned());
+                        evidence.push(None);
                     }
                     _ => return Err(error),
                 }
             }
         }
     }
-    if refusals.is_empty() {
-        Ok(evidence)
-    } else {
-        Err(TypeFactsCertificationError::CensusRefused { refusals })
-    }
+    let refusal =
+        (!refusals.is_empty()).then_some(TypeFactsCertificationError::CensusRefused { refusals });
+    Ok((evidence, refusal))
 }
 
 /// What decides whether two graph nodes may share one exported-value
@@ -17815,6 +17839,61 @@ mod tests {
 
     fn digest(bytes: &[u8]) -> String {
         format!("sha256:{:x}", Sha256::digest(bytes))
+    }
+
+    /// ADR 0148: a census refusal at one node keeps every other node's
+    /// verified answer, in request order, beside one `CensusRefused` naming
+    /// every refusal; any other error still fails the whole acquisition.
+    #[test]
+    fn a_census_refusal_keeps_the_evidence_of_every_node_that_verified() {
+        let refused = |demand: &str| {
+            TypeFactsCertificationError::CensusRefused {
+                refusals: vec![CensusRefusal {
+                    demand: demand.into(),
+                    reason: "open".into(),
+                    rendered: format!("{demand}: open"),
+                }],
+            }
+            .at_stage("verification")
+        };
+        let (evidence, refusal) = merge_graph_census_refusals(vec![
+            Ok(Some(1)),
+            Err(refused("a")),
+            Ok(None),
+            Err(refused("b")),
+            Ok(Some(4)),
+        ])
+        .expect("census refusals alone never fail the acquisition");
+        assert_eq!(evidence, vec![Some(1), None, None, None, Some(4)]);
+        let Some(TypeFactsCertificationError::CensusRefused { refusals }) = refusal else {
+            panic!("the refusals travel as one CensusRefused");
+        };
+        assert_eq!(
+            refusals
+                .iter()
+                .map(|r| r.demand.as_str())
+                .collect::<Vec<_>>(),
+            ["a", "b"]
+        );
+
+        let (evidence, refusal) =
+            merge_graph_census_refusals(vec![Ok(Some(1)), Ok(Some(2))]).expect("nothing refused");
+        assert_eq!(evidence, vec![Some(1), Some(2)]);
+        assert!(refusal.is_none());
+
+        let Err(error) = merge_graph_census_refusals(vec![
+            Ok(Some(1)),
+            Err(refused("a")),
+            Err(TypeFactsCertificationError::ProducerProvenance(
+                "wrong producer".into(),
+            )),
+        ]) else {
+            panic!("a non-census error fails the whole acquisition");
+        };
+        assert!(matches!(
+            error,
+            TypeFactsCertificationError::ProducerProvenance(_)
+        ));
     }
 
     /// ADR 0112's consumer half: the producer names each place the aliasing
