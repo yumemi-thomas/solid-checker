@@ -1,9 +1,9 @@
 # ADR 0139: What a constructor does with a callable it keeps is a claim the format cannot state yet
 
-- Status: **proposed — owner decision required** (2026-09-28). Nothing here is
-  implemented. It changes the contract format, so the rule of AGENTS.md applies:
-  every producer, consumer, bundled contract, fixture, proof sidecar, receipt and
-  gate moves together, or none does.
+- Status: accepted and implemented (2026-09-28). The owner approved the
+  proposal below on 2026-09-28; § Implementation records what landed, where it
+  is narrower than the proposal and why, and what it measured. Handshake
+  protocol 65.
 - Date: 2026-09-28
 - Relation: follows ADR 0134 (class attribution) and ADR 0135 (helper reach). It
   extends ADR 0023 (retention is not invocation) and ADR 0105 (a class export is
@@ -168,3 +168,176 @@ not hold for that shape. The narrowing is unsound in the direction that
 publishes a closed domain, so it is recorded here for the owner of ADR 0134.
 
 Fixed by the amendment of 2026-09-28 in ADR 0134.
+
+## Implementation (2026-09-28)
+
+### Format
+
+`Event::ResultAccess` (`result-access`) is valid only as the trigger and the
+execution point of an `invoke` exactly one `callbacks` item names from a bare
+parameter, scheduled `external`, `ambient-at-execution` for tracking and owner
+with unconstrained requirements, count `trigger` 0..many, unguarded, with no
+protocol, inputs, output or resources (`validate_result_access_operation`).
+A contract stating one writes `solid-checker:semantic-result-access:v1` first
+(`SEMANTIC_RESULT_ACCESS_MARKER`), and a recipe address does per claim; every
+other contract and address hashes byte for byte as before, pinned by a golden
+vector. The schema, the wire decoder and `semantic-model.md` § callbacks carry
+the event.
+
+The denial is **per slot**: a `result-access` item from slot `i` denies every
+other retention of slot `i`'s value. A closed domain with only call items from
+a slot says nothing about retention, as it never did (ADR 0023). This is
+narrower than the proposal's "a domain closed over call and result-access
+items denies every other retention", which would have given every certified
+document's call-only slots a meaning their census never checked.
+
+### Producer census (Type Facts, handshake protocol 65)
+
+`ExportImplementationTranscript.retainedArguments`, beside `invocation:
+construct`, names each constructor parameter the producer found kept
+(`retainedArgumentsLocked`): one top-level `this.<key> = p` statement of the
+constructor; every other use a direct call in the constructor's own frame;
+the key no class element, not `__proto__`, written nowhere else; every other
+access of `this.<key>` the callee of a call outside the code a construction
+reaches (the constructor less its installed closures and, transitively, every
+member whose key reached code names). It answers only for an exact class: no
+heritage, static member or nested class; every `this` in the class body the
+object of a literal-keyed member access (no escape); no computed member of
+`this`; no constructor return value; every member write storing a parameter, a
+literal, an object or array literal, a `new` result, a template, a
+`void`/`typeof`/`!` expression, or (top-level in the constructor) an installed
+function literal -- never an identifier, call result or member read, which
+could be a function whose body runs later as a member; and every reference to
+the class in the program an export specifier, a `new` callee or a `void`
+operand, so nothing augments (`C.prototype.m = …`), extends or passes it on.
+
+Two producer facts widen with it, both true by grammar: a constructor's
+completion form is `plain` (it was `unclassified`), and its parameters get the
+unwritten-slot identity functions already had, so ADR 0100's call items can be
+confirmed in a construction.
+
+The certifier confirms each `result-access` item against the stated fact and
+re-derives the parameter half from the transcript's use census: every use is
+the stated store or a direct call in the constructor's own frame
+(`retained_argument_evidence`). The same fact witnesses the item's positive
+families (argument binding, callable path, operation reachability, and the
+per-trigger cardinality). A class export's selected signature is its construct
+signature. The veto constructs the export with `new` on that signature and
+invokes no member of the value (`Observation::ConstructedCallbacks`), so a kept
+slot that runs at any time up to the end of the drain is the contradiction.
+
+What the proposal allowed and this does not state: a construction-time
+invocation through a member (router-core's `this.update(…)` reaching
+`this.getStoreConfig(this)`) -- the call item the census cannot yet follow to
+one closure.
+
+### Generator
+
+`solid_facts::ast::retained_constructor_arguments` restates the producer's
+rules on Oxc's resolved references for the class an entry name's runtime
+binding publishes, and the backend describes each kept parameter as a
+`result-access` item when every constructor parameter is kept or unused. It
+derives no call item for a class, so a constructor that also calls the kept
+parameter (`Primed`) proposes nothing; the census confirms that pair when it is
+stated by hand. Re-emission republishes a projected item as itself. A local
+caller that forwards its own parameter to a dependency's kept slot does not
+inherit the item -- the caller may keep the constructed value anywhere -- and
+its slot is opened instead.
+
+### Consumer (ADR 0134 § 6)
+
+`export_names_of_super_argument_obligation` answers after the class rung and
+before `fallback-all`, for an obligation in a module-level function `F` (or on
+an import binding used only inside it) whose every reference in the package is
+an argument `i` of the top-level `super(…)` statement of a module-level class
+`C` extending a named import of dependency export `D`, in `F`'s module or
+through import bindings used only that way, with no entry name publishing `F`:
+
+| `D`'s accepted `callbacks` for slot `i`, and `C` | Attribution |
+| --- | --- |
+| closed, `result-access` item, no call item; `C`'s constructor names no member of `this`/`super` | `super-argument-member`: creators' `returns` |
+| closed, `result-access` item and a call item, or the constructor names a member | `super-argument-construction`: creators, every domain |
+| closed with call items only, no item, a member path, open, absent, degenerate | `fallback-all` |
+| `C` declares any member but its constructor, or its instance escapes | `fallback-all` |
+
+The first column's third row deviates from the proposal's "only call items ⇒
+construction": without a `result-access` item nothing denies that `D` keeps `F`
+somewhere another export later runs it. The creators are the class rung's own
+for the `super(…)` call. What `D` does with values `F` returns is `D`'s code,
+described by `D`'s contract in its own domains, which is the premise ADR 0134
+takes for the instance itself.
+
+### Pinned by
+
+- `contract_semantics::tests::result_access_digest_family_is_separate_and_frozen`
+  and `a_result_access_operation_is_validated_to_its_one_shape`;
+  `contract_document::tests::a_result_access_item_round_trips_in_its_own_digest_family`;
+  `contracts::tests::a_result_access_item_projects_as_a_deferred_row_that_keeps_its_event`;
+- `TestAConstructionStatesWhatItKeepsForItsMembers` (Go, 17 rows);
+  `session::tests::a_retained_argument_names_one_plain_slot_of_a_construction`;
+- `retained_arguments::tests` and `super_argument::tests` (Oxc);
+- `contract_certification::tests::the_retained_argument_census_certifies_exactly_what_members_keep`
+  (end to end: `Keeper` and `Primed` certify with the veto, seven variants
+  withhold by name) and
+  `synthesized_vetoes::adversarial_tests::the_constructed_callbacks_module_samples_new_and_never_runs_a_kept_slot`;
+- `fixtures/package-contracts/implementation-census-retained-argument` (corpus);
+- `scripts/contract-super-argument-attribution.test.mjs` (the consumer rung,
+  its construction row and four refusing variants).
+
+Each rule was disabled once to check its pin: the consumer rung (the script's
+`kept` and `touching` rows fail), the certifier's retained-argument evidence
+and the constructed veto (the end-to-end test fails), and the producer's
+escape check (`theInstanceEscapes` fails). The one unpinned rule is the
+consumer's refusal to restate a dependency's item on a forwarding caller's
+parameter: today a class export's `returns` and owner requirements are never
+closed, so an importer of one is opened in every domain by that import and the
+restated row could not show.
+
+### Measured on `viviana-ui-main-b005c00a`
+
+A fresh `consumer-environment` run with this build (release binary, network
+install): `@tanstack/solid-router` certified with 106 closures (callbacks 88,
+creates 34, returns 32), `solid-start-client` 98, `solid-start-server` refused
+as before (`node:stream is not a package receipt`). No document in the run
+states a `result-access` item: `RouterCore` is not an exact class (its
+instance escapes, it hangs imported functions on itself, and its constructor
+calls the member that calls the kept key).
+
+Each node replayed against the catalog the graph lane handed it:
+
+| node | `fallback-all` | degenerate exports | exports proposing a closure |
+| --- | --- | --- | --- |
+| router-core `.` | 2: `createBrowserHistory`, `parseHref` (unchanged) | 71 of 79, `RouterCore` among them | 8: `DEFAULT_PROTOCOL_ALLOWLIST`, `DEV_STYLES_ATTR`, `TSR_DEFERRED_PROMISE`, `defaultSerovalPlugins`, `preloadWarning`, `rootRouteId`, `storageKey`, `trailingSlashOptions` |
+| solid-router `.` | 3: `routerStores.js` 9–38 and 40–70 (`getStoreFactory`'s bindings), `route.js` 465 | 91 of 97 | 6, all re-exports: `DEFAULT_PROTOCOL_ALLOWLIST`, `createBrowserHistory`, `createHashHistory`, `createHistory`, `createMemoryHistory`, `rootRouteId` |
+
+`createRouter`, `createFileRoute`, `Link` and `Outlet` propose nothing. The
+super-argument rung does not fire on `getStoreFactory`: `RouterCore`'s
+`callbacks` is degenerate, and `Router`'s `primeRouterFromRegistry(this)` is an
+escape it would refuse anyway. A binary predating ADR 0138 replaying the same
+catalog reports 6 root catch-alls; the three `not-found.js` ones are ADR 0138's
+(reachability), not this change's -- no attribution marker in either replay
+names a super-argument mechanism.
+
+### Router-core's own two catch-alls: no exact rule, nothing changed
+
+`createBrowserHistory` and `parseHref` (`router.js` bytes 1087–1107 and
+1109–1118) stay `fallback-all`. Both obstacles were examined for an exact rule:
+
+- **Prototype augmentation** (lines 825–826) is exact for a function-literal
+  value -- a member defined at module scope, whose body the reach can read --
+  but `_replaceRouteChunk = replaceRouteChunk` hangs an *imported* function on
+  the prototype, whose body runs later with `this` the instance, and
+  `_refreshRoute`'s literal body hands `this` to `refreshClientRoute`. The same
+  holds inside the constructor: `this.loadRouteChunk = loadRouteChunk`. A rule
+  admitting only function literals moves neither obligation.
+- **The escaping instance** has no exact rule. `this` reaches four package
+  helpers (`setupScrollRestoration(this)` at construction, which subscribes and
+  adds window listeners holding it; `loadClientRoute`, `preloadClientRoute`,
+  `refreshClientRoute`), a global (`self.__TSR_ROUTER__ = this`, readable by any
+  code), and the caller's own `getStoreConfig(this)`. "Creators' `returns` and
+  construction, never narrower" covers code that runs inside a creator's call
+  or on the value it hands out, but not a *different* package export that later
+  reaches the instance through module state or the global and runs `update`
+  inside its own call; that export would be left unmarked. Proving the helpers
+  keep the instance nowhere is an interprocedural retention analysis this
+  change does not have. Recorded, not implemented.
