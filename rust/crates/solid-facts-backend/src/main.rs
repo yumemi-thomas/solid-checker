@@ -8943,8 +8943,15 @@ fn attach_generated_owner_requirements(
     // owner requirements below, and the `creates` proposal walk. Reading the
     // key out of the requirement map's own hit would conflate "this export's
     // function was identified" with "it carries a requirement".
+    //
+    // ADR 0142: by the *runtime* canonical symbol. An export this entry file
+    // re-exports from a sibling module that ships a `.d.ts` is, to the
+    // compiler, an alias of that declaration file's symbol, while every walk
+    // above indexed the function Node loads. ADR 0137's exact redirects are
+    // the join between the two; without one the symbols stay apart and the
+    // export proposes nothing, as before.
     let symbol = export_entity
-        .map(|entity| canonical_symbol(&entity.symbol, aliases))
+        .map(|entity| runtime_canonical_symbol_from(facts, aliases, &entity.symbol))
         .filter(|symbol| !symbol.is_empty());
     let default_function =
         (export_name == "default").then(|| default_export_function_key(facts, entry_file));

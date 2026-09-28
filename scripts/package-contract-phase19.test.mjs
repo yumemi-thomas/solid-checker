@@ -266,7 +266,11 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // document, the corpus pin of ADR 0139: a class export whose
       // construction keeps its caller's callable for its members states a
       // `result-access` item, and every inexact class states nothing.
-      stableMainDocuments: 154,
+      //
+      // 155 on 2026-09-28 adds declaration-sibling-proposal's main document,
+      // the corpus pin of ADR 0142: an export re-exported across a `.d.ts`
+      // split proposes what the same body declared in the entry file does.
+      stableMainDocuments: 155,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

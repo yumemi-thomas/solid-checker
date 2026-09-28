@@ -582,3 +582,74 @@ not an absence: the node proposed the closure, certification did not close it,
 and no withheld record says why. That is the accounting gap the audit's
 `closureCandidates`/`certifiedClosures` pair exists to find, and it is the
 next thing to read before trusting the missing-claim-form ranking above it.
+
+## 2026-09-28 (later): what "`returns` never proposed" was, and ADRs 0142-0143
+
+Measured on the release binary over the same pinned corpus, from `caa3d1af`'s
+successor `83f86d1a` (ADR 0139). The 243 exports whose `returns` the generator
+never proposed were grouped by what their implementation returns, reading each
+export's declaration through the run's retained trees (a scratch classifier,
+not a product path).
+
+**137 of the 243 were not a shape.** The implementation sits in a sibling module
+that ships a `.d.ts`, and the entry file imports and re-exports it -- the shape
+every rolldown and tsup build in the corpus emits. TypeScript resolves the
+specifier to the declaration file, and the generator's walk verdicts
+(valueless completion, value completion, argument containers, merged props,
+`creates`, owner requirements) were looked up by the declaration's symbol, so
+none of them applied. 93 were in the certifying package
+(`@solid-primitives/utils` 53, `event-bus` 10, `event-listener` 10,
+`storage` 8, `props` 6, `scroll` 6), 44 in a dependency a graph root re-exports
+(`@tanstack/query-core` 24, `@solid-primitives/utils`' colours for
+`@kobalte/core` 20). ADR 0142 reads the export through ADR 0137's redirects.
+
+The other 106, by shape (three examples each, byte ranges in the published
+file):
+
+| shape | exports | examples |
+| --- | ---: | --- |
+| a fresh function or closure | 26 | `utils` `chain` `index.js:2611..2734`, `createIdGenerator` `3490..3643`, `createMicrotask` `6845..7032` |
+| a callable value built by a call (`createContext`, `createSingletonRoot`, `Object.is.bind`) | 18 | `utils` `defaultEquals` `874..912`, `entries` `5432..5456`, `tryOnCleanup` `5615..5689` |
+| an object literal (functions, getters, spreads) | 17 | `utils` `createCallbackStack` `6171..6411`, `resize-observer` `getElementSize` `3603..3864`, `getWindowSize` `2412..2562` |
+| JSX / a rendered element | 9 | `@kobalte/core` `Badge` `badge/index.jsx:124..322`, `Button` `button/Cw4fT4wG.jsx:1336..2546`, `Alert` |
+| a Solid primitive's result | 8 | `resize-observer` `createElementSize` `3865..4509`, `createWindowSize` `2791..3041`, `keyed` `createBranch` `900..1199` |
+| a tuple / array literal | 7 | `utils` `wrapSetter` `12231..12369`, `static-store` `createStaticStore` `1072..1921`, `createHydratableStaticStore` `2595..2918` |
+| a class (the constructed instance) | 3 | `map` `ReactiveMap` `1160..3457`, `ReactiveWeakMap` `4337..5544`, `trigger` `TriggerCache` `793..1449` |
+| an instance, `Proxy` or `Promise` | 4 | `map` `createMap` `5605..5737`, `createWeakMap` `5801..5874`, `query-core` `dehydrateSettled` |
+| a builtin or member call's result | 4 | `media` `createBreakpoints`, `sortBreakpoints`, `router` `createRouter` |
+| a local helper's result | 4 | `media` `createPrefersDark`, `router` `action`, `solid-query` `useMutationState` |
+| valueless (declined elsewhere) | 3 | `resize-observer` `createResizeObserver`, `keyboard` `createKeyDown`, `createShortcut` |
+| a value from another package | 2 | `refs` `mergeRefs`, `media` `makeMediaQueryListener` |
+
+ADR 0142's first run exposed a latent defect it made common: a graph root that
+re-exports a dependency's function restated the dependency's `returns` closure
+over one `plain` return as `returns: []`, because both project to the
+consumer's `Known(None)`. The empty-return veto contradicted `hashKey`, and
+`@tanstack/solid-query` and `@kobalte/core`'s `./colors` stopped certifying
+(0 of 52 exports, and 19 fewer). ADR 0143 restates only an empty closure.
+
+**After ADRs 0142 and 0143** (harness wall 297 s):
+
+| | before | after |
+| --- | ---: | ---: |
+| clean, per package / by downloads | 3.4 % / 4.4 % | 3.4 % / 4.5 % |
+| clean / partial / degenerate (of 957) | 43 / 217 / 697 | 44 / 224 / 689 |
+| misuse-capable exports | 157 | 160 |
+| `returns` never proposed | 243 | **181** |
+| `creates` never proposed | 177 | **76** |
+| missing claim form, package-weighted | 68.0 % | 63.4 % |
+| withheld operation (exports) | 88 | 144 |
+
+`@solid-primitives/utils`' `./immutable` `clamp` certifies clean; `event-bus`,
+`event-listener`, `props`, `storage` and `utils` move exports from degenerate to
+partial. Most of the new proposals are refused by name rather than certified:
+`operation census refused: recursive-value-shape` is now 135 exports (ADR
+0113's `plain` proposed over a body that returns an array or an object, which
+the census correctly refuses), and `returns` of a re-exported plain return is
+open (ADR 0143's remaining gap: restating the dependency's exact operations).
+
+Of the 181 still never proposed, the largest groups are a returned fresh
+function (34), an object literal (29), a callable value built by a call (19),
+a class instance (15) and a tuple (14). Every one of them asks the same
+unanswered question -- what a callable the export hands back does when the
+caller later calls it -- and is not decided here.
