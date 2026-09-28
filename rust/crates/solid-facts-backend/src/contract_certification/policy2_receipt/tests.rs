@@ -133,6 +133,7 @@ fn resolved_import() -> ResolvedImport {
         unbound_declaration_exports: std::collections::BTreeSet::new(),
         foreign_declaration_exports: std::collections::BTreeSet::new(),
         forwarded_foreign_exports: std::collections::BTreeSet::new(),
+        runtime_withheld_exports: std::collections::BTreeSet::new(),
         authority: ResolutionAuthority::Host,
     }
 }

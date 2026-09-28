@@ -118,6 +118,50 @@ impl SnapshotVerifiedExports {
     }
 }
 
+/// ADR 0156: what a dependent's replay may know about a planned dependency
+/// node that ADR 0129 pruned. The node was planned from its own archive in
+/// the same transaction and proved statementless there
+/// (`CertificationPlan::pruned_dependency_evidence`); this is never an
+/// accepted dependency and nothing binds through it. It answers one question:
+/// does the node's own package export `name`, on both axes, exactly?
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PrunedDependencyEvidence {
+    pub(super) package_name: String,
+    pub(super) specifier: String,
+    pub(super) importer: String,
+    pub(super) conditions: Vec<String>,
+    /// Names whose replayed runtime and declaration bindings both terminate in
+    /// the pruned node's own snapshot.
+    pub(super) exact_exports: BTreeSet<String>,
+}
+
+impl PrunedDependencyEvidence {
+    #[must_use]
+    pub fn specifier(&self) -> &str {
+        &self.specifier
+    }
+
+    #[must_use]
+    pub fn conditions(&self) -> &[String] {
+        &self.conditions
+    }
+}
+
+impl SnapshotVerifiedExports {
+    /// The names whose runtime and declaration bindings both terminate in
+    /// this snapshot.
+    pub(super) fn own_exact_names(&self) -> BTreeSet<String> {
+        self.bindings
+            .iter()
+            .filter(|(_, binding)| {
+                binding.runtime_snapshot_root == self.snapshot_root
+                    && binding.declarations_snapshot_root == self.snapshot_root
+            })
+            .map(|(name, _)| name.clone())
+            .collect()
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct VerifiedExportBinding {
     runtime_path: String,
@@ -139,10 +183,12 @@ pub(super) fn verify_snapshot_exports_with_dependencies(
     resolution: &SnapshotVerifiedResolution,
     resolved: &ResolvedImport,
     dependencies: &[&super::CertificationPlan],
+    pruned: &[PrunedDependencyEvidence],
 ) -> Result<SnapshotVerifiedExports, ArtifactSnapshotError> {
     let mut replay = ExportReplay {
         snapshot,
         dependencies,
+        pruned,
         package_root: resolved.package_root.as_str(),
         closure_entries: &resolved.closure.entries,
         descriptions: BTreeMap::new(),
@@ -272,7 +318,18 @@ pub(super) fn verify_snapshot_exports_with_dependencies(
     // reads the dependency record's `withheldExports`; this replay reads the
     // dependency plan's recomputed set instead, so a forged or stale record
     // disagrees here and refuses.
+    //
+    // ADR 0156 widens the runtime axis. The runtime forwards exactly one
+    // withheld export -- a planned dependency's recomputed withheld name, or
+    // an own exact export of a dependency node ADR 0129 pruned, per that
+    // node's replayed evidence -- and the declaration either forwards the
+    // same name or binds exactly here, wherever it lives. Withheld, never
+    // bound. Every premise is replayed: the runtime graph links (the
+    // dependency's replay proved that runtime binding exact), the declaration
+    // exists (`bind_export` over the bytes), and a pruned node states nothing
+    // (`pruned_dependency_evidence`).
     let mut forwarded = BTreeSet::new();
+    let mut runtime_withheld = BTreeSet::new();
     for name in &names {
         let Some(runtime) = replay.forwarded_withheld(
             resolution.runtime_path(),
@@ -283,14 +340,30 @@ pub(super) fn verify_snapshot_exports_with_dependencies(
         else {
             continue;
         };
-        if replay.forwarded_withheld(
+        let pruned = runtime.0;
+        let declarations = replay.forwarded_withheld(
             resolution.declarations_path(),
             name,
             ModuleAxis::Declarations,
             &mut BTreeSet::new(),
-        )? == Some(runtime)
+        )?;
+        if declarations.as_ref() == Some(&runtime) {
+            if pruned {
+                runtime_withheld.insert(name.clone());
+            } else {
+                forwarded.insert(name.clone());
+            }
+        } else if declarations.is_none()
+            && replay
+                .bind_export(
+                    resolution.declarations_path(),
+                    name,
+                    ModuleAxis::Declarations,
+                    &mut BTreeSet::new(),
+                )?
+                .is_some()
         {
-            forwarded.insert(name.clone());
+            runtime_withheld.insert(name.clone());
         }
     }
     if forwarded != resolved.forwarded_foreign_exports {
@@ -299,11 +372,23 @@ pub(super) fn verify_snapshot_exports_with_dependencies(
             resolved.forwarded_foreign_exports,
         ));
     }
+    if runtime_withheld != resolved.runtime_withheld_exports {
+        return export_mismatch(format!(
+            "supplied runtime-withheld exports do not equal archive replay; replayed {runtime_withheld:?}; supplied {:?}",
+            resolved.runtime_withheld_exports,
+        ));
+    }
     let names = names
         .difference(&forwarded)
+        .filter(|name| !runtime_withheld.contains(*name))
         .cloned()
         .collect::<BTreeSet<_>>();
-    let withheld = foreign.union(&forwarded).cloned().collect::<BTreeSet<_>>();
+    let withheld = foreign
+        .iter()
+        .chain(&forwarded)
+        .chain(&runtime_withheld)
+        .cloned()
+        .collect::<BTreeSet<_>>();
     let supplied_names = resolved.exports.keys().cloned().collect::<BTreeSet<_>>();
     if names != supplied_names {
         let replayed_only = names
@@ -443,7 +528,7 @@ pub(super) fn verify_snapshot_exports(
     resolution: &SnapshotVerifiedResolution,
     resolved: &ResolvedImport,
 ) -> Result<SnapshotVerifiedExports, ArtifactSnapshotError> {
-    verify_snapshot_exports_with_dependencies(snapshot, resolution, resolved, &[])
+    verify_snapshot_exports_with_dependencies(snapshot, resolution, resolved, &[], &[])
 }
 
 fn verify_binding(
@@ -550,6 +635,9 @@ struct BindingTarget {
 struct ExportReplay<'a> {
     snapshot: &'a ArtifactSnapshot,
     dependencies: &'a [&'a super::CertificationPlan],
+    /// ADR 0156: pruned dependency nodes of the same transaction. Consulted
+    /// only by `forwarded_withheld`, never by a binding.
+    pruned: &'a [PrunedDependencyEvidence],
     /// This node's own installed package root and replayed closure entries,
     /// which `external_dependency` uses to tell *this* package's dependency
     /// edge from a homonymous edge reached through a descendant package (which
@@ -1283,7 +1371,7 @@ impl ExportReplay<'_> {
         name: &str,
         axis: ModuleAxis,
         visiting: &mut BTreeSet<(ModuleAxis, String, String)>,
-    ) -> Result<Option<(String, String)>, ArtifactSnapshotError> {
+    ) -> Result<Option<(bool, String, String)>, ArtifactSnapshotError> {
         let identity = (axis, path.to_owned(), name.to_owned());
         if !visiting.insert(identity.clone()) {
             return Ok(None);
@@ -1296,16 +1384,29 @@ impl ExportReplay<'_> {
                 self.forwarded_withheld(&direct.file, &direct.name, axis, visiting)?
             }
         } else if let Some((specifier, imported)) = description.external_direct.get(name) {
-            self.external_dependency(specifier).and_then(|dependency| {
-                let verified = &dependency.verified_exports;
-                (!verified.bindings.contains_key(imported) && verified.withheld.contains(imported))
+            match self.external_dependency(specifier) {
+                Some(dependency) => {
+                    let verified = &dependency.verified_exports;
+                    (!verified.bindings.contains_key(imported)
+                        && verified.withheld.contains(imported))
                     .then(|| {
                         (
+                            false,
                             dependency.snapshot.package_name().to_owned(),
                             imported.clone(),
                         )
                     })
-            })
+                }
+                // ADR 0156: no planned dependency answers the specifier, and
+                // the one pruned node of this package's own edge exports the
+                // name exactly.
+                None => self.pruned_dependency(specifier).and_then(|pruned| {
+                    pruned
+                        .exact_exports
+                        .contains(imported)
+                        .then(|| (true, pruned.package_name.clone(), imported.clone()))
+                }),
+            }
         } else if name == "default" {
             None
         } else {
@@ -1331,6 +1432,23 @@ impl ExportReplay<'_> {
         };
         visiting.remove(&identity);
         Ok(answer)
+    }
+
+    /// The one pruned dependency node (ADR 0156) that *this* package's own
+    /// import of `specifier` resolved to, by the same importer rule
+    /// `external_dependency` breaks ties with; `None` when there is not
+    /// exactly one.
+    fn pruned_dependency(&self, specifier: &str) -> Option<&PrunedDependencyEvidence> {
+        let mut owned = self.pruned.iter().filter(|pruned| {
+            pruned.specifier == specifier
+                && super::dependencies::importer_is_closure_entry_module(
+                    &pruned.importer,
+                    self.package_root,
+                    self.closure_entries,
+                )
+        });
+        let pruned = owned.next()?;
+        owned.next().is_none().then_some(pruned)
     }
 
     /// The package a replayed target belongs to: this package for a target in
@@ -1438,6 +1556,7 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            pruned: &[],
             package_root: "/project/node_modules/source-types",
             closure_entries: &[],
             descriptions: BTreeMap::new(),
@@ -1476,6 +1595,7 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            pruned: &[],
             package_root: "/project/node_modules/source-types",
             closure_entries: &[],
             descriptions: BTreeMap::new(),
@@ -1503,6 +1623,7 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            pruned: &[],
             package_root: "/project/node_modules/source-types",
             closure_entries: &[],
             descriptions: BTreeMap::new(),
@@ -1589,6 +1710,7 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            pruned: &[],
             package_root: "/project/node_modules/source-types",
             closure_entries: &[],
             descriptions: BTreeMap::new(),
@@ -1681,6 +1803,7 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            pruned: &[],
             package_root: "/project/node_modules/source-types",
             closure_entries: &[],
             descriptions: BTreeMap::new(),
@@ -1811,6 +1934,7 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            pruned: &[],
             package_root: "/project/node_modules/source-types",
             closure_entries: &[],
             descriptions: BTreeMap::new(),

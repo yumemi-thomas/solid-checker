@@ -2967,10 +2967,27 @@ impl CertificationPlanningTransaction {
         root: PublishedGraphNodeRequest,
         dependencies: impl IntoIterator<Item = PublishedGraphNodeRequest>,
     ) -> Result<PublishedContractGraphPlan, PublishedGraphPlanningError> {
+        self.plan_published_contract_graph_with_pruned(root, dependencies, Vec::new())
+    }
+
+    /// As [`Self::plan_published_contract_graph`], with the dependency nodes
+    /// ADR 0129 pruned that a node of this graph forwards exports of (ADR
+    /// 0156). Each is planned from its own archive and must prove itself
+    /// statementless; it is then no node of the graph -- never finalized,
+    /// never composed, never bound -- and its replayed evidence is handed to
+    /// every other node's export replay. A node planned only because a pruned
+    /// node depends on it leaves the graph with it.
+    pub fn plan_published_contract_graph_with_pruned(
+        &mut self,
+        root: PublishedGraphNodeRequest,
+        dependencies: impl IntoIterator<Item = PublishedGraphNodeRequest>,
+        pruned: Vec<PublishedGraphNodeRequest>,
+    ) -> Result<PublishedContractGraphPlan, PublishedGraphPlanningError> {
         plan_published_contract_graph_with_limits(
             self,
             root,
             dependencies,
+            pruned,
             POLICY_2_GRAPH_NODE_LIMIT,
             POLICY_2_GRAPH_DEPTH_LIMIT,
         )
@@ -2981,11 +2998,14 @@ fn plan_published_contract_graph_with_limits(
     transaction: &mut CertificationPlanningTransaction,
     root: PublishedGraphNodeRequest,
     dependencies: impl IntoIterator<Item = PublishedGraphNodeRequest>,
+    pruned: Vec<PublishedGraphNodeRequest>,
     node_limit: usize,
     depth_limit: usize,
 ) -> Result<PublishedContractGraphPlan, PublishedGraphPlanningError> {
     let mut requests = Vec::from([root]);
     requests.extend(dependencies);
+    let pruned_start = requests.len();
+    requests.extend(pruned);
     if requests.len() > node_limit {
         return Err(PublishedGraphPlanningError::NodeLimit {
             actual: requests.len(),
@@ -2998,7 +3018,26 @@ fn plan_published_contract_graph_with_limits(
     let mut planned = Vec::with_capacity(requests.len());
     let mut planned_by_request = vec![None; requests.len()];
     let mut visiting = BTreeSet::new();
-    for index in 0..requests.len() {
+    // ADR 0156: pruned nodes first, so every other node's export replay can be
+    // handed their replayed evidence. A node planned during this phase (a
+    // dependency of a pruned node) gets none.
+    let mut pruned_evidence = Vec::new();
+    for index in pruned_start..requests.len() {
+        let planned_index = plan_graph_request_dependency_first(
+            transaction,
+            index,
+            &raw_edges,
+            &mut requests,
+            &mut planned,
+            &mut planned_by_request,
+            &mut visiting,
+            depth_limit,
+            0,
+            &[],
+        )?;
+        pruned_evidence.push(planned[planned_index].plan.pruned_dependency_evidence()?);
+    }
+    for index in 0..pruned_start {
         plan_graph_request_dependency_first(
             transaction,
             index,
@@ -3009,11 +3048,32 @@ fn plan_published_contract_graph_with_limits(
             &mut visiting,
             depth_limit,
             0,
+            &pruned_evidence,
         )?;
     }
     let root_identity = planned[planned_by_request[0].expect("root request was planned")]
         .identity
         .clone();
+    // A pruned node is no node of this graph, and neither is a node planned
+    // only because a pruned node depends on it.
+    let pruned_planned = (pruned_start..requests.len())
+        .filter_map(|index| planned_by_request[index])
+        .collect::<BTreeSet<_>>();
+    let mut pruned_support = BTreeSet::new();
+    for index in pruned_start..requests.len() {
+        collect_graph_descendants(index, &raw_edges, &mut pruned_support);
+    }
+    let pruned_support = pruned_support
+        .into_iter()
+        .filter_map(|index| planned_by_request[index])
+        .filter(|index| !pruned_planned.contains(index))
+        .collect::<BTreeSet<_>>();
+    let (support, mut planned): (Vec<bool>, Vec<PlannedGraphNode>) = planned
+        .into_iter()
+        .enumerate()
+        .filter(|(index, _)| !pruned_planned.contains(index))
+        .map(|(index, node)| (pruned_support.contains(&index), node))
+        .unzip();
     let identity_census = planned
         .iter()
         .map(|node| node.identity.clone())
@@ -3115,6 +3175,17 @@ fn plan_published_contract_graph_with_limits(
         resolved.dedup();
         planned[parent_index].dependencies = resolved;
     }
+    let full_graph = planned
+        .iter()
+        .map(|node| (node.identity.clone(), node.dependencies.clone()))
+        .collect::<BTreeMap<_, _>>();
+    let reachable = reachable_nodes(&root_identity, &full_graph, depth_limit)?;
+    let planned = planned
+        .into_iter()
+        .zip(support)
+        .filter(|(node, support)| !support || reachable.contains(&node.identity))
+        .map(|(node, _)| node)
+        .collect::<Vec<_>>();
 
     let graph = planned
         .iter()
@@ -3354,6 +3425,7 @@ fn plan_graph_request_dependency_first(
     visiting: &mut BTreeSet<usize>,
     depth_limit: usize,
     depth: usize,
+    pruned: &[super::export_bindings::PrunedDependencyEvidence],
 ) -> Result<usize, PublishedGraphPlanningError> {
     if let Some(planned_index) = planned_by_request[index] {
         return Ok(planned_index);
@@ -3375,6 +3447,7 @@ fn plan_graph_request_dependency_first(
             visiting,
             depth_limit,
             depth + 1,
+            pruned,
         )?;
     }
     visiting.remove(&index);
@@ -3395,7 +3468,7 @@ fn plan_graph_request_dependency_first(
     let request = requests[index]
         .take()
         .expect("a graph request is consumed only after its dependencies");
-    let node = plan_graph_node(transaction, request, &dependency_plans)?;
+    let node = plan_graph_node(transaction, request, &dependency_plans, pruned)?;
     let planned_index = planned.len();
     planned.push(node);
     planned_by_request[index] = Some(planned_index);
@@ -3414,6 +3487,7 @@ fn plan_graph_node(
     transaction: &mut CertificationPlanningTransaction,
     request: PublishedGraphNodeRequest,
     dependencies: &[&CertificationPlan],
+    pruned: &[super::export_bindings::PrunedDependencyEvidence],
 ) -> Result<PlannedGraphNode, PublishedGraphPlanningError> {
     let PublishedGraphNodeRequest {
         certification,
@@ -3424,6 +3498,17 @@ fn plan_graph_node(
         resolved_from,
     } = request;
     let registry_origin = archive.registry_origin.clone();
+    // ADR 0156: the pruned nodes of this graph under this node's own
+    // conditions; the export replay then selects by specifier and importer.
+    let mut own_conditions = certification.export_conditions().to_vec();
+    own_conditions.sort();
+    own_conditions.dedup();
+    let certification = certification.with_pruned_dependencies(
+        pruned
+            .iter()
+            .filter(|evidence| evidence.conditions() == own_conditions.as_slice())
+            .cloned(),
+    );
     let mut plan = super::plan_certification_with_dependencies(
         transaction,
         certification,

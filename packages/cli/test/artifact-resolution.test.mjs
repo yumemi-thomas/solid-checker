@@ -1938,14 +1938,33 @@ describe("exact artifact records and closure", () => {
     // the refusal they had.
     for (const [runtime, declarations, dependencies] of [
       ["export const action = 1;\n", 'export { action } from "defining";\n'],
-      ['export { action } from "defining";\n', "export declare const action: number;\n"],
       ['export { action } from "defining";\n', 'export { other as action } from "defining";\n'],
+      ['export { action } from "defining";\n', 'export { missing as action } from "defining";\n'],
       ['export { missing } from "defining";\n', 'export { missing } from "defining";\n'],
       ['export { action } from "defining";\n', 'export { action } from "defining";\n', accepted(null)]
     ]) {
       expect(() => resolveWith(runtime, declarations, dependencies ?? accepted()), runtime + declarations)
         .toThrow(/accepted dependency defining has no exact (runtime|declarations) binding for export/);
     }
+
+    // ADR 0156, the reverse shape: the runtime forwards the withheld name and
+    // the declaration binds exactly -- here, or in the dependency. Withheld.
+    for (const declarations of [
+      "export declare const action: number;\n",
+      'export { own as action } from "defining";\n'
+    ]) {
+      const reverse = resolveWith('export { action } from "defining";\n', declarations);
+      expect(reverse.runtimeWithheldExports, declarations).toEqual(["action"]);
+      expect(reverse.forwardedForeignExports, declarations).toBeUndefined();
+      expect(reverse.exports, declarations).not.toHaveProperty("action");
+    }
+    // A bound runtime forward beside a local declaration is not withheld: it
+    // binds as it always has (the mismatch is not this rule's to hide).
+    const boundReverse = resolveWith(
+      'export { own } from "defining";\n',
+      "export declare const own: number;\n"
+    );
+    expect(boundReverse.runtimeWithheldExports).toBeUndefined();
 
     // A forged census naming a bound export changes nothing: the binding wins.
     const forged = both('export { own } from "defining";\n');

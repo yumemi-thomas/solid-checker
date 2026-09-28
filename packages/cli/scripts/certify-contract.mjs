@@ -2036,10 +2036,41 @@ export function withheldExportsOf(resolution) {
   const withheld = [
     ...new Set([
       ...(resolution?.foreignDeclarationExports ?? []),
-      ...(resolution?.forwardedForeignExports ?? [])
+      ...(resolution?.forwardedForeignExports ?? []),
+      ...(resolution?.runtimeWithheldExports ?? [])
     ])
   ].sort();
   return withheld.length > 0 ? { withheldExports: withheld } : {};
+}
+
+/// ADR 0156: the record a dependent is generated with for each direct
+/// dependency node ADR 0129 pruned: `{ [viaSpecifier]: { packageName, exports
+/// } }`, where `exports` are the names the pruned node's resolution binds on
+/// both axes inside its own package. A name it forwards from another package
+/// is not listed: the certifier accepts only an exact own binding.
+///
+/// The record is a claim; the native transaction replays the pruned node from
+/// its archive (`graphCaseSet.cases[].pruned`) and refuses a disagreement.
+export function prunedDependencyRecords(dependencies) {
+  const records = {};
+  for (const dependency of dependencies) {
+    const resolution = dependency.state?.planning?.resolution;
+    if (!resolution || typeof dependency.viaSpecifier !== "string") continue;
+    const root = `${resolution.packageRoot}/`;
+    const own = target =>
+      typeof target?.module?.path === "string" &&
+      target.module.path.startsWith(root) &&
+      !target.module.path.slice(root.length).split("/").includes("node_modules");
+    const exports = Object.entries(resolution.exports ?? {})
+      .filter(([, binding]) => own(binding?.runtime) && own(binding?.declarations))
+      .map(([name]) => name)
+      .sort();
+    if (records[dependency.viaSpecifier]) {
+      throw new Error(`dependency graph repeats pruned specifier ${dependency.viaSpecifier}`);
+    }
+    records[dependency.viaSpecifier] = { packageName: dependency.state.node.packageName, exports };
+  }
+  return records;
 }
 
 function graphNodeExecutionInput(state) {
@@ -2079,7 +2110,8 @@ export function buildPublishedGraphExecutionRequest({
     root: graphNodeExecutionInput(item.root),
     dependencies: item.nodes
       .filter(state => state !== item.root)
-      .map(graphNodeExecutionInput)
+      .map(graphNodeExecutionInput),
+    ...(item.pruned?.length ? { pruned: item.pruned.map(graphNodeExecutionInput) } : {})
   });
   const probes = probeRecipeCorpus
     ? { probeHarnessRoot, probeNodeExecutable, probeRecipeCorpus }
@@ -2087,7 +2119,7 @@ export function buildPublishedGraphExecutionRequest({
   if (cases.length > 1) {
     const nodes = new Map();
     for (const item of cases) {
-      for (const state of item.nodes) {
+      for (const state of [...item.nodes, ...(item.pruned ?? [])]) {
         const key = state.node?.key;
         if (typeof key !== "string" || !key) {
           throw new TypeError("published graph case-set node has no full-identity key");
@@ -2109,7 +2141,10 @@ export function buildPublishedGraphExecutionRequest({
           .map(([key, input]) => ({ key, ...input })),
         cases: cases.map(item => ({
           root: item.root.node.key,
-          nodes: [...new Set(item.nodes.map(state => state.node.key))].sort()
+          nodes: [...new Set(item.nodes.map(state => state.node.key))].sort(),
+          ...(item.pruned?.length
+            ? { pruned: [...new Set(item.pruned.map(state => state.node.key))].sort() }
+            : {})
         }))
       },
       typefactsExecutable: resolve(typefactsExecutable),
@@ -2208,6 +2243,35 @@ function reachableGraphStates(root, byKey, admit = () => true) {
   };
   visit(root);
   return [...byKey.values()].filter(state => found.has(state.node.key));
+}
+
+/// ADR 0156: the pruned dependency nodes a case must transport so the
+/// certifier can replay them from their archives. A pruned node is carried
+/// only when a node of the case withholds an exact forward of one of its
+/// exports (`runtimeWithheldExports`); its own dependencies join the case so its
+/// resolution plans. It is planned, never finalized and never bound.
+export function withPrunedDependencyNodes(item, byKey) {
+  const members = new Set(item.nodes);
+  const pruned = [];
+  for (const state of item.nodes) {
+    if (!(state.planning?.resolution?.runtimeWithheldExports?.length > 0)) continue;
+    for (const dependency of state.directDependencies ?? []) {
+      if (dependency.state?.statesNothing && !pruned.includes(dependency.state)) {
+        pruned.push(dependency.state);
+      }
+    }
+  }
+  if (pruned.length === 0) return item;
+  const nodes = [...item.nodes];
+  for (const node of pruned) {
+    for (const reached of reachableGraphStatesWithoutStatementlessNodes(node, byKey)) {
+      if (reached !== node && !members.has(reached)) {
+        members.add(reached);
+        nodes.push(reached);
+      }
+    }
+  }
+  return { ...item, nodes, pruned };
 }
 
 /// The graph a case certifies once every statementless dependency node has
@@ -3133,6 +3197,12 @@ export async function preparePublishedGraphCases({
             dependencies,
             join(state.scratch, `dependency-catalog-${dependencies.length}`)
           );
+          // ADR 0156: each direct dependency ADR 0129 pruned, with the names it
+          // exports exactly, so an exact forward of one is withheld instead of
+          // refusing this node. Never an accepted dependency.
+          const prunedDependencies = prunedDependencyRecords(
+            state.directDependencies.filter(dependency => dependency.state.statesNothing)
+          );
           const generationArguments = [
             "--package-root",
             state.node.packageRoot,
@@ -3158,7 +3228,8 @@ export async function preparePublishedGraphCases({
             state.node.conditions,
             dependencies
               .map(dependency => [dependency.viaSpecifier, dependency.variantKey ?? dependency.node.key])
-              .sort((left, right) => left[0].localeCompare(right[0]) || left[1].localeCompare(right[1]))
+              .sort((left, right) => left[0].localeCompare(right[0]) || left[1].localeCompare(right[1])),
+            prunedDependencies
           ]);
           state.variantKey = variantKey;
           let generated;
@@ -3187,6 +3258,7 @@ export async function preparePublishedGraphCases({
               quiet: true,
               proposalDependencies: merged.proposalDependencies,
               proposalDependencyCatalog: merged.catalog,
+              prunedDependencies,
               privateGraphPreparation: true,
               exactConditions: explicitConditions
             });
@@ -3275,7 +3347,7 @@ export async function preparePublishedGraphCases({
     reachable: reachableGraphStatesWithoutStatementlessNodes
   });
   caseRefusals.push(...surviving.refusals);
-  preparedCases.push(...surviving.cases);
+  preparedCases.push(...surviving.cases.map(item => withPrunedDependencyNodes(item, byKey)));
   if (preparedCases.length === 0) {
     throw new Error(
       `published dependency graph prepared no artifact case: ${

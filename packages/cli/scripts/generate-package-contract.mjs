@@ -1167,7 +1167,8 @@ export function prepareArtifact({
   conditions,
   resolutionSession,
   certificationImporter,
-  acceptedDependencies
+  acceptedDependencies,
+  prunedDependencies = {}
 }) {
   const specifier = specifierFor(manifest.name, entrypoint);
   const importer = certificationImporter ||
@@ -1179,7 +1180,8 @@ export function prepareArtifact({
     conditions: [...new Set([...conditions, "import"])],
     resolutionKind: "import",
     integrity,
-    acceptedDependencies
+    acceptedDependencies,
+    ...(Object.keys(prunedDependencies).length > 0 ? { prunedDependencies } : {})
   });
   return {
     entrypoint,
@@ -1435,6 +1437,8 @@ export async function generatePackageContract(
     receiptTrustConfiguration = "",
     proposalDependencies = {},
     proposalDependencyCatalog = "",
+    // ADR 0156: pruned dependency nodes, private graph preparation only.
+    prunedDependencies = {},
     privateGraphPreparation = false,
     exactConditions = null,
     artifactAnalysisBatchTargetLimit = ARTIFACT_ANALYSIS_BATCH_TARGET_LIMIT
@@ -1461,6 +1465,9 @@ export async function generatePackageContract(
     throw new Error(
       "private graph proposal dependencies cannot be combined with accepted receipt authority"
     );
+  }
+  if (Object.keys(prunedDependencies).length > 0 && !privateGraphPreparation) {
+    throw new Error("pruned dependency nodes exist only inside private graph preparation");
   }
   const resolutionDependencies = Object.keys(proposalDependencies).length > 0
     ? proposalDependencies
@@ -1606,7 +1613,8 @@ export async function generatePackageContract(
             conditions,
             resolutionSession,
             certificationImporter: options.certificationImporter,
-            acceptedDependencies: resolutionDependencies
+            acceptedDependencies: resolutionDependencies,
+            prunedDependencies
           })
         });
       } catch (error) {

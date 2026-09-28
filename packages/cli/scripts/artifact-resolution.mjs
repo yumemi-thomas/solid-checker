@@ -2249,12 +2249,20 @@ function bindExport(
       // ADR 0154: the dependency withholds exactly this name under ADR 0150.
       // That is not yet a verdict -- the caller decides whether *both* axes
       // forward the same withheld name, and refuses with `message` otherwise.
-      const withheld = withheldDependencyExport(
-        acceptedDependencies,
-        externalDirect.specifier,
-        externalDirect.name,
-        message
-      );
+      const withheld =
+        withheldDependencyExport(
+          acceptedDependencies,
+          externalDirect.specifier,
+          externalDirect.name,
+          message
+        ) ??
+        prunedDependencyExport(
+          acceptedDependencies,
+          cache.prunedDependencies,
+          externalDirect.specifier,
+          externalDirect.name,
+          message
+        );
       if (withheld) {
         visiting.delete(identity);
         return withheld;
@@ -2396,9 +2404,16 @@ function exactExportBindings(
   sharedCache,
   parser,
   acceptedDependencies,
-  resolutionProgram
+  resolutionProgram,
+  prunedDependencies = {}
 ) {
-  const cache = { local: new Map(), shared: sharedCache, parser, resolutionProgram };
+  const cache = {
+    local: new Map(),
+    shared: sharedCache,
+    parser,
+    resolutionProgram,
+    prunedDependencies
+  };
   const runtimeNames = exportedNames(
     runtime.path,
     "runtime",
@@ -2420,6 +2435,7 @@ function exactExportBindings(
   const ownerPackages = acceptedBindingOwners(acceptedDependencies);
   const packageName = ownPackageName(packageRoot, cache);
   const forwardedForeignExports = [];
+  const runtimeWithheldExports = [];
   for (const name of names) {
     const runtimeTarget = bindExport(
       runtime.path,
@@ -2440,19 +2456,31 @@ function exactExportBindings(
     // ADR 0154: both axes forward, by exact name chains, the same name that
     // the same planned dependency withholds under ADR 0150 (or forwards under
     // this rule). It is that unavailable export, so it is unavailable here
-    // too. Anything else that reaches a withheld name -- one axis only, a
-    // local definition beside it, two different names -- refuses exactly as
-    // before. The certifier replays this from the dependency's verified plan.
+    // too. The certifier replays this from the dependency's verified plan.
+    //
+    // ADR 0156 widens this on the runtime axis. The runtime forwards exactly
+    // one withheld export -- a planned dependency's (ADR 0150, 0154 or 0156)
+    // or an own exact export of a dependency node ADR 0129 pruned -- and the
+    // declaration either forwards that same name or binds exactly, wherever
+    // it lives. The name is withheld, never bound. Anything else that reaches
+    // a withheld name -- a declaration forwarding a different withheld name,
+    // or no declaration binding, or a withheld declaration beside an exact
+    // runtime binding -- refuses exactly as before.
     const runtimeWithheld = isWithheldDependencyExport(runtimeTarget);
     const declarationWithheld = isWithheldDependencyExport(declarationTarget);
     if (runtimeWithheld || declarationWithheld) {
-      if (
+      const sameWithheld =
         runtimeWithheld &&
         declarationWithheld &&
+        runtimeTarget.kind === declarationTarget.kind &&
         runtimeTarget.packageName === declarationTarget.packageName &&
-        runtimeTarget.name === declarationTarget.name
-      ) {
+        runtimeTarget.name === declarationTarget.name;
+      if (sameWithheld && runtimeTarget.kind === "withheld") {
         forwardedForeignExports.push(name);
+        continue;
+      }
+      if (sameWithheld || (runtimeWithheld && declarationTarget && !declarationWithheld)) {
+        runtimeWithheldExports.push(name);
         continue;
       }
       fail(
@@ -2495,6 +2523,7 @@ function exactExportBindings(
     unboundDeclarationExports,
     foreignDeclarationExports,
     forwardedForeignExports,
+    runtimeWithheldExports,
     cache
   };
 }
@@ -2514,7 +2543,36 @@ function withheldDependencyExport(acceptedDependencies, specifier, name, message
   if (typeof dependency.packageName !== "string" || !dependency.packageName) return undefined;
   return Object.freeze({
     [WITHHELD_DEPENDENCY_EXPORT]: true,
+    kind: "withheld",
     packageName: dependency.packageName,
+    name,
+    message
+  });
+}
+
+/// ADR 0156: the marker for a named re-export of a name the planned
+/// dependency node exports exactly, when ADR 0129 pruned that node (it
+/// proposed nothing, so no receipt can ever back it). The caller then
+/// withholds the dependent's export instead of refusing its case; it never
+/// binds it. `prunedDependencies[specifier]` is the orchestrator's record
+/// (`{ packageName, exports }`): the certifier replays the pruned node's
+/// identity and exports from its archive and refuses a record that disagrees.
+/// An accepted dependency for the same specifier always wins.
+function prunedDependencyExport(
+  acceptedDependencies,
+  prunedDependencies,
+  specifier,
+  name,
+  message
+) {
+  if (acceptedDependencies[specifier] !== undefined) return undefined;
+  const pruned = prunedDependencies?.[specifier];
+  if (!Array.isArray(pruned?.exports) || !pruned.exports.includes(name)) return undefined;
+  if (typeof pruned.packageName !== "string" || !pruned.packageName) return undefined;
+  return Object.freeze({
+    [WITHHELD_DEPENDENCY_EXPORT]: true,
+    kind: "pruned",
+    packageName: pruned.packageName,
     name,
     message
   });
@@ -3044,7 +3102,11 @@ export function resolvePackageArtifacts({
   conditions = [],
   resolutionKind = "import",
   integrity,
-  acceptedDependencies = {}
+  acceptedDependencies = {},
+  // ADR 0156: `{ [specifier]: { packageName, exports } }` for each planned
+  // dependency node that ADR 0129 pruned. Read only to withhold an exact
+  // forward of one of its exports; it is never an accepted dependency.
+  prunedDependencies = {}
 }, session = null) {
   const packageName = packageNameFromSpecifier(specifier);
   const logicalRoot = resolve(packageRoot ?? findPackageRoot(importer, packageName));
@@ -3100,7 +3162,10 @@ export function resolvePackageArtifacts({
         accepted.acceptedContractDigest,
         accepted.exports,
         accepted.withheldExports ?? null
-      ])
+      ]),
+    Object.entries(prunedDependencies)
+      .sort(([left], [right]) => compareText(left, right))
+      .map(([dependency, pruned]) => [dependency, pruned.packageName, pruned.exports])
   ]);
   let semantic = session?.[SESSION_LOOKUP](semanticKey, logicalRoot);
   if (!semantic) {
@@ -3110,6 +3175,7 @@ export function resolvePackageArtifacts({
       unboundDeclarationExports,
       foreignDeclarationExports,
       forwardedForeignExports,
+      runtimeWithheldExports,
       cache
     } = exactExportBindings(
       runtime.file,
@@ -3118,7 +3184,8 @@ export function resolvePackageArtifacts({
       session?.[SESSION_MODULE_CACHE](),
       session?.[SESSION_MODULE_PARSER](logicalRoot),
       acceptedDependencies,
-      resolutionProgram
+      resolutionProgram,
+      prunedDependencies
     );
     const closure = closureForRoots(
       logicalRoot,
@@ -3134,6 +3201,7 @@ export function resolvePackageArtifacts({
       unboundDeclarationExports,
       foreignDeclarationExports,
       forwardedForeignExports,
+      runtimeWithheldExports,
       closure
     };
     session?.[SESSION_STORE](semanticKey, semantic);
@@ -3172,6 +3240,10 @@ export function resolvePackageArtifacts({
     // ADR 0154, additive in the same way.
     ...(semantic.forwardedForeignExports.length > 0
       ? { forwardedForeignExports: semantic.forwardedForeignExports }
+      : {}),
+    // ADR 0156, additive in the same way.
+    ...(semantic.runtimeWithheldExports.length > 0
+      ? { runtimeWithheldExports: semantic.runtimeWithheldExports }
       : {}),
     authority: "standalonePackageResolver"
   };

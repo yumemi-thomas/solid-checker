@@ -349,6 +349,11 @@ struct ContractCertificationExecutionRequest {
 struct ContractCertificationGraphRequest {
     root: ContractCertificationGraphNodeRequest,
     dependencies: Vec<ContractCertificationGraphNodeRequest>,
+    /// ADR 0156: dependency nodes ADR 0129 pruned whose exports a node of this
+    /// graph forwards. Planned from their archives and proved statementless;
+    /// never finalized, composed or bound.
+    #[serde(default)]
+    pruned: Vec<ContractCertificationGraphNodeRequest>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -402,6 +407,9 @@ impl ContractCertificationGraphCaseSetNodeRequest {
 struct ContractCertificationGraphCaseSetCase {
     root: String,
     nodes: Vec<String>,
+    /// ADR 0156: see `ContractCertificationGraphRequest::pruned`.
+    #[serde(default)]
+    pruned: Vec<String>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -984,8 +992,13 @@ fn certification_graph_from_request_in(
         .into_iter()
         .map(certification_graph_node_from_request)
         .collect::<Result<Vec<_>, _>>()?;
+    let pruned = request
+        .pruned
+        .into_iter()
+        .map(certification_graph_node_from_request)
+        .collect::<Result<Vec<_>, _>>()?;
     transaction
-        .plan_published_contract_graph(root, dependencies)
+        .plan_published_contract_graph_with_pruned(root, dependencies, pruned)
         .map_err(|error| format!("published graph planning failed: {error}").into())
 }
 
@@ -2070,8 +2083,31 @@ fn expand_deduplicated_graph_case_set(
                     })
             })
             .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
+        let pruned = case
+            .pruned
+            .into_iter()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .map(|key| {
+                if node_keys.contains(&key) {
+                    return Err(
+                        "deduplicated graph case names a node both planned and pruned".into(),
+                    );
+                }
+                referenced.insert(key.clone());
+                nodes
+                    .get(&key)
+                    .cloned()
+                    .map(ContractCertificationGraphCaseSetNodeRequest::graph_node)
+                    .ok_or_else(|| "deduplicated graph case names an unknown pruned node".into())
+            })
+            .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
         referenced.insert(case.root);
-        cases.push(ContractCertificationGraphRequest { root, dependencies });
+        cases.push(ContractCertificationGraphRequest {
+            root,
+            dependencies,
+            pruned,
+        });
     }
     if referenced.len() != nodes.len() {
         return Err("deduplicated graph case-set transports an unreachable node".into());
@@ -6834,7 +6870,8 @@ fn emit_package_contract(
     // identities. Emitting it cost the whole artifact case at `bind_exports`
     // (`solid-js@2.0.0-rc.9`'s server build and `action`). ADR 0154 leaves
     // off a name both axes forward from a planned dependency that withholds
-    // it that way (`@solidjs/web@2.0.0-rc.9`'s server build and `getOwner`).
+    // it that way (`@solidjs/web@2.0.0-rc.9`'s server build and `getOwner`),
+    // and ADR 0156 one forwarded from a pruned dependency node (`scope`).
     let declaration_surface = (!resolution.declaration_exports.is_empty()).then(|| {
         resolution
             .declaration_exports
@@ -6843,6 +6880,7 @@ fn emit_package_contract(
                 !resolution.unbound_declaration_exports.contains(*name)
                     && !resolution.foreign_declaration_exports.contains(*name)
                     && !resolution.forwarded_foreign_exports.contains(*name)
+                    && !resolution.runtime_withheld_exports.contains(*name)
             })
             .cloned()
             .collect::<BTreeSet<_>>()

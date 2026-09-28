@@ -624,6 +624,14 @@ pub struct ResolvedImport {
     /// planned dependency's verified plan; a disagreement refuses.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub forwarded_foreign_exports: BTreeSet<String>,
+    /// Names on the runtime/declaration intersection that both axes forward,
+    /// through exact named re-export chains, as the same name of the same
+    /// planned dependency node that ADR 0129 pruned (it proposed nothing, so
+    /// no receipt can back it), where that node's own package exports the name
+    /// exactly (ADR 0156). Withheld, never bound to the claimless node. Replayed
+    /// by certification from the pruned node's archive; a disagreement refuses.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub runtime_withheld_exports: BTreeSet<String>,
     pub authority: ResolutionAuthority,
 }
 
@@ -723,6 +731,27 @@ impl ResolvedImport {
             if !self.declaration_exports.contains(name) {
                 return invalid_resolution(format!(
                     "forwarded foreign export {name:?} is absent from the declaration export census"
+                ));
+            }
+        }
+        for name in &self.runtime_withheld_exports {
+            validate_identifier(name, "pruned forward export name")?;
+            if self.exports.contains_key(name) {
+                return invalid_resolution(format!(
+                    "export {name:?} is both bound and declared a pruned forward"
+                ));
+            }
+            if self.unbound_declaration_exports.contains(name)
+                || self.foreign_declaration_exports.contains(name)
+                || self.forwarded_foreign_exports.contains(name)
+            {
+                return invalid_resolution(format!(
+                    "export {name:?} is declared a pruned forward and withheld for another reason"
+                ));
+            }
+            if !self.declaration_exports.contains(name) {
+                return invalid_resolution(format!(
+                    "pruned forward export {name:?} is absent from the declaration export census"
                 ));
             }
         }
@@ -1736,6 +1765,7 @@ mod tests {
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
             forwarded_foreign_exports: BTreeSet::new(),
+            runtime_withheld_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         }
     }

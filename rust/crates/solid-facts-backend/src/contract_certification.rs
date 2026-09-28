@@ -351,6 +351,11 @@ pub struct CertificationRequest {
     candidate: NormalizedContract,
     import_request: ImportRequest,
     resolved_import: ResolvedImport,
+    /// ADR 0156: pruned dependency nodes of the same graph transaction, each
+    /// already planned from its own archive and proved statementless. Read
+    /// only by the export replay, to recognise an exact forward of one of their
+    /// exports; never a dependency plan and never a binding.
+    pruned_dependencies: Vec<export_bindings::PrunedDependencyEvidence>,
 }
 
 impl CertificationRequest {
@@ -364,7 +369,23 @@ impl CertificationRequest {
             candidate,
             import_request,
             resolved_import,
+            pruned_dependencies: Vec::new(),
         }
+    }
+
+    /// This request, with the pruned dependency nodes (ADR 0156) its export
+    /// replay may recognise forwards of.
+    #[must_use]
+    pub fn with_pruned_dependencies(
+        mut self,
+        pruned: impl IntoIterator<Item = export_bindings::PrunedDependencyEvidence>,
+    ) -> Self {
+        self.pruned_dependencies = pruned.into_iter().collect();
+        self
+    }
+
+    pub(crate) fn export_conditions(&self) -> &[String] {
+        &self.import_request.export_conditions
     }
 }
 
@@ -528,6 +549,52 @@ impl CertificationPlan {
     #[must_use]
     pub const fn verified_exports(&self) -> &SnapshotVerifiedExports {
         &self.verified_exports
+    }
+
+    /// ADR 0156: this plan as a pruned dependency node, when it is one.
+    ///
+    /// ADR 0129 prunes a node whose proposal states nothing and proposes
+    /// nothing. That was the orchestrator's reading of its sidecars; here it is
+    /// re-derived from the plan, which was built from the node's own archive:
+    /// the selected candidate closes no claim (`NoClosedClaims`), and states no
+    /// closure candidate, positive operation, positive fact or initialization
+    /// claim. A plan that states anything is not prunable, so a record calling
+    /// it pruned is forged and the transaction refuses. The evidence carries
+    /// the node's own import identity and the names its own package exports
+    /// exactly on both axes, which is all a dependent's replay may use.
+    pub fn pruned_dependency_evidence(
+        &self,
+    ) -> Result<export_bindings::PrunedDependencyEvidence, CertificationPlanningError> {
+        let case = &self.selected_candidate.artifact_cases()[0];
+        let states_nothing = case.initialization.is_none()
+            && self.candidates.closure_candidates().is_empty()
+            && self.candidates.positive_operations().is_empty()
+            && self.candidates.positive_facts().is_empty()
+            && matches!(
+                solid_reactive_ir::contract_semantics::proof::policy2_closed_claims_root(
+                    &self.selected_candidate,
+                    &case.id,
+                ),
+                Err(solid_reactive_ir::contract_semantics::proof::ReceiptValidationError::NoClosedClaims)
+            );
+        if !states_nothing {
+            return Err(CertificationPlanningError::InvalidCandidate(format!(
+                "pruned graph node {}@{} {} states a claim, so it is not statementless (ADR 0129) and cannot be pruned",
+                self.snapshot.package_name(),
+                self.snapshot.package_version(),
+                self.import_request.specifier,
+            )));
+        }
+        let mut conditions = self.import_request.export_conditions.clone();
+        conditions.sort();
+        conditions.dedup();
+        Ok(export_bindings::PrunedDependencyEvidence {
+            package_name: self.snapshot.package_name().to_owned(),
+            specifier: self.import_request.specifier.clone(),
+            importer: self.import_request.importer.clone(),
+            conditions,
+            exact_exports: self.verified_exports.own_exact_names(),
+        })
     }
 
     /// Snapshot-derived bindings for the six artifact-wide demands. These are
@@ -1416,6 +1483,7 @@ fn plan_certification_with_dependencies(
         &verified_resolution,
         &request.resolved_import,
         dependencies,
+        &request.pruned_dependencies,
     )?;
     let external_targets = dependencies
         .iter()
@@ -5823,6 +5891,7 @@ mod tests {
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
             forwarded_foreign_exports: BTreeSet::new(),
+            runtime_withheld_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -6021,6 +6090,7 @@ mod tests {
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
             forwarded_foreign_exports: BTreeSet::new(),
+            runtime_withheld_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -6226,6 +6296,7 @@ mod tests {
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
             forwarded_foreign_exports: BTreeSet::new(),
+            runtime_withheld_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -8052,6 +8123,28 @@ export { own as renamedOwn } from \"defining-package\";\n";
         bound: &[&str],
         importer: &str,
     ) -> Result<CertificationPlan, super::CertificationPlanningError> {
+        plan_forwarding_package_withholding(
+            defining,
+            runtime,
+            declarations,
+            forwarded,
+            &[],
+            bound,
+            importer,
+        )
+    }
+
+    /// As `plan_forwarding_package_over`, also naming the resolver's ADR 0156
+    /// runtime-withheld exports.
+    fn plan_forwarding_package_withholding(
+        defining: &CertificationPlan,
+        runtime: &[u8],
+        declarations: &[u8],
+        forwarded: &[&str],
+        runtime_withheld: &[&str],
+        bound: &[&str],
+        importer: &str,
+    ) -> Result<CertificationPlan, super::CertificationPlanningError> {
         let archive = published_archive_for(
             "forwarding-package",
             "1.0.0",
@@ -8076,6 +8169,10 @@ export { own as renamedOwn } from \"defining-package\";\n";
             .iter()
             .map(|name| (*name).to_owned())
             .collect::<BTreeSet<_>>();
+        let runtime_withheld = runtime_withheld
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect::<BTreeSet<_>>();
         try_plan_adjusted_for_test_package(
             &archive,
             "forwarding-package",
@@ -8095,15 +8192,19 @@ export { own as renamedOwn } from \"defining-package\";\n";
                     binding.runtime.export_name = "own".into();
                     binding.declarations.export_name = "own".into();
                 }
-                if !forwarded.is_empty() {
+                if !forwarded.is_empty() || !runtime_withheld.is_empty() {
                     resolved.declaration_exports = resolved
                         .exports
                         .keys()
                         .cloned()
                         .chain(forwarded.iter().cloned())
+                        .chain(runtime_withheld.iter().cloned())
                         .collect();
                 }
                 resolved.forwarded_foreign_exports.clone_from(&forwarded);
+                resolved
+                    .runtime_withheld_exports
+                    .clone_from(&runtime_withheld);
             },
         )
     }
@@ -8247,6 +8348,345 @@ export { SHARED } from \"defining-package\";\n";
                 String::from_utf8_lossy(declarations)
             );
         }
+    }
+
+    // ADR 0156, the reverse shape over a planned dependency: the runtime
+    // forwards a name the dependency withholds (here ADR 0150's `SHARED`) and
+    // the declaration binds exactly -- locally, or in another module -- so the
+    // name is withheld. Over a *bound* dependency export beside a local
+    // declaration it is not withheld.
+    #[test]
+    fn a_runtime_forward_of_a_withheld_name_is_withheld_whatever_declares_it() {
+        let defining = plan_forwarding_dependency();
+        for declarations in [
+            b"export { own } from \"defining-package\";\nexport declare const SHARED: number;\n"
+                .as_slice(),
+            b"export { own } from \"defining-package\";\nexport { own as SHARED } from \"defining-package\";\n",
+        ] {
+            let plan = plan_forwarding_package_withholding(
+                &defining,
+                b"export { own, SHARED } from \"defining-package\";\n",
+                declarations,
+                &[],
+                &["SHARED"],
+                &["own"],
+                "/project/src/app.ts",
+            )
+            .unwrap_or_else(|error| panic!("{}: {error}", String::from_utf8_lossy(declarations)));
+            assert_eq!(plan.verified_exports.binding_count(), 1);
+            assert!(plan.verified_exports.declaration_binding("SHARED").is_none());
+        }
+
+        // Replayed, not trusted: a resolution that omits it refuses...
+        let omitted = refusal_text(plan_forwarding_package_withholding(
+            &defining,
+            b"export { own, SHARED } from \"defining-package\";\n",
+            b"export { own } from \"defining-package\";\nexport declare const SHARED: number;\n",
+            &[],
+            &[],
+            &["own"],
+            "/project/src/app.ts",
+        ));
+        assert!(
+            omitted.contains("supplied runtime-withheld exports do not equal archive replay"),
+            "{omitted}"
+        );
+        // ...and a bound dependency export forwarded beside a local
+        // declaration is a real mismatch between the axes, not a withheld
+        // export: naming it withheld refuses.
+        let bound = refusal_text(plan_forwarding_package_withholding(
+            &defining,
+            b"export { own } from \"defining-package\";\nexport { own as OTHER } from \"defining-package\";\n",
+            b"export { own } from \"defining-package\";\nexport declare const OTHER: number;\n",
+            &[],
+            &["OTHER"],
+            &["own"],
+            "/project/src/app.ts",
+        ));
+        assert!(
+            bound.contains("supplied runtime-withheld exports do not equal archive replay"),
+            "{bound}"
+        );
+        // A declaration forwarding a name the dependency never had keeps its
+        // refusal.
+        let unbound = refusal_text(plan_forwarding_package_withholding(
+            &defining,
+            b"export { own, SHARED } from \"defining-package\";\n",
+            b"export { own } from \"defining-package\";\nexport { MISSING as SHARED } from \"defining-package\";\n",
+            &[],
+            &["SHARED"],
+            &["own"],
+            "/project/src/app.ts",
+        ));
+        assert!(
+            unbound.contains("supplied runtime-withheld exports do not equal archive replay"),
+            "{unbound}"
+        );
+    }
+
+    const PRUNED_ROOT: &str = "/project/node_modules/pruned-package";
+    const PRUNED_MANIFEST: &[u8] = br#"{"name":"pruned-package","version":"1.0.0","exports":{".":{"types":"./index.d.ts","import":"./index.js"}}}"#;
+    const PRUNED_RUNTIME: &[u8] = b"export const inner = 1;\nexport const other = 2;\n";
+    const PRUNED_DECLARATIONS: &[u8] =
+        b"export declare const inner: number;\nexport declare const other: number;\n";
+    const PRUNING_ROOT: &str = "/project/node_modules/pruning-package";
+    const PRUNING_IMPORTER: &str = "/project/node_modules/pruning-package/dist/index.js";
+    const PRUNING_MANIFEST: &[u8] = br#"{"name":"pruning-package","version":"1.0.0","exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.js"}}}"#;
+
+    /// A graph node request for a test package: the resolution replayed from
+    /// its bytes, one proposed export per binding, `shape` for each.
+    #[expect(clippy::too_many_arguments, reason = "exact resolution inputs")]
+    fn graph_node_request_for_test_package(
+        archive: &PublishedArchive,
+        name: &str,
+        root: &str,
+        manifest: &[u8],
+        exports: &[TestExportBinding<'_>],
+        importer: &str,
+        shape: &dyn Fn(&str) -> ValueShape,
+        adjust: &dyn Fn(&mut ResolvedImport),
+    ) -> PublishedGraphNodeRequest {
+        let (request, mut resolved) = test_package_resolution(
+            archive,
+            name,
+            "1.0.0",
+            root,
+            manifest,
+            &["import"],
+            exports,
+            &[],
+            importer,
+        );
+        adjust(&mut resolved);
+        let candidate = test_candidate(
+            &resolved,
+            exports.iter().map(|(export, _, _, _)| *export),
+            &[],
+            shape,
+        );
+        let snapshot =
+            ArtifactSnapshot::from_published(archive, SnapshotLimits::policy_2()).unwrap();
+        let integrity = snapshot.package_integrity().to_owned();
+        PublishedGraphNodeRequest::new(
+            CertificationRequest::new(candidate, request, resolved),
+            archive.clone(),
+            graph_lock(name, "1.0.0", &integrity),
+        )
+    }
+
+    fn pruned_archive() -> PublishedArchive {
+        published_archive_for(
+            "pruned-package",
+            "1.0.0",
+            &[
+                ("package/package.json", PRUNED_MANIFEST),
+                ("package/index.js", PRUNED_RUNTIME),
+                ("package/index.d.ts", PRUNED_DECLARATIONS),
+            ],
+        )
+    }
+
+    /// `pruned-package`, as the pruned node `pruning-package` imports, with the
+    /// proposal `shape` (statementless when `Unknown`). Its proposal names
+    /// `inner` alone; `other` is exported too and bound by the replay.
+    fn pruned_node_request(shape: ValueShape) -> PublishedGraphNodeRequest {
+        let bindings = [
+            (
+                "inner",
+                ("index.js", PRUNED_RUNTIME),
+                ("index.d.ts", PRUNED_DECLARATIONS),
+                PRUNED_ROOT,
+            ),
+            (
+                "other",
+                ("index.js", PRUNED_RUNTIME),
+                ("index.d.ts", PRUNED_DECLARATIONS),
+                PRUNED_ROOT,
+            ),
+        ];
+        graph_node_request_for_test_package(
+            &pruned_archive(),
+            "pruned-package",
+            PRUNED_ROOT,
+            PRUNED_MANIFEST,
+            &bindings,
+            PRUNING_IMPORTER,
+            &|_| shape.clone(),
+            &|_| {},
+        )
+    }
+
+    /// `pruning-package`, whose runtime forwards `pruned-package`'s `inner` as
+    /// `scope` (its declaration is its own: `@solidjs/web@2.0.0-rc.9`'s shape)
+    /// and as `both` (its declaration forwards the same name), with the
+    /// resolver's runtime-withheld census `withheld`.
+    fn pruning_root_request(
+        runtime: &[u8],
+        declarations: &[u8],
+        withheld: &[&str],
+    ) -> PublishedGraphNodeRequest {
+        let archive = published_archive_for(
+            "pruning-package",
+            "1.0.0",
+            &[
+                ("package/package.json", PRUNING_MANIFEST),
+                ("package/dist/index.js", runtime),
+                ("package/dist/index.d.ts", declarations),
+            ],
+        );
+        let withheld = withheld
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect::<BTreeSet<_>>();
+        graph_node_request_for_test_package(
+            &archive,
+            "pruning-package",
+            PRUNING_ROOT,
+            PRUNING_MANIFEST,
+            &[(
+                "own",
+                ("dist/index.js", runtime),
+                ("dist/index.d.ts", declarations),
+                PRUNING_ROOT,
+            )],
+            "/project/src/app.ts",
+            &|_| ValueShape::Plain,
+            &|resolved| {
+                resolved.declaration_exports = resolved
+                    .exports
+                    .keys()
+                    .cloned()
+                    .chain(withheld.iter().cloned())
+                    .collect();
+                resolved.runtime_withheld_exports.clone_from(&withheld);
+            },
+        )
+    }
+
+    const PRUNING_RUNTIME: &[u8] = b"export { inner as scope } from \"pruned-package\";\n\
+export { inner as both } from \"pruned-package\";\nexport const own = 1;\n";
+    const PRUNING_DECLARATIONS: &[u8] = b"export declare function scope(): void;\n\
+export { inner as both } from \"pruned-package\";\nexport declare const own: number;\n";
+
+    fn graph_refusal(
+        result: Result<
+            crate::PublishedContractGraphPlan,
+            super::dependencies::PublishedGraphPlanningError,
+        >,
+    ) -> String {
+        match result {
+            Ok(_) => panic!("the graph must stay refused"),
+            Err(error) => error.to_string(),
+        }
+    }
+
+    // ADR 0156: a runtime forward of an own exact export of a node ADR 0129
+    // pruned is withheld, whether the declaration is this package's own
+    // (`@solidjs/web@2.0.0-rc.9`'s `scope`) or forwards the same name. The
+    // pruned node is planned from its archive, is no node of the graph, and
+    // nothing binds through it.
+    #[test]
+    fn a_runtime_forward_of_a_pruned_export_is_withheld_in_both_shapes() {
+        let graph = CertificationPlanningTransaction::new()
+            .plan_published_contract_graph_with_pruned(
+                pruning_root_request(PRUNING_RUNTIME, PRUNING_DECLARATIONS, &["both", "scope"]),
+                [],
+                vec![pruned_node_request(ValueShape::Unknown)],
+            )
+            .unwrap();
+        assert_eq!(graph.dependency_first_identities().len(), 1);
+        let root = graph.plan(graph.root_identity()).unwrap();
+        assert_eq!(root.verified_exports.binding_count(), 1);
+        assert!(root.verified_exports.declaration_binding("own").is_some());
+        assert!(root.verified_exports.declaration_binding("scope").is_none());
+
+        // Replayed, not trusted: a resolution naming only one of the two
+        // refuses.
+        let partial = graph_refusal(
+            CertificationPlanningTransaction::new().plan_published_contract_graph_with_pruned(
+                pruning_root_request(PRUNING_RUNTIME, PRUNING_DECLARATIONS, &["scope"]),
+                [],
+                vec![pruned_node_request(ValueShape::Unknown)],
+            ),
+        );
+        assert!(partial.contains("archive replay"), "{partial}");
+    }
+
+    // A node that states a claim is not statementless: a record calling it
+    // pruned is forged, and the transaction refuses.
+    #[test]
+    fn a_forged_prune_refuses_the_graph() {
+        let forged = graph_refusal(
+            CertificationPlanningTransaction::new().plan_published_contract_graph_with_pruned(
+                pruning_root_request(PRUNING_RUNTIME, PRUNING_DECLARATIONS, &["both", "scope"]),
+                [],
+                vec![pruned_node_request(ValueShape::Plain)],
+            ),
+        );
+        assert!(forged.contains("is not statementless"), "{forged}");
+    }
+
+    // A node pruned because it *refused* produced no plan: without replayed
+    // evidence the forward is not withheld, and a resolution that says it is
+    // refuses. A pruned node whose archive disagrees with its lock selection
+    // refuses the graph as well.
+    #[test]
+    fn a_refused_node_is_not_a_pruned_node() {
+        let absent = graph_refusal(
+            CertificationPlanningTransaction::new().plan_published_contract_graph_with_pruned(
+                pruning_root_request(PRUNING_RUNTIME, PRUNING_DECLARATIONS, &["both", "scope"]),
+                [],
+                Vec::new(),
+            ),
+        );
+        assert!(
+            absent.contains("supplied runtime-withheld exports do not equal archive replay"),
+            "{absent}"
+        );
+
+        let archive = pruned_archive();
+        let (request, resolved) = test_package_resolution(
+            &archive,
+            "pruned-package",
+            "1.0.0",
+            PRUNED_ROOT,
+            PRUNED_MANIFEST,
+            &["import"],
+            &[(
+                "inner",
+                ("index.js", PRUNED_RUNTIME),
+                ("index.d.ts", PRUNED_DECLARATIONS),
+                PRUNED_ROOT,
+            )],
+            &[],
+            PRUNING_IMPORTER,
+        );
+        let candidate = test_candidate(&resolved, ["inner"].into_iter(), &[], &|_| {
+            ValueShape::Unknown
+        });
+        // The lock names another archive's integrity.
+        let other = published_archive_for(
+            "pruned-package",
+            "1.0.0",
+            &[("package/package.json", PRUNED_MANIFEST)],
+        );
+        let other_integrity = ArtifactSnapshot::from_published(&other, SnapshotLimits::policy_2())
+            .unwrap()
+            .package_integrity()
+            .to_owned();
+        let mislocked = PublishedGraphNodeRequest::new(
+            CertificationRequest::new(candidate, request, resolved),
+            archive,
+            graph_lock("pruned-package", "1.0.0", &other_integrity),
+        );
+        let refusal = graph_refusal(
+            CertificationPlanningTransaction::new().plan_published_contract_graph_with_pruned(
+                pruning_root_request(PRUNING_RUNTIME, PRUNING_DECLARATIONS, &["both", "scope"]),
+                [],
+                vec![mislocked],
+            ),
+        );
+        assert!(!refusal.contains("runtime-withheld"), "{refusal}");
     }
 
     // Regression: `external_dependency` selected a planned dependency by its
@@ -9074,6 +9514,7 @@ export { SHARED } from \"defining-package\";\n";
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
             forwarded_foreign_exports: BTreeSet::new(),
+            runtime_withheld_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         (request, resolved)
@@ -9232,17 +9673,39 @@ export { SHARED } from \"defining-package\";\n";
             importer,
         );
         adjust(&mut resolved);
+        let candidate = test_candidate(
+            &resolved,
+            exports
+                .iter()
+                .map(|(export, _, _, _)| *export)
+                .chain(extra_candidate_exports.iter().copied()),
+            closed_domains,
+            shape,
+        );
+        super::plan_certification_with_dependencies(
+            &mut CertificationPlanningTransaction::new(),
+            CertificationRequest::new(candidate, request, resolved),
+            UntrustedArtifactEnvelope::Published(archive.clone()),
+            dependencies,
+        )
+    }
+
+    /// The candidate the test planners propose for `resolved`: one semantics
+    /// entry per named export, bound to the entry files.
+    fn test_candidate<'a>(
+        resolved: &ResolvedImport,
+        exports: impl Iterator<Item = &'a str>,
+        closed_domains: &[(&str, ClaimDomain)],
+        shape: &dyn Fn(&str) -> ValueShape,
+    ) -> solid_reactive_ir::contract_semantics::NormalizedContract {
         let (package, mut artifact_case) =
-            crate::artifact_resolution::proposal_identity(&resolved).unwrap();
+            crate::artifact_resolution::proposal_identity(resolved).unwrap();
         // Each export's proposed value shape is chosen per export name: the
         // plain default is what inventories the `recursive-value-shape` demand
         // the witness harness answers, and a tracer that closes a value domain
         // has to be able to give one export a closed shape while its siblings
         // stay open.
         artifact_case.exports = exports
-            .iter()
-            .map(|(export, _, _, _)| *export)
-            .chain(extra_candidate_exports.iter().copied())
             .map(|export| {
                 (
                     export.to_owned(),
@@ -9272,15 +9735,9 @@ export { SHARED } from \"defining-package\";\n";
                 )
             })
             .collect();
-        let candidate = ContractProposal::new(package, vec![artifact_case])
+        ContractProposal::new(package, vec![artifact_case])
             .normalize()
-            .unwrap();
-        super::plan_certification_with_dependencies(
-            &mut CertificationPlanningTransaction::new(),
-            CertificationRequest::new(candidate, request, resolved),
-            UntrustedArtifactEnvelope::Published(archive.clone()),
-            dependencies,
-        )
+            .unwrap()
     }
 
     #[test]
@@ -9879,6 +10336,7 @@ export const value = phantom;
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
             forwarded_foreign_exports: BTreeSet::new(),
+            runtime_withheld_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -10015,6 +10473,7 @@ export const value = phantom;
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
             forwarded_foreign_exports: BTreeSet::new(),
+            runtime_withheld_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -10180,6 +10639,7 @@ export const value = phantom;
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
             forwarded_foreign_exports: BTreeSet::new(),
+            runtime_withheld_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         let (package, mut artifact_case) =
@@ -10502,6 +10962,7 @@ export const value = phantom;
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
             forwarded_foreign_exports: BTreeSet::new(),
+            runtime_withheld_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         let (package, mut artifact_case) =
@@ -11373,6 +11834,7 @@ export const value = phantom;
                 unbound_declaration_exports: BTreeSet::new(),
                 foreign_declaration_exports: BTreeSet::new(),
                 forwarded_foreign_exports: BTreeSet::new(),
+                runtime_withheld_exports: BTreeSet::new(),
                 authority: ResolutionAuthority::Host,
             };
             let (package, mut artifact_case) =
@@ -12513,6 +12975,7 @@ export const value = phantom;
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
             forwarded_foreign_exports: BTreeSet::new(),
+            runtime_withheld_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         let (package, mut artifact_case) =

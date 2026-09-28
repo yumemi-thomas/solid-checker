@@ -81,7 +81,10 @@ axes and are unaffected.
    that names it anyway refuses at `bind_exports` exactly as before.
 6. **Only this shape.** The converse (a local declaration of a name the
    runtime forwards from another package) and two different foreign packages
-   on the two axes keep their existing behavior.
+   on the two axes keep their existing behavior. ADR 0156 withholds the
+   converse when the forwarded runtime name is itself withheld by its planned
+   dependency, or is an own exact export of a node ADR 0129 pruned. A converse
+   over a bound dependency export keeps its existing binding.
 
 ## Soundness
 
