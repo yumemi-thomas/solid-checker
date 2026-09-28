@@ -5763,6 +5763,33 @@ impl ReachabilityFloor {
             Self::MayExecute => reach_admits_zero_lower_bound(reach),
         }
     }
+
+    /// ADR 0159: whether a **call** witnesses under this floor.
+    ///
+    /// `reach: reachable` is optimistic -- the producer keeps both arms of an
+    /// `if` reachable and reads through `&&`, `?:` and an optional chain -- so
+    /// on its own it is may-execute evidence, not a lower bound. The strict
+    /// floor therefore also requires the producer's `unconditional`
+    /// (handshake protocol 71): the call runs exactly once on every normal
+    /// completion of its flow owner. The may-execute floor reads `reach` as
+    /// before.
+    fn admits_call(self, call: &typefacts::ImplementationCall) -> bool {
+        match self {
+            Self::Reachable => call.reach == Reachability::Reachable && call.unconditional,
+            Self::MayExecute => reach_admits_zero_lower_bound(call.reach),
+        }
+    }
+
+    /// ADR 0159: whether a use or an uncensused form -- a site the producer
+    /// states no lower bound for -- witnesses under this floor. Under the
+    /// strict floor none does: its `reach` is the same optimistic one a
+    /// call's is, and nothing beside it says the site runs on every path.
+    fn admits_unbounded_site(self, reach: Reachability) -> bool {
+        match self {
+            Self::Reachable => false,
+            Self::MayExecute => reach_admits_zero_lower_bound(reach),
+        }
+    }
 }
 
 /// Whether this reachability is adequate evidence for a claim whose lower bound
@@ -5889,7 +5916,10 @@ fn require_protocol_use(
     };
     let mut found = false;
     for form in &implementation.uncensused_invoking_forms {
-        if form.captured || !floor.admits(form.reach) || form.local_literal_result.is_some() {
+        if form.captured
+            || !floor.admits_unbounded_site(form.reach)
+            || form.local_literal_result.is_some()
+        {
             continue;
         }
         let matches = match protocol {
@@ -6232,7 +6262,7 @@ fn implementation_call_is_executed_within(
         return false;
     }
     *budget -= 1;
-    if !floor.admits(call.reach) {
+    if !floor.admits_call(call) {
         return false;
     }
     if !call.captured {
@@ -6556,7 +6586,7 @@ fn census_dialect_axiom(
     roots_longest_first: &[SnapshotSourceRoot<'_>],
     requested_conditions: &[String],
 ) -> Result<CensusTerminator, Option<String>> {
-    if floor != ReachabilityFloor::MayExecute || !floor.admits(call.reach) {
+    if floor != ReachabilityFloor::MayExecute || !floor.admits_call(call) {
         return Err(None);
     }
     if !matches!(call.kind, CallKind::Call | CallKind::Construct) {
@@ -7047,7 +7077,7 @@ fn require_parameter_read_call(
     let mut found = false;
     for call in &implementation.calls {
         if is_call_expression(call)
-            && floor.admits(call.reach)
+            && floor.admits_call(call)
             && !call.captured
             && call
                 .callee_parameter
@@ -7106,7 +7136,7 @@ fn require_parameter_read_evidence(
     }
     let mut found = require_parameter_read_call(implementation, source, floor, open, sites).is_ok();
     for use_site in &implementation.parameter_uses {
-        if !floor.admits(use_site.reach)
+        if !floor.admits_unbounded_site(use_site.reach)
             || use_site.captured
             || !matches!(
                 use_site.kind,
@@ -7172,7 +7202,7 @@ fn require_owner_operation_call(
     let mut found = false;
     for call in &implementation.calls {
         if !is_call_expression(call)
-            || !floor.admits(call.reach)
+            || !floor.admits_call(call)
             || call.captured
             || call.target.is_empty()
             || call.target_module.as_ref() != "solid-js"
@@ -7386,7 +7416,7 @@ fn initial_parameter_member_identity(
         |usage| {
             implementation.calls.iter().any(|call| {
                 is_call_expression(call)
-                    && floor.admits(call.reach)
+                    && floor.admits_call(call)
                     && !call.captured
                     && call.location.path == usage.path
                     && call.location.start_byte == usage.start_byte
@@ -7717,7 +7747,7 @@ fn require_reactive_read_operation_input(
         // `accessor()`, and the producer's present habits are not what this
         // side certifies against. The captured gate is the schedule premise
         // documented above; the floor is the operation's own stated bound.
-        if !is_call_expression(call) || !floor.admits(call.reach) || call.captured {
+        if !is_call_expression(call) || !floor.admits_call(call) || call.captured {
             continue;
         }
         let rooted = call
@@ -7811,7 +7841,7 @@ fn composing_call_resolves_to_declaration(
     target_runtime_export: &str,
     floor: ReachabilityFloor,
 ) -> bool {
-    if !is_call_expression(call) || !floor.admits(call.reach) || call.captured {
+    if !is_call_expression(call) || !floor.admits_call(call) || call.captured {
         return false;
     }
     let Some(declaration) = &call.declaration else {
@@ -8293,7 +8323,7 @@ fn require_reactive_operation_input(
         {
             continue;
         }
-        if !floor.admits(call.reach) {
+        if !floor.admits_call(call) {
             continue;
         }
         if call.captured && call.enclosing_callable.is_none() {
@@ -8357,8 +8387,11 @@ fn require_reactive_operation_input(
         )));
     }
     for usage in &implementation.parameter_uses {
+        // ADR 0159: a universal claim ranges over every use that may run, so
+        // the demand's floor never narrows it: under the strict floor a use in
+        // a loop body was skipped, and left the claim unchecked there.
         if !parameter_binding_matches(usage.parameter_index, &usage.binding_path, source)
-            || !floor.admits(usage.reach)
+            || !ReachabilityFloor::MayExecute.admits(usage.reach)
         {
             continue;
         }
@@ -19787,6 +19820,31 @@ mod tests {
     // call the producer reports as Unknown discharges it; an operation that
     // asserts an occurrence is owed a call the implementation provably reaches.
     // Neither reading admits code that never runs.
+    /// ADR 0159: under the strict floor a call witnesses only when the
+    /// producer also states it unconditional; a use or form, which carries no
+    /// lower bound, never does. The may-execute floor is unchanged.
+    #[test]
+    fn the_strict_floor_asks_a_call_for_its_lower_bound() {
+        let call = |reach: &str, unconditional: bool| -> typefacts::ImplementationCall {
+            serde_json::from_value(serde_json::json!({
+                "location": {"path": "/package/index.js", "startByte": 0, "endByte": 4},
+                "reach": reach,
+                "kind": "call",
+                "unconditional": unconditional,
+            }))
+            .unwrap()
+        };
+        assert!(ReachabilityFloor::Reachable.admits_call(&call("reachable", true)));
+        assert!(!ReachabilityFloor::Reachable.admits_call(&call("reachable", false)));
+        assert!(!ReachabilityFloor::Reachable.admits_call(&call("unknown", true)));
+        assert!(ReachabilityFloor::MayExecute.admits_call(&call("reachable", false)));
+        assert!(ReachabilityFloor::MayExecute.admits_call(&call("unknown", false)));
+        assert!(!ReachabilityFloor::MayExecute.admits_call(&call("unreachable", true)));
+        assert!(!ReachabilityFloor::Reachable.admits_unbounded_site(Reachability::Reachable));
+        assert!(ReachabilityFloor::MayExecute.admits_unbounded_site(Reachability::Unknown));
+        assert!(!ReachabilityFloor::MayExecute.admits_unbounded_site(Reachability::Unreachable));
+    }
+
     #[test]
     fn reachability_floor_follows_the_bound_operation_lower_bound() {
         assert!(reach_admits_zero_lower_bound(Reachability::Reachable));
@@ -20205,7 +20263,7 @@ mod tests {
         }
         implementation.calls = vec![serde_json::from_value(json!({
             "location": {"path": "/project/index.js", "startByte": 30, "endByte": 42},
-            "kind": "call", "reach": "reachable", "target": "symbol:trim",
+            "kind": "call", "reach": "reachable", "unconditional": true, "target": "symbol:trim",
             "calleeParameter": {"parameterIndex": 0, "path": [{"kind": "property", "property": "trim"}]}
         })).unwrap()];
         let member = parameter_source_at(0, &["trim"]);
@@ -20428,6 +20486,7 @@ mod tests {
 
         let mut reached = implementation.clone();
         reached.calls[0].reach = Reachability::Reachable;
+        reached.calls[0].unconditional = true;
         let mut sites = Vec::new();
         assert!(
             operation_input_value_shape_evidence(
@@ -20659,11 +20718,21 @@ mod tests {
         require_parameter_read_evidence(
             &implementation,
             &source,
-            ReachabilityFloor::Reachable,
+            ReachabilityFloor::MayExecute,
             &open,
             &mut sites,
         )
         .expect("an uncaptured property access is a read");
+        // ADR 0159: a use carries no lower bound, so under the strict floor it
+        // witnesses nothing.
+        require_parameter_read_evidence(
+            &implementation,
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut Vec::new(),
+        )
+        .expect_err("a use never answers the strict floor");
         assert_eq!(
             sites,
             vec!["implementation-read-use:/project/index.js:20:25:propertyAccess"]
@@ -20676,7 +20745,7 @@ mod tests {
             require_parameter_read_evidence(
                 &implementation,
                 &source,
-                ReachabilityFloor::Reachable,
+                ReachabilityFloor::MayExecute,
                 &open,
                 &mut sites,
             )
@@ -20698,7 +20767,7 @@ mod tests {
             require_parameter_read_evidence(
                 &implementation,
                 &source,
-                ReachabilityFloor::Reachable,
+                ReachabilityFloor::MayExecute,
                 &open,
                 &mut sites,
             )
@@ -20713,7 +20782,7 @@ mod tests {
         require_parameter_read_evidence(
             &implementation,
             &source,
-            ReachabilityFloor::Reachable,
+            ReachabilityFloor::MayExecute,
             &open,
             &mut sites,
         )
@@ -20726,7 +20795,7 @@ mod tests {
         require_parameter_read_evidence(
             &implementation,
             &parameter_source_at(1, &[]),
-            ReachabilityFloor::Reachable,
+            ReachabilityFloor::MayExecute,
             &open,
             &mut Vec::new(),
         )
@@ -20734,7 +20803,7 @@ mod tests {
         require_parameter_read_evidence(
             &implementation,
             &parameter_source_at(0, &["children"]),
-            ReachabilityFloor::Reachable,
+            ReachabilityFloor::MayExecute,
             &open,
             &mut Vec::new(),
         )
@@ -20747,7 +20816,7 @@ mod tests {
         require_parameter_read_evidence(
             &implementation,
             &source,
-            ReachabilityFloor::Reachable,
+            ReachabilityFloor::MayExecute,
             &open,
             &mut Vec::new(),
         )
@@ -20828,7 +20897,18 @@ mod tests {
         .expect_err("a use in a loop body does not witness an asserted occurrence");
 
         // And the witness still works where it should: a reachable use answers
-        // the strict floor, so the gate is not simply refusing every use.
+        // the may-execute floor, so the gate is not simply refusing every use.
+        // ADR 0159: under the strict floor it no longer does -- a use's
+        // `reach` is the optimistic one, and the producer states no lower
+        // bound for a use.
+        require_parameter_read_evidence(
+            &use_at("reachable"),
+            &source,
+            ReachabilityFloor::MayExecute,
+            &open,
+            &mut Vec::new(),
+        )
+        .expect("a reachable property access is a read that may run");
         require_parameter_read_evidence(
             &use_at("reachable"),
             &source,
@@ -20836,7 +20916,7 @@ mod tests {
             &open,
             &mut Vec::new(),
         )
-        .expect("a reachable property access is a read under either floor");
+        .expect_err("a use carries no lower bound, so it never answers the strict floor");
     }
 
     // The owner branch asks the same reachability question the flow branches do,
@@ -20933,6 +21013,7 @@ mod tests {
                 "calls": [{
                     "location": {"path": "/project/index.js", "startByte": 30, "endByte": 60},
                     "reach": "reachable",
+                    "unconditional": true,
                     "kind": "call",
                     "target": format!("symbol:{target}"),
                     "targetName": target,
@@ -20997,6 +21078,7 @@ mod tests {
                 "calls": [{
                     "location": {"path": "/project/index.js", "startByte": 10, "endByte": 15},
                     "reach": "reachable",
+                    "unconditional": true,
                     "kind": "call",
                     "calleeParameter": {"parameterIndex": 0},
                     "captured": true,
@@ -21136,6 +21218,7 @@ mod tests {
                 "calls": [{
                     "location": {"path": "/project/index.js", "startByte": 30, "endByte": 40},
                     "reach": "reachable",
+                    "unconditional": true,
                     "kind": "call",
                     "calleeParameter": {"parameterIndex": 0},
                     "captured": true,
@@ -21333,6 +21416,7 @@ mod tests {
                 "calls": [{
                     "location": {"path": "/project/index.js", "startByte": 2000, "endByte": 2010},
                     "reach": "reachable",
+                    "unconditional": true,
                     "kind": "call",
                     "captured": true,
                     "enclosingCallable": location(edges)
@@ -21380,6 +21464,7 @@ mod tests {
             "calls": [{
                 "location": {"path": "/project/index.js", "startByte": 200, "endByte": 210},
                 "reach": "reachable",
+                "unconditional": true,
                 "kind": "call",
                 "captured": true,
                 "enclosingCallable": location(1)
@@ -21405,6 +21490,7 @@ mod tests {
         let mut outer_call = json!({
             "location": {"path": "/project/index.js", "startByte": 10, "endByte": 90},
             "reach": "reachable",
+            "unconditional": true,
             "kind": "call",
             "argumentCallables": [{
                 "argument": 0,
@@ -21425,6 +21511,7 @@ mod tests {
                 {
                     "location": {"path": "/project/index.js", "startByte": 30, "endByte": 40},
                     "reach": "reachable",
+                    "unconditional": true,
                     "kind": "call",
                     "calleeParameter": {"parameterIndex": 0},
                     "captured": true,
@@ -21624,6 +21711,7 @@ mod tests {
             let mut inner_carrier = json!({
                 "location": {"path": "/project/index.js", "startByte": 62, "endByte": 85},
                 "reach": "reachable",
+                "unconditional": true,
                 "kind": "call",
                 "captured": true,
                 "enclosingCallable": {"path": "/project/index.js", "startByte": 20, "endByte": 90},
@@ -21645,6 +21733,7 @@ mod tests {
                     {
                         "location": {"path": "/project/index.js", "startByte": 10, "endByte": 95},
                         "reach": "reachable",
+                        "unconditional": true,
                         "kind": "call",
                         "target": "symbol:createEffect",
                         "targetName": "createEffect",
@@ -21661,6 +21750,7 @@ mod tests {
                     {
                         "location": {"path": "/project/index.js", "startByte": 40, "endByte": 52},
                         "reach": "reachable",
+                        "unconditional": true,
                         "kind": "call",
                         "calleeParameter": {"parameterIndex": 0},
                         "captured": true,
@@ -21727,6 +21817,7 @@ mod tests {
             calls.push(json!({
                 "location": {"path": "/project/index.js", "startByte": start, "endByte": end},
                 "reach": "reachable",
+                "unconditional": true,
                 "kind": "call",
                 "captured": depth != 0,
                 "enclosingCallable": enclosing,
@@ -21773,6 +21864,7 @@ mod tests {
                             "endByte": link * 2 + 1
                         },
                         "reach": "reachable",
+                        "unconditional": true,
                         "kind": "call",
                         "captured": link != 0,
                         "enclosingCallable": (link != 0).then(|| json!({
@@ -21835,6 +21927,7 @@ mod tests {
                 "calls": [{
                     "location": {"path": "/project/index.js", "startByte": 10, "endByte": 40},
                     "reach": "reachable",
+                    "unconditional": true,
                     "kind": "call",
                     "target": "symbol:createPolled",
                     "targetName": "createPolled",
@@ -21922,6 +22015,7 @@ mod tests {
                     {
                         "location": {"path": "/project/index.js", "startByte": 30, "endByte": 80},
                         "reach": "reachable",
+                        "unconditional": true,
                         "kind": kind,
                         "target": "symbol:Promise",
                         "targetName": "Promise",
@@ -21942,6 +22036,7 @@ mod tests {
                     {
                         "location": {"path": "/project/index.js", "startByte": 50, "endByte": 70},
                         "reach": "reachable",
+                        "unconditional": true,
                         "kind": "call",
                         "target": "symbol:genFn",
                         "calleeParameter": {"parameterIndex": 0},
@@ -22073,6 +22168,7 @@ mod tests {
                 "calls": [{
                     "location": {"path": "/project/index.js", "startByte": 10, "endByte": 40},
                     "reach": "reachable",
+                    "unconditional": true,
                     "kind": kind,
                     "target": "symbol:createEffect",
                     "targetName": "createEffect",
@@ -22090,6 +22186,7 @@ mod tests {
                 "calls": [{
                     "location": {"path": "/project/index.js", "startByte": 10, "endByte": 40},
                     "reach": "reachable",
+                    "unconditional": true,
                     "kind": kind,
                     "target": "symbol:cb",
                     "calleeParameter": {"parameterIndex": 0}
@@ -22104,6 +22201,7 @@ mod tests {
                 "calls": [{
                     "location": {"path": "/project/index.js", "startByte": 10, "endByte": 40},
                     "reach": "reachable",
+                    "unconditional": true,
                     "kind": kind,
                     "target": "symbol:onCleanup",
                     "targetName": "onCleanup",
@@ -22293,6 +22391,7 @@ mod tests {
                     "calls": [{
                         "location": {"path": "/project/index.js", "startByte": 10, "endByte": 40},
                         "reach": "reachable",
+                        "unconditional": true,
                         "kind": "call",
                         "target": "symbol:createPolled",
                         "targetName": "createPolled",
@@ -24379,6 +24478,7 @@ mod tests {
         json!({
             "location": {"path": "/pkg/dist/index.js", "startByte": start, "endByte": start + 10},
             "reach": "reachable",
+            "unconditional": true,
             "kind": "call",
             "target": "symbol:other",
             "argumentSources": [sources],
@@ -24556,6 +24656,7 @@ mod tests {
                 vec![json!({
                     "location": {"path": "/pkg/dist/index.js", "startByte": 100, "endByte": 110},
                     "reach": "reachable",
+                    "unconditional": true,
                     "kind": "call",
                     "target": "symbol:callback",
                     "calleeParameter": {"parameterIndex": 0},
@@ -24615,6 +24716,7 @@ mod tests {
                 vec![json!({
                     "location": {"path": "/pkg/dist/index.js", "startByte": 100, "endByte": 110},
                     "reach": "reachable",
+                    "unconditional": true,
                     "kind": "call",
                     "target": "symbol:other",
                     "argumentSources": [dialect_signal_source(0)],
@@ -24626,6 +24728,7 @@ mod tests {
                 vec![json!({
                     "location": {"path": "/pkg/dist/index.js", "startByte": 100, "endByte": 110},
                     "reach": "reachable",
+                    "unconditional": true,
                     "kind": "construct",
                     "target": "symbol:callback",
                     "calleeParameter": {"parameterIndex": 0},
@@ -24640,6 +24743,7 @@ mod tests {
                 vec![json!({
                     "location": {"path": "/pkg/dist/index.js", "startByte": 100, "endByte": 110},
                     "reach": "reachable",
+                    "unconditional": true,
                     "kind": "call",
                     "target": "symbol:callback",
                     "calleeParameter": {"parameterIndex": 0},
@@ -24814,6 +24918,7 @@ mod tests {
                     json!({
                         "location": {"path": "/pkg/dist/index.js", "startByte": 200, "endByte": 220},
                         "reach": "reachable",
+                        "unconditional": true,
                         "kind": "call",
                         "target": "symbol:call",
                         "calleeParameter": {"parameterIndex": 0, "path": [{"kind": "property", "property": "call"}]},
@@ -24878,6 +24983,7 @@ mod tests {
                     json!({
                         "location": {"path": "/pkg/dist/index.js", "startByte": 200, "endByte": 215},
                         "reach": "reachable",
+                        "unconditional": true,
                         "kind": "construct",
                         "argumentSources": [json!([])],
                     }),
@@ -24896,6 +25002,7 @@ mod tests {
                     json!({
                         "location": {"path": "/pkg/dist/index.js", "startByte": 200, "endByte": 215},
                         "reach": "reachable",
+                        "unconditional": true,
                         "kind": "construct",
                         "target": "symbol:callback",
                         "calleeParameter": {"parameterIndex": 0},
@@ -25513,6 +25620,7 @@ mod tests {
                 vec![json!({
                     "location": {"path": "/pkg/dist/index.js", "startByte": 100, "endByte": 112},
                     "reach": "reachable",
+                    "unconditional": true,
                     "kind": "construct",
                     "calleeSources": dialect_signal_source(0),
                 })],
@@ -25568,6 +25676,7 @@ mod tests {
             let mut value = json!({
                 "location": {"path": "/pkg/dist/index.js", "startByte": 4655, "endByte": 4709},
                 "reach": "reachable",
+                "unconditional": true,
                 "kind": "call",
                 "target": "symbol:createPolled",
                 "targetName": "createPolled",
@@ -25760,6 +25869,7 @@ mod tests {
             json!({
                 "location": {"path": "/pkg/dist/index.js", "startByte": 4000, "endByte": 4050},
                 "reach": "reachable",
+                "unconditional": true,
                 "kind": "call",
                 "target": format!("symbol:{name}"),
                 "targetName": name,
@@ -26315,6 +26425,7 @@ mod tests {
         let mut value = json!({
             "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 100, "endByte": 140},
             "reach": "reachable",
+            "unconditional": true,
             "kind": "call",
             "target": format!("symbol:{export}"),
             "targetName": export,
@@ -27478,6 +27589,7 @@ mod tests {
             let mut value = json!({
                 "location": {"path": source, "startByte": start, "endByte": start + 4},
                 "reach": "reachable",
+                "unconditional": true,
                 "kind": "call",
                 "target": "symbol:member",
                 "calleeParameter": callee,
@@ -28777,6 +28889,7 @@ mod tests {
             let mut value = json!({
                 "location": {"path": source, "startByte": start, "endByte": start + 4},
                 "reach": "reachable",
+                "unconditional": true,
                 "kind": "call",
                 "target": "symbol:cb",
                 "calleeParameter": {"parameterIndex": 0},
@@ -28954,6 +29067,7 @@ mod tests {
         let call: typefacts::ImplementationCall = serde_json::from_value(json!({
             "location": {"path": source, "startByte": 100, "endByte": 104},
             "reach": "reachable",
+            "unconditional": true,
             "kind": "call",
             "target": "symbol:cb",
             "calleeParameter": {"parameterIndex": 0},
@@ -29266,6 +29380,7 @@ mod tests {
             serde_json::from_value::<typefacts::ImplementationCall>(json!({
                 "location": {"path": source, "startByte": start, "endByte": start + 10},
                 "reach": "reachable",
+                "unconditional": true,
                 "kind": "call",
                 "calleeParameter": callee,
             }))
@@ -29392,6 +29507,7 @@ mod tests {
                 serde_json::from_value(json!({
                     "location": {"path": source, "startByte": 200, "endByte": 210},
                     "reach": "reachable",
+                    "unconditional": true,
                     "kind": "call",
                     "captured": true,
                     "calleeParameter": tuple(0),
@@ -29489,6 +29605,7 @@ mod tests {
                 serde_json::from_value(json!({
                     "location": {"path": source, "startByte": 100, "endByte": 104},
                     "reach": "reachable",
+                    "unconditional": true,
                     "kind": "call",
                     "target": "symbol:cb",
                     "calleeParameter": {"parameterIndex": 0},
@@ -30913,6 +31030,7 @@ mod tests {
                 "calls": [{
                     "location": {"path": "/p/index.js", "startByte": 17, "endByte": 39},
                     "reach": "reachable",
+                    "unconditional": true,
                     "kind": "call",
                     "targetName": merge_name,
                     "targetModule": "solid-js",
@@ -31635,6 +31753,7 @@ mod tests {
             "calls": [{
                 "location": {"path": "/p/index.js", "startByte": 17, "endByte": 39},
                 "reach": "reachable",
+                "unconditional": true,
                 "kind": "call",
                 "targetName": "merge",
                 "targetModule": "solid-js",

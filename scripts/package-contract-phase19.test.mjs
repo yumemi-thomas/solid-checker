@@ -287,7 +287,11 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // item, and the export keeps the argument at `result-access`. 160 adds
       // package-described-callback-consumer's hand-stated document, its
       // consumer half.
-      stableMainDocuments: 160,
+      //
+      // 161 on 2026-09-29 adds implementation-census-callback-lower-bound's
+      // main document, the corpus pin of ADR 0159: a direct call of a callback
+      // under a condition may run, and is never a lower bound.
+      stableMainDocuments: 161,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

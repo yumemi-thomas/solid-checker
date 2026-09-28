@@ -47,6 +47,7 @@
     "forwarded-local-untrack-wrapper",
     "function-supertype-kind",
     "implementation-census-argument-returns",
+    "implementation-census-callback-lower-bound",
     "implementation-census-creates",
     "implementation-census-described-accessor",
     "implementation-census-described-callables",

@@ -19079,6 +19079,235 @@ export const value = phantom;
         );
     }
 
+    /// ADR 0159's tracer, `implementation-census-callback-lower-bound`: every
+    /// export calls parameter 0 directly in its own body, so ADR 0100 confirms
+    /// a `callbacks` item for it. The generator states the item's count
+    /// `{scope: call, min: 0, max: many}`; `count` replaces it, which is how a
+    /// claim that the callback runs at least once, or a count left unstated,
+    /// reaches the census.
+    fn callback_lower_bound_fixture_certify(
+        label: &str,
+        count: &solid_reactive_ir::contract_semantics::Cardinality,
+    ) -> Option<(
+        CertificationPlan,
+        Result<super::FinalizedPolicy2Contract, super::Policy2FinalizationError>,
+    )> {
+        use solid_reactive_ir::contract_semantics::{ContractProposal, InvokeProtocol};
+        use solid_reactive_ir::{
+            ContractCallback, ContractClaim, ContractEntrypoint, ContractExport, ContractPackage,
+            PackageContract,
+        };
+        let exports = [
+            "always",
+            "afterThrow",
+            "guarded",
+            "shortCircuit",
+            "chosen",
+            "optional",
+            "early",
+            "looped",
+        ];
+        let name = "implementation-census-callback-lower-bound";
+        let pin = pinned_producer_for_test()?;
+        let root = format!("/project/node_modules/{name}");
+        let root = root.as_str();
+        let fixture = repository_root()
+            .join("fixtures/package-contracts")
+            .join(name);
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let bindings = exports
+            .iter()
+            .map(|export| {
+                (
+                    *export,
+                    ("index.js", runtime.as_slice()),
+                    ("index.d.ts", declarations.as_slice()),
+                    root,
+                )
+            })
+            .collect::<Vec<_>>();
+        let (_, resolved) = test_package_resolution(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[],
+            "/project/src/app.ts",
+        );
+        let inline = ContractCallback {
+            parameter: 0,
+            execution: "inline".into(),
+            schedule: None,
+            clears_tracking: false,
+            arguments: Vec::new(),
+            owner: None,
+            protocol: InvokeProtocol::Call,
+            path: Vec::new(),
+        };
+        let inferred = PackageContract {
+            package: ContractPackage {
+                name: name.into(),
+                version: "1.0.0".into(),
+                integrity: String::new(),
+            },
+            entrypoints: BTreeMap::from([(
+                ".".into(),
+                ContractEntrypoint {
+                    exports: exports
+                        .iter()
+                        .map(|export| {
+                            (
+                                (*export).into(),
+                                ContractExport {
+                                    kind: "function".into(),
+                                    reactive_reads: ContractClaim::Open,
+                                    callbacks: ContractClaim::Known(vec![inline.clone()]),
+                                    owner_requirements: ContractClaim::Open,
+                                    returns: ContractClaim::Open,
+                                    async_behavior: ContractClaim::Known(String::new()),
+                                    direct_callback_parameters: std::collections::BTreeSet::from([
+                                        0,
+                                    ]),
+                                    ..ContractExport::default()
+                                },
+                            )
+                        })
+                        .collect(),
+                },
+            )]),
+            source_path: String::new(),
+        };
+        let generated =
+            crate::inferred_contract::normalize_inferred_contract(&inferred, &resolved).unwrap();
+        let mut cases = generated.artifact_cases().to_vec();
+        for semantics in cases[0].exports.values_mut() {
+            let invoked = semantics
+                .callbacks()
+                .items()
+                .iter()
+                .map(|item| item.operation.clone())
+                .collect::<Vec<_>>();
+            for operation in &mut semantics.call.operations {
+                if invoked.contains(&operation.id) {
+                    assert_eq!(
+                        operation.cardinality.min,
+                        Some(0),
+                        "the generator states min 0"
+                    );
+                    operation.cardinality = count.clone();
+                }
+            }
+        }
+        let candidate = ContractProposal::new(generated.package().clone(), cases)
+            .normalize()
+            .unwrap();
+        let plan = try_plan_supplied_candidate_for_test_package(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            candidate,
+        )
+        .expect("the stated proposal plans against its own artifact");
+        let scratch = TracerScratch::new(label);
+        let probes = tracer_configuration_from(&fixture, scratch.path(), label, &[])?;
+        let outcome = tracer_certify(&plan, &pin, &probes);
+        Some((plan, outcome))
+    }
+
+    /// ADR 0159 end to end, in three counts.
+    ///
+    /// * `min: 0` -- the callback may run -- certifies every export's item:
+    ///   each body may call it.
+    /// * `min: 1` -- it runs at least once -- certifies none, not even
+    ///   `always`: the operation-cardinality census proves `0..many` and
+    ///   nothing tighter, so a lower bound is never certified. This is why the
+    ///   optimistic `reach` never reached a certified "at least once".
+    /// * a count left unstated asks the strict floor of every witness, and
+    ///   since ADR 0159 that floor is a real lower bound: only the exports
+    ///   that call the callback on every normal completion certify, and the
+    ///   call under an `if` arm, behind `&&` or `?:`, after an early return or
+    ///   in a loop withdraws the item. Before ADR 0159 the `if`, `&&`, `?:`
+    ///   and early-return shapes certified here on the optimistic `reach`.
+    #[test]
+    fn a_callback_claimed_to_run_at_least_once_needs_an_unconditional_call() {
+        use solid_reactive_ir::contract_semantics::{
+            Cardinality, CardinalityScope, InvokeProtocol, UpperBound,
+        };
+        let stated = |min: u32| Cardinality {
+            scope: Some(CardinalityScope::Call),
+            min: Some(min),
+            max: Some(UpperBound::Many),
+        };
+        let all = [
+            "always",
+            "afterThrow",
+            "guarded",
+            "shortCircuit",
+            "chosen",
+            "early",
+            "looped",
+        ];
+        for (count, label, certifying) in [
+            (stated(0), "callback-lower-bound-zero", &all[..]),
+            (stated(1), "callback-lower-bound-one", &[][..]),
+            (
+                Cardinality::default(),
+                "callback-lower-bound-unstated",
+                &["always", "afterThrow"][..],
+            ),
+        ] {
+            let Some((_, outcome)) = callback_lower_bound_fixture_certify(label, &count) else {
+                return;
+            };
+            let finalized = outcome.unwrap_or_else(|error| {
+                panic!("every refusal here withholds by name and the row certifies: {error}")
+            });
+            let main = finalized.canonical_main();
+            for export in all {
+                let expected = certifying
+                    .contains(&export)
+                    .then(|| vec![(InvokeProtocol::Call, 0)]);
+                assert_eq!(
+                    closed_callbacks_in(main, export),
+                    expected,
+                    "{label}, {export}: {:?} {:?}",
+                    finalized.withheld_closures(),
+                    finalized.withheld_operations()
+                );
+            }
+            if count.min == Some(1) {
+                assert!(
+                    finalized.withheld_operations().iter().any(|record| {
+                        record.export == "always"
+                            && record
+                                .reason
+                                .contains("cannot prove a tighter operation cardinality")
+                    }),
+                    "{:?}",
+                    finalized.withheld_operations()
+                );
+            }
+        }
+    }
+
     /// `member-alias-proposals` planned from the generator's own summaries of
     /// its reviewed member aliases -- raised to functions, marked as aliases,
     /// with their spelling -- and certified against the real producer with the
