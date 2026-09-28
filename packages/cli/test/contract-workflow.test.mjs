@@ -2082,7 +2082,7 @@ test("the private graph catalog names every module that re-exports a dependency"
 
 test("published graph execution transports exact lock bytes and no caller receipt authority", () => {
   const state = (name, locator, sourceDependencies = []) => ({
-    node: { bunLockPath: "/project/bun.lock", lockLocator: locator },
+    node: { lockfilePath: "/project/bun.lock", lockLocator: locator },
     planning: {
       schemaVersion: 1,
       proposal: `/scratch/${name}.json`,
@@ -2133,7 +2133,7 @@ test("published graph execution transports exact lock bytes and no caller receip
 
 test("published graph case-set execution deduplicates canonical node transport", () => {
   const state = (key, name, locator) => ({
-    node: { key, bunLockPath: "/project/bun.lock", lockLocator: locator },
+    node: { key, lockfilePath: "/project/bun.lock", lockLocator: locator },
     planning: {
       schemaVersion: 1,
       proposal: `/scratch/${name}.json`,
@@ -2169,7 +2169,7 @@ test("published graph case-set execution deduplicates canonical node transport",
 
 test("both graph execution shapes carry the configured pinned probe paths", () => {
   const root = {
-    node: { key: "root", bunLockPath: "/project/bun.lock", lockLocator: "root" },
+    node: { key: "root", lockfilePath: "/project/bun.lock", lockLocator: "root" },
     planning: { schemaVersion: 1, proposal: "/scratch/root.json", resolution: {} }
   };
   const configured = {

@@ -53,7 +53,7 @@ test("retained roots preserve proposal, importer, source and lock inputs without
     assert.equal(item.root.sourceDependencies, input.sourceDependenciesByInput[index]);
     assert.equal(item.artifactCase, input.coordinates[index]);
     assert.deepEqual(item.nodes, [item.root]);
-    assert.equal(item.root.node.bunLockPath, input.lockfile);
+    assert.equal(item.root.node.lockfilePath, input.lockfile);
     assert.equal(item.root.node.lockLocator, input.lockLocator);
   }
   for (const mutate of [

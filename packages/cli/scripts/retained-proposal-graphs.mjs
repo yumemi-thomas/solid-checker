@@ -60,7 +60,7 @@ export function retainedProposalGraphCases({ plannings, sourceDependenciesByInpu
     const input = { planning, sourceDependencies, lockfile, lockLocator };
     const key = `retained-proposal:${createHash("sha256").update(JSON.stringify(input)).digest("hex")}`;
     const root = { index, planning, sourceDependencies,
-      node: { key, bunLockPath: lockfile, lockLocator } };
+      node: { key, lockfilePath: lockfile, lockLocator } };
     return { root, nodes: [root], artifactCase: coordinate };
   });
 }
