@@ -135,6 +135,34 @@ pub struct Policy2ReceiptBindings {
     /// receipt re-encodes to the exact bytes it was signed over.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub dependency_environment_root: String,
+    /// The compiled-in acceptances this certification cited as proof (ADR
+    /// 0151): each dependency whose accepted claim a composition relied on,
+    /// named by the receipt the compiled-in tier carries for it.
+    ///
+    /// Signed with the rest of the payload, so the citation is auditable from
+    /// the receipt alone, and read back by every admission: a receipt citing a
+    /// receipt the running build's tier no longer carries is admitted nowhere,
+    /// which is how a later tier change withdraws what was built on it.
+    ///
+    /// Empty -- every receipt issued before citations existed, and every one
+    /// that cited nothing -- is skipped when encoding, so those receipts keep
+    /// the exact bytes they were signed over.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cited_acceptances: Vec<CitedAcceptance>,
+}
+
+/// One compiled-in acceptance a certification cited (ADR 0151).
+///
+/// `receipt_digest` is the whole identity: the tier pins a receipt by the
+/// digest of its bytes, and the receipt signs the artifact, the environment and
+/// every claim. Name and version travel beside it so a refusal can say what was
+/// withdrawn; they are compared with the tier's bundle, never trusted alone.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CitedAcceptance {
+    pub package_name: String,
+    pub package_version: String,
+    pub receipt_digest: String,
 }
 
 /// One installed package, besides the certified one, whose bytes a
@@ -519,6 +547,24 @@ impl Policy2ReceiptBindings {
                     field: "dependencyEnvironmentRoot",
                 }
             })?;
+        }
+        // Canonical: sorted, no two citing one receipt, every digest a digest.
+        // A citation is only ever read as "this receipt must still be in the
+        // tier", so a repeated or unsorted list would give one statement two
+        // encodings.
+        if self
+            .cited_acceptances
+            .windows(2)
+            .any(|pair| pair[0].receipt_digest >= pair[1].receipt_digest)
+            || self.cited_acceptances.iter().any(|citation| {
+                validate_digest(&citation.receipt_digest).is_err()
+                    || citation.package_name.is_empty()
+                    || citation.package_version.is_empty()
+            })
+        {
+            return Err(Policy2ReceiptError::InvalidBinding {
+                field: "citedAcceptances",
+            });
         }
         if self.witness_roots.len() != RECEIPT_WITNESS_FAMILIES.len()
             || !RECEIPT_WITNESS_FAMILIES
@@ -1012,6 +1058,10 @@ struct ReceiptPayload {
     // when empty so every older receipt re-encodes to its signed bytes.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     dependency_environment_root: String,
+    // ADR 0151, on the same terms: absent means "cites nothing", skipped when
+    // empty so every older receipt re-encodes to its signed bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    cited_acceptances: Vec<CitedAcceptance>,
     issuer_kind: ReceiptIssuerKind,
     issuer_scope: String,
     key_id: String,
@@ -1486,6 +1536,7 @@ fn payload_bindings(payload: &ReceiptPayload) -> Policy2ReceiptBindings {
         verifier_source_digest: payload.verifier_source_digest.clone(),
         verifier_build_digest: payload.verifier_build_digest.clone(),
         dependency_environment_root: payload.dependency_environment_root.clone(),
+        cited_acceptances: payload.cited_acceptances.clone(),
     }
 }
 
@@ -1579,6 +1630,10 @@ fn binding_mismatch(
             "dependencyEnvironmentRoot",
             actual.dependency_environment_root == expected.dependency_environment_root,
         ),
+        (
+            "citedAcceptances",
+            actual.cited_acceptances == expected.cited_acceptances,
+        ),
     ] {
         if !matches {
             return field;
@@ -1626,6 +1681,7 @@ fn payload(
         verifier_source_digest: bindings.verifier_source_digest.clone(),
         verifier_build_digest: bindings.verifier_build_digest.clone(),
         dependency_environment_root: bindings.dependency_environment_root.clone(),
+        cited_acceptances: bindings.cited_acceptances.clone(),
         issuer_kind,
         issuer_scope: issuer_scope.into(),
         key_id: key_id.into(),
@@ -1637,6 +1693,9 @@ fn payload(
 /// tags the environment's, so the two optional frames cannot be read as each
 /// other.
 const ARTIFACT_ACCEPTANCE_ROOT_FRAME: &[u8] = b"artifact-acceptance-root:v1";
+
+/// Tags the cited-acceptances frame (ADR 0151).
+const CITED_ACCEPTANCES_FRAME: &[u8] = b"cited-acceptances:v1";
 
 /// Whether the signed payload carries `artifactAcceptanceRoot`.
 ///
@@ -1720,6 +1779,17 @@ fn canonical_payload(payload: &ReceiptPayload) -> Vec<u8> {
     if !payload.dependency_environment_root.is_empty() {
         frame(&mut bytes, b"dependency-environment-root:v1");
         frame(&mut bytes, payload.dependency_environment_root.as_bytes());
+    }
+    // ADR 0151. Signed only when stated, under its own tag, for the same
+    // reason as the environment frame above.
+    if !payload.cited_acceptances.is_empty() {
+        frame(&mut bytes, CITED_ACCEPTANCES_FRAME);
+        number(&mut bytes, payload.cited_acceptances.len() as u64);
+        for citation in &payload.cited_acceptances {
+            frame(&mut bytes, citation.package_name.as_bytes());
+            frame(&mut bytes, citation.package_version.as_bytes());
+            frame(&mut bytes, citation.receipt_digest.as_bytes());
+        }
     }
     if signs_artifact_acceptance_root(payload) {
         frame(&mut bytes, ARTIFACT_ACCEPTANCE_ROOT_FRAME);

@@ -369,7 +369,9 @@ function main() {
       refused.push([catalog, String(error.stderr ?? error.message ?? "").trim()]);
     }
   }
-  const { ordered, objects, conflicted, refinements } = collectBundles(results, options);
+  const collected = collectBundles(results, options);
+  const { objects, conflicted, refinements } = collected;
+  const { kept: ordered, withdrawn } = withdrawUncarriedCitations(collected.ordered, objects);
   let index;
   try {
     index = indexDocument(ordered, objects);
@@ -385,6 +387,13 @@ function main() {
   }
   for (const key of [...refinements.keys()].sort()) {
     console.log(`  kept the closing certification of ${key}`);
+  }
+  for (const { entry, citation } of withdrawn) {
+    console.error(
+      `  dropped ${entry.packageName}@${entry.packageVersion} ${entry.requestedEntrypoint}: `
+      + `it cites ${citation.packageName}@${citation.packageVersion} (receipt ${citation.receiptDigest}), `
+      + "which this tier does not carry (ADR 0151)"
+    );
   }
   const packages = new Set(ordered.map(entry => entry.packageName));
   console.log(`${ordered.length} bundle(s) over ${packages.size} package(s)`);
@@ -531,6 +540,38 @@ export function collectBundles(results, options = {}) {
       return published;
     });
   return { ordered, objects, conflicted, refinements };
+}
+
+/**
+ * ADR 0151: the bundles a tier may carry together. A bundle whose receipt
+ * cites a compiled-in acceptance rests on it, so it is kept only while the
+ * tier carries a bundle with exactly that receipt digest, package and
+ * version; dropping one can withdraw another that cited it, so this runs to a
+ * fixpoint. The loader refuses an index that breaks the rule whole, so a
+ * bundle is dropped here, by name, rather than shipping an index that does
+ * not load.
+ *
+ * Pure: `objects` maps each receipt member to its bytes.
+ */
+export function withdrawUncarriedCitations(ordered, objects) {
+  let kept = [...ordered];
+  const withdrawn = [];
+  for (;;) {
+    const carried = new Set(
+      kept.map(entry => JSON.stringify([entry.receiptDigest, entry.packageName, entry.packageVersion]))
+    );
+    const next = [];
+    for (const entry of kept) {
+      const citations = JSON.parse(objects.get(entry.receipt) ?? "null")?.payload?.citedAcceptances ?? [];
+      const missing = citations.find(citation =>
+        !carried.has(JSON.stringify([citation.receiptDigest, citation.packageName, citation.packageVersion]))
+      );
+      if (missing) withdrawn.push({ entry, citation: missing });
+      else next.push(entry);
+    }
+    if (next.length === kept.length) return { kept, withdrawn };
+    kept = next;
+  }
 }
 
 function embeddedSource(members) {

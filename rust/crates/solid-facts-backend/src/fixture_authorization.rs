@@ -280,6 +280,7 @@ pub fn authorize_fixture_contract(
         // names no environment to reproduce. Every authorizing fixture imports
         // its package from the one file the receipt binds.
         dependency_environment_root: String::new(),
+        cited_acceptances: Vec::new(),
     };
 
     let issuer =

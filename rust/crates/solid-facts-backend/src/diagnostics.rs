@@ -1468,6 +1468,7 @@ pub fn admission_refusal_details(
         AdmissionRefusal::InstalledBytesDiffer(_) => 1,
         AdmissionRefusal::NoEnvironmentStated => 2,
         AdmissionRefusal::AcceptanceRootNotReproduced { .. } => 3,
+        AdmissionRefusal::CitationWithdrawn(_) => 4,
     };
     let mut details = BTreeMap::new();
     for (tier, refusals) in tiers {
@@ -2628,6 +2629,256 @@ pub fn certified_catalog_self_admission(
     .into_iter()
     .filter(|(specifier, _)| package_name_of_specifier(specifier).as_deref() == Some(package_name))
     .collect())
+}
+
+/// One entry of a cited environment (its edge removed), the real paths it was
+/// found at, and the lookups that found it: `(importer's installed real path,
+/// bare name)`.
+pub(crate) type LocatedCitedEntry = (
+    crate::DependencyEnvironmentEntry,
+    Vec<PathBuf>,
+    Vec<(PathBuf, String)>,
+);
+
+/// One compiled-in acceptance a certification cites (ADR 0151), with where
+/// its dependency and every package of its environment are installed in the
+/// dependent's tree.
+pub(crate) struct LocatedCitation {
+    pub(crate) cited: crate::accepted_bundles::CompiledInCitation,
+    /// The dependency itself, as installed: name, manifest version, lockfile
+    /// integrity, no edge.
+    pub(crate) installed: crate::DependencyEnvironmentEntry,
+    /// The dependency's installed real path.
+    pub(crate) root: PathBuf,
+    /// Each environment entry of the cited receipt (its edge removed), the
+    /// real paths it was found at, and the lookups that found it:
+    /// `(importer's installed real path, bare name)`. An environment the tier
+    /// states without edges records no lookups, and is then carried without
+    /// edges.
+    pub(crate) located: Vec<LocatedCitedEntry>,
+}
+
+/// The compiled-in acceptance the package installed at `dependent_root` may
+/// cite for `query` (ADR 0151), replayed against that package's own tree, or
+/// why it may not.
+///
+/// The tree is the dependent's installed location, from which Node finds the
+/// dependency exactly as the dependent's own imports do; the admission steps
+/// are the ones `contract check` and self-admission replay
+/// ([`crate::accepted_bundles::admission_refusals`]), so a citation is
+/// admitted here exactly when a project importing the dependency from this
+/// location would admit the same acceptance.
+pub(crate) fn compiled_in_citation(
+    dependent_root: &Path,
+    query: &crate::accepted_bundles::CitationQuery<'_>,
+) -> Result<LocatedCitation, String> {
+    let project = fs::canonicalize(dependent_root).map_err(|error| {
+        format!(
+            "the dependent's installed root {} cannot be read: {error}",
+            dependent_root.display()
+        )
+    })?;
+    let patches = crate::installed_patches::InstalledPatches::read(&project);
+    let snapshots = InstalledSnapshots::default();
+    let installed = |specifier: &str| installed_artifact_identity(&project, specifier);
+    let bytes =
+        |specifier: &str| installed_artifact_bytes(&project, specifier, &patches, &snapshots);
+    let difference = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
+        installed_environment_difference(&project, specifier, environment, &patches)
+    };
+    let cited = crate::accepted_bundles::cite_compiled_in(query, &installed, &bytes, &difference)
+        .map_err(|refusal| refusal.to_string())?;
+    let unlocatable = || {
+        format!(
+            "{} is not installed where this tree can say",
+            query.specifier
+        )
+    };
+    let module = package_name_of_specifier(query.specifier).ok_or_else(unlocatable)?;
+    let directory = discover_package_directory(&project, &module)
+        .ok()
+        .flatten()
+        .ok_or_else(unlocatable)?;
+    let root = fs::canonicalize(&directory).map_err(|_| unlocatable())?;
+    let installed = installed_environment_identity(&project, &root).ok_or_else(unlocatable)?;
+    let located = locate_cited_environment(&project, &root, &cited.environment);
+    Ok(LocatedCitation {
+        cited,
+        installed,
+        root,
+        located,
+    })
+}
+
+/// One answer of [`compiled_in_citation_candidates`]: the acceptance a
+/// certification of the package would cite for one specifier, or why none.
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CitationCandidate {
+    pub specifier: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub package_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub package_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artifact_case: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accepted_contract_digest: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub receipt_digest: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refusal: Option<String>,
+}
+
+/// For each specifier the package installed at `dependent_root` imports, the
+/// compiled-in acceptance a certification under `conditions` would cite
+/// (ADR 0151), or why none.
+///
+/// The generation adapter's question, answered by the same function
+/// certification uses, so the edge it writes into a proposal is the edge
+/// certification can discharge. An answer is a hint and never authority:
+/// certification replays the whole citation from the tree itself.
+pub fn compiled_in_citation_candidates(
+    dependent_root: &Path,
+    conditions: &[String],
+    specifiers: &[String],
+) -> Vec<CitationCandidate> {
+    specifiers
+        .iter()
+        .map(|specifier| {
+            let query = crate::accepted_bundles::CitationQuery {
+                specifier,
+                export_conditions: conditions,
+                artifact_case: None,
+                accepted_contract_digest: None,
+            };
+            match compiled_in_citation(dependent_root, &query) {
+                Ok(located) => CitationCandidate {
+                    specifier: specifier.clone(),
+                    package_name: Some(located.cited.citation.package_name.clone()),
+                    package_version: Some(located.cited.citation.package_version.clone()),
+                    artifact_case: located
+                        .cited
+                        .contract
+                        .artifact_cases()
+                        .first()
+                        .map(|case| case.id.clone()),
+                    accepted_contract_digest: Some(
+                        located.cited.contract.semantic_digest().as_str().to_owned(),
+                    ),
+                    receipt_digest: Some(located.cited.citation.receipt_digest.clone()),
+                    refusal: None,
+                },
+                Err(refusal) => CitationCandidate {
+                    specifier: specifier.clone(),
+                    package_name: None,
+                    package_version: None,
+                    artifact_case: None,
+                    accepted_contract_digest: None,
+                    receipt_digest: None,
+                    refusal: Some(refusal),
+                },
+            }
+        })
+        .collect()
+}
+
+/// Where each entry of a cited environment is installed, found by replaying
+/// its recorded lookup from every location its importer was found at, the
+/// dependency itself standing for `certified`.
+///
+/// Admission has already replayed the same lookups and compared every
+/// identity, so this only recovers the locations, which the dependent's own
+/// environment needs to state edges of its own. An environment stated without
+/// edges records none; its entries are located from the dependency and from
+/// each other, by the strict rule's own search, and carried without lookups.
+fn locate_cited_environment(
+    project: &Path,
+    dependency_root: &Path,
+    environment: &[crate::DependencyEnvironmentEntry],
+) -> Vec<LocatedCitedEntry> {
+    use crate::contract_certification::EnvironmentImporter;
+    let identity_at = |at: &Path| installed_environment_identity(project, at);
+    let mut located: Vec<LocatedCitedEntry> = Vec::new();
+    let locations_of =
+        |located: &[LocatedCitedEntry], importer: &EnvironmentImporter| -> Vec<PathBuf> {
+            match importer {
+                EnvironmentImporter::Certified => vec![dependency_root.to_path_buf()],
+                EnvironmentImporter::Package(package) => located
+                    .iter()
+                    .filter(|(entry, _, _)| package.is(entry))
+                    .flat_map(|(_, roots, _)| roots.iter().cloned())
+                    .collect(),
+            }
+        };
+    if crate::contract_certification::dependency_environment_states_edges(environment) {
+        // Edges are rooted, so repeated passes reach every entry whose
+        // importer is reachable; the bound is the entry count.
+        for _ in 0..=environment.len() {
+            let mut moved = false;
+            for entry in environment {
+                let Some(edge) = entry.resolved_from.as_ref() else {
+                    continue;
+                };
+                for from in locations_of(&located, &edge.importer) {
+                    let Ok(Some(at)) = node_package_lookup(&from, &edge.specifier) else {
+                        continue;
+                    };
+                    if !identity_at(&at).is_some_and(|found| found.same_package(entry)) {
+                        continue;
+                    }
+                    let bare = entry.without_edge();
+                    let lookup = (from.clone(), edge.specifier.clone());
+                    match located
+                        .iter_mut()
+                        .find(|(known, _, _)| known.same_package(&bare))
+                    {
+                        Some((_, roots, lookups)) => {
+                            if !roots.contains(&at) {
+                                roots.push(at.clone());
+                                moved = true;
+                            }
+                            if !lookups.contains(&lookup) {
+                                lookups.push(lookup);
+                                moved = true;
+                            }
+                        }
+                        None => {
+                            located.push((bare, vec![at.clone()], vec![lookup]));
+                            moved = true;
+                        }
+                    }
+                }
+            }
+            if !moved {
+                break;
+            }
+        }
+    } else {
+        let mut frontier = vec![dependency_root.to_path_buf()];
+        let mut seen = std::collections::BTreeSet::new();
+        while let Some(from) = frontier.pop() {
+            if !seen.insert(from.clone()) {
+                continue;
+            }
+            for entry in environment {
+                let Ok(Some(at)) = node_package_lookup(&from, &entry.name) else {
+                    continue;
+                };
+                if !identity_at(&at).is_some_and(|found| found.same_package(entry)) {
+                    continue;
+                }
+                if !located
+                    .iter()
+                    .any(|(known, _, _)| known.same_package(entry))
+                {
+                    located.push((entry.without_edge(), vec![at.clone()], Vec::new()));
+                }
+                frontier.push(at);
+            }
+        }
+    }
+    located
 }
 
 /// Whether this project's installed tree, resolved from the installed copy of

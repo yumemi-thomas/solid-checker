@@ -4058,6 +4058,9 @@ pub struct VerifiedDependencyComposition {
     /// Why that environment was not acquired, when some reachable node's was
     /// not; the receipt then states none.
     environment_not_acquired: Option<String>,
+    /// The compiled-in acceptances this composition cited (ADR 0151); empty
+    /// for a composition of receipts the graph transaction issued itself.
+    cited_acceptances: Vec<super::CitedAcceptance>,
 }
 
 impl VerifiedDependencyComposition {
@@ -4398,7 +4401,299 @@ impl VerifiedDependencyComposition {
             dependency_environment,
             environment_packages,
             environment_not_acquired,
+            cited_acceptances: Vec::new(),
         })
+    }
+
+    /// Composes a plain-lane plan's dependency edges from compiled-in
+    /// acceptances it cites (ADR 0151), instead of from receipts a graph
+    /// transaction issued.
+    ///
+    /// Every dependency-composition demand of `parent` must be answered by
+    /// exactly one citation for the same package, artifact case, contract and
+    /// specifier, and each is discharged exactly as a graph receipt is, with
+    /// the cited contract standing where a node's certified candidate stands:
+    ///
+    /// - the cited receipt certifies the very document the edge names (its
+    ///   semantic digest) under the proof policy this plan is planned against;
+    /// - a `creates` census obligation and an inherited-closure obligation on
+    ///   the dependency are met only by a claim that document closes and the
+    ///   receipt lists among its closed claims, and the census obligation only
+    ///   by an empty `creates`, as in the graph;
+    /// - a factory-return obligation names an importing node of a graph, which
+    ///   a citation has none of, so it refuses rather than guess one.
+    ///
+    /// What differs from a graph receipt is where the authority comes from,
+    /// and nothing else: membership in this build's compiled-in tier, which
+    /// the receipt then names ([`Self::cited_acceptances`]) so admission can
+    /// withdraw it with the tier. So there is no issuer, trust-store or
+    /// verifier-build comparison to make against this transaction, and the
+    /// composition states no verifier build of its own.
+    pub(super) fn from_citations(
+        parent: &CertificationPlan,
+        citations: &[super::citations::CitedDependency],
+        type_facts: Option<&super::type_facts::VerifiedTypeFactsEvidence>,
+    ) -> Result<Self, DependencyReceiptCompositionError> {
+        let schedule = parent.dependency_composition_schedule()?;
+        let citation_rows = citations
+            .iter()
+            .map(|cited| cited.cited.citation.receipt_digest.as_str())
+            .collect::<BTreeSet<_>>();
+        let citation_root = composition_root(
+            "compiled-in-citations",
+            parent.demand_graph().root().as_str(),
+            &citation_rows.iter().collect::<Vec<_>>(),
+        );
+        if let Some(type_facts) = type_facts
+            && let Some((demand_id, _)) = type_facts.factory_return_claims().first()
+        {
+            return Err(DependencyReceiptCompositionError::CitationCannotDischarge {
+                demand_id: demand_id.clone(),
+                reason: "a factory-return obligation names a graph node's importer, which a \
+                         compiled-in citation does not have"
+                    .into(),
+            });
+        }
+        let mut receipt_rows = Vec::new();
+        let mut trust_rows = Vec::new();
+        let mut witnesses = Vec::with_capacity(schedule.requirements().len());
+        for requirement in schedule.requirements() {
+            let wanted = requirement.dependency();
+            let mut matching = citations.iter().filter(|cited| {
+                cited.edge.specifier == wanted.specifier
+                    && cited.edge.package_name == wanted.package
+                    && cited.edge.artifact_case == wanted.artifact_case
+                    && cited.edge.accepted_contract_digest == wanted.accepted_contract_digest
+            });
+            let cited = matching.next().ok_or_else(|| {
+                DependencyReceiptCompositionError::MissingGraphEdge {
+                    demand_id: requirement.demand_id().into(),
+                }
+            })?;
+            if matching.next().is_some() {
+                return Err(DependencyReceiptCompositionError::DuplicateReceipt);
+            }
+            let receipt = &cited.cited.receipt;
+            let contract = &cited.cited.contract;
+            for (field, actual, expected) in [
+                (
+                    "semantic digest",
+                    receipt.semantic_digest().as_str(),
+                    wanted.accepted_contract_digest.as_str(),
+                ),
+                (
+                    "binding semantic digest",
+                    receipt.bindings().semantic_digest.as_str(),
+                    wanted.accepted_contract_digest.as_str(),
+                ),
+                (
+                    "cited document digest",
+                    contract.semantic_digest().as_str(),
+                    wanted.accepted_contract_digest.as_str(),
+                ),
+                (
+                    "artifact acceptance root",
+                    receipt.bindings().artifact_acceptance_root.as_str(),
+                    cited.cited.acceptance_root.as_str(),
+                ),
+                (
+                    "policy digest",
+                    receipt.policy_digest().as_str(),
+                    parent.demand_graph().policy_digest().as_str(),
+                ),
+            ] {
+                if actual != expected {
+                    return Err(DependencyReceiptCompositionError::ReceiptMismatch {
+                        field,
+                        actual: actual.into(),
+                        expected: expected.into(),
+                    });
+                }
+            }
+            let census = requirement
+                .semantic_claim_id()
+                .and_then(|claim| type_facts?.creates_census(parent, claim));
+            let mut census_sites = Vec::new();
+            let census_claims = requirement
+                .semantic_claim_id()
+                .and_then(|claim| {
+                    type_facts.map(|facts| facts.dependency_creates_claims(parent, claim))
+                })
+                .unwrap_or_default();
+            for claim in census_claims.iter().filter(|claim| {
+                claim.package == wanted.package
+                    && claim.artifact_case == wanted.artifact_case
+                    && claim.accepted_contract_digest == wanted.accepted_contract_digest
+            }) {
+                let empty = contract
+                    .artifact_case(&claim.artifact_case)
+                    .and_then(|case| case.exports.get(&claim.export))
+                    .and_then(|export| {
+                        export.operation_claim(
+                            solid_reactive_ir::contract_semantics::ClaimDomain::Creates,
+                        )
+                    })
+                    .is_some_and(|creates| creates.is_closed() && creates.items().is_empty());
+                if !empty || !receipt.contains_closed_claim_id(&claim.semantic_claim_id) {
+                    return Err(DependencyReceiptCompositionError::MissingClosedClaim {
+                        demand_id: requirement.demand_id().into(),
+                        semantic_claim_id: claim.semantic_claim_id.clone(),
+                    });
+                }
+                census_sites.push(format!(
+                    "census-dependency-creates:{}:{}:{}",
+                    claim.export,
+                    claim.semantic_claim_id,
+                    receipt.receipt_digest()
+                ));
+            }
+            let inherited = requirement
+                .semantic_claim_id()
+                .and_then(|claim| {
+                    type_facts.map(|facts| facts.inherited_closure_claims(parent, claim))
+                })
+                .unwrap_or_default();
+            for claim in inherited.iter().filter(|claim| {
+                claim.package == wanted.package
+                    && claim.artifact_case == wanted.artifact_case
+                    && claim.accepted_contract_digest == wanted.accepted_contract_digest
+            }) {
+                let closed = solid_reactive_ir::contract_semantics::ClaimDomain::ALL
+                    .into_iter()
+                    .find(|domain| domain.wire_name() == claim.domain)
+                    .and_then(|domain| {
+                        let export = contract
+                            .artifact_case(&claim.artifact_case)?
+                            .exports
+                            .get(&claim.export)?;
+                        Some(export.operation_claim(domain).map_or_else(
+                            || export.callbacks().is_closed(),
+                            |claim| claim.is_closed(),
+                        ))
+                    })
+                    .unwrap_or(false);
+                if !closed || !receipt.contains_closed_claim_id(&claim.semantic_claim_id) {
+                    return Err(DependencyReceiptCompositionError::MissingClosedClaim {
+                        demand_id: requirement.demand_id().into(),
+                        semantic_claim_id: claim.semantic_claim_id.clone(),
+                    });
+                }
+                census_sites.push(format!(
+                    "inherited-closure-dependency:{}:{}:{}:{}",
+                    claim.export,
+                    claim.domain,
+                    claim.semantic_claim_id,
+                    receipt.receipt_digest()
+                ));
+            }
+            let fields = [
+                citation_root.as_str(),
+                parent.demand_graph().root().as_str(),
+                parent.selected_artifact_case_id(),
+                requirement.demand_id(),
+                requirement.parent_export().unwrap_or("<artifact>"),
+                requirement.semantic_claim_id().unwrap_or("<artifact>"),
+                wanted.specifier.as_str(),
+                cited.cited.acceptance_root.as_str(),
+                receipt.receipt_digest(),
+                receipt.main_digest(),
+                receipt.semantic_digest().as_str(),
+                receipt.policy_digest().as_str(),
+                receipt.bindings().dependency_environment_root.as_str(),
+                cited.installed.integrity.as_str(),
+            ];
+            let evidence_root = composition_root("compiled-in-citation-evidence", "", &fields);
+            let evidence_root = census.map_or(evidence_root.clone(), |census| {
+                composition_root(
+                    if census_claims.is_empty() {
+                        "independent-creates-census-composition"
+                    } else {
+                        "dependency-creates-census-composition"
+                    },
+                    &citation_root,
+                    &[evidence_root.as_str(), census],
+                )
+            });
+            let mut sites = vec![
+                format!("compiled-in-citation:{}", receipt.receipt_digest()),
+                format!("parent-case:{}", parent.selected_artifact_case_id()),
+                format!(
+                    "cited-artifact:{}@{}:{}",
+                    cited.cited.citation.package_name,
+                    cited.cited.citation.package_version,
+                    cited.cited.acceptance_root
+                ),
+                format!("dependency-receipt:{}", receipt.receipt_digest()),
+            ];
+            if let Some(census) = census {
+                let kind = if census_claims.is_empty() {
+                    "independent-creates-census"
+                } else {
+                    "dependency-creates-census"
+                };
+                sites.push(format!("{kind}:{census}"));
+            }
+            sites.extend(census_sites);
+            witnesses.push(
+                solid_reactive_ir::contract_semantics::certification::WitnessBinding::new(
+                    solid_reactive_ir::contract_semantics::certification::ProofWitnessVariant::AcceptedDependencyComposition,
+                    requirement.demand_id(),
+                    evidence_root,
+                    sites,
+                ),
+            );
+            receipt_rows.push(format!(
+                "compiled-in:{}:{}:{}:{}",
+                requirement.demand_id(),
+                cited.cited.acceptance_root,
+                receipt.receipt_digest(),
+                receipt.main_digest()
+            ));
+            trust_rows.push(format!(
+                "compiled-in:{}:{:?}:{}:{}",
+                receipt.receipt_digest(),
+                receipt.issuer_kind(),
+                receipt.issuer_scope(),
+                receipt.verifier_build_digest().as_str()
+            ));
+        }
+        receipt_rows.sort();
+        receipt_rows.dedup();
+        trust_rows.sort();
+        trust_rows.dedup();
+        let mut dependency_environment = BTreeSet::new();
+        let mut environment_packages = Vec::new();
+        let mut cited_acceptances = Vec::new();
+        for cited in citations {
+            dependency_environment.extend(cited.environment.iter().cloned());
+            environment_packages.extend(cited.located.iter().cloned());
+            cited_acceptances.push(cited.cited.citation.clone());
+        }
+        cited_acceptances.sort_by(|left, right| left.receipt_digest.cmp(&right.receipt_digest));
+        cited_acceptances.dedup();
+        Ok(Self {
+            demand_graph_root: parent.demand_graph().root().as_str().into(),
+            graph_root: citation_root.clone(),
+            witnesses,
+            receipts_root: composition_root("dependency-receipts", &citation_root, &receipt_rows),
+            trust_root: composition_root("dependency-trust", &citation_root, &trust_rows),
+            verifier_build_digest: None,
+            semantic_dependency_count: citations.len(),
+            census_requirements_root: type_facts
+                .and_then(super::type_facts::VerifiedTypeFactsEvidence::dependency_census_root),
+            factory_requirements_root: type_facts
+                .and_then(super::type_facts::VerifiedTypeFactsEvidence::factory_requirements_root),
+            dependency_environment,
+            environment_packages,
+            environment_not_acquired: None,
+            cited_acceptances,
+        })
+    }
+
+    /// The compiled-in acceptances this composition cited, sorted by receipt
+    /// digest (ADR 0151).
+    pub(super) fn cited_acceptances(&self) -> &[super::CitedAcceptance] {
+        &self.cited_acceptances
     }
 
     /// The environment this composition relies on, canonically ordered.
@@ -4767,6 +5062,10 @@ pub enum DependencyReceiptCompositionError {
         "the withheld closures of dependency node {dependency} do not re-derive a weakening of its accepted proposal: {reason}"
     )]
     WithheldWeakening { dependency: String, reason: String },
+    #[error(
+        "dependency demand {demand_id} cannot be discharged by a compiled-in citation: {reason}"
+    )]
+    CitationCannotDischarge { demand_id: String, reason: String },
 }
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]

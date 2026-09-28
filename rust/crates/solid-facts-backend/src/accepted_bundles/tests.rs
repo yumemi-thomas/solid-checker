@@ -119,6 +119,7 @@ fn bundle_in(
         dependency_environment_root: environment
             .map(policy2_dependency_environment_root)
             .unwrap_or_default(),
+        cited_acceptances: Vec::new(),
     };
     let receipt = issue_builtin_policy2_receipt(&canonical, &bindings, BUILT_IN_SCOPE)
         .expect("a built-in receipt is issuable over a canonical main");
@@ -996,6 +997,7 @@ fn admission_refusals_name_the_step_that_failed() {
         snapshot_root: &bundle.snapshot_root,
         environment: bundle.environment.as_deref(),
         identity: &bundle.identity,
+        citations: &bundle.bindings.cited_acceptances,
     };
     let installed = |version: &'static str| {
         move |_: &str| {
@@ -1404,6 +1406,7 @@ impl PatchTree {
                     snapshot_root: &bundle.snapshot_root,
                     environment: bundle.environment.as_deref(),
                     identity: &bundle.identity,
+                    citations: &bundle.bindings.cited_acceptances,
                 },
                 "1.0.0",
             )],
@@ -1794,4 +1797,348 @@ fn a_version_3_index_reads_bindings_only_from_the_receipt_its_digest_pins() {
             field: "receiptDigest"
         })
     ));
+}
+
+// ADR 0151: citations.
+
+/// `tier()`, plus one bundle that cites the first one's receipt.
+fn tier_with_citing() -> (Vec<BundleEntry>, BTreeMap<String, Vec<u8>>) {
+    let (mut entries, mut objects) = tier();
+    let cited = CitedAcceptance {
+        package_name: entries[0].package_name.clone(),
+        package_version: entries[0].package_version.clone(),
+        receipt_digest: entries[0].receipt_digest.clone(),
+    };
+    let (entry, document, receipt) = citing_bundle(vec![cited]);
+    objects.insert(entry.document.clone(), document);
+    objects.insert(entry.receipt.clone(), receipt);
+    entries.push(entry);
+    (entries, objects)
+}
+
+/// A dependent package certified by citing `citations`.
+fn citing_bundle(citations: Vec<CitedAcceptance>) -> (BundleEntry, Vec<u8>, Vec<u8>) {
+    let (mut entry, document, _) = bundle_in(
+        "dependent-package",
+        "1.0.0",
+        "sha512-dependent-integrity",
+        "dependent-package",
+        &["import"],
+        Some(&head()),
+    );
+    entry.bindings.cited_acceptances = citations;
+    let receipt = issue_builtin_policy2_receipt(&document, &entry.bindings, BUILT_IN_SCOPE)
+        .expect("a citing receipt is issuable");
+    entry.receipt_digest = crate::contract_interface::sha256_digest(&receipt);
+    entry.document = format!("objects/{}.main.json", &entry.document_digest[7..]);
+    entry.receipt = format!("objects/{}.receipt.json", &entry.receipt_digest[7..]);
+    (entry, document, receipt)
+}
+
+/// The query certification states for the fixture document's one artifact
+/// case, found by decoding it.
+fn fixture_case() -> (String, String) {
+    let canonical =
+        canonicalize_policy2_main(DOCUMENT).expect("the fixture document canonicalizes");
+    let contract = crate::contract_document::decode(&canonical)
+        .expect("decodes")
+        .normalize()
+        .expect("normalizes");
+    (
+        contract.artifact_cases()[0].id.clone(),
+        contract.semantic_digest().as_str().to_owned(),
+    )
+}
+
+fn installed_plain(specifier: &str) -> Option<(String, String, String)> {
+    (specifier == "plain-package").then(|| {
+        (
+            "plain-package".to_owned(),
+            "1.0.0".to_owned(),
+            "sha512-published-integrity".to_owned(),
+        )
+    })
+}
+
+fn reproduced(_: &str, _: &[DependencyEnvironmentEntry]) -> Option<String> {
+    None
+}
+
+fn cite_in_tier(
+    query: &CitationQuery<'_>,
+    installed: &InstalledArtifactIdentity,
+    bytes: &InstalledArtifactBytes,
+    difference: &InstalledEnvironmentDifference,
+) -> Result<CompiledInCitation, CitationRefusal> {
+    let (entries, objects) = tier();
+    let loaded = load_from(&indexed_index(&entries), &objects).expect("the tier loads");
+    cite_from(
+        &loaded,
+        |member: &str| {
+            objects
+                .get(member)
+                .map(Vec::as_slice)
+                .ok_or_else(|| ContractFailure::DocumentDecode {
+                    message: format!("no object {member}"),
+                })
+        },
+        query,
+        installed,
+        bytes,
+        difference,
+    )
+}
+
+/// The positive case: the tier carries the exact contract the edge names,
+/// under the dependent's conditions, and the dependent's tree reproduces the
+/// artifact, its bytes and its environment. The citation names the receipt,
+/// and the authenticated receipt is the tier's.
+#[test]
+fn a_citation_names_the_admitted_acceptance_of_the_exact_contract() {
+    let (case, digest) = fixture_case();
+    let conditions = ["import".to_owned()];
+    let query = CitationQuery {
+        specifier: "plain-package",
+        export_conditions: &conditions,
+        artifact_case: Some(&case),
+        accepted_contract_digest: Some(&digest),
+    };
+    let cited = cite_in_tier(&query, &installed_plain, &signed_bytes, &reproduced)
+        .expect("the acceptance is cited");
+    let (entries, _) = tier();
+    // Two acceptances of the one document are reproduced (floor and head
+    // environments, both one package): the tie breaks on the receipt digest.
+    let expected = entries[..2]
+        .iter()
+        .map(|entry| entry.receipt_digest.clone())
+        .min()
+        .expect("two plain-package bundles");
+    assert_eq!(cited.citation.receipt_digest, expected);
+    assert_eq!(cited.citation.package_name, "plain-package");
+    assert_eq!(cited.receipt.receipt_digest(), expected);
+    assert_eq!(cited.contract.semantic_digest().as_str(), digest);
+    // Asked without an edge, the adapter is answered with the same one.
+    let hint = CitationQuery {
+        specifier: "plain-package",
+        export_conditions: &conditions,
+        artifact_case: None,
+        accepted_contract_digest: None,
+    };
+    let hinted = cite_in_tier(&hint, &installed_plain, &signed_bytes, &reproduced)
+        .expect("the adapter's question is answered");
+    assert_eq!(hinted.citation, cited.citation);
+}
+
+/// A dependency whose installed environment is not the certified one is never
+/// cited, and the refusal says the environment differs.
+#[test]
+fn a_citation_is_refused_where_the_environment_differs() {
+    let (case, digest) = fixture_case();
+    let conditions = ["import".to_owned()];
+    let query = CitationQuery {
+        specifier: "plain-package",
+        export_conditions: &conditions,
+        artifact_case: Some(&case),
+        accepted_contract_digest: Some(&digest),
+    };
+    let differs = |_: &str, _: &[DependencyEnvironmentEntry]| {
+        Some("@solidjs/signals installed 2.0.0-rc.9, certified 2.0.0-rc.6".to_owned())
+    };
+    assert!(matches!(
+        cite_in_tier(&query, &installed_plain, &signed_bytes, &differs),
+        Err(CitationRefusal::NotAdmitted {
+            refusal: AdmissionRefusal::EnvironmentDiffers(_),
+            ..
+        })
+    ));
+    // Another installed version of the dependency is another artifact.
+    let other_version = |specifier: &str| {
+        installed_plain(specifier).map(|(name, _, integrity)| (name, "1.0.1".to_owned(), integrity))
+    };
+    assert!(matches!(
+        cite_in_tier(&query, &other_version, &signed_bytes, &reproduced),
+        Err(CitationRefusal::NotAdmitted {
+            refusal: AdmissionRefusal::AcceptanceRootNotReproduced { .. },
+            ..
+        })
+    ));
+}
+
+/// ADR 0131 holds for a citation exactly as for a consumer: a patched
+/// dependency keeps its lockfile integrity, and its files are not the archive
+/// the cited receipt signs.
+#[test]
+fn a_patched_dependency_is_never_cited() {
+    let (case, digest) = fixture_case();
+    let conditions = ["import".to_owned()];
+    let query = CitationQuery {
+        specifier: "plain-package",
+        export_conditions: &conditions,
+        artifact_case: Some(&case),
+        accepted_contract_digest: Some(&digest),
+    };
+    let patched = |_: &str| -> Result<String, String> {
+        Err("plain-package@1.0.0 is patched (pnpm-lock.yaml patchedDependencies)".to_owned())
+    };
+    let refusal = cite_in_tier(&query, &installed_plain, &patched, &reproduced)
+        .err()
+        .expect("a patched dependency is refused");
+    assert!(
+        matches!(
+            &refusal,
+            CitationRefusal::NotAdmitted {
+                refusal: AdmissionRefusal::InstalledBytesDiffer(reason),
+                ..
+            } if reason.contains("patched")
+        ),
+        "{refusal}"
+    );
+}
+
+/// Only the accepted claim is cited: not another document about the same
+/// artifact, not another artifact case, not a package the tier does not carry,
+/// and not the same package certified for another host.
+#[test]
+fn an_unaccepted_claim_is_never_cited() {
+    let (case, digest) = fixture_case();
+    let conditions = ["import".to_owned()];
+    let other_digest = stand_in(99);
+    let unaccepted = CitationQuery {
+        specifier: "plain-package",
+        export_conditions: &conditions,
+        artifact_case: Some(&case),
+        accepted_contract_digest: Some(&other_digest),
+    };
+    assert!(matches!(
+        cite_in_tier(&unaccepted, &installed_plain, &signed_bytes, &reproduced),
+        Err(CitationRefusal::ClaimNotAccepted { .. })
+    ));
+    let other_case = CitationQuery {
+        specifier: "plain-package",
+        export_conditions: &conditions,
+        artifact_case: Some("artifact-case:another"),
+        accepted_contract_digest: Some(&digest),
+    };
+    assert!(matches!(
+        cite_in_tier(&other_case, &installed_plain, &signed_bytes, &reproduced),
+        Err(CitationRefusal::ClaimNotAccepted { .. })
+    ));
+    let absent = CitationQuery {
+        specifier: "absent-package",
+        export_conditions: &conditions,
+        artifact_case: Some(&case),
+        accepted_contract_digest: Some(&digest),
+    };
+    assert!(matches!(
+        cite_in_tier(&absent, &installed_plain, &signed_bytes, &reproduced),
+        Err(CitationRefusal::NotInTier { .. })
+    ));
+    // Every tier bundle here is host free; a `node` certification resolved
+    // another closure and cites none of them (ADR 0140).
+    let node = ["import".to_owned(), "node".to_owned()];
+    let other_host = CitationQuery {
+        specifier: "plain-package",
+        export_conditions: &node,
+        artifact_case: Some(&case),
+        accepted_contract_digest: Some(&digest),
+    };
+    assert!(matches!(
+        cite_in_tier(&other_host, &installed_plain, &signed_bytes, &reproduced),
+        Err(CitationRefusal::NotInTier { .. })
+    ));
+}
+
+/// A tier that carries a bundle built on a citation must carry what it
+/// cites; one that dropped the cited receipt refuses whole.
+#[test]
+fn an_index_carrying_a_bundle_whose_citation_it_dropped_refuses() {
+    let (entries, objects) = tier_with_citing();
+    let loaded = load_from(&indexed_index(&entries), &objects)
+        .expect("a tier that carries what it cites loads");
+    assert_eq!(
+        loaded
+            .iter()
+            .find(|bundle| bundle.package_name == "dependent-package")
+            .map(|bundle| bundle.bindings.cited_acceptances.len()),
+        Some(1)
+    );
+    // Drop the cited bundle and keep the one built on it.
+    let dropped = entries.into_iter().skip(1).collect::<Vec<_>>();
+    assert!(matches!(
+        load_from(&indexed_index(&dropped), &objects),
+        Err(ContractFailure::DocumentDecode { message }) if message.contains("cites")
+    ));
+}
+
+/// Admission withdraws an acceptance whose citation this build's tier does
+/// not carry, in every tier that reads it; the refusal names the citation.
+#[test]
+fn an_acceptance_citing_a_receipt_the_tier_no_longer_carries_is_withdrawn() {
+    let withdrawn = CitedAcceptance {
+        package_name: "gone-package".into(),
+        package_version: "1.0.0".into(),
+        receipt_digest: stand_in(77),
+    };
+    let (entry, document, receipt) = citing_bundle(vec![withdrawn.clone()]);
+    let bundle = load_bundle(&entry, &document, &receipt).expect("the bundle authenticates");
+    let installed = |specifier: &str| {
+        (specifier == "dependent-package").then(|| {
+            (
+                "dependent-package".to_owned(),
+                "1.0.0".to_owned(),
+                "sha512-dependent-integrity".to_owned(),
+            )
+        })
+    };
+    let refusals = admission_refusals(
+        [(
+            ArtifactAcceptance {
+                specifier: &bundle.specifier,
+                requested_entrypoint: &bundle.requested_entrypoint,
+                export_conditions: &bundle.export_conditions,
+                runtime_target: &bundle.runtime_target,
+                declaration_target: &bundle.declaration_target,
+                acceptance_root: &bundle.acceptance_root,
+                snapshot_root: &bundle.snapshot_root,
+                environment: bundle.environment.as_deref(),
+                identity: &bundle.identity,
+                citations: &bundle.bindings.cited_acceptances,
+            },
+            "1.0.0",
+        )],
+        &installed,
+        &signed_bytes,
+        &reproduced,
+    );
+    assert!(
+        matches!(
+            &refusals[0].1,
+            Some(AdmissionRefusal::CitationWithdrawn(citation)) if citation.contains("gone-package")
+        ),
+        "{refusals:?}"
+    );
+    let admitted = admit_by_artifact(
+        [ArtifactAcceptance {
+            specifier: &bundle.specifier,
+            requested_entrypoint: &bundle.requested_entrypoint,
+            export_conditions: &bundle.export_conditions,
+            runtime_target: &bundle.runtime_target,
+            declaration_target: &bundle.declaration_target,
+            acceptance_root: &bundle.acceptance_root,
+            snapshot_root: &bundle.snapshot_root,
+            environment: bundle.environment.as_deref(),
+            identity: &bundle.identity,
+            citations: &bundle.bindings.cited_acceptances,
+        }],
+        &BTreeSet::from(["import".to_owned()]),
+        &installed,
+        &signed_bytes,
+        &|_: &str| Some("dist/index.js".to_owned()),
+        &any_environment,
+    );
+    assert!(admitted.is_empty(), "a withdrawn citation admits nothing");
+    // The rule itself: citing nothing is never withdrawn, and citing a
+    // receipt this build's tier does not carry always is.
+    assert_eq!(withdrawn_compiled_in_citation(&[]), None);
+    assert!(withdrawn_compiled_in_citation(&[withdrawn]).is_some());
 }

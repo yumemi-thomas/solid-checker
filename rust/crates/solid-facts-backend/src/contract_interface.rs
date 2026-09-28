@@ -635,6 +635,17 @@ fn read_catalog_with_trust(
                     bindings,
                     entry.dependency_environment.as_deref(),
                 )?;
+                // ADR 0151: an entry built on a compiled-in claim this build
+                // no longer carries is withdrawn with it. It authenticates, so
+                // it is not an error; it is simply not an acceptance here, by
+                // importer or by artifact.
+                if crate::accepted_bundles::withdrawn_compiled_in_citation(
+                    &bindings.cited_acceptances,
+                )
+                .is_some()
+                {
+                    continue;
+                }
                 accepted.push(AcceptedContractInput {
                     importer: entry.import.importer.clone(),
                     specifier: entry.import.specifier.clone(),
@@ -1027,6 +1038,7 @@ pub fn admitted_project_artifacts(
                 runtime_target,
                 declaration_target,
                 environment,
+                citations: bindings.cited_acceptances.clone(),
             });
         }
     }
@@ -1108,6 +1120,7 @@ pub(crate) fn project_admission_refusals_where(
                     runtime_target,
                     declaration_target,
                     environment: environment.clone().unwrap_or_default(),
+                    citations: bindings.cited_acceptances.clone(),
                 },
                 environment.is_some(),
                 entry.import.package_version.clone(),
@@ -1140,6 +1153,8 @@ struct ProjectCandidate {
     snapshot_root: String,
     environment: Vec<DependencyEnvironmentEntry>,
     identity: String,
+    /// The compiled-in acceptances its receipt cites (ADR 0151).
+    citations: Vec<crate::contract_certification::CitedAcceptance>,
 }
 
 impl ProjectCandidate {
@@ -1154,6 +1169,7 @@ impl ProjectCandidate {
             snapshot_root: &self.snapshot_root,
             environment: Some(&self.environment),
             identity: &self.identity,
+            citations: &self.citations,
         }
     }
 }

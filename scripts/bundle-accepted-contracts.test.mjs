@@ -17,7 +17,8 @@ import {
   indexDocument,
   parseArguments,
   relate,
-  retainedOutputDirectories
+  retainedOutputDirectories,
+  withdrawUncarriedCitations
 } from "./bundle-accepted-contracts.mjs";
 
 const document = (summary) =>
@@ -331,5 +332,43 @@ describe("writing the index", () => {
     assert.throws(() => indexDocument([unsigned], objects), /does not sign the environment root/);
     const unbound = { ...bundle("a", "2.0.0-rc.6", "1"), bindings: {} };
     assert.throws(() => indexDocument([unbound], objectsOf(one)), /binds no dependency environment/);
+  });
+});
+
+describe("ADR 0151: a tier carries what its bundles cite", () => {
+  const bundle = (name, receiptDigest, citedAcceptances = []) => ({
+    entry: {
+      packageName: name,
+      packageVersion: "1.0.0",
+      requestedEntrypoint: ".",
+      receipt: `objects/${name}.receipt.json`,
+      receiptDigest
+    },
+    receipt: JSON.stringify({ payload: citedAcceptances.length ? { citedAcceptances } : {} })
+  });
+  const cite = (name, receiptDigest) => ({ packageName: name, packageVersion: "1.0.0", receiptDigest });
+
+  test("a bundle whose citation the tier carries is kept, and one whose citation it dropped is withdrawn, transitively", () => {
+    const utils = bundle("utils", "sha256:u");
+    const media = bundle("media", "sha256:m", [cite("utils", "sha256:u")]);
+    const orphan = bundle("orphan", "sha256:o", [cite("gone", "sha256:g")]);
+    // Cites the orphan, so it goes when the orphan goes.
+    const chained = bundle("chained", "sha256:c", [cite("orphan", "sha256:o")]);
+    const all = [utils, media, orphan, chained];
+    const objects = new Map(all.map(({ entry, receipt }) => [entry.receipt, receipt]));
+    const { kept, withdrawn } = withdrawUncarriedCitations(all.map(({ entry }) => entry), objects);
+    assert.deepEqual(kept.map(entry => entry.packageName), ["utils", "media"]);
+    assert.deepEqual(
+      withdrawn.map(({ entry, citation }) => [entry.packageName, citation.packageName]),
+      [["orphan", "gone"], ["chained", "orphan"]]
+    );
+  });
+
+  test("a citation names the exact receipt: another receipt of the same package does not carry it", () => {
+    const utils = bundle("utils", "sha256:new");
+    const media = bundle("media", "sha256:m", [cite("utils", "sha256:old")]);
+    const objects = new Map([utils, media].map(({ entry, receipt }) => [entry.receipt, receipt]));
+    const { kept } = withdrawUncarriedCitations([utils.entry, media.entry], objects);
+    assert.deepEqual(kept.map(entry => entry.packageName), ["utils"]);
   });
 });

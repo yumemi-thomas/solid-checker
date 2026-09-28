@@ -472,6 +472,7 @@ mod policy2_receipt_tests {
             verifier_source_digest: root(18),
             verifier_build_digest: root(19),
             dependency_environment_root: String::new(),
+            cited_acceptances: Vec::new(),
         }
     }
 

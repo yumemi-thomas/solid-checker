@@ -58,7 +58,7 @@ use solid_reactive_ir::contract_semantics::AcceptedContractIndex;
 
 use crate::{
     contract_certification::{
-        BuiltInReceiptEntry, DependencyEnvironmentEntry, EnvironmentImporter,
+        BuiltInReceiptEntry, CitedAcceptance, DependencyEnvironmentEntry, EnvironmentImporter,
         Policy2ReceiptBindings, dependency_environment_states_edges,
         policy2_artifact_acceptance_root_for_identity, policy2_dependency_environment_root,
         policy2_receipt_payload_bindings, validate_dependency_environment,
@@ -205,6 +205,7 @@ struct BundleEntry {
 }
 
 struct LoadedBundle {
+    package_name: String,
     specifier: String,
     /// The certified version, so a refusal report can name it.
     package_version: String,
@@ -226,6 +227,13 @@ struct LoadedBundle {
     /// `None` for an inert bundle (see [`INERT_BUNDLE_INDEX_VERSION`]).
     environment: Option<Vec<DependencyEnvironmentEntry>>,
     contract: solid_reactive_ir::contract_semantics::AcceptedContract,
+    /// The index members holding this bundle's document and receipt, and the
+    /// receipt's pinned digest and bindings: what a citation (ADR 0151)
+    /// re-authenticates and names.
+    document_member: String,
+    receipt_member: String,
+    receipt_digest: String,
+    bindings: Policy2ReceiptBindings,
 }
 
 fn bundles() -> Result<&'static [LoadedBundle], ContractFailure> {
@@ -262,7 +270,7 @@ fn load_index<'a>(
     } else {
         decode_index::<InlineBundleIndexDocument>(index_bytes)?.bundles
     };
-    entries
+    let loaded = entries
         .iter()
         .map(|entry| {
             let document = object(&entry.document)?;
@@ -278,7 +286,68 @@ fn load_index<'a>(
             }
             Ok(bundle)
         })
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    // ADR 0151: a bundle that cites a compiled-in acceptance rests on it, so
+    // the index that carries the bundle must carry what it cites. A tier that
+    // dropped or replaced a cited receipt and kept the bundle built on it has
+    // misstated what was reviewed; it refuses whole, as every other
+    // inconsistency here does. The bundler drops such a bundle before writing.
+    if let Some(withdrawn) = withdrawn_citation(&loaded, &loaded) {
+        return Err(ContractFailure::DocumentDecode {
+            message: format!(
+                "the compiled-in accepted-contract index carries a bundle that cites {withdrawn}, \
+                 which the index does not carry"
+            ),
+        });
+    }
+    Ok(loaded)
+}
+
+/// The first citation of any bundle in `citing` that no bundle of `tier`
+/// answers: the same receipt digest, package name and version. `None` when
+/// every citation is carried.
+fn withdrawn_citation(citing: &[LoadedBundle], tier: &[LoadedBundle]) -> Option<String> {
+    citing
+        .iter()
+        .flat_map(|bundle| &bundle.bindings.cited_acceptances)
+        .find(|citation| citation_withdrawn(citation, tier))
+        .map(describe_citation)
+}
+
+fn citation_withdrawn(citation: &CitedAcceptance, tier: &[LoadedBundle]) -> bool {
+    !tier.iter().any(|bundle| {
+        bundle.receipt_digest == citation.receipt_digest
+            && bundle.package_name == citation.package_name
+            && bundle.package_version == citation.package_version
+    })
+}
+
+fn describe_citation(citation: &CitedAcceptance) -> String {
+    format!(
+        "{}@{} (receipt {})",
+        citation.package_name, citation.package_version, citation.receipt_digest
+    )
+}
+
+/// The first acceptance `citations` names that this build's compiled-in tier
+/// does not carry, described; `None` when the tier carries every one (ADR
+/// 0151). An empty list is always carried.
+///
+/// This is the whole of the withdrawal rule, and every tier's admission asks
+/// it: a contract built on a cited claim is admitted only while the running
+/// build still carries that claim. A tier that fails to load carries nothing,
+/// so everything citing refuses.
+pub(crate) fn withdrawn_compiled_in_citation(citations: &[CitedAcceptance]) -> Option<String> {
+    if citations.is_empty() {
+        return None;
+    }
+    let Ok(tier) = bundles() else {
+        return citations.first().map(describe_citation);
+    };
+    citations
+        .iter()
+        .find(|citation| citation_withdrawn(citation, tier))
+        .map(describe_citation)
 }
 
 fn decode_index<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, ContractFailure> {
@@ -470,6 +539,7 @@ fn load_bundle(
     let environment =
         verified_dependency_environment(&entry.bindings, entry.dependency_environment.as_deref())?;
     Ok(LoadedBundle {
+        package_name: entry.package_name.clone(),
         specifier: entry.specifier.clone(),
         package_version: entry.package_version.clone(),
         requested_entrypoint: entry.requested_entrypoint.clone(),
@@ -481,6 +551,10 @@ fn load_bundle(
         snapshot_root: entry.bindings.snapshot_root.clone(),
         environment,
         contract,
+        document_member: entry.document.clone(),
+        receipt_member: entry.receipt.clone(),
+        receipt_digest: entry.receipt_digest.clone(),
+        bindings: entry.bindings.clone(),
     })
 }
 
@@ -521,6 +595,250 @@ pub fn compiled_in_accepted_contracts() -> Result<AcceptedContractIndex, Contrac
             .filter(|bundle| bundle.environment.is_some())
             .map(|bundle| (bundle.identity.clone(), bundle.contract.clone())),
     ))
+}
+
+/// What a certification asks the compiled-in tier when a dependency edge of
+/// its closure is to be discharged by citation (ADR 0151): the exact artifact
+/// the dependent resolved, and the exact contract its proposal was generated
+/// against.
+pub(crate) struct CitationQuery<'a> {
+    /// The specifier the dependent imports, which is what the tier is keyed by.
+    pub(crate) specifier: &'a str,
+    /// The dependent's resolution conditions. The dependency is resolved under
+    /// the same set, so a bundle certified under any other set resolved some
+    /// other closure and is never cited, however close the two look.
+    pub(crate) export_conditions: &'a [String],
+    /// The artifact case and contract the edge names. Certification always
+    /// states both; an adapter asking which acceptance it could cite states
+    /// neither, and is answered with the one certification would then find.
+    pub(crate) artifact_case: Option<&'a str>,
+    pub(crate) accepted_contract_digest: Option<&'a str>,
+}
+
+/// One compiled-in acceptance a certification may cite: authenticated,
+/// admitted in the dependent's own installed tree by steps 1-3 of the one
+/// admission rule, and certifying exactly the contract the dependent's closure
+/// names.
+pub(crate) struct CompiledInCitation {
+    pub(crate) citation: CitedAcceptance,
+    pub(crate) receipt: crate::contract_certification::AuthenticatedPolicy2Receipt,
+    pub(crate) contract: solid_reactive_ir::contract_semantics::NormalizedContract,
+    pub(crate) acceptance_root: String,
+    /// The environment the cited receipt signs, exactly as the tier states it.
+    pub(crate) environment: Vec<DependencyEnvironmentEntry>,
+}
+
+/// Why a dependency edge could not be discharged by citation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum CitationRefusal {
+    /// No compiled-in acceptance for this specifier under these conditions.
+    NotInTier {
+        specifier: String,
+        conditions: Vec<String>,
+    },
+    /// The tier accepts this artifact, but not the contract the dependent's
+    /// closure names (another artifact case, or another certified document).
+    ClaimNotAccepted { specifier: String },
+    /// Every candidate failed an admission step in the dependent's tree; the
+    /// first refusal.
+    NotAdmitted {
+        specifier: String,
+        refusal: AdmissionRefusal,
+    },
+    /// The tier itself could not be read, or a candidate did not
+    /// re-authenticate.
+    Tier(String),
+}
+
+impl std::fmt::Display for CitationRefusal {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotInTier {
+                specifier,
+                conditions,
+            } => write!(
+                formatter,
+                "the compiled-in tier accepts no contract for {specifier} under [{}]",
+                conditions.join(",")
+            ),
+            Self::ClaimNotAccepted { specifier } => write!(
+                formatter,
+                "the compiled-in tier accepts {specifier}, but not the contract this closure names"
+            ),
+            Self::NotAdmitted { specifier, refusal } => write!(
+                formatter,
+                "the compiled-in acceptance for {specifier} is not admitted in this tree: {refusal}"
+            ),
+            Self::Tier(reason) => write!(formatter, "the compiled-in tier refused: {reason}"),
+        }
+    }
+}
+
+/// The compiled-in acceptance a certification cites for one dependency edge
+/// (ADR 0151), or why there is none.
+///
+/// The closures answer for the **dependent's** installed tree, exactly as
+/// `contract check` answers for a project: `installed_integrity(specifier)` is
+/// the dependency's identity as Node finds it from the dependent,
+/// `installed_bytes` its files, and `installed_difference` the environment
+/// replayed from its own location. Nothing here trusts the adapter that asked.
+pub(crate) fn cite_compiled_in(
+    query: &CitationQuery<'_>,
+    installed_integrity: &InstalledArtifactIdentity,
+    installed_bytes: &InstalledArtifactBytes,
+    installed_difference: &InstalledEnvironmentDifference,
+) -> Result<CompiledInCitation, CitationRefusal> {
+    let loaded = bundles().map_err(|error| CitationRefusal::Tier(error.to_string()))?;
+    cite_from(
+        loaded,
+        object,
+        query,
+        installed_integrity,
+        installed_bytes,
+        installed_difference,
+    )
+}
+
+/// A condition list as the set an acceptance root is computed over: `import`
+/// is always part of a resolution, whether or not a list spells it.
+fn condition_set(conditions: &[String]) -> BTreeSet<&str> {
+    conditions
+        .iter()
+        .map(String::as_str)
+        .chain(std::iter::once("import"))
+        .collect()
+}
+
+fn cite_from<'a>(
+    loaded: &[LoadedBundle],
+    object: impl Fn(&str) -> Result<&'a [u8], ContractFailure>,
+    query: &CitationQuery<'_>,
+    installed_integrity: &InstalledArtifactIdentity,
+    installed_bytes: &InstalledArtifactBytes,
+    installed_difference: &InstalledEnvironmentDifference,
+) -> Result<CompiledInCitation, CitationRefusal> {
+    let tier = |error: ContractFailure| CitationRefusal::Tier(error.to_string());
+    let conditions = condition_set(query.export_conditions);
+    let artifact = loaded
+        .iter()
+        .filter(|bundle| {
+            bundle.environment.is_some()
+                && bundle.specifier == query.specifier
+                && condition_set(&bundle.export_conditions) == conditions
+        })
+        .collect::<Vec<_>>();
+    if artifact.is_empty() {
+        return Err(CitationRefusal::NotInTier {
+            specifier: query.specifier.to_owned(),
+            conditions: conditions.iter().map(|&value| value.to_owned()).collect(),
+        });
+    }
+    // The contract, not only the artifact: the dependent's proposal was
+    // generated against one certified document, and the edge names it by
+    // semantic digest and artifact case. Another document about the same
+    // bytes -- certified in another environment, by another build -- is
+    // another claim, and citing it would compose what the dependent never read.
+    let mut claimed = Vec::new();
+    for bundle in artifact {
+        if query
+            .accepted_contract_digest
+            .is_some_and(|digest| bundle.bindings.semantic_digest != digest)
+        {
+            continue;
+        }
+        let document = object(&bundle.document_member).map_err(tier)?;
+        let contract = crate::contract_document::decode(document)
+            .map_err(tier)?
+            .normalize()
+            .map_err(|error| CitationRefusal::Tier(error.to_string()))?;
+        if contract.artifact_cases().first().is_some_and(|case| {
+            query
+                .artifact_case
+                .is_none_or(|artifact_case| case.id == artifact_case)
+        }) {
+            claimed.push((bundle, document, contract));
+        }
+    }
+    if claimed.is_empty() {
+        return Err(CitationRefusal::ClaimNotAccepted {
+            specifier: query.specifier.to_owned(),
+        });
+    }
+    let refusals = admission_refusals(
+        claimed.iter().map(|(bundle, _, _)| {
+            (
+                ArtifactAcceptance {
+                    specifier: &bundle.specifier,
+                    requested_entrypoint: &bundle.requested_entrypoint,
+                    export_conditions: &bundle.export_conditions,
+                    runtime_target: &bundle.runtime_target,
+                    declaration_target: &bundle.declaration_target,
+                    acceptance_root: &bundle.acceptance_root,
+                    snapshot_root: &bundle.snapshot_root,
+                    environment: bundle.environment.as_deref(),
+                    identity: &bundle.identity,
+                    citations: &bundle.bindings.cited_acceptances,
+                },
+                bundle.package_version.as_str(),
+            )
+        }),
+        installed_integrity,
+        installed_bytes,
+        installed_difference,
+    );
+    let mut first_refusal = None;
+    let mut admitted = Vec::new();
+    for (candidate, (_, refusal)) in claimed.into_iter().zip(refusals) {
+        match refusal {
+            None => admitted.push(candidate),
+            Some(refusal) => {
+                first_refusal.get_or_insert(refusal);
+            }
+        }
+    }
+    if admitted.is_empty() {
+        return Err(CitationRefusal::NotAdmitted {
+            specifier: query.specifier.to_owned(),
+            refusal: first_refusal.expect("every candidate refused names a refusal"),
+        });
+    }
+    // Two acceptances of the one document, both reproduced here, are both
+    // true in this tree; the one resting on fewer installed packages is cited,
+    // so the dependent inherits the fewest premises. The receipt digest breaks
+    // a tie, so the choice never depends on index order.
+    admitted.sort_by(|(left, _, _), (right, _, _)| {
+        (
+            left.environment.as_ref().map_or(0, Vec::len),
+            &left.receipt_digest,
+        )
+            .cmp(&(
+                right.environment.as_ref().map_or(0, Vec::len),
+                &right.receipt_digest,
+            ))
+    });
+    let (bundle, document, contract) = admitted.swap_remove(0);
+    let receipt_bytes = object(&bundle.receipt_member).map_err(tier)?;
+    let receipt = crate::contract_certification::authenticate_policy2_receipt(
+        document,
+        receipt_bytes,
+        &bundle.bindings,
+        crate::contract_certification::Policy2ReceiptProvenance::BuiltIn(&BuiltInReceiptEntry {
+            entry_digest: bundle.receipt_digest.clone(),
+            verifier_build_digest: bundle.bindings.verifier_build_digest.clone(),
+        }),
+    )
+    .map_err(|error| CitationRefusal::Tier(error.to_string()))?;
+    Ok(CompiledInCitation {
+        citation: CitedAcceptance {
+            package_name: bundle.package_name.clone(),
+            package_version: bundle.package_version.clone(),
+            receipt_digest: bundle.receipt_digest.clone(),
+        },
+        receipt,
+        contract,
+        acceptance_root: bundle.acceptance_root.clone(),
+        environment: bundle.environment.clone().unwrap_or_default(),
+    })
 }
 
 /// Whether this project's installed tree reproduces a bundle's dependency
@@ -940,6 +1258,7 @@ fn admitted_from(
             snapshot_root: &bundle.snapshot_root,
             environment: bundle.environment.as_deref(),
             identity: &bundle.identity,
+            citations: &bundle.bindings.cited_acceptances,
         }),
         conditions,
         installed_integrity,
@@ -972,6 +1291,10 @@ pub enum AdmissionRefusal {
     /// Step 3: the installed tree differs from the certified environment; the
     /// text names the first differing package.
     EnvironmentDiffers(String),
+    /// Step 1b (ADR 0151): the receipt cites a compiled-in acceptance this
+    /// build's tier no longer carries, so the claim it was built on has been
+    /// withdrawn; the text names the citation.
+    CitationWithdrawn(String),
 }
 
 impl std::fmt::Display for AdmissionRefusal {
@@ -1009,6 +1332,11 @@ impl std::fmt::Display for AdmissionRefusal {
                     "its dependency environment differs: {difference}"
                 )
             }
+            Self::CitationWithdrawn(citation) => write!(
+                formatter,
+                "it cites the compiled-in acceptance {citation}, which this build no longer \
+                 carries"
+            ),
         }
     }
 }
@@ -1038,6 +1366,9 @@ pub(crate) fn admission_refusals<'a>(
                 let Some(environment) = acceptance.environment else {
                     return Some(AdmissionRefusal::NoEnvironmentStated);
                 };
+                if let Some(withdrawn) = withdrawn_compiled_in_citation(acceptance.citations) {
+                    return Some(AdmissionRefusal::CitationWithdrawn(withdrawn));
+                }
                 let Some((name, version, integrity)) = installed_integrity(acceptance.specifier)
                 else {
                     return Some(AdmissionRefusal::AcceptanceRootNotReproduced {
@@ -1088,6 +1419,7 @@ pub fn bundle_admission_refusals(
                     snapshot_root: &bundle.snapshot_root,
                     environment: bundle.environment.as_deref(),
                     identity: &bundle.identity,
+                    citations: &bundle.bindings.cited_acceptances,
                 },
                 bundle.package_version.as_str(),
             )
@@ -1142,6 +1474,9 @@ pub(crate) struct ArtifactAcceptance<'a> {
     /// The key the acceptance is indexed under
     /// ([`environment_acceptance_identity`]).
     pub(crate) identity: &'a str,
+    /// The compiled-in acceptances its receipt cites (ADR 0151), each of
+    /// which the running build's tier must still carry.
+    pub(crate) citations: &'a [CitedAcceptance],
 }
 
 /// The one rule for admitting an acceptance by artifact (ADR 0123), whichever
@@ -1150,6 +1485,8 @@ pub(crate) struct ArtifactAcceptance<'a> {
 /// An acceptance applies to this project only when all of these hold:
 ///
 /// 1. the receipt states the environment its proof read;
+///    1b. every compiled-in acceptance its receipt cites is still carried by
+///    this build's tier (ADR 0151);
 /// 2. the project's installed identity for the specifier -- name, manifest
 ///    version, lockfile integrity -- reproduces the signed acceptance root under
 ///    the conditions it was computed over;
@@ -1178,6 +1515,10 @@ pub(crate) fn admit_by_artifact<'a>(
         let Some(environment) = acceptance.environment else {
             continue;
         };
+        // ADR 0151: built on a compiled-in claim this build no longer carries.
+        if withdrawn_compiled_in_citation(acceptance.citations).is_some() {
+            continue;
+        }
         let Some((name, version, integrity)) = installed_integrity(acceptance.specifier) else {
             continue;
         };

@@ -295,6 +295,7 @@ fn certify_into(
         dependency_environment_root: environment
             .map(policy2_dependency_environment_root)
             .unwrap_or_default(),
+        cited_acceptances: Vec::new(),
     };
     let issuer = ConfiguredReceiptIssuer::persistent_local("project-catalog-test", [9; 32])
         .expect("a persistent-local issuer");

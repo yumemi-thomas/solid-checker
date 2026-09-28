@@ -116,6 +116,7 @@ import {
   closureCandidatesFromNativeOutput,
   recipeAddressesFromNativeOutput,
   declinedDependencyGraphCases,
+  citedFrontierRecords,
   RetainedCasePreparationRefusal,
   recoveryGraphCases,
   certifyRecoverableCaseSelection,
@@ -154,7 +155,8 @@ import {
   retainIndependentlyMergeableProposalBatches,
   retainIndependentlyMergeableProposals,
   withheldClaimsFromEmitterOutput,
-  declinedClosuresFromEmitterOutput
+  declinedClosuresFromEmitterOutput,
+  citableSpecifiers
 } from "../scripts/generate-package-contract.mjs";
 
 test("declaration binding recovery requests only exact refused reexports without granting authority", () => {
@@ -1363,6 +1365,53 @@ test("a partial proposal has a dependency frontier only when a refusal is a depe
   assert.equal(partialProposalHasDependencyFrontier(null), false);
   assert.equal(partialProposalHasDependencyFrontier(undefined), false);
   assert.equal(partialProposalHasDependencyFrontier("accepted dependency"), false);
+});
+
+test("ADR 0151: only a bare, non-foundation, non-re-exported frontier specifier is citable", () => {
+  const resolution = {
+    closure: {
+      hazards: [
+        { kind: "unaccepted-external-dependency", source: "./dist/index.js:@solid-primitives/utils" },
+        { kind: "unaccepted-external-dependency", source: "./dist/index.js:@solid-primitives/event-listener" },
+        // Re-exported on some axis: a citation binds no per-export targets.
+        { kind: "unaccepted-external-dependency", source: "./dist/index.js:@solid-primitives/rootless" },
+        // The runtime foundation is the dialect's, never a contract's.
+        { kind: "unaccepted-external-dependency", source: "./dist/index.js:solid-js" },
+        // Not package specifiers.
+        { kind: "unaccepted-external-dependency", source: "./dist/index.js:#internal" },
+        { kind: "unaccepted-external-dependency", source: "./dist/index.js:./asset.css?raw" },
+        { kind: "unaccepted-external-dependency", source: "./dist/index.js:node:fs" },
+        { kind: "unaccepted-external-dependency", source: "./dist/index.js:fs/promises" },
+        // Another hazard is never a frontier.
+        { kind: "native-code", source: "./dist/index.js:./binding.node" }
+      ]
+    }
+  };
+  assert.deepEqual(
+    citableSpecifiers(resolution, new Set(["@solid-primitives/rootless"])),
+    ["@solid-primitives/event-listener", "@solid-primitives/utils"]
+  );
+  assert.deepEqual(citableSpecifiers(null, new Set()), []);
+});
+
+test("ADR 0151: a cited edge stays a graph-lane frontier coordinate", () => {
+  const cited = citedFrontierRecords([
+    {
+      entrypoint: ".",
+      conditions: ["node"],
+      specifier: "@solid-primitives/utils",
+      cited: "@solid-primitives/utils@7.0.0-next.4",
+      receiptDigest: "sha256:" + "5".repeat(64)
+    },
+    // A refused citation is already a decline elsewhere, or nothing.
+    { entrypoint: ".", conditions: ["node"], specifier: "@solid-primitives/event-listener", refusal: "no bundle" }
+  ]);
+  assert.equal(cited.length, 1);
+  assert.equal(cited[0].kind, "unaccepted-external-dependency");
+  assert.deepEqual(declinedDependencyGraphCases(cited), [
+    { entrypoint: ".", conditions: ["import", "node"] }
+  ]);
+  assert.deepEqual(citedFrontierRecords(undefined), []);
 });
 
 test("a declined dependency frontier names exact cases, and nothing it cannot spell", () => {

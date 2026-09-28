@@ -66,6 +66,7 @@ fn bindings(main: &[u8]) -> Policy2ReceiptBindings {
         verifier_source_digest: root("verifier-source"),
         verifier_build_digest: root("verifier-build"),
         dependency_environment_root: String::new(),
+        cited_acceptances: Vec::new(),
     }
 }
 
@@ -1860,4 +1861,69 @@ fn an_edge_bearing_environment_has_its_own_root_domain() {
             .get("resolvedFrom")
             .is_none()
     );
+}
+
+/// ADR 0151: what a receipt cites is inside its signature, so it cannot be
+/// stripped to escape a tier's withdrawal, and a receipt that cites nothing
+/// keeps the bytes every receipt issued before citations has.
+#[test]
+fn cited_acceptances_are_signed_and_citing_nothing_keeps_the_older_bytes() {
+    let main = canonical_main(MAIN);
+    let uncited = bindings(&main);
+    let citation = |digit: u8| CitedAcceptance {
+        package_name: "@solid-primitives/utils".into(),
+        package_version: "7.0.0-next.4".into(),
+        receipt_digest: format!("sha256:{}", format!("{digit:x}").repeat(64)),
+    };
+    let mut cited = uncited.clone();
+    cited.cited_acceptances = vec![citation(1)];
+    let issuer = local_issuer(6);
+    let trust = trust_store(&issuer, &cited, None);
+    let verify = |receipt: &[u8], expected: &Policy2ReceiptBindings| {
+        authenticate_policy2_receipt(
+            &main,
+            receipt,
+            expected,
+            Policy2ReceiptProvenance::PersistentLocal {
+                trust_store: &trust,
+                scope: &issuer.scope,
+            },
+        )
+    };
+    let older = issue_policy2_receipt(&main, &uncited, &issuer).unwrap();
+    assert!(!String::from_utf8_lossy(&older).contains("citedAcceptances"));
+    assert!(verify(&older, &uncited).is_ok());
+
+    let receipt = issue_policy2_receipt(&main, &cited, &issuer).unwrap();
+    assert!(verify(&receipt, &cited).is_ok());
+    assert_eq!(
+        verify(&receipt, &uncited),
+        Err(Policy2ReceiptError::BindingMismatch {
+            field: "citedAcceptances"
+        })
+    );
+    let stripped = canonical_mutation(&receipt, |document| {
+        document.payload.cited_acceptances.clear();
+    });
+    assert_eq!(
+        verify(&stripped, &uncited),
+        Err(Policy2ReceiptError::InvalidSignature)
+    );
+    let substituted = canonical_mutation(&receipt, |document| {
+        document.payload.cited_acceptances = vec![citation(2)];
+    });
+    let mut substituted_bindings = cited.clone();
+    substituted_bindings.cited_acceptances = vec![citation(2)];
+    assert_eq!(
+        verify(&substituted, &substituted_bindings),
+        Err(Policy2ReceiptError::InvalidSignature)
+    );
+
+    // One statement, one encoding: citations are sorted and never repeated.
+    let mut unsorted = uncited.clone();
+    unsorted.cited_acceptances = vec![citation(2), citation(1)];
+    assert!(issue_policy2_receipt(&main, &unsorted, &issuer).is_err());
+    let mut repeated = uncited;
+    repeated.cited_acceptances = vec![citation(1), citation(1)];
+    assert!(issue_policy2_receipt(&main, &repeated, &issuer).is_err());
 }
