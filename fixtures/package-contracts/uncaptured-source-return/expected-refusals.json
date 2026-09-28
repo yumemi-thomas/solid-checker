@@ -205,5 +205,13 @@
       "shape": "",
       "spelling": ""
     }
+  ],
+  "citedDependencies": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "specifier": "uncharted-helpers",
+      "refusal": "the compiled-in tier accepts no contract for uncharted-helpers under [import]"
+    }
   ]
 }

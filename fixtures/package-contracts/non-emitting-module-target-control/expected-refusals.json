@@ -66,5 +66,13 @@
     }
   ],
   "withheldClaims": [],
-  "declinedClosures": []
+  "declinedClosures": [],
+  "citedDependencies": [
+    {
+      "entrypoint": "./vitest",
+      "conditions": [],
+      "specifier": "vitest",
+      "refusal": "the compiled-in tier accepts no contract for vitest under [import]"
+    }
+  ]
 }

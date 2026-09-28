@@ -121,5 +121,19 @@
       "shape": "",
       "spelling": ""
     }
+  ],
+  "citedDependencies": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "specifier": "environment-dependent-package",
+      "refusal": "the compiled-in tier accepts no contract for environment-dependent-package under [import]"
+    },
+    {
+      "entrypoint": "./bare",
+      "conditions": [],
+      "specifier": "environment-dependent-package",
+      "refusal": "the compiled-in tier accepts no contract for environment-dependent-package under [import]"
+    }
   ]
 }

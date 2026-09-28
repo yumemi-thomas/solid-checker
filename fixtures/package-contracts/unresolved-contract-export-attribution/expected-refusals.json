@@ -121,5 +121,13 @@
       "shape": "",
       "spelling": ""
     }
+  ],
+  "citedDependencies": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "specifier": "partial-contract-package",
+      "refusal": "the compiled-in tier accepts no contract for partial-contract-package under [import]"
+    }
   ]
 }
