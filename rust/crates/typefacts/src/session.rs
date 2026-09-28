@@ -2493,6 +2493,35 @@ fn validate_implementation_transcript(
         }
         previous = Some(binding.parameter_index);
     }
+    // ADR 0139: what a construction keeps is stated beside a construction
+    // only, once per parameter in order, for a plain signature slot, with
+    // every location in the censused file.
+    let mut previous_retained = None;
+    for argument in &transcript.retained_arguments {
+        let parameter = transcript
+            .signature
+            .as_ref()
+            .and_then(|signature| signature.parameters.get(argument.parameter_index));
+        let in_file = |location: &crate::Location| {
+            location.path == transcript.location.path && location.start_byte < location.end_byte
+        };
+        if transcript.invocation.as_deref() != Some("construct")
+            || previous_retained.is_some_and(|index| index >= argument.parameter_index)
+            || argument.key.is_empty()
+            || !in_file(&argument.store)
+            || !argument.invocations.iter().all(in_file)
+            || parameter.is_none_or(|parameter| {
+                parameter.index != argument.parameter_index || parameter.rest || parameter.defaulted
+            })
+        {
+            return Err(SessionError::InvalidResponse(
+                "retained constructor argument does not name one plain slot of a construction \
+                 and locations in its implementation"
+                    .into(),
+            ));
+        }
+        previous_retained = Some(argument.parameter_index);
+    }
     for form in &transcript.uncensused_invoking_forms {
         if form.captured != form.enclosing_callable.is_some() {
             return Err(SessionError::InvalidResponse(format!(
@@ -3992,8 +4021,80 @@ mod tests {
             not_callable_value: None,
             default_library_alias: None,
             invocation: None,
+            retained_arguments: Vec::new(),
             complete: false,
             open_reasons: Vec::new(),
+        }
+    }
+
+    /// ADR 0139: a retained argument is stated beside a construction only, once
+    /// per plain signature slot in order, with its store and invocations in
+    /// the censused implementation.
+    #[test]
+    fn a_retained_argument_names_one_plain_slot_of_a_construction() {
+        let mut transcript = implementation_transcript(span("/input.js", 0, 40));
+        transcript.completion_form = Some(crate::ImplementationCompletionForm::Plain);
+        transcript.invocation = Some("construct".into());
+        let value = export_value_transcript(span("/input.js", 6, 11)).value;
+        let parameter = |index: usize| crate::SelectedParameter {
+            index,
+            symbol: "callback".into(),
+            declaration: None,
+            rest: false,
+            optional: false,
+            defaulted: false,
+            value: value.clone(),
+            declared_type: None,
+            callable_paths: vec![],
+        };
+        transcript.signature = Some(crate::SelectedSignature {
+            identity: "signature".into(),
+            declaration: resolved_declaration("Keeper", span("/input.js", 0, 5)),
+            overload_ordinal: 0,
+            overload_count: 1,
+            minimum_argument_count: 2,
+            has_rest: false,
+            parameters: vec![parameter(0), parameter(1)],
+            result: value.clone(),
+            result_callable_paths: vec![],
+        });
+        transcript.retained_arguments.push(crate::RetainedArgument {
+            parameter_index: 1,
+            key: "callback".into(),
+            store: span("/input.js", 20, 28),
+            invocations: vec![span("/input.js", 30, 39)],
+        });
+        validate_implementation_transcript(&transcript).unwrap();
+        for invalid in [
+            "call",
+            "key",
+            "store",
+            "invocation",
+            "slot",
+            "order",
+            "rest",
+        ] {
+            let mut changed = transcript.clone();
+            match invalid {
+                "call" => changed.invocation = None,
+                "key" => changed.retained_arguments[0].key = "".into(),
+                "store" => changed.retained_arguments[0].store = span("/other.js", 20, 28),
+                "invocation" => {
+                    changed.retained_arguments[0].invocations = vec![span("/input.js", 30, 30)];
+                }
+                "slot" => changed.retained_arguments[0].parameter_index = 2,
+                "order" => changed
+                    .retained_arguments
+                    .push(changed.retained_arguments[0].clone()),
+                "rest" => {
+                    changed.signature.as_mut().unwrap().parameters[1].rest = true;
+                }
+                _ => unreachable!(),
+            }
+            assert!(
+                validate_implementation_transcript(&changed).is_err(),
+                "{invalid}"
+            );
         }
     }
 

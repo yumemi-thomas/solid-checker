@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:5540922fc6863e0533776d5f81806b73a20f7fe0bd0fc2bc29beab10a67167dc";
+    "sha256:513bf2df187285b39f94953e2186a9b71348cc1cf533fdad9b9ae67fa874bc53";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -355,7 +355,13 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // arm carries the member's path in `parameter`, and an optional chain adds a
 // second arm with `ReturnArm::undefined`. A protocol-63 consumer decodes with
 // `deny_unknown_fields` and would reject the new field, so the number moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 64;
+// Protocol 65 states what a construction keeps for its members (ADR 0139):
+// `ExportImplementationTranscript::retained_arguments`, beside invocation
+// `construct`, names each constructor parameter stored once on the instance
+// under a fixed key whose only readers are member calls no construction
+// reaches. A protocol-64 consumer decodes with `deny_unknown_fields` and would
+// reject the new field, so the number moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 65;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

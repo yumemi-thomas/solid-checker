@@ -559,10 +559,32 @@ type ExportImplementationTranscript struct {
 	// census of different code -- `new C(…)` runs a constructor body, and a
 	// consumer that read this transcript as `C(…)` would be describing a call
 	// the class cannot even accept.
-	Invocation          CallKind `cbor:"invocation,omitempty" json:"invocation,omitempty"`
-	PrimitiveCompletion bool     `cbor:"primitiveCompletion,omitempty" json:"primitiveCompletion,omitempty"`
-	Complete            bool     `cbor:"complete,omitempty" json:"complete,omitempty"`
-	OpenReasons         []string `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+	Invocation CallKind `cbor:"invocation,omitempty" json:"invocation,omitempty"`
+	// RetainedArguments are the constructor parameters a construction keeps
+	// on the instance for its own members to call later (ADR 0139, handshake
+	// protocol 65). Stated only beside Invocation `construct`, and only for a
+	// parameter whose one store, every other use, and every member call of
+	// the key the producer censused (retainedArgumentsLocked). Absence is not
+	// a statement that nothing is kept.
+	RetainedArguments   []RetainedArgument `cbor:"retainedArguments,omitempty" json:"retainedArguments,omitempty"`
+	PrimitiveCompletion bool               `cbor:"primitiveCompletion,omitempty" json:"primitiveCompletion,omitempty"`
+	Complete            bool               `cbor:"complete,omitempty" json:"complete,omitempty"`
+	OpenReasons         []string           `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+}
+
+// RetainedArgument is one constructor parameter a class export keeps on its
+// instance under a fixed key (ADR 0139, handshake protocol 65).
+//
+// Store is the parameter's own reference in the one top-level
+// `this.<Key> = p` statement of the constructor; every other use of the
+// parameter is a direct call in the constructor's own frame. Invocations is
+// every member call `this.<Key>(…)` in the class body, none of which a
+// construction reaches, and it may be empty.
+type RetainedArgument struct {
+	ParameterIndex int        `cbor:"parameterIndex" json:"parameterIndex"`
+	Key            string     `cbor:"key" json:"key"`
+	Store          Location   `cbor:"store" json:"store"`
+	Invocations    []Location `cbor:"invocations,omitempty" json:"invocations,omitempty"`
 }
 
 // ParameterPremise is one parameter's type binding under which an

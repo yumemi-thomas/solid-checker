@@ -172,6 +172,7 @@ pub fn project_export_semantics(
         direct_coerced_parameters: BTreeSet::new(),
         direct_member_callback_parameters: BTreeSet::new(),
         iterated_parameters: BTreeSet::new(),
+        result_access_parameters: BTreeSet::new(),
         // A projected dependency export has no body here to walk.
         merged_props_return: None,
         // The projection alone states no acceptance identity;
@@ -212,12 +213,19 @@ fn project_callbacks(
             // republishes what the contract said rather than a default: a
             // tracked row with no execution point means the producer
             // established none, which is a different fact from `queued`.
-            schedule: (execution == "tracked").then_some(match operation.schedule {
-                Some(Schedule::SameStack) => CallbackSchedule::SameStack,
-                Some(Schedule::Queued) => CallbackSchedule::Queued,
-                Some(Schedule::External) => CallbackSchedule::External,
-                None => CallbackSchedule::Unestablished,
-            }),
+            schedule: if operation.is_result_access() {
+                // ADR 0139: a deferred row, whose one distinguishing fact is
+                // the event it runs at -- kept so re-emission republishes the
+                // item it was read from rather than a queued deferral.
+                Some(CallbackSchedule::ResultAccess)
+            } else {
+                (execution == "tracked").then_some(match operation.schedule {
+                    Some(Schedule::SameStack) => CallbackSchedule::SameStack,
+                    Some(Schedule::Queued) => CallbackSchedule::Queued,
+                    Some(Schedule::External) => CallbackSchedule::External,
+                    None => CallbackSchedule::Unestablished,
+                })
+            },
             // The inverse of the producer's mapping, word for word
             // (`ContractCallback::clears_tracking`): `untracked` on an `inline`
             // row is a proven clearing wrapper, on a `deferred` row a deferral
@@ -863,6 +871,57 @@ mod owner_requirement_projection_tests {
                 "{index}"
             );
         }
+    }
+
+    /// ADR 0139: a `result-access` item projects as the deferred row it is --
+    /// an ambient deferral under an inherited owner, never a clearing -- that
+    /// carries the event, and the domain stays closed.
+    #[test]
+    fn a_result_access_item_projects_as_a_deferred_row_that_keeps_its_event() {
+        use crate::CallbackSchedule;
+        use crate::contract_semantics::{
+            CallbackInvocation, OwnerRelation, OwnerSource, ValueSource,
+        };
+        let mut kept = operation("callback-1", OperationKind::Invoke, &[]);
+        kept.trigger = Some(Trigger::Event(Event::ResultAccess));
+        kept.at = Some(Event::ResultAccess);
+        kept.schedule = Some(Schedule::External);
+        kept.tracking = Tracking::AmbientAtExecution;
+        kept.owner = OwnerRelation {
+            source: OwnerSource::AmbientAtExecution,
+            ..OwnerRelation::default()
+        };
+        kept.cardinality.scope = Some(CardinalityScope::Trigger);
+        let projected = project_export_semantics(&export(
+            CallClaims {
+                callbacks: KnowledgeSet::Complete(vec![CallbackInvocation {
+                    from: ValueSource::Parameter {
+                        index: 1,
+                        path: Vec::new(),
+                    },
+                    operation: OperationId("callback-1".into()),
+                }]),
+                ..claims()
+            },
+            vec![kept],
+            Vec::new(),
+        ));
+        assert!(
+            !projected.open_claims.contains(&ClaimDomain::Callbacks),
+            "{:?}",
+            projected.open_claims
+        );
+        let rows = projected.callbacks.known().expect("the domain stays known");
+        let [row] = rows.as_slice() else {
+            panic!("one row: {rows:?}");
+        };
+        assert_eq!(row.parameter, 1);
+        assert_eq!(row.execution, "deferred");
+        assert_eq!(row.schedule, Some(CallbackSchedule::ResultAccess));
+        assert!(row.is_result_access());
+        assert!(row.invokes_argument());
+        assert!(!row.clears_tracking);
+        assert_eq!(row.owner.as_deref(), Some("inherited"));
     }
 
     /// ADR 0113: a closed `returns` whose every operation hands back a `plain`
@@ -2272,6 +2331,9 @@ fn contract_export_function(
             .filter(|(protocol, _)| *protocol == crate::contract_semantics::InvokeProtocol::Iterate)
             .map(|(_, parameter)| *parameter)
             .collect(),
+        // A function node is not a construction; ADR 0139's walk is attached
+        // to a class export at the emit boundary.
+        result_access_parameters: BTreeSet::new(),
     }
 }
 

@@ -2414,3 +2414,155 @@ fn call_semantics_with_one_coerce() -> CallSemantics {
     invoke.protocol = Some(InvokeProtocol::Coerce);
     call(vec![invoke], vec![])
 }
+
+/// ADR 0139's one shape: an `invoke` triggered by and at `result-access`, on
+/// an external schedule, ambient for tracking and owner, counted per trigger
+/// from zero to many, unguarded.
+fn result_access_operation(id: &str) -> Operation {
+    let mut invoke = operation(id, OperationKind::Invoke);
+    invoke.trigger = Some(Trigger::Event(Event::ResultAccess));
+    invoke.at = Some(Event::ResultAccess);
+    invoke.schedule = Some(Schedule::External);
+    invoke.tracking = Tracking::AmbientAtExecution;
+    invoke.owner = OwnerRelation {
+        source: OwnerSource::AmbientAtExecution,
+        productions: KnowledgeSet::complete(vec![]),
+        ..OwnerRelation::default()
+    };
+    invoke.cardinality = Cardinality {
+        scope: Some(CardinalityScope::Trigger),
+        min: Some(0),
+        max: Some(UpperBound::Many),
+    };
+    invoke
+}
+
+/// `invoking_contract`'s shape with its one `invoke` a `result-access` item.
+fn result_access_contract(case_id: &str) -> Result<NormalizedContract, ModelError> {
+    let mut case = artifact_case(case_id);
+    case.dependency_closure = digest('d');
+    let invoke = result_access_operation(&format!("{case_id}:createResource:operation:callback-0"));
+    let call = call(vec![invoke], vec![]);
+    let export = export(&case, "createResource", ValueShape::Callable, call);
+    case.exports.insert("createResource".into(), export);
+    ContractProposal::new(package(), vec![case]).normalize()
+}
+
+/// ADR 0139: a contract that states a `result-access` operation is its own
+/// digest family, under a frozen vector, and distinct from the same item at
+/// any other event; a claim naming one is addressed in that family.
+#[test]
+fn result_access_digest_family_is_separate_and_frozen() {
+    assert_eq!(
+        SEMANTIC_RESULT_ACCESS_MARKER,
+        "solid-checker:semantic-result-access:v1"
+    );
+    let kept = result_access_contract("case-a").unwrap();
+    assert_eq!(
+        kept.semantic_digest().as_str(),
+        "sha256:382b278d9347bc91f55fa1d8ac1185e1ec9ae622bab42b121ba8212b18cb63c7"
+    );
+    let call = protocol_contract("case-a", None).unwrap();
+    assert_ne!(kept.semantic_digest(), call.semantic_digest());
+    let kept_address = address_of(&kept, "case-a", CALLBACKS, "closure");
+    assert_ne!(
+        kept_address,
+        address_of(&call, "case-a", CALLBACKS, "closure")
+    );
+    assert_eq!(
+        kept_address.as_str(),
+        "recipe-address:v1:sha256:334480c0c7d4ef149f0e4291a93b0d72d909338ce61c0a2af53e0e2331001497"
+    );
+}
+
+/// A `result-access` operation states exactly one shape, and exactly one
+/// `callbacks` item names it, from a bare parameter.
+#[test]
+fn a_result_access_operation_is_validated_to_its_one_shape() {
+    let refused = |mutate: &dyn Fn(&mut CallSemantics), needle: &str| {
+        let mut behavior = call(vec![result_access_operation("callback-0")], vec![]);
+        mutate(&mut behavior);
+        let error = proposal_with(ValueShape::Callable, behavior)
+            .normalize()
+            .expect_err("the shape is refused");
+        assert!(error.to_string().contains(needle), "{needle:?} in {error}");
+    };
+    normalized_export(proposal_with(
+        ValueShape::Callable,
+        call(vec![result_access_operation("callback-0")], vec![]),
+    ));
+    let at_event = "is triggered by and happens at the result-access event";
+    refused(
+        &|call| call.operations[0].trigger = Some(Trigger::Event(Event::Call)),
+        at_event,
+    );
+    refused(&|call| call.operations[0].at = Some(Event::Call), at_event);
+    refused(
+        &|call| call.operations[0].schedule = Some(Schedule::Queued),
+        at_event,
+    );
+    let ambient = "ambient-at-execution and unconstrained";
+    refused(
+        &|call| call.operations[0].tracking = Tracking::Untracked,
+        ambient,
+    );
+    refused(
+        &|call| call.operations[0].owner.source = OwnerSource::AmbientAtCall,
+        ambient,
+    );
+    refused(
+        &|call| call.operations[0].owner.requirements.owner = Requirement::Required,
+        ambient,
+    );
+    refused(
+        &|call| call.operations[0].cardinality.scope = Some(CardinalityScope::Call),
+        "per trigger, from zero to many",
+    );
+    refused(
+        &|call| call.operations[0].protocol = Some(InvokeProtocol::Get),
+        "at the call event on the same stack",
+    );
+    refused(
+        &|call| call.operations[0].inputs = vec![ValueShape::Plain],
+        "states no inputs, output or resources",
+    );
+    let one_item = "exactly one callbacks item from a bare parameter";
+    refused(
+        &|call| {
+            call.claims.callbacks = KnowledgeSet::Complete(vec![CallbackInvocation {
+                from: ValueSource::Parameter {
+                    index: 0,
+                    path: vec!["handler".into()],
+                },
+                operation: OperationId("callback-0".into()),
+            }]);
+        },
+        one_item,
+    );
+    refused(
+        &|call| {
+            let item = call.claims.callbacks.items()[0].clone();
+            let second = CallbackInvocation {
+                from: ValueSource::Parameter {
+                    index: 1,
+                    path: vec![],
+                },
+                ..item.clone()
+            };
+            call.claims.callbacks = KnowledgeSet::Complete(vec![item, second]);
+        },
+        one_item,
+    );
+    // Only an invoke happens at the event.
+    let mut read = result_access_operation("read");
+    read.kind = OperationKind::Read;
+    let error = proposal_with(ValueShape::Callable, call(vec![read], vec![]))
+        .normalize()
+        .expect_err("a read is not kept for later invocation");
+    assert!(
+        error
+            .to_string()
+            .contains("a result-access operation is an invoke"),
+        "{error}"
+    );
+}

@@ -1241,6 +1241,17 @@ pub struct ContractExport {
     /// propose a `callbacks` enumeration with non-call items beside any of
     /// these: it could not describe the enumeration whole. Never evidence.
     pub iterated_parameters: BTreeSet<usize>,
+    /// ADR 0139: the parameters a class export's constructor keeps on the
+    /// instance for later member calls, as the generator's byte walk
+    /// ([`solid_facts::ast::retained_constructor_arguments`]) found them --
+    /// each stored once as `this.<key> = p` in the constructor's own frame,
+    /// with every other use a direct call there, and every read of the key a
+    /// member call nothing at construction reaches. The generator describes
+    /// each as a `result-access` item. A proposal input in the family of
+    /// [`Self::direct_callback_parameters`]: never encoded, never evidence,
+    /// empty is "do not propose"; the Type Facts producer's own census of the
+    /// class decides the item.
+    pub result_access_parameters: BTreeSet<usize>,
     /// ADR 0109: the parameter whose reactivity a props merge this export
     /// returns carries, when the generator's own walk cleared the body
     /// ([`crate::returns_walk::MergedPropsReturns`]).
@@ -1456,6 +1467,13 @@ pub enum CallbackSchedule {
     /// honest. The emitted operation carries no execution point at all rather
     /// than a guessed one.
     Unestablished,
+    /// ADR 0139, and only on a `deferred` row: the export keeps the callable
+    /// only in the value it returns (for a construction, the instance), and
+    /// it runs later, on the stack of code that invokes it through that value.
+    /// The row is a deferred invocation in every pass that models one; the
+    /// variant exists so an accepted contract's `result-access` item projects
+    /// back, and is re-emitted, as exactly that item.
+    ResultAccess,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1465,7 +1483,9 @@ pub struct ContractCallback {
     /// The schedule of a `tracked` row, where the producer established one.
     /// `None` is a producer that did not compute a schedule for this row and
     /// leaves the consumer's historical default in place; it is meaningless
-    /// for `inline` and `deferred`, whose word already carries the schedule.
+    /// for `inline` and for `deferred`, whose word already carries the
+    /// schedule -- except [`CallbackSchedule::ResultAccess`], which only a
+    /// `deferred` row carries and which names ADR 0139's retention event.
     pub schedule: Option<CallbackSchedule>,
     /// Runtime arguments supplied when this callback is invoked. `null`
     /// preserves an unmodeled ordinary value at that position; a structured
@@ -1546,6 +1566,15 @@ impl ContractCallback {
     #[must_use]
     pub fn is_invocation(&self) -> bool {
         self.protocol == contract_semantics::InvokeProtocol::Call
+    }
+
+    /// Whether this row is ADR 0139's `result-access` item: a `deferred`
+    /// invocation of a callable the export keeps only in the value it
+    /// returns. Every pass that models invocations reads it as the deferred
+    /// row it is; only projection and re-emission ask.
+    #[must_use]
+    pub fn is_result_access(&self) -> bool {
+        self.execution == "deferred" && self.schedule == Some(CallbackSchedule::ResultAccess)
     }
 
     /// Whether this row calls the argument at [`Self::parameter`] itself: an

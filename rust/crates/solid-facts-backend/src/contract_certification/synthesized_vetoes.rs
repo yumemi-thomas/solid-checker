@@ -120,6 +120,23 @@ pub(crate) fn synthesize(
             {
                 return Some((record, &[][..], Observation::DefaultLibraryAlias(index)));
             }
+            // ADR 0139: a class export's described `callbacks` closure is
+            // sampled with `new`, on the construct signature its construction
+            // census selected. No other observation constructs.
+            if evidence.call_signatures(&record.export).is_none()
+                && let Some(signature) = evidence.construct_signature(&record.export)
+            {
+                let Some(Observation::DescribedCallbacks(mask)) =
+                    candidate_observation(&record.domain, export)
+                else {
+                    return None;
+                };
+                return Some((
+                    record,
+                    std::slice::from_ref(signature),
+                    Observation::ConstructedCallbacks(mask),
+                ));
+            }
             let Some(signatures) = evidence.call_signatures(&record.export) else {
                 // ADR 0099: no call signature, but the producer stated the
                 // value cannot be invoked. The veto observes `typeof`; it
@@ -226,6 +243,9 @@ pub(crate) fn synthesize(
                         match observation {
                             Observation::DescribedCallbacks(_) => {
                                 "ADR 0100, described callbacks enumeration"
+                            }
+                            Observation::ConstructedCallbacks(_) => {
+                                "ADR 0100 and 0139, described callbacks enumeration of a construction"
                             }
                             Observation::DescribedProtocols(_) => {
                                 "ADR 0100 per protocol, described callbacks enumeration with non-call items"
@@ -503,6 +523,12 @@ enum Observation {
     /// contradiction is an invocation of a callable at a slot outside the
     /// set, or of one inside it after the sample call has returned.
     DescribedCallbacks(u64),
+    /// ADR 0139: `DescribedCallbacks` for a class export, sampled with `new`
+    /// on the construct signature its construction census selected. A kept
+    /// (`result-access`) slot is outside the mask, so the module -- which hands
+    /// the constructed value to nothing -- observes any invocation of it at any
+    /// time up to the end of the drain as the contradiction.
+    ConstructedCallbacks(u64),
     /// Item A of ways-to-improve § 3.3: a described `callbacks` enumeration
     /// with at least one non-call item (a property read, iteration, coercion or
     /// `hasInstance` of a bare parameter). Every described slot, and every
@@ -588,6 +614,17 @@ fn candidate_observation(domain: &str, export: &ExportSemantics) -> Option<Obser
                     return None;
                 }
                 let operation = export.operation(&item.operation.0)?;
+                // ADR 0139: a kept slot is never a call slot. The module hands
+                // the constructed value to nothing, so its callable running at
+                // any time up to the end of the drain is a use the item does not
+                // describe: the slot is observed exactly as one outside the
+                // set, and is left out of every mask.
+                if operation.is_result_access() {
+                    if !path.is_empty() || operation.kind != OperationKind::Invoke {
+                        return None;
+                    }
+                    continue;
+                }
                 if operation.kind != OperationKind::Invoke
                     || operation.at != Some(Event::Call)
                     || operation.schedule != Some(Schedule::SameStack)
@@ -1072,6 +1109,11 @@ impl Observation {
                 observation: "exact: a callable argument the sample supplied at a slot the enumeration does not describe was invoked at any time up to the end of the session's drain, or one at a described slot was invoked outside the sample call's own stack",
                 emit: "",
             },
+            Self::ConstructedCallbacks(_) => ReviewedObservation {
+                marker: "callback-invocation",
+                observation: "exact: a callable argument the sampled construction supplied at a slot the enumeration describes no call of -- a kept slot included, since the module hands the constructed value to nothing -- was invoked at any time up to the end of the session's drain, or one at a described call slot was invoked outside the construction's own stack",
+                emit: "",
+            },
             Self::DescribedProtocols(_) => ReviewedObservation {
                 marker: "callback-invocation",
                 observation: "exact for the recorded slots: a Proxy argument the sample supplied was called or constructed, had a string-keyed member read, tested with `in`, enumerated or described (get), had Symbol.iterator or Symbol.asyncIterator read (iterate), had Symbol.toPrimitive, valueOf or toString read (coerce), or had Symbol.hasInstance read (has-instance), by a protocol the enumeration does not describe for that slot, at any time up to the end of the session's drain, or by a described one outside the sample call's own stack",
@@ -1192,7 +1234,9 @@ impl Observation {
                 tuples
             }
             Self::NotCallable | Self::DefaultLibraryAlias(_) => Vec::new(),
-            Self::DescribedCallbacks(_) => sample_tuples_with(signatures, true),
+            Self::DescribedCallbacks(_) | Self::ConstructedCallbacks(_) => {
+                sample_tuples_with(signatures, true)
+            }
             Self::DescribedProtocols(masks) => protocol_sample_tuples(signatures, masks),
             Self::DescribedMembers(masks, members) => {
                 member_sample_tuples(signatures, masks, members)
@@ -1206,6 +1250,9 @@ impl Observation {
         match self {
             Self::DescribedCallbacks(_) => {
                 "at most six tuples per overload; no variadic tail or structural object construction; a described slot the signature does not type as callable is sampled with a non-callable value, so a call of it throws and observes nothing"
+            }
+            Self::ConstructedCallbacks(_) => {
+                "at most six tuples of the one construct signature; no variadic tail or structural object construction; a slot the signature does not type as callable is sampled with a non-callable value, so a call of it throws and observes nothing; no member of the constructed value is invoked, so a kept callable's later invocation through the value is never sampled"
             }
             Self::DescribedProtocols(_) => {
                 "at most six tuples per overload; no variadic tail or structural object construction; every described slot and every object-, array- or callable-typed slot is sampled with a recording Proxy over an empty object, an empty array or a zero-arity function, whose traps answer as the target does, and a described slot the signature types as a primitive is also sampled with the object Proxy; a symbol-keyed member other than the iteration, coercion and hasInstance symbols is not recorded, and a use on a value the export derived from an argument, rather than the argument itself, is not observed"
@@ -1405,7 +1452,10 @@ fn module_source(
         return default_library_alias_module_source(specifier, export, index);
     }
     if let Observation::DescribedCallbacks(mask) = observation {
-        return described_callbacks_module_source(specifier, export, mask, signatures);
+        return described_callbacks_module_source(specifier, export, mask, signatures, false);
+    }
+    if let Observation::ConstructedCallbacks(mask) = observation {
+        return described_callbacks_module_source(specifier, export, mask, signatures, true);
     }
     if let Observation::DescribedProtocols(masks) = observation {
         return described_protocols_module_source(specifier, export, masks, signatures);
@@ -1426,6 +1476,7 @@ fn module_source(
         | Observation::NotCallable
         | Observation::DefaultLibraryAlias(_)
         | Observation::DescribedCallbacks(_)
+        | Observation::ConstructedCallbacks(_)
         | Observation::DescribedProtocols(_)
         | Observation::DescribedMembers(..)
         | Observation::DescribedReads(_) => unreachable!(),
@@ -1925,6 +1976,7 @@ fn described_callbacks_module_source(
     export: &str,
     mask: u64,
     signatures: &[typefacts::SelectedSignature],
+    construct: bool,
 ) -> String {
     let described = (0..u64::BITS)
         .filter(|bit| mask & (1 << bit) != 0)
@@ -1965,7 +2017,7 @@ fn described_callbacks_module_source(
          \x20 for (const args of samples) {{\n\
          \x20   inCall = true;\n\
          \x20   try {{\n\
-         \x20     subject(...args);\n\
+         \x20     {invoke}subject(...args);\n\
          \x20   }} catch {{\n\
          \x20     threw += 1;\n\
          \x20   }} finally {{\n\
@@ -1977,6 +2029,7 @@ fn described_callbacks_module_source(
          }}\n",
         specifier_json = serde_json::to_string(specifier).unwrap_or_default(),
         export_json = serde_json::to_string(export).unwrap_or_default(),
+        invoke = if construct { "new " } else { "" },
     )
 }
 

@@ -413,6 +413,11 @@ pub struct VerifiedTypeFactsEvidence {
     /// declared overload set. Read only by veto synthesis; a signature here
     /// proves nothing and binds nothing.
     call_signatures: std::collections::BTreeMap<String, Vec<typefacts::SelectedSignature>>,
+    /// ADR 0139: the one construct signature of every scheduled class export
+    /// whose implementation transcript censused its construction, by export
+    /// name. Read only by veto synthesis, which samples `new` with it; a
+    /// signature here proves nothing and binds nothing.
+    construct_signatures: std::collections::BTreeMap<String, typefacts::SelectedSignature>,
     /// ADR 0099: the not-callable value fact of every scheduled export whose
     /// implementation transcript stated one, by export name. Read only by veto
     /// synthesis, for the same reason as `call_signatures`: a fact here proves
@@ -588,6 +593,15 @@ impl VerifiedTypeFactsEvidence {
     /// only as honest as the set it was drawn from.
     pub(super) fn call_signatures(&self, export: &str) -> Option<&[typefacts::SelectedSignature]> {
         self.call_signatures.get(export).map(Vec::as_slice)
+    }
+
+    /// ADR 0139: the construct signature of a class export whose transcript
+    /// censused its construction and stated no call signature.
+    pub(super) fn construct_signature(
+        &self,
+        export: &str,
+    ) -> Option<&typefacts::SelectedSignature> {
+        self.construct_signatures.get(export)
     }
 
     /// ADR 0099: the not-callable value fact the export's implementation
@@ -2990,6 +3004,7 @@ pub(super) fn verify_live_answer(
         bindings,
         session_evidence_root: identity.evidence_root().to_owned(),
         call_signatures: std::collections::BTreeMap::new(),
+        construct_signatures: std::collections::BTreeMap::new(),
         not_callable_exports: std::collections::BTreeMap::new(),
         default_library_aliases: std::collections::BTreeMap::new(),
         // The invocation census admits no dependency root at all (its source
@@ -3206,6 +3221,7 @@ fn verify_live_export_value_answer_with_project_census(
     let certification_sources_root = plan.certification_sources_root();
     let mut bindings = Vec::with_capacity(expected_ids.len());
     let mut call_signatures = std::collections::BTreeMap::new();
+    let mut construct_signatures = std::collections::BTreeMap::new();
     let mut not_callable_exports = std::collections::BTreeMap::new();
     let mut default_library_aliases = std::collections::BTreeMap::new();
     let mut census_refusals = Vec::<CensusRefusal>::new();
@@ -3218,6 +3234,16 @@ fn verify_live_export_value_answer_with_project_census(
             call_signatures
                 .entry(export.to_owned())
                 .or_insert(signatures);
+        }
+        if let Some(proof) = scheduled.proof_demands.first()
+            && transcript.call_signature.is_none()
+            && transcript.call_signatures.is_empty()
+            && let Some(signature) = construction_signature(transcript)
+        {
+            let (_, export) = proof_artifact_export(&proof.subject);
+            construct_signatures
+                .entry(export.to_owned())
+                .or_insert_with(|| signature.clone());
         }
         if let Some(proof) = scheduled.proof_demands.first()
             && let Some(fact) = stated_not_callable_value(transcript)
@@ -3319,6 +3345,7 @@ fn verify_live_export_value_answer_with_project_census(
         bindings,
         session_evidence_root: identity.evidence_root().to_owned(),
         call_signatures,
+        construct_signatures,
         not_callable_exports,
         default_library_aliases,
         dependency_environment,
@@ -3697,6 +3724,23 @@ fn verify_export_value_family(
         {
             sites.push(site);
         }
+        // ADR 0105 and 0139: a class export is constructed, so the one
+        // signature its positive facts are about is the construct signature
+        // the producer selected for the constructor it censused.
+        ProofFamily::SelectedSignature | ProofFamily::RestSpreadCoverage
+            if transcript.call_signature.is_none()
+                && transcript.call_signatures.is_empty()
+                && construction_signature(transcript).is_some() =>
+        {
+            let signature = construction_signature(transcript).expect("matched by the guard above");
+            sites.push(format!(
+                "export-construct-signature:{}:overload:{}/{}:rest:{}",
+                signature.identity,
+                signature.overload_ordinal,
+                signature.overload_count,
+                signature.has_rest
+            ));
+        }
         ProofFamily::SelectedSignature | ProofFamily::RestSpreadCoverage => {
             for signature in require_export_call_signatures(proof, transcript, &open)? {
                 sites.push(format!(
@@ -3713,7 +3757,9 @@ fn verify_export_value_family(
                 require_export_implementation(plan, proof, transcript, &open)?;
             let source = callback_parameter_source(export, proof)?;
             let floor = callback_reachability_floor(export, proof);
-            if let Some((protocol, source)) = callback_protocol_use(export, proof) {
+            if callback_is_result_access(export, proof) {
+                require_retained_argument(implementation, &source, &open, &mut sites)?;
+            } else if let Some((protocol, source)) = callback_protocol_use(export, proof) {
                 require_protocol_use(
                     implementation,
                     transcript,
@@ -3765,6 +3811,29 @@ fn verify_export_value_family(
                     &open,
                     &mut sites,
                 )?;
+            }
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::CallbackBinding { .. })
+                if require_export_implementation(plan, proof, transcript, &open)
+                    .ok()
+                    .is_some_and(|(export, _)| callback_is_result_access(export, proof)) =>
+            {
+                // ADR 0139: the kept value is called by the members the
+                // producer names, so it is a callable wherever one of them
+                // runs; the path is the retained argument itself, and the
+                // declared signature is not asked.
+                let (export, implementation) =
+                    require_export_implementation(plan, proof, transcript, &open)?;
+                let source = callback_parameter_source(export, proof)?;
+                let before = sites.len();
+                require_retained_argument(implementation, &source, &open, &mut sites)?;
+                if !sites[before..]
+                    .iter()
+                    .any(|site| site.starts_with("retained-argument-invocation:"))
+                {
+                    return Err(open(
+                        "a result-access item names a kept value no member of the class calls",
+                    ));
+                }
             }
             ProofDemandSubject::PositiveFact(PositiveFactSubject::CallbackBinding { .. }) => {
                 let (export, implementation) =
@@ -3872,7 +3941,11 @@ fn verify_export_value_family(
             let (export, implementation) =
                 require_export_implementation(plan, proof, transcript, &open)?;
             let operation = proof_operation(export, proof)?;
-            if operation.cardinality.scope != Some(CardinalityScope::Call)
+            // ADR 0139: a kept callable runs whenever a member is invoked, so
+            // the one bound its operation states is per trigger, zero to many.
+            let per_trigger = operation.is_result_access()
+                && operation.cardinality.scope == Some(CardinalityScope::Trigger);
+            if (operation.cardinality.scope != Some(CardinalityScope::Call) && !per_trigger)
                 || operation.cardinality.min != Some(0)
                 || operation.cardinality.max != Some(UpperBound::Many)
             {
@@ -3882,6 +3955,20 @@ fn verify_export_value_family(
                         "runtime implementation census cannot prove a tighter operation cardinality"
                             .into(),
                 });
+            }
+            if per_trigger {
+                require_operation_evidence(
+                    plan,
+                    export,
+                    operation,
+                    proof,
+                    (implementation, transcript),
+                    transcripts,
+                    &open,
+                    &mut sites,
+                )?;
+                sites.push("operation-cardinality:per-trigger:0..many".into());
+                return Ok(sites);
             }
             require_operation_evidence(
                 plan,
@@ -4195,6 +4282,22 @@ fn require_export_call_signatures<'a>(
     }
     require_complete_overload_set(&transcript.call_signatures, open)?;
     Ok(&transcript.call_signatures)
+}
+
+/// The one construct signature a class export's implementation transcript
+/// selected (ADR 0105): a complete construction transcript with exactly one
+/// overload, or `None`.
+fn construction_signature(
+    transcript: &ExportValueTranscript,
+) -> Option<&typefacts::SelectedSignature> {
+    let implementation = transcript.implementation.as_ref()?;
+    let signature = implementation.signature.as_ref()?;
+    (implementation.invocation.as_deref() == Some("construct")
+        && implementation.complete
+        && implementation.open_reasons.is_empty()
+        && signature.overload_count == 1
+        && signature.overload_ordinal == 0)
+        .then_some(signature)
 }
 
 /// Refuses an overload set that is not provably the whole declared set.
@@ -6674,7 +6777,9 @@ fn require_operation_evidence(
                 .iter()
                 .find(|callback| callback.operation == operation.id)
                 .ok_or_else(|| open("invoke operation has no exact callback source"))?;
-            if operation.is_protocol_invocation() {
+            if operation.is_result_access() {
+                require_retained_argument(implementation, &callback.from, open, sites)
+            } else if operation.is_protocol_invocation() {
                 require_protocol_use(
                     implementation,
                     declared,
@@ -11450,6 +11555,12 @@ fn census_callbacks_domain(
                     )
                     .map_err(refuse)?,
                 );
+                if !described.kept.is_empty() {
+                    sites.push(
+                        confirm_retained_arguments(&described.kept, implementation)
+                            .map_err(refuse)?,
+                    );
+                }
             }
         }
     }
@@ -11477,6 +11588,7 @@ fn described_callbacks(
     let mut indices = std::collections::BTreeSet::new();
     let mut protocols = std::collections::BTreeSet::new();
     let mut members = std::collections::BTreeSet::new();
+    let mut kept = std::collections::BTreeSet::new();
     for item in items {
         let operation_id = item.operation.0.as_str();
         let (index, member) = match &item.from {
@@ -11503,6 +11615,20 @@ fn described_callbacks(
                 "names `{operation_id}`, whose kind is {:?} rather than invoke",
                 operation.kind
             ));
+        }
+        // ADR 0139: a `result-access` item says the construction keeps the
+        // bare parameter for its members; the producer's retained-argument
+        // census confirms it (`confirm_retained_arguments`), and its one shape
+        // is the model's.
+        if operation.is_result_access() {
+            if member.is_some() {
+                return Err(format!(
+                    "describes `{operation_id}` as keeping a member of parameter {index}, and \
+                     the census confirms a kept bare parameter only"
+                ));
+            }
+            kept.insert(index);
+            continue;
         }
         if operation.at != Some(Event::Call) || operation.schedule != Some(Schedule::SameStack) {
             return Err(format!(
@@ -11555,6 +11681,7 @@ fn described_callbacks(
         calls: indices,
         protocols,
         members,
+        kept,
     }))
 }
 
@@ -11585,6 +11712,9 @@ struct DescribedCallbacks {
     /// `(parameter, path)` of every call item from a member of a parameter
     /// (item B of ways-to-improve § 3.3): `(1, ["0"])` for `handler[0](…)`.
     members: std::collections::BTreeSet<(usize, Vec<String>)>,
+    /// The parameters a `result-access` item says the construction keeps for
+    /// its members (ADR 0139).
+    kept: std::collections::BTreeSet<usize>,
 }
 
 impl DescribedCallbacks {
@@ -11619,6 +11749,159 @@ fn member_path_text(parameter: usize, path: &[String]) -> String {
         }
     }
     text
+}
+
+/// Confirms the `result-access` items of a described enumeration against the
+/// producer's own census of the construction (ADR 0139), or refuses by naming
+/// the first fact that separates them.
+///
+/// The producer states a [`typefacts::RetainedArgument`] only for a class it
+/// found exact and a parameter kept once for members nothing at construction
+/// reaches (`retainedArgumentsLocked`). This checks that it said so for every
+/// kept slot of *this* construction, and re-derives the parameter half from a
+/// second census on the same transcript, the use census every other premise
+/// reads: the parameter's every use is either the stated store or a direct
+/// call in the constructor's own frame -- which the call census has already
+/// matched to the enumeration's call items.
+fn confirm_retained_arguments(
+    kept: &std::collections::BTreeSet<usize>,
+    implementation: &typefacts::ExportImplementationTranscript,
+) -> Result<String, String> {
+    if implementation.invocation.as_deref() != Some("construct") {
+        return Err(format!(
+            "describes result-access item(s) for parameter(s) {}, and the transcript censused a \
+             call rather than a construction",
+            index_list(kept)
+        ));
+    }
+    for index in kept {
+        retained_argument_evidence(implementation, *index)?;
+    }
+    Ok(format!(
+        "typefacts-implementation-census:callbacks:retained-arguments:{}",
+        index_list(kept)
+    ))
+}
+
+/// The producer's retained-argument fact for one slot of a construction, once
+/// the use census on the same transcript agrees with it (ADR 0139): the
+/// parameter's every use is either the stated store or a direct call in the
+/// constructor's own frame.
+fn retained_argument_evidence(
+    implementation: &typefacts::ExportImplementationTranscript,
+    index: usize,
+) -> Result<&typefacts::RetainedArgument, String> {
+    if implementation.invocation.as_deref() != Some("construct") {
+        return Err(format!(
+            "describes parameter {index} as kept for the constructed value's members, and the \
+             transcript censused a call rather than a construction"
+        ));
+    }
+    let Some(argument) = implementation
+        .retained_arguments
+        .iter()
+        .find(|argument| argument.parameter_index == index)
+    else {
+        return Err(format!(
+            "describes parameter {index} as kept for the constructed value's members, and the \
+             producer states no retained argument at that slot"
+        ));
+    };
+    // A write of the binding is a use too: the use census records every
+    // reference, an assignment's target included, so the rule below refuses
+    // it without the producer's unwritten-slot fact, which a construct
+    // signature declared in a sibling `.d.ts` does not bind.
+    let mut stores = 0;
+    for used in implementation
+        .parameter_uses
+        .iter()
+        .filter(|used| used.parameter_index == index)
+    {
+        if !used.binding_path.is_empty() {
+            return Err(format!(
+                "describes parameter {index} as kept, and the use census roots a use at a \
+                 destructured member of it"
+            ));
+        }
+        if used.location == argument.store {
+            stores += 1;
+        } else if used.kind != typefacts::ParameterUseKind::DirectCall || used.captured {
+            return Err(format!(
+                "describes parameter {index} as kept, and the use census records a {:?} use at \
+                 {}:{}..{} that is neither its store nor a direct call in the constructor's own \
+                 frame",
+                used.kind, used.location.path, used.location.start_byte, used.location.end_byte
+            ));
+        }
+    }
+    if stores != 1 {
+        return Err(format!(
+            "describes parameter {index} as kept, and the use census records {stores} use(s) at \
+             its stated store"
+        ));
+    }
+    Ok(argument)
+}
+
+/// The positive half of a `result-access` item (ADR 0139): the operation, and
+/// the callback binding naming it, are witnessed by the producer's retained
+/// argument at the item's bare-parameter slot, and nothing else.
+fn require_retained_argument(
+    implementation: &typefacts::ExportImplementationTranscript,
+    source: &ValueSource,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    let ValueSource::Parameter { index, path } = source else {
+        return Err(open("a result-access item keeps a caller's parameter only"));
+    };
+    if !path.is_empty() {
+        return Err(open("a result-access item keeps a bare parameter only"));
+    }
+    let argument = retained_argument_evidence(implementation, usize::from(*index))
+        .map_err(|reason| open(&reason))?;
+    sites.push(format!(
+        "retained-argument:{index}:{}:{}:{}:{}",
+        argument.key, argument.store.path, argument.store.start_byte, argument.store.end_byte
+    ));
+    for invocation in &argument.invocations {
+        sites.push(format!(
+            "retained-argument-invocation:{}:{}:{}",
+            invocation.path, invocation.start_byte, invocation.end_byte
+        ));
+    }
+    Ok(())
+}
+
+/// Whether the callback binding a demand names is a `result-access` item.
+fn callback_is_result_access(
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    proof: &ScheduledProofDemand,
+) -> bool {
+    let ProofDemandSubject::PositiveFact(PositiveFactSubject::CallbackBinding {
+        ordinal,
+        operation,
+        ..
+    }) = &proof.subject
+    else {
+        return false;
+    };
+    export
+        .callbacks()
+        .items()
+        .get(usize::try_from(*ordinal).unwrap_or(usize::MAX))
+        .filter(|callback| callback.operation.0 == *operation)
+        .and_then(|callback| export.operation(&callback.operation.0))
+        .is_some_and(solid_reactive_ir::contract_semantics::Operation::is_result_access)
+}
+
+/// `0,2`: indices in order, comma-separated.
+fn index_list(indices: &std::collections::BTreeSet<usize>) -> String {
+    indices
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 /// Confirms a described enumeration against what the walk dispositioned, or
@@ -26297,6 +26580,7 @@ mod tests {
         };
         let plain = Some(Completion::Plain);
         let calls = |indices: &[usize]| DescribedCallbacks {
+            kept: std::collections::BTreeSet::new(),
             calls: indices.iter().copied().collect(),
             ..DescribedCallbacks::default()
         };
@@ -26493,6 +26777,7 @@ mod tests {
         };
         let enumeration =
             |calls: &[usize], protocols: &[(InvokeProtocol, usize)]| DescribedCallbacks {
+                kept: std::collections::BTreeSet::new(),
                 calls: calls.iter().copied().collect(),
                 protocols: protocols.iter().copied().collect(),
                 ..DescribedCallbacks::default()
@@ -26790,6 +27075,7 @@ mod tests {
             run.caller_supplied_invocations
         };
         let enumeration = |members: &[(usize, &str)]| DescribedCallbacks {
+            kept: std::collections::BTreeSet::new(),
             calls: [1usize].into(),
             protocols: [(Get, 0usize), (Get, 1)].into(),
             members: members
@@ -26929,6 +27215,7 @@ mod tests {
         };
         refused(
             &DescribedCallbacks {
+                kept: std::collections::BTreeSet::new(),
                 members: [(1usize, vec!["0".to_owned()])].into(),
                 ..DescribedCallbacks::default()
             },
@@ -26949,6 +27236,7 @@ mod tests {
         assert_eq!(
             confirm_described_callbacks(
                 &DescribedCallbacks {
+                    kept: std::collections::BTreeSet::new(),
                     members: [(0usize, vec!["run".to_owned()])].into(),
                     ..DescribedCallbacks::default()
                 },
@@ -26997,6 +27285,7 @@ mod tests {
         );
         let sites = run.caller_supplied_invocations;
         let described = DescribedCallbacks {
+            kept: std::collections::BTreeSet::new(),
             calls: [0usize].into(),
             ..DescribedCallbacks::default()
         };
@@ -27095,6 +27384,7 @@ mod tests {
                 vec![invoke("a"), invoke("b")],
             )),
             Ok(Some(DescribedCallbacks {
+                kept: std::collections::BTreeSet::new(),
                 calls: std::collections::BTreeSet::from([0usize, 2]),
                 ..DescribedCallbacks::default()
             }))
@@ -27107,6 +27397,7 @@ mod tests {
                 vec![invoke("a"), invoke("b")],
             )),
             Ok(Some(DescribedCallbacks {
+                kept: std::collections::BTreeSet::new(),
                 calls: std::collections::BTreeSet::from([0usize]),
                 members: std::collections::BTreeSet::from([(0usize, vec!["0".to_owned()])]),
                 ..DescribedCallbacks::default()

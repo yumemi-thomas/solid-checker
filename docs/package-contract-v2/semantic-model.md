@@ -119,7 +119,10 @@ The version-1 event vocabulary is:
 - cleanup;
 - external event;
 - request;
-- response commitment.
+- response commitment;
+- result access (ADR 0139: the export keeps a caller's callable only in the
+  value it returns, and it runs later, on the stack of code that invokes it
+  through that value; valid only as described under § callbacks).
 
 The scheduling relation is `same stack`, `queued`, or `external`. A queued
 operation names its drain event in `at`; an external operation names the
@@ -403,6 +406,40 @@ before. A consumer folds the item as an inline call of the member's value only
 when the argument written at the slot is an array or object literal naming
 that member exactly; any other argument folds nothing, which is what an inline
 row whose argument resolves to nothing has always done.
+
+**[Decision 2026-09-28, ADR 0139]** a `callbacks` item may say where the
+export **keeps** a callable its caller handed it: an `invoke` triggered by and
+`at` the `result-access` event, scheduled `external`, `ambient-at-execution`
+for tracking and owner with unconstrained requirements, counted per trigger
+from zero to many, unguarded, with no protocol, inputs, output or resources,
+and named by exactly one item `from` a bare parameter. It states that this
+invocation stores the callable only in the value it returns -- for a
+construction, the instance -- and that the callable runs later, on the stack of
+code that invokes it through that value. It denies, for that slot, every other
+retention: a registry, a module binding, a queued task, an external event. A
+slot with call items and no `result-access` item says nothing about retention,
+as before (ADR 0023: storage is not a call). A contract stating the event hashes
+in a digest family of its own (`solid-checker:semantic-result-access:v1`),
+recipe addresses per claim likewise, and a decoder that predates the event
+refuses the document. The generator derives the item for a class export whose
+construction the module's bytes show keeps the parameter once, as a top-level
+`this.<key> = p` statement of an exact class, with every other access of the
+key a member call no construction reaches, and every constructor parameter
+kept or unused (`retained_constructor_arguments`); it derives no call item for
+a class. The Type Facts producer states the same fact independently
+(`ExportImplementationTranscript.retainedArguments`, handshake protocol 65),
+over every reference to the class in the program, and the census confirms each
+item against it and against the use census of the same transcript: every use
+of the parameter is its stored reference or a direct call in the constructor's
+own frame, which ADR 0100's rules confirm as call items. A construction-time
+invocation through a member -- `@tanstack/router-core`'s `this.update(…)`
+reaching `this.getStoreConfig(this)` -- is not stated: it would be a call item
+the census cannot yet follow to one closure. The veto constructs the export
+with `new` on the construct signature and invokes no member of the value, so
+a kept slot running at any time is the contradiction. A consumer reads the
+item as a `deferred` invocation under an inherited owner, never a clearing,
+and never restates it on a local caller's parameter, which may keep the
+constructed value anywhere: the caller's slot is opened instead.
 
 ### reads
 

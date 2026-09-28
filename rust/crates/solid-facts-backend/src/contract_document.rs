@@ -1168,6 +1168,7 @@ const fn event_name(value: Event) -> &'static str {
         Event::External => "external-event",
         Event::Request => "request",
         Event::ResponseCommitment => "response-commitment",
+        Event::ResultAccess => "result-access",
     }
 }
 
@@ -1655,6 +1656,7 @@ enum WireEvent {
     External,
     Request,
     ResponseCommitment,
+    ResultAccess,
 }
 
 impl From<WireEvent> for Event {
@@ -1670,6 +1672,7 @@ impl From<WireEvent> for Event {
             WireEvent::External => Self::External,
             WireEvent::Request => Self::Request,
             WireEvent::ResponseCommitment => Self::ResponseCommitment,
+            WireEvent::ResultAccess => Self::ResultAccess,
         }
     }
 }
@@ -3940,6 +3943,86 @@ mod tests {
         assert!(
             decode(&document(r#"{"proposedClosures":["nonsense"]}"#)).is_err(),
             "an unknown domain spelling must be refused, not ignored"
+        );
+    }
+
+    /// ADR 0139: a `result-access` item survives the round trip, puts the
+    /// document in a digest family of its own, and is refused in any shape but
+    /// its one.
+    #[test]
+    fn a_result_access_item_round_trips_in_its_own_digest_family() {
+        let document = |operation: &str, callbacks: &str| {
+            format!(
+                r#"{{"format":"solid-reactivity-contract","schemaVersion":1,"semanticModelVersion":1,"package":{{"name":"consumer","version":"1.0.0","integrity":"sha512:test","manifest":{{"path":"package.json","sha256":"{a}"}}}},"summaries":{{"fn":{{"shape":"callable","call":{{"callbacks":{callbacks},"closed":["callbacks"],"operations":[{operation}]}}}}}},"entrypoints":{{".":{{"artifact":{{"path":"dist/index.js","sha256":"{b}","closureSha256":"{c}"}},"declarations":{{"path":"dist/index.d.ts","sha256":"{d}"}},"exports":{{"Keeper":"fn"}}}}}},"sidecars":{{}}}}"#,
+                a = "a".repeat(64),
+                b = "b".repeat(64),
+                c = "c".repeat(64),
+                d = "d".repeat(64),
+            )
+            .into_bytes()
+        };
+        const KEPT: &str = r#"{"at":{"event":"result-access","schedule":"external"},"count":{"max":"many","min":0,"scope":"trigger"},"id":"callback-0","kind":"invoke","owner":{"closed":["productions"],"productions":[],"source":"ambient-at-execution"},"tracking":"ambient-at-execution","trigger":{"event":"result-access"}}"#;
+        const ITEM: &str = r#"[{"from":{"arg":1,"path":[]},"operation":"callback-0"}]"#;
+        let kept = normalized(&document(KEPT, ITEM));
+        let operation = &kept.artifact_cases()[0].exports["Keeper"].call.operations[0];
+        assert!(operation.is_result_access(), "{operation:?}");
+        let encoded = encode(&kept, &SidecarDigests::default(), true).unwrap();
+        assert!(
+            String::from_utf8_lossy(&encoded).contains("\"event\": \"result-access\""),
+            "the encoder dropped the event"
+        );
+        assert_eq!(normalized(&encoded), kept);
+        // Its own family: the same item at the external event is another
+        // document with another digest.
+        let external = normalized(&document(
+            &KEPT
+                .replace(
+                    "\"result-access\",\"schedule\"",
+                    "\"external-event\",\"schedule\"",
+                )
+                .replace(
+                    "\"trigger\":{\"event\":\"result-access\"}",
+                    "\"trigger\":{\"event\":\"external-event\"}",
+                ),
+            ITEM,
+        ));
+        assert_ne!(external.semantic_digest(), kept.semantic_digest());
+        // Any other shape refuses.
+        for (operation, callbacks, needle) in [
+            (
+                KEPT.replace("\"schedule\":\"external\"", "\"schedule\":\"queued\""),
+                ITEM.to_owned(),
+                "on an external schedule",
+            ),
+            (
+                KEPT.replace(
+                    "\"tracking\":\"ambient-at-execution\"",
+                    "\"tracking\":\"untracked\"",
+                ),
+                ITEM.to_owned(),
+                "ambient-at-execution and unconstrained",
+            ),
+            (
+                KEPT.to_owned(),
+                ITEM.replace("\"path\":[]", "\"path\":[\"handler\"]"),
+                "exactly one callbacks item from a bare parameter",
+            ),
+        ] {
+            let refused = decode(&document(&operation, &callbacks))
+                .and_then(|decoded| decoded.normalize())
+                .expect_err("the shape is refused");
+            assert!(
+                refused.to_string().contains(needle),
+                "{needle:?}: {refused}"
+            );
+        }
+        assert!(
+            decode(&document(
+                &KEPT.replace("result-access", "result-read"),
+                ITEM
+            ))
+            .is_err(),
+            "an unknown event spelling is refused, not ignored"
         );
     }
 

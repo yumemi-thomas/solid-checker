@@ -317,7 +317,8 @@
       }
     },
     "event": {
-      "enum": ["call", "render", "flush", "settle", "transition", "async-emission", "cleanup", "external-event", "request", "response-commitment"]
+      "$comment": "`result-access` (ADR 0139) is valid only as both the trigger and the execution point of an `invoke` that exactly one `callbacks` item names from a bare parameter, scheduled `external`, `ambient-at-execution` for tracking and owner with unconstrained requirements, count trigger 0..many, unguarded, with no protocol, inputs, output or resources. It says the export stores the caller's callable only in the value it returns (for a construction, the instance), and the callable runs later, on the stack of code that invokes it through that value. A document stating it hashes in a digest family of its own (`solid-checker:semantic-result-access:v1`); a decoder that predates the event refuses the document, which is intended.",
+      "enum": ["call", "render", "flush", "settle", "transition", "async-emission", "cleanup", "external-event", "request", "response-commitment", "result-access"]
     },
     "trigger": {
       "type": "object",

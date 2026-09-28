@@ -489,6 +489,21 @@ fn callbacks_enumeration_is_confirmable(
         let Some(operation) = export.operation(&item.operation.0) else {
             return false;
         };
+        // ADR 0139: a `result-access` item is admissible when the generator's
+        // byte walk found the argument kept on the instance for members only
+        // (`result_access_parameters`); its one shape is the model's.
+        if operation.is_result_access() {
+            return matches!(
+                &item.from,
+                ValueSource::Parameter { index, path }
+                    if path.is_empty()
+                        && summary.is_some_and(|summary| {
+                            summary
+                                .result_access_parameters
+                                .contains(&usize::from(*index))
+                        })
+            );
+        }
         let direct = |index: u16, path: &[String]| {
             summary.is_some_and(|summary| {
                 let index = usize::from(index);
@@ -1060,6 +1075,30 @@ fn callback_operation(
         operation.protocol = Some(callback.protocol);
         return Ok(operation);
     }
+    // ADR 0139's retention item is one shape too (the model's
+    // `validate_result_access_operation`): triggered by and at the
+    // `result-access` event, on an external schedule, in the tracking context
+    // and under the owner of whoever invokes it through the returned value,
+    // counted per trigger from zero to many. Built directly for the same
+    // reason as a non-call row: nothing the row's other fields say can leak
+    // into it.
+    if callback.is_result_access() {
+        if !callback.path.is_empty() {
+            return invalid("a result-access row names the argument itself, never a member");
+        }
+        let mut operation = operation(id, OperationKind::Invoke, Vec::new(), None);
+        operation.trigger = Some(Trigger::Event(Event::ResultAccess));
+        operation.at = Some(Event::ResultAccess);
+        operation.schedule = Some(Schedule::External);
+        operation.tracking = Tracking::AmbientAtExecution;
+        operation.owner = owner_ambient();
+        operation.cardinality = Cardinality {
+            scope: Some(CardinalityScope::Trigger),
+            min: Some(0),
+            max: Some(UpperBound::Many),
+        };
+        return Ok(operation);
+    }
     // `inline` and `deferred` carry their schedule in the word. `tracked` does
     // not: it is an attribution word, and 1.x `createMemo`/`mergeProps` have
     // already run the callback when the export returns while 1.x `createEffect`
@@ -1114,6 +1153,9 @@ fn callback_operation(
                 // docs/precision-backlog.md: the compiler-lowering callback
                 // roles are the remaining path that reaches here.
                 Some(CallbackSchedule::Queued) | None => Some(Schedule::Queued),
+                Some(CallbackSchedule::ResultAccess) => {
+                    return invalid("only a deferred row carries the result-access event");
+                }
             },
             Tracking::Tracked,
         ),

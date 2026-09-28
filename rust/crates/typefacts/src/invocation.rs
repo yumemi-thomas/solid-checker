@@ -503,6 +503,24 @@ pub struct UnwrittenParameterBinding {
     pub declaration: Location,
 }
 
+/// ADR 0139, handshake protocol 65: one constructor parameter a class export
+/// keeps on its instance.
+///
+/// `store` is the parameter's own reference in the one top-level
+/// `this.<key> = p` statement of the constructor; every other use of the
+/// parameter is a direct call in the constructor's own frame. `invocations`
+/// is every member call `this.<key>(…)` in the class body, none of which a
+/// construction reaches.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RetainedArgument {
+    pub parameter_index: usize,
+    pub key: Arc<str>,
+    pub store: Location,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub invocations: Vec<Location>,
+}
+
 /// Protocol 46: original input transferred to a stable local helper, whose
 /// unchanged parameter is read synchronously at one exact member call.
 /// Possible execution only; no member shape or later input identity follows.
@@ -886,6 +904,13 @@ pub struct ExportImplementationTranscript {
     /// cannot accept.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub invocation: Option<Arc<str>>,
+    /// ADR 0139, handshake protocol 65: the constructor parameters a
+    /// construction keeps on the instance under a fixed key, for its own
+    /// members to call later. Stated only beside `invocation: construct`, and
+    /// only for a parameter the producer's census of the class admits. Absence
+    /// is not a statement that nothing is kept.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub retained_arguments: Vec<RetainedArgument>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub primitive_completion: bool,
     /// The conjunction of seven independent gates, every one of which the

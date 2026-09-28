@@ -438,6 +438,9 @@ fn normalize_operation(
     if let Some(protocol) = operation.protocol {
         validate_protocol_operation(operation, protocol, &op_path)?;
     }
+    if operation.is_result_access() {
+        validate_result_access_operation(operation, &op_path)?;
+    }
     if let Some(composed) = &operation.composed_from {
         let composed_path = format!("{op_path}.composedFrom");
         require_text(&composed.export, &format!("{composed_path}.export"))?;
@@ -516,6 +519,69 @@ fn validate_protocol_operation(
     }
     if operation.guard.is_some() {
         return refuse("is unguarded");
+    }
+    Ok(())
+}
+
+/// An operation at the `result-access` event (ADR 0139) states exactly one
+/// shape.
+///
+/// It says the export stores the caller's callable only in the value it
+/// returns, and the callable runs later, on the stack of whoever invokes it
+/// through that value: so an `invoke` whose trigger and execution point are
+/// both the event, scheduled `external` (it is not this call's stack), in the
+/// tracking context and under the owner of that later caller
+/// (`ambient-at-execution` for both -- never `untracked`, which would claim a
+/// clear nobody proved), counted per trigger from zero to many, with no guard
+/// and no protocol but a call. Which `callbacks` item names it, and from
+/// where, is checked with the claims (`validate_call_claims`).
+fn validate_result_access_operation(operation: &Operation, path: &str) -> Result<(), ModelError> {
+    let refuse = |reason: &str| {
+        contradiction(
+            format!("{path}.at"),
+            format!("a result-access operation {reason}"),
+        )
+    };
+    if operation.kind != OperationKind::Invoke {
+        return refuse("is an invoke");
+    }
+    if operation.trigger != Some(Trigger::Event(Event::ResultAccess))
+        || operation.at != Some(Event::ResultAccess)
+        || operation.schedule != Some(Schedule::External)
+    {
+        return refuse(
+            "is triggered by and happens at the result-access event, on an external schedule",
+        );
+    }
+    if operation.tracking != Tracking::AmbientAtExecution
+        || operation.owner.source != OwnerSource::AmbientAtExecution
+        || operation.owner.requirements
+            != (OwnerRequirements {
+                owner: Requirement::Unconstrained,
+                child_owners: Requirement::Unconstrained,
+                cleanup: Requirement::Unconstrained,
+            })
+    {
+        return refuse(
+            "runs in the tracking context and under the owner of its later caller, \
+             ambient-at-execution and unconstrained",
+        );
+    }
+    if operation.cardinality
+        != (Cardinality {
+            scope: Some(CardinalityScope::Trigger),
+            min: Some(0),
+            max: Some(UpperBound::Many),
+        })
+    {
+        return refuse("is counted per trigger, from zero to many");
+    }
+    if operation.guard.is_some() || operation.protocol.is_some() {
+        return refuse("is an unguarded call");
+    }
+    if !operation.inputs.is_empty() || operation.output.is_some() || !operation.resources.is_empty()
+    {
+        return refuse("states no inputs, output or resources");
     }
     Ok(())
 }
@@ -1249,6 +1315,31 @@ fn validate_call_claims(
                 return contradiction(
                     format!("{path}.operation.{}.protocol", operation.id.0),
                     "a non-call invocation is named by exactly one callbacks item from a bare parameter",
+                );
+            }
+        }
+    }
+    // ADR 0139: a result-access operation keeps the caller's own argument, so
+    // exactly one item names it, from a bare parameter -- a member of the
+    // argument, an operation's output or a resource is a value this export
+    // reached, and no census states what the export keeps of one.
+    for operation in operations
+        .iter()
+        .filter(|operation| operation.is_result_access())
+    {
+        let naming = claims
+            .callbacks
+            .items()
+            .iter()
+            .filter(|callback| callback.operation == operation.id)
+            .collect::<Vec<_>>();
+        match naming.as_slice() {
+            [callback] if matches!(&callback.from, ValueSource::Parameter { path, .. } if path.is_empty()) =>
+                {}
+            _ => {
+                return contradiction(
+                    format!("{path}.operation.{}.at", operation.id.0),
+                    "a result-access invocation is named by exactly one callbacks item from a bare parameter",
                 );
             }
         }

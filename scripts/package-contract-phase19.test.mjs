@@ -261,7 +261,12 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // corpus pin of ADR 0128: a declaration re-export of a name its module
       // does not declare leaves the surface alone instead of refusing the
       // artifact case (`solid-js@2.0.0-rc.9`'s `$DEVCOMP`).
-      stableMainDocuments: 153,
+      //
+      // 154 on 2026-09-28 adds implementation-census-retained-argument's main
+      // document, the corpus pin of ADR 0139: a class export whose
+      // construction keeps its caller's callable for its members states a
+      // `result-access` item, and every inexact class states nothing.
+      stableMainDocuments: 154,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

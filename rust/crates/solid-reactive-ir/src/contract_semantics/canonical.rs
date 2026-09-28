@@ -71,7 +71,25 @@ pub(super) fn semantic_digest(
                 .any(|operation| operation.protocol.is_some())
         })
     });
+    // ADR 0139's `result-access` event is one family more, on the same
+    // argument: a contract none of whose operations happens at the event emits
+    // the stream it always did. Its operations are encoded by the ordinary
+    // event encoding, which gives the new event a code of its own; the marker
+    // separates the family so no document that predates the event can share
+    // an identity with one that states it.
+    let result_access = artifact_cases.iter().any(|case| {
+        case.exports.values().any(|export| {
+            export
+                .call
+                .operations
+                .iter()
+                .any(Operation::is_result_access)
+        })
+    });
     let mut writer = CanonicalWriter::new();
+    if result_access {
+        writer.text(SEMANTIC_RESULT_ACCESS_MARKER);
+    }
     if invoke_protocols {
         writer.text(SEMANTIC_INVOKE_PROTOCOL_MARKER);
     }
@@ -204,6 +222,13 @@ pub(super) fn recipe_address(
         }
     };
     let mut writer = CanonicalWriter::new();
+    // The result-access family (ADR 0139), per claim, the same way.
+    if operations
+        .iter()
+        .any(|operation| operation.is_result_access())
+    {
+        writer.text(SEMANTIC_RESULT_ACCESS_MARKER);
+    }
     // The invoke-protocol family, per claim: a claim none of whose operations
     // states a non-call protocol writes exactly the stream it wrote before the
     // field existed, so every address already in a recipe corpus still binds.
@@ -723,6 +748,7 @@ impl CanonicalWriter {
             Event::External => 7,
             Event::Request => 8,
             Event::ResponseCommitment => 9,
+            Event::ResultAccess => 10,
         });
     }
 

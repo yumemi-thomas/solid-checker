@@ -1584,3 +1584,128 @@ fn a_member_call_item_selects_the_member_observation_at_an_index_only() {
         );
     }
 }
+
+/// ADR 0139: a `result-access` item is never a call slot -- it leaves the mask,
+/// so an enumeration of kept items alone observes every slot -- and a class
+/// export is sampled with `new`. The module hands the constructed value to
+/// nothing, so a kept callable that runs at any time is the contradiction, and
+/// a described call slot that runs inside the construction is the item.
+#[test]
+fn the_constructed_callbacks_module_samples_new_and_never_runs_a_kept_slot() {
+    use solid_reactive_ir::contract_semantics::{
+        CallbackInvocation, CardinalityScope, OwnerSource, UpperBound, ValueSource,
+    };
+    let kept = |id: &str| Operation {
+        id: OperationId(id.into()),
+        kind: OperationKind::Invoke,
+        output: None,
+        trigger: Some(Trigger::Event(Event::ResultAccess)),
+        at: Some(Event::ResultAccess),
+        schedule: Some(Schedule::External),
+        tracking: Tracking::AmbientAtExecution,
+        owner: OwnerRelation {
+            source: OwnerSource::AmbientAtExecution,
+            ..OwnerRelation::default()
+        },
+        cardinality: Cardinality {
+            scope: Some(CardinalityScope::Trigger),
+            min: Some(0),
+            max: Some(UpperBound::Many),
+        },
+        ..return_operation()
+    };
+    let call = |id: &str| Operation {
+        id: OperationId(id.into()),
+        kind: OperationKind::Invoke,
+        output: None,
+        ..return_operation()
+    };
+    let item = |index: u16, operation: &str| CallbackInvocation {
+        from: ValueSource::Parameter {
+            index,
+            path: vec![],
+        },
+        operation: OperationId(operation.into()),
+    };
+    let export = |items: Vec<CallbackInvocation>, operations: Vec<Operation>| {
+        let mut export = export_with_returns(KnowledgeSet::Unknown, operations);
+        export.call = CallSemantics::new(
+            CallClaims {
+                callbacks: KnowledgeSet::complete(items),
+                ..CallClaims::default()
+            },
+            export.call.operations.clone(),
+            vec![],
+            vec![],
+            GuardPartition::default(),
+        );
+        export
+    };
+    assert_eq!(
+        candidate_observation("callbacks", &export(vec![item(0, "k")], vec![kept("k")])),
+        Some(Observation::DescribedCallbacks(0)),
+        "a kept slot is outside every mask"
+    );
+    assert_eq!(
+        candidate_observation(
+            "callbacks",
+            &export(vec![item(0, "c"), item(0, "k")], vec![call("c"), kept("k")])
+        ),
+        Some(Observation::DescribedCallbacks(0b1)),
+        "the call item alone is the described slot"
+    );
+
+    let signatures = [signature(&[callable_fact()])];
+    let invoked = |observed: &ObservationResult| {
+        observed
+            .markers
+            .iter()
+            .any(|marker| marker == "callback-invocation")
+    };
+    for (implementation, mask) in [
+        (
+            "export class subject { constructor(a) { this.a = a; } run() { this.a(); } }",
+            0,
+        ),
+        (
+            "export class subject { constructor(a) { a(); this.a = a; } run() { this.a(); } }",
+            0b1,
+        ),
+    ] {
+        let quiet = execute(
+            implementation,
+            Observation::ConstructedCallbacks(mask),
+            &signatures,
+        );
+        assert_eq!(quiet.error, None, "{implementation}");
+        assert!(!invoked(&quiet), "{implementation}: {quiet:?}");
+    }
+    for implementation in [
+        // Invoked at construction, which no call item describes.
+        "export class subject { constructor(a) { a(); } }",
+        // Kept somewhere other than the instance and run later.
+        "export class subject { constructor(a) { queueMicrotask(a); } }",
+    ] {
+        let loud = execute(
+            implementation,
+            Observation::ConstructedCallbacks(0),
+            &signatures,
+        );
+        assert_eq!(loud.error, None, "{implementation}");
+        assert!(invoked(&loud), "{implementation}: {loud:?}");
+    }
+    let source = module_source(
+        "data:text/javascript,",
+        "subject",
+        Observation::ConstructedCallbacks(0),
+        &signatures,
+    );
+    assert!(source.contains("new subject(...args);"), "{source}");
+    let called = module_source(
+        "data:text/javascript,",
+        "subject",
+        Observation::DescribedCallbacks(0),
+        &signatures,
+    );
+    assert!(!called.contains("new subject"), "{called}");
+}

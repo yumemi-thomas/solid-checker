@@ -830,9 +830,22 @@
         "primitiveCompletion": { "type": "boolean" },
         "notCallableValue": { "$ref": "#/$defs/notCallableValue" },
         "defaultLibraryAlias": { "$ref": "#/$defs/defaultLibraryAlias" },
+        "retainedArguments": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/retainedArgument" }, "description": "ADR 0139, handshake protocol 65: the constructor parameters a construction keeps on the instance under a fixed key for its own members to call later. Stated only beside invocation \"construct\". Absence is not a statement that nothing is kept." },
         "invocation": { "enum": ["construct"], "description": "The form the selected signature is invoked through (ADR 0105, handshake protocol 59). Stated as \"construct\" for a class export and absent for a call, because absence is what every producer below this protocol meant by saying nothing. A consumer must read it: the census of a construction is a census of a constructor body, and reading it as a call would describe an invocation the class cannot accept." },
         "complete": { "type": "boolean" },
         "openReasons": { "type": "array", "maxItems": 1000000, "items": { "type": "string" } }
+      }
+    },
+    "retainedArgument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parameterIndex", "key", "store"],
+      "description": "One constructor parameter a class export keeps on its instance (ADR 0139, handshake protocol 65). store is the parameter's own reference in the one top-level `this.<key> = p` statement of the constructor; every other use of the parameter is a direct call in the constructor's own frame. invocations is every member call `this.<key>(…)` in the class body, none of which a construction reaches. The producer states it only for an exact class: no heritage, static member, nested class or computed member of `this`; an instance that never escapes as a value; a constructor that returns no value; members written only with parameters, literals, objects, arrays, `new` results or installed function literals; and every reference to the class an export specifier, a `new` callee or a `void` operand.",
+      "properties": {
+        "parameterIndex": { "type": "integer", "minimum": 0 },
+        "key": { "type": "string", "minLength": 1 },
+        "store": { "$ref": "#/$defs/location" },
+        "invocations": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/location" } }
       }
     },
     "parameterPremise": {

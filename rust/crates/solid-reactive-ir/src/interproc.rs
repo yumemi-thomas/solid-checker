@@ -1902,6 +1902,12 @@ fn discover_interprocedural_graph(
                         if let Some(&(callback_owner, parameter)) =
                             function_lookup.parameter_owner.get(member_symbol)
                         {
+                            if callback.is_result_access() {
+                                contribution
+                                    .escaped_parameters
+                                    .push((nodes[callback_owner].span, parameter));
+                                continue;
+                            }
                             if callback.execution == "inline" {
                                 contribution
                                     .invoked_parameters
@@ -1963,6 +1969,14 @@ fn discover_interprocedural_graph(
                     if let Some(&(callback_owner, parameter)) =
                         function_lookup.parameter_owner.get(argument_symbol)
                     {
+                        // ADR 0139: what the dependency keeps in its result is
+                        // not a fact about this owner's result.
+                        if callback.is_result_access() {
+                            contribution
+                                .escaped_parameters
+                                .push((nodes[callback_owner].span, parameter));
+                            continue;
+                        }
                         if callback.execution == "inline" {
                             contribution
                                 .invoked_parameters
@@ -6127,6 +6141,17 @@ fn interprocedural_reads(
                 .cloned()
                 .collect::<Vec<_>>()
             {
+                // ADR 0139: a `result-access` row says the *callee* keeps the
+                // callable only in what it returns. That is not a fact about
+                // the owner, which may keep that value anywhere, so the row is
+                // never restated: the owner's slot is opened instead.
+                if callback.is_result_access() {
+                    if !escaped_parameters[*owner].contains(owner_parameter) {
+                        escaped_parameters[*owner].push(*owner_parameter);
+                        changed = true;
+                    }
+                    continue;
+                }
                 // Only an `inline` callee row is relative to the callee's own
                 // call and therefore needs restating; `tracked` and `deferred`
                 // survive any wrapper. `Unknown` refuses to restate it, and the

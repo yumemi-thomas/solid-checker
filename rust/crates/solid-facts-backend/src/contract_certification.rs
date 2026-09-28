@@ -17876,6 +17876,244 @@ export const value = phantom;
         );
     }
 
+    /// ADR 0139, planned from hand-stated summaries so a claim the generator's
+    /// walk would not make can be put to the census: each class export's
+    /// `callbacks` is an inline call item per `calls` entry and a
+    /// `result-access` item per `kept` entry.
+    fn retained_argument_fixture_certify(
+        label: &str,
+    ) -> Option<(
+        CertificationPlan,
+        Result<super::FinalizedPolicy2Contract, super::Policy2FinalizationError>,
+    )> {
+        use solid_reactive_ir::contract_semantics::InvokeProtocol;
+        use solid_reactive_ir::{
+            CallbackSchedule, ContractCallback, ContractClaim, ContractEntrypoint, ContractExport,
+            ContractPackage, PackageContract,
+        };
+        type Claim = (&'static str, &'static [usize], &'static [usize]);
+        let exports: [Claim; 9] = [
+            // What the generator proposes (`expected.json`).
+            ("Keeper", &[], &[0]),
+            // What the generator does not derive: the call item's arguments.
+            ("Primed", &[0], &[0]),
+            // The falsifying variants: a kept claim the producer does not
+            // state, and a call the enumeration leaves out.
+            ("RunsAtConstruction", &[], &[0]),
+            ("HandsOn", &[], &[0]),
+            ("Escapes", &[], &[0]),
+            ("Rewritten", &[], &[0]),
+            ("Augmented", &[], &[0]),
+            ("PrimedUndescribed", &[], &[0]),
+            // A kept claim beside a construction that keeps nothing.
+            ("KeeperUnkept", &[], &[0]),
+        ];
+        let pin = pinned_producer_for_test()?;
+        let name = "implementation-census-retained-argument";
+        let root = "/project/node_modules/implementation-census-retained-argument";
+        let fixture = repository_root()
+            .join("fixtures/package-contracts")
+            .join(name);
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let bindings = exports.map(|(export, ..)| {
+            (
+                export,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        let (_, resolved) = test_package_resolution(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[],
+            "/project/src/app.ts",
+        );
+        let row = |parameter: usize, kept: bool| ContractCallback {
+            parameter,
+            execution: if kept { "deferred" } else { "inline" }.into(),
+            schedule: kept.then_some(CallbackSchedule::ResultAccess),
+            clears_tracking: false,
+            arguments: Vec::new(),
+            owner: kept.then(|| "inherited".into()),
+            protocol: InvokeProtocol::Call,
+            path: Vec::new(),
+        };
+        let inferred = PackageContract {
+            package: ContractPackage {
+                name: name.into(),
+                version: "1.0.0".into(),
+                integrity: String::new(),
+            },
+            entrypoints: BTreeMap::from([(
+                ".".into(),
+                ContractEntrypoint {
+                    exports: exports
+                        .into_iter()
+                        .map(|(export, calls, kept)| {
+                            (
+                                export.into(),
+                                ContractExport {
+                                    kind: "function".into(),
+                                    reactive_reads: ContractClaim::Open,
+                                    callbacks: ContractClaim::Known(
+                                        calls
+                                            .iter()
+                                            .map(|parameter| row(*parameter, false))
+                                            .chain(
+                                                kept.iter().map(|parameter| row(*parameter, true)),
+                                            )
+                                            .collect(),
+                                    ),
+                                    owner_requirements: ContractClaim::Open,
+                                    returns: ContractClaim::Open,
+                                    async_behavior: ContractClaim::Known(String::new()),
+                                    direct_callback_parameters: calls.iter().copied().collect(),
+                                    result_access_parameters: kept.iter().copied().collect(),
+                                    ..ContractExport::default()
+                                },
+                            )
+                        })
+                        .collect(),
+                },
+            )]),
+            source_path: String::new(),
+        };
+        let candidate =
+            crate::inferred_contract::normalize_inferred_contract(&inferred, &resolved).unwrap();
+        let plan = try_plan_supplied_candidate_for_test_package(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            candidate,
+        )
+        .expect("the hand-stated proposal plans against its own artifact");
+        let scratch = TracerScratch::new(label);
+        let probes = tracer_configuration_from(&fixture, scratch.path(), label, &[])?;
+        let outcome = tracer_certify(&plan, &pin, &probes);
+        Some((plan, outcome))
+    }
+
+    /// `(is result-access, parameter)` of every item of `export`'s closed
+    /// `callbacks`, sorted, or `None` when the domain is open.
+    fn closed_kept_callbacks_in(main: &[u8], export: &str) -> Option<Vec<(bool, u16)>> {
+        use solid_reactive_ir::contract_semantics::ValueSource;
+        let decoded = crate::contract_document::decode(main)
+            .expect("canonical main decodes")
+            .normalize()
+            .expect("canonical main normalizes");
+        decoded.artifact_cases().iter().find_map(|case| {
+            let semantics = case.exports.get(export)?;
+            let claim = semantics.callbacks();
+            claim.is_closed().then(|| {
+                let mut items = claim
+                    .items()
+                    .iter()
+                    .filter_map(|item| {
+                        let ValueSource::Parameter { index, .. } = &item.from else {
+                            return None;
+                        };
+                        Some((
+                            semantics.operation(&item.operation.0)?.is_result_access(),
+                            *index,
+                        ))
+                    })
+                    .collect::<Vec<_>>();
+                items.sort();
+                items
+            })
+        })
+    }
+
+    /// ADR 0139 end to end: a `result-access` item is confirmed by the
+    /// producer's census of the construction and its use census, beside a call
+    /// item the call census confirms, and survives the mandatory veto into the
+    /// canonical main; every class the producer does not state withholds by
+    /// name while the row certifies.
+    #[test]
+    fn the_retained_argument_census_certifies_exactly_what_members_keep() {
+        let Some((plan, outcome)) = retained_argument_fixture_certify("retained-argument") else {
+            return;
+        };
+        let finalized = outcome.unwrap_or_else(|error| {
+            panic!("every refusal here withholds by name and the row certifies: {error}")
+        });
+        let main = finalized.canonical_main();
+        for (export, expected) in [
+            ("Keeper", vec![(true, 0)]),
+            ("Primed", vec![(false, 0), (true, 0)]),
+        ] {
+            assert_eq!(
+                closed_kept_callbacks_in(main, export),
+                Some(expected),
+                "{export}: {:?}",
+                finalized.withheld_closures()
+            );
+        }
+        // A kept item the producer does not state is withdrawn by its own
+        // positive facts, which opens the domain before the closure is
+        // reached; one it does state beside a call the enumeration leaves out
+        // is refused by the closure census.
+        let unstated = "producer states no retained argument at that slot";
+        for (export, needle) in [
+            ("RunsAtConstruction", unstated),
+            ("HandsOn", unstated),
+            ("Escapes", unstated),
+            ("Rewritten", unstated),
+            ("Augmented", unstated),
+            ("KeeperUnkept", unstated),
+            (
+                "PrimedUndescribed",
+                "which the enumeration does not describe",
+            ),
+        ] {
+            assert!(
+                finalized
+                    .withheld_closures()
+                    .iter()
+                    .filter(|record| record.export == export && record.domain == "callbacks")
+                    .map(|record| record.reason.as_str())
+                    .chain(
+                        finalized
+                            .withheld_operations()
+                            .iter()
+                            .filter(|record| record.export == export)
+                            .map(|record| record.reason.as_str())
+                    )
+                    .any(|reason| reason.contains(needle)),
+                "{export}: {:?} {:?}",
+                finalized.withheld_closures(),
+                finalized.withheld_operations()
+            );
+            assert_eq!(closed_kept_callbacks_in(main, export), None, "{export}");
+        }
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan),
+            "the synthesized veto must run before a kept closure closes"
+        );
+    }
+
     /// Item B of ways-to-improve § 3.3, planned from hand-stated summaries so a
     /// claim the generator's walk would not make can be put to the census:
     /// each export's `callbacks` is a call per `calls` entry, a member call per

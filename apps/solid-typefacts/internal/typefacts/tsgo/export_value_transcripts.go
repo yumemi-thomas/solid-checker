@@ -413,6 +413,12 @@ func (p *project) exportImplementationTranscriptLocked(
 	}
 	if callKind == typefacts.CallKindConstruct {
 		transcript.Invocation = typefacts.CallKindConstruct
+		// ADR 0139: what the construction keeps on the instance, for its own
+		// members only. Not stated through an implementation alias: the body
+		// censused is then some other declaration's.
+		if implementationOf == nil {
+			transcript.RetainedArguments = p.retainedArgumentsLocked(implementation)
+		}
 	}
 	transcript.CompletionForm = implementationCompletionForm(implementation)
 	selected := p.selectedSignatureLocked(
@@ -1495,6 +1501,11 @@ func implementationCompletionForm(implementation *ast.Node) typefacts.Implementa
 	case ast.IsMethodDeclaration(implementation):
 		generator = implementation.AsMethodDeclaration().AsteriskToken != nil
 	case ast.IsArrowFunction(implementation):
+	case nodeKindName(implementation) == "Constructor":
+		// A constructor is neither async nor a generator by grammar: `new`
+		// runs its body to completion before it hands back the instance
+		// (handshake protocol 65, ADR 0139).
+		return typefacts.CompletionPlain
 	default:
 		return typefacts.CompletionUnclassified
 	}

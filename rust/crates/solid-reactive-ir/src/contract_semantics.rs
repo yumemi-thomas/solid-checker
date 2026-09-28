@@ -63,6 +63,11 @@ pub const SEMANTIC_DIGEST_DOMAIN_COMPOSED_PROPOSED_CLOSURE: &str =
 /// [`InvokeProtocol`]. A stream with no such operation never writes it, so it
 /// hashes exactly as it did before the protocol existed.
 pub const SEMANTIC_INVOKE_PROTOCOL_MARKER: &str = "solid-checker:semantic-invoke-protocol:v1";
+/// The length-prefixed marker a semantic digest or a recipe address writes
+/// first when some operation it encodes happens at [`Event::ResultAccess`]
+/// (ADR 0139). A stream with no such operation never writes it, so it hashes
+/// exactly as it did before the event existed.
+pub const SEMANTIC_RESULT_ACCESS_MARKER: &str = "solid-checker:semantic-result-access:v1";
 pub const SEMANTIC_CLAIM_ID_VERSION: u16 = 1;
 /// Version of the byte-only artifact-case identity a [`RecipeAddress`] binds.
 pub const ARTIFACT_CASE_BYTES_VERSION: u16 = 1;
@@ -1457,6 +1462,14 @@ pub enum Event {
     External,
     Request,
     ResponseCommitment,
+    /// ADR 0139: the export stores the callable only in the value it returns
+    /// (for a construction, the instance), and the callable runs later, on
+    /// the stack of code that invokes it through that value. Valid only on an
+    /// `invoke` a `callbacks` item names from a bare parameter, with schedule
+    /// `external`, tracking and owner `ambient-at-execution`, counted per
+    /// trigger from zero to many, unguarded
+    /// (`validate::validate_result_access_operation`).
+    ResultAccess,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -1723,6 +1736,21 @@ impl Operation {
     #[must_use]
     pub fn is_protocol_invocation(&self) -> bool {
         self.invoke_protocol() != InvokeProtocol::Call
+    }
+
+    /// Whether this operation happens at [`Event::ResultAccess`] (ADR 0139):
+    /// its execution point or its trigger names the event.
+    #[must_use]
+    pub fn is_result_access(&self) -> bool {
+        self.at == Some(Event::ResultAccess)
+            || matches!(
+                self.trigger,
+                Some(Trigger::Event(Event::ResultAccess))
+                    | Some(Trigger::Resource {
+                        event: Event::ResultAccess,
+                        ..
+                    })
+            )
     }
 }
 

@@ -268,8 +268,13 @@ authenticate the other.
 Operation `kind` is one of `invoke`, `return`, `read`, `write`, `invalidate`,
 `create`, `cleanup`, or `dispose`. `trigger` names either an event, an operation,
 or a resource event. `at.event` is one of `call`, `render`, `flush`, `settle`,
-`transition`, `async-emission`, `cleanup`, `external-event`, `request`, or
-`response-commitment`; `at.schedule` is `same-stack`, `queued`, or `external`.
+`transition`, `async-emission`, `cleanup`, `external-event`, `request`,
+`response-commitment`, or `result-access`; `at.schedule` is `same-stack`,
+`queued`, or `external`. `result-access` (ADR 0139) is valid only as both the
+trigger and the execution point of an `invoke` exactly one `callbacks` item
+names from a bare parameter, scheduled `external`, `ambient-at-execution` for
+tracking and owner, count `trigger` 0..many, unguarded, and puts the document
+in the digest family `solid-checker:semantic-result-access:v1`.
 
 `tracking` is `tracked`, `untracked`, or `ambient-at-execution`. Omission means
 unknown. Owner `source` is `none`, `ambient-at-call`, `ambient-at-execution`,

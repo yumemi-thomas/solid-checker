@@ -39,7 +39,9 @@ mod import_reexport;
 mod inert_erasure;
 mod inert_javascript;
 mod object_binding;
+mod retained_arguments;
 mod span_index;
+mod super_argument;
 
 pub use binding_references::import_binding_references;
 pub use class_obligation::{ClassObligation, ClassObligationKind, class_obligation};
@@ -56,6 +58,13 @@ pub use inert_javascript::{
 pub use object_binding::{
     UnwrittenObjectBinding, UnwrittenPrimitiveBinding, unwritten_object_binding,
     unwritten_primitive_binding,
+};
+pub use retained_arguments::{
+    RetainedConstructorArguments, RetainedParameter, retained_constructor_arguments,
+};
+pub use super_argument::{
+    SuperArgumentFunction, SuperArgumentSite, super_argument_function,
+    super_argument_sites_of_binding,
 };
 
 pub use emission::{

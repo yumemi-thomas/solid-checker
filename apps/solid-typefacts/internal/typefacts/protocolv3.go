@@ -4,7 +4,18 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 64 (item B round 2 of ways-to-improve § 3.3):
+// TypeFactsHandshakeProtocol is 65 (ADR 0139): **a construction states what it
+// keeps for its members.** ExportImplementationTranscript.RetainedArguments,
+// beside invocation `construct`, names each constructor parameter stored once
+// on the instance under a fixed key, whose every other use is a direct call in
+// the constructor's own frame and whose key only member calls read, none of
+// them in code a construction reaches, in a class nothing extends, augments
+// or leaks. A constructor's completion form is now stated `plain`, which its
+// grammar guarantees, where it was `unclassified`. A protocol-64 consumer
+// decodes with `deny_unknown_fields` and would reject the new field, so the
+// number moves.
+//
+// Protocol 64 (item B round 2 of ways-to-improve § 3.3):
 // **a returned member read of an unchanged parameter states its arms.** A
 // return whose expression, after identity-preserving wrappers, is a non-call
 // property access or literal-keyed element access chain rooted at an
@@ -420,8 +431,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 64
-	TypeFactsSchemaSHA256             = "sha256:5540922fc6863e0533776d5f81806b73a20f7fe0bd0fc2bc29beab10a67167dc"
+	TypeFactsHandshakeProtocol uint64 = 65
+	TypeFactsSchemaSHA256             = "sha256:513bf2df187285b39f94953e2186a9b71348cc1cf533fdad9b9ae67fa874bc53"
 )
 
 type ServiceHandshake struct {

@@ -5070,6 +5070,10 @@ struct UnresolvedExportIndex<'a> {
     /// The requested entrypoint's exact resolution record, for the runtime
     /// bindings of its public names; `None` without an entry file.
     resolution: Option<&'a solid_facts_backend::ResolvedImport>,
+    /// The accepted dependency contracts this generation was handed, for what
+    /// a base class does with an argument its subclass passes to `super(…)`
+    /// (ADR 0139 § 3).
+    contracts: &'a solid_reactive_ir::contract_semantics::AcceptedContractIndex,
 }
 
 /// How an open semantic leaf was attributed to the exports it affects.
@@ -5109,6 +5113,15 @@ enum AttributionMechanism {
     /// it opens `returns` of exactly the exports that create or publish the
     /// class (ADR 0134, owner decision 2026-09-27).
     ClassInstanceMember,
+    /// The obligation is in a function whose only use is an argument of a
+    /// subclass's `super(…)`, and the base's accepted contract says it invokes
+    /// that argument during construction, or keeps it for its members and a
+    /// construction may reach one: it belongs to the subclass's creators, in
+    /// every domain (ADR 0139 § 3).
+    SuperArgumentConstruction,
+    /// The same function, kept by the base for its members only: it opens
+    /// `returns` of exactly the subclass's creators (ADR 0139 § 3).
+    SuperArgumentMember,
     /// Nothing identified the obligation's function, so every export of the
     /// entrypoint is marked. This is the surviving fail-closed rung.
     FallbackAll,
@@ -5126,6 +5139,8 @@ impl AttributionMechanism {
             Self::ReexportedImport => "reexported-import",
             Self::ClassConstruction => "class-construction",
             Self::ClassInstanceMember => "class-instance-member",
+            Self::SuperArgumentConstruction => "super-argument-construction",
+            Self::SuperArgumentMember => "super-argument-member",
             Self::FallbackAll => "fallback-all",
         }
     }
@@ -5660,10 +5675,218 @@ fn attribute_unresolved_obligation(
         };
         return (mechanism, names);
     }
+    if let Some((construction, names)) =
+        export_names_of_super_argument_obligation(index, location, exports)
+    {
+        let mechanism = if construction {
+            AttributionMechanism::SuperArgumentConstruction
+        } else {
+            AttributionMechanism::SuperArgumentMember
+        };
+        return (mechanism, names);
+    }
     (
         AttributionMechanism::FallbackAll,
         exports.keys().cloned().collect(),
     )
+}
+
+/// Which exports an obligation in a function passed to a subclass's
+/// `super(…)` belongs to, from what the base's accepted contract says it does
+/// with that argument (ADR 0139 § 3).
+///
+/// The obligation sits in a module-level function `F`, or on an import binding
+/// used only inside it ([`solid_facts::ast::super_argument_function`]). Every
+/// reference to `F` in the package must be an argument `i` of the top-level
+/// `super(…)` statement of a module-level class `C` whose heritage is a named
+/// import of a dependency export `D` -- in `F`'s own module, or through an
+/// import binding in another package module whose every use is one
+/// ([`solid_facts::ast::super_argument_sites_of_binding`]) -- and no entry name
+/// may publish `F`. Then, per site:
+///
+/// - `C` declares nothing but its constructor, and its instance escapes
+///   nowhere: an override would change what `D`'s own `this.m(…)` runs, and an
+///   escaped instance lets code that never received it call `D`'s members;
+/// - `D`'s accepted `callbacks` is closed and has a `result-access` item from
+///   slot `i`, which denies that `D` keeps `F` anywhere but in the instance. A
+///   call item alone does not: storage is not a call, and a closed enumeration
+///   of calls says nothing about what else `D` keeps (ADR 0023). Every other
+///   answer -- open, absent, degenerate, a member path of slot `i`, or no
+///   `result-access` item -- answers nothing here;
+/// - with a call item from `i`, or a constructor that names a member of
+///   `this` or `super` (a construction may then reach `D`'s member that calls
+///   `F`), `F` runs during construction: [`SuperArgumentConstruction`], in every
+///   domain. Otherwise `F` runs only when a member of the instance is invoked:
+///   [`SuperArgumentMember`], which opens `returns`, as ADR 0134 § 2 does;
+/// - `C`'s creators are exactly [`export_names_of_class_obligation`]'s for the
+///   `super(…)` call, with every reference check it makes.
+///
+/// What `D` does with the values `F` returns is `D`'s code, which the base's
+/// contract describes in its own domains; this rung reads only how `D` treats
+/// `F` itself, as ADR 0134 reads only how a base treats the instance.
+///
+/// [`SuperArgumentConstruction`]: AttributionMechanism::SuperArgumentConstruction
+/// [`SuperArgumentMember`]: AttributionMechanism::SuperArgumentMember
+fn export_names_of_super_argument_obligation(
+    index: UnresolvedExportIndex<'_>,
+    location: &typefacts::Location,
+    exports: &BTreeMap<String, solid_reactive_ir::ContractExport>,
+) -> Option<(bool, Vec<String>)> {
+    use solid_reactive_ir::contract_semantics::ValueSource;
+    let resolution = index.resolution?;
+    let module = index.files_by_path.get(location.path.as_ref()).copied()?;
+    let module_path = Path::new(module.path.as_str()).canonicalize().ok()?;
+    let package_root = Path::new(&resolution.package_root).canonicalize().ok()?;
+    if !module_path.starts_with(&package_root) {
+        return None;
+    }
+    let span = solid_facts::core::Span::new(
+        u32::try_from(location.start_byte).ok()?,
+        u32::try_from(location.end_byte).ok()?,
+    );
+    let found = solid_facts::ast::super_argument_function(&module_path, &module.source, span)?;
+    // No entry name publishes `F`: a consumer could then call it outside any
+    // construction.
+    for binding in resolution.exports.values() {
+        if Path::new(&binding.runtime.module.path)
+            .canonicalize()
+            .is_ok_and(|target| target == module_path)
+            && found.published.contains(&binding.runtime.export_name)
+        {
+            return None;
+        }
+    }
+    let mut sites = found
+        .sites
+        .iter()
+        .map(|site| (module, site.clone()))
+        .collect::<Vec<_>>();
+    if !found.published.is_empty() {
+        let published = found.published.iter().cloned().collect::<BTreeSet<_>>();
+        for file in &index.facts.files {
+            if file.path.as_str() == module.path.as_str() {
+                continue;
+            }
+            let file_path = Path::new(file.path.as_str());
+            let inside = file_path
+                .canonicalize()
+                .is_ok_and(|path| path.starts_with(&package_root));
+            let lands = |specifier: &str| relative_landing(file_path, specifier, &module_path);
+            for import in file.ast.imports.iter().filter(|import| !import.type_only) {
+                match lands(&import.module) {
+                    Some(false) => continue,
+                    None if inside => return None,
+                    None => continue,
+                    Some(true) => {}
+                }
+                for binding in import.bindings.iter().filter(|binding| !binding.type_only) {
+                    let name = match binding.kind {
+                        solid_facts::ast::ImportKind::Namespace => return None,
+                        solid_facts::ast::ImportKind::Default => "default",
+                        _ => binding.imported.as_deref().unwrap_or_default(),
+                    };
+                    if !published.contains(name) {
+                        continue;
+                    }
+                    let uses = solid_facts::ast::super_argument_sites_of_binding(
+                        file_path,
+                        &file.source,
+                        binding.local.span,
+                    )?;
+                    sites.extend(uses.into_iter().map(|site| (file, site)));
+                }
+            }
+            for export in file.ast.exports.iter().filter(|export| !export.type_only) {
+                let Some(specifier) = export.module.as_deref() else {
+                    continue;
+                };
+                match lands(specifier) {
+                    Some(false) => continue,
+                    None if inside => return None,
+                    None => continue,
+                    Some(true) => {}
+                }
+                if export.kind == solid_facts::ast::ExportKind::All
+                    || export.namespace.is_some()
+                    || export.specifiers.iter().any(|specifier| {
+                        !specifier.type_only
+                            && file
+                                .source_text(specifier.local.span)
+                                .is_none_or(|local| published.contains(local))
+                    })
+                {
+                    return None;
+                }
+            }
+            for load in &file.ast.module_loads {
+                match load.specifier.as_deref() {
+                    None if inside => return None,
+                    None => {}
+                    Some(specifier) => match lands(specifier) {
+                        Some(true) => return None,
+                        None if inside => return None,
+                        _ => {}
+                    },
+                }
+            }
+        }
+    }
+    if sites.is_empty() {
+        return None;
+    }
+    let mut construction = false;
+    let mut names = BTreeSet::new();
+    for (file, site) in sites {
+        if site.other_members || site.escapes {
+            return None;
+        }
+        let (specifier, imported) = site.base.as_ref()?;
+        if specifier.starts_with('.') || specifier.starts_with('/') {
+            return None;
+        }
+        let accepted = index
+            .contracts
+            .resolve_name(file.path.as_str(), specifier, imported)
+            .ok()?;
+        let base = accepted.export();
+        let callbacks = base.callbacks();
+        if !callbacks.is_closed() {
+            return None;
+        }
+        let (mut kept, mut called) = (false, false);
+        for item in callbacks.items() {
+            let ValueSource::Parameter { index: slot, path } = &item.from else {
+                continue;
+            };
+            if usize::from(*slot) != site.argument_index {
+                continue;
+            }
+            if !path.is_empty() {
+                return None;
+            }
+            let operation = base.operation(&item.operation.0)?;
+            if operation.is_result_access() {
+                kept = true;
+            } else if !operation.is_protocol_invocation() {
+                called = true;
+            }
+        }
+        if !kept {
+            return None;
+        }
+        construction |= called || site.touches_instance;
+        let super_call = typefacts::Location {
+            path: file.path.to_string().into(),
+            start_byte: u64::from(site.super_call.start),
+            end_byte: u64::from(site.super_call.end),
+        };
+        let (kind, creators) = export_names_of_class_obligation(index, &super_call, exports)?;
+        if kind != solid_facts::ast::ClassObligationKind::Construction || creators.is_empty() {
+            return None;
+        }
+        names.extend(creators);
+    }
+    Some((construction, names.into_iter().collect()))
 }
 
 /// The one public name a re-export specifier publishes, when the obligation was
@@ -6010,7 +6233,10 @@ fn mark_unresolved_export_claims(
     // ADR 0134, owner decision 2026-09-27: what an instance member does is a
     // fact about the instance an export hands out, so it opens that export's
     // `returns` and no domain of the export's own call.
-    let domains = if mechanism == AttributionMechanism::ClassInstanceMember {
+    let domains = if matches!(
+        mechanism,
+        AttributionMechanism::ClassInstanceMember | AttributionMechanism::SuperArgumentMember
+    ) {
         UnresolvedClaimDomains {
             reactive_reads: false,
             returns: domains.returns,
@@ -6559,6 +6785,59 @@ fn emit_package_contract(
             declaration_export_names,
         )?
     };
+    // ADR 0139: a class export's construction may keep a caller's callable on
+    // the instance for its own members only. The generator summarizes
+    // functions, not constructors, so a class arrives raised with `callbacks`
+    // open; where the module's bytes show every constructor parameter kept
+    // that way or unused, the enumeration is the kept parameters'
+    // `result-access` items, proposed for the producer's census to confirm.
+    // Attribution below still opens it for any obligation it marks.
+    if !request.contract_entry_file.is_empty() {
+        for (name, summary) in &mut exports {
+            if summary.kind != "function"
+                || !summary.callbacks.is_open()
+                || summary.inherited_from.is_some()
+            {
+                continue;
+            }
+            let Some(binding) = resolution.exports.get(name) else {
+                continue;
+            };
+            let Ok(module_path) = Path::new(&binding.runtime.module.path).canonicalize() else {
+                continue;
+            };
+            let Some(module) = files_by_canonical_path.get(&module_path) else {
+                continue;
+            };
+            let Some(retained) = solid_facts::ast::retained_constructor_arguments(
+                &module_path,
+                &module.source,
+                &binding.runtime.export_name,
+            ) else {
+                continue;
+            };
+            let mut rows = Vec::new();
+            for (parameter, disposition) in retained.parameters.iter().enumerate() {
+                if matches!(
+                    disposition,
+                    solid_facts::ast::RetainedParameter::Kept { .. }
+                ) {
+                    rows.push(solid_reactive_ir::ContractCallback {
+                        parameter,
+                        execution: "deferred".into(),
+                        schedule: Some(solid_reactive_ir::CallbackSchedule::ResultAccess),
+                        clears_tracking: false,
+                        arguments: Vec::new(),
+                        owner: Some("inherited".into()),
+                        protocol: solid_reactive_ir::contract_semantics::InvokeProtocol::Call,
+                        path: Vec::new(),
+                    });
+                    summary.result_access_parameters.insert(parameter);
+                }
+            }
+            summary.callbacks = solid_reactive_ir::ContractClaim::Known(rows);
+        }
+    }
     // A name bound to an accepted dependency's exact export is not this
     // package's to weaken. Both attribution channels above and below widen a
     // *local* unresolved obligation onto export names, and the widest
@@ -6732,6 +7011,7 @@ fn emit_package_contract(
             .flatten()
             .and_then(|entry| files_by_canonical_path.get(&entry).copied()),
         resolution: (!request.contract_entry_file.is_empty()).then_some(&resolution),
+        contracts,
     };
     for unresolved in &program.contract_generation_obligations {
         let target_names = contract_generation_obligation_target_names(

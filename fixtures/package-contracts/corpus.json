@@ -50,6 +50,7 @@
     "implementation-census-member-callee",
     "implementation-census-member-returns",
     "implementation-census-reads",
+    "implementation-census-retained-argument",
     "implementation-census-returns",
     "json-import",
     "late-types-condition",

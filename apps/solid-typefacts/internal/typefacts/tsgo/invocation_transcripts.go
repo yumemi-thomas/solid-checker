@@ -1695,6 +1695,9 @@ func (p *project) unwrittenParameterIdentityLocked(implementation, expression *a
 			return nil
 		}
 	case ast.IsArrowFunction(implementation):
+	case nodeKindName(implementation) == "Constructor":
+		// A constructor's parameters are ordinary bindings of a body that is
+		// never a generator (handshake protocol 65, ADR 0139).
 	default:
 		return nil
 	}
