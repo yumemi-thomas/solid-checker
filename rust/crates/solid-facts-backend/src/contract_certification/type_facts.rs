@@ -14752,7 +14752,7 @@ fn census_transcript_calls(
             run.record(disposition, census_form_site(form, disposition));
             continue;
         }
-        if !census_coercion_rests_on_primitive_calls(run, implementation, form)? {
+        if !census_coercion_rests_on_primitive_calls(run, implementation, form, depth)? {
             return Err(refuse_form(form));
         }
         run.record(
@@ -14922,8 +14922,11 @@ fn census_parameter_or_own_result_is_bound(
 /// callee's transcript under. Nothing here re-derives a type: it matches each
 /// named call to a row of this transcript, binds that row's callee to a
 /// declaration in the artifact's own runtime source exactly as the
-/// local-recursion disposition does, and reads one boolean from the transcript
-/// that row already produced.
+/// local-recursion disposition does, and reads the transcript that row already
+/// produced: its completion, and since ADR 0149 the
+/// evidence beside every value it hands back
+/// ([`completion_is_primitive_by_evidence`]), since the completion is only the
+/// helper's return type.
 ///
 /// A named call that is not a row, a callee this census cannot bind, or a
 /// transcript that does not state the completion, all answer `false` — the
@@ -14932,6 +14935,7 @@ fn census_coercion_rests_on_primitive_calls(
     run: &mut CensusRun<'_>,
     implementation: &typefacts::ExportImplementationTranscript,
     form: &typefacts::UncensusedInvokingForm,
+    depth: usize,
 ) -> Result<bool, String> {
     let Some(premise) = form.coercion_premise.as_ref() else {
         return Ok(false);
@@ -14969,11 +14973,75 @@ fn census_coercion_rests_on_primitive_calls(
         let Some(transcript) = run.evidence.local(&node, premises) else {
             return Ok(false);
         };
-        if !transcript.primitive_completion {
+        // A helper return that hands back its own unwritten parameter hands
+        // back this call's argument there. The helper's premised completion
+        // types it by the argument type recorded at this call, which is only
+        // as good as that argument: at depth 0, an unwritten parameter of the
+        // export itself, typed by ADR 0038's declared-signature premise.
+        let grounded = |index: usize| {
+            depth == 0
+                && !implementation.parameter_premises.is_empty()
+                && call.argument_parameters.get(index).is_some_and(|argument| {
+                    argument.as_ref().is_some_and(|source| {
+                        source.path.is_empty()
+                            && implementation
+                                .unwritten_parameters
+                                .iter()
+                                .any(|slot| slot.parameter_index == source.parameter_index)
+                    })
+                })
+        };
+        if !completion_is_primitive_by_evidence(transcript, grounded) {
             return Ok(false);
         }
     }
     Ok(true)
+}
+
+/// ADR 0149: whether a local helper's completion is
+/// a primitive by evidence, not by its return type alone.
+///
+/// `primitiveCompletion` is the checker's return type for the helper, and in a
+/// JavaScript file that type is inferred from return expressions typed by
+/// their bindings' declarations: `function h() { let v = 0; v = { valueOf: run
+/// }; return v; }` is typed `number`, so a coercion of `h()` would reach `run`.
+/// The type still has to say primitive, over a plain, classified completion,
+/// and every live value the helper hands back must be one by evidence the
+/// type cannot fake:
+///
+/// * a primitive by grammar (`primitive_syntax`), which holds whatever the
+///   operands are and so needs no type beside it (`originPoint + scaled`);
+/// * the helper's own unwritten whole parameter, when the caller says the
+///   argument there is `grounded` -- the completion's type for it is then the
+///   argument type the caller's premise recorded;
+/// * a primitive type with ADR 0113's evidence beside it
+///   ([`plain_return_evidence`]).
+///
+/// A body that hands back no value completes with `undefined`, which is one.
+fn completion_is_primitive_by_evidence(
+    transcript: &typefacts::ExportImplementationTranscript,
+    grounded: impl Fn(usize) -> bool,
+) -> bool {
+    if !transcript.primitive_completion {
+        return false;
+    }
+    let Ok(control_flow) = require_plain_classified_completion(transcript, "") else {
+        return false;
+    };
+    control_flow
+        .returns
+        .iter()
+        .filter(|site| site.reach != Reachability::Unreachable)
+        .all(|site| {
+            site.value.is_none()
+                || site.primitive_syntax
+                || site.parameter.as_ref().is_some_and(|parameter| {
+                    parameter.path.is_empty() && grounded(parameter.parameter_index)
+                })
+                || site.value.as_ref().is_some_and(|value| {
+                    value_is_primitive_alone(value) && plain_return_evidence(site).is_some()
+                })
+        })
 }
 
 /// The argument premise this transcript recorded for `call`, or none.
@@ -15460,6 +15528,27 @@ fn census_call_disposition(
         .as_ref()
         .filter(|declaration| declaration.standard_library)
     {
+        // ADR 0149: resolution names the built-in
+        // by the callee's *type*, and in a JavaScript file a binding's type is
+        // its declaration's whatever was written to it since -- `let m = Math;
+        // … m = { min: run }; m.min()` resolves to `Math.min` and runs `run`.
+        // The call is the built-in only when the producer states it by
+        // identity (handshake protocol 68), or when the immutable-alias walk
+        // rebound it through a chain that already proves the same thing.
+        if rebound.is_none() && !call.standard_library_identity {
+            return Err(format!(
+                "creates census refuses the standard-library member `{}` called at {}: the \
+                 callee resolves to it only through the declared type of the value it is read \
+                 from, which in a JavaScript file an unchecked write does not change, and \
+                 the producer does not state the call invokes the built-in by identity",
+                if declaration.qualified_name.is_empty() {
+                    &declaration.name
+                } else {
+                    &declaration.qualified_name
+                },
+                at()
+            ));
+        }
         let disposition = census_standard_library_admits(run, call, declaration)
             .map_err(|reason| format!("{reason}, called at {}", at()))?;
         return Ok(Some((disposition, census_call_site(call, disposition))));
@@ -26856,6 +26945,7 @@ mod tests {
                     json!({
                         "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 170, "endByte": 190},
                         "targetModule": "",
+                        "standardLibraryIdentity": true,
                         "declaration": {
                             "symbol": "symbol:Array.map",
                             "name": "map",
@@ -26885,6 +26975,7 @@ mod tests {
                     json!({
                         "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 220, "endByte": 250},
                         "targetModule": "",
+                        "standardLibraryIdentity": true,
                         "declaration": {
                             "symbol": "symbol:CallableFunction.call",
                             "name": "call",
@@ -29181,11 +29272,28 @@ mod tests {
             );
             transcript
         };
-        let helper_transcript = |primitive: bool| {
+        // The helper's one return, typed `number` and carrying `evidence`
+        // beside the type (ADR 0149).
+        let helper_with = |primitive: bool, evidence: serde_json::Value| {
             let mut helper = census_transcript_with(vec![], json!([]));
             helper.location = helper_location.clone();
             helper.query_name = "helper".into();
             helper.primitive_completion = primitive;
+            helper.completion_form = Some(typefacts::ImplementationCompletionForm::Plain);
+            let mut site = json!({
+                "location": {"path": source_path, "startByte": helper_node.0, "endByte": helper_node.1},
+                "reach": "reachable",
+                "value": {
+                    "callability": "nonCallable",
+                    "constructability": "nonConstructable",
+                    "primitive": {"mayBeNumber": true}
+                }
+            });
+            for (key, value) in evidence.as_object().unwrap() {
+                site[key] = value.clone();
+            }
+            helper.control_flow =
+                Some(serde_json::from_value(json!({"returns": [site]})).expect("a valid census"));
             helper.declaration = Some(
                 serde_json::from_value(json!({
                     "symbol": "symbol:helper",
@@ -29202,6 +29310,8 @@ mod tests {
                 transcript: helper,
             }]
         };
+        let helper_transcript =
+            |primitive: bool| helper_with(primitive, json!({"primitiveSyntax": true}));
         let call_location = json!({
             "path": source_path, "startByte": call_at.0, "endByte": call_at.1
         });
@@ -29275,6 +29385,32 @@ mod tests {
                     "a completion that is not a primitive grants nothing"
                 );
             }
+        }
+
+        // ADR 0149: a completion the checker types
+        // primitive is not one on its own. `function helper() { let v = 0; …
+        // v = { valueOf: run }; return v; }` is typed `number` in a JavaScript
+        // file, so a helper whose return carries no evidence beside its type
+        // grants nothing, and the same helper with it does.
+        for (evidence, grants) in [
+            (json!({}), false),
+            (json!({"defaultLibraryCall": "Math.min"}), true),
+            (json!({"typeScriptSource": true}), true),
+        ] {
+            let locals = helper_with(true, evidence.clone());
+            let mut run = census_run(&certified, &roots);
+            run.evidence = CensusEvidence {
+                roots: &roots,
+                locals: &locals,
+                dependencies: &[],
+            };
+            let outcome = census_transcript(
+                &mut run,
+                &export(json!({"calls": [call_location.clone()]})),
+                0,
+                &[],
+            );
+            assert_eq!(outcome.is_ok(), grants, "{evidence}: {outcome:?}");
         }
     }
 
@@ -30996,6 +31132,7 @@ mod tests {
                 json!({
                     "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 220, "endByte": 250},
                     "targetModule": "",
+                    "standardLibraryIdentity": true,
                     "declaration": {
                         "symbol": "symbol:CallableFunction.call",
                         "name": "call",
@@ -31505,6 +31642,7 @@ mod tests {
                 "location": {"path": lib, "startByte": 10, "endByte": 20},
                 "standardLibrary": true,
             },
+            "standardLibraryIdentity": true,
         });
         for (key, value) in overrides.as_object().expect("an object") {
             base.as_object_mut()
@@ -31800,6 +31938,23 @@ mod tests {
                 &for_each(json!({"argumentParameters": [{"parameterIndex": 1}]}))
             ),
             Ok(Some(CensusDisposition::StandardLibrary))
+        );
+        // ADR 0149: the same resolution without the
+        // producer's identity fact -- `let list = []; … list = { forEach: run
+        // }; list.forEach(cb)` resolves to `Array.forEach` by `list`'s declared
+        // type -- is refused by name, whatever its slots prove.
+        let refusal = admitted(
+            &mut run,
+            &for_each(json!({
+                "argumentParameters": [{"parameterIndex": 1}],
+                "standardLibraryIdentity": false,
+            })),
+        )
+        .expect_err("a built-in named only by a binding's type refuses");
+        assert!(
+            refusal.contains("`Array.forEach`")
+                && refusal.contains("only through the declared type"),
+            "{refusal}"
         );
         // A callable literal inside the frame: its calls are rows of this walk.
         assert_eq!(

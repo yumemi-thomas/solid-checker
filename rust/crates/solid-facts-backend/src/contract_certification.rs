@@ -21804,11 +21804,14 @@ export const value = phantom;
                 "nestedCallableParameterRead",
                 &["uncensused invoking form: property-access-unknown-accessor"][..],
             ),
+            // ADR 0149: `identity.call` names `Function.prototype.call` only
+            // through `identity`'s type, so it refuses before the by-reference
+            // owner rule is reached.
             (
                 "callNonLibraryReceiver",
                 &[
                     "CallableFunction.call",
-                    "transfers control to a callable by reference",
+                    "only through the declared type of the value it is read from",
                 ][..],
             ),
             (

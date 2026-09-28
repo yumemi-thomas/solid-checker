@@ -680,6 +680,7 @@
         "targetName": { "type": "string" },
         "targetModule": { "type": "string" },
         "declaration": { "$ref": "#/$defs/resolvedDeclaration" },
+        "standardLibraryIdentity": { "type": "boolean" },
         "calleeParameter": { "$ref": "#/$defs/parameterValueSource" },
         "calleeIteratedParameter": { "$ref": "#/$defs/parameterValueSource" },
         "callReceiver": { "$ref": "#/$defs/resolvedDeclaration" },

@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:2dc205633dd2583dcb9af214cc1e240d4a4c535a5b896f424676b4765e00ee07";
+    "sha256:92d9f0d279171c394001a025ab32668e86d29e518f09b101c3e2e0dd03da03b7";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -377,7 +377,14 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // `ReturnSite::type_script_source` states a return in a TypeScript source file.
 // A protocol-66 consumer decodes with `deny_unknown_fields` and would reject
 // the new fields, so the number moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 67;
+// Protocol 68 (ADR 0149) states when a
+// default-library call invokes its declaration by identity:
+// `ImplementationCall::standard_library_identity`, for a callee whose receiver
+// is nothing, an unshadowed global the file never writes, or a fresh built-in
+// value the expression itself makes -- never a binding whose declared type is
+// all that names the built-in. A protocol-67 consumer decodes with
+// `deny_unknown_fields` and would reject the new field, so the number moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 68;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

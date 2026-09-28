@@ -83,6 +83,12 @@ type project struct {
 	// rather than once per returned-callable resolution. Checker-owned symbol
 	// pointers make it generation-scoped, like runtimePaths.
 	assignedSymbols map[*ast.SourceFile]map[*ast.Symbol]struct{}
+	// libraryStability memoizes unstableLibrarySymbolsLocked per file for the
+	// same checker generation (standardLibraryIdentityLocked, ADR 0149).
+	libraryStability map[*ast.SourceFile]map[*ast.Symbol]struct{}
+	// freshConsts memoizes freshBindingLocked per symbol, for the same
+	// generation: its reference walk covers the whole file.
+	freshConsts map[*ast.Symbol]bool
 	// ownLiteralSymbols memoizes ADR 0044's answer per symbol: the variable
 	// declaration a name is bound to when this program initialized it from an
 	// object or array literal, or nil. Keyed by symbol rather than by file
@@ -325,6 +331,8 @@ func (p *project) ReleaseAnalysisState() {
 	p.currentSourceFiles = nil
 	p.runtimePaths = nil
 	p.assignedSymbols = nil
+	p.libraryStability = nil
+	p.freshConsts = nil
 	p.calleeInvocations = nil
 	p.resolvedDeclarations = nil
 	p.resolvedParameters = nil
@@ -603,6 +611,8 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.generation++
 	p.runtimePaths = nil
 	p.assignedSymbols = nil
+	p.libraryStability = nil
+	p.freshConsts = nil
 	p.calleeInvocations = nil
 	if incremental && incrementalPath != "" && currentExportsKnown {
 		if p.exportedIdentities == nil {

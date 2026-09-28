@@ -321,11 +321,14 @@ certified under an incomplete veto (`@kobalte/core`'s `isRTL`,
 `RTL_SCRIPTS.has(script)`, and `@solid-primitives/scroll`'s `isScrollable`, a
 regular-expression literal's `test`). `number` and `add` withdraw as well in
 the eighteen dependency-graph documents that certify `@solid-primitives/utils`
-under another package. Because utils' certified document changes, the hand
-recipes addressed to its old digest stop addressing
-(`@solid-primitives/scheduled`'s `leadingAndTrailing` loses a `reads` closure
-to `no recipe in corpus`), exactly the orphaning this ADR's consequences
-already describe. None of the five is unsound to call plain; each is a
+under another package. No hand recipe is orphaned: re-measured with
+`probe-recipe-addressing.mjs` over the census run, 95 of 366 recipes address a
+claim, 15 of them by recipe address (ADR 0117), exactly the pin. (A first
+reading of this run blamed `@solid-primitives/scheduled`'s
+`leadingAndTrailing`, which moved from partial to degenerate in the same
+comparison; that was 7b57b487's getOwner()-guarded owner fix, which the
+earlier run predated, not this amendment. Scheduled has no `leadingAndTrailing`
+recipe.) None of the five is unsound to call plain; each is a
 primitive through evidence the rule does not yet admit -- a `let` every write
 of which is a primitive by grammar, a reviewed global conversion (`Number`), a
 method of a literal the function built (`/re/.test`, a module `Set`'s `has`) --

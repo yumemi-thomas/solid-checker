@@ -949,6 +949,9 @@ func (p *project) implementationCallCensusLocked(
 			call.Target, call.TargetName, call.TargetModule, call.Declaration =
 				p.implementationCallTargetLocked(node.Expression())
 			call.ImmutableCalleeAlias = p.immutableCalleeAliasLocked(node)
+			if call.Declaration != nil && call.Declaration.StandardLibrary {
+				call.StandardLibraryIdentity = p.standardLibraryIdentityLocked(node)
+			}
 			// ADR 0034: a `.call`/`.apply` on a default-library receiver states
 			// that receiver and the parameter its `this` argument is rooted at.
 			call.CallReceiver, call.ThisParameter =

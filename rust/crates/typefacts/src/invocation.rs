@@ -1321,6 +1321,19 @@ pub struct ImplementationCall {
     pub declaration: Option<ResolvedDeclaration>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub immutable_callee_alias: Option<ImmutableCalleeAlias>,
+    /// Beside a `declaration` in the default library: the value this call
+    /// invokes is that declaration **by identity** (ADR 0149, handshake
+    /// protocol 68), not merely by the declared type of a
+    /// binding the callee is read through. The producer states it for a callee
+    /// whose receiver is nothing (`setTimeout(…)`), an unshadowed
+    /// default-library global the file never writes, deletes or lets escape
+    /// (`Math.min`, `Object.prototype.toString.call`), or a fresh built-in the
+    /// expression itself makes (a primitive by grammar, an array or
+    /// regular-expression literal, `new Map()`). `false` is no claim: in a
+    /// JavaScript file `let m = Math; … m = { min: run }; m.min()` resolves to
+    /// `Math.min` and runs `run`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub standard_library_identity: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub callee_parameter: Option<ParameterValueSource>,
     /// The parameter-rooted iterable whose iteration produced this call's

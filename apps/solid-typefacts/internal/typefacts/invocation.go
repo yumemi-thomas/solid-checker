@@ -1137,7 +1137,13 @@ type ImplementationCall struct {
 	TargetModule         string                `cbor:"targetModule,omitempty" json:"targetModule,omitempty"`
 	Declaration          *ResolvedDeclaration  `cbor:"declaration,omitempty" json:"declaration,omitempty"`
 	ImmutableCalleeAlias *ImmutableCalleeAlias `cbor:"immutableCalleeAlias,omitempty" json:"immutableCalleeAlias,omitempty"`
-	CalleeParameter      *ParameterValueSource `cbor:"calleeParameter,omitempty" json:"calleeParameter,omitempty"`
+	// StandardLibraryIdentity states, beside a Declaration in the default
+	// library, that the value this call invokes is that declaration by
+	// identity rather than by the declared type of a binding it is read
+	// through (ADR 0149, handshake protocol 68):
+	// see standardLibraryIdentityLocked. Absent is no claim.
+	StandardLibraryIdentity bool                  `cbor:"standardLibraryIdentity,omitempty" json:"standardLibraryIdentity,omitempty"`
+	CalleeParameter         *ParameterValueSource `cbor:"calleeParameter,omitempty" json:"calleeParameter,omitempty"`
 	// CalleeIteratedParameter names the parameter-rooted iterable whose
 	// iteration produced this call's callee: the binding a `for…of` head
 	// declares, called inside the loop (ADR 0042, handshake protocol 26).

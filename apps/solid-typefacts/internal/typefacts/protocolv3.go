@@ -4,7 +4,16 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 67 (the 2026-09-28 amendment to ADR 0113):
+// TypeFactsHandshakeProtocol is 68 (ADR 0149):
+// **a default-library call states whether it invokes its declaration by
+// identity.** ImplementationCall.StandardLibraryIdentity holds for a callee
+// whose receiver is nothing, an unshadowed default-library global the file
+// never writes, or a fresh built-in value the expression makes; never for a
+// binding whose declared type is all that names the built-in. A protocol-67
+// consumer decodes with `deny_unknown_fields` and would reject the new field,
+// so the number moves.
+//
+// Protocol 67 (the 2026-09-28 amendment to ADR 0113):
 // **a `plain` return rests on evidence no reassignable binding can fake.**
 // ReturnSite.PrimitiveSyntax now also answers a never-written `const` whose
 // initializer is one and the intrinsic `undefined`; ReturnSite.DefaultLibraryCall
@@ -453,8 +462,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 67
-	TypeFactsSchemaSHA256             = "sha256:2dc205633dd2583dcb9af214cc1e240d4a4c535a5b896f424676b4765e00ee07"
+	TypeFactsHandshakeProtocol uint64 = 68
+	TypeFactsSchemaSHA256             = "sha256:92d9f0d279171c394001a025ab32668e86d29e518f09b101c3e2e0dd03da03b7"
 )
 
 type ServiceHandshake struct {
