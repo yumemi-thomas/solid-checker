@@ -132,6 +132,7 @@ fn resolved_import() -> ResolvedImport {
         declaration_exports: std::collections::BTreeSet::new(),
         unbound_declaration_exports: std::collections::BTreeSet::new(),
         foreign_declaration_exports: std::collections::BTreeSet::new(),
+        forwarded_foreign_exports: std::collections::BTreeSet::new(),
         authority: ResolutionAuthority::Host,
     }
 }
@@ -1060,6 +1061,30 @@ fn resolved_import_root_binds_the_foreign_declaration_export_census() {
         .foreign_declaration_exports
         .insert("ForeignName".into());
     assert!(policy2_resolved_import_root(&unbound).is_err());
+}
+
+#[test]
+fn resolved_import_root_binds_the_forwarded_foreign_export_census() {
+    let resolved = resolved_import();
+    let mut changed = resolved.clone();
+    changed.declaration_exports.insert("Forwarded".into());
+    let census_only = policy2_resolved_import_root(&changed).unwrap();
+    changed.forwarded_foreign_exports.insert("Forwarded".into());
+    assert_ne!(
+        census_only,
+        policy2_resolved_import_root(&changed).unwrap(),
+        "an export ADR 0154 withholds as forwarded is receipt identity"
+    );
+
+    let mut uncensused = resolved.clone();
+    uncensused
+        .forwarded_foreign_exports
+        .insert("Forwarded".into());
+    assert!(policy2_resolved_import_root(&uncensused).is_err());
+
+    let mut both = changed;
+    both.foreign_declaration_exports.insert("Forwarded".into());
+    assert!(policy2_resolved_import_root(&both).is_err());
 }
 
 /// The whole point of the acceptance root: two consumers that resolved the same

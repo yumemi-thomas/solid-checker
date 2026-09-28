@@ -113,7 +113,11 @@ root commits to exactly the bound set.
   that dependent refuses. Clearing it needs a further step this ADR does not
   take: a dependent's re-export of a name its dependency withholds as unbound
   or foreign would itself be withheld, with the dependency's withheld set
-  carried in the planned dependency's record and replayed.
+  carried in the planned dependency's record and replayed. ADR 0154 took
+  that step, for foreign names only (not ADR 0128's).
+- ADR 0154 narrows the dependent `export { name } from` line of the
+  Soundness list: an exact forward of such a name on both axes is withheld
+  instead of refused.
 - The resolution field is receipt identity whenever it is non-empty, because
   it is part of the resolved-import root.
 - Pinned by `fixtures/package-contracts/foreign-declaration-reexport` (the

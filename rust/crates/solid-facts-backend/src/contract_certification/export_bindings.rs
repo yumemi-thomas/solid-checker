@@ -19,6 +19,11 @@ pub struct SnapshotVerifiedExports {
     snapshot_root: String,
     evidence_root: String,
     bindings: BTreeMap<String, VerifiedExportBinding>,
+    /// The names this replay withheld as foreign (ADR 0150) or forwarded
+    /// foreign (ADR 0154): unavailable exports whose runtime binding the
+    /// replay proved exact. A dependent's replay reads this, and only this, to
+    /// recognise a forward of one; the resolver's copy is never trusted.
+    withheld: BTreeSet<String>,
 }
 
 impl SnapshotVerifiedExports {
@@ -260,6 +265,45 @@ pub(super) fn verify_snapshot_exports_with_dependencies(
         ));
     }
     let names = names.difference(&foreign).cloned().collect::<BTreeSet<_>>();
+    // ADR 0154: a name both axes forward, through exact named re-export
+    // chains, as the same name of the same planned dependency, which that
+    // dependency's own verified replay withheld (ADR 0150, or this rule), is
+    // that unavailable export. The generator's `withheldDependencyExport`
+    // reads the dependency record's `withheldExports`; this replay reads the
+    // dependency plan's recomputed set instead, so a forged or stale record
+    // disagrees here and refuses.
+    let mut forwarded = BTreeSet::new();
+    for name in &names {
+        let Some(runtime) = replay.forwarded_withheld(
+            resolution.runtime_path(),
+            name,
+            ModuleAxis::Runtime,
+            &mut BTreeSet::new(),
+        )?
+        else {
+            continue;
+        };
+        if replay.forwarded_withheld(
+            resolution.declarations_path(),
+            name,
+            ModuleAxis::Declarations,
+            &mut BTreeSet::new(),
+        )? == Some(runtime)
+        {
+            forwarded.insert(name.clone());
+        }
+    }
+    if forwarded != resolved.forwarded_foreign_exports {
+        return export_mismatch(format!(
+            "supplied forwarded foreign exports do not equal archive replay; replayed {forwarded:?}; supplied {:?}",
+            resolved.forwarded_foreign_exports,
+        ));
+    }
+    let names = names
+        .difference(&forwarded)
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let withheld = foreign.union(&forwarded).cloned().collect::<BTreeSet<_>>();
     let supplied_names = resolved.exports.keys().cloned().collect::<BTreeSet<_>>();
     if names != supplied_names {
         let replayed_only = names
@@ -340,6 +384,7 @@ pub(super) fn verify_snapshot_exports_with_dependencies(
         snapshot_root: snapshot.root().into(),
         evidence_root,
         bindings,
+        withheld,
     })
 }
 
@@ -1221,6 +1266,73 @@ impl ExportReplay<'_> {
         owned.next().is_none().then_some(dependency)
     }
 
+    /// The planned dependency's package and export name that `name` forwards,
+    /// on `axis`, through exact named re-export chains, when that dependency's
+    /// verified replay withheld the name (ADR 0150 or ADR 0154) and binds
+    /// nothing by it.
+    ///
+    /// The generator's `withheldDependencyExport` mirror. A local `export *`
+    /// is followed only when every star that reaches the name reaches this
+    /// same withheld name and none binds it. A local definition, a default, a
+    /// cycle, a dependency with a binding by that name, or one that did not
+    /// withhold it answers `None`, which leaves the name to its existing
+    /// refusal.
+    fn forwarded_withheld(
+        &mut self,
+        path: &str,
+        name: &str,
+        axis: ModuleAxis,
+        visiting: &mut BTreeSet<(ModuleAxis, String, String)>,
+    ) -> Result<Option<(String, String)>, ArtifactSnapshotError> {
+        let identity = (axis, path.to_owned(), name.to_owned());
+        if !visiting.insert(identity.clone()) {
+            return Ok(None);
+        }
+        let description = self.description(path, axis)?;
+        let answer = if let Some(direct) = description.direct.get(name) {
+            if direct.file == path || direct.name == "*" {
+                None
+            } else {
+                self.forwarded_withheld(&direct.file, &direct.name, axis, visiting)?
+            }
+        } else if let Some((specifier, imported)) = description.external_direct.get(name) {
+            self.external_dependency(specifier).and_then(|dependency| {
+                let verified = &dependency.verified_exports;
+                (!verified.bindings.contains_key(imported) && verified.withheld.contains(imported))
+                    .then(|| {
+                        (
+                            dependency.snapshot.package_name().to_owned(),
+                            imported.clone(),
+                        )
+                    })
+            })
+        } else if name == "default" {
+            None
+        } else {
+            let mut withheld = BTreeSet::new();
+            let mut bound = false;
+            for target in &description.stars {
+                if let Some(found) = self.forwarded_withheld(target, name, axis, visiting)? {
+                    withheld.insert(found);
+                } else if self
+                    .bind_export(target, name, axis, &mut BTreeSet::new())?
+                    .is_some()
+                {
+                    bound = true;
+                }
+            }
+            bound |= description
+                .external_stars
+                .iter()
+                .any(|specifier| self.external_binding(specifier, name, axis).is_some());
+            (!bound && withheld.len() == 1)
+                .then(|| withheld.into_iter().next())
+                .flatten()
+        };
+        visiting.remove(&identity);
+        Ok(answer)
+    }
+
     /// The package a replayed target belongs to: this package for a target in
     /// its own snapshot, the planned dependency's package for one in that
     /// dependency's snapshot, and `None` for a snapshot no planned dependency
@@ -1737,6 +1849,7 @@ mod tests {
         assert_eq!(expression.name, "value");
         assert_ne!(alias.span, expression.span);
         let verified = SnapshotVerifiedExports {
+            withheld: BTreeSet::new(),
             snapshot_root: snapshot.root().into(),
             evidence_root: "sha256:test".into(),
             bindings: BTreeMap::from([

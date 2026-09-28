@@ -1840,6 +1840,125 @@ describe("exact artifact records and closure", () => {
     expect(record.exports.default).toBeUndefined();
   });
 
+  test("a forward of a name the dependency withholds as foreign is withheld too, alone", () => {
+    // ADR 0154. `@solidjs/web@2.0.0-rc.9`'s server build re-exports
+    // `getOwner`, `untrack` and `merge as mergeProps` from `solid-js`, whose
+    // `[import,node]` node withholds all three under ADR 0150. Both axes
+    // forward the same withheld name, so the dependent's export is that
+    // unavailable export.
+    const dependencyRoot = fixture(
+      { name: "defining", version: "1.0.0" },
+      {
+        "index.js": "export const own = 1;\n",
+        "index.d.ts": "export declare const own: number;\n"
+      }
+    );
+    const target = axis => ({
+      module: {
+        path: join(dependencyRoot, axis === "runtime" ? "index.js" : "index.d.ts"),
+        digest: `sha256:${(axis === "runtime" ? "2" : "3").repeat(64)}`
+      },
+      exportName: "own"
+    });
+    const accepted = (withheldExports = ["action", "other"]) => ({
+      defining: {
+        packageName: "defining",
+        artifactCase: "artifact-case:defining",
+        acceptedContractDigest: `sha256:${"1".repeat(64)}`,
+        exports: { own: { runtime: target("runtime"), declarations: target("declarations") } },
+        ...(withheldExports ? { withheldExports } : {})
+      }
+    });
+    let counter = 0;
+    const resolveWith = (runtime, declarations, acceptedDependencies = accepted()) => {
+      const name = `forwarding-${(counter += 1)}`;
+      const root = fixture(
+        {
+          name,
+          version: "1.0.0",
+          type: "module",
+          exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+        },
+        { "index.js": runtime, "index.d.ts": declarations }
+      );
+      return resolvePackageArtifacts({
+        importer: join(root, "consumer.mjs"),
+        specifier: name,
+        packageRoot: root,
+        integrity: "sha512:test",
+        acceptedDependencies
+      });
+    };
+    const both = source => resolveWith(source, source);
+
+    // Named, renamed, and import-then-export forwards of the withheld name.
+    const record = both(
+      'export { action, own } from "defining";\n' +
+        'export { action as alias } from "defining";\n' +
+        'import { action as imported } from "defining";\nexport { imported };\n' +
+        'export { own as renamedOwn } from "defining";\n'
+    );
+    expect(record.forwardedForeignExports).toEqual(["action", "alias", "imported"]);
+    // A renamed forward of a bound name still binds exactly.
+    expect(Object.keys(record.exports)).toEqual(["own", "renamedOwn"]);
+    expect(record.exports.renamedOwn).toEqual(record.exports.own);
+
+    // Through a local `export *`, as `@solidjs/web`'s typings reach
+    // `getOwner` through `export * from "./client.js"`.
+    const starRoot = fixture(
+      {
+        name: "forwarding-star",
+        version: "1.0.0",
+        type: "module",
+        exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+      },
+      {
+        "index.js": 'export * from "./client.js";\n',
+        "client.js": 'import { action } from "defining";\nexport { action };\n',
+        "index.d.ts": 'export * from "./client.js";\n',
+        "client.d.ts": 'import { action } from "defining";\nexport { action };\n'
+      }
+    );
+    expect(resolvePackageArtifacts({
+      importer: join(starRoot, "consumer.mjs"),
+      specifier: "forwarding-star",
+      packageRoot: starRoot,
+      integrity: "sha512:test",
+      acceptedDependencies: accepted()
+    }).forwardedForeignExports).toEqual(["action"]);
+
+    // `export *` forwards only the dependency's bound surface.
+    const star = both('export * from "defining";\n');
+    expect(star.forwardedForeignExports).toBeUndefined();
+    expect(Object.keys(star.exports)).toEqual(["own"]);
+
+    // Nothing else widens. A local definition beside a forwarded
+    // declaration, two different withheld names on the two axes, a name the
+    // dependency never withheld, and a record without the census all keep
+    // the refusal they had.
+    for (const [runtime, declarations, dependencies] of [
+      ["export const action = 1;\n", 'export { action } from "defining";\n'],
+      ['export { action } from "defining";\n', "export declare const action: number;\n"],
+      ['export { action } from "defining";\n', 'export { other as action } from "defining";\n'],
+      ['export { missing } from "defining";\n', 'export { missing } from "defining";\n'],
+      ['export { action } from "defining";\n', 'export { action } from "defining";\n', accepted(null)]
+    ]) {
+      expect(() => resolveWith(runtime, declarations, dependencies ?? accepted()), runtime + declarations)
+        .toThrow(/accepted dependency defining has no exact (runtime|declarations) binding for export/);
+    }
+
+    // A forged census naming a bound export changes nothing: the binding wins.
+    const forged = both('export { own } from "defining";\n');
+    expect(forged.forwardedForeignExports).toBeUndefined();
+    const forgedOwn = resolveWith(
+      'export { own } from "defining";\n',
+      'export { own } from "defining";\n',
+      accepted(["own"])
+    );
+    expect(Object.keys(forgedOwn.exports)).toEqual(["own"]);
+    expect(forgedOwn.forwardedForeignExports).toBeUndefined();
+  });
+
   test("a local runtime definition declared by another package's declaration is foreign, alone", () => {
     // ADR 0150. `solid-js@2.0.0-rc.9`'s server build `dist/server.js` defines
     // `action` itself while `types/index.d.ts` re-exports `@solidjs/signals`'

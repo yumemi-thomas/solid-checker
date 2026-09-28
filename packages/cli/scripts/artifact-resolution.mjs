@@ -2245,10 +2245,21 @@ function bindExport(
       // no binding (`if (!runtimeTarget || !declarationTarget) continue`), so
       // every other export survives. ADR 0027's "missing native behavior stays
       // unknown", not a claim that the export does not exist.
-      fail(
-        "accepted-dependency-binding",
-        `accepted dependency ${externalDirect.specifier} has no exact ${axis} binding for export ${externalDirect.name}`
+      const message = `accepted dependency ${externalDirect.specifier} has no exact ${axis} binding for export ${externalDirect.name}`;
+      // ADR 0154: the dependency withholds exactly this name under ADR 0150.
+      // That is not yet a verdict -- the caller decides whether *both* axes
+      // forward the same withheld name, and refuses with `message` otherwise.
+      const withheld = withheldDependencyExport(
+        acceptedDependencies,
+        externalDirect.specifier,
+        externalDirect.name,
+        message
       );
+      if (withheld) {
+        visiting.delete(identity);
+        return withheld;
+      }
+      fail("accepted-dependency-binding", message);
     }
     visiting.delete(identity);
     return result;
@@ -2267,6 +2278,24 @@ function bindExport(
   ]
     .filter(Boolean);
   visiting.delete(identity);
+  // A local `export *` into a module that forwards a withheld name forwards
+  // it exactly when nothing else the stars reach binds or withholds that
+  // name differently (ADR 0154; `@solidjs/web`'s `types/index.d.ts` reaches
+  // `getOwner` through `export * from "./client.js"`). Any other mix keeps
+  // the refusal it had before the dependency's name was withheld.
+  const starWithheld = candidates.filter(isWithheldDependencyExport);
+  if (starWithheld.length > 0) {
+    const [first] = starWithheld;
+    if (
+      starWithheld.length === candidates.length &&
+      starWithheld.every(
+        candidate => candidate.packageName === first.packageName && candidate.name === first.name
+      )
+    ) {
+      return first;
+    }
+    fail("accepted-dependency-binding", first.message);
+  }
   const unique = new Map(candidates.map(candidate => [`${candidate.module.digest}:${candidate.exportName}`, candidate]));
   if (unique.size > 1) fail("ambiguous-export", `export ${name} resolves through multiple star exports`);
   return unique.values().next().value;
@@ -2390,6 +2419,7 @@ function exactExportBindings(
   const foreignDeclarationExports = [];
   const ownerPackages = acceptedBindingOwners(acceptedDependencies);
   const packageName = ownPackageName(packageRoot, cache);
+  const forwardedForeignExports = [];
   for (const name of names) {
     const runtimeTarget = bindExport(
       runtime.path,
@@ -2407,6 +2437,29 @@ function exactExportBindings(
       cache,
       acceptedDependencies
     );
+    // ADR 0154: both axes forward, by exact name chains, the same name that
+    // the same planned dependency withholds under ADR 0150 (or forwards under
+    // this rule). It is that unavailable export, so it is unavailable here
+    // too. Anything else that reaches a withheld name -- one axis only, a
+    // local definition beside it, two different names -- refuses exactly as
+    // before. The certifier replays this from the dependency's verified plan.
+    const runtimeWithheld = isWithheldDependencyExport(runtimeTarget);
+    const declarationWithheld = isWithheldDependencyExport(declarationTarget);
+    if (runtimeWithheld || declarationWithheld) {
+      if (
+        runtimeWithheld &&
+        declarationWithheld &&
+        runtimeTarget.packageName === declarationTarget.packageName &&
+        runtimeTarget.name === declarationTarget.name
+      ) {
+        forwardedForeignExports.push(name);
+        continue;
+      }
+      fail(
+        "accepted-dependency-binding",
+        (runtimeWithheld ? runtimeTarget : declarationTarget).message
+      );
+    }
     // Only a runtime-bound name qualifies: a runtime re-export of a name its
     // module does not declare fails the whole module graph at link time, so
     // no export of the entrypoint would be usable and the case must refuse.
@@ -2441,8 +2494,34 @@ function exactExportBindings(
     declarationExports: [...declarationNames].sort(),
     unboundDeclarationExports,
     foreignDeclarationExports,
+    forwardedForeignExports,
     cache
   };
+}
+
+const WITHHELD_DEPENDENCY_EXPORT = Symbol("withheldDependencyExport");
+
+/// The marker `bindExport` returns for a named re-export of a name the
+/// accepted dependency withholds (ADR 0154): its record lists the name in
+/// `withheldExports` and binds nothing by it. The record's list is a claim of
+/// the orchestrator, not a proof -- the certifier recomputes the dependency's
+/// withheld set from its bytes, so a forged or stale list refuses there.
+function withheldDependencyExport(acceptedDependencies, specifier, name, message) {
+  const dependency = acceptedDependencies[specifier];
+  const withheld = dependency?.withheldExports;
+  if (!Array.isArray(withheld) || !withheld.includes(name)) return undefined;
+  if (dependency.exports?.[name] !== undefined) return undefined;
+  if (typeof dependency.packageName !== "string" || !dependency.packageName) return undefined;
+  return Object.freeze({
+    [WITHHELD_DEPENDENCY_EXPORT]: true,
+    packageName: dependency.packageName,
+    name,
+    message
+  });
+}
+
+function isWithheldDependencyExport(target) {
+  return Boolean(target?.[WITHHELD_DEPENDENCY_EXPORT]);
 }
 
 /// Every accepted dependency binding object, mapped to the package names of
@@ -3019,7 +3098,8 @@ export function resolvePackageArtifacts({
         accepted.packageName,
         accepted.artifactCase,
         accepted.acceptedContractDigest,
-        accepted.exports
+        accepted.exports,
+        accepted.withheldExports ?? null
       ])
   ]);
   let semantic = session?.[SESSION_LOOKUP](semanticKey, logicalRoot);
@@ -3029,6 +3109,7 @@ export function resolvePackageArtifacts({
       declarationExports,
       unboundDeclarationExports,
       foreignDeclarationExports,
+      forwardedForeignExports,
       cache
     } = exactExportBindings(
       runtime.file,
@@ -3052,6 +3133,7 @@ export function resolvePackageArtifacts({
       declarationExports,
       unboundDeclarationExports,
       foreignDeclarationExports,
+      forwardedForeignExports,
       closure
     };
     session?.[SESSION_STORE](semanticKey, semantic);
@@ -3086,6 +3168,10 @@ export function resolvePackageArtifacts({
     // ADR 0150, additive in the same way.
     ...(semantic.foreignDeclarationExports.length > 0
       ? { foreignDeclarationExports: semantic.foreignDeclarationExports }
+      : {}),
+    // ADR 0154, additive in the same way.
+    ...(semantic.forwardedForeignExports.length > 0
+      ? { forwardedForeignExports: semantic.forwardedForeignExports }
       : {}),
     authority: "standalonePackageResolver"
   };

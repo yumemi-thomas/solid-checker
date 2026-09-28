@@ -5822,6 +5822,7 @@ mod tests {
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
+            forwarded_foreign_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -6019,6 +6020,7 @@ mod tests {
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
+            forwarded_foreign_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -6223,6 +6225,7 @@ mod tests {
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
+            forwarded_foreign_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -7987,15 +7990,263 @@ mod tests {
             assert_eq!(plan.verified_exports.binding_count(), 1);
         }
 
-        // A named re-export of the unavailable export reaches it, and refuses.
+        // A named re-export of the unavailable export reaches it. A resolution
+        // that binds it, or does not name it (ADR 0154), refuses.
         let refusal = refusal_text(dependent(
             b"export { own, SHARED } from \"defining-package\";\n",
         ));
         assert!(
-            refusal.contains("do not equal the runtime/declaration intersection")
-                || refusal.contains("has no exact binding"),
+            refusal.contains("supplied forwarded foreign exports do not equal archive replay"),
             "{refusal}"
         );
+    }
+
+    const FORWARDING_MANIFEST: &[u8] = br#"{"name":"forwarding-package","version":"1.0.0","exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.js"}}}"#;
+    const FORWARDING_ROOT: &str = "/project/node_modules/forwarding-package";
+    const FORWARDING_IMPORTER: &str = "/project/node_modules/forwarding-package/dist/index.js";
+    const FORWARDING_SOURCE: &[u8] = b"export { own, SHARED } from \"defining-package\";\n\
+export { SHARED as ALIAS } from \"defining-package\";\n\
+export { own as renamedOwn } from \"defining-package\";\n";
+
+    /// `forwarding-package` over `defining-package` (which withholds `SHARED`
+    /// under ADR 0150), with the caller's runtime and declaration bytes and
+    /// the forwarded set its resolver would name. `own` and `renamedOwn` bind
+    /// to `defining-package`'s `own`; `@solidjs/web@2.0.0-rc.9`'s server build
+    /// is this shape for `getOwner`, `untrack` and `merge as mergeProps`.
+    fn plan_forwarding_package(
+        runtime: &[u8],
+        declarations: &[u8],
+        forwarded: &[&str],
+        bound: &[&str],
+        importer: &str,
+    ) -> Result<CertificationPlan, super::CertificationPlanningError> {
+        plan_forwarding_package_over(
+            &plan_forwarding_dependency(),
+            runtime,
+            declarations,
+            forwarded,
+            bound,
+            importer,
+        )
+    }
+
+    /// `defining-package`, withholding `SHARED`, as `forwarding-package`'s
+    /// planned dependency.
+    fn plan_forwarding_dependency() -> CertificationPlan {
+        let declaring = plan_declaring_package();
+        plan_defining_package(
+            &defining_archive(DEFINING_RUNTIME),
+            &["SHARED"],
+            &[],
+            &[&declaring],
+            FORWARDING_IMPORTER,
+        )
+        .unwrap()
+    }
+
+    fn plan_forwarding_package_over(
+        defining: &CertificationPlan,
+        runtime: &[u8],
+        declarations: &[u8],
+        forwarded: &[&str],
+        bound: &[&str],
+        importer: &str,
+    ) -> Result<CertificationPlan, super::CertificationPlanningError> {
+        let archive = published_archive_for(
+            "forwarding-package",
+            "1.0.0",
+            &[
+                ("package/package.json", FORWARDING_MANIFEST),
+                ("package/dist/index.js", runtime),
+                ("package/dist/index.d.ts", declarations),
+            ],
+        );
+        let bindings = bound
+            .iter()
+            .map(|name| {
+                (
+                    *name,
+                    ("dist/index.js", DEFINING_RUNTIME),
+                    ("types/index.d.ts", DEFINING_DECLARATIONS),
+                    DEFINING_ROOT,
+                )
+            })
+            .collect::<Vec<_>>();
+        let forwarded = forwarded
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect::<BTreeSet<_>>();
+        try_plan_adjusted_for_test_package(
+            &archive,
+            "forwarding-package",
+            "1.0.0",
+            FORWARDING_ROOT,
+            FORWARDING_MANIFEST,
+            &["import"],
+            &bindings,
+            &[defining],
+            importer,
+            &[],
+            &|_| ValueShape::Plain,
+            &[],
+            &|resolved| {
+                // Every bound export here is `defining-package`'s `own`.
+                for binding in resolved.exports.values_mut() {
+                    binding.runtime.export_name = "own".into();
+                    binding.declarations.export_name = "own".into();
+                }
+                if !forwarded.is_empty() {
+                    resolved.declaration_exports = resolved
+                        .exports
+                        .keys()
+                        .cloned()
+                        .chain(forwarded.iter().cloned())
+                        .collect();
+                }
+                resolved.forwarded_foreign_exports.clone_from(&forwarded);
+            },
+        )
+    }
+
+    // ADR 0154: a dependent's re-export, on both axes, of a name its planned
+    // dependency withholds under ADR 0150 is that unavailable export. It costs
+    // that export alone -- renamed or not -- and a renamed forward of a bound
+    // name still binds exactly.
+    #[test]
+    fn a_forward_of_a_withheld_name_costs_only_that_export() {
+        let plan = plan_forwarding_package(
+            FORWARDING_SOURCE,
+            FORWARDING_SOURCE,
+            &["ALIAS", "SHARED"],
+            &["own", "renamedOwn"],
+            "/project/src/app.ts",
+        )
+        .unwrap();
+        assert_eq!(plan.verified_exports.binding_count(), 2);
+        assert_eq!(
+            plan.verified_exports.declaration_binding("renamedOwn"),
+            plan.verified_exports.declaration_binding("own"),
+        );
+        assert!(
+            plan.verified_exports
+                .declaration_binding("SHARED")
+                .is_none()
+        );
+        assert!(plan.verified_exports.declaration_binding("ALIAS").is_none());
+
+        // Transitive: a package forwarding the dependent's withheld name
+        // withholds it too, because the dependent's verified plan withheld it.
+        let defining = plan_forwarding_dependency();
+        let middle = plan_forwarding_package_over(
+            &defining,
+            FORWARDING_SOURCE,
+            FORWARDING_SOURCE,
+            &["ALIAS", "SHARED"],
+            &["own", "renamedOwn"],
+            "/project/node_modules/outer-package/dist/index.js",
+        )
+        .unwrap();
+        let outer_manifest = br#"{"name":"outer-package","version":"1.0.0","exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.js"}}}"#;
+        let outer_source = b"export { own, ALIAS } from \"forwarding-package\";\n";
+        let outer = published_archive_for(
+            "outer-package",
+            "1.0.0",
+            &[
+                ("package/package.json", outer_manifest.as_slice()),
+                ("package/dist/index.js", outer_source.as_slice()),
+                ("package/dist/index.d.ts", outer_source.as_slice()),
+            ],
+        );
+        let plan = try_plan_adjusted_for_test_package(
+            &outer,
+            "outer-package",
+            "1.0.0",
+            "/project/node_modules/outer-package",
+            outer_manifest,
+            &["import"],
+            &[(
+                "own",
+                ("dist/index.js", DEFINING_RUNTIME),
+                ("types/index.d.ts", DEFINING_DECLARATIONS),
+                DEFINING_ROOT,
+            )],
+            &[&middle, &defining],
+            "/project/src/app.ts",
+            &[],
+            &|_| ValueShape::Plain,
+            &[],
+            &|resolved| {
+                resolved.declaration_exports = BTreeSet::from(["ALIAS".into(), "own".into()]);
+                resolved.forwarded_foreign_exports = BTreeSet::from(["ALIAS".into()]);
+            },
+        )
+        .unwrap();
+        assert_eq!(plan.verified_exports.binding_count(), 1);
+    }
+
+    #[test]
+    fn a_forward_of_a_withheld_name_is_replayed_never_trusted() {
+        // Stale: a resolution that still binds or omits the forwarded names.
+        let stale = refusal_text(plan_forwarding_package(
+            FORWARDING_SOURCE,
+            FORWARDING_SOURCE,
+            &[],
+            &["own", "renamedOwn"],
+            "/project/src/app.ts",
+        ));
+        assert!(
+            stale.contains("supplied forwarded foreign exports do not equal archive replay"),
+            "{stale}"
+        );
+        // Forged: a resolution naming a bound export as forwarded.
+        let forged = refusal_text(plan_forwarding_package(
+            FORWARDING_SOURCE,
+            FORWARDING_SOURCE,
+            &["ALIAS", "SHARED", "renamedOwn"],
+            &["own"],
+            "/project/src/app.ts",
+        ));
+        assert!(
+            forged.contains("supplied forwarded foreign exports do not equal archive replay"),
+            "{forged}"
+        );
+        // Nothing else widens: a local definition beside a forwarded
+        // declaration, a forwarded runtime beside a local declaration, two
+        // different names on the two axes, and a name the dependency never
+        // had are all refused when named.
+        let forwards = b"export { own } from \"defining-package\";\n\
+export { SHARED } from \"defining-package\";\n";
+        for (runtime, declarations) in [
+            (
+                b"export { own } from \"defining-package\";\nexport const SHARED = 1;\n".as_slice(),
+                forwards.as_slice(),
+            ),
+            (
+                forwards.as_slice(),
+                b"export { own } from \"defining-package\";\nexport declare const SHARED: number;\n",
+            ),
+            (
+                forwards.as_slice(),
+                b"export { own } from \"defining-package\";\nexport { own as SHARED } from \"defining-package\";\n",
+            ),
+            (
+                b"export { own } from \"defining-package\";\nexport { MISSING as SHARED } from \"defining-package\";\n",
+                b"export { own } from \"defining-package\";\nexport { MISSING as SHARED } from \"defining-package\";\n",
+            ),
+        ] {
+            let refusal = refusal_text(plan_forwarding_package(
+                runtime,
+                declarations,
+                &["SHARED"],
+                &["own"],
+                "/project/src/app.ts",
+            ));
+            assert!(
+                refusal.contains("supplied forwarded foreign exports do not equal archive replay"),
+                "{}: {refusal}",
+                String::from_utf8_lossy(declarations)
+            );
+        }
     }
 
     // Regression: `external_dependency` selected a planned dependency by its
@@ -8822,6 +9073,7 @@ mod tests {
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
+            forwarded_foreign_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         (request, resolved)
@@ -9626,6 +9878,7 @@ export const value = phantom;
             ]),
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
+            forwarded_foreign_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -9761,6 +10014,7 @@ export const value = phantom;
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
+            forwarded_foreign_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -9925,6 +10179,7 @@ export const value = phantom;
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
+            forwarded_foreign_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         let (package, mut artifact_case) =
@@ -10246,6 +10501,7 @@ export const value = phantom;
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
+            forwarded_foreign_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         let (package, mut artifact_case) =
@@ -11116,6 +11372,7 @@ export const value = phantom;
                 declaration_exports: BTreeSet::new(),
                 unbound_declaration_exports: BTreeSet::new(),
                 foreign_declaration_exports: BTreeSet::new(),
+                forwarded_foreign_exports: BTreeSet::new(),
                 authority: ResolutionAuthority::Host,
             };
             let (package, mut artifact_case) =
@@ -12249,6 +12506,7 @@ export const value = phantom;
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
+            forwarded_foreign_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         let (package, mut artifact_case) =

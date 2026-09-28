@@ -6832,7 +6832,9 @@ fn emit_package_contract(
     // runtime binding is this package's own definition and its declaration
     // binding another package's declaration, so no one entity carries both
     // identities. Emitting it cost the whole artifact case at `bind_exports`
-    // (`solid-js@2.0.0-rc.9`'s server build and `action`).
+    // (`solid-js@2.0.0-rc.9`'s server build and `action`). ADR 0154 leaves
+    // off a name both axes forward from a planned dependency that withholds
+    // it that way (`@solidjs/web@2.0.0-rc.9`'s server build and `getOwner`).
     let declaration_surface = (!resolution.declaration_exports.is_empty()).then(|| {
         resolution
             .declaration_exports
@@ -6840,6 +6842,7 @@ fn emit_package_contract(
             .filter(|name| {
                 !resolution.unbound_declaration_exports.contains(*name)
                     && !resolution.foreign_declaration_exports.contains(*name)
+                    && !resolution.forwarded_foreign_exports.contains(*name)
             })
             .cloned()
             .collect::<BTreeSet<_>>()

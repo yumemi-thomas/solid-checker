@@ -615,6 +615,15 @@ pub struct ResolvedImport {
     /// direction refuses.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub foreign_declaration_exports: BTreeSet<String>,
+    /// Names on the runtime/declaration intersection that both axes forward,
+    /// through exact named re-export chains, as the same name of the same
+    /// planned dependency, which withholds that name as a foreign declaration
+    /// export (ADR 0150) or forwards it under this rule itself (ADR 0154). The
+    /// export is that unavailable export, so it leaves this surface too.
+    /// Additive resolution evidence, replayed by certification from the
+    /// planned dependency's verified plan; a disagreement refuses.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub forwarded_foreign_exports: BTreeSet<String>,
     pub authority: ResolutionAuthority,
 }
 
@@ -694,6 +703,26 @@ impl ResolvedImport {
             if !self.declaration_exports.contains(name) {
                 return invalid_resolution(format!(
                     "foreign declaration export {name:?} is absent from the declaration export census"
+                ));
+            }
+        }
+        for name in &self.forwarded_foreign_exports {
+            validate_identifier(name, "forwarded foreign export name")?;
+            if self.exports.contains_key(name) {
+                return invalid_resolution(format!(
+                    "export {name:?} is both bound and declared forwarded foreign"
+                ));
+            }
+            if self.unbound_declaration_exports.contains(name)
+                || self.foreign_declaration_exports.contains(name)
+            {
+                return invalid_resolution(format!(
+                    "export {name:?} is declared forwarded foreign and withheld for another reason"
+                ));
+            }
+            if !self.declaration_exports.contains(name) {
+                return invalid_resolution(format!(
+                    "forwarded foreign export {name:?} is absent from the declaration export census"
                 ));
             }
         }
@@ -1706,6 +1735,7 @@ mod tests {
             declaration_exports: BTreeSet::new(),
             unbound_declaration_exports: BTreeSet::new(),
             foreign_declaration_exports: BTreeSet::new(),
+            forwarded_foreign_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         }
     }

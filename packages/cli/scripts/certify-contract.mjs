@@ -2010,7 +2010,11 @@ export function mergeProposalDependencies(dependencies, outputRoot) {
       packageName: dependency.node.packageName,
       artifactCase: dependency.demandPlan.selectedArtifactCase,
       acceptedContractDigest: dependency.demandPlan.candidateSemanticDigest,
-      exports: resolution.exports ?? {}
+      exports: resolution.exports ?? {},
+      // ADR 0154: what the dependency withholds under ADR 0150, so a dependent
+      // that forwards exactly such a name withholds it too instead of
+      // refusing. Absent when empty, so no other record changes by a byte.
+      ...withheldExportsOf(resolution)
     };
   }
   contracts.sort((left, right) =>
@@ -2024,6 +2028,18 @@ export function mergeProposalDependencies(dependencies, outputRoot) {
     contracts
   })}\n`);
   return { catalog, proposalDependencies };
+}
+
+/// The names a resolution withholds as unavailable under ADR 0150 and ADR
+/// 0154, as a planned dependency's `withheldExports`.
+export function withheldExportsOf(resolution) {
+  const withheld = [
+    ...new Set([
+      ...(resolution?.foreignDeclarationExports ?? []),
+      ...(resolution?.forwardedForeignExports ?? [])
+    ])
+  ].sort();
+  return withheld.length > 0 ? { withheldExports: withheld } : {};
 }
 
 function graphNodeExecutionInput(state) {

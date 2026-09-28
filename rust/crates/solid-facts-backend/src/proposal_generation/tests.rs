@@ -225,6 +225,7 @@ fn analysis() -> ProposalAnalysis {
         declaration_exports: std::collections::BTreeSet::new(),
         unbound_declaration_exports: std::collections::BTreeSet::new(),
         foreign_declaration_exports: std::collections::BTreeSet::new(),
+        forwarded_foreign_exports: std::collections::BTreeSet::new(),
         authority: ResolutionAuthority::StandalonePackageResolver,
     };
     ProposalAnalysis {
