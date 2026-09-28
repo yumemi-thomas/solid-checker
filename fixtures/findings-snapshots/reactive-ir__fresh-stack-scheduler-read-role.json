@@ -64,11 +64,11 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-read-role/App.tsx",
-      "start": 2907,
-      "end": 2914,
+      "start": 2941,
+      "end": 2948,
       "fixes": 0
     }
   ]

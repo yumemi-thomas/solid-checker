@@ -1088,6 +1088,7 @@ mod tests {
                 uncertain: false,
                 missing_jsx_census: false,
                 host_callback_timing: false,
+                callee_callback_timing: false,
             }],
             writes: vec![ReactiveWrite {
                 setter: "sampleSetter".into(),

@@ -57,7 +57,7 @@ decide which, so those reads keep their lexical role and are reported as
 | the same pending async read in the body | `SC5001` violation (its `SC1001` is owned by it) | the body read throws `PENDING_ASYNC_UNTRACKED_READ` |
 | a read in an `addEventListener` listener, a `PromiseLike.then` callback, a bound argument | `SC1001` **uncertifiable** | each can run inside the window or after it; not proven either way |
 | a read in a callback of a local function named `setTimeout` | `SC1001` violation | not the standard-library declaration: it runs the callback in the body |
-| a read in `setTimeout(wrap(() => ...))` | `SC1001` violation, **retained** | the scheduler receives what `wrap` returns, and the arrow may run on `wrap`'s own stack |
+| a read in `setTimeout(wrap(() => ...))` | `SC1001` **uncertifiable** | the scheduler receives what `wrap` returns, and `wrap`'s body does not call the arrow during the call; it may run on `wrap`'s stack, a caller's, or the timer's (`callee-callback-timing`) |
 
 **Stub.** `solid-js.d.ts` is `fresh-stack-scheduler-owner`'s, whose
 declarations (`createSignal`, `createMemo` and the rest) are verbatim from the

@@ -46,8 +46,10 @@ pub fn package_contract_finding(issue: &PackageContractIssue) -> Finding {
 // untracked in a proven tracking context, so Solid provably warns there — the
 // flat "Solid warns ... here in dev" claim is earned. An uncertifiable read is
 // not: it rests on unenumerable callers (`ReactiveRead::uncertain`), a census
-// hole (`ReactiveRead::missing_jsx_census`), or a host callback whose
-// invocation window is not proven (`ReactiveRead::host_callback_timing`), and
+// hole (`ReactiveRead::missing_jsx_census`), a host callback whose
+// invocation window is not proven (`ReactiveRead::host_callback_timing`), or a
+// callback handed to a callee not proven to invoke it during the call
+// (`ReactiveRead::callee_callback_timing`), and
 // in each case the flat claim asserts a runtime behavior the finding's own
 // message says cannot be proven.
 // The conditional phrasing stays true regardless of which uncertainty caused

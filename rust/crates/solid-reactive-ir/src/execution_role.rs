@@ -999,6 +999,161 @@ pub(crate) fn host_callback_timing(
     }
 }
 
+/// Whether a read classified in `execution` is **uncertifiable** because it
+/// sits in a function literal handed to a *project* function whose body is not
+/// proven to invoke it during the call.
+///
+/// The lexical fallback of [`semantic_execution_role_within`] places code by
+/// where it is written, so a literal written in a component body takes the
+/// body's role. That is a proof only when the literal runs during the body.
+/// Handed to a project function, it runs wherever that function runs it: in
+/// its own body during the call, from a closure it returns or keeps, or never.
+/// Probed on the audited 2.0.0-rc.9, dev and prod: `localChain([() => n()])`
+/// whose returned invoker runs only from a click handler raises no
+/// `STRICT_READ_UNTRACKED`, while the same chain invoked in the body, and a
+/// helper that invokes its array's elements during the call, both warn. The
+/// syntax does not tell these apart, so the read is a proof obligation, not a
+/// proven untracked read.
+///
+/// The one invocation this proves is the direct one: the literal *is* the
+/// argument at parameter `index`, the callee is a synchronous function whose
+/// own body (not a nested closure) calls that parameter by symbol -- the named
+/// callback case the interprocedural summary already covers. Then the literal
+/// runs during the call, and the walk continues from the call, exactly as it
+/// does through a standard-library inline callback (`items.forEach`). An
+/// element of an array or object literal argument proves nothing: whether the
+/// callee iterates it, or invokes it later, has no fact here.
+///
+/// A callee with no body in the project -- a package export seen through its
+/// declarations, or a callee nothing resolves -- proves the invocation only
+/// through an accepted contract's `inline` row for that parameter; without one
+/// the read is a proof obligation too. Primitive and standard-library calls
+/// are other arms' business (their dialect and runtime models). This withholds
+/// a claim; it never makes one.
+pub(crate) fn callee_callback_timing(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    execution: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use crate::runtime_semantics::RuntimeArgumentBehavior;
+    if !execution.reports_untracked_read() {
+        return false;
+    }
+    let mut span = span;
+    loop {
+        let Some(literal) = containing_ast_function(&file.ast, span) else {
+            return false;
+        };
+        // The call the literal is written in: an argument in which the literal
+        // is the outermost function (directly, or inside an array or object
+        // literal), the innermost such call.
+        let Some((call, index)) = file
+            .ast
+            .arguments_containing(literal.span)
+            .filter(|(call, index)| {
+                file.ast
+                    .functions_within(call.arguments[*index].span)
+                    .filter(|function| function.span.contains(literal.span))
+                    .max_by_key(|function| function.span.end - function.span.start)
+                    .is_some_and(|outer| outer.span == literal.span)
+            })
+            .min_by_key(|(call, _)| call.span.end - call.span.start)
+        else {
+            return false;
+        };
+        if lookup.primitive_at_call(file, call.span).is_some() {
+            return false;
+        }
+        let argument = &call.arguments[index];
+        // Resolved by symbol, members included (`bus.addEventListener` of a
+        // project object resolves to its method's declaration).
+        if let Some((callee_file, callee)) = lookup
+            .callee_symbol(file, call.callee)
+            .and_then(|symbol| lookup.function_for_symbol(symbol))
+            .or_else(|| lookup.function_called_at(file.path.as_str(), call.callee))
+        {
+            let direct =
+                !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == literal.span;
+            if !(direct && invokes_parameter_during_call(callee_file, callee, index, lookup)) {
+                return true;
+            }
+            // The call contains the literal strictly, so the walk terminates.
+            span = call.span;
+            continue;
+        }
+        let resolved = lookup.resolved_callee_call(file, call.callee);
+        if let Some(resolved) = resolved.filter(|resolved| {
+            resolved
+                .declaration
+                .as_ref()
+                .is_some_and(|declaration| declaration.standard_library)
+        }) {
+            let callability = lookup
+                .entity_at(file.path.as_str(), argument.span)
+                .and_then(|entity| entity.callability);
+            match crate::runtime_semantics::argument_behavior(resolved, callability, index) {
+                Some(RuntimeArgumentBehavior::InlineCallback)
+                    if direct_callback_contains(file, argument.span, span) =>
+                {
+                    span = call.span;
+                    continue;
+                }
+                _ => return false,
+            }
+        }
+        // A callee with no body in the project: a package export seen through
+        // its declarations, or a callee nothing resolves. Only an accepted
+        // contract row can say it invokes the argument during the call.
+        let direct = !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == literal.span;
+        let contracted_inline = direct
+            && lookup
+                .callee_symbol(file, call.callee)
+                .and_then(|symbol| lookup.contract_callbacks(symbol))
+                .is_some_and(|rows| {
+                    rows.iter()
+                        .any(|row| row.parameter == index && row.execution == "inline")
+                });
+        if !contracted_inline {
+            return true;
+        }
+        span = call.span;
+    }
+}
+
+/// Whether the synchronous project function `function` calls its parameter
+/// `index` in its own body -- not in a closure it creates -- by the
+/// parameter's symbol. Destructured, rest and missing parameters prove
+/// nothing, and neither does an async function or a generator, whose body may
+/// run after the call returns.
+fn invokes_parameter_during_call(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if function.r#async || function.generator {
+        return false;
+    }
+    let Some(parameter) = function.parameters.get(index) else {
+        return false;
+    };
+    if parameter.shape != solid_facts::ast::BindingShape::Identifier {
+        return false;
+    }
+    let Some(name) = parameter.names.first() else {
+        return false;
+    };
+    let Some(symbol) = lookup.entities().at(file.path.as_str(), name.span) else {
+        return false;
+    };
+    file.ast.calls.iter().any(|call| {
+        containing_ast_function(&file.ast, call.span)
+            .is_some_and(|owner| owner.span == function.span)
+            && lookup.callee_symbol(file, call.callee) == Some(symbol.as_str())
+    })
+}
+
 /// Whether `span` lies inside an argument the dialect says runs on reads of
 /// the call's returned object ([`Dialect::callback_runs_on_result_access`]).
 ///

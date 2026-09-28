@@ -40,7 +40,9 @@ use crate::cache::{
     InterproceduralGraphTarget, InterproceduralResultDependency,
     InterproceduralResultDependencyState, TypedAccessorContribution, same_compiler_semantics,
 };
-use crate::execution_role::{direct_callback_contains, host_callback_timing, missing_jsx_census};
+use crate::execution_role::{
+    callee_callback_timing, direct_callback_contains, host_callback_timing, missing_jsx_census,
+};
 use crate::owners::{
     containing_ast_function, enclosing_function_label, enclosing_render_function,
     function_binding_name, read_escapes_synchronous_extent, solid_accessor_declaration,
@@ -5617,6 +5619,12 @@ fn interprocedural_result_reads_for_file(
                                 callback_execution,
                                 lookup,
                             ),
+                            callee_callback_timing: callee_callback_timing(
+                                file,
+                                call.span,
+                                callback_execution,
+                                lookup,
+                            ),
                         });
                     }
                 }
@@ -5649,6 +5657,9 @@ fn interprocedural_result_reads_for_file(
                     uncertain: false,
                     missing_jsx_census: missing_jsx_census(file, call.span, execution),
                     host_callback_timing: host_callback_timing(file, call.span, execution, lookup),
+                    callee_callback_timing: callee_callback_timing(
+                        file, call.span, execution, lookup,
+                    ),
                 });
             }
         }

@@ -24,9 +24,10 @@ use std::{
 };
 
 use crate::execution_role::{
-    RootBodyGuard, allowed_callback_spans, async_execution_role, control_flow_execution_role,
-    host_callback_timing, missing_jsx_census, named_callback_execution_role, read_analysis_context,
-    semantic_execution_role, semantic_write_execution_role,
+    RootBodyGuard, allowed_callback_spans, async_execution_role, callee_callback_timing,
+    control_flow_execution_role, host_callback_timing, missing_jsx_census,
+    named_callback_execution_role, read_analysis_context, semantic_execution_role,
+    semantic_write_execution_role,
 };
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
@@ -456,6 +457,12 @@ impl LocalAccessContext<'_, '_> {
                             execution,
                             self.lookup,
                         ),
+                        callee_callback_timing: callee_callback_timing(
+                            file,
+                            call.span,
+                            execution,
+                            self.lookup,
+                        ),
                     }));
                     if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                         result.strict_read_obligations += 1;
@@ -547,6 +554,12 @@ impl LocalAccessContext<'_, '_> {
                         execution,
                         self.lookup,
                     ),
+                    callee_callback_timing: callee_callback_timing(
+                        file,
+                        call.span,
+                        execution,
+                        self.lookup,
+                    ),
                 }));
                 if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                     result.strict_read_obligations += 1;
@@ -627,6 +640,12 @@ impl LocalAccessContext<'_, '_> {
                         execution,
                         self.lookup,
                     ),
+                    callee_callback_timing: callee_callback_timing(
+                        file,
+                        call.span,
+                        execution,
+                        self.lookup,
+                    ),
                 }));
                 result.strict_read_obligations += 1;
             }
@@ -656,6 +675,12 @@ impl LocalAccessContext<'_, '_> {
                             uncertain: self.lookup.inside_possible_component(file, call.span),
                             missing_jsx_census: missing_jsx_census(file, call.span, execution),
                             host_callback_timing: host_callback_timing(
+                                file,
+                                call.span,
+                                execution,
+                                self.lookup,
+                            ),
+                            callee_callback_timing: callee_callback_timing(
                                 file,
                                 call.span,
                                 execution,
@@ -714,6 +739,12 @@ impl LocalAccessContext<'_, '_> {
                             uncertain: self.lookup.inside_possible_component(file, call.span),
                             missing_jsx_census: missing_jsx_census(file, call.span, execution),
                             host_callback_timing: host_callback_timing(
+                                file,
+                                call.span,
+                                execution,
+                                self.lookup,
+                            ),
+                            callee_callback_timing: callee_callback_timing(
                                 file,
                                 call.span,
                                 execution,
@@ -955,6 +986,12 @@ impl LocalAccessContext<'_, '_> {
                     execution,
                     self.lookup,
                 ),
+                callee_callback_timing: callee_callback_timing(
+                    file,
+                    member.span,
+                    execution,
+                    self.lookup,
+                ),
             }));
             if counts_as_strict_read_root(file, member.span, execution, self.lookup) {
                 result.strict_read_obligations += 1;
@@ -1065,6 +1102,12 @@ impl LocalAccessContext<'_, '_> {
                 uncertain,
                 missing_jsx_census: missing_jsx_census(file, spread.span, execution),
                 host_callback_timing: host_callback_timing(
+                    file,
+                    spread.span,
+                    execution,
+                    self.lookup,
+                ),
+                callee_callback_timing: callee_callback_timing(
                     file,
                     spread.span,
                     execution,

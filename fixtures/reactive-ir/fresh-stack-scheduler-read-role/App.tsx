@@ -97,8 +97,8 @@ function Shadowed() {
   return <div />;
 }
 
-// Retained: the scheduler receives what `wrap` returns, and the arrow inside
-// may run on `wrap`'s own stack.
+// Uncertifiable: the scheduler receives what `wrap` returns, and `wrap`'s
+// body does not call the arrow during the call, so nothing places it.
 function wrap(fn: () => void): () => void {
   return fn;
 }

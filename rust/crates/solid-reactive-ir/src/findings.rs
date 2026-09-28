@@ -358,6 +358,22 @@ pub fn strict_read_message(read: &ReactiveRead) -> String {
             read.accessor,
         );
     }
+    // The same honesty when the invoker is project code: the literal is
+    // handed to a function whose body is not proven to call it during the
+    // call, so it may run then, later from a closure the function returns or
+    // keeps, or never.
+    if read.callee_callback_timing {
+        let through = if read.via.is_empty() {
+            String::new()
+        } else {
+            format!(" through {}", read.via)
+        };
+        return format!(
+            "{} {:?} is read{through} in a callback written in {context} and passed to a function that is not proven to invoke it during the call; that function may invoke it then, later from a closure it returns or keeps, or never, so whether this read runs untracked in {context} cannot be proven either way",
+            reactive_value_label(&read.kind),
+            read.accessor,
+        );
+    }
     if read.via.is_empty() {
         format!(
             "{} {:?} is read directly in {context}, which does not track; the read sees the current value once and never updates when {:?} changes",
@@ -398,6 +414,10 @@ fn untracked_evidence_sentence(read: &ReactiveRead, subject: &str) -> String {
     } else if read.host_callback_timing {
         format!(
             "{subject} sits in a callback a host API retains and may invoke on its invoker's stack, so no fact places its execution inside or after the component body's strict-read window"
+        )
+    } else if read.callee_callback_timing {
+        format!(
+            "{subject} sits in a callback passed to a function whose body is not proven to invoke it during the call, so no fact places its execution inside or after the component body's strict-read window"
         )
     } else {
         format!("{subject} is outside every compiler-tracked JSX region and deferred callback")
@@ -560,6 +580,7 @@ mod tests {
             uncertain: false,
             missing_jsx_census,
             host_callback_timing: false,
+            callee_callback_timing: false,
         }
     }
 
@@ -631,6 +652,34 @@ mod tests {
         );
         assert!(
             last.contains("no fact places its execution inside or after"),
+            "the evidence must state the missing fact: {last}"
+        );
+    }
+
+    /// A read in a literal handed to a project function that is not proven to
+    /// invoke it names that hole, not the host one, and claims neither
+    /// "does not track" nor a completed search.
+    #[test]
+    fn a_callee_callback_read_never_claims_the_window_either_way() {
+        let mut callee = read(false);
+        callee.callee_callback_timing = true;
+        assert!(callee.is_uncertifiable());
+        let message = strict_read_message(&callee);
+        assert!(
+            message.contains("not proven to invoke it during the call"),
+            "the callee-timing hole must be named in the message: {message}"
+        );
+        assert!(
+            !message.contains("host API")
+                && !message.contains("which does not track")
+                && !message.contains("never updates when"),
+            "the message must not claim the read never updates: {message}"
+        );
+        let evidence = strict_read_evidence(&callee);
+        let last = &evidence.last().unwrap().message;
+        assert!(
+            !last.contains("outside every compiler-tracked JSX region")
+                && last.contains("not proven to invoke it during the call"),
             "the evidence must state the missing fact: {last}"
         );
     }

@@ -351,19 +351,31 @@ pub struct ReactiveRead {
     /// worded separately for that reason.
     #[serde(default, skip_serializing_if = "is_false")]
     pub host_callback_timing: bool,
+    /// The read sits in a function literal handed to a project function that
+    /// is not proven to invoke it during the call
+    /// (`execution_role::callee_callback_timing`): the literal is written in
+    /// the component body but runs wherever the callee runs it -- during the
+    /// call, from a closure the callee returns or stores, or never -- and the
+    /// lexical position proves none of these. A fourth hole beside the other
+    /// three, about which code invokes the read rather than when a host does,
+    /// and worded separately for that reason.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub callee_callback_timing: bool,
 }
 
 impl ReactiveRead {
     /// Whether a finding about this read is **uncertifiable** rather than a
     /// proven violation.
     ///
-    /// Three independent holes, any of which is enough: the reactive
+    /// Four independent holes, any of which is enough: the reactive
     /// backing cannot be established because the component's callers cannot be
     /// enumerated ([`Self::uncertain`]), the execution context cannot be
     /// established because the compiler reported no census for the JSX region
-    /// ([`Self::missing_jsx_census`]), or the host may run the read's callback
+    /// ([`Self::missing_jsx_census`]), the host may run the read's callback
     /// inside the strict-read window or after it
-    /// ([`Self::host_callback_timing`]).
+    /// ([`Self::host_callback_timing`]), or the read's function literal is
+    /// handed to a project function not proven to invoke it during the call
+    /// ([`Self::callee_callback_timing`]).
     ///
     /// This is one predicate on purpose. The projection sets a finding's `kind`
     /// from it and each dialect's wording selects its hint from it; when the two
@@ -371,7 +383,10 @@ impl ReactiveRead {
     /// carrying a proof-obligation hint, or the reverse.
     #[must_use]
     pub fn is_uncertifiable(&self) -> bool {
-        self.uncertain || self.missing_jsx_census || self.host_callback_timing
+        self.uncertain
+            || self.missing_jsx_census
+            || self.host_callback_timing
+            || self.callee_callback_timing
     }
 }
 
