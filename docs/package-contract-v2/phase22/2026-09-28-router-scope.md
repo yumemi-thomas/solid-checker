@@ -20,7 +20,7 @@ contract.
 | exports clean, any version, any host | **0** (next.30 0/32, next.26 0/31, next.21 0/31) |
 | demanded sites any single wall unblocks alone | **22** (`./fs` `defineFileRoute` reads recipe, *estimated* by bytes; 2 measured), and 3 (`defineRoutes`, `defineRoute`: the accessor hazard; not under `node`) |
 | sites the first four-cause bundle unblocks (callbacks, creates, reads, returns at the context-reading hooks) | 143 host free, 154 `browser`, 128 `node` (*estimated* over all versions); 60 / 62 / 59 at the measured versions |
-| sites in an app environment on an audited runtime archive | 111 of 263 (42 %) |
+| sites in an app environment on an audited runtime triple | 64 of 263 (24 %): next.26 × rc.9 and next.18 × rc.3 |
 | harness wall, 3 versions per host | host free 60 s, `browser` 15 s, `node` 22 s (install cache warm after the first) |
 
 - **The package certifies; nothing in it is clean.** All nine runs produce a
@@ -43,7 +43,7 @@ contract.
   bundle only for its exact artifact and environment (ADRs 0123, 0126, 0131),
   so each (version, runtime) pair needs its own certification. Certifying is
   cheap (under a minute for three versions). What limits reach is the runtime:
-  only 111 sites sit on an audited archive (rc.3, rc.6, rc.9).
+  only 64 sites sit on an audited runtime triple (rc.3 or rc.9).
 
 ## Demand
 
@@ -69,7 +69,10 @@ rc.8, which has no audited archive and no install pin
 (`scripts/ecosystem-benchmark/lib/runtime-pins.mjs`). A certification in its
 apps' environment is refused before it starts. Each measured version was
 certified on the runtime triple its own apps install: next.26 on rc.9 and
-next.21 on rc.6, both audited archives.
+next.21 on rc.6. rc.9 is an audited triple. rc.6 is not: only
+`@solidjs/signals@2.0.0-rc.6` is an audited archive, and `solid-js` and
+`@solidjs/web` rc.6 are not (`rust/crates/solid-dialect/audited-archives.json`),
+so next.21 was measured for its bytes but cannot be delivered (*Versions*).
 
 | export | sites | apps | | export | sites | apps |
 | --- | ---: | ---: | --- | --- | ---: | ---: |
@@ -203,17 +206,18 @@ report does not propose weakening that.
 
 **What that costs.** Certification is not the bottleneck: three versions
 certify in 15 to 60 s per host. The runtime is. The table below shows which
-apps' environments can be certified today, meaning on an audited archive in
-`AUDITED_ARCHIVES` (rc.3, rc.6, rc.9):
+apps' environments can be certified today. A consumer-environment run needs
+all three runtime packages to be audited archives (`AUDITED_ARCHIVES`), and
+only the rc.3 and rc.9 triples are; rc.6 has an audited `@solidjs/signals`
+alone:
 
 | version × runtime | apps | sites | lockfile not behind a refusing reader |
 | --- | ---: | ---: | --- |
 | next.26 × rc.9 | 7 | 47 | 30 (npm, yarn, pnpm one document); 17 behind wall 4 or 8 of the baseline (pnpm `---`, `bun.lock` v1) |
-| next.21 × rc.6 | 6 | 47 | 35; 12 behind walls 4 or 8 |
 | next.18 × rc.3 (beacon-web, solid-groove) | 2 | 17 | 0 (`bun.lockb`, `bun.lock` v1) |
-| everything else (rc.0/rc.1/rc.4/rc.5/rc.7/rc.8 runtimes) | 11 | 152 | not certifiable: no archive, and ADR 0127 schedules no new work on older rcs |
+| everything else: next.21 × rc.6 (6 apps, 47 sites: `solid-js` and `@solidjs/web` rc.6 are not audited), next.18 × rc.3 with signals rc.8 and × rc.4 (27), and the rc.0/rc.1/rc.4/rc.5/rc.7/rc.8 runtimes | 17 | 199 | not certifiable: no audited triple, and ADR 0127 schedules no new work on older rcs |
 
-The ceiling for the router is therefore **111 sites (42 %)**, and 65 of them
+The ceiling for the router is therefore **64 sites (24 %)**, and 30 of them
 are not behind the two refusing lockfile readers. This assumes every export were
 clean.
 

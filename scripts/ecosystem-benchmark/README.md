@@ -234,10 +234,19 @@ with signals rc.3. The two rc.9 ones are `viviana-ui-main-b005c00a`
 (proyecto-viviana/ui `apps/web`, a TanStack Start app: `@tanstack/solid-router`,
 `solid-start-client` and `solid-start-server` at rc.8; its patched
 `@tanstack/solid-start` is recorded) and `oscartbeaumont-website-main-60823453`
-(`@solidjs/meta@1.0.0-next.2`; its `@solidjs/router@2.0.0-next.26` is not the
-manifest's next.30). Both are refused until `solid-js` and `@solidjs/web` rc.9
-are audited archives, and `make consumer-environment-runs` stops on the first
-refusal.
+(`@solidjs/meta@1.0.0-next.2` and `@solidjs/router@2.0.0-next.26`). Both
+are admitted since `solid-js` and `@solidjs/web` rc.9 became audited archives
+(ADR 0127), and `make consumer-environment-runs` stops on the first refusal.
+
+A package may have more than one `solid2` row, one per release real consumers
+install, and an environment's package is matched to the row of its own
+version. `@solidjs/router` has three: next.30 (the corpus row), next.26 on the
+rc.9 triple and next.18 on the rc.3 triple, the two (version, audited runtime)
+pairs the app-import corpus installs
+(`docs/package-contract-v2/phase22/2026-09-28-router-scope.md`). The other
+router apps are on runtimes with no audited triple, or have lockfiles
+`derive-consumer-environment.mjs` does not read (only single-document
+`pnpm-lock.yaml`).
 
 Certification children run with `SOLID_CHECKER_DURABLE_WRITES=none`: every
 catalog a probe publishes lives in a temporary directory removed seconds

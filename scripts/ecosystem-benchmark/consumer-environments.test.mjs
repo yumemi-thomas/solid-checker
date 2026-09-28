@@ -57,7 +57,7 @@ test("the reviewed kobalte environment is admissible against the committed manif
 // are admissible -- so this holds on both sides of that merge.
 test.each([
   ["viviana-ui-main-b005c00a", ["@tanstack/solid-router", "@tanstack/solid-start-client", "@tanstack/solid-start-server"]],
-  ["oscartbeaumont-website-main-60823453", ["@solidjs/meta"]]
+  ["oscartbeaumont-website-main-60823453", ["@solidjs/meta", "@solidjs/router"]]
 ])("the reviewed rc.9 environment %s is admitted exactly by the audited archives", (id, delivered) => {
   const environment = reviewed().find(entry => entry.id === id);
   assert.ok(environment, `${id} is listed`);
@@ -129,6 +129,27 @@ test("a package that is not its manifest row's artifact is refused", () => {
   assert.match(environmentProblems(conflicting, { manifest, auditedArchives }).join("\n"), /is pinned at 7\.0\.0-next\.5/);
 
   assert.throws(() => consumerEnvironmentManifest(manifest, bytes, { auditedArchives }), /refused:/);
+});
+
+// `@solidjs/router` has a `solid2` row per release real consumers install
+// (next.30, next.26, next.18), so an environment's package is matched to the
+// row of its own version and cloned from that row -- never from the first row
+// of that name.
+test("a package with several manifest rows is matched and cloned by version", () => {
+  const rows = manifest.rows.filter(row => row.solidTarget === "solid2" && row.package === "@solidjs/router");
+  assert.deepEqual(rows.map(row => row.version), ["2.0.0-next.30", "2.0.0-next.26", "2.0.0-next.18"]);
+  const oscar = reviewed().find(entry => entry.id === "oscartbeaumont-website-main-60823453");
+  const derived = consumerEnvironmentManifest(manifest, oscar, { auditedArchives });
+  const router = derived.rows.find(row => row.package === "@solidjs/router");
+  assert.equal(router.version, "2.0.0-next.26");
+  assert.equal(router.integrity, rows[1].integrity);
+
+  const elsewhere = reviewed().find(entry => entry.id === "oscartbeaumont-website-main-60823453");
+  elsewhere.packages.find(entry => entry.package === "@solidjs/router").version = "2.0.0-next.24";
+  assert.match(
+    environmentProblems(elsewhere, { manifest, auditedArchives }).join("\n"),
+    /@solidjs\/router@2\.0\.0-next\.24 is not the manifest row's 2\.0\.0-next\.30, 2\.0\.0-next\.26, 2\.0\.0-next\.18/
+  );
 });
 
 test("a runtime above the audited Solid 2 release, or not an audited archive, is refused", () => {

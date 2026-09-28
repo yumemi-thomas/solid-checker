@@ -613,6 +613,10 @@
           "version": "1.0.0-next.2",
           "integrity": "sha512-4aqPczFqDdep4JTAUXfh4nyfq7InbTgimd7NuN6ZWWE29UPv0uR5dyr53yFcf2YgVXjFdX+JGhXtsE0njGL+fA=="
         },
+        "@solidjs/router": {
+          "version": "2.0.0-next.26",
+          "integrity": "sha512-Zjho0HI095mxSMu8tyfuqoq8vTeYML0mWJj1iQar298MrhtT2itGiEgF2C7ndE2mzKeXRQ/DLf1tr37Gax5bsg=="
+        },
         "csstype": {
           "version": "3.2.3",
           "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="
@@ -631,16 +635,14 @@
           "package": "@solidjs/meta",
           "version": "1.0.0-next.2",
           "integrity": "sha512-4aqPczFqDdep4JTAUXfh4nyfq7InbTgimd7NuN6ZWWE29UPv0uR5dyr53yFcf2YgVXjFdX+JGhXtsE0njGL+fA=="
-        }
-      ],
-      "unmatched": [
+        },
         {
           "package": "@solidjs/router",
           "version": "2.0.0-next.26",
-          "integrity": "sha512-Zjho0HI095mxSMu8tyfuqoq8vTeYML0mWJj1iQar298MrhtT2itGiEgF2C7ndE2mzKeXRQ/DLf1tr37Gax5bsg==",
-          "reason": "the solid2 manifest row is 2.0.0-next.30"
+          "integrity": "sha512-Zjho0HI095mxSMu8tyfuqoq8vTeYML0mWJj1iQar298MrhtT2itGiEgF2C7ndE2mzKeXRQ/DLf1tr37Gax5bsg=="
         }
-      ]
+      ],
+      "unmatched": []
     }
   ]
 }

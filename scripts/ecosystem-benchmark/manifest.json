@@ -1159,6 +1159,82 @@
     {
       "family": "official-solid",
       "status": "official",
+      "package": "@solidjs/router",
+      "solidTarget": "solid2",
+      "version": "2.0.0-next.26",
+      "distTags": [],
+      "integrity": "sha512-Zjho0HI095mxSMu8tyfuqoq8vTeYML0mWJj1iQar298MrhtT2itGiEgF2C7ndE2mzKeXRQ/DLf1tr37Gax5bsg==",
+      "deprecated": null,
+      "dependencies": {},
+      "peerDependencies": {
+        "@solidjs/web": "^2.0.0-rc.9",
+        "solid-js": "^2.0.0-rc.9"
+      },
+      "optionalDependencies": {},
+      "compatibleSolidVersions": {
+        "@solidjs/web": [
+          "2.0.0-rc.9"
+        ],
+        "solid-js": [
+          "2.0.0-rc.9"
+        ]
+      },
+      "unparsedRanges": [],
+      "probes": [
+        {
+          "id": "@solidjs/router@2.0.0-next.26|solid2|only",
+          "kind": "only",
+          "channel": "rc",
+          "solid": {
+            "@solidjs/web": "2.0.0-rc.9",
+            "solid-js": "2.0.0-rc.9"
+          }
+        }
+      ]
+    },
+    {
+      "family": "official-solid",
+      "status": "official",
+      "package": "@solidjs/router",
+      "solidTarget": "solid2",
+      "version": "2.0.0-next.18",
+      "distTags": [],
+      "integrity": "sha512-DQ58djANKYi4HZfE9J7vN9kAtAH/eKYkUj61cezfDrBae3A/cgthgdjQS9C8pNGtNeST6aA8GNhcFYKlUWn+zA==",
+      "deprecated": null,
+      "dependencies": {},
+      "peerDependencies": {
+        "@solidjs/web": "^2.0.0-rc.3",
+        "solid-js": "^2.0.0-rc.3"
+      },
+      "optionalDependencies": {},
+      "compatibleSolidVersions": {
+        "@solidjs/signals": [
+          "2.0.0-rc.3"
+        ],
+        "@solidjs/web": [
+          "2.0.0-rc.3"
+        ],
+        "solid-js": [
+          "2.0.0-rc.3"
+        ]
+      },
+      "unparsedRanges": [],
+      "probes": [
+        {
+          "id": "@solidjs/router@2.0.0-next.18|solid2|only",
+          "kind": "only",
+          "channel": "rc",
+          "solid": {
+            "@solidjs/signals": "2.0.0-rc.3",
+            "@solidjs/web": "2.0.0-rc.3",
+            "solid-js": "2.0.0-rc.3"
+          }
+        }
+      ]
+    },
+    {
+      "family": "official-solid",
+      "status": "official",
       "package": "@solidjs/signals",
       "solidTarget": "solid2",
       "version": "2.0.0-rc.9",

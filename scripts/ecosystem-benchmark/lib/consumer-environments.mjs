@@ -47,6 +47,32 @@ const INTEGRITY = /^sha512-[A-Za-z0-9+/]+={0,2}$/;
 const CEILINGED_RUNTIME = ["solid-js", "@solidjs/web"];
 
 /**
+ * The `solid2` manifest rows by package name. A package may carry more than
+ * one row: `@solidjs/router` has a row per release real consumers install
+ * (next.30 for the corpus, next.26 and next.18 for the apps that pin them), so
+ * a lookup is always by package **and** version, never "the" row.
+ */
+function solid2RowsByPackage(manifest) {
+  const rows = new Map();
+  for (const row of manifest?.rows ?? []) {
+    if (row.solidTarget !== "solid2") continue;
+    if (!rows.has(row.package)) rows.set(row.package, []);
+    rows.get(row.package).push(row);
+  }
+  return rows;
+}
+
+/// The row for exactly this release, or `null`.
+function rowForVersion(rows, name, version) {
+  return (rows.get(name) ?? []).find(row => row.version === version) ?? null;
+}
+
+/// How a package's rows are named in a refusal: every version it has a row at.
+function rowVersions(rows, name) {
+  return (rows.get(name) ?? []).map(row => row.version).join(", ");
+}
+
+/**
  * The reviewed environments, or a throw. Strict about shape for the reason
  * `loadAuditedArchives` is: a file that parses but lists nothing must not read
  * as "no environment disagrees".
@@ -142,10 +168,7 @@ export function environmentProblems(
     }
   }
 
-  const rows = new Map();
-  for (const row of manifest?.rows ?? []) {
-    if (row.solidTarget === "solid2") rows.set(row.package, row);
-  }
+  const rows = solid2RowsByPackage(manifest);
   const packages = Array.isArray(environment?.packages) ? environment.packages : [];
   if (packages.length === 0) problems.push(`${id}: lists no packages`);
   const listed = new Set();
@@ -164,13 +187,13 @@ export function environmentProblems(
       problems.push(`${id}: ${name} is the runtime, not a tier package`);
       continue;
     }
-    const row = rows.get(name);
-    if (!row) {
+    if (!rows.has(name)) {
       problems.push(`${id}: ${name}@${entry.version} has no solid2 manifest row`);
       continue;
     }
-    if (row.version !== entry.version) {
-      problems.push(`${id}: ${name}@${entry.version} is not the manifest row's ${row.version}`);
+    const row = rowForVersion(rows, name, entry.version);
+    if (!row) {
+      problems.push(`${id}: ${name}@${entry.version} is not the manifest row's ${rowVersions(rows, name)}`);
     } else if (row.integrity !== entry.integrity) {
       problems.push(
         `${id}: ${name}@${entry.version} integrity ${entry.integrity} is not the manifest row's ${row.integrity}`
@@ -215,7 +238,10 @@ export function consumerEnvironmentManifest(manifest, environment, options = {})
       .map(name => [name, { version: environment.pins[name].version, integrity: environment.pins[name].integrity }])
   );
   const rows = environment.packages.map(entry => {
-    const row = manifest.rows.find(candidate => candidate.solidTarget === "solid2" && candidate.package === entry.package);
+    const row = manifest.rows.find(
+      candidate =>
+        candidate.solidTarget === "solid2" && candidate.package === entry.package && candidate.version === entry.version
+    );
     const entrypoints = (row.probes ?? []).find(probe => Array.isArray(probe.entrypoints))?.entrypoints;
     const probe = {
       id: environmentProbeId(row, environment),
@@ -331,8 +357,7 @@ export function deriveConsumerEnvironment({ lock, id, source, importers, manifes
   }
   const consumerClosure = closureOf(importerRoots);
 
-  const rows = new Map();
-  for (const row of manifest?.rows ?? []) if (row.solidTarget === "solid2") rows.set(row.package, row);
+  const rows = solid2RowsByPackage(manifest);
   const scopes = new Set(
     [...rows.keys()].map(name => (name.startsWith("@") ? name.split("/")[0] : null)).filter(Boolean)
   );
@@ -354,22 +379,22 @@ export function deriveConsumerEnvironment({ lock, id, source, importers, manifes
     const name = nameOf(key);
     const version = versionOf(key);
     if (SOLID_RUNTIME_PACKAGES.includes(name)) continue;
-    const row = rows.get(name);
-    if (row && row.version === version && row.integrity === integrity) {
+    const row = rowForVersion(rows, name, version);
+    if (row && row.integrity === integrity) {
       if (patched.has(key)) unmatched.push({ package: name, version, integrity, reason: PATCHED_REASON });
       else candidates.push({ package: name, version, integrity });
       continue;
     }
     const scope = name.startsWith("@") ? name.split("/")[0] : null;
-    if (!row && !(scope && scopes.has(scope))) continue;
+    if (!rows.has(name) && !(scope && scopes.has(scope))) continue;
     unmatched.push({
       package: name,
       version,
       integrity,
-      reason: !row
+      reason: !rows.has(name)
         ? "no solid2 manifest row"
-        : row.version !== version
-          ? `the solid2 manifest row is ${row.version}`
+        : !row
+          ? `the solid2 manifest row is ${rowVersions(rows, name)}`
           : `the solid2 manifest row's integrity is ${row.integrity}`
     });
   }
