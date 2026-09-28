@@ -16996,14 +16996,16 @@ export const value = phantom;
     // publishes (the generated side is pinned by `implementation-census-returns`'
     // own document). Every other domain stays open, so the only closure
     // candidates are the ones under test.
-    const PRIMITIVE_RETURNS_FIXTURE_EXPORTS: [&str; 11] = [
+    const PRIMITIVE_RETURNS_FIXTURE_EXPORTS: [&str; 13] = [
         "add",
         "annotatedBox",
         "box",
         "clamp",
         "isObject",
         "label",
+        "limit",
         "passThrough",
+        "reassignedLet",
         "sign",
         "trueFn",
         "voidFn",
@@ -17145,7 +17147,9 @@ export const value = phantom;
             panic!("every refusal here withholds by name and the row certifies: {error}")
         });
         let main = finalized.canonical_main();
-        for export in ["clamp", "isObject", "label", "sign", "trueFn", "voidFn"] {
+        for export in [
+            "clamp", "isObject", "label", "limit", "sign", "trueFn", "voidFn",
+        ] {
             assert!(
                 plain_return_is_closed_in(main, export),
                 "{export}: a primitive completion certifies one plain return: {:?} {:?}",
@@ -17177,6 +17181,13 @@ export const value = phantom;
                 "whose own value the producer did not type as a primitive alone",
             ),
             ("widened", "every declared signature's result"),
+            // The 2026-09-28 amendment to ADR 0113: typed `number` by its
+            // declaration, which a JavaScript write does not widen, and
+            // nothing else stated beside the type.
+            (
+                "reassignedLet",
+                "may be only a reassignable binding's declaration",
+            ),
         ] {
             assert!(
                 finalized.withheld_operations().iter().any(|record| {
@@ -20219,11 +20230,14 @@ export const value = phantom;
 
     /// ADR 0113: the census fixture's plain returns that certify -- the
     /// exports whose every live completion the producer types a primitive.
-    const CENSUS_FIXTURE_GENERATED_PLAIN_RETURNS_CLOSED: [&str; 9] = [
+    ///
+    /// `helperCoercion`, `helperSpreadCoercion` and `helperUntypedArgument`
+    /// left on 2026-09-28 (the amendment to ADR 0113): each returns a local
+    /// helper's result, typed `number` by the helper's inferred return type,
+    /// which is a type and no evidence beside one -- grammar, a reviewed
+    /// built-in, TypeScript source -- so the `return` is withdrawn by name.
+    const CENSUS_FIXTURE_GENERATED_PLAIN_RETURNS_CLOSED: [&str; 6] = [
         "declaredMemberCoercion",
-        "helperCoercion",
-        "helperSpreadCoercion",
-        "helperUntypedArgument",
         "instanceOfComputedClass",
         "instanceOfDerivedClass",
         "instanceOfLibrary",
@@ -20245,7 +20259,7 @@ export const value = phantom;
     /// § 3.3) stopped proposing a plain one. Counted rather than listed, because
     /// the fixture exists to pin the `creates` census and what these return is
     /// incidental to it.
-    const CENSUS_FIXTURE_GENERATED_PLAIN_RETURNS_WITHDRAWN: usize = 77;
+    const CENSUS_FIXTURE_GENERATED_PLAIN_RETURNS_WITHDRAWN: usize = 80;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).

@@ -460,7 +460,9 @@
         "arms": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/returnArm" } },
         "callable": { "$ref": "#/$defs/location" },
         "primitiveSyntax": { "type": "boolean" },
-        "call": { "$ref": "#/$defs/location" }
+        "call": { "$ref": "#/$defs/location" },
+        "defaultLibraryCall": { "type": "string", "minLength": 1 },
+        "typeScriptSource": { "type": "boolean" }
       }
     },
     "returnArm": {

@@ -40,7 +40,30 @@ export function sign(value) {
   return value > 0 ? 1 : -1;
 }
 
+// A `const` holds its initializer's value for its whole life, so a read of one
+// whose initializer is a literal is a primitive by grammar (the 2026-09-28
+// amendment to ADR 0113).
+const LIMIT = 10;
+export function limit() {
+  return LIMIT;
+}
+
 // --- Every export below is proposed the same closure and refused. ---
+
+// The hole the 2026-09-28 amendment to ADR 0113 closes. In a JavaScript file
+// the checker types `x` by its declaration, `number`, whatever the unchecked
+// write stored, so the return site's type and `primitiveCompletion` both say
+// primitive; and the veto's samples never pass the one key that stores the
+// function. Only the evidence the census now requires beside the type -- the
+// value's grammar, a reviewed built-in's call, or TypeScript source -- refuses
+// it.
+export function reassignedLet(key) {
+  let x = 0;
+  if (key === "unlock-the-function") {
+    x = () => 1;
+  }
+  return x;
+}
 
 // An object: the one thing a primitive completion rules out.
 export function box(value) {

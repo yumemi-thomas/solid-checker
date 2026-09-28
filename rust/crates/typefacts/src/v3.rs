@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:5d6c78af7351bfd6cc50129352feb4bcbd90dbcff0bf660e8badd9625fc49eb6";
+    "sha256:2dc205633dd2583dcb9af214cc1e240d4a4c535a5b896f424676b4765e00ee07";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -368,7 +368,16 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // ADR 0146 adds `ReturnSite::call` and a call-result source's
 // `arguments_primitive_syntax`. A protocol-65 consumer decodes with `deny_unknown_fields` and would reject
 // the new field, so the number moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 66;
+// Protocol 67 (the 2026-09-28 amendment to ADR 0113) holds a `plain` return to
+// evidence no reassignable binding's declared type can fake:
+// `ReturnSite::primitive_syntax` now also answers a never-written `const`
+// whose initializer is one and the intrinsic `undefined`,
+// `ReturnSite::default_library_call` names the built-in a returned
+// `Receiver.member(...)` call invokes by identity, and
+// `ReturnSite::type_script_source` states a return in a TypeScript source file.
+// A protocol-66 consumer decodes with `deny_unknown_fields` and would reject
+// the new fields, so the number moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 67;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

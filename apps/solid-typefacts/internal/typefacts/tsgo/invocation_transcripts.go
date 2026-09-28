@@ -1952,17 +1952,19 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 		carried := p.carriedCallableLocationsLocked(body)
 		reachable := typefacts.Reachable
 		census.Returns = append(census.Returns, typefacts.ReturnSite{
-			Location:         nodeLocation(body),
-			Reach:            typefacts.Reachable,
-			Value:            &value,
-			Parameter:        p.returnedParameterIdentityLocked(implementation, body),
-			CarriedCallables: carried,
-			CarryReach:       &reachable,
-			Sources:          p.returnValueSourcesLocked(body),
-			Arms:             p.returnArmsLocked(implementation, body),
-			Callable:         returnedCallableLiteral(body),
-			PrimitiveSyntax:  primitiveBySyntax(body, 0),
-			Call:             returnedCallExpression(body),
+			Location:           nodeLocation(body),
+			Reach:              typefacts.Reachable,
+			Value:              &value,
+			Parameter:          p.returnedParameterIdentityLocked(implementation, body),
+			CarriedCallables:   carried,
+			CarryReach:         &reachable,
+			Sources:            p.returnValueSourcesLocked(body),
+			Arms:               p.returnArmsLocked(implementation, body),
+			Callable:           returnedCallableLiteral(body),
+			PrimitiveSyntax:    p.primitiveBySyntaxLocked(body, 0),
+			Call:               returnedCallExpression(body),
+			DefaultLibraryCall: p.defaultLibraryCallLocked(body),
+			TypeScriptSource:   isTypeScriptSourceFile(ast.GetSourceFileOfNode(body)),
 		})
 		return census
 	}
@@ -2030,11 +2032,13 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 				Location: nodeLocation(node), Reach: state.reach, Value: value,
 				Parameter:        p.returnedParameterIdentityLocked(implementation, node.Expression()),
 				CarriedCallables: carried, CarryReach: carryReach,
-				Sources:         p.returnValueSourcesLocked(node.Expression()),
-				Arms:            p.returnArmsLocked(implementation, node.Expression()),
-				Callable:        returnedCallableLiteral(node.Expression()),
-				PrimitiveSyntax: node.Expression() != nil && primitiveBySyntax(node.Expression(), 0),
-				Call:            returnedCallExpression(node.Expression()),
+				Sources:            p.returnValueSourcesLocked(node.Expression()),
+				Arms:               p.returnArmsLocked(implementation, node.Expression()),
+				Callable:           returnedCallableLiteral(node.Expression()),
+				PrimitiveSyntax:    node.Expression() != nil && p.primitiveBySyntaxLocked(node.Expression(), 0),
+				Call:               returnedCallExpression(node.Expression()),
+				DefaultLibraryCall: p.defaultLibraryCallLocked(node.Expression()),
+				TypeScriptSource:   isTypeScriptSourceFile(ast.GetSourceFileOfNode(node)),
 			})
 			return flowState{reach: typefacts.Unreachable, carryReach: typefacts.Unreachable}
 		}

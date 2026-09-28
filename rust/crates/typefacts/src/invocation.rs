@@ -1737,9 +1737,10 @@ pub struct ReturnSite {
     /// (ADR 0145, handshake protocol 66), whatever any binding it reads holds:
     /// a non-object literal, an untagged template, a unary, arithmetic,
     /// relational or equality operator, and conditionals and logical operators
-    /// of them. `false` is no claim. A checker type is not this proof in a
-    /// JavaScript file, where an unchecked write does not widen a
-    /// declaration's type.
+    /// of them; since handshake protocol 67, also a never-written `const` with
+    /// a plain name whose initializer is one, and the intrinsic `undefined`.
+    /// `false` is no claim. A checker type is not this proof in a JavaScript
+    /// file, where an unchecked write does not widen a declaration's type.
     #[serde(default, skip_serializing_if = "is_false")]
     pub primitive_syntax: bool,
     /// The exact location of the call expression the returned expression is,
@@ -1747,6 +1748,21 @@ pub struct ReturnSite {
     /// Absence is no claim.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call: Option<Location>,
+    /// The default-library member, as `Receiver.member`, that the returned
+    /// call invokes by identity (the 2026-09-28 amendment to ADR 0113,
+    /// handshake protocol 67): a plain `Receiver.member(...)` call whose
+    /// receiver and member both resolve to default-library declarations alone,
+    /// neither written, deleted nor escaped in the file. It names which
+    /// built-in runs, not what that built-in hands back, which is the
+    /// consumer's reviewed question. Empty is no claim.
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub default_library_call: Arc<str>,
+    /// The return sits in a TypeScript source file, neither JavaScript nor a
+    /// declaration file (the 2026-09-28 amendment to ADR 0113, handshake
+    /// protocol 67): there the checker holds every write to a binding to its
+    /// declared type. `false` is JavaScript, or no claim.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub type_script_source: bool,
 }
 
 /// One value a return site can hand back (ADR 0115).

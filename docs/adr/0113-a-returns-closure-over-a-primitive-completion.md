@@ -1,6 +1,7 @@
 # ADR 0113: A `returns` closure over a primitive completion
 
-- Status: accepted and implemented (2026-09-23); written with the implementation
+- Status: accepted and implemented (2026-09-23); written with the implementation;
+  amended 2026-09-28 (§ Amendment: a primitive type is not a plain return on its own)
 - Date: 2026-09-23
 - Owners: the generator's `returns` proposal (`returns_walk.rs`,
   `main.rs`'s walk index, `inferred_contract.rs`), the policy-2 `returns`
@@ -161,6 +162,9 @@ reports `SC9005` for both.
 
 ## Where the trust sits
 
+*Narrowed on 2026-09-28: the type below is necessary and no longer sufficient.
+See § Amendment 2026-09-28 for the evidence each site now needs beside it.*
+
 **The checker's type of each return expression, over `any` parameters.** A
 primitive there comes from a literal, an operator TypeScript types primitive, a
 comparison, `typeof`, `instanceof`, or a callee's return type: the default
@@ -229,3 +233,100 @@ veto does not complete and the closure is withheld.
   before and after. The pin is not moved here; re-addressing those recipes is
   the scaffold's two-pass review, and so is every later change to a dependency's
   certified contract.
+
+## Amendment 2026-09-28: a primitive type is not a plain return on its own
+
+**The hole.** Premise 3 above read the checker's type of each return
+expression, and "Where the trust sits" called that type the evidence. In a
+JavaScript file it is not. A binding is typed by its declaration whatever an
+unchecked write stored since, and so is a closure's read of one it captured:
+
+```js
+export function reassignedLet(key) {
+  let x = 0;
+  if (key === "unlock-the-function") x = () => 1;
+  return x; // typed `number`; `primitiveCompletion` agrees
+}
+```
+
+Measured with the producer (`TestReturnSitesStatePlainReturnEvidence`,
+`letReassignedToFunction`): the site's value fact is `number` alone. Before
+this amendment every premise held, and the veto samples `reassignedLet` with
+strings it never matches, so the document certified `returns: [plain]` for an
+export that hands back a function. ADR 0145 found it (§ "Found while doing
+this"); the lead ruled it a soundness defect, fixed even though certified
+documents move.
+
+**The rule.** A live value-carrying return is `plain` only when its value fact
+states a primitive alone (premise 3, unchanged) **and** one of three facts the
+producer states per return site (handshake protocol 67) stands beside it. Each
+is named in the site's witness (`census-return:…:primitive:<evidence>`), and
+`plain_return_evidence` in `type_facts.rs` is the one predicate: the closure
+census, the operation's positive fact and ADR 0145's described-callable census
+all read it.
+
+- **`syntax`** -- `ReturnSite::primitive_syntax`: a primitive by grammar alone
+  (ADR 0145's operators, literals, conditionals and logical operators of
+  them), extended by two identifiers whose value their declaration fixes: a
+  `const` with a plain name, declared once in the reading file and never
+  written, whose initializer is one by the same rule; and the intrinsic
+  `undefined` (the checker's own symbol, which has no declaration, so a
+  shadowing binding is not it).
+- **`default-library:<member>`** -- `ReturnSite::default_library_call`: the
+  returned expression is a plain `Receiver.member(…)` call, not optional,
+  whose receiver and member both resolve to default-library declarations
+  alone, neither written, deleted nor escaped in the file (the producer's ADR
+  0103/0112 stability walk), **and** the reviewed table
+  `DEFAULT_LIBRARY_ALIAS_RETURNS` states that member `plain` whatever its
+  arguments are (`Math.*`, `Array.isArray`, `Number.is*`, `Object.is`). The
+  producer names which built-in runs; what it hands back is only ever the
+  reviewed table's answer. A binding holding `Math`, an import or a parameter
+  names nothing.
+- **`typescript-source`** -- `ReturnSite::type_script_source`: the return sits
+  in a TypeScript source file, where the checker holds every write to a binding
+  to its declared type. What it does not hold is a write of an `any`-typed
+  value (`n = JSON.parse(s)`) or one under `@ts-ignore`; that is the trust
+  every TypeScript type this census reads already carries, and it is stated
+  here rather than assumed. No such row can certify end to end today in any
+  event (the probe harness refuses TypeScript under `node_modules`, above).
+
+Anything else fails closed: the operation is withdrawn by name ("may be only a
+reassignable binding's declaration") and `returns` opens with it. A producer
+below protocol 67 states none of the three, so an old transcript refuses
+rather than certifies.
+
+**What it costs, by design.** A primitive the checker proves through anything
+else no longer certifies: a local helper's inferred return type (which may
+itself rest on a `let`), a dependency's `.d.ts`, a member read (`s.length`),
+a call of an unreviewed built-in (`Math.random`, `String(x)`), an unwritten
+parameter's JSDoc type. Each could be admitted by evidence of its own; none is
+a type this amendment can trust.
+
+**What moved.** `implementation-census-primitive-returns` gains `limit`
+(`return LIMIT` over `const LIMIT = 10`, certifies by `syntax`) and
+`reassignedLet` (refused by name); the six certifying exports keep their claim,
+`clamp` now by `default-library:Math.min`. The census fixture's
+`helperCoercion`, `helperSpreadCoercion` and `helperUntypedArgument` no longer
+close: each returns a local helper's result, whose type is the helper's
+inferred return type. The contract corpus moves no document (the generator's
+proposals do not read the evidence), and coverage moves no finding.
+
+Measured with `make certification-metric` against the ADR 0146 run (host-free,
+957 exports): clean 45 → 44, partial 231 → 230, degenerate 681 → 683,
+misuse-capable 165 → 164. Five previously certified plain returns withdraw:
+three closed ones -- `@solid-primitives/utils`' `number` (`Number(raw)`) and
+`add` (`let r = 0; for (const n of a) r += n; return r`), and
+`@solidjs/router`'s `int` (`/^-?\d+$/.test(s)`) -- and two whose operation had
+certified under an incomplete veto (`@kobalte/core`'s `isRTL`,
+`RTL_SCRIPTS.has(script)`, and `@solid-primitives/scroll`'s `isScrollable`, a
+regular-expression literal's `test`). `number` and `add` withdraw as well in
+the eighteen dependency-graph documents that certify `@solid-primitives/utils`
+under another package. Because utils' certified document changes, the hand
+recipes addressed to its old digest stop addressing
+(`@solid-primitives/scheduled`'s `leadingAndTrailing` loses a `reads` closure
+to `no recipe in corpus`), exactly the orphaning this ADR's consequences
+already describe. None of the five is unsound to call plain; each is a
+primitive through evidence the rule does not yet admit -- a `let` every write
+of which is a primitive by grammar, a reviewed global conversion (`Number`), a
+method of a literal the function built (`/re/.test`, a module `Set`'s `has`) --
+and each would need its own evidence to return.

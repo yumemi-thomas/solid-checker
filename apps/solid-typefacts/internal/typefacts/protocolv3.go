@@ -4,7 +4,17 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 66 (ADR 0145): **a returned function or arrow
+// TypeFactsHandshakeProtocol is 67 (the 2026-09-28 amendment to ADR 0113):
+// **a `plain` return rests on evidence no reassignable binding can fake.**
+// ReturnSite.PrimitiveSyntax now also answers a never-written `const` whose
+// initializer is one and the intrinsic `undefined`; ReturnSite.DefaultLibraryCall
+// names the built-in a returned `Receiver.member(...)` call invokes by
+// identity; and ReturnSite.TypeScriptSource states a return in a TypeScript
+// source file, where the checker holds every write to a binding's declared
+// type. A protocol-66 consumer decodes with `deny_unknown_fields` and would
+// reject the new fields, so the number moves.
+//
+// Protocol 66 (ADR 0145): **a returned function or arrow
 // expression states its location.** ReturnSite.Callable and ReturnArm.Callable
 // name the exact function-like node a returned expression is, after
 // identity-preserving wrappers, so a consumer can demand that node's own
@@ -443,8 +453,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 66
-	TypeFactsSchemaSHA256             = "sha256:5d6c78af7351bfd6cc50129352feb4bcbd90dbcff0bf660e8badd9625fc49eb6"
+	TypeFactsHandshakeProtocol uint64 = 67
+	TypeFactsSchemaSHA256             = "sha256:2dc205633dd2583dcb9af214cc1e240d4a4c535a5b896f424676b4765e00ee07"
 )
 
 type ServiceHandshake struct {

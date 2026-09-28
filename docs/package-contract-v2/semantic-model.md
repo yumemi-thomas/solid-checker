@@ -896,6 +896,15 @@ the creating call's declaration in an audited dialect archive among the
 certified package's authenticated dependencies. The consumer reads it as an
 accessor: calling it is a reactive read in whatever scope calls it.
 
+**[Decision 2026-09-28, amendment to ADR 0113]** a `plain` return -- the
+export's own or a described callable's -- is proved by a primitive *type* and,
+beside it, evidence no reassignable binding's declaration can fake: a primitive
+by grammar (which reaches a never-written `const` whose initializer is one, and
+the intrinsic `undefined`), a call of a reviewed default-library member whose
+row states `plain`, or a return in TypeScript source. In a JavaScript file `let
+x = 0; … x = () => 1; return x` is typed `number`, so the type alone is never
+the proof; a site with none of the three withdraws the `return`.
+
 ### cleanups
 
 `cleanups: [] closed` denies that one invocation of this export gives rise to

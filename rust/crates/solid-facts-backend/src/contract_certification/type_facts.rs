@@ -13675,7 +13675,7 @@ fn described_callable_body(
         let Some(value) = &site.value else {
             continue;
         };
-        let shape = if value_is_primitive_alone(value) && site.primitive_syntax {
+        let shape = if value_is_primitive_alone(value) && plain_return_evidence(site).is_some() {
             ValueShape::Plain
         } else if site
             .call
@@ -13688,13 +13688,14 @@ fn described_callable_body(
             // usually reads bindings it captured, and in a JavaScript file such
             // a read is typed by the binding's declaration whatever was written
             // to it since: `let n = 0; … n = {}` still reads `number`. So a
-            // primitive must also be one by grammar (handshake protocol 66),
-            // which no binding's contents can change.
+            // primitive must also carry the evidence ADR 0113's plain return
+            // does (`plain_return_evidence`), which no binding's contents can
+            // change.
             return Err(format!(
                 "described callable census refuses the literal at {at}: its return at \
                  {}:{}..{}, reach {}, hands back neither a value that is a primitive both by \
-                 type and by its syntax alone, nor exactly what one of its owned-signal reads \
-                 returned",
+                 type and by its syntax alone (or by a reviewed default-library call, or in \
+                 TypeScript source), nor exactly what one of its owned-signal reads returned",
                 site.location.path,
                 site.location.start_byte,
                 site.location.end_byte,
@@ -14093,8 +14094,20 @@ fn primitive_return_sites(
                 reachability_name(site.reach)
             ));
         }
+        let Some(evidence) = plain_return_evidence(site) else {
+            return Err(format!(
+                "primitive returns census refuses a return at {}:{}..{}, reach {}, for {at}: its \
+                 value is typed a primitive, but in a JavaScript file that type may be only a \
+                 reassignable binding's declaration, and the value is not a primitive by its \
+                 syntax alone nor what a reviewed default-library member returns",
+                site.location.path,
+                site.location.start_byte,
+                site.location.end_byte,
+                reachability_name(site.reach)
+            ));
+        };
         sites.push(format!(
-            "census-return:{}:{}:{}:{}:primitive",
+            "census-return:{}:{}:{}:{}:primitive:{evidence}",
             site.location.path,
             site.location.start_byte,
             site.location.end_byte,
@@ -14114,6 +14127,45 @@ fn primitive_return_sites(
     sites.sort();
     sites.dedup();
     Ok(sites)
+}
+
+/// The 2026-09-28 amendment to ADR 0113: what makes a return site's primitive
+/// *type* the primitive its value is, or `None`.
+///
+/// The type alone is not that proof. In a JavaScript file a binding is typed
+/// by its declaration whatever an unchecked write stored since -- `let n = 0;
+/// ... n = () => 1; return n` is typed `number` -- and so is a closure's read of
+/// one it captured. One of three facts has to stand beside the type, each named
+/// in the witness:
+///
+/// * `syntax` -- the value is a primitive by its grammar alone
+///   ([`typefacts::ReturnSite::primitive_syntax`]): an operator, a non-object
+///   literal, a never-written `const` whose initializer is one, the intrinsic
+///   `undefined`, and conditionals and logical operators of them;
+/// * `default-library:<member>` -- the value is what a default-library member
+///   hands back, called by identity
+///   ([`typefacts::ReturnSite::default_library_call`]), and that member's
+///   reviewed row states `plain` whatever its arguments are
+///   ([`reviewed_default_library_alias_return`]): `Math.min(...)`;
+/// * `typescript-source` -- the return sits in a TypeScript source file
+///   ([`typefacts::ReturnSite::type_script_source`]), where the checker holds
+///   every write to a binding to its declared type. What it does not hold is
+///   a write of an `any`-typed value, which is the trust every TypeScript type
+///   this census reads already carries.
+///
+/// Each is a fact a producer below handshake protocol 67 never states, so an
+/// absent one refuses: the direction is always toward refusing more.
+fn plain_return_evidence(site: &typefacts::ReturnSite) -> Option<String> {
+    if site.primitive_syntax {
+        return Some("syntax".into());
+    }
+    if !site.default_library_call.is_empty()
+        && reviewed_default_library_alias_return(&site.default_library_call)
+            == Some(ValueShape::Plain)
+    {
+        return Some(format!("default-library:{}", site.default_library_call));
+    }
+    site.type_script_source.then(|| "typescript-source".into())
 }
 
 /// `Err` when `implementation` censused a construction (ADR 0105), whose
@@ -29645,6 +29697,9 @@ mod tests {
     }
 
     /// One return site over `/p/index.js`, carrying `value` when it is given.
+    /// A value-carrying site states it is a primitive by its syntax, the
+    /// evidence the 2026-09-28 amendment to ADR 0113 holds a plain return to;
+    /// `plain_return_evidence_is_required_beside_the_type` varies it.
     fn primitive_census_site(
         start: u64,
         end: u64,
@@ -29657,6 +29712,7 @@ mod tests {
         });
         if let Some(value) = value {
             row["value"] = value;
+            row["primitiveSyntax"] = json!(true);
         }
         row
     }
@@ -29940,7 +29996,7 @@ mod tests {
             ))
             .unwrap(),
             vec![
-                "census-return:/p/index.js:10:40:reachable:primitive".to_owned(),
+                "census-return:/p/index.js:10:40:reachable:primitive:syntax".to_owned(),
                 "census-returns-primitive-total:1".to_owned(),
             ]
         );
@@ -29960,8 +30016,8 @@ mod tests {
         assert_eq!(
             sites,
             vec![
-                "census-return:/p/index.js:14:22:unknown:primitive".to_owned(),
-                "census-return:/p/index.js:30:40:reachable:primitive".to_owned(),
+                "census-return:/p/index.js:14:22:unknown:primitive:syntax".to_owned(),
+                "census-return:/p/index.js:30:40:reachable:primitive:syntax".to_owned(),
                 "census-returns-primitive-total:4".to_owned(),
             ]
         );
@@ -30060,7 +30116,7 @@ mod tests {
         assert_eq!(
             census_primitive_returns_transcript(&premised(one(number()))).unwrap(),
             vec![
-                "census-return:/p/index.js:10:40:reachable:primitive".to_owned(),
+                "census-return:/p/index.js:10:40:reachable:primitive:syntax".to_owned(),
                 "census-returns-primitive-total:1".to_owned(),
             ]
         );
@@ -30091,6 +30147,108 @@ mod tests {
             .unwrap(),
         );
         refuses(unaccounted, "cannot account for a construct");
+    }
+
+    /// The 2026-09-28 amendment to ADR 0113: a primitive *type* is not a plain
+    /// return on its own. In a JavaScript file `let x = 0; … x = () => 1;
+    /// return x` is typed `number`, so the site must also be a primitive by its
+    /// syntax, a call of a reviewed default-library member whose row states
+    /// `plain`, or sit in TypeScript source; a site stating none refuses by
+    /// name, and the positive fact refuses with it.
+    #[test]
+    fn plain_return_evidence_is_required_beside_the_type() {
+        let number = primitive_census_value(json!({"mayBeNumber": true}), "nonCallable");
+        let site = |evidence: serde_json::Value| {
+            let mut row = json!({
+                "location": {"path": "/p/index.js", "startByte": 10, "endByte": 40},
+                "reach": "reachable",
+                "value": number.clone()
+            });
+            for (key, value) in evidence.as_object().unwrap() {
+                row[key] = value.clone();
+            }
+            row
+        };
+        let census = |evidence: serde_json::Value| {
+            census_primitive_returns_transcript(&primitive_census_implementation(
+                json!([site(evidence)]),
+                true,
+            ))
+        };
+        let certifies = |evidence: serde_json::Value, witness: &str| {
+            let sites = census(evidence).expect("the evidence certifies a plain return");
+            assert_eq!(
+                sites[0],
+                format!("census-return:/p/index.js:10:40:reachable:primitive:{witness}")
+            );
+        };
+        // `return x` over `let x = 0; … x = () => 1;` in a JavaScript file:
+        // typed `number`, and nothing else stated.
+        let refusal = census(json!({})).expect_err("a declaration-typed binding refuses");
+        assert!(
+            refusal.contains("may be only a reassignable binding's declaration"),
+            "{refusal}"
+        );
+        // A primitive by grammar, which includes `const x = 0; return x`.
+        certifies(json!({"primitiveSyntax": true}), "syntax");
+        // `return Math.min(value, max)`: the reviewed member's row states
+        // `plain` whatever the arguments are.
+        certifies(
+            json!({"defaultLibraryCall": "Math.min"}),
+            "default-library:Math.min",
+        );
+        // A built-in the reviewed table does not state `plain` for is not
+        // evidence: `Object.keys` hands back an array, `Math.random` is not
+        // reviewed at all.
+        for member in ["Object.keys", "Math.random"] {
+            let refusal = census(json!({"defaultLibraryCall": member}))
+                .expect_err("an unreviewed or non-plain member refuses");
+            assert!(
+                refusal.contains("reviewed default-library member"),
+                "{refusal}"
+            );
+        }
+        // A TypeScript source file, where every write is held to the declared
+        // type: `let n: number = 0; return n`.
+        certifies(json!({"typeScriptSource": true}), "typescript-source");
+        // Every site needs its own: one site with evidence does not carry one
+        // without.
+        let refusal = census_primitive_returns_transcript(&primitive_census_implementation(
+            json!([
+                site(json!({"primitiveSyntax": true})),
+                {
+                    "location": {"path": "/p/index.js", "startByte": 50, "endByte": 60},
+                    "reach": "reachable",
+                    "value": number.clone()
+                }
+            ]),
+            true,
+        ))
+        .expect_err("a second site without evidence refuses");
+        assert!(refusal.contains("/p/index.js:50..60"), "{refusal}");
+        // The positive fact reads the same evidence.
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "test".into(),
+            reason: reason.into(),
+        };
+        let declared = {
+            let mut signature = export_signature(0, 1, "nonCallable");
+            signature["result"] = number.clone();
+            export_value_transcript(json!({"callSignature": signature}))
+        };
+        let demand = proof(ProofFamily::CallablePath, selected_subject());
+        let error = require_primitive_return_output(
+            &demand,
+            &declared,
+            &primitive_census_implementation(json!([site(json!({}))]), true),
+            &open,
+            &mut Vec::new(),
+        )
+        .expect_err("the positive fact refuses a declaration-typed binding too");
+        assert!(
+            error.to_string().contains("reassignable binding"),
+            "{error}"
+        );
     }
 
     /// ADR 0105: `new` hands the caller the instance whatever the constructor
@@ -30252,7 +30410,7 @@ mod tests {
         assert_eq!(
             sites,
             vec![
-                "census-return:/p/index.js:10:40:reachable:primitive".to_owned(),
+                "census-return:/p/index.js:10:40:reachable:primitive:syntax".to_owned(),
                 "census-returns-primitive-total:1".to_owned(),
                 "recursive-operation-value:primitive-completion".to_owned(),
             ]

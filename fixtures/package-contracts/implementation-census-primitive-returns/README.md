@@ -24,17 +24,30 @@ The certifier's side is pinned by
 
 | export | result | why |
 | --- | --- | --- |
-| `trueFn` | certifies | an expression body typed `boolean` |
+| `trueFn` | certifies | an expression body typed `boolean`, a literal by grammar |
 | `voidFn` | certifies | `void 0` is `undefined`, a primitive, and still a value-carrying completion |
-| `clamp` | certifies | `Math.min(…)` is `number` from the default library, whatever the arguments are |
+| `clamp` | certifies | `Math.min(…)` is a call of the reviewed built-in by identity, whose row states `plain` whatever the arguments are |
 | `label` | certifies | two reachable returns, both strings |
 | `isObject` | certifies | a comparison is a boolean whatever its operands are |
 | `sign` | certifies | a bare `return;` beside a number; `value > 0` makes the producer premise the transcript, and the return sites are still read off the original program |
+| `limit` | certifies | `return LIMIT` reads a never-written `const` whose initializer is a literal, a primitive by grammar |
 | `box` | refused | an object; the producer does not prove the completion primitive |
 | `passThrough` | refused | the caller's argument, which an unannotated parameter types `any` |
 | `annotatedBox` | refused | `@returns {number}` over `return {}`: the checker takes the annotation at its word, so the completion *is* stated primitive, and the return site's own type is what refuses |
 | `add` | refused | `a + b` always yields a primitive at run time, but TypeScript types it `any` over `any` operands; the named approximation of the census |
 | `widened` | refused | the body is a primitive and the declaration promises `number \| object`; the operation's positive fact refuses the declared result |
+| `reassignedLet` | refused | `let x = 0; if (key === "unlock-the-function") x = () => 1; return x`: typed `number` by its declaration, which an unchecked JavaScript write does not widen, and `primitiveCompletion` agrees; the veto's samples never pass that key. The census refuses because nothing *beside* the type stands (the 2026-09-28 amendment to ADR 0113) |
+
+Since that amendment every live value must carry, beside a primitive type,
+one of three facts the producer states per return site (handshake protocol
+67): a primitive by grammar (`primitiveSyntax`, which reaches a never-written
+`const` and the intrinsic `undefined`), a call of a reviewed default-library
+member whose row states `plain` (`defaultLibraryCall`), or a return in
+TypeScript source (`typeScriptSource`). The TypeScript arm cannot be exercised
+here -- the probe harness refuses to load TypeScript under `node_modules` -- so
+it is pinned on synthesized transcripts by
+`plain_return_evidence_is_required_beside_the_type` in `type_facts.rs`, and the
+producer's facts by `TestReturnSitesStatePlainReturnEvidence`.
 
 Every refusal withdraws the `return` operation itself (`operation census
 refused: …`): the operation's positive fact reads the same evidence as the

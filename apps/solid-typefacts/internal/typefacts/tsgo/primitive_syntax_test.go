@@ -37,7 +37,7 @@ func TestReturnSitesStatePrimitiveSyntax(t *testing.T) {
 		{"object", `export const check = () => ({});`, false},
 		{"assignmentOfIdentifier", `export function check(o: any) { let n; return (n = o); }`, false},
 		{"tagged", "export const check = (t: any) => t`x`;", false},
-		{"undefinedIdentifier", `export const check = () => undefined;`, false},
+		{"undefinedIdentifier", `export const check = () => undefined;`, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

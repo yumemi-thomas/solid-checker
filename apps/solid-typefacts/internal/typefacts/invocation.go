@@ -1468,6 +1468,18 @@ type ReturnSite struct {
 	// protocol 66): the site hands back what that call returned. Absent for
 	// every other expression.
 	Call *Location `cbor:"call,omitempty" json:"call,omitempty"`
+	// DefaultLibraryCall names, as `Receiver.member`, the default-library
+	// member the returned call invokes by identity (the 2026-09-28 amendment
+	// to ADR 0113, handshake protocol 67): see defaultLibraryCallLocked. It
+	// says which built-in runs, not what it hands back. Absent is no claim.
+	DefaultLibraryCall string `cbor:"defaultLibraryCall,omitempty" json:"defaultLibraryCall,omitempty"`
+	// TypeScriptSource states that the return sits in a TypeScript source
+	// file, neither JavaScript nor a declaration file (the 2026-09-28
+	// amendment to ADR 0113, handshake protocol 67): the one kind of file in
+	// which the checker holds every write to a binding to its declared type,
+	// so a type read off a binding there is not only its declaration's.
+	// Absent is JavaScript, or not stated.
+	TypeScriptSource bool `cbor:"typeScriptSource,omitempty" json:"typeScriptSource,omitempty"`
 }
 
 // ReturnArm is one value a return site can hand back (ADR 0115).

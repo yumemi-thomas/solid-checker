@@ -185,5 +185,6 @@ and in a JavaScript file that type is a declaration's, whatever an unchecked
 write stored since (`let n = 0; n = {}; return n` is typed `number`). An export
 of that shape can be proposed and certified `returns: [plain]` while returning
 an object whenever the veto's finite samples miss the write. `primitive_syntax`
-is the fact that would close it; ADR 0113 does not read it yet. Recorded for
-the lead, not changed here: changing it moves certified documents.
+is the fact that would close it. Closed on 2026-09-28 by ADR 0113's amendment,
+which holds every plain return -- this ADR's nested ones included -- to the same
+evidence (`plain_return_evidence`).

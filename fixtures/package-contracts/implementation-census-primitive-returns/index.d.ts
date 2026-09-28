@@ -12,3 +12,5 @@ export declare function passThrough<T>(value: T): T;
 export declare function annotatedBox(): number;
 export declare function add(a: number, b: number): number;
 export declare function widened(): number | object;
+export declare function limit(): number;
+export declare function reassignedLet(key: string): number;
