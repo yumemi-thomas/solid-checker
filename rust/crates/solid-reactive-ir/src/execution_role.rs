@@ -1319,11 +1319,24 @@ pub(super) fn control_flow_execution_role(
                 .is_some_and(|primitive| dialect.renders_children_through_callback(primitive))
         })
         .min_by_key(|element| element.span.end - element.span.start)?;
-    let callback = file
-        .ast
-        .functions_body_containing(span)
-        .filter(|function| element.span.contains(function.span))
-        .max_by_key(|function| function.body.end - function.body.start)?;
+    // The control-flow component invokes only a function written at its own
+    // level: its children callback (`<For>{(item) => …}</For>`) or code run
+    // inline from there. A function inside a *nested* element belongs to that
+    // element -- `<Show><div onClick={() => …} /></Show>` hands the arrow to
+    // the `<div>` as an event handler, which the compiler classifies, and
+    // which runs when the event fires, with no owner (probed on the audited
+    // 2.0.0-rc.9, dev and prod: a signal write there neither throws nor
+    // warns). The named-callback index draws the same line for identifiers.
+    let callback =
+        file.ast
+            .functions_body_containing(span)
+            .filter(|function| {
+                element.span.contains(function.span)
+                    && !file.ast.jsx_containing(function.span).any(|nested| {
+                        nested.span != element.span && element.span.contains(nested.span)
+                    })
+            })
+            .max_by_key(|function| function.body.end - function.body.start)?;
     let owner = containing_ast_function(&file.ast, span)?;
     if owner.span != callback.span {
         return Some(ExecutionRole::DeferredCallback);
