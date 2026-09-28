@@ -1657,7 +1657,7 @@ impl PublishedContractGraphPlan {
     /// such withdrawal the graph can reach.
     fn finalize_value_only_with_type_facts(
         &self,
-        type_facts_by_node: &BTreeMap<String, super::type_facts::VerifiedTypeFactsEvidence>,
+        type_facts_by_node: &EvidenceByNode,
         gates_by_node: &BTreeMap<String, (String, super::probe_gates::VerifiedProbeGateBatch)>,
         pin: &TypeFactsProducerPin,
         issuer: &ConfiguredReceiptIssuer,
@@ -1688,7 +1688,7 @@ impl PublishedContractGraphPlan {
                 &crate::contract_document::SidecarDigests::default(),
                 false,
             )?;
-            let type_facts = type_facts_by_node.get(digest);
+            let type_facts = type_facts_by_node.get(digest).map(|evidence| &**evidence);
             let dependency_evidence = if node.dependencies.is_empty()
                 && node.source_dependencies.is_empty()
             {
@@ -1903,8 +1903,7 @@ fn certify_graphs_with_recipe_gating(
     // Evidence and gates persist across passes, each entry keyed by the gating
     // it was taken under: a node whose demand-graph root (and, for gates, whose
     // corpus) did not move keeps both, so a pass costs only the nodes it moved.
-    let mut evidence_by_node =
-        BTreeMap::<String, super::type_facts::VerifiedTypeFactsEvidence>::new();
+    let mut evidence_by_node = EvidenceByNode::new();
     let mut evidence_roots = BTreeMap::<String, String>::new();
     let mut gates_by_node =
         BTreeMap::<String, (String, super::probe_gates::VerifiedProbeGateBatch)>::new();
@@ -2359,6 +2358,11 @@ fn elapsed_ns(started: std::time::Instant) -> u64 {
     u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 
+/// Each canonical node's verified Type Facts evidence, shared by the importer
+/// variants one acquisition answered (ADR 0147).
+type EvidenceByNode =
+    BTreeMap<String, std::sync::Arc<super::type_facts::VerifiedTypeFactsEvidence>>;
+
 /// Exported-value evidence for the Type Facts nodes of the case set whose
 /// gating moved since `held` was taken, keyed by canonical identity digest;
 /// `held` maps a digest to the demand-graph root its evidence was acquired
@@ -2376,10 +2380,7 @@ fn acquire_case_set_evidence(
     held: &BTreeMap<String, String>,
     synthesis_attempted: Option<&BTreeSet<String>>,
 ) -> Result<
-    (
-        BTreeMap<String, super::type_facts::VerifiedTypeFactsEvidence>,
-        Option<PublishedGraphCertificationError>,
-    ),
+    (EvidenceByNode, Option<PublishedGraphCertificationError>),
     PublishedGraphCertificationError,
 > {
     let first_graph = graphs

@@ -1227,8 +1227,9 @@ pub(super) fn acquire_and_verify_graph_export_values(
 /// One graph acquisition's answer, one entry per request.
 pub(super) struct GraphExportValues {
     /// The verified evidence of each request that verified; `None` for a
-    /// request that was not acquired or whose census refused.
-    pub(super) evidence: Vec<Option<VerifiedTypeFactsEvidence>>,
+    /// request that was not acquired or whose census refused. Importer
+    /// variants of one acquisition share one allocation (ADR 0147).
+    pub(super) evidence: Vec<Option<std::sync::Arc<VerifiedTypeFactsEvidence>>>,
     /// One `CensusRefused` carrying every refusing node's refusals, when any
     /// node's census refused.
     pub(super) census_refusal: Option<TypeFactsCertificationError>,
@@ -1251,7 +1252,11 @@ pub(super) fn shared_graph_export_values_for_test(
     let answer = acquire_graph_export_values_in_contexts(plans[0], &requests, pin, false)?;
     match answer.census_refusal {
         Some(refusal) => Err(refusal),
-        None => Ok(answer.evidence),
+        None => Ok(answer
+            .evidence
+            .into_iter()
+            .map(|evidence| evidence.map(std::sync::Arc::unwrap_or_clone))
+            .collect()),
     }
 }
 
@@ -1427,6 +1432,13 @@ fn acquire_graph_export_values_in_contexts(
     // Back to one answer per requested node, importer variants sharing their
     // representative's evidence.
     let (evidence, census_refusal) = evidence?;
+    // ADR 0147: one allocation per acquisition, shared by every importer
+    // variant it answers. A case set with many importers of one package
+    // otherwise held one deep copy of the same evidence per variant.
+    let evidence = evidence
+        .into_iter()
+        .map(|evidence| evidence.map(std::sync::Arc::new))
+        .collect::<Vec<_>>();
     Ok(GraphExportValues {
         evidence: representative_of
             .iter()
