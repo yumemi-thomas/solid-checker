@@ -120,3 +120,30 @@ reproduce the receipt's signed `snapshotRoot` (step 2b). It also refuses an
 environment entry that the tree records as patched: pnpm or Bun
 `patchedDependencies`, pnpm `patch_hash`, a Yarn `patch:` resolution, or a
 `patch-package` file. Both refusals are reported the way a mismatch is.
+
+## Amendment (2026-09-28): index version 3
+
+The per-host tier (ADR 0140) certifies one artifact in one environment for
+every host, so version 2 repeated most environments and restated every
+receipt's bindings. Measured on the regenerated 729-bundle tier: 7.7 MB, with
+`bindings` 48% and `dependencyEnvironment` 45% of it, and only 120 distinct
+environments. That is over the repository's 5 MB pre-commit limit.
+
+`bundleIndexVersion` 3 stores each fact once:
+
+- an `environments` table holds each distinct environment, keyed by its
+  `dependencyEnvironmentRoot`, the root the receipts already sign. Each bundle
+  names its environment by that root (`dependencyEnvironmentRoot`);
+- `bindings` are not restated. Authentication already refused any copy that
+  was not equal to the receipt payload, and the index pins the receipt by
+  digest, so the copy added nothing. The loader reads the bindings from the
+  pinned receipt.
+
+The index is refused whole, before any bundle is authenticated, when a table
+key is not the root of its own canonical entries, or a bundle names a root the
+table does not carry or its receipt does not sign. Admission is unchanged: the
+loader resolves each version-3 bundle into the entry version 2 would have
+stated, and the tests pin that both spellings load the same bundles. On the
+729-bundle tier the index is 1.35 MB, and converting it resolves every bundle
+to its version-2 entry exactly. Version 2 still loads with its old meaning,
+and the bundler writes only version 3.

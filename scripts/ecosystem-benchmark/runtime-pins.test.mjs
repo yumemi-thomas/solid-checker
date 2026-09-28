@@ -59,7 +59,10 @@ test("every signals release the shipped tier was proven with is the pinned one",
   const index = JSON.parse(readFileSync(join(ROOT, "pkg/contracts/accepted/index.json"), "utf8"));
   const seen = new Set();
   for (const bundle of index.bundles) {
-    for (const entry of bundle.dependencyEnvironment ?? []) {
+    // Index version 3 keeps each environment once, in `environments`, keyed by
+    // the root a bundle names; version 2 stated it inline.
+    const environment = index.environments?.[bundle.dependencyEnvironmentRoot] ?? bundle.dependencyEnvironment;
+    for (const entry of environment ?? []) {
       if (entry.name !== "@solidjs/signals") continue;
       seen.add(entry.version);
       assert.equal(entry.integrity, SOLID_SIGNALS_RELEASES[entry.version], `${bundle.packageName} ${entry.version}`);

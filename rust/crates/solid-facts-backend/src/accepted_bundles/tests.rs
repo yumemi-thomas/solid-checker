@@ -1554,3 +1554,244 @@ fn bun_and_patch_package_patches_refuse_the_packages_they_patch_only() {
         "{refusal}"
     );
 }
+
+/// Three bundles as a per-host tier has them: one artifact certified in the
+/// floor and head environments, and a second artifact certified in the head
+/// environment too, so the head environment is shared. Each object is named by
+/// its own digest, the way the bundler names it.
+fn tier() -> (Vec<BundleEntry>, BTreeMap<String, Vec<u8>>) {
+    let mut entries = Vec::new();
+    let mut objects = BTreeMap::new();
+    for (package, environment) in [
+        ("plain-package", floor()),
+        ("plain-package", head()),
+        ("other-package", head()),
+    ] {
+        let (mut entry, document, receipt) = bundle_in(
+            package,
+            "1.0.0",
+            "sha512-published-integrity",
+            package,
+            &["import"],
+            Some(&environment),
+        );
+        entry.document = format!("objects/{}.main.json", &entry.document_digest[7..]);
+        entry.receipt = format!("objects/{}.receipt.json", &entry.receipt_digest[7..]);
+        objects.insert(entry.document.clone(), document);
+        objects.insert(entry.receipt.clone(), receipt);
+        entries.push(entry);
+    }
+    (entries, objects)
+}
+
+fn identity_fields(entry: &BundleEntry) -> serde_json::Map<String, serde_json::Value> {
+    let serde_json::Value::Object(fields) = serde_json::json!({
+        "packageName": entry.package_name,
+        "packageVersion": entry.package_version,
+        "packageIntegrity": entry.package_integrity,
+        "specifier": entry.specifier,
+        "requestedEntrypoint": entry.requested_entrypoint,
+        "exportConditions": entry.export_conditions,
+        "runtimeTarget": entry.runtime_target,
+        "declarationTarget": entry.declaration_target,
+        "document": entry.document,
+        "documentDigest": entry.document_digest,
+        "receipt": entry.receipt,
+        "receiptDigest": entry.receipt_digest,
+    }) else {
+        unreachable!("a JSON object literal")
+    };
+    fields
+}
+
+/// The version-2 index the bundler used to write for `entries`.
+fn inline_index(entries: &[BundleEntry]) -> serde_json::Value {
+    let bundles = entries
+        .iter()
+        .map(|entry| {
+            let mut fields = identity_fields(entry);
+            fields.insert("bindings".into(), serde_json::json!(entry.bindings));
+            fields.insert(
+                "dependencyEnvironment".into(),
+                serde_json::json!(entry.dependency_environment),
+            );
+            serde_json::Value::Object(fields)
+        })
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "format": BUNDLE_INDEX_FORMAT,
+        "bundleIndexVersion": INLINE_BUNDLE_INDEX_VERSION,
+        "bundles": bundles,
+    })
+}
+
+/// The version-3 index the bundler writes for `entries`: each environment once,
+/// keyed by its root, and no restated bindings.
+fn indexed_index(entries: &[BundleEntry]) -> serde_json::Value {
+    let mut environments = serde_json::Map::new();
+    let bundles = entries
+        .iter()
+        .map(|entry| {
+            let environment = entry
+                .dependency_environment
+                .as_deref()
+                .expect("every tier bundle states its environment");
+            let root = policy2_dependency_environment_root(environment);
+            environments.insert(root.clone(), serde_json::json!(environment));
+            let mut fields = identity_fields(entry);
+            fields.insert("dependencyEnvironmentRoot".into(), root.into());
+            serde_json::Value::Object(fields)
+        })
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "format": BUNDLE_INDEX_FORMAT,
+        "bundleIndexVersion": BUNDLE_INDEX_VERSION,
+        "environments": environments,
+        "bundles": bundles,
+    })
+}
+
+fn load_from(
+    index: &serde_json::Value,
+    objects: &BTreeMap<String, Vec<u8>>,
+) -> Result<Vec<LoadedBundle>, ContractFailure> {
+    let bytes = serde_json::to_vec_pretty(index).expect("an index serializes");
+    load_index(&bytes, |member: &str| {
+        objects
+            .get(member)
+            .map(Vec::as_slice)
+            .ok_or_else(|| ContractFailure::DocumentDecode {
+                message: format!("no object {member}"),
+            })
+    })
+}
+
+/// Specifier, acceptance root, snapshot root, identity and environment.
+type AdmissionView = (
+    String,
+    String,
+    String,
+    String,
+    Option<Vec<DependencyEnvironmentEntry>>,
+);
+
+/// What admission reads of a loaded bundle, and nothing else.
+fn admission_view(bundles: &[LoadedBundle]) -> Vec<AdmissionView> {
+    bundles
+        .iter()
+        .map(|bundle| {
+            (
+                bundle.specifier.clone(),
+                bundle.acceptance_root.clone(),
+                bundle.snapshot_root.clone(),
+                bundle.identity.clone(),
+                bundle.environment.clone(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn a_version_3_index_loads_exactly_what_its_version_2_spelling_loads() {
+    let (entries, objects) = tier();
+    let inline = load_from(&inline_index(&entries), &objects).expect("version 2 loads");
+    let indexed_document = indexed_index(&entries);
+    assert_eq!(
+        indexed_document["environments"]
+            .as_object()
+            .map(serde_json::Map::len),
+        Some(2),
+        "three bundles over two environments store two"
+    );
+    let indexed = load_from(&indexed_document, &objects).expect("version 3 loads");
+    assert_eq!(admission_view(&indexed), admission_view(&inline));
+    for (indexed, entry) in indexed.iter().zip(&entries) {
+        assert_eq!(
+            indexed.environment.as_deref(),
+            entry.dependency_environment.as_deref()
+        );
+    }
+}
+
+#[test]
+fn a_version_3_reference_to_an_environment_the_table_does_not_carry_refuses_the_index() {
+    let (entries, objects) = tier();
+    let mut index = indexed_index(&entries);
+    let floor_root = policy2_dependency_environment_root(&floor());
+    index["environments"]
+        .as_object_mut()
+        .expect("a table")
+        .remove(&floor_root);
+    assert!(matches!(
+        load_from(&index, &objects),
+        Err(ContractFailure::DocumentDecode { message })
+            if message.contains("does not carry") && message.contains(&floor_root)
+    ));
+}
+
+#[test]
+fn a_version_3_environment_that_is_not_the_one_its_key_names_refuses_the_index() {
+    let (entries, objects) = tier();
+    let floor_root = policy2_dependency_environment_root(&floor());
+    // Another environment under the key: admission would compare the
+    // consumer's tree against entries no receipt signed.
+    let mut swapped = indexed_index(&entries);
+    swapped["environments"][&floor_root] = serde_json::json!(head());
+    // The key's own entries, restated with a repeat. The root sorts and
+    // deduplicates, so only canonical validation tells this apart, and a key
+    // must determine its bytes exactly.
+    let mut repeated = indexed_index(&entries);
+    repeated["environments"][&floor_root] = serde_json::json!([floor()[0], floor()[0]]);
+    // An entry nothing references is not a refusal (the scripts check catches
+    // that one in review); an entry that misstates its key is, even when no
+    // bundle reads it.
+    let mut unread = indexed_index(&entries);
+    unread["environments"][&stand_in(99)] = serde_json::json!(floor());
+    for index in [swapped, repeated, unread] {
+        assert!(matches!(
+            load_from(&index, &objects),
+            Err(ContractFailure::DocumentDecode { message })
+                if message.contains("is not the environment that root names")
+        ));
+    }
+}
+
+#[test]
+fn a_version_3_bundle_naming_an_environment_its_receipt_did_not_sign_is_refused() {
+    let (entries, objects) = tier();
+    let mut index = indexed_index(&entries);
+    // A real key, and the wrong one for this receipt.
+    index["bundles"][0]["dependencyEnvironmentRoot"] =
+        policy2_dependency_environment_root(&head()).into();
+    assert!(matches!(
+        load_from(&index, &objects),
+        Err(ContractFailure::ReceiptMismatch {
+            field: "dependencyEnvironment"
+        })
+    ));
+}
+
+#[test]
+fn a_version_3_index_reads_bindings_only_from_the_receipt_its_digest_pins() {
+    let (entries, mut objects) = tier();
+    let index = indexed_index(&entries);
+    // Bindings the index restates are not a field version 3 has.
+    let mut restated = index.clone();
+    restated["bundles"][0]["bindings"] = serde_json::json!(entries[0].bindings);
+    assert!(matches!(
+        load_from(&restated, &objects),
+        Err(ContractFailure::DocumentDecode { .. })
+    ));
+    // And a receipt that is not the pinned one is refused before its payload
+    // is read.
+    let receipt = objects
+        .get_mut(&entries[0].receipt)
+        .expect("the receipt object");
+    receipt.extend_from_slice(b" ");
+    assert!(matches!(
+        load_from(&index, &objects),
+        Err(ContractFailure::ReceiptMismatch {
+            field: "receiptDigest"
+        })
+    ));
+}

@@ -1252,6 +1252,34 @@ pub fn issue_builtin_policy2_receipt(
     })
 }
 
+/// The bindings a receipt's payload states, decoded under the same limits
+/// [`authenticate_policy2_receipt`] applies. **Unauthenticated**: this reads
+/// the bytes and nothing vouches for them.
+///
+/// It exists for a caller that has pinned the receipt bytes some other way
+/// and therefore has nothing independent to compare the payload with. The
+/// compiled-in tier is that caller: a built-in receipt is authenticated by the
+/// whole-receipt digest its index states, so a second copy of the bindings
+/// beside that digest could only ever equal the payload or fail to load.
+/// Whatever it returns still goes through [`authenticate_policy2_receipt`],
+/// which checks canonical encoding, the main and semantic digests, the policy
+/// and the provenance exactly as it does for any other expected bindings.
+pub fn policy2_receipt_payload_bindings(
+    receipt_bytes: &[u8],
+) -> Result<Policy2ReceiptBindings, Policy2ReceiptError> {
+    let document: ReceiptDocument = bounded_json::decode(
+        receipt_bytes,
+        bounded_json::Limits {
+            bytes: MAX_RECEIPT_BYTES,
+            depth: 128,
+            nodes: 4096,
+            string_bytes: MAX_STRING_BYTES,
+        },
+    )
+    .map_err(|message| Policy2ReceiptError::Decode { message })?;
+    Ok(payload_bindings(&document.payload))
+}
+
 /// Policy-2 authentication boundary shared by native and WASM loaders.
 pub fn authenticate_policy2_receipt(
     canonical_main: &[u8],

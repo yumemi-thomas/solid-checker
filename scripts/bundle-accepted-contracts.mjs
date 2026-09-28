@@ -370,11 +370,12 @@ function main() {
     }
   }
   const { ordered, objects, conflicted, refinements } = collectBundles(results, options);
-  const index = {
-    format: "solid-checker-accepted-contract-bundle-index",
-    bundleIndexVersion: BUNDLE_INDEX_VERSION,
-    bundles: ordered
-  };
+  let index;
+  try {
+    index = indexDocument(ordered, objects);
+  } catch (error) {
+    fail(error.message);
+  }
 
   for (const [catalog, reason] of refused) {
     console.error(`  refused ${relative(REPOSITORY, catalog)}: ${reason.split("\n")[0]}`);
@@ -412,10 +413,57 @@ function main() {
   console.log(`wrote ${relative(REPOSITORY, INDEX_PATH)} and ${members.length} object(s)`);
 }
 
-/// Version 2 states each bundle's dependency environment and keys bundles by
-/// it. The loader still reads version 1, as inert: none of its bundles states
-/// an environment, so none is ever admitted.
-export const BUNDLE_INDEX_VERSION = 2;
+/// Version 3 states what version 2 states, each fact once: every distinct
+/// dependency environment in one `environments` table keyed by the
+/// `dependencyEnvironmentRoot` its receipts sign, each bundle naming its
+/// environment by that root, and no copy of the receipt's bindings (the
+/// receipt the index pins by digest is where the loader reads them). A
+/// per-host tier proves one artifact in one environment for every host, so
+/// version 2 wrote most environments three times and every binding twice.
+/// The loader still reads version 2 unchanged, and version 1 as inert.
+export const BUNDLE_INDEX_VERSION = 3;
+
+/**
+ * The index `collectBundles`' bundles are written as: each environment once,
+ * keyed by the root its receipts sign, and each bundle without the bindings
+ * its receipt already states.
+ *
+ * `objects` is what `collectBundles` returns beside them; each bundle's
+ * receipt is read from it to confirm the root it signs is the one this names,
+ * so a key never outruns what the loader will find. Throws for a bundle that
+ * binds no environment root, or for two bundles that state different entries
+ * under one root: the Rust tool refused both already, and an index that
+ * carried either would be refused whole at load.
+ */
+export function indexDocument(ordered, objects) {
+  const environments = new Map();
+  const bundles = ordered.map(entry => {
+    const { bindings, dependencyEnvironment, ...published } = entry;
+    const root = bindings?.dependencyEnvironmentRoot;
+    if (!root || !Array.isArray(dependencyEnvironment)) {
+      throw new Error(`${entry.packageName}@${entry.packageVersion} binds no dependency environment`);
+    }
+    const signed = JSON.parse(objects.get(entry.receipt) ?? "null")?.payload?.dependencyEnvironmentRoot;
+    if (signed !== root) {
+      throw new Error(`${entry.receipt} does not sign the environment root ${root} its entry states`);
+    }
+    const stated = stableJson(dependencyEnvironment);
+    const previous = environments.get(root);
+    if (previous !== undefined && stableJson(previous) !== stated) {
+      throw new Error(`two bundles state different environments under the root ${root}`);
+    }
+    environments.set(root, dependencyEnvironment);
+    return { ...published, dependencyEnvironmentRoot: root };
+  });
+  return {
+    format: "solid-checker-accepted-contract-bundle-index",
+    bundleIndexVersion: BUNDLE_INDEX_VERSION,
+    environments: Object.fromEntries(
+      [...environments.entries()].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    ),
+    bundles
+  };
+}
 
 /**
  * Every bundle a set of `solid-contract-bundle` results yields, one per

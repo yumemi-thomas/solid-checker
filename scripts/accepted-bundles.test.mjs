@@ -38,36 +38,79 @@ function named() {
 // Version 2 states every bundle's dependency environment. Version 1 predates
 // that binding; the loader still reads it, as inert (no bundle of it is ever
 // admitted), so a checked-in version-1 tier builds and supplies nothing.
-const stated = index.bundleIndexVersion === 2;
+// Version 3 states what version 2 does, each fact once: environments in one
+// table keyed by the root the receipts sign, and bindings only in the receipt.
+const stated = index.bundleIndexVersion >= 2;
+const indexed = index.bundleIndexVersion === 3;
+
+/** A bundle's bindings: its receipt's payload in version 3, restated before. */
+function bindingsOf(bundle) {
+  if (!indexed) return bundle.bindings;
+  return JSON.parse(readFileSync(join(BUNDLE_ROOT, bundle.receipt), "utf8")).payload;
+}
+
+/** A bundle's dependency environment, wherever its index version keeps it. */
+function environmentOf(bundle) {
+  return indexed ? index.environments[bundle.dependencyEnvironmentRoot] : bundle.dependencyEnvironment;
+}
 
 test("the index is the format the checker compiles in", () => {
   assert.equal(index.format, "solid-checker-accepted-contract-bundle-index");
-  assert.ok([1, 2].includes(index.bundleIndexVersion), `version ${index.bundleIndexVersion}`);
+  assert.ok([1, 2, 3].includes(index.bundleIndexVersion), `version ${index.bundleIndexVersion}`);
   assert.ok(Array.isArray(index.bundles));
+  if (indexed) {
+    assert.ok(index.environments && typeof index.environments === "object", "version 3 has an environments table");
+    for (const bundle of index.bundles) {
+      assert.equal(bundle.bindings, undefined, `${bundle.packageName} restates its receipt's bindings`);
+      assert.equal(bundle.dependencyEnvironment, undefined, `${bundle.packageName} states its environment inline`);
+    }
+  }
 });
 
-test("a version-2 bundle states the environment its receipt binds", () => {
+test("a version-3 environments table is exactly what the bundles name, once each, in key order", () => {
+  // The loader refuses a reference with no table entry and an entry that is
+  // not the environment its root names. What it does not refuse is an entry
+  // nobody names, or two keys for one environment -- dead weight and a second
+  // spelling, each a review hazard rather than a load failure.
+  if (!indexed) return;
+  const keys = Object.keys(index.environments);
+  assert.deepEqual(keys, [...keys].sort(), "the table is not in key order");
+  const named = new Set(index.bundles.map(bundle => bundle.dependencyEnvironmentRoot));
+  assert.deepEqual([...named].sort(), keys, "the table and the bundles' references disagree");
+  const spelled = Object.values(index.environments).map(environment => JSON.stringify(environment));
+  assert.equal(new Set(spelled).size, spelled.length, "one environment is stored under two keys");
+  for (const bundle of index.bundles) {
+    assert.equal(
+      bundle.dependencyEnvironmentRoot,
+      bindingsOf(bundle).dependencyEnvironmentRoot,
+      `${bundle.packageName} names an environment its receipt does not sign`
+    );
+  }
+});
+
+test("a version-2 or later bundle states the environment its receipt binds", () => {
   if (!stated) return;
   for (const bundle of index.bundles) {
     assert.ok(
-      bundle.bindings?.dependencyEnvironmentRoot,
+      bindingsOf(bundle)?.dependencyEnvironmentRoot,
       `${bundle.packageName} binds no dependency environment, so no project could be checked against it`
     );
-    assert.ok(Array.isArray(bundle.dependencyEnvironment), `${bundle.packageName} publishes no environment`);
-    const spelled = bundle.dependencyEnvironment.map(entry => JSON.stringify([entry.name, entry.version, entry.integrity]));
+    const environment = environmentOf(bundle);
+    assert.ok(Array.isArray(environment), `${bundle.packageName} publishes no environment`);
+    const spelled = environment.map(entry => JSON.stringify([entry.name, entry.version, entry.integrity]));
     // ADR 0126: an environment is edged on every entry or on none. An edged one
     // may name one package more than once, under different importers, so it is
     // canonical when its entries are sorted and no whole entry repeats.
-    const edged = bundle.dependencyEnvironment.filter(entry => entry.resolvedFrom).length;
+    const edged = environment.filter(entry => entry.resolvedFrom).length;
     assert.ok(
-      edged === 0 || edged === bundle.dependencyEnvironment.length,
+      edged === 0 || edged === environment.length,
       `${bundle.packageName}'s environment is edged on some entries only`
     );
     if (edged === 0) {
       assert.deepEqual(spelled, [...new Set(spelled)].sort(), `${bundle.packageName}'s environment is not canonical`);
     } else {
       assert.deepEqual(spelled, [...spelled].sort(), `${bundle.packageName}'s environment is not sorted`);
-      const whole = bundle.dependencyEnvironment.map(entry => JSON.stringify(entry));
+      const whole = environment.map(entry => JSON.stringify(entry));
       assert.equal(new Set(whole).size, whole.length, `${bundle.packageName}'s environment repeats an entry`);
     }
   }
@@ -122,7 +165,7 @@ test("a bundle states every field admission recomputes", () => {
       `${bundle.packageName} states no export conditions, which select the artifact`
     );
     assert.ok(
-      bundle.bindings?.artifactAcceptanceRoot,
+      bindingsOf(bundle)?.artifactAcceptanceRoot,
       `${bundle.packageName} has no artifactAcceptanceRoot, so no project could match it`
     );
     // Package-relative, or the comparison against a consumer's resolved file is
@@ -142,8 +185,8 @@ test("no two bundles claim the same artifact in the same environment", () => {
   const seen = new Map();
   for (const bundle of index.bundles) {
     const root = stated
-      ? `${bundle.bindings.artifactAcceptanceRoot} ${bundle.bindings.dependencyEnvironmentRoot}`
-      : bundle.bindings.artifactAcceptanceRoot;
+      ? `${bindingsOf(bundle).artifactAcceptanceRoot} ${bindingsOf(bundle).dependencyEnvironmentRoot}`
+      : bindingsOf(bundle).artifactAcceptanceRoot;
     const previous = seen.get(root);
     assert.equal(
       previous,

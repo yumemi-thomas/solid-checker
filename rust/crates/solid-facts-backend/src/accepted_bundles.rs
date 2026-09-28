@@ -61,6 +61,7 @@ use crate::{
         BuiltInReceiptEntry, DependencyEnvironmentEntry, EnvironmentImporter,
         Policy2ReceiptBindings, dependency_environment_states_edges,
         policy2_artifact_acceptance_root_for_identity, policy2_dependency_environment_root,
+        policy2_receipt_payload_bindings, validate_dependency_environment,
     },
     contract_interface::{
         AuthenticCase, ContractFailure, InstalledArtifactIdentity, ResolvedTargetIdentity,
@@ -75,9 +76,28 @@ mod embedded;
 mod tests;
 
 const BUNDLE_INDEX_FORMAT: &str = "solid-checker-accepted-contract-bundle-index";
+/// Version 3: what version 2 states, each fact stored once.
+///
+/// - **Environments** live in one `environments` table keyed by their
+///   `dependencyEnvironmentRoot` -- the content address the receipt already
+///   signs -- and a bundle names its environment by that root. A per-host tier
+///   proves one artifact in the same environment for every host, and 729
+///   bundles read 120 distinct environments.
+/// - **Bindings** are not restated. Version 2 carried a copy of each receipt
+///   payload's bindings beside the receipt's own digest, and authentication
+///   refused any copy that was not byte-equal to the payload, so the copy
+///   carried nothing the pinned receipt did not. Version 3 reads them from the
+///   receipt the index names by digest.
+///
+/// Every table key is recomputed from its entries and every reference must
+/// resolve, before any bundle is authenticated; either failure refuses the
+/// whole index. What is admitted, and where, is exactly what version 2 admits.
+const BUNDLE_INDEX_VERSION: u16 = 3;
 /// Version 2: every bundle states the dependency environment its receipt
-/// binds, and bundles are unique by artifact *and* environment.
-const BUNDLE_INDEX_VERSION: u16 = 2;
+/// binds inline, beside a copy of its receipt's bindings, and bundles are
+/// unique by artifact *and* environment. Still read, with unchanged meaning, so
+/// a tier generated before version 3 loads; the bundler writes version 3 only.
+const INLINE_BUNDLE_INDEX_VERSION: u16 = 2;
 /// The version before environments were stated. Still read, and still
 /// authenticated byte for byte, but **inert**: its receipts bind no
 /// environment, so no consumer tree can be shown to be the one the proof read,
@@ -90,16 +110,68 @@ const INERT_BUNDLE_INDEX_VERSION: u16 = 1;
 /// carries exactly the bundles the repository does.
 const INDEX_BYTES: &[u8] = include_bytes!("../../../../pkg/contracts/accepted/index.json");
 
+/// Enough of any index to choose the decoder for its version.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BundleIndexHeader {
+    format: String,
+    bundle_index_version: u16,
+}
+
+/// Version 3 (see [`BUNDLE_INDEX_VERSION`]).
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct BundleIndexDocument {
-    format: String,
-    bundle_index_version: u16,
+    /// Read by [`BundleIndexHeader`]; stated here so `deny_unknown_fields`
+    /// admits them.
+    #[serde(rename = "format")]
+    _format: String,
+    #[serde(rename = "bundleIndexVersion")]
+    _bundle_index_version: u16,
+    /// Every distinct environment the bundles were proven in, keyed by its
+    /// `dependencyEnvironmentRoot`. A key is a claim about its entries, checked
+    /// by recomputing it before any bundle is read.
+    environments: BTreeMap<String, Vec<DependencyEnvironmentEntry>>,
+    bundles: Vec<IndexedBundleEntry>,
+}
+
+/// One version-3 bundle: a [`BundleEntry`] whose bindings are read from its
+/// receipt and whose environment is named by root.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct IndexedBundleEntry {
+    package_name: String,
+    package_version: String,
+    package_integrity: String,
+    specifier: String,
+    requested_entrypoint: String,
+    export_conditions: Vec<String>,
+    runtime_target: String,
+    #[serde(default)]
+    declaration_target: String,
+    document: String,
+    document_digest: String,
+    receipt: String,
+    receipt_digest: String,
+    /// The key of this bundle's environment in the index's `environments`
+    /// table, which must also be the root its receipt signs.
+    dependency_environment_root: String,
+}
+
+/// Versions 1 and 2, which state each bundle whole.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct InlineBundleIndexDocument {
+    #[serde(rename = "format")]
+    _format: String,
+    #[serde(rename = "bundleIndexVersion")]
+    _bundle_index_version: u16,
     bundles: Vec<BundleEntry>,
 }
 
 /// One compiled-in acceptance, described by exactly what a consumer can
-/// recompute about its own installed tree.
+/// recompute about its own installed tree: a version-2 index entry as it is
+/// written, and every version's entry once [`indexed_entries`] resolves it.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct BundleEntry {
@@ -121,6 +193,9 @@ struct BundleEntry {
     document_digest: String,
     receipt: String,
     receipt_digest: String,
+    /// Stated by a version-2 index and compared with the receipt payload by
+    /// authentication; a version-3 index states none, and they are read from
+    /// the receipt `receipt_digest` pins.
     bindings: Policy2ReceiptBindings,
     /// The entries behind `bindings.dependencyEnvironmentRoot`, in canonical
     /// order. Unauthenticated on their own: the loader admits them only when
@@ -162,22 +237,32 @@ fn bundles() -> Result<&'static [LoadedBundle], ContractFailure> {
 }
 
 fn load_bundles() -> Result<Vec<LoadedBundle>, ContractFailure> {
-    let index: BundleIndexDocument =
-        serde_json::from_slice(INDEX_BYTES).map_err(|error| ContractFailure::DocumentDecode {
-            message: format!("decode the compiled-in accepted-contract index: {error}"),
-        })?;
-    let inert = match index.bundle_index_version {
-        BUNDLE_INDEX_VERSION => false,
+    load_index(INDEX_BYTES, object)
+}
+
+/// Every bundle an index names, authenticated, with `object` supplying the
+/// bytes of each member it names. Any failure refuses the whole index.
+fn load_index<'a>(
+    index_bytes: &[u8],
+    object: impl Fn(&str) -> Result<&'a [u8], ContractFailure>,
+) -> Result<Vec<LoadedBundle>, ContractFailure> {
+    let header: BundleIndexHeader = decode_index(index_bytes)?;
+    let inert = match header.bundle_index_version {
+        BUNDLE_INDEX_VERSION | INLINE_BUNDLE_INDEX_VERSION => false,
         INERT_BUNDLE_INDEX_VERSION => true,
         _ => {
             return Err(unsupported_index());
         }
     };
-    if index.format != BUNDLE_INDEX_FORMAT {
+    if header.format != BUNDLE_INDEX_FORMAT {
         return Err(unsupported_index());
     }
-    index
-        .bundles
+    let entries = if header.bundle_index_version == BUNDLE_INDEX_VERSION {
+        indexed_entries(decode_index(index_bytes)?, &object)?
+    } else {
+        decode_index::<InlineBundleIndexDocument>(index_bytes)?.bundles
+    };
+    entries
         .iter()
         .map(|entry| {
             let document = object(&entry.document)?;
@@ -196,11 +281,92 @@ fn load_bundles() -> Result<Vec<LoadedBundle>, ContractFailure> {
         .collect()
 }
 
+fn decode_index<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, ContractFailure> {
+    serde_json::from_slice(bytes).map_err(|error| ContractFailure::DocumentDecode {
+        message: format!("decode the compiled-in accepted-contract index: {error}"),
+    })
+}
+
+/// A version-3 index's bundles, each with the environment its reference names
+/// and the bindings its receipt states: the shape version 2 wrote whole.
+///
+/// The table is checked first and as a whole. A key must be the
+/// `dependencyEnvironmentRoot` of its own entries, which must be canonical
+/// ([`validate_dependency_environment`] refuses an unsorted or repeating list),
+/// so a key determines its entries exactly; a bundle whose reference is not a
+/// key refuses too. Neither is a bundle-level skip: an index that misstates
+/// one environment has misstated what was reviewed, and the tier refuses to
+/// load rather than serve the rest of it.
+fn indexed_entries<'a>(
+    index: BundleIndexDocument,
+    object: &impl Fn(&str) -> Result<&'a [u8], ContractFailure>,
+) -> Result<Vec<BundleEntry>, ContractFailure> {
+    for (root, entries) in &index.environments {
+        if validate_dependency_environment(entries).is_err()
+            || policy2_dependency_environment_root(entries) != *root
+        {
+            return Err(ContractFailure::DocumentDecode {
+                message: format!(
+                    "the compiled-in accepted-contract index's environment {root} is not the \
+                     environment that root names"
+                ),
+            });
+        }
+    }
+    index
+        .bundles
+        .into_iter()
+        .map(|bundle| {
+            let environment = index
+                .environments
+                .get(&bundle.dependency_environment_root)
+                .ok_or_else(|| ContractFailure::DocumentDecode {
+                    message: format!(
+                        "the compiled-in accepted-contract index names environment {} for {}, \
+                         which its environments table does not carry",
+                        bundle.dependency_environment_root, bundle.package_name
+                    ),
+                })?;
+            // The bindings are read from the pinned bytes, never from bytes
+            // the index has not vouched for.
+            let receipt = object(&bundle.receipt)?;
+            verify_object_digest(receipt, &bundle.receipt_digest, "receiptDigest")?;
+            let bindings = policy2_receipt_payload_bindings(receipt).map_err(|error| {
+                ContractFailure::ReceiptDecode {
+                    message: error.to_string(),
+                }
+            })?;
+            if bindings.dependency_environment_root != bundle.dependency_environment_root {
+                return Err(ContractFailure::ReceiptMismatch {
+                    field: "dependencyEnvironment",
+                });
+            }
+            Ok(BundleEntry {
+                package_name: bundle.package_name,
+                package_version: bundle.package_version,
+                package_integrity: bundle.package_integrity,
+                specifier: bundle.specifier,
+                requested_entrypoint: bundle.requested_entrypoint,
+                export_conditions: bundle.export_conditions,
+                runtime_target: bundle.runtime_target,
+                declaration_target: bundle.declaration_target,
+                document: bundle.document,
+                document_digest: bundle.document_digest,
+                receipt: bundle.receipt,
+                receipt_digest: bundle.receipt_digest,
+                bindings,
+                dependency_environment: Some(environment.clone()),
+            })
+        })
+        .collect()
+}
+
 fn unsupported_index() -> ContractFailure {
     ContractFailure::DocumentDecode {
         message: format!(
             "the compiled-in accepted-contract index must use format {BUNDLE_INDEX_FORMAT:?} \
-             version {BUNDLE_INDEX_VERSION} (or the inert version {INERT_BUNDLE_INDEX_VERSION})"
+             version {BUNDLE_INDEX_VERSION} or {INLINE_BUNDLE_INDEX_VERSION} (or the inert \
+             version {INERT_BUNDLE_INDEX_VERSION})"
         ),
     }
 }

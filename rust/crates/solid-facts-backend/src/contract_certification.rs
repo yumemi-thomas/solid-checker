@@ -89,7 +89,8 @@ pub use policy2_receipt::{
     policy2_ambiguous_empty_dependency_environment_root, policy2_artifact_acceptance_root,
     policy2_artifact_acceptance_root_for_identity, policy2_dependency_environment_root,
     policy2_main_closed_claims_root, policy2_main_semantic_digest, policy2_policy_digest,
-    policy2_resolved_import_root, policy2_trust_configuration_for_issuer, publish_policy2_catalog,
+    policy2_receipt_payload_bindings, policy2_resolved_import_root,
+    policy2_trust_configuration_for_issuer, publish_policy2_catalog,
     validate_dependency_environment,
 };
 pub use probe_gates::{ProbeGate, ProbeGateError, ProbeGateSchedule, VerifiedProbeGateBatch};

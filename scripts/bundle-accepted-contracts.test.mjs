@@ -14,6 +14,7 @@ import {
   bundleKey,
   claimsOf,
   collectBundles,
+  indexDocument,
   parseArguments,
   relate,
   retainedOutputDirectories
@@ -275,5 +276,60 @@ describe("bundling from several runs", () => {
       ordered.map(bundle => bundle.dependencyEnvironment[0].version).sort(),
       ["2.0.0-rc.0", "2.0.0-rc.3", "2.0.0-rc.6"]
     );
+  });
+});
+
+// A per-host tier proves one artifact in one environment for every host, so
+// the index stores each environment once, keyed by the root its receipts sign,
+// and never restates a receipt's bindings (index version 3). Measured on the
+// 729-bundle per-host tier: 120 distinct environments, 7.7 MB inline.
+describe("writing the index", () => {
+  const environment = version => [{ name: "@solidjs/signals", version, integrity: `sha512-${version}` }];
+  const root = version => `sha256:${version.replace(/\D/g, "").padStart(64, "0")}`;
+  const bundle = (name, version, digest) => ({
+    packageName: name,
+    packageVersion: "1.0.0",
+    receipt: `objects/${digest}.receipt.json`,
+    bindings: { dependencyEnvironmentRoot: root(version), specifier: name },
+    dependencyEnvironment: environment(version)
+  });
+  const objectsOf = (...bundles) =>
+    new Map(
+      bundles.map(entry => [
+        entry.receipt,
+        JSON.stringify({ payload: { dependencyEnvironmentRoot: entry.bindings.dependencyEnvironmentRoot } })
+      ])
+    );
+
+  test("each environment is stored once and every bundle names it by root", () => {
+    const bundles = [
+      bundle("a", "2.0.0-rc.6", "1"),
+      bundle("b", "2.0.0-rc.6", "2"),
+      bundle("a", "2.0.0-rc.0", "3")
+    ];
+    const index = indexDocument(bundles, objectsOf(...bundles));
+    assert.equal(index.bundleIndexVersion, 3);
+    assert.deepEqual(Object.keys(index.environments), [root("2.0.0-rc.0"), root("2.0.0-rc.6")]);
+    assert.deepEqual(index.environments[root("2.0.0-rc.6")], environment("2.0.0-rc.6"));
+    assert.deepEqual(
+      index.bundles.map(entry => entry.dependencyEnvironmentRoot),
+      [root("2.0.0-rc.6"), root("2.0.0-rc.6"), root("2.0.0-rc.0")]
+    );
+    for (const entry of index.bundles) {
+      assert.equal(entry.bindings, undefined, "the receipt states the bindings");
+      assert.equal(entry.dependencyEnvironment, undefined);
+    }
+  });
+
+  test("two environments under one root, or a root the receipt does not sign, are refused", () => {
+    const one = bundle("a", "2.0.0-rc.6", "1");
+    const other = { ...bundle("b", "2.0.0-rc.6", "2"), dependencyEnvironment: environment("2.0.0-rc.3") };
+    assert.throws(() => indexDocument([one, other], objectsOf(one, other)), /different environments under the root/);
+    const unsigned = bundle("a", "2.0.0-rc.6", "1");
+    const objects = objectsOf(unsigned);
+    objects.set(unsigned.receipt, JSON.stringify({ payload: { dependencyEnvironmentRoot: root("2.0.0-rc.0") } }));
+    assert.throws(() => indexDocument([unsigned], objects), /does not sign the environment root/);
+    const unbound = { ...bundle("a", "2.0.0-rc.6", "1"), bindings: {} };
+    assert.throws(() => indexDocument([unbound], objectsOf(one)), /binds no dependency environment/);
   });
 });
