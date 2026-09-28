@@ -136,7 +136,34 @@ side. `CERTIFICATION_METRIC_HOSTS=` restores the single host-free run.
   `accepted_bundles/tests.rs` that encoded "a declared host falls back to a
   host-free case" and "an undeclared host receives a `node` case" moved.
   `a_declared_host_receives_only_cases_certified_for_it` pins the new rule.
-- Per-host numbers are in the 2026-09-28 metric rerun (the lead's report).
+- Measured on 2026-09-28 (`make certification-metric`, release build of this
+  change, 30-package corpus). The baseline is `caa3d1af`, host free: 43
+  exports clean, 3.4 % per-package mean, dialect-silent class 21 exports.
+
+  | host | clean (pooled) | per-package mean | exports | dialect-silent exports |
+  | --- | ---: | ---: | ---: | ---: |
+  | none | 43 | 3.4 % | 957 | 21 |
+  | `browser` | 43 | 3.4 % | 957 | 11 |
+  | `node` | 28 | 2.1 % | 866 | 385 |
+
+  - **`browser`.** The `createSignal` and `createMemo` walls clear: the
+    dialect-silent class falls from 21 to 11 exports, and the "dialect row
+    scoped to the browser host" catch-all falls from 13 to 0. No export turns
+    clean, because every one of them has another open domain (graph lane
+    unrecorded, recipes). Five `reads` closures are lost. The probe-recipe
+    corpus addresses claims by artifact case, so its recipes address the
+    host-free cases only, and a `browser` case finds none ("no probe recipe").
+    That is an input gap, not a semantic one.
+  - **`node`.** The published-graph lane refuses for 19 of the 20 packages
+    that use it host free, at the `solid-js@2.0.0-rc.9` graph node: under `[import,node]`, `.`
+    runs `dist/server.js`, which defines `action` (and the other server
+    bodies) itself, while `types/index.d.ts:1` re-exports the declaration
+    from `@solidjs/signals`. The node refuses with "contract identity does not
+    match the resolved import". The rows fall back to the plain lane.
+    `@tanstack/solid-query` refuses whole, and `@solid-primitives/storage`'s
+    `.` publishes no case. Its dialect-silent count is the plain lane's
+    `merge`/`createSignal`/`createMemo` walls, which the host-free graph lane
+    hides behind "graph lane: unrecorded".
 
 ## Still open
 
@@ -149,3 +176,9 @@ side. `CERTIFICATION_METRIC_HOSTS=` restores the single host-free run.
   *re-exporting* `solid-js` resolves to a browser build (audit § 2.3).
 - **`deno` and `worker`** are not certified. A consumer declaring them gets no
   contract.
+- **The `node` graph lane** refuses at `solid-js`' own graph node: the server
+  runtime defines what its declaration re-exports from `@solidjs/signals`
+  (above). Until that split is bound, `node` certification is plain lane only.
+- **Recipes are addressed per artifact case**, so every recipe in
+  `scripts/ecosystem-benchmark/probe-recipes/` serves the host-free case alone.
+  A host run needs the recipes re-addressed to its claim ids.
