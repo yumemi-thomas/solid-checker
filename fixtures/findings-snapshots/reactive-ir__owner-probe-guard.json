@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-probe-guard/registry.ts",
+      "start": 1068,
+      "end": 1077,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-probe-guard/registry.ts",
+      "start": 1273,
+      "end": 1282,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-probe-guard/shadowed.ts",
+      "start": 241,
+      "end": 250,
+      "fixes": 0
+    }
+  ]
+}

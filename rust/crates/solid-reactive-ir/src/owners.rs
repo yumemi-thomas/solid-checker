@@ -840,6 +840,7 @@ pub(crate) fn find_missing_owners(
                             component_uncertain,
                             report: context & OWNER_CONTEXT_UNOWNED != 0,
                         },
+                        lookup,
                     );
                 }
             }
@@ -1006,6 +1007,7 @@ pub(crate) fn find_missing_owners(
                         component_uncertain,
                         report,
                     },
+                    lookup,
                 );
             }
         }
@@ -1061,6 +1063,7 @@ pub(crate) fn find_missing_owners(
                     component_uncertain,
                     report: context & OWNER_CONTEXT_UNOWNED != 0,
                 },
+                lookup,
             );
         }
     }
@@ -1541,6 +1544,7 @@ pub(crate) fn find_missing_owners_incremental(
                     component_uncertain,
                     report: context & candidate.report_mask != 0,
                 },
+                lookup,
             );
         }
     }
@@ -1698,6 +1702,59 @@ pub(crate) fn owner_context_at(
         .map_or(OWNER_CONTEXT_UNOWNED, |index| contexts[index])
 }
 
+/// Whether the operation at `span` runs only after the same invocation of its
+/// function has seen a non-null owner: it is the right operand of
+/// `getOwner() && …`, or sits in the consequent of `getOwner() ? … : …` or of
+/// `if (getOwner()) …`, where the test is a call of Solid's own `getOwner`
+/// resolved by symbol (a same-named local function proves nothing).
+///
+/// Such an operation never executes without an owner, so "no scope's disposal
+/// can trigger it" is false on every path that reaches it: probed on the
+/// audited 2.0.0-rc.9, dev and prod, an exported helper written this way and
+/// called at module scope skips `onCleanup` (no `NO_OWNER_CLEANUP`), while the
+/// unguarded helper beside it warns. The guard and the operation must share
+/// one function body with no `await` between them -- an owner seen before an
+/// `await` is not current after it -- and nothing else is read as a guard:
+/// `owner && …` over a binding, `!getOwner() || …`, and early returns keep
+/// their requirement.
+fn guarded_by_owner_probe(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let owner_probe = |test: Span| {
+        let test = file.ast.peel_ts_sugar_span(test);
+        file.ast.calls.iter().any(|call| {
+            call.span == test
+                && call.arguments.is_empty()
+                && lookup.primitive_at_call(file, call.span) == Some(Primitive::GetOwner)
+        })
+    };
+    let function = containing_ast_function(&file.ast, span).map(|function| function.span);
+    let same_invocation = |test: Span, region: Span| {
+        containing_ast_function(&file.ast, test).map(|function| function.span) == function
+            && !file
+                .ast
+                .awaits
+                .iter()
+                .any(|awaited| region.contains(*awaited) && awaited.start < span.start)
+    };
+    file.ast.logical_expressions.iter().any(|logical| {
+        logical.operator == solid_facts::ast::LogicalOperatorKind::And
+            && logical.right.contains(span)
+            && owner_probe(logical.left)
+            && same_invocation(logical.left, logical.right)
+    }) || file.ast.conditional_expressions.iter().any(|conditional| {
+        conditional.consequent.contains(span)
+            && owner_probe(conditional.test)
+            && same_invocation(conditional.test, conditional.consequent)
+    }) || file.ast.if_regions.iter().any(|region| {
+        region.consequent.contains(span)
+            && owner_probe(region.test)
+            && same_invocation(region.test, region.consequent)
+    })
+}
+
 /// The one place an owner requirement becomes a finding seed — both owner
 /// passes, every operation, every uncertainty source — which is why the
 /// discarded-region guard is applied here rather than at each push site.
@@ -1712,6 +1769,7 @@ pub(crate) fn push_owner_requirement(
     file: &solid_facts::FileFacts,
     span: Span,
     status: OwnerRequirementStatus,
+    lookup: &SemanticLookup<'_>,
 ) {
     // The compiler deleted this operation. There is no owner question to
     // answer and no obligation to record: "this cleanup will never run" is a
@@ -1720,6 +1778,11 @@ pub(crate) fn push_owner_requirement(
     // Applied at the funnel for the same reason the divergence escalation below
     // is: a new candidate kind cannot forget it.
     if crate::execution_role::discarded_region_contains(file, span) {
+        return;
+    }
+    // The operation runs only once the same invocation has seen an owner, so
+    // there is no unowned execution to report and nothing left unproven.
+    if guarded_by_owner_probe(file, span, lookup) {
         return;
     }
     let location = location(file.path.as_str(), span);
