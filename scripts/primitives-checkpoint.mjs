@@ -432,7 +432,15 @@ export function refusalOf(result) {
 /// then held behind the dependency the graph would have accepted; the report
 /// attributes those holds to this key.
 export function graphRefusalOf(result) {
-  const text = result?.certificationAttempt?.graphPreparation?.preparationRefusal;
+  // Two trace shapes carry the refusal: a declined-only frontier whose
+  // composition failed (`preparationRefusal`), and a partial proposal whose
+  // graph preparation was attempted and failed (`partialProposalFrontier:
+  // "unprepared"`, `reason`). Reading only the first left the second's
+  // dependents attributed to the dependency the graph never reached.
+  const preparation = result?.certificationAttempt?.graphPreparation;
+  const text =
+    preparation?.preparationRefusal ??
+    (preparation?.partialProposalFrontier === "unprepared" ? preparation.reason : undefined);
   if (typeof text !== "string" || !text) return null;
   const unbound = /graph node (\S+) \S+ \[([^\]]*)\] refused:.*Declaration target for export "([^"]+)" is re-exported from dependency "([^"]+)"/.exec(text);
   if (unbound) {

@@ -223,6 +223,15 @@ test("refusals, published-package defects and graph-lane refusals are named with
     "@tauri-apps/api is not installed (imported by @solid-primitives/filesystem)"
   );
   assert.equal(graphRefusalOf({ certificationAttempt: { graphPreparation: {} } }), null);
+  // A partial proposal whose graph preparation failed records the refusal as
+  // `reason` beside `partialProposalFrontier: "unprepared"` (sse under `node`).
+  const unprepared = reason => graphRefusalOf({ certificationAttempt: { graphPreparation: { partialProposalFrontier: "unprepared", reason } } });
+  assert.equal(
+    unprepared("published dependency graph prepared no artifact case: @tauri-apps/api is not installed above /private/tmp/x/node_modules/@solid-primitives/filesystem/dist/a.d.ts").key,
+    "@tauri-apps/api is not installed (imported by @solid-primitives/filesystem)"
+  );
+  // `reason` is only a refusal under that frontier marker.
+  assert.equal(graphRefusalOf({ certificationAttempt: { graphPreparation: { reason: "anything" } } }), null);
 });
 
 test("the misuse ledger is well formed and pins the corpus versions", () => {
