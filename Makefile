@@ -469,6 +469,50 @@ certification-metric: build-checker-release
 
 .PHONY: certification-metric
 
+# The @solid-primitives checkpoint (owner, 2026-09-28): every @solid-primitives
+# package with a Solid 2 release certified host free and per host (ADR 0140)
+# and in the accepted tier, every export accounted for, and misuse of each
+# primitive reporting the right finding against the real published typings.
+# The corpus is pinned in scripts/ecosystem-benchmark/primitives-checkpoint-corpus.json
+# (re-pin with `bun scripts/primitives-checkpoint.mjs --select`, network and
+# `gh`); the misuse ledger is fixtures/primitives-misuse/cases.json. Each host
+# is certified with the certification metric's flags, measured, and its
+# retained trees removed before the next host starts (pass
+# PRIMITIVES_CHECKPOINT_KEEP=1 to keep them). The misuse ledger installs each
+# case's package from the registry. Not in `make verify` (registry, minutes).
+PRIMITIVES_CHECKPOINT_OUT := $(CURDIR)/rust/target/primitives-checkpoint
+
+primitives-checkpoint: build-checker-release
+	mkdir -p "$(PRIMITIVES_CHECKPOINT_OUT)"
+	@probes="$$($(BUN) scripts/primitives-checkpoint.mjs --print-probes)" || exit 1; \
+	measured=""; \
+	for host in none browser node; do \
+	  if [ "$$host" = none ]; then suffix=""; hostflag=""; else suffix="-$$host"; hostflag="--host $$host"; fi; \
+	  start=$$(date +%s); \
+	  SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
+	    SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
+	    $(BUN) scripts/ecosystem-benchmark/run.mjs --solid 2 --timeout 1800 \
+	    --attempt-certification --recover-entrypoints \
+	    --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" --keep-temp $$hostflag \
+	    $$(printf '%s\n' "$$probes" | sed 's/^/--probe /' | tr '\n' ' ') \
+	    --json "$(PRIMITIVES_CHECKPOINT_OUT)/run$$suffix.json" \
+	    --markdown "$(PRIMITIVES_CHECKPOINT_OUT)/run$$suffix.md" || exit 1; \
+	  echo "primitives-checkpoint: host $$host certified in $$(( $$(date +%s) - start )) s"; \
+	  $(BUN) scripts/primitives-checkpoint.mjs --measure "$(PRIMITIVES_CHECKPOINT_OUT)/run$$suffix.json" \
+	    --json "$(PRIMITIVES_CHECKPOINT_OUT)/measure$$suffix.json" \
+	    $(if $(PRIMITIVES_CHECKPOINT_KEEP),,--clean-retained) || exit 1; \
+	  measured="$$measured$${measured:+,}$(PRIMITIVES_CHECKPOINT_OUT)/measure$$suffix.json"; \
+	done; \
+	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
+	  $(BUN) scripts/primitives-checkpoint.mjs --misuse --json "$(PRIMITIVES_CHECKPOINT_OUT)/misuse.json" || exit 1; \
+	$(BUN) scripts/primitives-checkpoint.mjs --report "$$measured" \
+	  --misuse-results "$(PRIMITIVES_CHECKPOINT_OUT)/misuse.json" \
+	  --json "$(PRIMITIVES_CHECKPOINT_OUT)/checkpoint.json" \
+	  --markdown "$(PRIMITIVES_CHECKPOINT_OUT)/checkpoint.md"
+
+.PHONY: primitives-checkpoint
+
 # Delivery-only certification runs, one per reviewed consumer environment in
 # scripts/ecosystem-benchmark/consumer-environments.json: each certifies the
 # listed packages, cloned from their solid2 manifest rows, in the exact tree

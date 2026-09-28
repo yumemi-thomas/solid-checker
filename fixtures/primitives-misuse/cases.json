@@ -1,0 +1,20 @@
+{
+  "format": "solid-checker-primitives-misuse-cases",
+  "version": 1,
+  "note": "Criterion 3 of the @solid-primitives checkpoint (docs/package-contract-v2/phase22/2026-09-28-solid-primitives-checkpoint.md). Each case is compiled and checked against the real published package at the version scripts/ecosystem-benchmark/primitives-checkpoint-corpus.json pins, installed with the head probe's Solid runtime, never against a stub. `misuse` must report `rule`; `correct` must report nothing; `tsc` must be silent on both. Run with `make primitives-checkpoint` or `bun scripts/primitives-checkpoint.mjs --misuse`.",
+  "cases": [
+    {
+      "id": "timer-createTimer-module-scope",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "entrypoint": ".",
+      "export": "createTimer",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": ["none", "browser", "node"],
+      "why": "The certified summary of createTimer states an owner requirement (a cleanup registered on the ambient owner at call). Called at module scope there is no owner, so the timer is never cleared.",
+      "misuse": "import { createTimer } from \"@solid-primitives/timer\";\n\ncreateTimer(() => console.log(\"tick\"), 1000, setInterval);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createTimer } from \"@solid-primitives/timer\";\n\ncreateRoot(dispose => {\n  createTimer(() => console.log(\"tick\"), 1000, setInterval);\n  return dispose;\n});\n"
+    }
+  ]
+}
