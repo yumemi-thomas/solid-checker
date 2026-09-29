@@ -584,6 +584,13 @@ consumer-environment-runs: build-checker-release
 # `include_bytes!` list, which are reviewed artifacts. Run it, read the diff,
 # rebuild, and check the Rust tier's own pin
 # (`every_bundle_this_build_carries_authenticates`) still passes.
+#
+# With PRIMITIVES_CHECKPOINT_KEEP=1, the @solid-primitives checkpoint's own
+# certification runs feed the tier too (owner checkpoint, 2026-09-28: every
+# primitive certified *in the accepted tier*). Produce them with
+# `make primitives-checkpoint PRIMITIVES_CHECKPOINT_KEEP=1`, which keeps the
+# retained trees the bundler reads; like the census, they are certifications of
+# pinned published bytes with the metric's flags.
 accepted-bundles: build-checker-debug
 	$(BUN) scripts/bundle-accepted-contracts.mjs \
 	  $$(for host in none $(TIER_HOSTS); do \
@@ -594,6 +601,8 @@ accepted-bundles: build-checker-debug
 	      run="$(CONSUMER_ENVIRONMENT_RUNS)/$$id/run$$suffix.json"; \
 	      if [ -f "$$run" ]; then printf -- '--run %s ' "$$run"; fi; \
 	    done; \
+	    run="$(PRIMITIVES_CHECKPOINT_OUT)/run$$suffix.json"; \
+	    if [ -n "$(PRIMITIVES_CHECKPOINT_KEEP)" ] && [ -f "$$run" ]; then printf -- '--run %s ' "$$run"; fi; \
 	  done)
 
 .PHONY: contract-coverage-census consumer-environment-runs accepted-bundles
