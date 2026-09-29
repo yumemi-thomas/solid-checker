@@ -12820,6 +12820,7 @@ fn census_reads_domain(
         return Ok((CensusOutcome::NeedsTranscripts, Vec::new(), run.requested));
     }
     let mut sites = Vec::new();
+    let mut undecided = Vec::new();
     for form in &implementation.uncensused_invoking_forms {
         if form.reach == Reachability::Unreachable {
             continue;
@@ -12864,18 +12865,43 @@ fn census_reads_domain(
         // recurses into nothing, so every form it sees is in the declaration
         // whose parameters the caller filled.
         let Some(disposition) = census_form_disposition(&run, form, 0) else {
-            return Err(refuse(format!(
-                "reads-census premise required: the {} form ({}) at {}:{}..{} ({}) states no \
-                 reviewed subject root, so whose value it reads is undecided",
-                uncensused_invoking_form_kind_name(form.kind),
-                form.node_kind,
-                form.location.path,
-                form.location.start_byte,
-                form.location.end_byte,
-                reachability_name(form.reach)
-            )));
+            undecided.push(form);
+            continue;
         };
         sites.push(census_form_site(form, disposition));
+    }
+    // The first undecided form refuses, as it always has. The rest are named
+    // by count and by the producer's own diagnostic, so one refusal sizes
+    // every premise this export still needs rather than only the first.
+    if let Some(form) = undecided.first() {
+        let mut tally = std::collections::BTreeMap::<String, usize>::new();
+        for other in &undecided {
+            *tally
+                .entry(format!(
+                    "{}/{}",
+                    uncensused_invoking_form_kind_name(other.kind),
+                    census_subject_leg(other)
+                ))
+                .or_default() += 1;
+        }
+        return Err(refuse(format!(
+            "reads-census premise required: the {} form ({}) at {}:{}..{} ({}) states no \
+             reviewed subject root, so whose value it reads is undecided ({}); undecided forms \
+             {}: {}",
+            uncensused_invoking_form_kind_name(form.kind),
+            form.node_kind,
+            form.location.path,
+            form.location.start_byte,
+            form.location.end_byte,
+            reachability_name(form.reach),
+            census_subject_diagnostic(form),
+            undecided.len(),
+            tally
+                .iter()
+                .map(|(leg, count)| format!("{leg} x{count}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )));
     }
     sites.push(format!(
         "typefacts-implementation-census:reads:forms:{}",
@@ -17790,6 +17816,41 @@ fn census_local_declaration_identity(
 /// [`typefacts::UncensusedInvokingForm::subject_write`] marks: there the
 /// assignment into the caller's object is the export's own operation, and no
 /// question of whose code runs excuses it.
+/// The short name of the leg a form's subject derivation stopped at, for a
+/// refusal's tally: the stated root, or the producer's diagnostic, or `-`.
+fn census_subject_leg(form: &typefacts::UncensusedInvokingForm) -> String {
+    if !form.subject_root.is_empty() {
+        format!("root:{}", form.subject_root)
+    } else if !form.subject_root_refusal.is_empty() {
+        form.subject_root_refusal.clone()
+    } else if !form.coercion_subject_root_refusal.is_empty() {
+        format!("coercion:{}", form.coercion_subject_root_refusal)
+    } else {
+        "-".to_owned()
+    }
+}
+
+/// What the producer stated about a form's subject, for a refusal's text only
+/// (protocol 48's diagnostic): the derivation it offered and was not enough,
+/// or which leg it fell off. Never a premise.
+fn census_subject_diagnostic(form: &typefacts::UncensusedInvokingForm) -> String {
+    if !form.subject_root.is_empty() {
+        format!("the producer stated subject root {:?}", form.subject_root)
+    } else if !form.subject_root_refusal.is_empty() {
+        format!(
+            "the producer offered no subject derivation: {}",
+            form.subject_root_refusal
+        )
+    } else if !form.coercion_subject_root_refusal.is_empty() {
+        format!(
+            "the coerced operands rooted at nothing shared: {}",
+            form.coercion_subject_root_refusal
+        )
+    } else {
+        "the producer offered no subject derivation".to_owned()
+    }
+}
+
 fn census_form_disposition(
     run: &CensusRun<'_>,
     form: &typefacts::UncensusedInvokingForm,
