@@ -1141,6 +1141,54 @@ mod tests {
         )
     }
 
+    /// ADR 0164: what the valueless walk clears, and what it leaves open. The
+    /// walk answers about the function's own completions only, so a thrown path
+    /// is no completion, a return inside a nested callable is that callable's,
+    /// and anything that may hand back a value -- a `return` carrying an
+    /// expression on any path, an expression body, an `async` function -- is a
+    /// decline, never a proposal.
+    #[test]
+    fn the_valueless_walk_clears_only_a_body_no_path_of_which_returns_a_value() {
+        for source in [
+            "function f() {}",
+            "function f(flag) { if (flag) { return; } g(); }",
+            "function f() { throw new Error('no'); }",
+            "function f(flag) { if (flag) { throw new Error('no'); } g(); }",
+            "function f() { try { g(); } catch (error) { h(error); } }",
+            "const f = () => { g(); };",
+            "const f = function () { throw 1; };",
+            // A nested callable's `return` is that callable's completion.
+            "function f() { function inner() { return 1; } inner(); }",
+            "function f() { const inner = () => 1; inner(); }",
+        ] {
+            assert_eq!(answers(source), (Ok(()), false), "{source}");
+        }
+        // A `return` carrying an expression on any path declines, and the
+        // decline names it.
+        for source in [
+            "function f(flag) { if (flag) { return 1; } }",
+            "function f(flag) { if (flag) { throw 1; } return flag; }",
+        ] {
+            assert!(
+                matches!(answers(source).0, Err(ReturnsDecline::ValueReturn { .. })),
+                "{source}"
+            );
+        }
+        for (source, declined) in [
+            // An expression body completes with its expression, even one that
+            // is `undefined` at run time: the walk cannot prove the value.
+            ("const f = () => g();", ReturnsDecline::ExpressionBody),
+            ("const f = () => void g();", ReturnsDecline::ExpressionBody),
+            ("const f = () => undefined;", ReturnsDecline::ExpressionBody),
+            // A promise on every completion, whatever the body does.
+            ("async function f() {}", ReturnsDecline::Async),
+            ("async function f() { throw 1; }", ReturnsDecline::Async),
+            ("const f = async () => { g(); };", ReturnsDecline::Async),
+        ] {
+            assert_eq!(answers(source).0, Err(declined), "{source}");
+        }
+    }
+
     /// ADR 0113: the value completion walk proposes exactly where the
     /// valueless walk declined on a value and no own completion is a literal
     /// that is an object on every run. Everything it cannot rule out syntactically

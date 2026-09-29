@@ -828,8 +828,23 @@ fn normalize_export(
             KnowledgeSet::Complete(ids)
         })
     };
+    // ADR 0164: the valueless-completion walk is evidence about the export's
+    // own completions, and nothing a reactive description of the return could
+    // miss changes it: an unresolved call can hand a reactive member to a value
+    // the export returns, and a body that returns no value hands nothing. So
+    // the empty closure is proposed over an `Open` return exactly as over an
+    // undescribed one, and ADR 0035's census proves it from the producer's
+    // control-flow census either way.
+    let valueless_returns = || {
+        (scope.publishes_bootstrapped_reactive_domains()
+            && summary.kind == "function"
+            && summary.returns_walk_clean
+            && summary.inherited_from.is_none())
+        .then(|| KnowledgeSet::Complete(Vec::new()))
+    };
     let returns = match &summary.returns {
-        ContractClaim::Open => container_returns(&mut operations)
+        ContractClaim::Open => valueless_returns()
+            .or_else(|| container_returns(&mut operations))
             .or_else(|| alias_return(&mut operations))
             .or_else(|| described_returns(&mut operations))
             .unwrap_or(KnowledgeSet::Unknown),

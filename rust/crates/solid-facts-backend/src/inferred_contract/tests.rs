@@ -1403,6 +1403,60 @@ fn a_local_summary_with_the_same_silent_walks_proposes_nothing() {
     assert!(normalized.inherited.is_empty());
 }
 
+/// ADR 0164: an unresolved call erases the reactive description of an
+/// export's return (`returns` is `Open`), and says nothing about whether the
+/// body hands back a value at all. The valueless-completion walk does, so a
+/// body it cleared proposes ADR 0035's empty closure over an `Open` return
+/// exactly as over an undescribed one; the census proves it either way.
+#[test]
+fn a_valueless_body_proposes_the_empty_closure_over_an_open_return() {
+    let summary = |returns_walk_clean: bool| ContractExport {
+        kind: "function".into(),
+        returns: ContractClaim::Open,
+        async_behavior: ContractClaim::Known(String::new()),
+        returns_walk_clean,
+        ..ContractExport::default()
+    };
+    let proposed = |summary: ContractExport, package_name: &str| {
+        let normalized = normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution_for_package(package_name, ["read".into()]),
+        )
+        .unwrap();
+        let export = &normalized.contract.artifact_cases()[0].exports["read"];
+        (
+            export
+                .call
+                .proposed_closures()
+                .contains(&ClaimDomain::Returns),
+            export.claim_state(ClaimDomain::Returns),
+        )
+    };
+    assert_eq!(
+        proposed(summary(true), "package"),
+        (true, KnowledgeState::CompleteNegative)
+    );
+    // The falsifiers: the walk did not clear the body, the export is not a
+    // function, or a dialect's own archive publishes no bootstrapped domain.
+    for (summary, package_name) in [
+        (summary(false), "package"),
+        (
+            ContractExport {
+                kind: "component".into(),
+                ..summary(true)
+            },
+            "package",
+        ),
+        (summary(true), "solid-js"),
+    ] {
+        assert_eq!(
+            proposed(summary, package_name),
+            (false, KnowledgeState::Unknown),
+            "{package_name}"
+        );
+    }
+}
+
 /// ADR 0113: the walk's value-completion answer proposes exactly one `plain`
 /// return and labels the closure proposed, so the certifier's census, not this
 /// generator, decides whether the value is a primitive.
