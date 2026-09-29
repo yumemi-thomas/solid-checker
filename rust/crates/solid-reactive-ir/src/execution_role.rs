@@ -1261,7 +1261,7 @@ fn callee_callback_timing_within(
 /// parameter's symbol. Destructured, rest and missing parameters prove
 /// nothing, and neither does an async function or a generator, whose body may
 /// run after the call returns.
-fn invokes_parameter_during_call(
+pub(crate) fn invokes_parameter_during_call(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     index: usize,

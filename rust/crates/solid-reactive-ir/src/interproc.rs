@@ -5410,6 +5410,43 @@ fn interprocedural_result_reads_for_file(
                     for read in argument_summary {
                         push_unique_summary_read(&mut effective, read.clone());
                     }
+                    continue;
+                }
+                // An accessor passed by reference, `run(count)`: the callee
+                // calling the parameter reads the accessor at that moment.
+                // `invoked_parameters` alone does not place that call inside
+                // this call -- its owner is the nearest summary node, which
+                // may enclose a timer callback or a returned closure -- so
+                // the read is claimed only when the callee's own synchronous
+                // body calls the parameter. One callee, not a dispatch.
+                if ambiguous_candidates.is_none()
+                    && !argument.spread
+                    && source_kinds.get(argument_symbol.as_str())
+                        == Some(&ReactiveSourceKind::Accessor)
+                    && let Some((display, declaration)) = accessors.get(argument_symbol.as_str())
+                    && lookup
+                        .function_for_symbol(symbol)
+                        .is_some_and(|(callee_file, callee)| {
+                            crate::execution_role::invokes_parameter_during_call(
+                                callee_file,
+                                callee,
+                                *parameter,
+                                lookup,
+                            )
+                        })
+                {
+                    push_unique_summary_read(
+                        &mut effective,
+                        SummaryRead {
+                            symbol: argument_symbol.clone(),
+                            display: display.clone(),
+                            kind: Some("accessor".into()),
+                            declaration: declaration.clone(),
+                            origin: location(file.path.shared(), call.span),
+                            origin_context: label.clone(),
+                            owner: None,
+                        },
+                    );
                 }
             }
             // The callee invokes a member of one of its parameters. Which

@@ -51,6 +51,13 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   synchronous dispatch in the body reaches the listener, so even that case stays
   uncertifiable. A JSX event handler (`onClick={...}`) is the compiler's event
   callback and is not reported.
+- **An accessor passed by reference is read where the callee calls it.**
+  `run(count)` reads `count` during the call when `run` is a project function
+  whose own synchronous body calls that parameter, so in a component body it is
+  reported as `run(() => count())` is. A callee that calls the parameter only
+  from a timer callback, a closure it returns, or an `async` body, or that only
+  stores it, is not proven to read it during the call, and nothing is reported
+  (`fixtures/reactive-ir/accessor-passed-by-reference`).
 - **`flush(fn)` keeps the caller's read role.** It runs `fn` inline without
   touching the listener, so a read inside it subscribes a memo or effect compute
   that calls it, and in a component body it is reported exactly as a bare read
