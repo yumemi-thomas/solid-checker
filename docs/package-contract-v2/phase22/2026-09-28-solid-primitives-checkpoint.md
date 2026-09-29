@@ -19,7 +19,9 @@ package:
 2. every export is certified clean in every host, or is uncertifiable only for
    a reason the owner has accepted as genuinely unprovable
    (`ACCEPTED_UNPROVABLE` in the script, **empty**: every cause the
-   classifier names today is a checker gap);
+   classifier names today is a checker gap), or belongs to a package that
+   cannot load under the pinned runtime in any host: a **published package
+   defect** (owner ruling 2026-09-30, below);
 3. every export with a misuse path has a ledger case that, against the real
    published typings, reports the expected rule on the misuse and nothing on
    the correct use, with `tsc` silent on both, in every host the case names;
@@ -425,8 +427,34 @@ after adding each class):
 
 ### Published-package defects
 
-These are facts about the published bytes under rc.9, not checker gaps, and
-whether they leave the denominator is an owner decision:
+These are facts about the published bytes under rc.9, not checker gaps.
+
+**Owner ruling, 2026-09-30: their exports count as accounted for** (criterion
+2), as *uncertifiable with the agreed reason "published package defect"*. The
+ruling is narrow:
+
+- Nothing is claimed about them. They stay out of every clean count (exports
+  clean per host, criterion 1, "at the checkpoint"): a defect package is
+  accounted for, never certified.
+- The defect is read from the published bytes on every run
+  (`publishedDefectOf`: a runtime target absent from the tarball, or a
+  specifier the pinned runtime does not export), never from a name list. A
+  package counts only when every one of the three hosts read the defect; a host
+  not measured, or one where the package loads, leaves it undecided and its
+  exports unaccounted. A package republished so that it loads therefore stops
+  being a defect on the next run, with no edit here.
+- `animation` names no export at all (nothing loads, so no surface is
+  measured); the defect alone accounts for the package, and it adds no exports
+  to the count.
+- Only the five packages below are defects in this sense. `keyed`, `share` and
+  `filesystem` (an undeclared dependency the graph lane cannot install) are
+  refused for a different reason and stay open.
+
+Recomputed from the 2026-09-30 runs (no new certification, `--measure` and
+`--report` over the same run files): criterion 2 rises from 1 to 6 packages of
+97, and exports accounted for from 99 to 132 of 721 (33 as a published package
+defect: `controlled-props` 7, `drag-drop` 13, `favicon` 11, `virtual` 2).
+Clean per host is unchanged (99 / 99 / 100).
 
 | package | defect |
 | --- | --- |
@@ -590,10 +618,11 @@ needs an owner decision before it is started.
    delivers changes what is compiled into the checker, and the tier only
    admits a consumer whose tree reproduces the certified environment.
 8. **Published-package defects** (5 packages that cannot load, 2 with an
-   undeclared dependency, `filesystem`'s undeclared Tauri peer). **Owner**:
-   leave them in the denominator (they can never pass), or drop them from the
-   checkpoint until upstream publishes fixed bytes; either way they are
-   upstream issues, not checker work.
+   undeclared dependency, `filesystem`'s undeclared Tauri peer). **Owner,
+   2026-09-30**: the 5 that cannot load count as accounted for in criterion 2
+   as uncertifiable, reason "published package defect" (see above); they are
+   upstream issues, not checker work. The undeclared-dependency packages are
+   not covered by the ruling.
 9. **`ACCEPTED_UNPROVABLE`**. **Owner**: nothing is accepted as genuinely
    unprovable yet, so criterion 2 means *clean*. A candidate would have to be
    a cause no claim form can ever state; none of today's classes is one.

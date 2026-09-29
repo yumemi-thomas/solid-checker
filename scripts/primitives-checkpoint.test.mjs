@@ -356,6 +356,49 @@ test("the checkpoint needs every host certified and in the tier, every export cl
   assert.equal(missing.packages[0].atCheckpoint, false);
 });
 
+test("a published package defect read from the bytes in every host accounts for the package's exports as uncertifiable, never clean", () => {
+  const corpus = { measuredOn: "2026-09-30", packages: [{ package: "@solid-primitives/a", version: "1.0.0" }], withoutSolid2: [] };
+  const tier = tierEntrypoints({ bundles: [] });
+  const defect = { kind: "imports a specifier the runtime does not export", detail: "solid-js/web (solid-js@2.0.0-rc.9)" };
+  const refused = { domain: "reads", class: "refused", key: "certification refused" };
+  const open = { entrypoint: ".", export: "createA", bucket: "uncertified", causes: [refused], misuse: [] };
+  const broken = { certification: "refused", certifiable: false, publishedDefect: defect };
+  const measured = HOSTS.map(host => hostMeasurement(host, [open], broken));
+
+  const result = checkpoint({ hosts: measured, tier, ledger: { cases: [] }, corpus });
+  const entry = result.packages[0];
+  assert.equal(entry.criteria.accounted, true);
+  assert.equal(entry.accountedAsDefect, true);
+  assert.equal(entry.exports[0].accounted, true);
+  assert.equal(entry.exports[0].certified, false);
+  assert.equal(entry.exports[0].uncertifiableReason, "published package defect");
+  // Nothing is claimed: not certified, not at the checkpoint, not counted clean.
+  assert.equal(entry.criteria.certified, false);
+  assert.equal(entry.atCheckpoint, false);
+  assert.equal(result.progress.exportsAccounted, 1);
+  assert.equal(result.progress.exportsAccountedAsDefect, 1);
+  assert.deepEqual(result.progress.exportsCleanPerHost, { none: 0, browser: 0, node: 0 });
+
+  // A package that names no export (nothing loads) is accounted for by the defect alone.
+  const empty = HOSTS.map(host => hostMeasurement(host, [], broken));
+  const bare = checkpoint({ hosts: empty, tier, ledger: { cases: [] }, corpus }).packages[0];
+  assert.equal(bare.criteria.accounted, true);
+
+  // The defect is read on every run: a host where the package loads (no defect
+  // read from its bytes) leaves the package undecided, so its open export is not accounted for.
+  const loads = HOSTS.map(host => hostMeasurement(host, [open], host === "node" ? { ...broken, publishedDefect: null } : broken));
+  const republished = checkpoint({ hosts: loads, tier, ledger: { cases: [] }, corpus });
+  assert.equal(republished.packages[0].criteria.accounted, false);
+  assert.equal(republished.packages[0].exports[0].accounted, false);
+  assert.equal(republished.packages[0].exports[0].uncertifiableReason, null);
+  assert.equal(republished.progress.exportsAccountedAsDefect, 0);
+
+  // A host not measured leaves it undecided too, and a package with no defect and no exports stays unaccounted.
+  assert.equal(checkpoint({ hosts: measured.slice(0, 2), tier, ledger: { cases: [] }, corpus }).packages[0].criteria.accounted, false);
+  const none = HOSTS.map(host => hostMeasurement(host, [], { certification: null }));
+  assert.equal(checkpoint({ hosts: none, tier, ledger: { cases: [] }, corpus }).packages[0].criteria.accounted, false);
+});
+
 test("walls join hosts by cause, and an unaccepted dependency behind a refused graph lane is attributed to that refusal", () => {
   const behind = 'graph node solid-js@2.0.0-rc.9 [import,node]: export "action" re-exported';
   const item = (name, causes) => ({ entrypoint: ".", export: name, bucket: "partial", causes, misuse: [] });

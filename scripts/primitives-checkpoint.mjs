@@ -29,7 +29,11 @@
 //   2  every export is certified clean in every host, or is uncertifiable only
 //      for a reason the owner has accepted as genuinely unprovable
 //      (`ACCEPTED_UNPROVABLE`, empty until the owner names one: no current
-//      blocking cause is one, every one of them is a checker gap);
+//      blocking cause is one, every one of them is a checker gap), or belongs
+//      to a package whose published bytes cannot load under the pinned runtime
+//      in any host (a published package defect, owner ruling 2026-09-30):
+//      uncertifiable with the agreed reason "published package defect",
+//      nothing claimed about it, never counted clean;
 //   3  every export with a misuse path has a ledger case
 //      (`fixtures/primitives-misuse/cases.json`) that, against the real
 //      published typings, reports the expected rule on the misuse and nothing
@@ -704,6 +708,19 @@ async function evaluateMisuse({ ledger, corpus, only, checker, typefacts }) {
 
 const accepted = cause => ACCEPTED_UNPROVABLE.some(entry => entry.class === cause.class && entry.key === cause.key);
 
+/// The agreed reason an export of a published-defect package is accounted for.
+export const PUBLISHED_DEFECT_REASON = "published package defect";
+
+/// A package's published defect when every host measured it and every one of
+/// them read the defect from the bytes (`publishedDefectOf`, recomputed on
+/// each run, never a name list): a package republished so that it loads in any
+/// host has no defect there and so no defect here. A host not measured, or one
+/// where the package loads, leaves the package undecided, so not accounted.
+export function packageDefect(perHost) {
+  const defects = perHost.map(([, measured]) => measured?.publishedDefect ?? null);
+  return defects.every(Boolean) ? defects[0] : null;
+}
+
 /// Combines the per-host measurements, the tier and the misuse results into
 /// the checkpoint: per package, the four criteria; per export, its status.
 export function checkpoint({ hosts, tier, misuseResults = null, ledger = { cases: [] }, corpus }) {
@@ -735,6 +752,7 @@ export function checkpoint({ hosts, tier, misuseResults = null, ledger = { cases
         met: Boolean(measured) && certified && missingTier.length === 0 && surfaceEntrypoints.length > 0
       };
     }
+    const defect = packageDefect(perHost);
     // Criterion 2 and 3, per export (the union of every host's surface).
     const keys = new Set();
     for (const [, measured] of perHost) for (const item of measured?.exports ?? []) keys.add(`${item.entrypoint}\u0000${item.export}`);
@@ -755,6 +773,7 @@ export function checkpoint({ hosts, tier, misuseResults = null, ledger = { cases
       }
       const clean = HOSTS.every(host => status[host].bucket === "clean");
       const unprovable = !clean && HOSTS.every(host => status[host].bucket === "clean" || (status[host].causes.length > 0 && status[host].causes.every(accepted)));
+      const inDefect = !clean && !unprovable && defect !== null;
       const cases = (ledger.cases ?? []).filter(item => item.package === entry.package && (item.entrypoint ?? ".") === entrypoint && item.export === name);
       const evaluated = cases.map(item => misuseResults?.results?.find(result => result.id === item.id) ?? null);
       const reporting = evaluated.filter(result => result && Object.values(result.hosts ?? {}).length > 0 && Object.values(result.hosts).every(host => host.status === "reports correctly"));
@@ -766,7 +785,8 @@ export function checkpoint({ hosts, tier, misuseResults = null, ledger = { cases
         entrypoint,
         export: name,
         certified: clean,
-        accounted: clean || unprovable,
+        accounted: clean || unprovable || inDefect,
+        uncertifiableReason: inDefect ? PUBLISHED_DEFECT_REASON : null,
         status,
         misuse: paths,
         fixture,
@@ -774,7 +794,9 @@ export function checkpoint({ hosts, tier, misuseResults = null, ledger = { cases
       });
     }
     const criterion1 = HOSTS.every(host => certification[host].met);
-    const criterion2 = exports.length > 0 && exports.every(item => item.accounted);
+    // A defect package whose surface could not be measured at all (nothing
+    // loads, so no export is named) is accounted for by the defect alone.
+    const criterion2 = defect !== null ? exports.every(item => item.accounted) : exports.length > 0 && exports.every(item => item.accounted);
     const criterion3 = exports.every(item => item.fixture === "no misuse path" || item.fixture === "reports correctly");
     packages.push({
       package: entry.package,
@@ -783,6 +805,7 @@ export function checkpoint({ hosts, tier, misuseResults = null, ledger = { cases
       inCensus: entry.inCensus ?? false,
       certification,
       publishedDefect: HOSTS.map(host => certification[host].publishedDefect).find(Boolean) ?? null,
+      accountedAsDefect: defect !== null,
       exports,
       criteria: { certified: criterion1, accounted: criterion2, misuse: criterion3, appImport: null },
       atCheckpoint: criterion1 && criterion2 && criterion3
@@ -806,6 +829,7 @@ export function checkpoint({ hosts, tier, misuseResults = null, ledger = { cases
       criterion3: packages.filter(entry => entry.criteria.misuse).length,
       publishedDefects: packages.filter(entry => entry.publishedDefect).map(entry => ({ package: entry.package, ...entry.publishedDefect })),
       exportsAccounted: allExports.filter(item => item.accounted).length,
+      exportsAccountedAsDefect: allExports.filter(item => item.uncertifiableReason === PUBLISHED_DEFECT_REASON).length,
       exports: allExports.length,
       exportsCleanPerHost: Object.fromEntries(HOSTS.map(host => [host, allExports.filter(item => item.status[host]?.bucket === "clean").length])),
       exportsWithMisusePath: withPaths.length,
@@ -868,8 +892,8 @@ export function renderMarkdown(result) {
   lines.push("");
   lines.push(`- packages at the checkpoint: **${progress.packagesAtCheckpoint} of ${progress.packages}**`);
   lines.push(`- criterion 1 (certified per host, in the tier): ${progress.criterion1}; criterion 2 (every export accounted): ${progress.criterion2}; criterion 3 (misuse reports): ${progress.criterion3}; criterion 4 (app-import metric): not measured`);
-  lines.push(`- published-package defects (cannot load under the pinned runtime; owner decision): ${progress.publishedDefects.length ? progress.publishedDefects.map(entry => `\`${entry.package}\` (${entry.kind}: ${entry.detail})`).join(", ") : "none"}`);
-  lines.push(`- exports accounted for: **${progress.exportsAccounted} of ${progress.exports}**; clean per host: ${HOSTS.map(host => `${host} ${progress.exportsCleanPerHost[host]}`).join(", ")}`);
+  lines.push(`- published-package defects (cannot load under the pinned runtime; owner ruling 2026-09-30: their exports are accounted for as uncertifiable, reason "${PUBLISHED_DEFECT_REASON}", nothing claimed, never clean): ${progress.publishedDefects.length ? progress.publishedDefects.map(entry => `\`${entry.package}\` (${entry.kind}: ${entry.detail})`).join(", ") : "none"}`);
+  lines.push(`- exports accounted for: **${progress.exportsAccounted} of ${progress.exports}** (${progress.exportsAccountedAsDefect} as a published package defect); clean per host: ${HOSTS.map(host => `${host} ${progress.exportsCleanPerHost[host]}`).join(", ")}`);
   lines.push(`- exports with a misuse path: ${progress.exportsWithMisusePath} (${progress.misuseFromContract} from a contract claim) ${JSON.stringify(progress.misuseByClass)}; fixtures absent ${progress.misuseFixtures.absent}, present ${progress.misuseFixtures.present}, reporting ${progress.misuseFixtures.reporting}`);
   lines.push("");
   lines.push("## Per package");
