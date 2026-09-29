@@ -1,5 +1,75 @@
 # Precision backlog
 
+## App-import metric, node graph and the demand-ranked walls (2026-09-29)
+
+Status: **partly implemented**, 9aaae14c through 0fcdac2e. `make test-rust`
+passed at 65a2233c; `make verify` has not been run on this series. The tier
+has not been regenerated since 3d0197b4.
+
+- **Primary metric** (227a7360, `make app-import-metric`,
+  `phase22/2026-09-28-app-import-metric-baseline.md`): 0 of 1,872
+  third-party import sites certified in 38 pinned Solid 2 apps. Top walls:
+  - `lucide-solid`/`solid-icons` (526 sites, packages built for Solid 1.x);
+  - `@solidjs/router` (272, no contract);
+  - `@tanstack/solid-router` (437);
+  - lockfile readers (218).
+- **Lockfile readers** (6ca77fb2, e10e58c7): pnpm 11's leading env document
+  and `bun.lock` versions 1 and 2 are read. The 218 sites now reach 42 open
+  and 0 certified. `bun.lockb` and `bun.lock` v0/v3 are still refused.
+- **Node graph walls gone:**
+  - ADR 0150: a local definition declared by another package is withheld;
+  - ADR 0154: a forward of a withheld export is withheld;
+  - ADR 0156: a runtime forward of a pruned node's export is withheld.
+
+  `@solidjs/web` rc.9 now certifies under `node`. Checkpoint graph-lane
+  packages under `node` went 1 → 63, and certification-metric exports clean
+  went 30 → 44. The reverse shape (a runtime forward of a *bound* dependency
+  export beside a local declaration) still binds one axis to each target, as
+  it did before ADR 0150; that is unreviewed.
+- **Composition:**
+  - ADR 0151: a plain-lane dependency edge may cite a compiled-in acceptance.
+    Citations are identified by content since ADR 0155.
+  - ADR 0155: a composed dependency's closed return is evidence for a plain
+    return.
+  - Non-empty `creates` composition was declined, because no tier document
+    carries a `create` operation.
+  - ADR 0157 (argument-premised returns claims) is proposed and parked: its
+    measured ceiling is 2 exports.
+- **Claim forms:** ADR 0152 (a described callable invokes its export's
+  argument) makes utils `pipe` clean. It still refuses a callable's own
+  argument member, `try` bodies, loops and repeated calls.
+- **Soundness:**
+  - ADR 0149: a built-in is named by identity, not by a binding's type. It
+    withdrew claims from kobalte, trigger and utils.
+  - ADR 0159: a strict reachability floor is a lower bound. It withdrew no
+    certified claim; `min` ≥ 1 was already capped by the cardinality census.
+  - Open: the coercion operand must be proved primitive (owner-approved, in
+    progress). A `return` demand still reads the optimistic `reach`.
+- **Router** (`phase22/2026-09-28-router-scope.md`):
+  - Installed pairs added: next.26 × rc.9 and next.18 × rc.3, 64 app sites.
+    next.21 × rc.6 is excluded because only signals rc.6 is audited.
+  - ADR 0153 slice A recognizes package-owned context members and refuses them
+    when the context escapes (`RouterContext` is exported).
+  - Slices B–D are in progress: the consumer admission gate, a per-export
+    accessor bound, and returns forms.
+- **TanStack** (`phase22/2026-09-29-tanstack-scope.md`): only solid-router
+  rc.8 × rc.9 is deliverable (308 sites). ADR 0158 (extensionless source
+  edges, class entries) took all-export widenings from 22 to 8. The 4
+  `routerStores` widenings through `primeRouterFromRegistry(this)` still open
+  every export. Open question: does `creates` certification refuse a
+  `wrapThing → createThing` wrapper whose `new` site attributes only to the
+  lexical export?
+- **Checkpoint reads wall** (299 exports under `node`), classified:
+  - 152 are census-refused, 122 of them `property-access-unknown-accessor`.
+    ADR 0160 (the subject-root premise) is owner-approved and in progress.
+  - 124 need hand-authored recipes; the owner declined these for now.
+  - 13 are blocked by the node probe workspace lacking `seroval`; that fix is
+    in progress.
+  - 9 have recipes written for other bytes.
+- **Owner-requirement projection:** a `min: 0` owner-requirement operation
+  reaches SC4001 as a certain obligation. Whether that overclaims is under
+  review as ADR 0161.
+
 ## Certification metric, per-host tier and project false positives (2026-09-28)
 
 Status: **implemented**, 103fdc9c through 3d0197b4. `make verify` passed at
