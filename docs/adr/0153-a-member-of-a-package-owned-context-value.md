@@ -320,7 +320,34 @@ decided** here (see status).
   census test's `escaped-stated`, `escaped-other-stated` and
   `escaped-stated-broken` legs.
 - **C. A per-export bound on `runtime-accessor-installation`** for `reads`.
-  It needs a complete enumeration of the member accesses the export executes,
-  each on a receiver the census can prove is not a hazard site's object. Not
-  landed.
+  Not landed: it needs an owner decision (2026-09-29). Read against the
+  router's next.26 `dist/index.js`, its seven hazard sites are:
+  `new Proxy({}, …)` in `createMemoObject`; `Object.defineProperty(obj,
+  "name", …)` in `setFunctionName` (the target a parameter); `new
+  Proxy(build, …)` in `createPathsProxy`; `Object.defineProperty(e.router ||
+  …, "matches", …)` on the request event; `Object.defineProperty(instance,
+  "paths", …)`; `new Proxy([], …)` in `useSubmissions`; and
+  `{ __proto__: null, … }` in a frozen namespace literal. Neither proposed
+  bound lifts `reads` from any router export:
+  - **key avoidance** (the export's complete member-access list avoids every
+    installable key) cannot bound a `Proxy`, whose traps answer every key and
+    `has`/`ownKeys` besides;
+  - **a fresh target that escapes only by return** (the tanstack scope's P2,
+    which covers all six tanstack sites) does not hold for
+    `createMemoObject`: its proxies are the router context's `params`
+    (`wrapParams`) and the location literal's `query`, so they escape into
+    the package-owned context value that every hook reads.
+
+  What would move the router is a field-sensitive bound: which exports read a
+  *member of* `router.params` or `location.query`, through the context chain
+  part 1 already binds. The decisions this needs are (1) where a per-export
+  bound lives: the closure manifest's hazard is a byte census computed twice
+  (oxc and the TypeScript replay) and hashed into the closure digest, so a
+  reachability-derived `affectedExports` either enters that replay or becomes
+  a signed contract condition that the consumer's `open_domains` must honour
+  over the manifest; (2) whether the escape analysis stops at "returned or
+  passed as a prop" (tanstack, 0 router sites) or follows the context value's
+  fields (router). Both need a producer fact enumerating every member access,
+  including implicit ones (destructuring, spread, `in`, builtins that read
+  their arguments), and so a handshake bump (73).
 - **D. Part 4.** Not landed. It needs its own claim-shape ADR.
