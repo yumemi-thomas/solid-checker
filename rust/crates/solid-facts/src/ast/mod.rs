@@ -40,6 +40,7 @@ mod import_reexport;
 mod inert_erasure;
 mod inert_javascript;
 mod object_binding;
+mod reexport_chain;
 mod retained_arguments;
 mod span_index;
 mod super_argument;
@@ -65,6 +66,7 @@ pub use object_binding::{
     UnwrittenObjectBinding, UnwrittenPrimitiveBinding, unwritten_object_binding,
     unwritten_primitive_binding,
 };
+pub use reexport_chain::{ModuleGraph, ModuleLanding, entry_names_publishing_import};
 pub use retained_arguments::{
     RetainedConstructorArguments, RetainedParameter, retained_constructor_arguments,
 };

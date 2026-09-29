@@ -7,6 +7,12 @@
 // (`reexport-specifier`); the two-statement one fell through to marking every
 // export, which is what left 29 of `@tanstack/solid-router@2.0.0-rc.8`'s root
 // obligations marking all 97 exports.
+//
+// ADR 0169 extends it one module down: the barrel a bundler emits beside the
+// entry (`dist/transform.js` of `@solid-primitives/sse`) holds the import, and
+// the entry republishes it. The rung answers only when the entry's re-export
+// chain to the binding is exact; an ambiguous star, a cycle or an unresolved
+// edge still marks every export.
 
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -87,19 +93,50 @@ describe("an import the entry only re-exports belongs to the names it publishes"
       // use this rung must not account for.
       held:
         'import { clean, opaque } from "depkg";\nconst held = opaque;\n' +
-        "export { clean, opaque, held };\n"
+        "export { clean, opaque, held };\n",
+      // ADR 0169: the entry republishes a sibling barrel's binding.
+      sibling: 'import { clean, opaque } from "./transform.js";\nexport { clean, opaque };\n',
+      siblingRenamed:
+        'import { clean, opaque as renamed } from "./transform.js";\nexport { clean, renamed };\n',
+      siblingStar: 'export * from "./transform.js";\n',
+      // The negatives: the barrel's namespace is also published (it exposes the
+      // binding under a name the chain cannot follow), and a star cycle. (Two
+      // stars providing one name never reach the ladder: the generator refuses
+      // them earlier, "resolves through multiple star exports".)
+      siblingNamespace:
+        'import * as t from "./transform.js";\nimport { clean, opaque } from "./transform.js";\nexport { clean, opaque, t };\n',
+      siblingCycle: 'export * from "./transform.js";\n'
+    };
+    const barrel = 'import { clean, opaque } from "depkg";\nexport { clean, opaque };\n';
+    const barrelDeclarations = 'export { clean, opaque } from "depkg";\n';
+    // Files beside `dist/index.js`, by package.
+    const siblings = {
+      sibling: { "dist/transform.js": barrel, "dist/transform.d.ts": barrelDeclarations },
+      siblingRenamed: { "dist/transform.js": barrel, "dist/transform.d.ts": barrelDeclarations },
+      siblingStar: { "dist/transform.js": barrel, "dist/transform.d.ts": barrelDeclarations },
+      siblingNamespace: { "dist/transform.js": barrel, "dist/transform.d.ts": barrelDeclarations },
+      siblingCycle: {
+        "dist/transform.js": `${barrel}export * from "./index.js";\n`,
+        "dist/transform.d.ts": `${barrelDeclarations}export * from "./index.js";\n`
+      }
     };
     const declarations = {
       onestep: 'export { clean, opaque } from "depkg";\n',
       twostep: 'export { clean, opaque } from "depkg";\n',
       held:
         'export { clean, opaque } from "depkg";\n' +
-        "export declare const held: (node: unknown) => unknown;\n"
+        "export declare const held: (node: unknown) => unknown;\n",
+      sibling: 'export { clean, opaque } from "./transform.js";\n',
+      siblingRenamed: 'export { clean, opaque as renamed } from "./transform.js";\n',
+      siblingStar: 'export * from "./transform.js";\n',
+      siblingNamespace: 'export * as t from "./transform.js";\nexport { clean, opaque } from "./transform.js";\n',
+      siblingCycle: 'export * from "./transform.js";\n'
     };
     for (const name of Object.keys(sources)) {
       write(join(modules, name, "package.json"), manifest(name, { depkg: "1.0.0" }));
       write(join(modules, name, "dist/index.js"), `${sources[name]}${LOCAL}`);
       write(join(modules, name, "dist/index.d.ts"), `${declarations[name]}${LOCAL_DECLARATION}`);
+      for (const [file, contents] of Object.entries(siblings[name] ?? {})) write(join(modules, name, file), contents);
     }
 
     const dependencyOutput = join(directory, "depkg.json");
@@ -144,7 +181,13 @@ describe("an import the entry only re-exports belongs to the names it publishes"
               selectedArtifactCase: [...artifactCases][0],
               candidateSemanticDigest: plan.semanticDigest
             },
-            reexportImporters: [importer]
+            // The sibling barrel imports the dependency too (ADR 0169).
+            reexportImporters: [
+              importer,
+              ...Object.keys(siblings[name] ?? {})
+                .filter(file => file.endsWith("transform.js"))
+                .map(file => join(modules, name, file))
+            ]
           }
         ],
         join(directory, `${name}-graph`)
@@ -180,6 +223,22 @@ describe("an import the entry only re-exports belongs to the names it publishes"
   test("the two-statement spelling is described exactly as the one-statement one", () => {
     expect(closure(documents.twostep, "local")).toEqual(closure(documents.onestep, "local"));
     expect(closure(documents.twostep, "opaque")).toEqual({ closed: [], proposed: [] });
+  });
+
+  test("a sibling barrel the entry republishes exactly is described as the entry's own re-export is", () => {
+    for (const name of ["sibling", "siblingStar"]) {
+      expect(closure(documents[name], "local"), name).toEqual(closure(documents.onestep, "local"));
+      expect(closure(documents[name], "opaque"), name).toEqual({ closed: [], proposed: [] });
+    }
+    // A rename on the way is followed to the name the entry publishes.
+    expect(closure(documents.siblingRenamed, "local")).toEqual(closure(documents.onestep, "local"));
+    expect(closure(documents.siblingRenamed, "renamed")).toEqual({ closed: [], proposed: [] });
+  });
+
+  test("a barrel namespace or a cycle between the entry and the barrel still marks every export", () => {
+    for (const name of ["siblingNamespace", "siblingCycle"]) {
+      expect(closure(documents[name], "local").closed, name).not.toContain("callbacks");
+    }
   });
 
   test("a binding with any other use still marks every export", () => {

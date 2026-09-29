@@ -5815,15 +5815,20 @@ fn relative_landing(
     if !(specifier.starts_with("./") || specifier.starts_with("../")) {
         return Some(false);
     }
+    relative_target(edges, importer, specifier).map(|target| target == module)
+}
+
+/// The canonical file a relative `specifier` written in `importer` lands on,
+/// by the rule [`relative_landing`] documents; `None` when no single file
+/// answers.
+fn relative_target(edges: &RuntimeEdges, importer: &Path, specifier: &str) -> Option<PathBuf> {
     if let Ok(target) = importer.parent()?.join(specifier).canonicalize()
         && target.is_file()
     {
-        return Some(target == module);
+        return Some(target);
     }
     let importer = importer.canonicalize().ok()?;
-    edges
-        .get(&(importer, specifier.to_owned()))
-        .map(|target| target == module)
+    edges.get(&(importer, specifier.to_owned())).cloned()
 }
 
 fn module_surface_is_unaccounted(
@@ -6242,7 +6247,7 @@ fn export_names_of_reexported_import(
 ) -> Option<Vec<String>> {
     let entry = index.entry_file?;
     if entry.path.as_str() != location.path.as_ref() {
-        return None;
+        return export_names_through_sibling_module(index, entry, location, exports);
     }
     let binding = solid_facts::core::Span::new(
         u32::try_from(location.start_byte).ok()?,
@@ -6251,6 +6256,112 @@ fn export_names_of_reexported_import(
     let names = solid_facts::ast::reexport_only_import_names(
         Path::new(entry.path.as_str()),
         &entry.source,
+        binding,
+    )?;
+    names
+        .iter()
+        .all(|name| exports.contains_key(name))
+        .then_some(names)
+}
+
+/// The package's analyzed modules as [`solid_facts::ast::ModuleGraph`], so the
+/// re-export chain is walked over the ladder's own landing rule
+/// ([`relative_target`]: ESM's rule, then the generator's exact runtime edges).
+struct PackageModules<'a> {
+    index: UnresolvedExportIndex<'a>,
+    by_canonical_path: HashMap<PathBuf, &'a str>,
+    package_name: Option<&'a str>,
+}
+
+impl solid_facts::ast::ModuleGraph for PackageModules<'_> {
+    fn module(&self, path: &str) -> Option<(&solid_facts::ast::AstFacts, &str)> {
+        let file = self.index.files_by_path.get(path)?;
+        Some((&file.ast, &file.source))
+    }
+
+    fn landing(&self, importer: &str, specifier: &str) -> solid_facts::ast::ModuleLanding {
+        use solid_facts::ast::ModuleLanding;
+        if !(specifier.starts_with("./") || specifier.starts_with("../")) {
+            // A bare specifier names another package. These do not: a
+            // `#imports` alias and a self-reference land inside this one, and
+            // an absolute path or URL lands wherever it says.
+            let own = self.package_name.is_some_and(|name| {
+                specifier == name
+                    || specifier
+                        .strip_prefix(name)
+                        .is_some_and(|rest| rest.starts_with('/'))
+            });
+            return if own
+                || specifier.starts_with('#')
+                || specifier.starts_with('/')
+                || specifier.starts_with("file:")
+            {
+                ModuleLanding::Unresolved
+            } else {
+                ModuleLanding::Bare
+            };
+        }
+        relative_target(self.index.runtime_edges, Path::new(importer), specifier)
+            .and_then(|target| self.by_canonical_path.get(&target))
+            .map_or(ModuleLanding::Unresolved, |path| {
+                ModuleLanding::File((*path).to_owned())
+            })
+    }
+}
+
+/// The public names of an import binding in a *sibling* module of the entry,
+/// through an exact re-export chain (ADR 0169, extending ADR 0133).
+///
+/// The obligation sits at the local identifier of a module-level import in a
+/// package module other than the entry file, for example `dist/transform.js`
+/// of `import { number } from "dep"; export { number };`, which the entry
+/// republishes as `import { number } from "./transform.js"; export { number };`.
+/// [`solid_facts::ast::entry_names_publishing_import`] proves from the bytes of
+/// both modules -- the binder's resolution of each export specifier, and this
+/// ladder's landing rule for each relative specifier -- which entry names are
+/// that binding, and answers nothing unless every name the entry exports is
+/// decided. The binding must still be used only by export lists in its own
+/// module, exactly as ADR 0133 requires of an entry binding, and the module
+/// must lie inside the package root.
+fn export_names_through_sibling_module(
+    index: UnresolvedExportIndex<'_>,
+    entry: &solid_facts::FileFacts,
+    location: &typefacts::Location,
+    exports: &BTreeMap<String, solid_reactive_ir::ContractExport>,
+) -> Option<Vec<String>> {
+    let resolution = index.resolution?;
+    let module = index.files_by_path.get(location.path.as_ref()).copied()?;
+    let package_root = Path::new(&resolution.package_root).canonicalize().ok()?;
+    if !Path::new(module.path.as_str())
+        .canonicalize()
+        .ok()?
+        .starts_with(&package_root)
+    {
+        return None;
+    }
+    let by_canonical_path = index
+        .files_by_path
+        .values()
+        .filter_map(|file| {
+            Some((
+                Path::new(file.path.as_str()).canonicalize().ok()?,
+                file.path.as_str(),
+            ))
+        })
+        .collect();
+    let graph = PackageModules {
+        index,
+        by_canonical_path,
+        package_name: Some(resolution.package_name.as_str()),
+    };
+    let binding = solid_facts::core::Span::new(
+        u32::try_from(location.start_byte).ok()?,
+        u32::try_from(location.end_byte).ok()?,
+    );
+    let names = solid_facts::ast::entry_names_publishing_import(
+        &graph,
+        entry.path.as_str(),
+        module.path.as_str(),
         binding,
     )?;
     names
