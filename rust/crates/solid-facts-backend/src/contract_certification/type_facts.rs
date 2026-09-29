@@ -11545,6 +11545,7 @@ struct CensusWalkRecord {
 
 /// [`census_call_walk`], also answering every disposition the walk recorded
 /// (ADR 0145's described-callable census reads them).
+#[allow(clippy::too_many_arguments)]
 fn census_call_walk_with_dispositions(
     plan: &CertificationPlan,
     refuse: &dyn Fn(String) -> TypeFactsCertificationError,
