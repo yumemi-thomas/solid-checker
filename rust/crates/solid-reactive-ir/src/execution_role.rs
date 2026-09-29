@@ -589,6 +589,17 @@ fn semantic_write_execution_role_within(
     {
         return ExecutionRole::UntrackedCallback;
     }
+    // The rendering role places code by where it is written. For a write in a
+    // function literal nested in the body that is a proof only when the
+    // literal provably runs during the body; otherwise the write's role is
+    // what its invocation sites prove, which the walk below derives.
+    let direct = if direct == ExecutionRole::UntrackedRendering
+        && !nested_literal_runs_during_body(file, span, entities, symbol_names, lookup)
+    {
+        ExecutionRole::Unknown
+    } else {
+        direct
+    };
     if direct != ExecutionRole::Unknown {
         return direct;
     }
@@ -626,6 +637,86 @@ fn semantic_write_execution_role_within(
     }
     visiting.remove(&key);
     imperative.unwrap_or(ExecutionRole::Unknown)
+}
+
+/// Whether code at `span`, classified [`ExecutionRole::UntrackedRendering`],
+/// provably runs during the body it is written in.
+///
+/// Walks outward from the innermost function containing `span`. A
+/// (possible) component is the body itself: the rendering role is its own.
+/// Any other function literal runs during the body only as an argument whose
+/// invocation during the call is established:
+///
+/// - a primitive's callback, which the dialect arms of
+///   [`semantic_execution_role_within`] already classified;
+/// - a literal handed to a project function that invokes that parameter
+///   during the call, a standard-library inline callback, or a package
+///   callback an accepted contract states inline -- exactly the invocations
+///   [`callee_callback_timing`] proves for a read.
+///
+/// An IIFE runs where it is written, and a control-flow component's render
+/// callback runs while the component's children render, so both continue the
+/// walk or answer `true`. Any other literal that is no call's argument --
+/// stored in a binding, returned from another callback
+/// (`keep(() => () => setCount(1))`), a JSX attribute -- and one handed to a
+/// function not proven to invoke it during the
+/// call (`later(() => setCount(1))`, which keeps it for a timer) prove
+/// nothing: `false`. Then the write takes the role its invocation sites
+/// prove, and with none it is unclassified, which reports nothing
+/// (`docs/rules/reactive-write-in-owned-scope.md`: an unproven write position
+/// is never a violation).
+fn nested_literal_runs_during_body(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let mut span = span;
+    loop {
+        let Some(literal) = containing_ast_function(&file.ast, span) else {
+            return true;
+        };
+        if lookup.function_component_status(file, literal) != ComponentStatus::No {
+            return true;
+        }
+        let Some((call, _)) = file
+            .ast
+            .arguments_containing(literal.span)
+            .filter(|(call, index)| {
+                file.ast
+                    .functions_within(call.arguments[*index].span)
+                    .filter(|function| function.span.contains(literal.span))
+                    .max_by_key(|function| function.span.end - function.span.start)
+                    .is_some_and(|outer| outer.span == literal.span)
+            })
+            .min_by_key(|(call, _)| call.span.end - call.span.start)
+        else {
+            // Two literals that are no argument still run in place: an IIFE,
+            // invoked where it is written, and a control-flow component's
+            // render callback, which the component runs while its children
+            // render (`control_flow_execution_role` proved that role).
+            if let Some(call) = file
+                .ast
+                .calls
+                .iter()
+                .filter(|call| file.ast.peel_ts_sugar_span(call.callee) == literal.span)
+                .min_by_key(|call| call.span.end - call.span.start)
+            {
+                span = call.span;
+                continue;
+            }
+            return control_flow_execution_role(file, span, entities, symbol_names, lookup.dialect)
+                .is_some_and(ExecutionRole::reports_disallowed_write);
+        };
+        if lookup.primitive_at_call(file, call.span).is_none()
+            && callee_callback_timing(file, span, ExecutionRole::UntrackedRendering, lookup)
+        {
+            return false;
+        }
+        // The call contains the literal strictly, so the walk terminates.
+        span = call.span;
+    }
 }
 
 /// Whether `span` sits directly in the body of a function that is, or may be,

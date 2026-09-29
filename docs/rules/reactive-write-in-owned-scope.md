@@ -89,6 +89,27 @@ the runtime and reports these writes.)
 Internal reactive sources created with `{ ownedWrite: true }` in their
 source-creation options are exempt.
 
+A function literal written in a component body runs in that body only when
+something invokes it there, so a write in one is reported only when that
+invocation is proven. It is proven for:
+
+- a literal handed to a project function whose own body calls that parameter
+  during the call;
+- a standard-library inline callback (`[x].forEach(fn)`);
+- an IIFE;
+- a primitive's or a control-flow component's callback;
+- a named closure whose call site is itself in the body.
+
+Anywhere else the write takes the role its invocation sites prove, and with
+none nothing is reported. That covers a literal handed to a function that
+stores it (`later(() => setCount(1))` with a timer calling it), a closure a
+callback returns (`keep(() => () => setCount(1))`), and a literal handed to a
+package export no accepted contract describes. The write may throw, if the
+function calls it during the body, or be legal, if it runs later. An unproven
+write position is never claimed as a violation. The matching read there is
+`strict-read-untracked` uncertifiable
+(`fixtures/reactive-ir/write-in-deferred-callback`).
+
 This is the static counterpart of Solid's dev-mode `REACTIVE_WRITE_IN_OWNED_SCOPE`
 error.
 
