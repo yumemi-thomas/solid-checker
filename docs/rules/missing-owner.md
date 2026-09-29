@@ -49,6 +49,24 @@ thenable, which may call back synchronously), an `addEventListener` listener
 (a synchronous `dispatchEvent` runs it on the dispatcher's stack) and a
 Geolocation callback are not in that list.
 
+A call of a package export whose accepted contract states an owner
+requirement -- a `cleanup` or `compute` registered on the ambient owner at
+call -- is reported by the same rule, and the contract's count decides the
+finding kind (ADR 0161). A requirement some operation of which has
+`count.min >= 1` registers on every call, so an unowned call is a proven
+violation, as the primitive written there would be. One whose every operation
+has `min: 0` only *may* register: the export's body registers under a
+condition, such as the `if (isServer) return;` most published primitives start
+with. Whether the operation executes at all is then what the contract does not
+say, so an unowned call is reported as uncertifiable, never dropped. A
+generated contract states `min: 1` only for a dialect primitive the export's
+own body calls on every normal completion, and certification proves that from
+the producer's `unconditional` call fact. Two consequences are uncertifiable
+where a sharper analysis could prove a violation: the host constant
+`isServer` is not folded under a certified browser host, and an export that
+registers a cleanup on one branch and a computation on the other registers
+something on every call without either kind having `min >= 1`.
+
 One approximation remains: a nested callback the owner graph gives no owner
 edge at all, such as a callback handed to a function the analysis does not
 model, or handed to a scheduler through a wrapper call

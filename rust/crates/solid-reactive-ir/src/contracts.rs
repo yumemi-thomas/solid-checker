@@ -691,6 +691,9 @@ fn project_owner_requirements(
         // not itself supply (`Operation::imposes_owner_requirement`, which the
         // withdrawal of an operation asks too).
         if operation.imposes_owner_requirement() {
+            // ADR 0161: the lower bound decides the finding kind. Only a count
+            // whose minimum is at least one says every call registers.
+            let guaranteed = operation.cardinality.min.is_some_and(|min| min >= 1);
             let operation = match operation.kind {
                 OperationKind::Cleanup | OperationKind::Dispose => {
                     OwnerRequirementOperation::Cleanup
@@ -699,11 +702,19 @@ fn project_owner_requirements(
                 // `ambient-at-call` `create`.
                 _ => OwnerRequirementOperation::Effect,
             };
-            requirements.push(ContractOwnerRequirement { operation });
+            match requirements
+                .iter_mut()
+                .find(|existing: &&mut ContractOwnerRequirement| existing.operation == operation)
+            {
+                Some(existing) => existing.guaranteed |= guaranteed,
+                None => requirements.push(ContractOwnerRequirement {
+                    operation,
+                    guaranteed,
+                }),
+            }
         }
     }
     requirements.sort_by_key(|requirement| format!("{:?}", requirement.operation));
-    requirements.dedup_by_key(|requirement| requirement.operation);
     match knowledge {
         KnowledgeSet::Unknown if requirements.is_empty() => ContractClaim::Open,
         _ => ContractClaim::Known(requirements),
@@ -1425,7 +1436,8 @@ mod owner_requirement_projection_tests {
         assert_eq!(
             project_owner_requirements(&export, &mut open),
             ContractClaim::Known(vec![ContractOwnerRequirement {
-                operation: OwnerRequirementOperation::Effect
+                operation: OwnerRequirementOperation::Effect,
+                guaranteed: false,
             }])
         );
         assert!(open.is_empty());
@@ -1501,7 +1513,8 @@ mod owner_requirement_projection_tests {
         assert_eq!(
             project_owner_requirements(&export, &mut open),
             ContractClaim::Known(vec![ContractOwnerRequirement {
-                operation: OwnerRequirementOperation::Cleanup
+                operation: OwnerRequirementOperation::Cleanup,
+                guaranteed: false,
             }])
         );
         // `creates` is closed and empty here, and the *cleanups* read must not
@@ -1533,11 +1546,29 @@ mod owner_requirement_projection_tests {
         claims.computations = KnowledgeSet::Partial(vec![compute.id.clone()]);
         let effect = ContractClaim::Known(vec![ContractOwnerRequirement {
             operation: OwnerRequirementOperation::Effect,
+            guaranteed: false,
         }]);
 
         let closed = export(claims.clone(), vec![compute.clone()], Vec::new());
         let mut open = BTreeSet::new();
         assert_eq!(project_owner_requirements(&closed, &mut open), effect);
+
+        // ADR 0161: the count decides whether the requirement is guaranteed.
+        // `min: 0` may register; `min: 1` registers on every call, and one
+        // such operation of the kind is enough.
+        let mut every_call = compute.clone();
+        every_call.id = OperationId("owner-requirement-1".into());
+        every_call.cardinality.min = Some(1);
+        let mut both = claims.clone();
+        both.computations = KnowledgeSet::Partial(vec![compute.id.clone(), every_call.id.clone()]);
+        let guaranteed = export(both, vec![compute.clone(), every_call], Vec::new());
+        assert_eq!(
+            project_owner_requirements(&guaranteed, &mut BTreeSet::new()),
+            ContractClaim::Known(vec![ContractOwnerRequirement {
+                operation: OwnerRequirementOperation::Effect,
+                guaranteed: true,
+            }])
+        );
         assert!(open.is_empty(), "computations adds no domain of its own");
 
         claims.creates = KnowledgeSet::Unknown;

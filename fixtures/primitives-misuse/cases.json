@@ -1,7 +1,7 @@
 {
   "format": "solid-checker-primitives-misuse-cases",
   "version": 1,
-  "note": "Criterion 3 of the @solid-primitives checkpoint (docs/package-contract-v2/phase22/2026-09-28-solid-primitives-checkpoint.md). Each case is compiled and checked against the real published package at the version scripts/ecosystem-benchmark/primitives-checkpoint-corpus.json pins, installed with the head probe's Solid runtime, never against a stub. `misuse` must report `rule`; `correct` must report nothing; `tsc` must be silent on both. Run with `make primitives-checkpoint` or `bun scripts/primitives-checkpoint.mjs --misuse`.",
+  "note": "Criterion 3 of the @solid-primitives checkpoint (docs/package-contract-v2/phase22/2026-09-28-solid-primitives-checkpoint.md). Each case is compiled and checked against the real published package at the version scripts/ecosystem-benchmark/primitives-checkpoint-corpus.json pins, installed with the head probe's Solid runtime, never against a stub. `misuse` must report `rule` as `kind` (default `violation`; `uncertifiable` where the certified summary states the export only may register -- every owner-requirement count `min: 0`, ADR 0161 -- and a violation there is an overclaim); `correct` must report nothing; `tsc` must be silent on both. Run with `make primitives-checkpoint` or `bun scripts/primitives-checkpoint.mjs --misuse`.",
   "cases": [
     {
       "id": "timer-createTimer-module-scope",
@@ -11,12 +11,13 @@
       "export": "createTimer",
       "class": "owner",
       "rule": "missing-owner",
+      "kind": "uncertifiable",
       "hosts": [
         "none",
         "browser",
         "node"
       ],
-      "why": "The certified summary of createTimer states an owner requirement (a cleanup registered on the ambient owner at call). Called at module scope there is no owner, so the timer is never cleared.",
+      "why": "The certified summary of createTimer states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
       "misuse": "import { createTimer } from \"@solid-primitives/timer\";\n\ncreateTimer(() => console.log(\"tick\"), 1000, setInterval);\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createTimer } from \"@solid-primitives/timer\";\n\ncreateRoot(dispose => {\n  createTimer(() => console.log(\"tick\"), 1000, setInterval);\n  return dispose;\n});\n"
     },
@@ -361,12 +362,13 @@
       "export": "createTimer",
       "class": "owner",
       "rule": "missing-owner",
+      "kind": "uncertifiable",
       "hosts": [
         "none",
         "browser",
         "node"
       ],
-      "why": "A createEffect apply callback runs from the flush with no owner, so createTimer called there registers on nothing and is never disposed.",
+      "why": "The certified summary of createTimer states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called from a createEffect apply callback, which runs from the flush with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
       "misuse": "import { createEffect, createSignal } from \"solid-js\";\nimport { createTimer } from \"@solid-primitives/timer\";\n\nexport default function App() {\n  const [on] = createSignal(true);\n  createEffect(on, value => {\n    if (value) createTimer(() => console.log(\"tick\"), 1000, setInterval);\n  });\n  return <p>on</p>;\n}\n",
       "correct": "import { createSignal } from \"solid-js\";\nimport { createTimer } from \"@solid-primitives/timer\";\n\nexport default function App() {\n  const [on] = createSignal(true);\n  createTimer(() => console.log(\"tick\"), 1000, setInterval);\n  return <p>{String(on())}</p>;\n}\n"
     },
@@ -395,12 +397,13 @@
       "export": "createTimeoutLoop",
       "class": "owner",
       "rule": "missing-owner",
+      "kind": "uncertifiable",
       "hosts": [
         "none",
         "browser",
         "node"
       ],
-      "why": "createTimeoutLoop registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "why": "The certified summary of createTimeoutLoop states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
       "misuse": "import { createTimeoutLoop } from \"@solid-primitives/timer\";\n\ncreateTimeoutLoop(() => console.log(\"tick\"), 1000);\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createTimeoutLoop } from \"@solid-primitives/timer\";\n\ncreateRoot(dispose => {\n  createTimeoutLoop(() => console.log(\"tick\"), 1000);\n  return dispose;\n});\n"
     },
@@ -412,12 +415,13 @@
       "export": "createPolled",
       "class": "owner",
       "rule": "missing-owner",
+      "kind": "uncertifiable",
       "hosts": [
         "none",
         "browser",
         "node"
       ],
-      "why": "createPolled registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "why": "The certified summary of createPolled states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
       "misuse": "import { createPolled } from \"@solid-primitives/timer\";\n\ncreatePolled(() => Date.now(), 1000);\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createPolled } from \"@solid-primitives/timer\";\n\ncreateRoot(dispose => {\n  createPolled(() => Date.now(), 1000);\n  return dispose;\n});\n"
     },
@@ -979,12 +983,13 @@
       "export": "createPureReaction",
       "class": "owner",
       "rule": "missing-owner",
+      "kind": "uncertifiable",
       "hosts": [
         "none",
         "browser",
         "node"
       ],
-      "why": "createPureReaction registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "why": "createPureReaction starts `if (isServer) return () => void 0;` before its `onCleanup`, so a call may register nothing and the generator states `min: 0` (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
       "misuse": "import { createPureReaction } from \"@solid-primitives/memo\";\n\ncreatePureReaction(() => console.log(\"invalidated\"));\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createPureReaction } from \"@solid-primitives/memo\";\n\ncreateRoot(dispose => {\n  createPureReaction(() => console.log(\"invalidated\"));\n  return dispose;\n});\n"
     },
@@ -1064,11 +1069,12 @@
       "export": "createMutationObserver",
       "class": "owner",
       "rule": "missing-owner",
+      "kind": "uncertifiable",
       "hosts": [
         "none",
         "browser"
       ],
-      "why": "createMutationObserver registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "why": "createMutationObserver registers `onSettled(start)` and `onCleanup(stop)` only `if (isSupported)`, and `isSupported` is `!isServer`, so a call may register nothing and the generator states `min: 0` (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
       "misuse": "import { createMutationObserver } from \"@solid-primitives/mutation-observer\";\n\ncreateMutationObserver(document.body, { childList: true }, records => console.log(records.length));\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createMutationObserver } from \"@solid-primitives/mutation-observer\";\n\ncreateRoot(dispose => {\n  createMutationObserver(document.body, { childList: true }, records => console.log(records.length));\n  return dispose;\n});\n"
     },
@@ -1419,11 +1425,12 @@
       "export": "makeBroadcastChannel",
       "class": "owner",
       "rule": "missing-owner",
+      "kind": "uncertifiable",
       "hosts": [
         "none",
         "browser"
       ],
-      "why": "makeBroadcastChannel registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "why": "The certified summary of makeBroadcastChannel states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
       "misuse": "import { makeBroadcastChannel } from \"@solid-primitives/broadcast-channel\";\n\nmakeBroadcastChannel<string>(\"room\");\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { makeBroadcastChannel } from \"@solid-primitives/broadcast-channel\";\n\ncreateRoot(dispose => {\n  makeBroadcastChannel<string>(\"room\");\n  return dispose;\n});\n"
     },
@@ -1502,11 +1509,12 @@
       "export": "createDevices",
       "class": "owner",
       "rule": "missing-owner",
+      "kind": "uncertifiable",
       "hosts": [
         "none",
         "browser"
       ],
-      "why": "createDevices registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "why": "The certified summary of createDevices states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
       "misuse": "import { createDevices } from \"@solid-primitives/devices\";\n\ncreateDevices();\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createDevices } from \"@solid-primitives/devices\";\n\ncreateRoot(dispose => {\n  createDevices();\n  return dispose;\n});\n"
     },
@@ -1680,11 +1688,12 @@
       "export": "createPermission",
       "class": "owner",
       "rule": "missing-owner",
+      "kind": "uncertifiable",
       "hosts": [
         "none",
         "browser"
       ],
-      "why": "createPermission registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "why": "The certified summary of createPermission states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
       "misuse": "import { createPermission } from \"@solid-primitives/permission\";\n\ncreatePermission(\"camera\");\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createPermission } from \"@solid-primitives/permission\";\n\ncreateRoot(dispose => {\n  createPermission(\"camera\");\n  return dispose;\n});\n"
     },
@@ -1747,11 +1756,12 @@
       "export": "createScriptLoader",
       "class": "owner",
       "rule": "missing-owner",
+      "kind": "uncertifiable",
       "hosts": [
         "none",
         "browser"
       ],
-      "why": "createScriptLoader registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "why": "The certified summary of createScriptLoader states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
       "misuse": "import { createScriptLoader } from \"@solid-primitives/script-loader\";\n\ncreateScriptLoader({ src: \"/script.js\" });\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createScriptLoader } from \"@solid-primitives/script-loader\";\n\ncreateRoot(dispose => {\n  createScriptLoader({ src: \"/script.js\" });\n  return dispose;\n});\n"
     },
@@ -1811,11 +1821,12 @@
       "export": "createBattery",
       "class": "owner",
       "rule": "missing-owner",
+      "kind": "uncertifiable",
       "hosts": [
         "none",
         "browser"
       ],
-      "why": "createBattery registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "why": "The certified summary of createBattery states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
       "misuse": "import { createBattery } from \"@solid-primitives/sensors\";\n\ncreateBattery();\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createBattery } from \"@solid-primitives/sensors\";\n\ncreateRoot(dispose => {\n  createBattery();\n  return dispose;\n});\n"
     },
@@ -1912,12 +1923,13 @@
       "export": "createTween",
       "class": "owner",
       "rule": "missing-owner",
+      "kind": "uncertifiable",
       "hosts": [
         "none",
         "browser",
         "node"
       ],
-      "why": "createTween registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "why": "The certified summary of createTween states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
       "misuse": "import { createTween } from \"@solid-primitives/tween\";\n\ncreateTween(() => 1, { duration: 100 });\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createTween } from \"@solid-primitives/tween\";\n\ncreateRoot(dispose => {\n  createTween(() => 1, { duration: 100 });\n  return dispose;\n});\n"
     },
@@ -1977,11 +1989,12 @@
       "export": "createWorker",
       "class": "owner",
       "rule": "missing-owner",
+      "kind": "uncertifiable",
       "hosts": [
         "none",
         "browser"
       ],
-      "why": "createWorker registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "why": "The certified summary of createWorker states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
       "misuse": "import { createWorker } from \"@solid-primitives/workers\";\n\ncreateWorker({ add: (a: number, b: number) => a + b });\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createWorker } from \"@solid-primitives/workers\";\n\ncreateRoot(dispose => {\n  createWorker({ add: (a: number, b: number) => a + b });\n  return dispose;\n});\n"
     },
@@ -2010,14 +2023,30 @@
       "export": "keyArray",
       "class": "owner",
       "rule": "missing-owner",
+      "kind": "uncertifiable",
       "hosts": [
         "none",
         "browser",
         "node"
       ],
-      "why": "keyArray registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "why": "The certified summary of keyArray states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
       "misuse": "import { keyArray } from \"@solid-primitives/keyed\";\n\nkeyArray(() => [1, 2], item => item, value => value());\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { keyArray } from \"@solid-primitives/keyed\";\n\ncreateRoot(dispose => {\n  keyArray(() => [1, 2], item => item, value => value());\n  return dispose;\n});\n"
+    },
+    {
+      "id": "gestures-tap-module-scope",
+      "package": "@solid-primitives/gestures",
+      "version": "3.0.0-next.3",
+      "entrypoint": ".",
+      "export": "tap",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none"
+      ],
+      "why": "tap's body calls `onCleanup(() => cleanup?.())` before anything can return, so its certified summary states the cleanup with `min: 1`: every call registers (ADR 0161). Called at module scope there is no owner, so the cleanup has nowhere to register and the pointer listeners the returned directive adds are never removed.",
+      "misuse": "import { tap } from \"@solid-primitives/gestures\";\n\nexport const onTap = tap({ callback: position => console.log(position.x, position.y) });\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { tap } from \"@solid-primitives/gestures\";\n\nexport const dispose = createRoot(dispose => {\n  tap({ callback: position => console.log(position.x, position.y) });\n  return dispose;\n});\n"
     }
   ]
 }

@@ -504,6 +504,10 @@ pub(crate) struct OwnerRequirementCandidate {
     pub(crate) report_mask: u8,
     pub(crate) allow_uncertain: bool,
     pub(crate) runtime_uncertain: bool,
+    /// ADR 0161: the site is a call of a contract export, and whether that
+    /// export registers on every call.
+    pub(crate) through_contract: bool,
+    pub(crate) registration_uncertain: bool,
     pub(crate) settled_target: Option<OwnerTarget>,
     /// For call-site-gated leaf owners (2.0 `onSettled`): the owner call's
     /// span, published as a [`LeafGateDecision`] once the graph settles so
@@ -642,6 +646,8 @@ fn apply_settled_requirement_gates(
 #[derive(Clone, Copy)]
 pub(crate) struct OwnerRequirementStatus {
     pub(crate) uncertain: bool,
+    /// ADR 0161: the site is a call of a contract export (`through_contract`).
+    pub(crate) through_contract: bool,
     pub(crate) runtime_uncertain: bool,
     pub(crate) caller_uncertain: bool,
     pub(crate) conditional_owner: bool,
@@ -817,6 +823,9 @@ pub(crate) fn find_missing_owners(
                         == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
                 let component_uncertain = context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0;
                 for requirement in requirements_for_call {
+                    // ADR 0161: an export that may register without doing so
+                    // on every call leaves the unowned call a proof obligation.
+                    let registration_uncertain = !requirement.guaranteed;
                     let operation = match requirement.operation {
                         crate::OwnerRequirementOperation::Effect => "effect",
                         crate::OwnerRequirementOperation::Cleanup => "cleanup",
@@ -830,9 +839,11 @@ pub(crate) fn find_missing_owners(
                         file,
                         call.span,
                         OwnerRequirementStatus {
+                            through_contract: true,
                             uncertain: conditional_owner
                                 || later_run_unowned
-                                || component_uncertain,
+                                || component_uncertain
+                                || registration_uncertain,
                             runtime_uncertain: false,
                             caller_uncertain: false,
                             conditional_owner,
@@ -999,6 +1010,7 @@ pub(crate) fn find_missing_owners(
                     file,
                     operation_span,
                     OwnerRequirementStatus {
+                        through_contract: false,
                         uncertain,
                         runtime_uncertain,
                         caller_uncertain,
@@ -1055,6 +1067,7 @@ pub(crate) fn find_missing_owners(
                 file,
                 Span::new(element.span.start, element.name.span.end),
                 OwnerRequirementStatus {
+                    through_contract: false,
                     uncertain: conditional_owner || later_run_unowned || component_uncertain,
                     runtime_uncertain: false,
                     caller_uncertain: false,
@@ -1177,6 +1190,8 @@ pub(crate) fn discover_owner_file(
                     report_mask: OWNER_CONTEXT_UNOWNED,
                     allow_uncertain: true,
                     runtime_uncertain: false,
+                    through_contract: true,
+                    registration_uncertain: !requirement.guaranteed,
                     settled_target: None,
                     settled_gate: None,
                     providing_region_chain: providing_region_chain.clone(),
@@ -1234,6 +1249,8 @@ pub(crate) fn discover_owner_file(
                 report_mask,
                 allow_uncertain: true,
                 runtime_uncertain,
+                through_contract: false,
+                registration_uncertain: false,
                 settled_target,
                 settled_gate,
                 providing_region_chain,
@@ -1267,6 +1284,8 @@ pub(crate) fn discover_owner_file(
                 report_mask: OWNER_CONTEXT_UNOWNED,
                 allow_uncertain: false,
                 runtime_uncertain: false,
+                through_contract: false,
+                registration_uncertain: false,
                 settled_target: None,
                 settled_gate: None,
                 providing_region_chain: region_chain(element.span),
@@ -1528,7 +1547,8 @@ pub(crate) fn find_missing_owners_incremental(
                 || conditional_owner
                 || later_run_unowned
                 || caller_uncertain
-                || component_uncertain;
+                || component_uncertain
+                || candidate.registration_uncertain;
             push_owner_requirement(
                 &mut requirements,
                 &mut seen,
@@ -1536,6 +1556,7 @@ pub(crate) fn find_missing_owners_incremental(
                 file,
                 candidate.operation_span,
                 OwnerRequirementStatus {
+                    through_contract: candidate.through_contract,
                     uncertain,
                     runtime_uncertain,
                     caller_uncertain,
@@ -1803,6 +1824,7 @@ pub(crate) fn push_owner_requirement(
             later_run_unowned: status.later_run_unowned,
             component_uncertain: status.component_uncertain,
             missing_jsx_census,
+            through_contract: status.through_contract,
             report: status.report,
         });
     }

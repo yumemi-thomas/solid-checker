@@ -13,16 +13,16 @@
             "sha256": "808a42f903dc42e2a1ff9bb4af70d06f019f77ef864db9f166af216d05c29f6f"
           },
           "exports": {
-            "cleanupShape": "summary-1dc839445ba4e94bb85ea4a5846e1d314c1601f1c248059bb38a41bddfa39dc0",
-            "deferredTrackedShape": "summary-58c5b7eb2c4d222448882215acaf1c3dbb0d5eed208a6944f5070b486d3ea2d2",
+            "cleanupShape": "summary-b96dcbf16e134ee68c64ef501c83a7bfd70259527097624f54eac97e41427917",
+            "deferredTrackedShape": "summary-154de450ee0093b162a2033d2f5ec418b5c0e6bc68d6f60dab0548f93bdf381a",
             "derivedSignalShape": "summary-c341c230b1445395b521966ce3b41a9cf14f62c46fd568e104137806817bd020",
             "inlineShape": "summary-c341c230b1445395b521966ce3b41a9cf14f62c46fd568e104137806817bd020",
             "memoInsideUntrack": "summary-83f8148d2f3d575931f096b8120b6d8d743d76427e33b1baaa5c984cbc3e509a",
             "memoShape": "summary-a08378b6e30c2a2470713d95217b13fe7823b9e11ab6881ef7038a3828069262",
-            "mountShape": "summary-6a7a20c269dc559d4a7567829441582bbb0b49279d2d0a0a59c6428ca37173f1",
-            "trackedShape": "summary-7123c8fdc02e24e87156c456c8f7d1161b291f29036c8d8656d188a2b0327429",
-            "trackedThroughLocalHelper": "summary-7123c8fdc02e24e87156c456c8f7d1161b291f29036c8d8656d188a2b0327429",
-            "untrackedThroughLocalUntrack": "summary-6a7a20c269dc559d4a7567829441582bbb0b49279d2d0a0a59c6428ca37173f1"
+            "mountShape": "summary-9c017cf14f5a4997e2be86c478806c8d87f12c6ec31cfc495df34603ca9ef541",
+            "trackedShape": "summary-4ec3db41117ea7d78c929cb7894fb5ffb37d60f9fe3b2f342738f7c7daf94a66",
+            "trackedThroughLocalHelper": "summary-4ec3db41117ea7d78c929cb7894fb5ffb37d60f9fe3b2f342738f7c7daf94a66",
+            "untrackedThroughLocalUntrack": "summary-9c017cf14f5a4997e2be86c478806c8d87f12c6ec31cfc495df34603ca9ef541"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -46,75 +46,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-1dc839445ba4e94bb85ea4a5846e1d314c1601f1c248059bb38a41bddfa39dc0": {
-      "call": {
-        "callbacks": [
-          {
-            "from": {
-              "arg": 0,
-              "path": []
-            },
-            "operation": "callback-0"
-          }
-        ],
-        "cleanups": [
-          "owner-requirement-0"
-        ],
-        "closed": [
-          "reads",
-          "returns"
-        ],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "queued"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "callback-0",
-            "kind": "invoke",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          },
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "owner-requirement-0",
-            "kind": "cleanup",
-            "owner": {
-              "requires": "required",
-              "requiresCleanup": "required",
-              "source": "ambient-at-call"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "reads",
-          "returns"
-        ],
-        "reads": [],
-        "returns": []
-      },
-      "shape": "callable"
-    },
-    "summary-58c5b7eb2c4d222448882215acaf1c3dbb0d5eed208a6944f5070b486d3ea2d2": {
+    "summary-154de450ee0093b162a2033d2f5ec418b5c0e6bc68d6f60dab0548f93bdf381a": {
       "call": {
         "callbacks": [
           {
@@ -157,7 +89,7 @@
             },
             "count": {
               "max": "many",
-              "min": 0,
+              "min": 1,
               "scope": "call"
             },
             "id": "owner-requirement-0",
@@ -182,75 +114,7 @@
       },
       "shape": "callable"
     },
-    "summary-6a7a20c269dc559d4a7567829441582bbb0b49279d2d0a0a59c6428ca37173f1": {
-      "call": {
-        "callbacks": [
-          {
-            "from": {
-              "arg": 0,
-              "path": []
-            },
-            "operation": "callback-0"
-          }
-        ],
-        "closed": [
-          "reads",
-          "returns"
-        ],
-        "computations": [
-          "owner-requirement-0"
-        ],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "callback-0",
-            "kind": "invoke",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          },
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "owner-requirement-0",
-            "kind": "compute",
-            "owner": {
-              "requires": "required",
-              "requiresChildren": "required",
-              "source": "ambient-at-call"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "reads",
-          "returns"
-        ],
-        "reads": [],
-        "returns": []
-      },
-      "shape": "callable"
-    },
-    "summary-7123c8fdc02e24e87156c456c8f7d1161b291f29036c8d8656d188a2b0327429": {
+    "summary-4ec3db41117ea7d78c929cb7894fb5ffb37d60f9fe3b2f342738f7c7daf94a66": {
       "call": {
         "callbacks": [
           {
@@ -293,7 +157,7 @@
             },
             "count": {
               "max": "many",
-              "min": 0,
+              "min": 1,
               "scope": "call"
             },
             "id": "owner-requirement-0",
@@ -381,6 +245,74 @@
       },
       "shape": "callable"
     },
+    "summary-9c017cf14f5a4997e2be86c478806c8d87f12c6ec31cfc495df34603ca9ef541": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "computations": [
+          "owner-requirement-0"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "compute",
+            "owner": {
+              "requires": "required",
+              "requiresChildren": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
     "summary-a08378b6e30c2a2470713d95217b13fe7823b9e11ab6881ef7038a3828069262": {
       "call": {
         "callbacks": [
@@ -441,6 +373,74 @@
         "returns": [
           "return"
         ]
+      },
+      "shape": "callable"
+    },
+    "summary-b96dcbf16e134ee68c64ef501c83a7bfd70259527097624f54eac97e41427917": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "cleanups": [
+          "owner-requirement-0"
+        ],
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "cleanup",
+            "owner": {
+              "requires": "required",
+              "requiresCleanup": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "returns": []
       },
       "shape": "callable"
     },

@@ -13,7 +13,7 @@
             "sha256": "05b3d1ab22b4e2d50d652e11f6c2dc35253ab37e19ddb680666e1386c1935901"
           },
           "exports": {
-            "onSettled": "summary-b49322b447d7c514071135965257d0a641b5450cc963e36724085b64462e9aa4"
+            "onSettled": "summary-3ffd6f6e290d4f972acdcac81453ccef4d75cd811e68257221092c285b045fb5"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -37,7 +37,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-b49322b447d7c514071135965257d0a641b5450cc963e36724085b64462e9aa4": {
+    "summary-3ffd6f6e290d4f972acdcac81453ccef4d75cd811e68257221092c285b045fb5": {
       "call": {
         "callbacks": [
           {
@@ -80,7 +80,7 @@
             },
             "count": {
               "max": "many",
-              "min": 0,
+              "min": 1,
               "scope": "call"
             },
             "id": "owner-requirement-0",

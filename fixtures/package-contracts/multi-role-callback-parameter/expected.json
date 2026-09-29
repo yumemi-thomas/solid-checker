@@ -13,13 +13,13 @@
             "sha256": "06d4c62142ff816cd2de4e1220747e2e6e9781bd64ab39840d69068dccc6b9fd"
           },
           "exports": {
-            "contradictOnZeroOnly": "summary-7a943f0957989b2b0705ab104be3a80392bda70c167d0aad7dc7254876a47744",
+            "contradictOnZeroOnly": "summary-4616f25c90dae05cf2e383af13e917d50e6801f64cc43f270f3b0df3c9984a9b",
             "inlineAndReturned": "summary-ca619123127e1de07fa2e389652ad6b68b219061c6429d67dce3f8535893d5e3",
-            "inlineAndTracked": "summary-7a943f0957989b2b0705ab104be3a80392bda70c167d0aad7dc7254876a47744",
+            "inlineAndTracked": "summary-4616f25c90dae05cf2e383af13e917d50e6801f64cc43f270f3b0df3c9984a9b",
             "oneInlineSite": "summary-ea96fbaa3a4079a39da9fa829076dc4d73bb87fa736dbb1dbfb552938ca68959",
-            "oneTrackedSite": "summary-7123c8fdc02e24e87156c456c8f7d1161b291f29036c8d8656d188a2b0327429",
-            "twoParameters": "summary-55471cdce82b9b668b6a2170c22ba314b672770bc30e3697f3efef04f1b1b1bf",
-            "twoTrackedSites": "summary-7123c8fdc02e24e87156c456c8f7d1161b291f29036c8d8656d188a2b0327429"
+            "oneTrackedSite": "summary-4ec3db41117ea7d78c929cb7894fb5ffb37d60f9fe3b2f342738f7c7daf94a66",
+            "twoParameters": "summary-1f98cb91fd518682e67d8811f569a58520892aa9c2c81b076a6733b5730cd641",
+            "twoTrackedSites": "summary-4ec3db41117ea7d78c929cb7894fb5ffb37d60f9fe3b2f342738f7c7daf94a66"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -43,7 +43,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-55471cdce82b9b668b6a2170c22ba314b672770bc30e3697f3efef04f1b1b1bf": {
+    "summary-1f98cb91fd518682e67d8811f569a58520892aa9c2c81b076a6733b5730cd641": {
       "call": {
         "callbacks": [
           {
@@ -110,7 +110,7 @@
             },
             "count": {
               "max": "many",
-              "min": 0,
+              "min": 1,
               "scope": "call"
             },
             "id": "owner-requirement-0",
@@ -135,7 +135,49 @@
       },
       "shape": "callable"
     },
-    "summary-7123c8fdc02e24e87156c456c8f7d1161b291f29036c8d8656d188a2b0327429": {
+    "summary-4616f25c90dae05cf2e383af13e917d50e6801f64cc43f270f3b0df3c9984a9b": {
+      "call": {
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "computations": [
+          "owner-requirement-0"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "compute",
+            "owner": {
+              "requires": "required",
+              "requiresChildren": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-4ec3db41117ea7d78c929cb7894fb5ffb37d60f9fe3b2f342738f7c7daf94a66": {
       "call": {
         "callbacks": [
           {
@@ -178,49 +220,7 @@
             },
             "count": {
               "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "owner-requirement-0",
-            "kind": "compute",
-            "owner": {
-              "requires": "required",
-              "requiresChildren": "required",
-              "source": "ambient-at-call"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "reads",
-          "returns"
-        ],
-        "reads": [],
-        "returns": []
-      },
-      "shape": "callable"
-    },
-    "summary-7a943f0957989b2b0705ab104be3a80392bda70c167d0aad7dc7254876a47744": {
-      "call": {
-        "closed": [
-          "reads",
-          "returns"
-        ],
-        "computations": [
-          "owner-requirement-0"
-        ],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
+              "min": 1,
               "scope": "call"
             },
             "id": "owner-requirement-0",

@@ -42,6 +42,7 @@ mod object_binding;
 mod retained_arguments;
 mod span_index;
 mod super_argument;
+mod unconditional_calls;
 
 pub use binding_references::import_binding_references;
 pub use class_obligation::{ClassObligation, ClassObligationKind, class_obligation};
@@ -66,6 +67,7 @@ pub use super_argument::{
     SuperArgumentFunction, SuperArgumentSite, super_argument_function,
     super_argument_sites_of_binding,
 };
+pub use unconditional_calls::unconditional_calls;
 
 pub use emission::{
     EmittingStatement, ModuleEmission, ModuleEmissionError, ModuleFlavor, has_export_assignment,

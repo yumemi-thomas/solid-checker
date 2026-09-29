@@ -278,6 +278,15 @@ test("a misuse case reports correctly only with tsc silent, the rule's violation
     status: "correct use not clean",
     detail: "package-contract-incomplete"
   });
+  // ADR 0161: a case expecting the proof obligation reports correctly on the
+  // uncertifiable finding, and a violation there is an overclaim.
+  const obligation = { rule: "missing-owner", kind: "uncertifiable" };
+  assert.equal(misuseVerdict({ rule: "missing-owner", kind: "uncertifiable", tsc: silent, misuseFindings: [obligation], correctFindings: [] }).status, "reports correctly");
+  assert.deepEqual(misuseVerdict({ rule: "missing-owner", kind: "uncertifiable", tsc: silent, misuseFindings: [obligation, owner], correctFindings: [] }), {
+    status: "misuse overclaims",
+    detail: "missing-owner"
+  });
+  assert.ok(ledgerProblems({ cases: [{ id: "k", kind: "maybe" }] }, { packages: [] }).some(problem => /unknown finding kind maybe/.test(problem)));
 });
 
 const hostMeasurement = (host, exports, fields = {}) => ({

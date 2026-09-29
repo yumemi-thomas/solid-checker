@@ -14,7 +14,7 @@
           },
           "exports": {
             "computedMember": "summary-554dcd4438cbaeb5dcdc06611db8eb9be479d61186bbe359f74d20afb703e7ec",
-            "dialectSilent": "summary-43e92ca02b04fcc5cd8577c33be19cd22d0e12105655db2b1244ad8b360719be",
+            "dialectSilent": "summary-32caf070cf0c0fe6e59b7a346c4daaa6f7bf58c3bac119c005a425a2fcf0d241",
             "expressionCallee": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
             "memberPropertyUnresolved": "summary-7e3edf80dbc6dd5addeed9d111476a59b620e7599583564165173372609d50aa",
             "memberReceiverUnresolved": "summary-7e3edf80dbc6dd5addeed9d111476a59b620e7599583564165173372609d50aa",
@@ -116,7 +116,7 @@
       },
       "shape": "callable"
     },
-    "summary-43e92ca02b04fcc5cd8577c33be19cd22d0e12105655db2b1244ad8b360719be": {
+    "summary-32caf070cf0c0fe6e59b7a346c4daaa6f7bf58c3bac119c005a425a2fcf0d241": {
       "call": {
         "callbacks": [],
         "closed": [
@@ -135,7 +135,7 @@
             },
             "count": {
               "max": "many",
-              "min": 0,
+              "min": 1,
               "scope": "call"
             },
             "id": "owner-requirement-0",

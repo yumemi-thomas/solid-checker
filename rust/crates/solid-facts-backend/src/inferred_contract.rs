@@ -1636,6 +1636,7 @@ fn owner_requirement_operation(
                 lifetime: None,
                 productions: KnowledgeSet::Complete(Vec::new()),
             };
+            cleanup.cardinality.min = Some(u32::from(requirement.guaranteed));
             Ok(cleanup)
         }
         OwnerRequirementOperation::Effect => {
@@ -1651,6 +1652,9 @@ fn owner_requirement_operation(
                 lifetime: None,
                 productions: KnowledgeSet::Unknown,
             };
+            // ADR 0161: every call registers exactly when the requirement is
+            // guaranteed; the census proves that lower bound or withdraws it.
+            compute.cardinality.min = Some(u32::from(requirement.guaranteed));
             Ok(compute)
         }
         OwnerRequirementOperation::Boundary => Err(WithheldOwnerRequirement::Boundary),

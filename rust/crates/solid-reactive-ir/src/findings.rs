@@ -723,6 +723,7 @@ mod tests {
             later_run_unowned: false,
             component_uncertain: false,
             missing_jsx_census: false,
+            through_contract: false,
             report: true,
         };
 

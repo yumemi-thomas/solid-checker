@@ -8814,6 +8814,13 @@ type FunctionKey = (String, u32, u32);
 struct GeneratedOwnerRequirements {
     by_symbol: HashMap<String, Vec<solid_reactive_ir::OwnerRequirementOperation>>,
     by_function: HashMap<FunctionKey, Vec<solid_reactive_ir::OwnerRequirementOperation>>,
+    /// ADR 0161: the requirement kinds some site of which is a dialect
+    /// primitive call the function makes on every normal completion, by the
+    /// same two identities. A proposal input: the census reads the
+    /// producer's `unconditional`.
+    guaranteed_by_symbol: HashMap<String, HashSet<solid_reactive_ir::OwnerRequirementOperation>>,
+    guaranteed_by_function:
+        HashMap<FunctionKey, HashSet<solid_reactive_ir::OwnerRequirementOperation>>,
     /// Functions whose implementation the `creates` proposal walk cleared, by
     /// the same two identities the requirement maps use. Membership is the
     /// *positive* answer, so an export neither map reaches proposes nothing.
@@ -9104,6 +9111,7 @@ fn generated_owner_requirements_by_symbol(
             indexed.clean_creates_walk_by_function.insert(key);
         }
     }
+    let mut unconditional_calls = HashMap::<FunctionKey, Vec<solid_facts::core::Span>>::new();
     for requirement in program.missing_owners.iter().filter(|requirement| {
         !requirement.runtime_uncertain
             && !requirement.conditional_owner
@@ -9142,6 +9150,45 @@ fn generated_owner_requirements_by_symbol(
             if !operations.contains(&requirement.operation) {
                 operations.push(requirement.operation);
             }
+        }
+        // ADR 0161: a dialect primitive the function calls on every normal
+        // completion registers on every call. The site is the call's callee
+        // (or, for a settled cleanup, its argument), so the call is the
+        // innermost one containing it.
+        if requirement.through_contract {
+            continue;
+        }
+        let Some(site_call) = file
+            .ast
+            .calls
+            .iter()
+            .filter(|call| call.span.contains(span))
+            .min_by_key(|call| call.span.end - call.span.start)
+        else {
+            continue;
+        };
+        let unconditional = unconditional_calls.entry(key.clone()).or_insert_with(|| {
+            solid_facts::ast::unconditional_calls(
+                Path::new(file.path.as_str()),
+                &file.source,
+                function.span,
+            )
+            .unwrap_or_default()
+        });
+        if !unconditional.contains(&site_call.span) {
+            continue;
+        }
+        indexed
+            .guaranteed_by_function
+            .entry(key.clone())
+            .or_default()
+            .insert(requirement.operation);
+        if let Some(Some(symbol)) = function_symbols.get(&key) {
+            indexed
+                .guaranteed_by_symbol
+                .entry(symbol.clone())
+                .or_default()
+                .insert(requirement.operation);
         }
     }
     indexed
@@ -9351,19 +9398,32 @@ fn attach_generated_owner_requirements(
     let Some(operations) = operations else {
         return summary;
     };
+    let guaranteed = symbol
+        .as_ref()
+        .and_then(|symbol| generated.guaranteed_by_symbol.get(symbol))
+        .or_else(|| {
+            default_function
+                .as_ref()
+                .and_then(|key| generated.guaranteed_by_function.get(key))
+        })
+        .cloned()
+        .unwrap_or_default();
     let Some(owner_requirements) = summary.owner_requirements.known_mut() else {
         // An inherited/re-exported unknown remains unknown. Adding the local
         // positive rows would not prove that the list is complete.
         return summary;
     };
     for operation in operations {
-        if !owner_requirements
-            .iter()
-            .any(|existing| existing.operation == *operation)
+        let is_guaranteed = guaranteed.contains(operation);
+        match owner_requirements
+            .iter_mut()
+            .find(|existing| existing.operation == *operation)
         {
-            owner_requirements.push(solid_reactive_ir::ContractOwnerRequirement {
+            Some(existing) => existing.guaranteed |= is_guaranteed,
+            None => owner_requirements.push(solid_reactive_ir::ContractOwnerRequirement {
                 operation: *operation,
-            });
+                guaranteed: is_guaranteed,
+            }),
         }
     }
     owner_requirements.sort_by_key(|requirement| match requirement.operation {

@@ -574,6 +574,7 @@ export function ledgerProblems(ledger, corpus) {
     else if (pinned.version !== entry.version) problems.push(`${label}: pins ${entry.version}, the corpus pins ${pinned.version}`);
     if (!MISUSE_RULES[entry?.class]) problems.push(`${label}: unknown misuse class ${entry?.class}`);
     if (typeof entry?.rule !== "string") problems.push(`${label}: the expected rule is required`);
+    if (entry?.kind !== undefined && !FINDING_KINDS.includes(entry.kind)) problems.push(`${label}: unknown finding kind ${entry.kind}`);
     for (const field of ["misuse", "correct"]) if (typeof entry?.[field] !== "string" || entry[field].length === 0) problems.push(`${label}: ${field} code is required`);
     for (const host of entry?.hosts ?? []) if (!HOSTS.includes(host)) problems.push(`${label}: unknown host ${host}`);
     if (!Array.isArray(entry?.hosts) || entry.hosts.length === 0) problems.push(`${label}: hosts is required`);
@@ -581,12 +582,21 @@ export function ledgerProblems(ledger, corpus) {
   return problems;
 }
 
+/// The finding kinds a case may expect of its misuse (CONTEXT.md). A case
+/// states `kind: "uncertifiable"` when what the export does is a proof
+/// obligation rather than a proven defect -- ADR 0161's may-register owner
+/// requirement -- and a violation there is an overclaim.
+export const FINDING_KINDS = ["violation", "uncertifiable"];
+
 /// One host's verdict of one case from what TypeScript and the checker said.
-export function misuseVerdict({ rule, tsc, misuseFindings, correctFindings }) {
+export function misuseVerdict({ rule, kind = "violation", tsc, misuseFindings, correctFindings }) {
   if (tsc.misuse.length > 0 || tsc.correct.length > 0) {
     return { status: "tsc reports", detail: [...tsc.misuse, ...tsc.correct].map(code => `TS${code}`).join(", ") };
   }
-  const expected = misuseFindings.filter(finding => finding.rule === rule && finding.kind === "violation");
+  if (kind !== "violation" && misuseFindings.some(finding => finding.rule === rule && finding.kind === "violation")) {
+    return { status: "misuse overclaims", detail: rule };
+  }
+  const expected = misuseFindings.filter(finding => finding.rule === rule && finding.kind === kind);
   if (expected.length === 0) {
     if (misuseFindings.some(finding => finding.rule === rule)) return { status: "misuse only uncertifiable", detail: rule };
     const others = [...new Set(misuseFindings.map(finding => finding.rule))];
@@ -647,9 +657,9 @@ async function evaluateMisuse({ ledger, corpus, only, checker, typefacts }) {
         );
         findings[part] = (JSON.parse(output).findings ?? []).map(finding => ({ rule: finding.rule, kind: finding.kind }));
       }
-      hosts[host] = { ...misuseVerdict({ rule: entry.rule, tsc, misuseFindings: findings.misuse, correctFindings: findings.correct }), findings };
+      hosts[host] = { ...misuseVerdict({ rule: entry.rule, kind: entry.kind, tsc, misuseFindings: findings.misuse, correctFindings: findings.correct }), findings };
     }
-    results.push({ id: entry.id, package: entry.package, entrypoint: entry.entrypoint ?? ".", export: entry.export, class: entry.class, rule: entry.rule, tsc, hosts });
+    results.push({ id: entry.id, package: entry.package, entrypoint: entry.entrypoint ?? ".", export: entry.export, class: entry.class, rule: entry.rule, kind: entry.kind ?? "violation", tsc, hosts });
   }
   return { format: "solid-checker-primitives-misuse-results", version: 1, results };
 }

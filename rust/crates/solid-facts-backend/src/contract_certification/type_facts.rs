@@ -4040,6 +4040,34 @@ fn verify_export_value_family(
             // the one bound its operation states is per trigger, zero to many.
             let per_trigger = operation.is_result_access()
                 && operation.cardinality.scope == Some(CardinalityScope::Trigger);
+            // ADR 0161: an owner requirement registered on every call. The
+            // witness is the operation's own evidence under the strict floor
+            // its `min: 1` sets -- a dialect primitive call of the export's own
+            // frame the producer states unconditional (ADR 0159) -- so one such
+            // call runs on every normal completion, which is the lower bound;
+            // the upper bound stays `many`.
+            let registered_every_call = operation.imposes_owner_requirement()
+                && matches!(
+                    operation.kind,
+                    OperationKind::Create | OperationKind::Cleanup | OperationKind::Compute
+                )
+                && operation.cardinality.scope == Some(CardinalityScope::Call)
+                && operation.cardinality.min == Some(1)
+                && operation.cardinality.max == Some(UpperBound::Many);
+            if registered_every_call {
+                require_operation_evidence(
+                    plan,
+                    export,
+                    operation,
+                    proof,
+                    (implementation, transcript),
+                    transcripts,
+                    &open,
+                    &mut sites,
+                )?;
+                sites.push("operation-cardinality:per-call:1..many".into());
+                return Ok(sites);
+            }
             if (operation.cardinality.scope != Some(CardinalityScope::Call) && !per_trigger)
                 || operation.cardinality.min != Some(0)
                 || operation.cardinality.max != Some(UpperBound::Many)
@@ -7013,10 +7041,14 @@ fn require_operation_evidence(
                 .control_flow
                 .as_ref()
                 .ok_or_else(|| open("implementation control-flow census is absent"))?;
+            // ADR 0161: a return site's `reach` is the producer's optimistic one;
+            // `carryReach` is its lower bound, so the operation's own floor is
+            // read against that -- `reachable` for a claim that the return
+            // happens, may-execute for one that it may.
             let reachable = flow
                 .returns
                 .iter()
-                .filter(|site| site.reach == Reachability::Reachable)
+                .filter(|site| site.carry_reach.is_some_and(|reach| floor.admits(reach)))
                 .collect::<Vec<_>>();
             if reachable.is_empty() {
                 return Err(open(
@@ -21091,6 +21123,31 @@ mod tests {
             &mut Vec::new(),
         )
         .expect_err("an occurrence claim still demands a provably reached owner call");
+
+        // ADR 0161: a call the producer states reachable and unconditional is
+        // the lower bound "registers on every call" rests on; reachable alone,
+        // the optimistic `reach` of an `if` arm, is not.
+        let mut every_call = implementation.clone();
+        every_call.calls[0].reach = Reachability::Reachable;
+        require_owner_operation_call(
+            &guaranteed,
+            &demand,
+            &every_call,
+            operation_reachability_floor(&guaranteed),
+            &open,
+            &mut Vec::new(),
+        )
+        .expect_err("a reachable call under a condition is no lower bound");
+        every_call.calls[0].unconditional = true;
+        require_owner_operation_call(
+            &guaranteed,
+            &demand,
+            &every_call,
+            operation_reachability_floor(&guaranteed),
+            &open,
+            &mut Vec::new(),
+        )
+        .expect("an unconditional dialect owner call witnesses registration on every call");
 
         // Neither floor admits a call the implementation never reaches, and the
         // module gate is untouched: a same-named local is not the dialect's.

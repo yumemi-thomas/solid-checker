@@ -938,6 +938,11 @@ pub struct OwnerRequirement {
     /// reports an uncertifiable proof obligation rather than a violation.
     #[serde(default, skip_serializing_if = "is_false")]
     pub missing_jsx_census: bool,
+    /// ADR 0161: the requirement stands for a call of an accepted contract's
+    /// export rather than for a dialect primitive the code calls itself. The
+    /// generator never states such a site's registration as guaranteed.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub through_contract: bool,
     pub report: bool,
 }
 
@@ -1667,6 +1672,13 @@ impl ContractCallback {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContractOwnerRequirement {
     pub operation: OwnerRequirementOperation,
+    /// ADR 0161: whether every normal completion of one call performs an
+    /// operation of this kind. From an accepted contract, a certified count
+    /// with `min >= 1` on some operation of the kind; from the generator, a
+    /// requirement whose site is a dialect primitive call the export makes on
+    /// every completion. `false` is "may register": calling the export with no
+    /// owner is then a proof obligation, never a proven violation.
+    pub guaranteed: bool,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]

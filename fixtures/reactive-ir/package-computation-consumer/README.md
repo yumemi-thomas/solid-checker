@@ -1,19 +1,23 @@
 # A consumer of a registered computation
 
-Pins ADR 0114's consumer arm: an accepted contract that states a `compute`
-operation in `computations` tells a consumer the export registers a computation
-on its caller's owner, so an unowned call is `SC4001 missing-owner`, exactly as
-an unowned `createEffect` would be.
+Pins ADR 0114's consumer arm and ADR 0161's reading of its count: an accepted
+contract that states a `compute` operation in `computations` tells a consumer
+the export registers a computation on its caller's owner, so an unowned call is
+`SC4001 missing-owner`. The count decides the finding kind: `min: 1` says every
+call registers, which is the proven violation an unowned `createEffect` would
+be; `min: 0` says a call may register, and an unowned call is then a proof
+obligation, reported uncertifiable.
 
-`App.tsx` calls two exports that are identical in everything but that item:
+`App.tsx` calls three exports that are identical in everything but that item:
 
 | call | export | `computations` | verdict |
 | --- | --- | --- | --- |
-| module scope | `startTicker` | one `compute` | `SC4001`, a proven violation |
-| inside `Ticker` | `startTicker` | one `compute` | clean: the component's owner is there |
+| module scope | `startTicker` | one `compute`, `min: 0` | `SC4001`, uncertifiable: it may register (ADR 0161) |
+| module scope | `startTickerAlways` | one `compute`, `min: 1` | `SC4001`, a proven violation: every call registers |
+| inside `Ticker` | both | one `compute` | clean: the component's owner is there |
 | module scope | `startTickerSilent` | none | clean: `creates` is closed, so "no owner requirement" |
 
-Both summaries close `callbacks`, `reads`, `creates` and `returns`, so nothing
+All three summaries close `callbacks`, `reads`, `creates` and `returns`, so nothing
 else is open at either import and the one finding is about the owner.
 
 A generated contract could not say this before ADR 0114: the generator withheld

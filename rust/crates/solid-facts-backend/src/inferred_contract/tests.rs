@@ -186,7 +186,10 @@ fn owner_requirement_summary(
             composed_from: None,
         }]),
         owner_requirements: ContractClaim::Known(vec![
-            solid_reactive_ir::ContractOwnerRequirement { operation },
+            solid_reactive_ir::ContractOwnerRequirement {
+                operation,
+                guaranteed: false,
+            },
         ]),
         ..ContractExport::default()
     }
@@ -995,6 +998,7 @@ fn a_creates_closure_waits_for_every_owner_requirement_to_be_published() {
     let requirement = |operation| {
         ContractClaim::Known(vec![solid_reactive_ir::ContractOwnerRequirement {
             operation,
+            guaranteed: false,
         }])
     };
 
