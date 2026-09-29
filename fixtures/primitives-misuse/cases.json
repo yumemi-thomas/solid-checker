@@ -11,10 +11,2013 @@
       "export": "createTimer",
       "class": "owner",
       "rule": "missing-owner",
-      "hosts": ["none", "browser", "node"],
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
       "why": "The certified summary of createTimer states an owner requirement (a cleanup registered on the ambient owner at call). Called at module scope there is no owner, so the timer is never cleared.",
       "misuse": "import { createTimer } from \"@solid-primitives/timer\";\n\ncreateTimer(() => console.log(\"tick\"), 1000, setInterval);\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createTimer } from \"@solid-primitives/timer\";\n\ncreateRoot(dispose => {\n  createTimer(() => console.log(\"tick\"), 1000, setInterval);\n  return dispose;\n});\n"
+    },
+    {
+      "id": "resize-observer-createResizeObserver-module-scope",
+      "package": "@solid-primitives/resize-observer",
+      "version": "4.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createResizeObserver",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createResizeObserver registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createResizeObserver } from \"@solid-primitives/resize-observer\";\n\ncreateResizeObserver(document.body, rect => console.log(rect.width));\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createResizeObserver } from \"@solid-primitives/resize-observer\";\n\ncreateRoot(dispose => {\n  createResizeObserver(document.body, rect => console.log(rect.width));\n  return dispose;\n});\n"
+    },
+    {
+      "id": "resize-observer-createResizeObserver-effect-apply",
+      "package": "@solid-primitives/resize-observer",
+      "version": "4.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createResizeObserver",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "A createEffect apply callback runs from the flush with no owner, so createResizeObserver called there registers on nothing and is never disposed.",
+      "misuse": "import { createEffect, createSignal } from \"solid-js\";\nimport { createResizeObserver } from \"@solid-primitives/resize-observer\";\n\nexport default function App() {\n  const [on] = createSignal(true);\n  createEffect(on, value => {\n    if (value) createResizeObserver(document.body, rect => console.log(rect.width));\n  });\n  return <p>on</p>;\n}\n",
+      "correct": "import { createSignal } from \"solid-js\";\nimport { createResizeObserver } from \"@solid-primitives/resize-observer\";\n\nexport default function App() {\n  const [on] = createSignal(true);\n  createResizeObserver(document.body, rect => console.log(rect.width));\n  return <p>{String(on())}</p>;\n}\n"
+    },
+    {
+      "id": "resize-observer-createResizeObserver-leaf-owner",
+      "package": "@solid-primitives/resize-observer",
+      "version": "4.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createResizeObserver",
+      "class": "owner",
+      "rule": "leaf-owner-forbidden-call",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createTrackedEffect is a leaf owner and cannot own children; createResizeObserver attaches child work (an onCleanup) to the current owner, which Solid rejects there.",
+      "misuse": "import { createTrackedEffect } from \"solid-js\";\nimport { createResizeObserver } from \"@solid-primitives/resize-observer\";\n\nexport default function App() {\n  createTrackedEffect(() => {\n    createResizeObserver(document.body, rect => console.log(rect.width));\n  });\n  return <p>leaf</p>;\n}\n",
+      "correct": "import { createResizeObserver } from \"@solid-primitives/resize-observer\";\n\nexport default function App() {\n  createResizeObserver(document.body, rect => console.log(rect.width));\n  return <p>leaf</p>;\n}\n"
+    },
+    {
+      "id": "resize-observer-createWindowSize-module-scope",
+      "package": "@solid-primitives/resize-observer",
+      "version": "4.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createWindowSize",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createWindowSize registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createWindowSize } from \"@solid-primitives/resize-observer\";\n\ncreateWindowSize();\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createWindowSize } from \"@solid-primitives/resize-observer\";\n\ncreateRoot(dispose => {\n  createWindowSize();\n  return dispose;\n});\n"
+    },
+    {
+      "id": "resize-observer-createWindowSize-top-level-read",
+      "package": "@solid-primitives/resize-observer",
+      "version": "4.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createWindowSize",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createWindowSize returns a reactive size object. Reading `size.width` at the component's top level reads it once, untracked.",
+      "misuse": "import { createWindowSize } from \"@solid-primitives/resize-observer\";\n\nexport default function App() {\n  const size = createWindowSize();\n  const current = size.width;\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createWindowSize } from \"@solid-primitives/resize-observer\";\n\nexport default function App() {\n  const size = createWindowSize();\n  return <p>{String(size.width)}</p>;\n}\n"
+    },
+    {
+      "id": "resize-observer-createElementSize-top-level-read",
+      "package": "@solid-primitives/resize-observer",
+      "version": "4.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createElementSize",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createElementSize returns a reactive size object. Reading `size.height` at the component's top level reads it once, untracked.",
+      "misuse": "import { createElementSize } from \"@solid-primitives/resize-observer\";\n\nexport default function App() {\n  const size = createElementSize(document.body);\n  const current = size.height;\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createElementSize } from \"@solid-primitives/resize-observer\";\n\nexport default function App() {\n  const size = createElementSize(document.body);\n  return <p>{String(size.height)}</p>;\n}\n"
+    },
+    {
+      "id": "resize-observer-createElementSize-module-scope",
+      "package": "@solid-primitives/resize-observer",
+      "version": "4.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createElementSize",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createElementSize registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createElementSize } from \"@solid-primitives/resize-observer\";\n\ncreateElementSize(document.body);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createElementSize } from \"@solid-primitives/resize-observer\";\n\ncreateRoot(dispose => {\n  createElementSize(document.body);\n  return dispose;\n});\n"
+    },
+    {
+      "id": "event-listener-createEventListener-module-scope",
+      "package": "@solid-primitives/event-listener",
+      "version": "3.0.0-next.5",
+      "entrypoint": ".",
+      "export": "createEventListener",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createEventListener registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createEventListener } from \"@solid-primitives/event-listener\";\n\ncreateEventListener(window, \"resize\", () => console.log(\"resized\"));\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createEventListener } from \"@solid-primitives/event-listener\";\n\ncreateRoot(dispose => {\n  createEventListener(window, \"resize\", () => console.log(\"resized\"));\n  return dispose;\n});\n"
+    },
+    {
+      "id": "event-listener-createEventListener-effect-apply",
+      "package": "@solid-primitives/event-listener",
+      "version": "3.0.0-next.5",
+      "entrypoint": ".",
+      "export": "createEventListener",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "A createEffect apply callback runs from the flush with no owner, so createEventListener called there registers on nothing and is never disposed.",
+      "misuse": "import { createEffect, createSignal } from \"solid-js\";\nimport { createEventListener } from \"@solid-primitives/event-listener\";\n\nexport default function App() {\n  const [on] = createSignal(true);\n  createEffect(on, value => {\n    if (value) createEventListener(window, \"resize\", () => console.log(\"resized\"));\n  });\n  return <p>on</p>;\n}\n",
+      "correct": "import { createSignal } from \"solid-js\";\nimport { createEventListener } from \"@solid-primitives/event-listener\";\n\nexport default function App() {\n  const [on] = createSignal(true);\n  createEventListener(window, \"resize\", () => console.log(\"resized\"));\n  return <p>{String(on())}</p>;\n}\n"
+    },
+    {
+      "id": "event-listener-createEventListener-leaf-owner",
+      "package": "@solid-primitives/event-listener",
+      "version": "3.0.0-next.5",
+      "entrypoint": ".",
+      "export": "createEventListener",
+      "class": "owner",
+      "rule": "leaf-owner-forbidden-call",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createTrackedEffect is a leaf owner and cannot own children; createEventListener attaches child work (an onCleanup) to the current owner, which Solid rejects there.",
+      "misuse": "import { createTrackedEffect } from \"solid-js\";\nimport { createEventListener } from \"@solid-primitives/event-listener\";\n\nexport default function App() {\n  createTrackedEffect(() => {\n    createEventListener(window, \"resize\", () => console.log(\"resized\"));\n  });\n  return <p>leaf</p>;\n}\n",
+      "correct": "import { createEventListener } from \"@solid-primitives/event-listener\";\n\nexport default function App() {\n  createEventListener(window, \"resize\", () => console.log(\"resized\"));\n  return <p>leaf</p>;\n}\n"
+    },
+    {
+      "id": "event-listener-createEventListenerMap-module-scope",
+      "package": "@solid-primitives/event-listener",
+      "version": "3.0.0-next.5",
+      "entrypoint": ".",
+      "export": "createEventListenerMap",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createEventListenerMap registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createEventListenerMap } from \"@solid-primitives/event-listener\";\n\ncreateEventListenerMap(window, { resize: () => console.log(\"resized\") });\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createEventListenerMap } from \"@solid-primitives/event-listener\";\n\ncreateRoot(dispose => {\n  createEventListenerMap(window, { resize: () => console.log(\"resized\") });\n  return dispose;\n});\n"
+    },
+    {
+      "id": "event-listener-createEventSignal-top-level-read",
+      "package": "@solid-primitives/event-listener",
+      "version": "3.0.0-next.5",
+      "entrypoint": ".",
+      "export": "createEventSignal",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createEventSignal returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createEventSignal } from \"@solid-primitives/event-listener\";\n\nexport default function App() {\n  const last = createEventSignal(window, \"resize\");\n  const current = last();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createEventSignal } from \"@solid-primitives/event-listener\";\n\nexport default function App() {\n  const last = createEventSignal(window, \"resize\");\n  return <p>{String(last())}</p>;\n}\n"
+    },
+    {
+      "id": "utils-access-argument-read",
+      "package": "@solid-primitives/utils",
+      "version": "7.0.0-next.4",
+      "entrypoint": ".",
+      "export": "access",
+      "class": "argumentRead",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "access(accessor) calls the accessor. Called at the component's top level it reads the signal once, untracked.",
+      "misuse": "import { createSignal } from \"solid-js\";\nimport { access } from \"@solid-primitives/utils\";\n\nexport default function App() {\n  const [count] = createSignal(0);\n  const current = access(count);\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createSignal } from \"solid-js\";\nimport { access } from \"@solid-primitives/utils\";\n\nexport default function App() {\n  const [count] = createSignal(0);\n  return <p>{String(access(count))}</p>;\n}\n"
+    },
+    {
+      "id": "utils-createMicrotask-module-scope",
+      "package": "@solid-primitives/utils",
+      "version": "7.0.0-next.4",
+      "entrypoint": ".",
+      "export": "createMicrotask",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createMicrotask registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createMicrotask } from \"@solid-primitives/utils\";\n\ncreateMicrotask(() => console.log(\"tick\"));\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createMicrotask } from \"@solid-primitives/utils\";\n\ncreateRoot(dispose => {\n  createMicrotask(() => console.log(\"tick\"));\n  return dispose;\n});\n"
+    },
+    {
+      "id": "utils-createHydratableSignal-top-level-read",
+      "package": "@solid-primitives/utils",
+      "version": "7.0.0-next.4",
+      "entrypoint": ".",
+      "export": "createHydratableSignal",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createHydratableSignal returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createHydratableSignal } from \"@solid-primitives/utils\";\n\nexport default function App() {\n  const [value] = createHydratableSignal(0, () => 1);\n  const current = value();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createHydratableSignal } from \"@solid-primitives/utils\";\n\nexport default function App() {\n  const [value] = createHydratableSignal(0, () => 1);\n  return <p>{String(value())}</p>;\n}\n"
+    },
+    {
+      "id": "raf-createRAF-top-level-read",
+      "package": "@solid-primitives/raf",
+      "version": "4.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createRAF",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createRAF returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createRAF } from \"@solid-primitives/raf\";\n\nexport default function App() {\n  const [running] = createRAF(() => {});\n  const current = running();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createRAF } from \"@solid-primitives/raf\";\n\nexport default function App() {\n  const [running] = createRAF(() => {});\n  return <p>{String(running())}</p>;\n}\n"
+    },
+    {
+      "id": "raf-default-top-level-read",
+      "package": "@solid-primitives/raf",
+      "version": "4.0.0-next.2",
+      "entrypoint": ".",
+      "export": "default",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "The default export (createRAF) returns a `running` accessor. Read at the component's top level it is read once, untracked.",
+      "misuse": "import createRAF from \"@solid-primitives/raf\";\n\nexport default function App() {\n  const [running] = createRAF(() => {});\n  const current = running();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import createRAF from \"@solid-primitives/raf\";\n\nexport default function App() {\n  const [running] = createRAF(() => {});\n  return <p>{String(running())}</p>;\n}\n"
+    },
+    {
+      "id": "raf-createRAF-module-scope",
+      "package": "@solid-primitives/raf",
+      "version": "4.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createRAF",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createRAF registers the frame loop's stop on the ambient owner. Called at module scope there is no owner, so a started loop is never stopped.",
+      "misuse": "import { createRAF } from \"@solid-primitives/raf\";\n\ncreateRAF(() => {});\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createRAF } from \"@solid-primitives/raf\";\n\ncreateRoot(dispose => {\n  createRAF(() => {});\n  return dispose;\n});\n"
+    },
+    {
+      "id": "raf-createMs-module-scope",
+      "package": "@solid-primitives/raf",
+      "version": "4.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createMs",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createMs registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createMs } from \"@solid-primitives/raf\";\n\ncreateMs(60);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createMs } from \"@solid-primitives/raf\";\n\ncreateRoot(dispose => {\n  createMs(60);\n  return dispose;\n});\n"
+    },
+    {
+      "id": "scheduled-createScheduled-top-level-read",
+      "package": "@solid-primitives/scheduled",
+      "version": "2.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createScheduled",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createScheduled returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createScheduled, debounce } from \"@solid-primitives/scheduled\";\n\nexport default function App() {\n  const scheduled = createScheduled(fn => debounce(fn, 100));\n  const current = scheduled();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createScheduled, debounce } from \"@solid-primitives/scheduled\";\n\nexport default function App() {\n  const scheduled = createScheduled(fn => debounce(fn, 100));\n  return <p>{String(scheduled())}</p>;\n}\n"
+    },
+    {
+      "id": "timer-createTimer-effect-apply",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "entrypoint": ".",
+      "export": "createTimer",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "A createEffect apply callback runs from the flush with no owner, so createTimer called there registers on nothing and is never disposed.",
+      "misuse": "import { createEffect, createSignal } from \"solid-js\";\nimport { createTimer } from \"@solid-primitives/timer\";\n\nexport default function App() {\n  const [on] = createSignal(true);\n  createEffect(on, value => {\n    if (value) createTimer(() => console.log(\"tick\"), 1000, setInterval);\n  });\n  return <p>on</p>;\n}\n",
+      "correct": "import { createSignal } from \"solid-js\";\nimport { createTimer } from \"@solid-primitives/timer\";\n\nexport default function App() {\n  const [on] = createSignal(true);\n  createTimer(() => console.log(\"tick\"), 1000, setInterval);\n  return <p>{String(on())}</p>;\n}\n"
+    },
+    {
+      "id": "timer-createTimer-leaf-owner",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "entrypoint": ".",
+      "export": "createTimer",
+      "class": "owner",
+      "rule": "leaf-owner-forbidden-call",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createTrackedEffect is a leaf owner and cannot own children; createTimer attaches child work (an onCleanup) to the current owner, which Solid rejects there.",
+      "misuse": "import { createTrackedEffect } from \"solid-js\";\nimport { createTimer } from \"@solid-primitives/timer\";\n\nexport default function App() {\n  createTrackedEffect(() => {\n    createTimer(() => console.log(\"tick\"), 1000, setInterval);\n  });\n  return <p>leaf</p>;\n}\n",
+      "correct": "import { createTimer } from \"@solid-primitives/timer\";\n\nexport default function App() {\n  createTimer(() => console.log(\"tick\"), 1000, setInterval);\n  return <p>leaf</p>;\n}\n"
+    },
+    {
+      "id": "timer-createTimeoutLoop-module-scope",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "entrypoint": ".",
+      "export": "createTimeoutLoop",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createTimeoutLoop registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createTimeoutLoop } from \"@solid-primitives/timer\";\n\ncreateTimeoutLoop(() => console.log(\"tick\"), 1000);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createTimeoutLoop } from \"@solid-primitives/timer\";\n\ncreateRoot(dispose => {\n  createTimeoutLoop(() => console.log(\"tick\"), 1000);\n  return dispose;\n});\n"
+    },
+    {
+      "id": "timer-createPolled-module-scope",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "entrypoint": ".",
+      "export": "createPolled",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createPolled registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createPolled } from \"@solid-primitives/timer\";\n\ncreatePolled(() => Date.now(), 1000);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createPolled } from \"@solid-primitives/timer\";\n\ncreateRoot(dispose => {\n  createPolled(() => Date.now(), 1000);\n  return dispose;\n});\n"
+    },
+    {
+      "id": "timer-createPolled-top-level-read",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "entrypoint": ".",
+      "export": "createPolled",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createPolled returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createPolled } from \"@solid-primitives/timer\";\n\nexport default function App() {\n  const now = createPolled(() => Date.now(), 1000);\n  const current = now();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createPolled } from \"@solid-primitives/timer\";\n\nexport default function App() {\n  const now = createPolled(() => Date.now(), 1000);\n  return <p>{String(now())}</p>;\n}\n"
+    },
+    {
+      "id": "timer-createIntervalCounter-top-level-read",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "entrypoint": ".",
+      "export": "createIntervalCounter",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createIntervalCounter returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createIntervalCounter } from \"@solid-primitives/timer\";\n\nexport default function App() {\n  const count = createIntervalCounter(1000);\n  const current = count();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createIntervalCounter } from \"@solid-primitives/timer\";\n\nexport default function App() {\n  const count = createIntervalCounter(1000);\n  return <p>{String(count())}</p>;\n}\n"
+    },
+    {
+      "id": "pointer-createPointerListeners-module-scope",
+      "package": "@solid-primitives/pointer",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createPointerListeners",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createPointerListeners registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createPointerListeners } from \"@solid-primitives/pointer\";\n\ncreatePointerListeners({ target: document.body, onDown: event => console.log(event.x) });\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createPointerListeners } from \"@solid-primitives/pointer\";\n\ncreateRoot(dispose => {\n  createPointerListeners({ target: document.body, onDown: event => console.log(event.x) });\n  return dispose;\n});\n"
+    },
+    {
+      "id": "pointer-createPointerPosition-top-level-read",
+      "package": "@solid-primitives/pointer",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createPointerPosition",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createPointerPosition returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createPointerPosition } from \"@solid-primitives/pointer\";\n\nexport default function App() {\n  const position = createPointerPosition();\n  const current = position().x;\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createPointerPosition } from \"@solid-primitives/pointer\";\n\nexport default function App() {\n  const position = createPointerPosition();\n  return <p>{String(position().x)}</p>;\n}\n"
+    },
+    {
+      "id": "marker-createMarker-module-scope",
+      "package": "@solid-primitives/marker",
+      "version": "2.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createMarker",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createMarker registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createMarker } from \"@solid-primitives/marker\";\n\ncreateMarker(text => <mark>{text()}</mark>);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createMarker } from \"@solid-primitives/marker\";\n\ncreateRoot(dispose => {\n  createMarker(text => <mark>{text()}</mark>);\n  return dispose;\n});\n"
+    },
+    {
+      "id": "storage-makePersisted-top-level-read",
+      "package": "@solid-primitives/storage",
+      "version": "5.0.0-next.4",
+      "entrypoint": ".",
+      "export": "makePersisted",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "makePersisted returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createSignal } from \"solid-js\";\nimport { makePersisted } from \"@solid-primitives/storage\";\n\nexport default function App() {\n  const [value] = makePersisted(createSignal(0), { name: \"count\" });\n  const current = value();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createSignal } from \"solid-js\";\nimport { makePersisted } from \"@solid-primitives/storage\";\n\nexport default function App() {\n  const [value] = makePersisted(createSignal(0), { name: \"count\" });\n  return <p>{String(value())}</p>;\n}\n"
+    },
+    {
+      "id": "storage-makePersisted-module-scope",
+      "package": "@solid-primitives/storage",
+      "version": "5.0.0-next.4",
+      "entrypoint": ".",
+      "export": "makePersisted",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "makePersisted subscribes to storage events on the ambient owner. Called at module scope there is no owner, so the subscription is never removed.",
+      "misuse": "import { createSignal } from \"solid-js\";\nimport { makePersisted } from \"@solid-primitives/storage\";\n\nmakePersisted(createSignal(0), { name: \"count\" });\n",
+      "correct": "import { createRoot, createSignal } from \"solid-js\";\nimport { makePersisted } from \"@solid-primitives/storage\";\n\ncreateRoot(dispose => {\n  makePersisted(createSignal(0), { name: \"count\" });\n  return dispose;\n});\n"
+    },
+    {
+      "id": "event-bus-createEventStack-top-level-read",
+      "package": "@solid-primitives/event-bus",
+      "version": "3.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createEventStack",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createEventStack returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createEventStack } from \"@solid-primitives/event-bus\";\n\nexport default function App() {\n  const stack = createEventStack<{ text: string }>();\n  const current = stack.value().length;\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createEventStack } from \"@solid-primitives/event-bus\";\n\nexport default function App() {\n  const stack = createEventStack<{ text: string }>();\n  return <p>{String(stack.value().length)}</p>;\n}\n"
+    },
+    {
+      "id": "event-bus-toEffect-module-scope",
+      "package": "@solid-primitives/event-bus",
+      "version": "3.0.0-next.3",
+      "entrypoint": ".",
+      "export": "toEffect",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "toEffect registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createEventBus, toEffect } from \"@solid-primitives/event-bus\";\n\ntoEffect(createEventBus<string>().emit)(\"hello\");\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createEventBus, toEffect } from \"@solid-primitives/event-bus\";\n\ncreateRoot(dispose => {\n  toEffect(createEventBus<string>().emit)(\"hello\");\n  return dispose;\n});\n"
+    },
+    {
+      "id": "set-ReactiveSet-top-level-read",
+      "package": "@solid-primitives/set",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "ReactiveSet",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "A ReactiveSet's `has` is a tracked read. Called at the component's top level it is read once, untracked.",
+      "misuse": "import { ReactiveSet } from \"@solid-primitives/set\";\n\nexport default function App() {\n  const selected = new ReactiveSet<number>([1]);\n  const current = selected.has(1);\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { ReactiveSet } from \"@solid-primitives/set\";\n\nexport default function App() {\n  const selected = new ReactiveSet<number>([1]);\n  return <p>{String(selected.has(1))}</p>;\n}\n"
+    },
+    {
+      "id": "set-union-top-level-read",
+      "package": "@solid-primitives/set",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "union",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "union returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { ReactiveSet, union } from \"@solid-primitives/set\";\n\nexport default function App() {\n  const both = union(new ReactiveSet([1]), new ReactiveSet([2]));\n  const current = both().size;\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { ReactiveSet, union } from \"@solid-primitives/set\";\n\nexport default function App() {\n  const both = union(new ReactiveSet([1]), new ReactiveSet([2]));\n  return <p>{String(both().size)}</p>;\n}\n"
+    },
+    {
+      "id": "pagination-createPagination-top-level-read",
+      "package": "@solid-primitives/pagination",
+      "version": "1.0.0-next.8",
+      "entrypoint": ".",
+      "export": "createPagination",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createPagination returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createPagination } from \"@solid-primitives/pagination\";\n\nexport default function App() {\n  const [, page] = createPagination({ pages: 10 });\n  const current = page();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createPagination } from \"@solid-primitives/pagination\";\n\nexport default function App() {\n  const [, page] = createPagination({ pages: 10 });\n  return <p>{String(page())}</p>;\n}\n"
+    },
+    {
+      "id": "pagination-createSegment-top-level-read",
+      "package": "@solid-primitives/pagination",
+      "version": "1.0.0-next.8",
+      "entrypoint": ".",
+      "export": "createSegment",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createSegment returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createSignal } from \"solid-js\";\nimport { createSegment } from \"@solid-primitives/pagination\";\n\nexport default function App() {\n  const [page] = createSignal(1); const items = createSegment([1, 2, 3, 4], 2, page);\n  const current = items().length;\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createSignal } from \"solid-js\";\nimport { createSegment } from \"@solid-primitives/pagination\";\n\nexport default function App() {\n  const [page] = createSignal(1); const items = createSegment([1, 2, 3, 4], 2, page);\n  return <p>{String(items().length)}</p>;\n}\n"
+    },
+    {
+      "id": "clipboard-createClipboard-module-scope",
+      "package": "@solid-primitives/clipboard",
+      "version": "2.0.0-next.17",
+      "entrypoint": ".",
+      "export": "createClipboard",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createClipboard registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createClipboard } from \"@solid-primitives/clipboard\";\n\ncreateClipboard();\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createClipboard } from \"@solid-primitives/clipboard\";\n\ncreateRoot(dispose => {\n  createClipboard();\n  return dispose;\n});\n"
+    },
+    {
+      "id": "clipboard-createClipboard-top-level-read",
+      "package": "@solid-primitives/clipboard",
+      "version": "2.0.0-next.17",
+      "entrypoint": ".",
+      "export": "createClipboard",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createClipboard returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createClipboard } from \"@solid-primitives/clipboard\";\n\nexport default function App() {\n  const [items] = createClipboard();\n  const current = items().length;\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createClipboard } from \"@solid-primitives/clipboard\";\n\nexport default function App() {\n  const [items] = createClipboard();\n  return <p>{String(items().length)}</p>;\n}\n"
+    },
+    {
+      "id": "scroll-createScrollPosition-top-level-read",
+      "package": "@solid-primitives/scroll",
+      "version": "3.0.0-next.4",
+      "entrypoint": ".",
+      "export": "createScrollPosition",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createScrollPosition returns a reactive position object. Reading `position.y` at the component's top level reads it once, untracked.",
+      "misuse": "import { createScrollPosition } from \"@solid-primitives/scroll\";\n\nexport default function App() {\n  const position = createScrollPosition();\n  const current = position.y;\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createScrollPosition } from \"@solid-primitives/scroll\";\n\nexport default function App() {\n  const position = createScrollPosition();\n  return <p>{String(position.y)}</p>;\n}\n"
+    },
+    {
+      "id": "scroll-createScrollPosition-module-scope",
+      "package": "@solid-primitives/scroll",
+      "version": "3.0.0-next.4",
+      "entrypoint": ".",
+      "export": "createScrollPosition",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createScrollPosition registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createScrollPosition } from \"@solid-primitives/scroll\";\n\ncreateScrollPosition();\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createScrollPosition } from \"@solid-primitives/scroll\";\n\ncreateRoot(dispose => {\n  createScrollPosition();\n  return dispose;\n});\n"
+    },
+    {
+      "id": "scroll-createPreventScroll-module-scope",
+      "package": "@solid-primitives/scroll",
+      "version": "3.0.0-next.4",
+      "entrypoint": ".",
+      "export": "createPreventScroll",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createPreventScroll registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createPreventScroll } from \"@solid-primitives/scroll\";\n\ncreatePreventScroll();\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createPreventScroll } from \"@solid-primitives/scroll\";\n\ncreateRoot(dispose => {\n  createPreventScroll();\n  return dispose;\n});\n"
+    },
+    {
+      "id": "cursor-createBodyCursor-module-scope",
+      "package": "@solid-primitives/cursor",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createBodyCursor",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createBodyCursor registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createBodyCursor } from \"@solid-primitives/cursor\";\n\ncreateBodyCursor(() => \"pointer\");\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createBodyCursor } from \"@solid-primitives/cursor\";\n\ncreateRoot(dispose => {\n  createBodyCursor(() => \"pointer\");\n  return dispose;\n});\n"
+    },
+    {
+      "id": "cursor-createBodyCursor-write-in-tracked-callback",
+      "package": "@solid-primitives/cursor",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createBodyCursor",
+      "class": "trackedCallback",
+      "rule": "reactive-write-in-owned-scope",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createBodyCursor runs its callback in a tracked (owned) scope. Writing a signal there is a write in an owned scope, which Solid 2 rejects.",
+      "misuse": "import { createSignal } from \"solid-js\";\nimport { createBodyCursor } from \"@solid-primitives/cursor\";\n\nexport default function App() {\n  const [count, setCount] = createSignal(0);\n  createBodyCursor(() => {\n    setCount(1);\n    return count() < 0 ? false : \"pointer\";\n  });\n  return <p>{count()}</p>;\n}\n",
+      "correct": "import { createSignal } from \"solid-js\";\nimport { createBodyCursor } from \"@solid-primitives/cursor\";\n\nexport default function App() {\n  const [count] = createSignal(0);\n  createBodyCursor(() => {\n    count();\n    return count() < 0 ? false : \"pointer\";\n  });\n  return <p>{count()}</p>;\n}\n"
+    },
+    {
+      "id": "cursor-createElementCursor-module-scope",
+      "package": "@solid-primitives/cursor",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createElementCursor",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createElementCursor registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createElementCursor } from \"@solid-primitives/cursor\";\n\ncreateElementCursor(document.body, \"pointer\");\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createElementCursor } from \"@solid-primitives/cursor\";\n\ncreateRoot(dispose => {\n  createElementCursor(document.body, \"pointer\");\n  return dispose;\n});\n"
+    },
+    {
+      "id": "keyboard-createShortcut-module-scope",
+      "package": "@solid-primitives/keyboard",
+      "version": "2.0.0-next.5",
+      "entrypoint": ".",
+      "export": "createShortcut",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createShortcut registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createShortcut } from \"@solid-primitives/keyboard\";\n\ncreateShortcut([\"Control\", \"K\"], () => console.log(\"open\"));\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createShortcut } from \"@solid-primitives/keyboard\";\n\ncreateRoot(dispose => {\n  createShortcut([\"Control\", \"K\"], () => console.log(\"open\"));\n  return dispose;\n});\n"
+    },
+    {
+      "id": "keyboard-createKeyHold-top-level-read",
+      "package": "@solid-primitives/keyboard",
+      "version": "2.0.0-next.5",
+      "entrypoint": ".",
+      "export": "createKeyHold",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createKeyHold returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createKeyHold } from \"@solid-primitives/keyboard\";\n\nexport default function App() {\n  const held = createKeyHold(\"Shift\");\n  const current = held();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createKeyHold } from \"@solid-primitives/keyboard\";\n\nexport default function App() {\n  const held = createKeyHold(\"Shift\");\n  return <p>{String(held())}</p>;\n}\n"
+    },
+    {
+      "id": "keyboard-useKeyDownList-top-level-read",
+      "package": "@solid-primitives/keyboard",
+      "version": "2.0.0-next.5",
+      "entrypoint": ".",
+      "export": "useKeyDownList",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "useKeyDownList returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { useKeyDownList } from \"@solid-primitives/keyboard\";\n\nexport default function App() {\n  const keys = useKeyDownList();\n  const current = keys().length;\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { useKeyDownList } from \"@solid-primitives/keyboard\";\n\nexport default function App() {\n  const keys = useKeyDownList();\n  return <p>{String(keys().length)}</p>;\n}\n"
+    },
+    {
+      "id": "props-combineProps-top-level-read",
+      "package": "@solid-primitives/props",
+      "version": "4.0.0-next.3",
+      "entrypoint": ".",
+      "export": "combineProps",
+      "class": "argumentRead",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "combineProps returns a merged props proxy whose members read the component's props. Reading one at the component's top level reads it once, untracked.",
+      "misuse": "import { combineProps } from \"@solid-primitives/props\";\n\nexport default function Button(props: { class?: string }) {\n  const merged = combineProps(props, { class: \"button\" });\n  const current = merged.class;\n  return <button class={current}>go</button>;\n}\n",
+      "correct": "import { combineProps } from \"@solid-primitives/props\";\n\nexport default function Button(props: { class?: string }) {\n  const merged = combineProps(props, { class: \"button\" });\n  return <button class={merged.class}>go</button>;\n}\n"
+    },
+    {
+      "id": "upload-createDropzone-module-scope",
+      "package": "@solid-primitives/upload",
+      "version": "1.0.0-next.4",
+      "entrypoint": ".",
+      "export": "createDropzone",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createDropzone registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createDropzone } from \"@solid-primitives/upload\";\n\ncreateDropzone();\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createDropzone } from \"@solid-primitives/upload\";\n\ncreateRoot(dispose => {\n  createDropzone();\n  return dispose;\n});\n"
+    },
+    {
+      "id": "upload-createDropzone-top-level-read",
+      "package": "@solid-primitives/upload",
+      "version": "1.0.0-next.4",
+      "entrypoint": ".",
+      "export": "createDropzone",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createDropzone returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createDropzone } from \"@solid-primitives/upload\";\n\nexport default function App() {\n  const zone = createDropzone();\n  const current = zone.files().length;\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createDropzone } from \"@solid-primitives/upload\";\n\nexport default function App() {\n  const zone = createDropzone();\n  return <p>{String(zone.files().length)}</p>;\n}\n"
+    },
+    {
+      "id": "history-createUndoHistory-top-level-read",
+      "package": "@solid-primitives/history",
+      "version": "1.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createUndoHistory",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createUndoHistory returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createSignal } from \"solid-js\";\nimport { createUndoHistory } from \"@solid-primitives/history\";\n\nexport default function App() {\n  const [count, setCount] = createSignal(0); const history = createUndoHistory(() => { const value = count(); return () => setCount(value); });\n  const current = history.canUndo();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createSignal } from \"solid-js\";\nimport { createUndoHistory } from \"@solid-primitives/history\";\n\nexport default function App() {\n  const [count, setCount] = createSignal(0); const history = createUndoHistory(() => { const value = count(); return () => setCount(value); });\n  return <p>{String(history.canUndo())}</p>;\n}\n"
+    },
+    {
+      "id": "fullscreen-createFullscreen-top-level-read",
+      "package": "@solid-primitives/fullscreen",
+      "version": "2.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createFullscreen",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createFullscreen returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createFullscreen } from \"@solid-primitives/fullscreen\";\n\nexport default function App() {\n  const screen = createFullscreen(document.body);\n  const current = screen.isActive();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createFullscreen } from \"@solid-primitives/fullscreen\";\n\nexport default function App() {\n  const screen = createFullscreen(document.body);\n  return <p>{String(screen.isActive())}</p>;\n}\n"
+    },
+    {
+      "id": "fullscreen-createFullscreen-module-scope",
+      "package": "@solid-primitives/fullscreen",
+      "version": "2.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createFullscreen",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createFullscreen registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createFullscreen } from \"@solid-primitives/fullscreen\";\n\ncreateFullscreen(document.body);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createFullscreen } from \"@solid-primitives/fullscreen\";\n\ncreateRoot(dispose => {\n  createFullscreen(document.body);\n  return dispose;\n});\n"
+    },
+    {
+      "id": "i18n-translator-argument-read",
+      "package": "@solid-primitives/i18n",
+      "version": "3.0.0-next.4",
+      "entrypoint": ".",
+      "export": "translator",
+      "class": "argumentRead",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "A translator reads its dictionary accessor when called. Called at the component's top level that read happens once, untracked.",
+      "misuse": "import { createSignal } from \"solid-js\";\nimport { translator } from \"@solid-primitives/i18n\";\n\nexport default function App() {\n  const [dict] = createSignal({ hello: \"hello\" }); const t = translator(dict);\n  const current = t(\"hello\");\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createSignal } from \"solid-js\";\nimport { translator } from \"@solid-primitives/i18n\";\n\nexport default function App() {\n  const [dict] = createSignal({ hello: \"hello\" }); const t = translator(dict);\n  return <p>{String(t(\"hello\"))}</p>;\n}\n"
+    },
+    {
+      "id": "memo-createLazyMemo-top-level-read",
+      "package": "@solid-primitives/memo",
+      "version": "2.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createLazyMemo",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createLazyMemo returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createSignal } from \"solid-js\";\nimport { createLazyMemo } from \"@solid-primitives/memo\";\n\nexport default function App() {\n  const [count] = createSignal(1); const doubled = createLazyMemo(() => count() * 2);\n  const current = doubled();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createSignal } from \"solid-js\";\nimport { createLazyMemo } from \"@solid-primitives/memo\";\n\nexport default function App() {\n  const [count] = createSignal(1); const doubled = createLazyMemo(() => count() * 2);\n  return <p>{String(doubled())}</p>;\n}\n"
+    },
+    {
+      "id": "memo-createReducer-top-level-read",
+      "package": "@solid-primitives/memo",
+      "version": "2.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createReducer",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createReducer returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createReducer } from \"@solid-primitives/memo\";\n\nexport default function App() {\n  const [state] = createReducer((value: number, by: number) => value + by, 0);\n  const current = state();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createReducer } from \"@solid-primitives/memo\";\n\nexport default function App() {\n  const [state] = createReducer((value: number, by: number) => value + by, 0);\n  return <p>{String(state())}</p>;\n}\n"
+    },
+    {
+      "id": "memo-createPureReaction-module-scope",
+      "package": "@solid-primitives/memo",
+      "version": "2.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createPureReaction",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createPureReaction registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createPureReaction } from \"@solid-primitives/memo\";\n\ncreatePureReaction(() => console.log(\"invalidated\"));\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createPureReaction } from \"@solid-primitives/memo\";\n\ncreateRoot(dispose => {\n  createPureReaction(() => console.log(\"invalidated\"));\n  return dispose;\n});\n"
+    },
+    {
+      "id": "rootless-createRootPool-module-scope",
+      "package": "@solid-primitives/rootless",
+      "version": "2.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createRootPool",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createRootPool registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createRootPool } from \"@solid-primitives/rootless\";\n\ncreateRootPool(() => 1);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createRootPool } from \"@solid-primitives/rootless\";\n\ncreateRoot(dispose => {\n  createRootPool(() => 1);\n  return dispose;\n});\n"
+    },
+    {
+      "id": "refs-resolveFirst-write-in-tracked-callback",
+      "package": "@solid-primitives/refs",
+      "version": "3.0.0-next.2",
+      "entrypoint": ".",
+      "export": "resolveFirst",
+      "class": "trackedCallback",
+      "rule": "reactive-write-in-owned-scope",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "resolveFirst runs its callback in a tracked (owned) scope. Writing a signal there is a write in an owned scope, which Solid 2 rejects.",
+      "misuse": "import { createSignal } from \"solid-js\";\nimport { resolveFirst } from \"@solid-primitives/refs\";\n\nexport default function App() {\n  const [count, setCount] = createSignal(0);\n  resolveFirst(() => {\n    setCount(1);\n    return document.body;\n  });\n  return <p>{count()}</p>;\n}\n",
+      "correct": "import { createSignal } from \"solid-js\";\nimport { resolveFirst } from \"@solid-primitives/refs\";\n\nexport default function App() {\n  const [count] = createSignal(0);\n  resolveFirst(() => {\n    count();\n    return document.body;\n  });\n  return <p>{count()}</p>;\n}\n"
+    },
+    {
+      "id": "refs-resolveFirst-top-level-read",
+      "package": "@solid-primitives/refs",
+      "version": "3.0.0-next.2",
+      "entrypoint": ".",
+      "export": "resolveFirst",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "resolveFirst returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { resolveFirst } from \"@solid-primitives/refs\";\n\nexport default function App() {\n  const first = resolveFirst(() => document.body);\n  const current = first()?.tagName;\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { resolveFirst } from \"@solid-primitives/refs\";\n\nexport default function App() {\n  const first = resolveFirst(() => document.body);\n  return <p>{String(first()?.tagName)}</p>;\n}\n"
+    },
+    {
+      "id": "deep-trackStore-argument-read",
+      "package": "@solid-primitives/deep",
+      "version": "1.0.0-next.3",
+      "entrypoint": ".",
+      "export": "trackStore",
+      "class": "argumentRead",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "trackStore reads every member of its store argument. Called at the component's top level those reads happen once, untracked.",
+      "misuse": "import { createStore } from \"solid-js\";\nimport { trackStore } from \"@solid-primitives/deep\";\n\nexport default function App() {\n  const [store] = createStore({ count: 0 });\n  const current = trackStore(store).count;\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createStore } from \"solid-js\";\nimport { trackStore } from \"@solid-primitives/deep\";\n\nexport default function App() {\n  const [store] = createStore({ count: 0 });\n  return <p>{String(trackStore(store).count)}</p>;\n}\n"
+    },
+    {
+      "id": "mutation-observer-createMutationObserver-module-scope",
+      "package": "@solid-primitives/mutation-observer",
+      "version": "3.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createMutationObserver",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createMutationObserver registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createMutationObserver } from \"@solid-primitives/mutation-observer\";\n\ncreateMutationObserver(document.body, { childList: true }, records => console.log(records.length));\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createMutationObserver } from \"@solid-primitives/mutation-observer\";\n\ncreateRoot(dispose => {\n  createMutationObserver(document.body, { childList: true }, records => console.log(records.length));\n  return dispose;\n});\n"
+    },
+    {
+      "id": "map-ReactiveMap-top-level-read",
+      "package": "@solid-primitives/map",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "ReactiveMap",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "A ReactiveMap's `get` is a tracked read. Called at the component's top level it is read once, untracked.",
+      "misuse": "import { ReactiveMap } from \"@solid-primitives/map\";\n\nexport default function App() {\n  const cache = new ReactiveMap<string, number>([[\"a\", 1]]);\n  const current = cache.get(\"a\");\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { ReactiveMap } from \"@solid-primitives/map\";\n\nexport default function App() {\n  const cache = new ReactiveMap<string, number>([[\"a\", 1]]);\n  return <p>{String(cache.get(\"a\"))}</p>;\n}\n"
+    },
+    {
+      "id": "websocket-createReconnectingWS-module-scope",
+      "package": "@solid-primitives/websocket",
+      "version": "2.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createReconnectingWS",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createReconnectingWS registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createReconnectingWS } from \"@solid-primitives/websocket\";\n\ncreateReconnectingWS(\"wss://example.test/socket\");\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createReconnectingWS } from \"@solid-primitives/websocket\";\n\ncreateRoot(dispose => {\n  createReconnectingWS(\"wss://example.test/socket\");\n  return dispose;\n});\n"
+    },
+    {
+      "id": "websocket-createWSState-top-level-read",
+      "package": "@solid-primitives/websocket",
+      "version": "2.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createWSState",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createWSState returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createWSState } from \"@solid-primitives/websocket\";\n\nexport default function App() {\n  const state = createWSState(new WebSocket(\"wss://example.test/socket\"));\n  const current = state();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createWSState } from \"@solid-primitives/websocket\";\n\nexport default function App() {\n  const state = createWSState(new WebSocket(\"wss://example.test/socket\"));\n  return <p>{String(state())}</p>;\n}\n"
+    },
+    {
+      "id": "connectivity-createConnectivitySignal-top-level-read",
+      "package": "@solid-primitives/connectivity",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createConnectivitySignal",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createConnectivitySignal returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createConnectivitySignal } from \"@solid-primitives/connectivity\";\n\nexport default function App() {\n  const online = createConnectivitySignal();\n  const current = online();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createConnectivitySignal } from \"@solid-primitives/connectivity\";\n\nexport default function App() {\n  const online = createConnectivitySignal();\n  return <p>{String(online())}</p>;\n}\n"
+    },
+    {
+      "id": "connectivity-createConnectivitySignal-module-scope",
+      "package": "@solid-primitives/connectivity",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createConnectivitySignal",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createConnectivitySignal registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createConnectivitySignal } from \"@solid-primitives/connectivity\";\n\ncreateConnectivitySignal();\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createConnectivitySignal } from \"@solid-primitives/connectivity\";\n\ncreateRoot(dispose => {\n  createConnectivitySignal();\n  return dispose;\n});\n"
+    },
+    {
+      "id": "media-createMediaQuery-top-level-read",
+      "package": "@solid-primitives/media",
+      "version": "4.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createMediaQuery",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createMediaQuery returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createMediaQuery } from \"@solid-primitives/media\";\n\nexport default function App() {\n  const wide = createMediaQuery(\"(min-width: 800px)\");\n  const current = wide();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createMediaQuery } from \"@solid-primitives/media\";\n\nexport default function App() {\n  const wide = createMediaQuery(\"(min-width: 800px)\");\n  return <p>{String(wide())}</p>;\n}\n"
+    },
+    {
+      "id": "media-createMediaQuery-module-scope",
+      "package": "@solid-primitives/media",
+      "version": "4.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createMediaQuery",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createMediaQuery registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createMediaQuery } from \"@solid-primitives/media\";\n\ncreateMediaQuery(\"(min-width: 800px)\");\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createMediaQuery } from \"@solid-primitives/media\";\n\ncreateRoot(dispose => {\n  createMediaQuery(\"(min-width: 800px)\");\n  return dispose;\n});\n"
+    },
+    {
+      "id": "media-createPrefersDark-top-level-read",
+      "package": "@solid-primitives/media",
+      "version": "4.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createPrefersDark",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createPrefersDark returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createPrefersDark } from \"@solid-primitives/media\";\n\nexport default function App() {\n  const dark = createPrefersDark();\n  const current = dark();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createPrefersDark } from \"@solid-primitives/media\";\n\nexport default function App() {\n  const dark = createPrefersDark();\n  return <p>{String(dark())}</p>;\n}\n"
+    },
+    {
+      "id": "page-utilities-createPageVisibility-top-level-read",
+      "package": "@solid-primitives/page-utilities",
+      "version": "3.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createPageVisibility",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createPageVisibility returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createPageVisibility } from \"@solid-primitives/page-utilities\";\n\nexport default function App() {\n  const visible = createPageVisibility();\n  const current = visible();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createPageVisibility } from \"@solid-primitives/page-utilities\";\n\nexport default function App() {\n  const visible = createPageVisibility();\n  return <p>{String(visible())}</p>;\n}\n"
+    },
+    {
+      "id": "page-utilities-createPageLeaveBlocker-module-scope",
+      "package": "@solid-primitives/page-utilities",
+      "version": "3.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createPageLeaveBlocker",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createPageLeaveBlocker registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createPageLeaveBlocker } from \"@solid-primitives/page-utilities\";\n\ncreatePageLeaveBlocker(true);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createPageLeaveBlocker } from \"@solid-primitives/page-utilities\";\n\ncreateRoot(dispose => {\n  createPageLeaveBlocker(true);\n  return dispose;\n});\n"
+    },
+    {
+      "id": "active-element-createActiveElement-top-level-read",
+      "package": "@solid-primitives/active-element",
+      "version": "3.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createActiveElement",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createActiveElement returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createActiveElement } from \"@solid-primitives/active-element\";\n\nexport default function App() {\n  const active = createActiveElement();\n  const current = active()?.tagName;\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createActiveElement } from \"@solid-primitives/active-element\";\n\nexport default function App() {\n  const active = createActiveElement();\n  return <p>{String(active()?.tagName)}</p>;\n}\n"
+    },
+    {
+      "id": "active-element-createActiveElement-module-scope",
+      "package": "@solid-primitives/active-element",
+      "version": "3.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createActiveElement",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createActiveElement registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createActiveElement } from \"@solid-primitives/active-element\";\n\ncreateActiveElement();\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createActiveElement } from \"@solid-primitives/active-element\";\n\ncreateRoot(dispose => {\n  createActiveElement();\n  return dispose;\n});\n"
+    },
+    {
+      "id": "static-store-createStaticStore-top-level-read",
+      "package": "@solid-primitives/static-store",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createStaticStore",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createStaticStore returns a reactive object. Reading `state.count` at the component's top level reads it once, untracked.",
+      "misuse": "import { createStaticStore } from \"@solid-primitives/static-store\";\n\nexport default function App() {\n  const [state] = createStaticStore({ count: 0 });\n  const current = state.count;\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createStaticStore } from \"@solid-primitives/static-store\";\n\nexport default function App() {\n  const [state] = createStaticStore({ count: 0 });\n  return <p>{String(state.count)}</p>;\n}\n"
+    },
+    {
+      "id": "static-store-createDerivedStaticStore-write-in-tracked-callback",
+      "package": "@solid-primitives/static-store",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createDerivedStaticStore",
+      "class": "trackedCallback",
+      "rule": "reactive-write-in-owned-scope",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createDerivedStaticStore runs its callback in a tracked (owned) scope. Writing a signal there is a write in an owned scope, which Solid 2 rejects.",
+      "misuse": "import { createSignal } from \"solid-js\";\nimport { createDerivedStaticStore } from \"@solid-primitives/static-store\";\n\nexport default function App() {\n  const [count, setCount] = createSignal(0);\n  createDerivedStaticStore(() => {\n    setCount(1);\n    return { value: count() };\n  });\n  return <p>{count()}</p>;\n}\n",
+      "correct": "import { createSignal } from \"solid-js\";\nimport { createDerivedStaticStore } from \"@solid-primitives/static-store\";\n\nexport default function App() {\n  const [count] = createSignal(0);\n  createDerivedStaticStore(() => {\n    count();\n    return { value: count() };\n  });\n  return <p>{count()}</p>;\n}\n"
+    },
+    {
+      "id": "transition-group-createSwitchTransition-module-scope",
+      "package": "@solid-primitives/transition-group",
+      "version": "2.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createSwitchTransition",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createSwitchTransition registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createSwitchTransition } from \"@solid-primitives/transition-group\";\n\ncreateSwitchTransition(() => 1, {});\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createSwitchTransition } from \"@solid-primitives/transition-group\";\n\ncreateRoot(dispose => {\n  createSwitchTransition(() => 1, {});\n  return dispose;\n});\n"
+    },
+    {
+      "id": "trigger-createTrigger-top-level-read",
+      "package": "@solid-primitives/trigger",
+      "version": "3.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createTrigger",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createTrigger's `track` is a tracked read. Called at the component's top level it tracks nothing.",
+      "misuse": "import { createTrigger } from \"@solid-primitives/trigger\";\n\nexport default function App() {\n  const [track] = createTrigger();\n  const current = track();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createTrigger } from \"@solid-primitives/trigger\";\n\nexport default function App() {\n  const [track] = createTrigger();\n  return <p>{String(track())}</p>;\n}\n"
+    },
+    {
+      "id": "a11y-createReducedMotion-top-level-read",
+      "package": "@solid-primitives/a11y",
+      "version": "1.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createReducedMotion",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createReducedMotion returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createReducedMotion } from \"@solid-primitives/a11y\";\n\nexport default function App() {\n  const reduced = createReducedMotion();\n  const current = reduced();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createReducedMotion } from \"@solid-primitives/a11y\";\n\nexport default function App() {\n  const reduced = createReducedMotion();\n  return <p>{String(reduced())}</p>;\n}\n"
+    },
+    {
+      "id": "a11y-createReducedMotion-module-scope",
+      "package": "@solid-primitives/a11y",
+      "version": "1.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createReducedMotion",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createReducedMotion registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createReducedMotion } from \"@solid-primitives/a11y\";\n\ncreateReducedMotion();\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createReducedMotion } from \"@solid-primitives/a11y\";\n\ncreateRoot(dispose => {\n  createReducedMotion();\n  return dispose;\n});\n"
+    },
+    {
+      "id": "async-createAggregated-top-level-read",
+      "package": "@solid-primitives/async",
+      "version": "0.0.101-next.3",
+      "entrypoint": ".",
+      "export": "createAggregated",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createAggregated returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createSignal } from \"solid-js\";\nimport { createAggregated } from \"@solid-primitives/async\";\n\nexport default function App() {\n  const [source] = createSignal(1); const all = createAggregated(source);\n  const current = all();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createSignal } from \"solid-js\";\nimport { createAggregated } from \"@solid-primitives/async\";\n\nexport default function App() {\n  const [source] = createSignal(1); const all = createAggregated(source);\n  return <p>{String(all())}</p>;\n}\n"
+    },
+    {
+      "id": "audio-createAudio-module-scope",
+      "package": "@solid-primitives/audio",
+      "version": "3.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createAudio",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createAudio registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createAudio } from \"@solid-primitives/audio\";\n\ncreateAudio(\"/sound.mp3\");\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createAudio } from \"@solid-primitives/audio\";\n\ncreateRoot(dispose => {\n  createAudio(\"/sound.mp3\");\n  return dispose;\n});\n"
+    },
+    {
+      "id": "broadcast-channel-makeBroadcastChannel-module-scope",
+      "package": "@solid-primitives/broadcast-channel",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "makeBroadcastChannel",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "makeBroadcastChannel registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { makeBroadcastChannel } from \"@solid-primitives/broadcast-channel\";\n\nmakeBroadcastChannel<string>(\"room\");\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { makeBroadcastChannel } from \"@solid-primitives/broadcast-channel\";\n\ncreateRoot(dispose => {\n  makeBroadcastChannel<string>(\"room\");\n  return dispose;\n});\n"
+    },
+    {
+      "id": "date-createDateNow-top-level-read",
+      "package": "@solid-primitives/date",
+      "version": "3.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createDateNow",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createDateNow returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createDateNow } from \"@solid-primitives/date\";\n\nexport default function App() {\n  const [now] = createDateNow();\n  const current = now().getTime();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createDateNow } from \"@solid-primitives/date\";\n\nexport default function App() {\n  const [now] = createDateNow();\n  return <p>{String(now().getTime())}</p>;\n}\n"
+    },
+    {
+      "id": "date-createDateNow-module-scope",
+      "package": "@solid-primitives/date",
+      "version": "3.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createDateNow",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createDateNow registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createDateNow } from \"@solid-primitives/date\";\n\ncreateDateNow();\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createDateNow } from \"@solid-primitives/date\";\n\ncreateRoot(dispose => {\n  createDateNow();\n  return dispose;\n});\n"
+    },
+    {
+      "id": "date-createDate-top-level-read",
+      "package": "@solid-primitives/date",
+      "version": "3.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createDate",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createDate returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createDate } from \"@solid-primitives/date\";\n\nexport default function App() {\n  const [date] = createDate(0);\n  const current = date().getTime();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createDate } from \"@solid-primitives/date\";\n\nexport default function App() {\n  const [date] = createDate(0);\n  return <p>{String(date().getTime())}</p>;\n}\n"
+    },
+    {
+      "id": "devices-createDevices-top-level-read",
+      "package": "@solid-primitives/devices",
+      "version": "3.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createDevices",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createDevices returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createDevices } from \"@solid-primitives/devices\";\n\nexport default function App() {\n  const devices = createDevices();\n  const current = devices().length;\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createDevices } from \"@solid-primitives/devices\";\n\nexport default function App() {\n  const devices = createDevices();\n  return <p>{String(devices().length)}</p>;\n}\n"
+    },
+    {
+      "id": "devices-createDevices-module-scope",
+      "package": "@solid-primitives/devices",
+      "version": "3.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createDevices",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createDevices registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createDevices } from \"@solid-primitives/devices\";\n\ncreateDevices();\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createDevices } from \"@solid-primitives/devices\";\n\ncreateRoot(dispose => {\n  createDevices();\n  return dispose;\n});\n"
+    },
+    {
+      "id": "focus-createAutofocus-module-scope",
+      "package": "@solid-primitives/focus",
+      "version": "1.0.0-next.4",
+      "entrypoint": ".",
+      "export": "createAutofocus",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createAutofocus registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createAutofocus } from \"@solid-primitives/focus\";\n\ncreateAutofocus(() => document.body);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createAutofocus } from \"@solid-primitives/focus\";\n\ncreateRoot(dispose => {\n  createAutofocus(() => document.body);\n  return dispose;\n});\n"
+    },
+    {
+      "id": "intersection-observer-createVisibilityObserver-module-scope",
+      "package": "@solid-primitives/intersection-observer",
+      "version": "3.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createVisibilityObserver",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createVisibilityObserver registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createVisibilityObserver } from \"@solid-primitives/intersection-observer\";\n\ncreateVisibilityObserver(document.body);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createVisibilityObserver } from \"@solid-primitives/intersection-observer\";\n\ncreateRoot(dispose => {\n  createVisibilityObserver(document.body);\n  return dispose;\n});\n"
+    },
+    {
+      "id": "intersection-observer-createIntersectionObserver-module-scope",
+      "package": "@solid-primitives/intersection-observer",
+      "version": "3.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createIntersectionObserver",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createIntersectionObserver registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createIntersectionObserver } from \"@solid-primitives/intersection-observer\";\n\ncreateIntersectionObserver(() => [document.body]);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createIntersectionObserver } from \"@solid-primitives/intersection-observer\";\n\ncreateRoot(dispose => {\n  createIntersectionObserver(() => [document.body]);\n  return dispose;\n});\n"
+    },
+    {
+      "id": "lifecycle-createIsMounted-top-level-read",
+      "package": "@solid-primitives/lifecycle",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createIsMounted",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createIsMounted returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createIsMounted } from \"@solid-primitives/lifecycle\";\n\nexport default function App() {\n  const mounted = createIsMounted();\n  const current = mounted();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createIsMounted } from \"@solid-primitives/lifecycle\";\n\nexport default function App() {\n  const mounted = createIsMounted();\n  return <p>{String(mounted())}</p>;\n}\n"
+    },
+    {
+      "id": "lifecycle-createIsMounted-module-scope",
+      "package": "@solid-primitives/lifecycle",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createIsMounted",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createIsMounted registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createIsMounted } from \"@solid-primitives/lifecycle\";\n\ncreateIsMounted();\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createIsMounted } from \"@solid-primitives/lifecycle\";\n\ncreateRoot(dispose => {\n  createIsMounted();\n  return dispose;\n});\n"
+    },
+    {
+      "id": "notification-createNotification-module-scope",
+      "package": "@solid-primitives/notification",
+      "version": "1.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createNotification",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createNotification registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createNotification } from \"@solid-primitives/notification\";\n\ncreateNotification(\"hello\");\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createNotification } from \"@solid-primitives/notification\";\n\ncreateRoot(dispose => {\n  createNotification(\"hello\");\n  return dispose;\n});\n"
+    },
+    {
+      "id": "notification-createNotification-top-level-read",
+      "package": "@solid-primitives/notification",
+      "version": "1.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createNotification",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createNotification returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createNotification } from \"@solid-primitives/notification\";\n\nexport default function App() {\n  const note = createNotification(\"hello\");\n  const current = note.notification() === null;\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createNotification } from \"@solid-primitives/notification\";\n\nexport default function App() {\n  const note = createNotification(\"hello\");\n  return <p>{String(note.notification() === null)}</p>;\n}\n"
+    },
+    {
+      "id": "orientation-createOrientation-module-scope",
+      "package": "@solid-primitives/orientation",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createOrientation",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createOrientation registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createOrientation } from \"@solid-primitives/orientation\";\n\ncreateOrientation();\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createOrientation } from \"@solid-primitives/orientation\";\n\ncreateRoot(dispose => {\n  createOrientation();\n  return dispose;\n});\n"
+    },
+    {
+      "id": "orientation-createOrientation-top-level-read",
+      "package": "@solid-primitives/orientation",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createOrientation",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createOrientation returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createOrientation } from \"@solid-primitives/orientation\";\n\nexport default function App() {\n  const orientation = createOrientation();\n  const current = orientation.angle();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createOrientation } from \"@solid-primitives/orientation\";\n\nexport default function App() {\n  const orientation = createOrientation();\n  return <p>{String(orientation.angle())}</p>;\n}\n"
+    },
+    {
+      "id": "permission-createPermission-top-level-read",
+      "package": "@solid-primitives/permission",
+      "version": "2.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createPermission",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createPermission returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createPermission } from \"@solid-primitives/permission\";\n\nexport default function App() {\n  const camera = createPermission(\"camera\");\n  const current = camera();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createPermission } from \"@solid-primitives/permission\";\n\nexport default function App() {\n  const camera = createPermission(\"camera\");\n  return <p>{String(camera())}</p>;\n}\n"
+    },
+    {
+      "id": "permission-createPermission-module-scope",
+      "package": "@solid-primitives/permission",
+      "version": "2.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createPermission",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createPermission registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createPermission } from \"@solid-primitives/permission\";\n\ncreatePermission(\"camera\");\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createPermission } from \"@solid-primitives/permission\";\n\ncreateRoot(dispose => {\n  createPermission(\"camera\");\n  return dispose;\n});\n"
+    },
+    {
+      "id": "promise-until-write-in-tracked-callback",
+      "package": "@solid-primitives/promise",
+      "version": "2.0.0-next.2",
+      "entrypoint": ".",
+      "export": "until",
+      "class": "trackedCallback",
+      "rule": "reactive-write-in-owned-scope",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "until runs its callback in a tracked (owned) scope. Writing a signal there is a write in an owned scope, which Solid 2 rejects.",
+      "misuse": "import { createSignal } from \"solid-js\";\nimport { until } from \"@solid-primitives/promise\";\n\nexport default function App() {\n  const [count, setCount] = createSignal(0);\n  until(() => {\n    setCount(1);\n    return count() > 0;\n  });\n  return <p>{count()}</p>;\n}\n",
+      "correct": "import { createSignal } from \"solid-js\";\nimport { until } from \"@solid-primitives/promise\";\n\nexport default function App() {\n  const [count] = createSignal(0);\n  until(() => {\n    count();\n    return count() > 0;\n  });\n  return <p>{count()}</p>;\n}\n"
+    },
+    {
+      "id": "range-repeat-module-scope",
+      "package": "@solid-primitives/range",
+      "version": "1.0.0-next.3",
+      "entrypoint": ".",
+      "export": "repeat",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "repeat registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { repeat } from \"@solid-primitives/range\";\n\nrepeat(() => 3, index => index);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { repeat } from \"@solid-primitives/range\";\n\ncreateRoot(dispose => {\n  repeat(() => 3, index => index);\n  return dispose;\n});\n"
+    },
+    {
+      "id": "range-mapRange-module-scope",
+      "package": "@solid-primitives/range",
+      "version": "1.0.0-next.3",
+      "entrypoint": ".",
+      "export": "mapRange",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "mapRange registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { mapRange } from \"@solid-primitives/range\";\n\nmapRange(() => 0, () => 3, () => 1, value => value);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { mapRange } from \"@solid-primitives/range\";\n\ncreateRoot(dispose => {\n  mapRange(() => 0, () => 3, () => 1, value => value);\n  return dispose;\n});\n"
+    },
+    {
+      "id": "script-loader-createScriptLoader-module-scope",
+      "package": "@solid-primitives/script-loader",
+      "version": "3.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createScriptLoader",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createScriptLoader registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createScriptLoader } from \"@solid-primitives/script-loader\";\n\ncreateScriptLoader({ src: \"/script.js\" });\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createScriptLoader } from \"@solid-primitives/script-loader\";\n\ncreateRoot(dispose => {\n  createScriptLoader({ src: \"/script.js\" });\n  return dispose;\n});\n"
+    },
+    {
+      "id": "selection-createSelection-top-level-read",
+      "package": "@solid-primitives/selection",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createSelection",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createSelection returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createSelection } from \"@solid-primitives/selection\";\n\nexport default function App() {\n  const [selection] = createSelection();\n  const current = selection();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createSelection } from \"@solid-primitives/selection\";\n\nexport default function App() {\n  const [selection] = createSelection();\n  return <p>{String(selection())}</p>;\n}\n"
+    },
+    {
+      "id": "selection-createSelection-module-scope",
+      "package": "@solid-primitives/selection",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createSelection",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createSelection registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createSelection } from \"@solid-primitives/selection\";\n\ncreateSelection();\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createSelection } from \"@solid-primitives/selection\";\n\ncreateRoot(dispose => {\n  createSelection();\n  return dispose;\n});\n"
+    },
+    {
+      "id": "sensors-createBattery-top-level-read",
+      "package": "@solid-primitives/sensors",
+      "version": "1.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createBattery",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createBattery returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createBattery } from \"@solid-primitives/sensors\";\n\nexport default function App() {\n  const battery = createBattery();\n  const current = battery()?.level;\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createBattery } from \"@solid-primitives/sensors\";\n\nexport default function App() {\n  const battery = createBattery();\n  return <p>{String(battery()?.level)}</p>;\n}\n"
+    },
+    {
+      "id": "sensors-createBattery-module-scope",
+      "package": "@solid-primitives/sensors",
+      "version": "1.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createBattery",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createBattery registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createBattery } from \"@solid-primitives/sensors\";\n\ncreateBattery();\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createBattery } from \"@solid-primitives/sensors\";\n\ncreateRoot(dispose => {\n  createBattery();\n  return dispose;\n});\n"
+    },
+    {
+      "id": "signal-builders-capitalize-top-level-read",
+      "package": "@solid-primitives/signal-builders",
+      "version": "1.0.0-next.4",
+      "entrypoint": ".",
+      "export": "capitalize",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "capitalize returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { capitalize } from \"@solid-primitives/signal-builders\";\n\nexport default function App() {\n  const title = capitalize(() => \"hello\");\n  const current = title();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { capitalize } from \"@solid-primitives/signal-builders\";\n\nexport default function App() {\n  const title = capitalize(() => \"hello\");\n  return <p>{String(title())}</p>;\n}\n"
+    },
+    {
+      "id": "signal-builders-capitalize-write-in-tracked-callback",
+      "package": "@solid-primitives/signal-builders",
+      "version": "1.0.0-next.4",
+      "entrypoint": ".",
+      "export": "capitalize",
+      "class": "trackedCallback",
+      "rule": "reactive-write-in-owned-scope",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "capitalize runs its callback in a tracked (owned) scope. Writing a signal there is a write in an owned scope, which Solid 2 rejects.",
+      "misuse": "import { createSignal } from \"solid-js\";\nimport { capitalize } from \"@solid-primitives/signal-builders\";\n\nexport default function App() {\n  const [count, setCount] = createSignal(0);\n  capitalize(() => {\n    setCount(1);\n    return String(count());\n  });\n  return <p>{count()}</p>;\n}\n",
+      "correct": "import { createSignal } from \"solid-js\";\nimport { capitalize } from \"@solid-primitives/signal-builders\";\n\nexport default function App() {\n  const [count] = createSignal(0);\n  capitalize(() => {\n    count();\n    return String(count());\n  });\n  return <p>{count()}</p>;\n}\n"
+    },
+    {
+      "id": "spring-createSpring-top-level-read",
+      "package": "@solid-primitives/spring",
+      "version": "1.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createSpring",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createSpring returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createSpring } from \"@solid-primitives/spring\";\n\nexport default function App() {\n  const [value] = createSpring(0);\n  const current = value();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createSpring } from \"@solid-primitives/spring\";\n\nexport default function App() {\n  const [value] = createSpring(0);\n  return <p>{String(value())}</p>;\n}\n"
+    },
+    {
+      "id": "spring-createSpring-module-scope",
+      "package": "@solid-primitives/spring",
+      "version": "1.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createSpring",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createSpring registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createSpring } from \"@solid-primitives/spring\";\n\ncreateSpring(0);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createSpring } from \"@solid-primitives/spring\";\n\ncreateRoot(dispose => {\n  createSpring(0);\n  return dispose;\n});\n"
+    },
+    {
+      "id": "tween-createTween-top-level-read",
+      "package": "@solid-primitives/tween",
+      "version": "2.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createTween",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createTween returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createTween } from \"@solid-primitives/tween\";\n\nexport default function App() {\n  const tweened = createTween(() => 1, { duration: 100 });\n  const current = tweened();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createTween } from \"@solid-primitives/tween\";\n\nexport default function App() {\n  const tweened = createTween(() => 1, { duration: 100 });\n  return <p>{String(tweened())}</p>;\n}\n"
+    },
+    {
+      "id": "tween-createTween-module-scope",
+      "package": "@solid-primitives/tween",
+      "version": "2.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createTween",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createTween registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createTween } from \"@solid-primitives/tween\";\n\ncreateTween(() => 1, { duration: 100 });\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createTween } from \"@solid-primitives/tween\";\n\ncreateRoot(dispose => {\n  createTween(() => 1, { duration: 100 });\n  return dispose;\n});\n"
+    },
+    {
+      "id": "vibrate-createVibrate-module-scope",
+      "package": "@solid-primitives/vibrate",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createVibrate",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createVibrate registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createVibrate } from \"@solid-primitives/vibrate\";\n\ncreateVibrate(200);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createVibrate } from \"@solid-primitives/vibrate\";\n\ncreateRoot(dispose => {\n  createVibrate(200);\n  return dispose;\n});\n"
+    },
+    {
+      "id": "video-createVideoFrameCallback-top-level-read",
+      "package": "@solid-primitives/video",
+      "version": "1.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createVideoFrameCallback",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createVideoFrameCallback returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createVideoFrameCallback } from \"@solid-primitives/video\";\n\nexport default function App() {\n  const [running] = createVideoFrameCallback(() => undefined, () => {});\n  const current = running();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createVideoFrameCallback } from \"@solid-primitives/video\";\n\nexport default function App() {\n  const [running] = createVideoFrameCallback(() => undefined, () => {});\n  return <p>{String(running())}</p>;\n}\n"
+    },
+    {
+      "id": "video-createVideoFrameCallback-module-scope",
+      "package": "@solid-primitives/video",
+      "version": "1.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createVideoFrameCallback",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createVideoFrameCallback registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createVideoFrameCallback } from \"@solid-primitives/video\";\n\ncreateVideoFrameCallback(() => undefined, () => {});\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createVideoFrameCallback } from \"@solid-primitives/video\";\n\ncreateRoot(dispose => {\n  createVideoFrameCallback(() => undefined, () => {});\n  return dispose;\n});\n"
+    },
+    {
+      "id": "workers-createWorker-module-scope",
+      "package": "@solid-primitives/workers",
+      "version": "2.0.1-next.1",
+      "entrypoint": ".",
+      "export": "createWorker",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser"
+      ],
+      "why": "createWorker registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { createWorker } from \"@solid-primitives/workers\";\n\ncreateWorker({ add: (a: number, b: number) => a + b });\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createWorker } from \"@solid-primitives/workers\";\n\ncreateRoot(dispose => {\n  createWorker({ add: (a: number, b: number) => a + b });\n  return dispose;\n});\n"
+    },
+    {
+      "id": "cookies-createUserTheme-top-level-read",
+      "package": "@solid-primitives/cookies",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createUserTheme",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createUserTheme returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createUserTheme } from \"@solid-primitives/cookies\";\n\nexport default function App() {\n  const [theme] = createUserTheme();\n  const current = theme();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createUserTheme } from \"@solid-primitives/cookies\";\n\nexport default function App() {\n  const [theme] = createUserTheme();\n  return <p>{String(theme())}</p>;\n}\n"
+    },
+    {
+      "id": "keyed-keyArray-module-scope",
+      "package": "@solid-primitives/keyed",
+      "version": "3.0.0-next.2",
+      "entrypoint": ".",
+      "export": "keyArray",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "keyArray registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "misuse": "import { keyArray } from \"@solid-primitives/keyed\";\n\nkeyArray(() => [1, 2], item => item, value => value());\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { keyArray } from \"@solid-primitives/keyed\";\n\ncreateRoot(dispose => {\n  keyArray(() => [1, 2], item => item, value => value());\n  return dispose;\n});\n"
     }
   ]
 }
