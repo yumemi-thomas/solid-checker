@@ -11,8 +11,8 @@
 //! and a fixture or focused regression test.
 
 use crate::{
-    AuditedArchive, AuditedCitation, Boundary, CallClaimDomain, CallbackOwner, CleanupRule,
-    ContextRole, Dialect, DialectNegativeAuthority, Execution, HostTargetCondition,
+    ArgumentScope, AuditedArchive, AuditedCitation, Boundary, CallClaimDomain, CallbackOwner,
+    CleanupRule, ContextRole, Dialect, DialectNegativeAuthority, Execution, HostTargetCondition,
     HostTargetScope, NegativeClaimRow, Primitive, ReactiveRole, ResultSlot, RowScope,
     TrackedCallbackTiming, TrackingRuntime, Version, lookup, reverse,
 };
@@ -355,6 +355,16 @@ const RC9_MERGE_OMIT_MEMO_AUDIT: &str =
 /// names it.
 #[cfg(test)]
 const RC9_SERVER_BUILDS_AUDIT: &str = "docs/package-contract-v2/audits/2026-09-28-solid-2-rc9-server-builds-createsignal-creatememo.md";
+
+/// The reading of what the rc.9 dialect primitives the `reads` census's call
+/// walk (ADR 0165) refuses do at their call event, on the exact bytes of
+/// `@solidjs/signals@2.0.0-rc.9` and `solid-js@2.0.0-rc.9` (2026-09-30), in
+/// every build each `exports` map can select: `getOwner`, `onCleanup`,
+/// `runWithOwner`, `untrack` and `createSignal` of the signals archive, and
+/// `solid-js`' own `createSignal` and `useContext`. The three argument-scoped
+/// rows (ADR 0168) say which of their arguments the reading is conditional on.
+const RC9_READS_AUDIT: &str =
+    "docs/package-contract-v2/audits/2026-09-30-solid-2-rc9-reads-rows-for-dialect-primitives.md";
 
 /// The re-reading of `solid-js@2.0.0-rc.3` rows that rested on a
 /// `solid-js.json` summary alone and that rc.3's own runtime bytes contradict
@@ -2336,6 +2346,49 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             },
         ],
     },
+    // RC9_READS_AUDIT § 5, argument-scoped: a primitive first argument builds a plain
+    // signal, and a function one a memo whose compute is the caller's.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "createSignal",
+        domain: CallClaimDomain::Reads,
+        scope: RowScope::Arguments(ArgumentScope {
+            primitive_slots: &[],
+            callable_or_primitive_slots: &[0],
+            invoked_slots: &[],
+            delegates: &[],
+        }),
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 5. `createSignal` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/signals.js",
+                file_sha256: "d1a61ff0872b42987400100413bdb69e83e1e8e67dad175cf1178c7fb34646b6",
+                start_byte: 2747,
+                end_byte: 3027,
+                slice_sha256: "ce6ade13e9e77463067c7bac3727622e0ac32bd8e9bad801501a28365b9da388",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 5. `createSignal` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 97659,
+                end_byte: 98008,
+                slice_sha256: "d1292c1a9d7a916d932b8e2ae27b22c592daf612cc51ddf7848ecf64f63cd504",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 5. `createSignal` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/signals.js",
+                file_sha256: "6a338c1513530b9c423c215723b171fda5b23f47a010037f845fd3c467ad41b5",
+                start_byte: 2795,
+                end_byte: 3109,
+                slice_sha256: "0366fccdf03f70ca98cd1678d74800abeed9109c5499c65c626ee6868e6f565f",
+            },
+        ],
+    },
     NegativeClaimRow {
         package: "@solidjs/signals",
         version: RC9,
@@ -2552,6 +2605,43 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             },
         ],
     },
+    // RC9_READS_AUDIT § 1. `return context`; no read site in any build.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "getOwner",
+        domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 1. `getOwner` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/core/owner.js",
+                file_sha256: "a6b4d87b97f2d8021224d343a28bccf77ef2a9be8ba6872d91cfaa8b29dfc36e",
+                start_byte: 8615,
+                end_byte: 8663,
+                slice_sha256: "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 1. `getOwner` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev-shared.js",
+                file_sha256: "70b88ba97dcb1107878ccc161cd00651b3cff09d7e17aee5443f1cbf9689463e",
+                start_byte: 131908,
+                end_byte: 131950,
+                slice_sha256: "e8cb95b765807fa14a97032551f4bbced263cc3d7837fc1258f156ffc71ba8bb",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 1. `getOwner` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/core/owner.js",
+                file_sha256: "c384c5ab163cb53e1a611ce76bf9e2b27c8a7e7884d7a9c4ec7dfebf0f5e4126",
+                start_byte: 8635,
+                end_byte: 8683,
+                slice_sha256: "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2",
+            },
+        ],
+    },
     NegativeClaimRow {
         package: "@solidjs/signals",
         version: RC9,
@@ -2625,6 +2715,44 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
                 start_byte: 40834,
                 end_byte: 42437,
                 slice_sha256: "8b9a50f9840bd11547765d1269cb10f5f3486b49679852d061f1906408ca9128",
+            },
+        ],
+    },
+    // RC9_READS_AUDIT § 2. Stores the caller's function on the owner; the dev build adds
+    // diagnostics only.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "onCleanup",
+        domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 2. `onCleanup` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/signals.js",
+                file_sha256: "d1a61ff0872b42987400100413bdb69e83e1e8e67dad175cf1178c7fb34646b6",
+                start_byte: 2598,
+                end_byte: 2651,
+                slice_sha256: "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 2. `onCleanup` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev.js",
+                file_sha256: "f08c227c5c64baad8c7bf67acfadc1ed07d0027de562c7343370105ad18f2120",
+                start_byte: 96698,
+                end_byte: 97559,
+                slice_sha256: "5f8d40b1c3165f17bc00846b5063eb55f8bdd0a6b49dceba4a60f5aeb6570e44",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 2. `onCleanup` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/signals.js",
+                file_sha256: "6a338c1513530b9c423c215723b171fda5b23f47a010037f845fd3c467ad41b5",
+                start_byte: 2646,
+                end_byte: 2699,
+                slice_sha256: "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b",
             },
         ],
     },
@@ -2808,6 +2936,50 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             },
         ],
     },
+    // RC9_READS_AUDIT § 3, and **argument-scoped** (ADR 0168): the call's own code reads
+    // nothing, and the callable it runs is `fn` (slot 1), whose reads are its author's
+    // once the census can attribute it.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "runWithOwner",
+        domain: CallClaimDomain::Reads,
+        scope: RowScope::Arguments(ArgumentScope {
+            primitive_slots: &[],
+            callable_or_primitive_slots: &[],
+            invoked_slots: &[1],
+            delegates: &[],
+        }),
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 3. `runWithOwner` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/core/core.js",
+                file_sha256: "4baa2f64e47621423c0246529d3ce1b56ef82a8274aa54dfc1d345141158d53d",
+                start_byte: 87558,
+                end_byte: 87770,
+                slice_sha256: "5c40363ecc6eaf66378b57e0c387103fe67f51706d30dab3cb041fd10f8af3e5",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 3. `runWithOwner` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev-shared.js",
+                file_sha256: "70b88ba97dcb1107878ccc161cd00651b3cff09d7e17aee5443f1cbf9689463e",
+                start_byte: 287156,
+                end_byte: 287864,
+                slice_sha256: "332a218ceec024a1d0c3464213b7d043d4a902c529b5f02a7d6ae0467070a11c",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 3. `runWithOwner` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/core/core.js",
+                file_sha256: "5b2dba3ad755fce3a52b6d1a788dd3db9b720bd03193cc16bcd909958208adbe",
+                start_byte: 89058,
+                end_byte: 89270,
+                slice_sha256: "5c40363ecc6eaf66378b57e0c387103fe67f51706d30dab3cb041fd10f8af3e5",
+            },
+        ],
+    },
     NegativeClaimRow {
         package: "@solidjs/signals",
         version: RC9,
@@ -2877,6 +3049,48 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
                 start_byte: 786,
                 end_byte: 839,
                 slice_sha256: "3bb31686d1eba591133042dd4c7c95515074c440f6d532da34f25cbf6c05bfd2",
+            },
+        ],
+    },
+    // RC9_READS_AUDIT § 4, argument-scoped for the reason of § 3.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        version: RC9,
+        export: "untrack",
+        domain: CallClaimDomain::Reads,
+        scope: RowScope::Arguments(ArgumentScope {
+            primitive_slots: &[],
+            callable_or_primitive_slots: &[],
+            invoked_slots: &[0],
+            delegates: &[],
+        }),
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 4. `untrack` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/prod/core/core.js",
+                file_sha256: "4baa2f64e47621423c0246529d3ce1b56ef82a8274aa54dfc1d345141158d53d",
+                start_byte: 49018,
+                end_byte: 49298,
+                slice_sha256: "28c2d9f3861b28ad08edaeb66a6d8f2caa5530d6e7cff226afda0a9a7b5d912a",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 4. `untrack` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/dev-shared.js",
+                file_sha256: "70b88ba97dcb1107878ccc161cd00651b3cff09d7e17aee5443f1cbf9689463e",
+                start_byte: 242868,
+                end_byte: 243344,
+                slice_sha256: "2a929c2683ae93a3820bf2b4bf1a4455b41c6a928880eaa480a6820fe43a1852",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 4. `untrack` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+                archive_path: "dist/observe/core/core.js",
+                file_sha256: "5b2dba3ad755fce3a52b6d1a788dd3db9b720bd03193cc16bcd909958208adbe",
+                start_byte: 50382,
+                end_byte: 50662,
+                slice_sha256: "01672a8cba1c1d7a8800b0effde85a96cffd51ac0bb7025b40b208f805e98773",
             },
         ],
     },
@@ -4301,6 +4515,79 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             },
         ],
     },
+    // RC9_READS_AUDIT § 6, **argument-scoped** (ADR 0168), and it narrows the flat row
+    // RC9_SERVER_BUILDS_AUDIT withheld: the gate read and the server memo are
+    // reached only when the first argument is a function, so a first argument the
+    // census proves a primitive by grammar leaves both out. The delegate is the
+    // archive `createSignal$1` and the server-free path run.
+    NegativeClaimRow {
+        package: "solid-js",
+        version: RC9,
+        export: "createSignal",
+        domain: CallClaimDomain::Reads,
+        scope: RowScope::Arguments(ArgumentScope {
+            primitive_slots: &[0],
+            callable_or_primitive_slots: &[],
+            invoked_slots: &[],
+            delegates: &[("@solidjs/signals", "createSignal", CallClaimDomain::Reads)],
+        }),
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 6. `createSignal` — `reads`, argument scope — archive `solid-js@2.0.0-rc.9`",
+                archive_path: "dist/solid.js",
+                file_sha256: "0238f90858359bc71da523cae1c38dc769f6d86502ae37bcf1c7d72cc977794d",
+                start_byte: 23906,
+                end_byte: 23997,
+                slice_sha256: "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 6. `createSignal` — `reads`, argument scope — archive `solid-js@2.0.0-rc.9`",
+                archive_path: "dist/solid.dev.js",
+                file_sha256: "7baf8808f6bd87011707621ab9137a41416a585db3d12c89f7a7efcdec2411de",
+                start_byte: 25602,
+                end_byte: 25693,
+                slice_sha256: "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 6. `createSignal` — `reads`, argument scope — archive `solid-js@2.0.0-rc.9`",
+                archive_path: "dist/solid.observe.js",
+                file_sha256: "c337cd4b1b90e5dda31dccd4373d7d72e3aec07a7d40e1a6fefd903b63b16ffb",
+                start_byte: 24226,
+                end_byte: 24317,
+                slice_sha256: "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 6. `createSignal` — `reads`, argument scope — archive `solid-js@2.0.0-rc.9`",
+                archive_path: "dist/server.js",
+                file_sha256: "9c25fe06f9aab7657bcd87c7ad4b12ac413ebab3f02bae651da253a7478db7f9",
+                start_byte: 8763,
+                end_byte: 9388,
+                slice_sha256: "38028a6c27dec146a1e4eb81e2e9bdfce1f1e90ce2d2701fe21c1d460148cf39",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 6. `createSignal` — `reads`, argument scope — archive `solid-js@2.0.0-rc.9`",
+                archive_path: "dist/server.dev.js",
+                file_sha256: "129cbe735cceed1ff627aaab146e3c7c5e2032ed0a1f980134334226651ab7e7",
+                start_byte: 12317,
+                end_byte: 13006,
+                slice_sha256: "6002fc5a126d938f9e23b7d284d707d2448bf56a65da3e428bb02167efe9c979",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 6. `createSignal` — `reads`, argument scope — archive `solid-js@2.0.0-rc.9`",
+                archive_path: "dist/server.observe.js",
+                file_sha256: "0d1519f0613584c577288aa2519c29fb42c5aa1446742f84f3559841ec22aede",
+                start_byte: 10004,
+                end_byte: 10629,
+                slice_sha256: "38028a6c27dec146a1e4eb81e2e9bdfce1f1e90ce2d2701fe21c1d460148cf39",
+            },
+        ],
+    },
     // RC9_CORE_WEB_AUDIT § 13, and **scoped** like its rc.3 twin: the flat row
     // is withheld (§ 12, the server's derived overload reaches `ctx.serialize`).
     // All three builds the `browser` condition can select are cited, because
@@ -4355,6 +4642,71 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
                 start_byte: 24226,
                 end_byte: 24317,
                 slice_sha256: "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7",
+            },
+        ],
+    },
+    // RC9_READS_AUDIT § 7. A context-map read: plain property reads of the owner's
+    // context object; no reactive source is read.
+    NegativeClaimRow {
+        package: "solid-js",
+        version: RC9,
+        export: "useContext",
+        domain: CallClaimDomain::Reads,
+        scope: RowScope::EveryCondition,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 7. `useContext` — `reads` — archive `solid-js@2.0.0-rc.9`",
+                archive_path: "dist/solid.js",
+                file_sha256: "0238f90858359bc71da523cae1c38dc769f6d86502ae37bcf1c7d72cc977794d",
+                start_byte: 1635,
+                end_byte: 1697,
+                slice_sha256: "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 7. `useContext` — `reads` — archive `solid-js@2.0.0-rc.9`",
+                archive_path: "dist/solid.dev.js",
+                file_sha256: "7baf8808f6bd87011707621ab9137a41416a585db3d12c89f7a7efcdec2411de",
+                start_byte: 1664,
+                end_byte: 1726,
+                slice_sha256: "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 7. `useContext` — `reads` — archive `solid-js@2.0.0-rc.9`",
+                archive_path: "dist/solid.observe.js",
+                file_sha256: "c337cd4b1b90e5dda31dccd4373d7d72e3aec07a7d40e1a6fefd903b63b16ffb",
+                start_byte: 1657,
+                end_byte: 1719,
+                slice_sha256: "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 7. `useContext` — `reads` — archive `solid-js@2.0.0-rc.9`",
+                archive_path: "dist/server.js",
+                file_sha256: "9c25fe06f9aab7657bcd87c7ad4b12ac413ebab3f02bae651da253a7478db7f9",
+                start_byte: 50326,
+                end_byte: 50582,
+                slice_sha256: "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 7. `useContext` — `reads` — archive `solid-js@2.0.0-rc.9`",
+                archive_path: "dist/server.dev.js",
+                file_sha256: "129cbe735cceed1ff627aaab146e3c7c5e2032ed0a1f980134334226651ab7e7",
+                start_byte: 54707,
+                end_byte: 54963,
+                slice_sha256: "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f",
+            },
+            AuditedCitation::Implementation {
+                audit: RC9_READS_AUDIT,
+                section: "### 7. `useContext` — `reads` — archive `solid-js@2.0.0-rc.9`",
+                archive_path: "dist/server.observe.js",
+                file_sha256: "0d1519f0613584c577288aa2519c29fb42c5aa1446742f84f3559841ec22aede",
+                start_byte: 52445,
+                end_byte: 52701,
+                slice_sha256: "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f",
             },
         ],
     },
@@ -7812,6 +8164,78 @@ mod tests {
                  bodies are clean, and a node row is unbindable for § 3.3's reason",
             ),
         ),
+        // RC9_READS_AUDIT, 2026-09-30: `reads` rows for the dialect primitives
+        // the census's call walk (ADR 0165) refuses. The three flat rows are
+        // closed here; the four argument-scoped ones are read in
+        // ARGUMENT_READINGS.
+        (
+            "@solidjs/signals",
+            RC9,
+            "getOwner",
+            CallClaimDomain::Reads,
+            RC9_READS_AUDIT,
+            "### 1. `getOwner` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "onCleanup",
+            CallClaimDomain::Reads,
+            RC9_READS_AUDIT,
+            "### 2. `onCleanup` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "solid-js",
+            RC9,
+            "useContext",
+            CallClaimDomain::Reads,
+            RC9_READS_AUDIT,
+            "### 7. `useContext` — `reads` — archive `solid-js@2.0.0-rc.9`",
+            ImplementationVerdict::Closed,
+        ),
+    ];
+
+    /// The reading each [`RowScope::Arguments`] row rests on: the audit and the
+    /// section heading that walked it. One entry per argument-scoped row, and
+    /// the row's citations must name the same section. An argument-scoped row
+    /// is never the twin of a shipped flat row: where a flat sibling exists it
+    /// is withheld ([`WITHHELD`]), and where none does the export has no flat
+    /// reading at all.
+    const ARGUMENT_READINGS: &[(&str, &str, &str, CallClaimDomain, &str, &str)] = &[
+        (
+            "@solidjs/signals",
+            RC9,
+            "createSignal",
+            CallClaimDomain::Reads,
+            RC9_READS_AUDIT,
+            "### 5. `createSignal` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "runWithOwner",
+            CallClaimDomain::Reads,
+            RC9_READS_AUDIT,
+            "### 3. `runWithOwner` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+        ),
+        (
+            "@solidjs/signals",
+            RC9,
+            "untrack",
+            CallClaimDomain::Reads,
+            RC9_READS_AUDIT,
+            "### 4. `untrack` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+        ),
+        (
+            "solid-js",
+            RC9,
+            "createSignal",
+            CallClaimDomain::Reads,
+            RC9_READS_AUDIT,
+            "### 6. `createSignal` — `reads`, argument scope — archive `solid-js@2.0.0-rc.9`",
+        ),
     ];
 
     /// The directory under `benchmarks/package-contract-v2/phase0/` that
@@ -7870,6 +8294,7 @@ mod tests {
             | RC9_PARITY_AUDIT
             | RC9_CORE_WEB_AUDIT
             | RC9_MERGE_OMIT_MEMO_AUDIT
+            | RC9_READS_AUDIT
             | RC9_SERVER_BUILDS_AUDIT => RC9,
             other => panic!("{other} is not a known audit document"),
         }
@@ -8236,10 +8661,13 @@ mod tests {
         // (2026-09-27): 14 flat rows, six builds each -- 84 -- and the scoped
         // `createSignal` row's three browser builds. On rc.9 (2026-09-28):
         // `omit`'s three signals builds and the scoped `createMemo` row's three
-        // browser builds.
+        // browser builds. On rc.9 (2026-09-30, RC9_READS_AUDIT): seven `reads`
+        // rows -- five signals citations sets of three builds (`getOwner`,
+        // `onCleanup`, `runWithOwner`, `untrack`, `createSignal`, 15) and the
+        // `solid-js` `createSignal` (six builds) and `useContext` (six builds).
         assert_eq!(
             implementation_citations,
-            30 + 1 + 72 + 15 + 57 + 84 + 3 + 3 + 3,
+            30 + 1 + 72 + 15 + 57 + 84 + 3 + 3 + 3 + 27,
             "the Implementation citation arm did not run over the rows that need it"
         );
     }
@@ -8457,11 +8885,11 @@ mod tests {
         // The 2026-09-28 rc.9 server-builds reading closes nothing and
         // withholds 2 (the flat `solid-js` `createSignal` and `createMemo`
         // `reads`); its `creates` verdicts restate withholdings counted above.
-        assert_eq!(implementation_closed.len(), 8 + 24 + 5 + 19 + 14 + 1);
+        assert_eq!(implementation_closed.len(), 8 + 24 + 5 + 19 + 14 + 1 + 3);
         assert_eq!(implementation_withheld.len(), 4 + 5 + 12 + 2 + 2);
         let on = |version: &str| shipped.iter().filter(|(_, v, _, _)| v == version).count();
-        assert_eq!((on(RC3), on(RC6), on(RC9)), (45, 24, 24 + 14 + 1));
-        assert_eq!(shipped.len(), 93 + 14 + 1);
+        assert_eq!((on(RC3), on(RC6), on(RC9)), (45, 24, 24 + 14 + 1 + 3));
+        assert_eq!(shipped.len(), 93 + 14 + 1 + 3);
 
         // The scoped rows: each is a flat row both sources withhold, read
         // under one host-target condition in a section HOST_TARGET_READINGS
@@ -8514,7 +8942,66 @@ mod tests {
             assert!(scoped.insert(key), "{:?} is scoped twice", row.export);
         }
         assert_eq!(scoped.len(), 3);
-        assert_eq!(NEGATIVE_ROWS.len(), 108 + 3);
+
+        // The argument-scoped rows (ADR 0168): each rests on one reading in a
+        // section ARGUMENT_READINGS names, which its citations must name too,
+        // and none has a shipped flat twin -- a flat row would answer the same
+        // call without its argument premises.
+        let mut argument_scoped = BTreeSet::new();
+        for row in NEGATIVE_ROWS {
+            let RowScope::Arguments(scope) = row.scope else {
+                continue;
+            };
+            let key = (
+                row.package.to_owned(),
+                row.version.to_owned(),
+                row.export.to_owned(),
+                row.domain,
+            );
+            assert!(
+                !shipped.contains(&key),
+                "{key:?} is argument-scoped and also shipped flat"
+            );
+            assert!(
+                !scope.primitive_slots.is_empty()
+                    || !scope.callable_or_primitive_slots.is_empty()
+                    || !scope.invoked_slots.is_empty(),
+                "{key:?} is argument-scoped and states no argument premise"
+            );
+            let reading = ARGUMENT_READINGS
+                .iter()
+                .filter(|(package, version, export, domain, ..)| {
+                    *package == row.package
+                        && *version == row.version
+                        && *export == row.export
+                        && *domain == row.domain
+                })
+                .collect::<Vec<_>>();
+            let [(_, _, _, _, audit, section)] = reading.as_slice() else {
+                panic!("{key:?} is argument-scoped with {} readings", reading.len());
+            };
+            assert_eq!(audit_version(audit), row.version, "{key:?} audit version");
+            let text = std::fs::read_to_string(root.join(audit)).unwrap();
+            assert!(
+                text.lines().any(|line| line == *section),
+                "{key:?} names section {section:?}, which {audit} does not contain verbatim"
+            );
+            for citation in row.citations {
+                let AuditedCitation::Implementation {
+                    audit: cited,
+                    section: cited_section,
+                    ..
+                } = citation
+                else {
+                    panic!("{key:?} is argument-scoped, and that is a reading of runtime bytes");
+                };
+                assert_eq!((cited, cited_section), (audit, section), "{key:?} citation");
+            }
+            assert!(argument_scoped.insert(key), "{:?} twice", row.export);
+        }
+        assert_eq!(argument_scoped.len(), ARGUMENT_READINGS.len());
+        assert_eq!(argument_scoped.len(), 4);
+        assert_eq!(NEGATIVE_ROWS.len(), 108 + 3 + 3 + 4);
 
         // The two authorities must not be confusable from the row alone: a row
         // the hand census closed cites runtime bytes, and every other row cites
@@ -8537,7 +9024,9 @@ mod tests {
                 .any(|citation| matches!(citation, AuditedCitation::Summary { .. }));
             assert_eq!(
                 cites_implementation,
-                implementation_closed.contains(&key) || scoped.contains(&key),
+                implementation_closed.contains(&key)
+                    || scoped.contains(&key)
+                    || argument_scoped.contains(&key),
                 "{key:?}'s citation kind disagrees with IMPLEMENTATION_AUDITED"
             );
             assert!(
@@ -9189,6 +9678,133 @@ mod tests {
             )
             .is_none(),
             "an EveryCondition row is not a scoped row"
+        );
+    }
+
+    /// An argument-scoped row (ADR 0168) is reachable through the argument
+    /// entry alone, is never a denial and never a proposal, and every
+    /// delegate it names is answered by some audited archive of its package --
+    /// by an every-condition row or by an argument-scoped one, which the census
+    /// then checks against the delegating call's own arguments.
+    #[test]
+    fn argument_rows_state_checkable_premises() {
+        use std::collections::BTreeSet;
+
+        let mut seen = 0usize;
+        for row in NEGATIVE_ROWS {
+            let RowScope::Arguments(scope) = row.scope else {
+                continue;
+            };
+            seen += 1;
+            let audited = archive(row.package, row.version);
+            for slots in [
+                scope.primitive_slots,
+                scope.callable_or_primitive_slots,
+                scope.invoked_slots,
+            ] {
+                let distinct = slots.iter().copied().collect::<BTreeSet<_>>();
+                assert_eq!(
+                    distinct.len(),
+                    slots.len(),
+                    "{}: duplicate slot",
+                    row.export
+                );
+            }
+            // A slot is in one list only: the lists are three different
+            // premises about it, and two would be a contradiction or a no-op.
+            let all = scope
+                .primitive_slots
+                .iter()
+                .chain(scope.callable_or_primitive_slots)
+                .chain(scope.invoked_slots)
+                .copied()
+                .collect::<Vec<_>>();
+            assert_eq!(
+                all.iter().copied().collect::<BTreeSet<_>>().len(),
+                all.len(),
+                "{}: a slot is in two premise lists",
+                row.export
+            );
+            assert!(
+                !Solid2
+                    .negative_claim_authority()
+                    .denies(audited, row.export, row.domain),
+                "{}: an argument row is never an unconditional denial",
+                row.export
+            );
+            assert!(!crate::primitive_performs_no_operation(
+                audited, row.export, row.domain
+            ));
+            assert_eq!(
+                crate::argument_row(audited, row.export, row.domain),
+                Some(&scope)
+            );
+            assert!(crate::host_target_row(audited, row.export, row.domain).is_none());
+            for conditions in [
+                BTreeSet::new(),
+                BTreeSet::from(["import".to_owned()]),
+                BTreeSet::from(["browser".to_owned(), "import".to_owned()]),
+            ] {
+                assert!(
+                    !crate::some_audit_denies_primitive(
+                        row.package,
+                        row.export,
+                        row.domain,
+                        &conditions
+                    ),
+                    "{}: a proposal has no call site to check the arguments against",
+                    row.export
+                );
+            }
+            for &(package, export, domain) in scope.delegates {
+                assert_ne!(package, row.package, "a row may not delegate to itself");
+                let archives = AUDITED_ARCHIVES
+                    .iter()
+                    .filter(|archive| archive.name == package)
+                    .collect::<Vec<_>>();
+                assert!(!archives.is_empty(), "delegate {package} is not audited");
+                assert!(
+                    archives.iter().any(|archive| {
+                        crate::primitive_performs_no_operation(archive, export, domain)
+                            || crate::argument_row(archive, export, domain).is_some()
+                    }),
+                    "no audited archive answers delegate {package}:{export}"
+                );
+            }
+        }
+        assert_eq!(seen, 4);
+
+        // The four rows' premises, exactly.
+        let premise = |package: &str, export: &str| {
+            let RowScope::Arguments(scope) = NEGATIVE_ROWS
+                .iter()
+                .find(|row| {
+                    row.package == package
+                        && row.version == RC9
+                        && row.export == export
+                        && row.domain == CallClaimDomain::Reads
+                })
+                .expect("row")
+                .scope
+            else {
+                panic!("{package}:{export} is not argument-scoped");
+            };
+            scope
+        };
+        assert_eq!(premise("@solidjs/signals", "untrack").invoked_slots, &[0]);
+        assert_eq!(
+            premise("@solidjs/signals", "runWithOwner").invoked_slots,
+            &[1]
+        );
+        assert_eq!(
+            premise("@solidjs/signals", "createSignal").callable_or_primitive_slots,
+            &[0]
+        );
+        let js = premise("solid-js", "createSignal");
+        assert_eq!(js.primitive_slots, &[0]);
+        assert_eq!(
+            js.delegates,
+            &[("@solidjs/signals", "createSignal", CallClaimDomain::Reads)]
         );
     }
 

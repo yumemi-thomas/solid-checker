@@ -958,6 +958,48 @@ pub enum RowScope {
     /// every call the audit followed out of the archive is answered by an
     /// audited [`RowScope::EveryCondition`] row of the archive it reaches.
     HostTarget(HostTargetScope),
+    /// The row holds only for a call whose arguments satisfy
+    /// [`ArgumentScope`], which the census checks at the call site, and only
+    /// when every call the audit followed out of the archive is answered by an
+    /// audited [`RowScope::EveryCondition`] row of the archive it reaches.
+    /// Read through [`argument_row`] and nothing else.
+    Arguments(ArgumentScope),
+}
+
+/// The argument premises a [`RowScope::Arguments`] row rests on (ADR 0168).
+///
+/// A row's audit is a reading of what the archive's *own* code does at the call
+/// event. That reading is silent about a callable the caller hands over: a
+/// callable's reads are the caller's, but only when the census can see whose
+/// callable it is. Each premise below is checked by the census at the call
+/// site, against the producer's facts about the call, and a call that does not
+/// satisfy every one of them is not answered by the row.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ArgumentScope {
+    /// Argument slots that must be a primitive by their grammar alone
+    /// (`arguments_primitive_syntax`), which no function is. The reading holds
+    /// only where the archive's `typeof x === "function"` test fails, so a slot
+    /// the census cannot prove is not a function refuses. A slot the call does
+    /// not write, or a spread, is not proved.
+    pub primitive_slots: &'static [usize],
+    /// Argument slots the archive's own code sends down one path when the value
+    /// is a function (it invokes it) and another when it is not, and the audit
+    /// cleared both: each must be proved a primitive by its grammar, or hold a
+    /// callable attributable as for [`Self::invoked_slots`].
+    pub callable_or_primitive_slots: &'static [usize],
+    /// Argument slots the archive's own code invokes during the call. The
+    /// invoked callable's reads are its author's, and the census can attribute
+    /// them only when the slot holds one of: a function literal lexically inside
+    /// the implementation being walked (its calls are walked with the frame), or
+    /// a value rooted at a parameter of that implementation (the caller's own
+    /// callable). A reference to a callable declared elsewhere, or a value the
+    /// call built, may read a signal this very call created, and refuses.
+    pub invoked_slots: &'static [usize],
+    /// `(package, export, domain)` answers the reading delegated to: calls the
+    /// audit followed into another archive and read there. Each must be denied
+    /// by an [`RowScope::EveryCondition`] row of the one authenticated, audited
+    /// archive of that package in the certification's closure.
+    pub delegates: &'static [(&'static str, &'static str, CallClaimDomain)],
 }
 
 /// The premises a [`RowScope::HostTarget`] row rests on. Each is checked by
@@ -1086,6 +1128,33 @@ impl DialectNegativeAuthority {
                     && row.domain == domain
                     && row.scope == RowScope::EveryCondition
             })
+    }
+
+    /// The [`RowScope::Arguments`] scope this authority states for exactly
+    /// `(archive, export, domain)`, when it lists `archive` and carries such a
+    /// row. `None` otherwise, including where the row is
+    /// [`RowScope::EveryCondition`] (ask [`Self::denies`]).
+    #[must_use]
+    pub fn arguments(
+        &self,
+        archive: &AuditedArchive,
+        export: &str,
+        domain: CallClaimDomain,
+    ) -> Option<&'static ArgumentScope> {
+        if !self.archives.contains(archive) {
+            return None;
+        }
+        self.rows.iter().find_map(|row| match &row.scope {
+            RowScope::Arguments(scope)
+                if row.package == archive.name
+                    && row.version == archive.version
+                    && row.export == export
+                    && row.domain == domain =>
+            {
+                Some(scope)
+            }
+            _ => None,
+        })
     }
 
     /// The [`RowScope::HostTarget`] scope this authority states for exactly
@@ -1275,6 +1344,9 @@ pub fn some_audit_denies_primitive(
                 && match &row.scope {
                     RowScope::EveryCondition => true,
                     RowScope::HostTarget(scope) => conditions.contains(scope.condition.as_str()),
+                    // A proposal carries no call site to check the arguments
+                    // against, so it never answers from one.
+                    RowScope::Arguments(_) => false,
                 }
         })
     })
@@ -1306,6 +1378,33 @@ pub fn host_target_row(
             .archives
             .contains(archive)
             .then(|| authority.host_target(archive, export, domain))
+    });
+    let first = answers.next()??;
+    answers.all(|other| other == Some(first)).then_some(first)
+}
+
+/// The [`RowScope::Arguments`] scope every dialect listing `archive` states for
+/// `(archive, export, domain)`, or `None` (ADR 0168).
+///
+/// Like [`host_target_row`], `Some` is **not** an answer: it hands the census
+/// the premises it must replay at the call site and against authenticated
+/// bytes. Cross-dialect agreement is the same as
+/// [`primitive_performs_no_operation`]'s.
+#[must_use]
+pub fn argument_row(
+    archive: &AuditedArchive,
+    export: &str,
+    domain: CallClaimDomain,
+) -> Option<&'static ArgumentScope> {
+    if export.is_empty() || !canonical_primitive_name(export) {
+        return None;
+    }
+    let mut answers = DIALECTS.iter().filter_map(|dialect| {
+        let authority = dialect.negative_claim_authority();
+        authority
+            .archives
+            .contains(archive)
+            .then(|| authority.arguments(archive, export, domain))
     });
     let first = answers.next()??;
     answers.all(|other| other == Some(first)).then_some(first)
@@ -4473,8 +4572,13 @@ mod tests {
                 CallClaimDomain::Reads,
                 CallClaimDomain::Writes,
             ] {
-                assert!(
-                    !some_audit_denies_primitive(package, export, domain, &none),
+                // The 2026-09-30 rc.9 reads audit (ADR 0168) decided `useContext`
+                // `reads` as well, under its own audit and section.
+                let decided =
+                    (package, export, domain) == ("solid-js", "useContext", CallClaimDomain::Reads);
+                assert_eq!(
+                    some_audit_denies_primitive(package, export, domain, &none),
+                    decided,
                     "{package} {export} {domain:?}: the audit decided creates only"
                 );
             }

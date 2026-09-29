@@ -6676,6 +6676,7 @@ fn census_dialect_axiom(
     certified: &super::ArtifactSnapshot,
     roots_longest_first: &[SnapshotSourceRoot<'_>],
     requested_conditions: &[String],
+    argument_premises: &ArgumentPremises<'_>,
 ) -> Result<CensusTerminator, Option<String>> {
     if floor != ReachabilityFloor::MayExecute || !floor.admits_call(call) {
         return Err(None);
@@ -6746,6 +6747,24 @@ fn census_dialect_axiom(
             ),
         });
     }
+    // ADR 0168: a row that holds only for calls whose arguments satisfy its
+    // scope. It is consulted after the flat row and before the host-target one,
+    // and every decline is named, because a row that exists and does not bind
+    // is the one refusal here a reader can act on.
+    if let Some(scope) = solid_dialect::argument_row(archive, &call.target_name, domain) {
+        return census_arguments_terminator(
+            ArgumentRow {
+                archive,
+                export: call.target_name.to_string(),
+                domain,
+                scope,
+            },
+            certified,
+            roots_longest_first,
+            argument_premises,
+        )
+        .map_err(Some);
+    }
     let scope = solid_dialect::host_target_row(archive, &call.target_name, domain).ok_or(None)?;
     census_host_target_terminator(
         HostTargetRow {
@@ -6773,7 +6792,16 @@ fn census_dialect_axiom_for_callee(
     certified: &super::ArtifactSnapshot,
     roots_longest_first: &[SnapshotSourceRoot<'_>],
 ) -> Option<CensusTerminator> {
-    census_dialect_axiom(call, domain, floor, certified, roots_longest_first, &[]).ok()
+    census_dialect_axiom(
+        call,
+        domain,
+        floor,
+        certified,
+        roots_longest_first,
+        &[],
+        &|_| Err("no argument premises in this test".to_owned()),
+    )
+    .ok()
 }
 
 /// One scoped dialect row, bound to the authenticated snapshot whose four-field
@@ -6864,8 +6892,215 @@ fn census_host_target_terminator(
         ));
     }
 
-    let mut delegated = Vec::with_capacity(scope.delegates.len());
-    for &(package, delegate, delegate_domain) in scope.delegates {
+    let delegated = census_delegated_denials(&name, scope.delegates, certified, roots, None)?;
+    Ok(CensusTerminator {
+        witness_site: format!(
+            "census-dialect-axiom:{}@{}#{}:{export}:{}:{}:{}:delegates={}",
+            archive.name,
+            archive.version,
+            sri_prefix(archive.integrity),
+            domain.wire_name(),
+            scope.condition.as_str(),
+            resolved.path,
+            delegated.join("+")
+        ),
+    })
+}
+
+/// The argument premises of one call, asked of an argument-scoped row's scope
+/// (ADR 0168): the witness label of the premises that hold, or the reason one
+/// does not.
+type ArgumentPremises<'a> = dyn Fn(&solid_dialect::ArgumentScope) -> Result<String, String> + 'a;
+
+/// One argument-scoped dialect row (ADR 0168), bound to its audited archive.
+struct ArgumentRow {
+    archive: &'static solid_dialect::AuditedArchive,
+    export: String,
+    domain: solid_dialect::CallClaimDomain,
+    scope: &'static solid_dialect::ArgumentScope,
+}
+
+/// Replays a [`solid_dialect::RowScope::Arguments`] row's premises, and answers
+/// only when every one holds: the call's arguments satisfy the scope
+/// (`argument_premises`, decided at the call site by
+/// [`census_argument_premises`]), and every delegate is denied by an audited
+/// every-condition row of the authenticated archive it reaches. The witness
+/// carries the slots the premises were checked for, so a claim discharged here
+/// is bound to exactly the reading and the arguments it rests on.
+fn census_arguments_terminator(
+    row: ArgumentRow,
+    certified: &super::ArtifactSnapshot,
+    roots: &[SnapshotSourceRoot<'_>],
+    argument_premises: &ArgumentPremises<'_>,
+) -> Result<CensusTerminator, String> {
+    let ArgumentRow {
+        archive,
+        export,
+        domain,
+        scope,
+    } = row;
+    let name = format!(
+        "the dialect row {}@{}:{export}:{} holds only for calls whose arguments satisfy its \
+         scope",
+        archive.name,
+        archive.version,
+        domain.wire_name()
+    );
+    let checked = argument_premises(scope).map_err(|reason| format!("{name}, and {reason}"))?;
+    let delegated = census_delegated_denials(
+        &name,
+        scope.delegates,
+        certified,
+        roots,
+        Some(argument_premises),
+    )?;
+    Ok(CensusTerminator {
+        witness_site: format!(
+            "census-dialect-axiom:{}@{}#{}:{export}:{}:arguments={checked}:delegates={}",
+            archive.name,
+            archive.version,
+            sri_prefix(archive.integrity),
+            domain.wire_name(),
+            delegated.join("+")
+        ),
+    })
+}
+
+/// The argument premises of an [`solid_dialect::ArgumentScope`] at one call
+/// (ADR 0168), decided from the producer's facts about the call and nothing
+/// else.
+///
+/// * every `primitive_slots` slot is a primitive by its grammar
+///   (`arguments_primitive_syntax`), which the archive's own `typeof` test
+///   reads as not a function; a slot the call does not write, or a slot the
+///   producer did not state, is not proved;
+/// * every `invoked_slots` slot holds a callable the census can attribute
+///   ([`census_invoked_slot_is_attributable`]).
+fn census_argument_premises(
+    run: &CensusRun<'_>,
+    call: &typefacts::ImplementationCall,
+    scope: &solid_dialect::ArgumentScope,
+    depth: usize,
+) -> Result<String, String> {
+    for &slot in scope.primitive_slots {
+        match call.arguments_primitive_syntax.get(slot) {
+            Some(true) => {}
+            Some(false) => {
+                return Err(format!(
+                    "argument {slot} is not a primitive by its grammar, so it may be a function \
+                     the archive's own `typeof` test sends down the path the audit did not clear"
+                ));
+            }
+            None => {
+                return Err(format!(
+                    "the producer states nothing about argument {slot} (not written, displaced \
+                     by a spread, or a producer without the fact), so it is not proved a \
+                     primitive"
+                ));
+            }
+        }
+    }
+    for &slot in scope.callable_or_primitive_slots {
+        // Either the archive takes a primitive path the reading cleared, or its
+        // function path, whose callable the census must be able to attribute.
+        if call.arguments_primitive_syntax.get(slot) != Some(&true) {
+            census_invoked_slot_is_attributable(run, call, slot, depth).map_err(|reason| {
+                format!(
+                    "argument {slot} is not proved a primitive by its grammar, and as a possible \
+                     function: {reason}"
+                )
+            })?;
+        }
+    }
+    for &slot in scope.invoked_slots {
+        census_invoked_slot_is_attributable(run, call, slot, depth)?;
+    }
+    let list = |slots: &[usize]| {
+        slots
+            .iter()
+            .map(usize::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    Ok(format!(
+        "primitive[{}]+either[{}]+invoked[{}]",
+        list(scope.primitive_slots),
+        list(scope.callable_or_primitive_slots),
+        list(scope.invoked_slots)
+    ))
+}
+
+/// Whether the callable an archive's own code invokes at `slot` is one whose
+/// reads this census either walks or leaves to their author.
+///
+/// Rooted at a parameter of the implementation under the walk, it is the
+/// caller's own callable (census plan § 3.2) -- but only in the censused
+/// export's own frame at depth 0 of a `reads` walk: a nested frame's parameter
+/// holds whatever a call site in this artifact handed it, perhaps an accessor
+/// of a signal this call created (ADR 0165 § 3). A callable literal whose every
+/// location lies inside the frame is walked with the frame's own calls. Every
+/// other shape -- an imported or module-level `helper`, a member read, a value
+/// the call built, an accessor passed by reference -- reaches code the census
+/// cannot see, and refuses.
+fn census_invoked_slot_is_attributable(
+    run: &CensusRun<'_>,
+    call: &typefacts::ImplementationCall,
+    slot: usize,
+    depth: usize,
+) -> Result<(), String> {
+    let frame = run
+        .frame
+        .as_ref()
+        .ok_or("this census has no transcript frame to admit a callable literal against")?;
+    if call
+        .argument_parameters
+        .get(slot)
+        .is_some_and(Option::is_some)
+    {
+        if run.domain == solid_dialect::CallClaimDomain::Reads && depth != 0 {
+            return Err(format!(
+                "argument {slot} is rooted at a parameter of the frame at depth {depth}, which \
+                 a call site in this artifact filled: not the caller's own callable"
+            ));
+        }
+        return Ok(());
+    }
+    let carried = call
+        .argument_callables
+        .iter()
+        .find(|carried| carried.argument == slot);
+    if carried.is_some_and(|carried| {
+        !carried.locations.is_empty()
+            && carried.locations.iter().all(|location| {
+                location.path == frame.path
+                    && frame.start_byte <= location.start_byte
+                    && location.end_byte <= frame.end_byte
+            })
+    }) {
+        return Ok(());
+    }
+    Err(format!(
+        "argument {slot} is invoked by the archive's own code and is neither rooted at a \
+         parameter of this implementation nor a callable literal inside the transcript being \
+         censused, so control reaches a callable the census cannot see"
+    ))
+}
+
+/// The delegate premise both scoped rows share: for every `(package, export,
+/// domain)` the reading followed out of the archive, exactly one distinct
+/// authenticated dependency snapshot of `package` is in the closure, it is an
+/// audited archive in all four fields, and that archive's own
+/// [`solid_dialect::RowScope::EveryCondition`] row denies the delegate. Answers
+/// each delegate's witness label, or the named reason it does not bind.
+fn census_delegated_denials(
+    name: &str,
+    delegates: &[(&str, &str, solid_dialect::CallClaimDomain)],
+    certified: &super::ArtifactSnapshot,
+    roots: &[SnapshotSourceRoot<'_>],
+    delegate_arguments: Option<&ArgumentPremises<'_>>,
+) -> Result<Vec<String>, String> {
+    let mut delegated = Vec::with_capacity(delegates.len());
+    for &(package, delegate, delegate_domain) in delegates {
         let mut candidates = roots
             .iter()
             .filter(|root| {
@@ -6920,35 +7155,49 @@ fn census_host_target_terminator(
                 }
             )
         })?;
+        // ADR 0168: a delegate an every-condition row denies is answered as
+        // before. One that only an argument-scoped row denies is answered when
+        // that scope's premises hold for the delegating call's own arguments
+        // -- a reading that follows the call into the archive says which of its
+        // arguments the delegate receives, and a row may delegate this way only
+        // where it forwards them (the audit section states it).
+        let mut argument_label = String::new();
         if !solid_dialect::primitive_performs_no_operation(audited, delegate, delegate_domain) {
-            return Err(format!(
-                "{name}, and it delegates {delegate} {} to {}@{}, whose audit carries no \
-                 every-condition row denying it",
-                delegate_domain.wire_name(),
-                audited.name,
-                audited.version
-            ));
+            let scope = solid_dialect::argument_row(audited, delegate, delegate_domain);
+            let held = scope
+                .zip(delegate_arguments)
+                .map(|(scope, premises)| premises(scope));
+            match held {
+                Some(Ok(checked)) => argument_label = format!(":arguments={checked}"),
+                Some(Err(reason)) => {
+                    return Err(format!(
+                        "{name}, and it delegates {delegate} {} to {}@{}, whose row holds only \
+                         for calls whose arguments satisfy its scope, and {reason}",
+                        delegate_domain.wire_name(),
+                        audited.name,
+                        audited.version
+                    ));
+                }
+                None => {
+                    return Err(format!(
+                        "{name}, and it delegates {delegate} {} to {}@{}, whose audit carries no \
+                         every-condition row denying it",
+                        delegate_domain.wire_name(),
+                        audited.name,
+                        audited.version
+                    ));
+                }
+            }
         }
         delegated.push(format!(
-            "{}@{}#{}:{delegate}:{}",
+            "{}@{}#{}:{delegate}:{}{argument_label}",
             audited.name,
             audited.version,
             sri_prefix(audited.integrity),
             delegate_domain.wire_name()
         ));
     }
-    Ok(CensusTerminator {
-        witness_site: format!(
-            "census-dialect-axiom:{}@{}#{}:{export}:{}:{}:{}:delegates={}",
-            archive.name,
-            archive.version,
-            sri_prefix(archive.integrity),
-            domain.wire_name(),
-            scope.condition.as_str(),
-            resolved.path,
-            delegated.join("+")
-        ),
-    })
+    Ok(delegated)
 }
 
 fn require_signature_parameter_callable(
@@ -16791,6 +17040,7 @@ fn census_call_disposition(
         run.certified,
         run.evidence.roots,
         run.export_conditions,
+        &|scope| census_argument_premises(run, call, scope, depth),
     ) {
         // The tier's own site, not a generic one: it names the archive tuple,
         // the SRI prefix, the export and the domain, which is the whole premise.
@@ -28742,6 +28992,11 @@ mod tests {
         )
     }
 
+    /// The argument premises of a test that reaches no argument-scoped row.
+    fn no_arguments(_: &solid_dialect::ArgumentScope) -> Result<String, String> {
+        Err("no argument premises in this test".to_owned())
+    }
+
     fn conditions(names: &[&str]) -> Vec<String> {
         names.iter().map(|name| (*name).to_owned()).collect()
     }
@@ -28797,6 +29052,7 @@ mod tests {
                 &certified,
                 roots,
                 &conditions(requested),
+                &no_arguments,
             )
         };
         let browser = ["browser", "import"];
@@ -28929,6 +29185,7 @@ mod tests {
                 &certified,
                 &roots,
                 &conditions(&browser),
+                &no_arguments,
             )
             .map(|terminator| terminator.witness_site),
             Err(None)
@@ -28941,6 +29198,559 @@ mod tests {
         assert_eq!(
             answer(&mirrored, &browser).map(|terminator| terminator.witness_site),
             Err(None)
+        );
+    }
+
+    /// ADR 0168: the seven rc.9 `reads` rows the call walk reaches, replayed
+    /// against authenticated archives.
+    ///
+    /// The three every-condition rows answer as any flat row does. The four
+    /// argument-scoped ones answer only when the call-site premises hold, and
+    /// they decline by name when they do not; `solid-js`' `createSignal`
+    /// additionally binds beside the one audited signals archive and asks that
+    /// archive's own argument-scoped row about the same call.
+    #[test]
+    fn census_dialect_axiom_binds_the_rc9_reads_rows_and_their_argument_premises() {
+        use solid_dialect::CallClaimDomain::Reads;
+        let certified = archive_snapshot(
+            "consumer",
+            "1.0.0",
+            "sha512-consumer",
+            b"{\"name\":\"consumer\"}",
+            "/snapshot/consumer",
+        );
+        let signals = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.9",
+            SIGNALS_RC9_INTEGRITY,
+            &audited_phase0_manifest("rc9", "solidjs-signals"),
+            "/snapshot/signals-rc9",
+        );
+        let rc6 = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.6",
+            SIGNALS_RC6_INTEGRITY,
+            &audited_phase0_manifest("rc6", "solidjs-signals"),
+            "/snapshot/signals-rc6",
+        );
+        let solid_js = solid_js_rc9_snapshot();
+        let ok = |_: &solid_dialect::ArgumentScope| Ok("held".to_owned());
+        let refuse = |_: &solid_dialect::ArgumentScope| Err("the premise fails".to_owned());
+        let sri = "sha512-o3pqiTgpH5NR2Dst";
+
+        // Every-condition rows: `getOwner` and `onCleanup` (signals) and
+        // `useContext` (solid-js), decided with no argument premise at all.
+        let signals_roots = vec![signals_root(&signals)];
+        for export in ["getOwner", "onCleanup"] {
+            assert_eq!(
+                census_dialect_axiom(
+                    &signals_call(export, json!({})),
+                    Reads,
+                    ReachabilityFloor::MayExecute,
+                    &certified,
+                    &signals_roots,
+                    &[],
+                    &no_arguments,
+                )
+                .map(|terminator| terminator.witness_site),
+                Ok(format!(
+                    "census-dialect-axiom:@solidjs/signals@2.0.0-rc.9#{sri}:{export}:reads"
+                ))
+            );
+        }
+        let js_roots = vec![solid_js_root(&solid_js), signals_root(&signals)];
+        assert_eq!(
+            census_dialect_axiom(
+                &solid_js_call("useContext"),
+                Reads,
+                ReachabilityFloor::MayExecute,
+                &certified,
+                &js_roots,
+                &[],
+                &no_arguments,
+            )
+            .map(|terminator| terminator.witness_site),
+            Ok(
+                "census-dialect-axiom:solid-js@2.0.0-rc.9#sha512-J/oHWnWqe7S0FeIE:useContext:reads"
+                    .to_owned()
+            )
+        );
+
+        // Argument-scoped rows on the signals archive.
+        for (export, premises) in [
+            ("untrack", "primitive[]+either[]+invoked[0]"),
+            ("runWithOwner", "primitive[]+either[]+invoked[1]"),
+            ("createSignal", "primitive[]+either[0]+invoked[]"),
+        ] {
+            let answer =
+                |check: &dyn Fn(&solid_dialect::ArgumentScope) -> Result<String, String>,
+                 roots: &[SnapshotSourceRoot<'_>]| {
+                    census_dialect_axiom(
+                        &signals_call(export, json!({})),
+                        Reads,
+                        ReachabilityFloor::MayExecute,
+                        &certified,
+                        roots,
+                        &[],
+                        check,
+                    )
+                };
+            // The scope is what the closure is asked; a held premise answers
+            // with the witness that carries it.
+            let held = answer(&|scope| census_scope_label(scope), &signals_roots)
+                .expect("the premises hold");
+            assert_eq!(
+                held.witness_site,
+                format!(
+                    "census-dialect-axiom:@solidjs/signals@2.0.0-rc.9#{sri}:{export}:reads:\
+                     arguments={premises}:delegates="
+                )
+            );
+            match answer(&refuse, &signals_roots) {
+                Err(Some(reason)) => assert!(
+                    reason.starts_with(&format!(
+                        "the dialect row @solidjs/signals@2.0.0-rc.9:{export}:reads holds only for \
+                         calls whose arguments satisfy its scope, and the premise fails"
+                    )),
+                    "{reason}"
+                ),
+                other => panic!("{export}: an unheld premise declines by name: {other:?}"),
+            }
+            // rc.6 carries no such row: silence, never a named decline.
+            let rc6_roots = vec![signals_root(&rc6)];
+            assert_eq!(
+                answer(&ok, &rc6_roots).map(|terminator| terminator.witness_site),
+                Err(None),
+                "{export}: rc.6 was not read for reads"
+            );
+            // A caller that supplies no premises never reaches the row.
+            assert!(
+                census_dialect_axiom_for_callee(
+                    &signals_call(export, json!({})),
+                    Reads,
+                    ReachabilityFloor::MayExecute,
+                    &certified,
+                    &signals_roots,
+                )
+                .is_none(),
+                "{export}: the flat entry never answers an argument-scoped row"
+            );
+        }
+
+        // `solid-js`' `createSignal`: the premise, then the delegate.
+        let answer = |check: &dyn Fn(&solid_dialect::ArgumentScope) -> Result<String, String>,
+                      roots: &[SnapshotSourceRoot<'_>]| {
+            census_dialect_axiom(
+                &solid_js_call("createSignal"),
+                Reads,
+                ReachabilityFloor::MayExecute,
+                &certified,
+                roots,
+                &[],
+                check,
+            )
+        };
+        assert_eq!(
+            answer(&|scope| census_scope_label(scope), &js_roots)
+                .map(|terminator| terminator.witness_site),
+            Ok(format!(
+                "census-dialect-axiom:solid-js@2.0.0-rc.9#sha512-J/oHWnWqe7S0FeIE:createSignal:reads:\
+                 arguments=primitive[0]+either[]+invoked[]:delegates=@solidjs/signals@2.0.0-rc.9#{sri}:\
+                 createSignal:reads:arguments=primitive[]+either[0]+invoked[]"
+            ))
+        );
+        let reason = match answer(&refuse, &js_roots) {
+            Err(Some(reason)) => reason,
+            other => panic!("an unheld premise declines by name: {other:?}"),
+        };
+        assert!(
+            reason.starts_with(
+                "the dialect row solid-js@2.0.0-rc.9:createSignal:reads holds only for calls \
+                 whose arguments satisfy its scope, and the premise fails"
+            ),
+            "{reason}"
+        );
+        // The delegate is bound to one audited archive that carries its row.
+        let alone = vec![solid_js_root(&solid_js)];
+        assert!(matches!(
+            answer(&ok, &alone),
+            Err(Some(reason)) if reason.contains(
+                "it delegates createSignal reads to @solidjs/signals, which this \
+                 certification's authenticated closure does not carry"
+            )
+        ));
+        let older = vec![solid_js_root(&solid_js), signals_root(&rc6)];
+        assert!(matches!(
+            answer(&ok, &older),
+            Err(Some(reason)) if reason.contains("whose audit carries no every-condition row denying it")
+        ));
+        // A delegate whose own scope fails on this call's arguments declines,
+        // naming the delegate's row and the premise.
+        let calls = std::cell::Cell::new(0usize);
+        let second_fails = |scope: &solid_dialect::ArgumentScope| {
+            calls.set(calls.get() + 1);
+            if calls.get() == 1 {
+                Ok("held".to_owned())
+            } else {
+                census_scope_label(scope).and(Err("the delegate premise fails".to_owned()))
+            }
+        };
+        assert!(matches!(
+            answer(&second_fails, &js_roots),
+            Err(Some(reason)) if reason.contains("whose row holds only for calls whose arguments satisfy its scope, and the delegate premise fails")
+        ));
+    }
+
+    /// ADR 0168, end to end through the census's own walk over synthesized
+    /// transcripts: `untrack(() => sig())` closes `reads` when `sig` is the
+    /// caller's parameter, and `createSignal(() => sig())` does not, because
+    /// `solid-js`' row holds only for a primitive first argument. The rest of
+    /// the dispositions the rows exist for come with their refusals: an accessor
+    /// passed by reference, the plain signal, and the flat `getOwner`.
+    #[test]
+    fn the_reads_walk_admits_untrack_of_a_literal_and_refuses_create_signal_of_a_function() {
+        use solid_dialect::CallClaimDomain::Reads;
+        let source = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../../fixtures/package-contracts/reads-dialect-rows/index.js"),
+        )
+        .expect("the fixture is checked in");
+        let source = source.as_str();
+        let export_name = "untrackLiteral";
+        let path = "/project/node_modules/consumer/dist/index.js";
+        // The exact spans of the source above: the call, the literal it is
+        // handed, and the caller's accessor invoked inside the literal.
+        let at = |needle: &str| {
+            let start = u64::try_from(source.find(needle).expect("in the source")).unwrap();
+            (start, start + u64::try_from(needle.len()).unwrap())
+        };
+        let ((call_start, call_end), (arrow_start, arrow_end), (sig_start, sig_end)) =
+            (at("untrack(() => sig())"), at("() => sig()"), at("sig()"));
+        let signals = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.9",
+            SIGNALS_RC9_INTEGRITY,
+            &audited_phase0_manifest("rc9", "solidjs-signals"),
+            "/snapshot/signals-rc9",
+        );
+        let solid_js = solid_js_rc9_snapshot();
+        // The caller's own accessor, invoked inside the literal: the census's
+        // `callbacks` domain item, at any depth of nesting.
+        let inner = signals_call(
+            "sig",
+            json!({
+                "location": {"path": path, "startByte": sig_start, "endByte": sig_end},
+                "targetModule": "",
+                "declaration": null,
+                "calleeParameter": {"parameterIndex": 0},
+                "captured": true,
+                "enclosingCallable": {"path": path, "startByte": arrow_start, "endByte": arrow_end},
+            }),
+        );
+        let outcome = |call: typefacts::ImplementationCall,
+                       inner: Option<typefacts::ImplementationCall>| {
+            let (certified, export) = census_source_case(
+                source,
+                export_name,
+                std::iter::once(call).chain(inner).collect(),
+            );
+            let roots = vec![
+                consumer_root(&certified),
+                signals_root(&signals),
+                solid_js_root(&solid_js),
+            ];
+            let mut run = census_run(&certified, &roots);
+            run.domain = Reads;
+            let outcome = census_transcript(&mut run, &export, 0, &[]);
+            (outcome, run.sites)
+        };
+        let literal = json!([{"argument": 0, "locations": [{"path": path, "startByte": arrow_start, "endByte": arrow_end}]}]);
+        let untrack = |overrides: serde_json::Value| {
+            let mut value = json!({
+                "argumentCallables": literal,
+                "location": {"path": path, "startByte": call_start, "endByte": call_end},
+            });
+            for (key, replacement) in overrides.as_object().unwrap() {
+                value[key] = replacement.clone();
+            }
+            signals_call("untrack", value)
+        };
+
+        // `untrack(() => sig())` certifies: the call is the row's, the literal's
+        // own call is the caller's.
+        let (closed, sites) = outcome(untrack(json!({})), Some(inner.clone()));
+        assert_eq!(closed, Ok(CensusStep::Decided));
+        assert!(
+            sites.iter().any(|site| site.starts_with(
+                "census-dialect-axiom:@solidjs/signals@2.0.0-rc.9#sha512-o3pqiTgpH5NR2Dst:untrack:reads:\
+                 arguments=primitive[]+either[]+invoked[0]"
+            )),
+            "{sites:?}"
+        );
+        // The same call over the export's own parameter as the callable.
+        let (closed, _) = outcome(
+            untrack(
+                json!({"argumentCallables": [], "argumentParameters": [{"parameterIndex": 0}]}),
+            ),
+            None,
+        );
+        assert_eq!(closed, Ok(CensusStep::Decided));
+        // By reference: the walk cannot see what runs.
+        let (refused, _) = outcome(untrack(json!({"argumentCallables": []})), None);
+        let error = refused.expect_err("an accessor passed by reference refuses");
+        assert!(
+            error.contains("the dialect row @solidjs/signals@2.0.0-rc.9:untrack:reads holds only")
+                && error.contains("neither rooted at a parameter"),
+            "{error}"
+        );
+
+        // `solid-js`' `createSignal`: a primitive first argument certifies, a
+        // function does not, and neither does a value the producer states
+        // nothing about.
+        let create = |primitive: serde_json::Value| {
+            let mut call = solid_js_call("createSignal");
+            call = serde_json::from_value({
+                let mut value = serde_json::to_value(&call).unwrap();
+                value["argumentsPrimitiveSyntax"] = primitive;
+                value
+            })
+            .unwrap();
+            call
+        };
+        let (closed, sites) = outcome(create(json!([true])), None);
+        assert_eq!(closed, Ok(CensusStep::Decided));
+        assert!(
+            sites.iter().any(|site| site.contains(
+                "createSignal:reads:arguments=primitive[0]+either[]+invoked[]:delegates=@solidjs/signals@2.0.0-rc.9#"
+            )),
+            "{sites:?}"
+        );
+        for (why, primitive, needle) in [
+            (
+                "createSignal(() => sig())",
+                json!([false]),
+                "argument 0 is not a primitive by its grammar",
+            ),
+            (
+                "a producer without the fact",
+                json!([]),
+                "the producer states nothing about argument 0",
+            ),
+        ] {
+            let mut call = solid_js_call("createSignal");
+            call = serde_json::from_value({
+                let mut value = serde_json::to_value(&call).unwrap();
+                value["argumentsPrimitiveSyntax"] = primitive;
+                value
+            })
+            .unwrap();
+            let (refused, _) = outcome(call, Some(inner.clone()));
+            let error = refused.expect_err(why);
+            assert!(
+                error.contains("the dialect row solid-js@2.0.0-rc.9:createSignal:reads holds only")
+                    && error.contains(needle),
+                "{why}: {error}"
+            );
+        }
+
+        // A flat row: `getOwner` reads nothing whatever its arguments.
+        let (closed, _) = outcome(signals_call("getOwner", json!({})), None);
+        assert_eq!(closed, Ok(CensusStep::Decided));
+    }
+
+    /// The scope's own label, as a premise closure that always holds: what
+    /// [`census_argument_premises`] would say for a call that satisfied it.
+    fn census_scope_label(scope: &solid_dialect::ArgumentScope) -> Result<String, String> {
+        let list = |slots: &[usize]| {
+            slots
+                .iter()
+                .map(usize::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        Ok(format!(
+            "primitive[{}]+either[{}]+invoked[{}]",
+            list(scope.primitive_slots),
+            list(scope.callable_or_primitive_slots),
+            list(scope.invoked_slots)
+        ))
+    }
+
+    /// ADR 0168: what the producer's facts about one call prove, per premise.
+    ///
+    /// A primitive slot needs the producer's `argumentsPrimitiveSyntax`, and
+    /// absence is not proof (a slot not written, a spread, an old producer). An
+    /// invoked slot needs a callable the census walks or leaves to its author:
+    /// rooted at a parameter (in the export's own frame only), or a literal
+    /// whose every location lies inside the frame. A reference to a callable
+    /// declared elsewhere -- the accessor of a memo the call created, a
+    /// module-level helper -- refuses.
+    #[test]
+    fn census_argument_premises_state_what_the_producer_proved() {
+        use solid_dialect::CallClaimDomain::Reads;
+        let certified = consumer_snapshot();
+        let roots = vec![consumer_root(&certified)];
+        let path = "/project/node_modules/consumer/dist/index.js";
+        let frame = typefacts::Location {
+            path: path.into(),
+            start_byte: 0,
+            end_byte: 200,
+        };
+        let run = |domain| {
+            let mut run = census_run(&certified, &roots);
+            run.frame = Some(frame.clone());
+            run.domain = domain;
+            run
+        };
+        let scope = |package: &str, export: &str| {
+            let signals = solid_dialect::audited_archives(package)
+                .into_iter()
+                .find(|archive| archive.version == "2.0.0-rc.9")
+                .expect("an audited rc.9 archive");
+            solid_dialect::argument_row(signals, export, Reads).expect("an argument row")
+        };
+        let js_create = scope("solid-js", "createSignal");
+        let untrack = scope("@solidjs/signals", "untrack");
+        let with_owner = scope("@solidjs/signals", "runWithOwner");
+        let sig_create = scope("@solidjs/signals", "createSignal");
+        let call = |overrides: serde_json::Value| signals_call("untrack", overrides);
+        let premise = |scope, overrides: serde_json::Value, depth| {
+            census_argument_premises(&run(Reads), &call(overrides), scope, depth)
+        };
+        let inside = json!([{"argument": 0, "locations": [{"path": path, "startByte": 110, "endByte": 130}]}]);
+        let outside = json!([{"argument": 0, "locations": [{"path": path, "startByte": 300, "endByte": 320}]}]);
+        let elsewhere = json!([{"argument": 0, "locations": [{"path": "/project/node_modules/consumer/dist/other.js", "startByte": 10, "endByte": 20}]}]);
+        let parameter = json!([{"parameterIndex": 0}]);
+
+        // A primitive slot: stated true, and nothing else is proof.
+        assert_eq!(
+            premise(js_create, json!({"argumentsPrimitiveSyntax": [true]}), 0),
+            Ok("primitive[0]+either[]+invoked[]".to_owned())
+        );
+        assert_eq!(
+            premise(
+                js_create,
+                json!({"argumentsPrimitiveSyntax": [true, false]}),
+                0
+            ),
+            Ok("primitive[0]+either[]+invoked[]".to_owned()),
+            "the options slot is not a premise of the row"
+        );
+        for (why, overrides, needle) in [
+            (
+                "a function or an unknown value",
+                json!({"argumentsPrimitiveSyntax": [false]}),
+                "not a primitive by its grammar",
+            ),
+            (
+                "a producer that states nothing, a zero-argument call or a displaced slot",
+                json!({}),
+                "the producer states nothing about argument 0",
+            ),
+            (
+                "a callable literal is not a primitive",
+                json!({"argumentsPrimitiveSyntax": [false], "argumentCallables": inside.clone()}),
+                "not a primitive by its grammar",
+            ),
+        ] {
+            let error = premise(js_create, overrides, 0).expect_err(why);
+            assert!(error.contains(needle), "{why}: {error}");
+        }
+
+        // An invoked slot: a literal inside the frame, or the caller's own.
+        let held = "primitive[]+either[]+invoked[0]";
+        assert_eq!(
+            premise(untrack, json!({"argumentCallables": inside.clone()}), 0),
+            Ok(held.to_owned())
+        );
+        assert_eq!(
+            premise(untrack, json!({"argumentParameters": parameter.clone()}), 0),
+            Ok(held.to_owned())
+        );
+        for (why, overrides, depth, needle) in [
+            (
+                "an accessor or helper passed by reference traces to nothing",
+                json!({}),
+                0,
+                "neither rooted at a parameter of this implementation nor a callable literal",
+            ),
+            (
+                "a literal outside the frame under the walk",
+                json!({"argumentCallables": outside.clone()}),
+                0,
+                "neither rooted at a parameter",
+            ),
+            (
+                "a callable declared in another file",
+                json!({"argumentCallables": elsewhere}),
+                0,
+                "neither rooted at a parameter",
+            ),
+            (
+                "a nested frame's parameter is not the caller's",
+                json!({"argumentParameters": parameter.clone()}),
+                1,
+                "a parameter of the frame at depth 1",
+            ),
+        ] {
+            let error = premise(untrack, overrides, depth).expect_err(why);
+            assert!(error.contains(needle), "{why}: {error}");
+        }
+        // The literal of a nested frame is still that frame's own code.
+        assert_eq!(
+            premise(untrack, json!({"argumentCallables": inside.clone()}), 1),
+            Ok(held.to_owned())
+        );
+        // Slot 1 is `runWithOwner`'s; a callable in slot 0 is not it.
+        let error = premise(with_owner, json!({"argumentCallables": inside.clone()}), 0)
+            .expect_err("slot 0 is the owner");
+        assert!(error.contains("argument 1"), "{error}");
+        assert_eq!(
+            premise(
+                with_owner,
+                json!({"argumentParameters": [null, {"parameterIndex": 0}]}),
+                0
+            ),
+            Ok("primitive[]+either[]+invoked[1]".to_owned())
+        );
+
+        // Either a proved primitive, or a callable the census can attribute.
+        assert_eq!(
+            premise(sig_create, json!({"argumentsPrimitiveSyntax": [true]}), 0),
+            Ok("primitive[]+either[0]+invoked[]".to_owned())
+        );
+        assert_eq!(
+            premise(sig_create, json!({"argumentCallables": inside.clone()}), 0),
+            Ok("primitive[]+either[0]+invoked[]".to_owned())
+        );
+        let error = premise(sig_create, json!({}), 0).expect_err("a value nothing proves");
+        assert!(
+            error.contains(
+                "argument 0 is not proved a primitive by its grammar, and as a possible function"
+            ),
+            "{error}"
+        );
+
+        // The walk is not the `reads` walk in other domains, so the depth rule
+        // is the `reads` census's alone.
+        let creates = census_argument_premises(
+            &run(solid_dialect::CallClaimDomain::Creates),
+            &call(json!({"argumentParameters": parameter})),
+            untrack,
+            1,
+        );
+        assert_eq!(creates, Ok(held.to_owned()));
+        // No frame, no literal can be admitted.
+        let mut frameless = run(Reads);
+        frameless.frame = None;
+        assert!(
+            census_argument_premises(
+                &frameless,
+                &call(json!({"argumentCallables": inside})),
+                untrack,
+                0
+            )
+            .is_err()
         );
     }
 
@@ -29018,6 +29828,7 @@ mod tests {
                 &certified,
                 &roots,
                 &conditions(requested),
+                &no_arguments,
             )
         };
         for (requested, file) in [
@@ -29094,6 +29905,7 @@ mod tests {
                 &certified,
                 &roots,
                 &conditions(requested),
+                &no_arguments,
             )
         };
         let signals9 = "@solidjs/signals@2.0.0-rc.9#sha512-o3pqiTgpH5NR2Dst";
@@ -29145,6 +29957,7 @@ mod tests {
                 &certified,
                 &alone,
                 &conditions(&["browser", "import"]),
+                &no_arguments,
             ),
             Err(Some(reason)) if reason.contains(
                 "it delegates createMemo creates to @solidjs/signals, which this \

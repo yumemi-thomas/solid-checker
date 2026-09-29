@@ -12,15 +12,15 @@
     "ownerRequirement": 32,
     "measuredPackages": 16,
     "operations": 699,
-    "closed-empty": 253,
-    "degenerate": 200,
+    "closed-empty": 280,
+    "degenerate": 173,
     "absent": 722,
     "unmeasured": 84,
     "consumer": {
       "value": 158,
       "clean": 536,
-      "some-uses": 147,
-      "every-import": 311
+      "some-uses": 168,
+      "every-import": 290
     }
   },
   "packages": [
@@ -52,8 +52,8 @@
       "consumer": {
         "value": 112,
         "clean": 408,
-        "some-uses": 99,
-        "every-import": 201
+        "some-uses": 119,
+        "every-import": 181
       }
     },
     {
@@ -66,8 +66,8 @@
       "sites": 39,
       "measured": true,
       "operations": 12,
-      "closed-empty": 0,
-      "degenerate": 27,
+      "closed-empty": 27,
+      "degenerate": 0,
       "absent": 0,
       "ownerRequirement": 0,
       "consumer": {
@@ -158,8 +158,8 @@
       "consumer": {
         "value": 0,
         "clean": 0,
-        "some-uses": 0,
-        "every-import": 5
+        "some-uses": 1,
+        "every-import": 4
       }
     },
     {

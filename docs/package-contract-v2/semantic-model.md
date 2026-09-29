@@ -469,6 +469,18 @@ and `owner` fields say how it runs), and the body of a returned callable that
 nothing calls during the call — whoever calls it performs those reads, under
 the returned value's described claim (ADR 0146).
 
+**[Decision 2026-09-30] A dialect primitive's `reads` row may hold only for calls
+whose arguments satisfy a stated scope** ([ADR 0168](../adr/0168-argument-scoped-reads-rows.md)).
+A row is a reading of what the archive's own code observes at the call event, and that
+reading is silent about a callable the caller hands over and about a function-versus-value
+argument the archive branches on. So a row may state which argument slots must be a
+primitive by grammar, which must be a callable the census can attribute (a literal inside
+the implementation under the walk, or the caller's own parameter), and which archive
+rows it delegates to; the census replays each at the call site, and a call that does not
+satisfy them is not answered by the row and refuses by name. `solid-js`'s own
+`createSignal` is the case: its hydration gate reads a signal the call created, but only
+for a function first argument.
+
 `latest` publishes one `read` with `tracking: untracked` and closes every
 sibling domain; `createStore` publishes three; `Loading` and `isPending` leave
 `reads` *open* with one item, which is partial positive and not closure.
