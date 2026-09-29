@@ -803,7 +803,19 @@ impl CertificationPlan {
                 });
             }
             let evidence = match type_facts::acquire_and_verify_export_values(plan, pin) {
-                Ok(evidence) => evidence,
+                Ok(evidence) => {
+                    // ADR 0153 item C: the census confirmed every deferred
+                    // bound, so the recipe each still lacks is recorded now,
+                    // before synthesis, which may yet serve it.
+                    let deferred = plan.deferred_bounded_reads(
+                        configuration.map(ProbeHarnessConfiguration::recipe_corpus),
+                    )?;
+                    if !deferred.is_empty() {
+                        already_withheld.extend(deferred);
+                        continue;
+                    }
+                    evidence
+                }
                 Err(error) => {
                     // Both kinds in one pass. One `CensusRefused` carries every
                     // refusal the census recorded, and withdrawing only the
@@ -1478,6 +1490,15 @@ pub fn certify_value_only_case_set(
         .iter()
         .any(|plan| !finalization::requires_type_facts(plan))
     {
+        return plans.iter().map(|plan| individually(plan)).collect();
+    }
+    // ADR 0153 item C: a `reads` candidate deferred past its missing recipe is
+    // withheld only after the census has confirmed its bounds, which is the
+    // per-plan loop's step; the batch has no pass to do it in.
+    if gated_plans.iter().any(|plan| {
+        plan.deferred_bounded_reads(recipe_corpus)
+            .map_or(true, |deferred| !deferred.is_empty())
+    }) {
         return plans.iter().map(|plan| individually(plan)).collect();
     }
     let evidence = match type_facts::acquire_and_verify_export_values_batch(&gated_plans, pin) {
@@ -2263,6 +2284,16 @@ impl CertificationPlan {
             {
                 continue;
             }
+            // ADR 0153 item C: a `reads` candidate bounded against accessor
+            // installations is left in the plan for one acquisition pass, so
+            // the census confirms or refuses its bounds before the missing
+            // recipe is recorded. Withholding it first would name the recipe
+            // as its only wall, and a bound the census refuses is the wall a
+            // recipe cannot clear. The transaction withholds it right after
+            // that pass (`deferred_bounded_reads`), under this same reason.
+            if self.defers_bounded_reads(closure) {
+                continue;
+            }
             withheld.push(WithheldClosure {
                 artifact_case: closure.artifact_case.clone(),
                 export: closure.export.clone(),
@@ -2283,6 +2314,64 @@ impl CertificationPlan {
             plan: self.replanned_with(selected)?,
             withheld,
         })
+    }
+
+    /// Whether a closure candidate is a `reads` closure whose export bounds it
+    /// against accessor installations (ADR 0153 item C), which recipe gating
+    /// defers for one acquisition pass.
+    fn defers_bounded_reads(&self, closure: &SemanticClaimSubject) -> bool {
+        matches!(
+            closure.path,
+            SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Reads))
+        ) && self
+            .selected_candidate
+            .artifact_case(&closure.artifact_case)
+            .and_then(|case| case.exports.get(&closure.export))
+            .is_some_and(|export| !export.call.accessor_bounds().is_empty())
+    }
+
+    /// The `reads` candidates [`Self::recipe_gated_with`] deferred past a
+    /// missing recipe (ADR 0153 item C), as the records that withhold them
+    /// now. Called only after an acquisition pass succeeded, which is the
+    /// census having confirmed every bound; a refused bound withholds its
+    /// candidate through the census refusal instead, and never reaches here.
+    pub(crate) fn deferred_bounded_reads(
+        &self,
+        recipe_corpus: Option<&Path>,
+    ) -> Result<Vec<WithheldClosure>, RecipeGatingError> {
+        let corpus = recipe_corpus
+            .map(|directory| probe_harness::RecipeCorpus::load(directory, self))
+            .transpose()?;
+        let mut withheld = Vec::new();
+        for closure in self.candidates.closure_candidates() {
+            if !self.defers_bounded_reads(closure) {
+                continue;
+            }
+            let claim_id = self
+                .candidates
+                .proposal()
+                .claim_id(closure)
+                .map_err(|error| RecipeGatingError::ClaimIdentity {
+                    artifact_case: closure.artifact_case.clone(),
+                    export: closure.export.clone(),
+                    reason: error.to_string(),
+                })?;
+            if corpus
+                .as_ref()
+                .is_some_and(|corpus| corpus.recipe_for(claim_id.as_str()).is_some())
+            {
+                continue;
+            }
+            withheld.push(WithheldClosure {
+                artifact_case: closure.artifact_case.clone(),
+                export: closure.export.clone(),
+                domain: type_facts::call_claim_domain_name(ClaimDomain::Reads).to_owned(),
+                semantic_claim_id: claim_id.as_str().to_owned(),
+                reason: WITHHELD_CLOSURE_NO_RECIPE.to_owned(),
+                recipe_address: self.recipe_address_string(closure),
+            });
+        }
+        Ok(withheld)
     }
 
     /// [`Self::recipe_gated_with`] with operations the transaction has already
@@ -18129,6 +18218,177 @@ export const value = phantom;
         );
     }
 
+    /// ADR 0153 item C: a test package from one entrypoint file of
+    /// `implementation-census-reads-fresh-target`, planned with `reads` closed
+    /// on every named export and bounded against every accessor hazard of the
+    /// closure -- the proposal the generator makes for such a closure.
+    fn fresh_target_plan(
+        runtime_file: &str,
+        types_file: &str,
+        exports: &[&str],
+    ) -> CertificationPlan {
+        let fixture = repository_root()
+            .join("fixtures/package-contracts/implementation-census-reads-fresh-target");
+        let runtime = std::fs::read(fixture.join(runtime_file)).expect("fixture runtime");
+        let types = std::fs::read(fixture.join(types_file)).expect("fixture declarations");
+        let name = "reads-fresh-target";
+        let manifest = br#"{"name":"reads-fresh-target","version":"1.0.0","type":"module","exports":{".":{"types":"./index.d.ts","import":"./index.js"}}}"#;
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", types.as_slice()),
+            ],
+        );
+        let root = "/project/node_modules/reads-fresh-target";
+        let bindings = exports
+            .iter()
+            .map(|export| {
+                (
+                    *export,
+                    ("index.js", runtime.as_slice()),
+                    ("index.d.ts", types.as_slice()),
+                    root,
+                )
+            })
+            .collect::<Vec<_>>();
+        let (request, resolved) = test_package_resolution(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            manifest,
+            &["import"],
+            &bindings,
+            &[],
+            "/project/src/app.ts",
+        );
+        let sources = resolved
+            .closure
+            .hazards
+            .iter()
+            .filter(|hazard| hazard.kind == ClosureHazardKind::RuntimeAccessorInstallation)
+            .map(|hazard| hazard.source.clone())
+            .collect::<Vec<_>>();
+        assert!(!sources.is_empty(), "the closure states its installations");
+        let closed = exports
+            .iter()
+            .map(|export| (*export, ClaimDomain::Reads))
+            .collect::<Vec<_>>();
+        let candidate = test_candidate(&resolved, exports.iter().copied(), &closed, &|_| {
+            ValueShape::Callable
+        });
+        let mut cases = candidate.artifact_cases().to_vec();
+        for export in cases[0].exports.values_mut() {
+            export.add_accessor_bounds(sources.iter().cloned());
+        }
+        let candidate = ContractProposal::new(candidate.package().clone(), cases)
+            .normalize()
+            .unwrap();
+        super::plan_certification_with_dependencies(
+            &mut CertificationPlanningTransaction::new(),
+            CertificationRequest::new(candidate, request, resolved),
+            UntrustedArtifactEnvelope::Published(archive),
+            &[],
+        )
+        .unwrap()
+    }
+
+    /// ADR 0153 item C, end to end through the census. Bounded, `reads` is a
+    /// candidate for every export of a closure that installs accessors -- the
+    /// binding honours the bounds -- and recipe gating defers each one past
+    /// its missing recipe until the census has decided its bounds. The census
+    /// then confirms them for every export that cannot operate on either
+    /// target, refuses `readWidth`'s, which reads a member of one, and refuses
+    /// every export of `./escaping`, whose target also lives in module state.
+    #[test]
+    fn a_fresh_accessor_target_bounds_every_export_but_its_reader() {
+        let exports = ["createView", "createBounds", "readWidth", "plainSum"];
+        let plan = fresh_target_plan("index.js", "index.d.ts", &exports);
+        assert_eq!(
+            plan.verified_closure
+                .manifest()
+                .hazards
+                .iter()
+                .filter(|hazard| hazard.kind == ClosureHazardKind::RuntimeAccessorInstallation)
+                .count(),
+            2,
+            "one `new Proxy`, one `Object.defineProperty`"
+        );
+        let reads = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Reads));
+        assert_eq!(
+            plan.candidates
+                .closure_candidates()
+                .iter()
+                .filter(|candidate| candidate.path == reads)
+                .count(),
+            exports.len(),
+            "the bounds keep every export's reads a candidate"
+        );
+        let gated = plan.recipe_gated(None).unwrap();
+        assert!(
+            gated
+                .withheld()
+                .iter()
+                .all(|record| record.domain != "reads"),
+            "no bounded reads candidate is withheld before the census: {:?}",
+            gated.withheld()
+        );
+        assert_eq!(
+            plan.deferred_bounded_reads(None).unwrap().len(),
+            exports.len(),
+            "and each is withheld for its recipe once the census has run"
+        );
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let error = super::type_facts::acquire_and_verify_export_values(gated.plan(), &pin)
+            .err()
+            .expect("readWidth operates on a target it bounds against");
+        let withheld = super::census_refusal_withholding(gated.plan(), &error)
+            .into_iter()
+            .filter(|record| record.domain == "reads")
+            .collect::<Vec<_>>();
+        assert_eq!(
+            withheld
+                .iter()
+                .map(|record| record.export.as_str())
+                .collect::<Vec<_>>(),
+            ["readWidth"],
+            "only the reader's bound refuses: {withheld:?}"
+        );
+        assert!(
+            withheld[0]
+                .reason
+                .contains("installs on a fresh target this export can operate on"),
+            "{}",
+            withheld[0].reason
+        );
+
+        let escaping = ["createStore", "plainProduct", "lastValue"];
+        let plan = fresh_target_plan("escaping.js", "escaping.d.ts", &escaping);
+        let gated = plan.recipe_gated(None).unwrap();
+        let error = super::type_facts::acquire_and_verify_export_values(gated.plan(), &pin)
+            .err()
+            .expect("a target kept in module state bounds no export");
+        let withheld = super::census_refusal_withholding(gated.plan(), &error)
+            .into_iter()
+            .filter(|record| record.domain == "reads")
+            .collect::<Vec<_>>();
+        assert_eq!(withheld.len(), escaping.len(), "{withheld:?}");
+        for record in &withheld {
+            assert!(
+                record
+                    .reason
+                    .contains("is unbounded: the target is assigned"),
+                "{}",
+                record.reason
+            );
+        }
+    }
+
     /// The other half, and the reason the fixture has two entrypoints: a
     /// closure that installs an accessor at run time never reaches the census
     /// at all. No candidate, no gate, nothing to bind.
@@ -22068,9 +22328,20 @@ export const value = phantom;
             callbacks_candidates > 0,
             "the walk proposes callbacks closures too"
         );
+        // ADR 0153 item C: the tracer's `protoTable` literal is an accessor
+        // installation, and every export whose `reads` the inference closes
+        // proposes it bounded against that site.
+        let reads = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Reads));
+        let reads_candidates = plan
+            .candidates
+            .closure_candidates()
+            .iter()
+            .filter(|candidate| candidate.path == reads)
+            .count();
+        assert!(reads_candidates > 0, "the bounds keep reads candidates");
         assert_eq!(
             plan.probe_gate_schedule().unwrap().gates().len(),
-            proposing.len() + returns_candidates.len() + callbacks_candidates
+            proposing.len() + returns_candidates.len() + callbacks_candidates + reads_candidates
         );
         for export in proposing {
             assert_eq!(creates_demand_ids(&plan, export).len(), 1, "{export}");
@@ -22078,16 +22349,33 @@ export const value = phantom;
 
         // And with no recipe corpus the row is exactly the row it was: every
         // candidate withheld by name, no gate, no demand, the domain open.
-        let gated = plan.recipe_gated(None).expect("gating without a corpus");
+        // A bounded `reads` candidate is withheld after the one acquisition
+        // pass that decides its bounds, so this applies that step too.
+        let deferred = plan
+            .deferred_bounded_reads(None)
+            .expect("deferred reads without a corpus");
+        assert_eq!(deferred.len(), reads_candidates);
+        assert_eq!(
+            plan.recipe_gated(None)
+                .expect("gating without a corpus")
+                .withheld()
+                .len(),
+            proposing.len() + returns_candidates.len() + callbacks_candidates,
+            "recipe gating alone defers the bounded reads candidates"
+        );
+        let gated = plan
+            .recipe_gated_with(None, &deferred)
+            .expect("gating without a corpus");
         assert_eq!(
             gated.withheld().len(),
-            proposing.len() + returns_candidates.len() + callbacks_candidates
+            proposing.len() + returns_candidates.len() + callbacks_candidates + reads_candidates
         );
         for record in gated.withheld() {
             assert!(
                 record.domain == "creates"
                     || record.domain == "returns"
-                    || record.domain == "callbacks",
+                    || record.domain == "callbacks"
+                    || record.domain == "reads",
                 "{}",
                 record.domain
             );

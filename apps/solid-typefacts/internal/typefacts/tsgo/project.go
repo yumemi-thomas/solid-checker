@@ -110,6 +110,10 @@ type project struct {
 	contextProvisions          map[*ast.Symbol]*contextProvisionResult
 	contextInstallationProgram *compiler.Program
 	contextInstallationScans   map[string]contextInstallationScan
+	// ADR 0153 item C: the accessor-installation census, per installed
+	// package, of the program it was computed over.
+	accessorInstallationProgram *compiler.Program
+	accessorInstallationScans   map[string]accessorPackageScan
 	// formTwin is set for exactly the duration of an uncensused-form census
 	// classified under a declared-signature premise (ADR 0038): the checked
 	// twin of the implementation's file whose checker answers every type and

@@ -10895,6 +10895,9 @@ impl CensusDisposition {
 /// field every empty list would read as "no uncensused form", which is exactly
 /// the conclusion-from-silence this census exists to prevent.
 const CENSUS_UNCENSUSED_FORMS_PROTOCOL: u64 = 14;
+/// ADR 0153 item C: the handshake protocol at which an implementation states
+/// the run-time accessor installations of its package that can reach it.
+const CENSUS_ACCESSOR_INSTALLATIONS_PROTOCOL: u64 = 73;
 
 /// The handshake protocol at which the producer stopped **dropping** the `calls`
 /// rows a `break`/`continue` region covers, and began classifying each
@@ -12944,6 +12947,9 @@ fn census_reads_domain(
     // described enumeration in both directions; counted only under the empty
     // one.
     sites.push(confirm_described_reads(described.as_deref(), implementation).map_err(refuse)?);
+    // ADR 0153 item C: every accessor installation of the closure this export
+    // is bounded against, confirmed site by site.
+    sites.extend(census_accessor_bounds(&run, plan, export, implementation).map_err(refuse)?);
     // The witness lines the premise bindings above recorded on the run.
     sites.append(&mut run.sites);
     // Zero on both counts, and truthfully: this census dispositions no call
@@ -12954,6 +12960,161 @@ fn census_reads_domain(
         sites,
         run.requested,
     ))
+}
+
+/// ADR 0153 item C: confirms the accessor-installation bounds a `reads`
+/// closure states, one witness line per bounded site.
+///
+/// A bound names a `runtime-accessor-installation` hazard of the authenticated
+/// closure, which `bind_exports` then does not turn into an open `reads`. So
+/// every such hazard of the closure must be named, and each named one must lie
+/// inside a site the producer's census for this very implementation states
+/// either a `null-prototype` key or a `fresh-target` installation this
+/// implementation cannot reach, with every position it names in the
+/// artifact's own runtime source. Anything else refuses by name: a hazard the
+/// producer states no site for, an unbounded site (with the producer's own
+/// reason), a reached one, an absent census, and a bound naming no hazard.
+///
+/// What is not re-derived is the producer's flow: that the target's every use
+/// is classified and that the readers are closed. The census binds the
+/// positions it names to the bytes this certification authenticated.
+fn census_accessor_bounds(
+    run: &CensusRun<'_>,
+    plan: &CertificationPlan,
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    implementation: &typefacts::ExportImplementationTranscript,
+) -> Result<Vec<String>, String> {
+    let bounds = export.call.accessor_bounds();
+    let hazards = plan
+        .verified_closure
+        .manifest()
+        .hazards
+        .iter()
+        .filter(|hazard| {
+            hazard.kind
+                == crate::artifact_resolution::ClosureHazardKind::RuntimeAccessorInstallation
+        })
+        .collect::<Vec<_>>();
+    if bounds.is_empty() {
+        // Nothing is bounded, so binding opened `reads` for every hazard and a
+        // closure demand never reaches here over one.
+        return Ok(Vec::new());
+    }
+    if let Some(stray) = bounds
+        .iter()
+        .find(|source| !hazards.iter().any(|hazard| &hazard.source == *source))
+    {
+        return Err(format!(
+            "reads-census premise required: the accessor bound {stray} names no \
+             runtime-accessor-installation hazard of the closure"
+        ));
+    }
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_ACCESSOR_INSTALLATIONS_PROTOCOL {
+        return Err(format!(
+            "reads-census premise required: the accessor-installation census arrived at handshake \
+             protocol {CENSUS_ACCESSOR_INSTALLATIONS_PROTOCOL} and this build speaks {}",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        ));
+    }
+    let Some(census) = &implementation.accessor_installations else {
+        return Err(
+            "reads-census premise required: the producer states no accessor-installation census \
+             for this implementation"
+                .into(),
+        );
+    };
+    let placed = |location: &typefacts::Location| {
+        census_certified_relative_path(run, &location.path)
+            .filter(|(_, relative)| run.runtime_sources.contains(relative))
+            .map(|(_, relative)| format!("./{relative}"))
+    };
+    let mut sites = Vec::new();
+    for hazard in hazards {
+        if !bounds.contains(&hazard.source) {
+            return Err(format!(
+                "reads-census premise required: the accessor installation at {} is not bounded, \
+                 so a read through it would record no form",
+                hazard.source
+            ));
+        }
+        let Some((path, span)) = hazard.source.rsplit_once(':') else {
+            return Err(format!("the hazard source {} names no span", hazard.source));
+        };
+        let Some((start, end)) = span
+            .split_once('-')
+            .and_then(|(start, end)| Some((start.parse::<u64>().ok()?, end.parse::<u64>().ok()?)))
+        else {
+            return Err(format!("the hazard source {} names no span", hazard.source));
+        };
+        let mut containing = census.sites.iter().filter(|site| {
+            placed(&site.site).as_deref() == Some(path)
+                && site.site.start_byte <= start
+                && end <= site.site.end_byte
+        });
+        let (Some(site), None) = (containing.next(), containing.next()) else {
+            return Err(format!(
+                "reads-census premise required: the producer states no single installation site \
+                 containing the accessor hazard at {}",
+                hazard.source
+            ));
+        };
+        match site.kind {
+            typefacts::AccessorInstallationKind::NullPrototype => {}
+            typefacts::AccessorInstallationKind::Unbounded => {
+                return Err(format!(
+                    "reads-census premise required: the accessor installation at {} is unbounded: {}",
+                    hazard.source, site.refusal
+                ));
+            }
+            typefacts::AccessorInstallationKind::FreshTarget => {
+                if site.reached {
+                    return Err(format!(
+                        "reads-census premise required: the accessor installation at {} installs on a \
+                         fresh target this export can operate on",
+                        hazard.source
+                    ));
+                }
+                let positions = site
+                    .function
+                    .iter()
+                    .chain(site.target.iter())
+                    .chain(site.returns.iter())
+                    .chain(site.readers.iter())
+                    .chain(
+                        site.accesses
+                            .iter()
+                            .flat_map(|access| [&access.location, &access.function]),
+                    );
+                for location in positions {
+                    if placed(location).is_none() {
+                        return Err(format!(
+                            "reads-census premise required: the accessor installation at {} names \
+                             {}:{}..{}, which is not in the artifact's own runtime source",
+                            hazard.source, location.path, location.start_byte, location.end_byte
+                        ));
+                    }
+                }
+                if site.function.is_none() || site.target.is_none() {
+                    return Err(format!(
+                        "reads-census premise required: the fresh-target installation at {} names no \
+                         allocating function",
+                        hazard.source
+                    ));
+                }
+            }
+        }
+        sites.push(format!(
+            "census-accessor-bound:{}:{}:accesses:{}:readers:{}",
+            hazard.source,
+            match site.kind {
+                typefacts::AccessorInstallationKind::NullPrototype => "null-prototype",
+                _ => "fresh-target",
+            },
+            site.accesses.len(),
+            site.readers.len()
+        ));
+    }
+    Ok(sites)
 }
 
 /// The local declarations a `reads` census needs transcripts for, requested.

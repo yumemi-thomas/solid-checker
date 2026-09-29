@@ -221,6 +221,7 @@ fn normalize_call(call: &mut CallSemantics, path: &str) -> Result<(), ModelError
 
     validate_call_claims(&call.claims, &call.operations, &resources, path)?;
     validate_proposed_closures(call, path)?;
+    validate_accessor_bounds(call, path)?;
     normalize_operation_graph(&mut call.edges, &call.operations, &operation_ids, path)?;
     normalize_guard_partition(&mut call.guards, &operation_ids, path)?;
     Ok(())
@@ -250,6 +251,26 @@ fn validate_proposed_closures(call: &CallSemantics, path: &str) -> Result<(), Mo
                 "call domain {} is proposed closed and states no closure",
                 claim_domain_name(*domain)
             ),
+        });
+    }
+    Ok(())
+}
+
+/// An accessor-installation bound (ADR 0153 item C) names a hazard source; an
+/// empty name bounds no site. A bound beside an open `reads` is admitted: the
+/// certifier's candidate weakening opens a proposed `reads` over the knowledge
+/// it states and closes it again, and the bound must survive the round trip.
+/// Every opening that withdraws a claim (`open_call_domains`) clears the
+/// bounds with it, so a published document never carries one beside an open
+/// `reads` it did not come from.
+fn validate_accessor_bounds(call: &CallSemantics, path: &str) -> Result<(), ModelError> {
+    if call.accessor_bounds().is_empty() {
+        return Ok(());
+    }
+    if call.accessor_bounds().iter().any(String::is_empty) {
+        return Err(ModelError::InvalidKnowledge {
+            path: format!("{path}.accessorBounds"),
+            reason: "an accessor bound names no hazard source".into(),
         });
     }
     Ok(())

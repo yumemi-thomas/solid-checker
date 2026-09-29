@@ -109,6 +109,17 @@ pub(super) fn semantic_digest(
         writer.text(SEMANTIC_CONTEXT_PREMISES_MARKER);
     }
     writer.context_premises = context_premises;
+    // ADR 0153 item C's bounds, on the same argument: a contract stating none
+    // hashes as it always did.
+    let accessor_bounds = artifact_cases.iter().any(|case| {
+        case.exports
+            .values()
+            .any(|export| !export.call.accessor_bounds().is_empty())
+    });
+    if accessor_bounds {
+        writer.text(SEMANTIC_ACCESSOR_BOUNDS_MARKER);
+    }
+    writer.accessor_bounds = accessor_bounds;
     let initialization = artifact_cases
         .iter()
         .any(|case| case.initialization.is_some());
@@ -323,6 +334,10 @@ struct CanonicalWriter {
     /// part 3): set from the contract by [`semantic_digest`], false
     /// everywhere else.
     context_premises: bool,
+    /// Whether this stream belongs to the accessor-bound family (ADR 0153
+    /// item C): set from the contract by [`semantic_digest`], false everywhere
+    /// else.
+    accessor_bounds: bool,
 }
 
 impl CanonicalWriter {
@@ -337,6 +352,7 @@ impl CanonicalWriter {
             computations: false,
             invoke_protocols: false,
             context_premises: false,
+            accessor_bounds: false,
         }
     }
 
@@ -626,6 +642,15 @@ impl CanonicalWriter {
             self.usize(premises.len());
             for premise in premises {
                 self.text(&premise.export);
+            }
+        }
+        // Written only in the accessor-bound family (ADR 0153 item C), in the
+        // `BTreeSet`'s order.
+        if self.accessor_bounds {
+            let bounds = call.accessor_bounds();
+            self.usize(bounds.len());
+            for source in bounds {
+                self.text(source);
             }
         }
         self.sequence(&call.operations, Self::operation);

@@ -499,6 +499,17 @@ export function causeOf(status, domain) {
         /uncensused invoking form: ([a-z-]+)/.exec(body)?.[1] ??
         /premise required: the ([a-z-]+) form/.exec(body)?.[1];
       if (/uncensused invoking form/.test(body)) return { class: "census refusal", key: `uncensused invoking form: ${form}` };
+      // ADR 0153 item C: a `reads` bound the producer's accessor-installation
+      // census does not support, by its own reason, or one the export reaches.
+      const accessor = /the accessor installation at \S+ (?:is unbounded: ([^;]+)|(installs on a fresh target))/.exec(body);
+      if (accessor) {
+        return {
+          class: "census refusal",
+          key: accessor[1]
+            ? `accessor installation unbounded: ${accessor[1].replace(/\/[^\s"]+/g, "<path>").slice(0, 70)}`
+            : "accessor installation the export operates on"
+        };
+      }
       if (/premise required/.test(body)) return { class: "census refusal", key: `reads premise required: ${form}` };
       if (/unresolved callee/.test(body)) return { class: "census refusal", key: "unresolved callee" };
       if (/parameter-rooted family/.test(body)) {

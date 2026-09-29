@@ -13,9 +13,9 @@
             "sha256": "2ecd56eb18b7ff147a132b59344eb90270bc94b9c76666ec3e76a399d38229f2"
           },
           "exports": {
-            "getterFunction": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "getterObject": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
-            "getterResult": "summary-c5b6fdd1cf17767811766a000f0c77b8e8431d8f0e87207209550472e0446638"
+            "getterFunction": "summary-3025730d88387d79ae5225978530d08b68c0d6ab22a1f1bdc06df93b7fd807db",
+            "getterObject": "summary-ea7d38071394cce8048cc66e98ad89e66aaedb2d9a523c04e5806d8817441366",
+            "getterResult": "summary-f04280f3c0d4bf8edc4b2cc38370f30f85d4fec556458c36c53739f4dc248d06"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -39,23 +39,48 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76": {
+    "summary-3025730d88387d79ae5225978530d08b68c0d6ab22a1f1bdc06df93b7fd807db": {
       "call": {
-        "callbacks": [],
+        "accessorBounds": [
+          "./index.js:168-189"
+        ],
         "closed": [
-          "callbacks"
+          "reads"
         ],
         "proposedClosures": [
-          "callbacks"
-        ]
+          "reads"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-ea7d38071394cce8048cc66e98ad89e66aaedb2d9a523c04e5806d8817441366": {
+      "call": {
+        "accessorBounds": [
+          "./index.js:168-189"
+        ],
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
       },
       "shape": "plain"
     },
-    "summary-c5b6fdd1cf17767811766a000f0c77b8e8431d8f0e87207209550472e0446638": {
+    "summary-f04280f3c0d4bf8edc4b2cc38370f30f85d4fec556458c36c53739f4dc248d06": {
       "call": {
+        "accessorBounds": [
+          "./index.js:168-189"
+        ],
         "callbacks": [],
         "closed": [
-          "callbacks"
+          "callbacks",
+          "reads"
         ],
         "operations": [
           {
@@ -89,16 +114,14 @@
           }
         ],
         "proposedClosures": [
-          "callbacks"
+          "callbacks",
+          "reads"
         ],
+        "reads": [],
         "returns": [
           "return"
         ]
       },
-      "shape": "callable"
-    },
-    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
-      "call": {},
       "shape": "callable"
     }
   }

@@ -4022,6 +4022,7 @@ mod tests {
             default_library_alias: None,
             invocation: None,
             retained_arguments: Vec::new(),
+            accessor_installations: None,
             complete: false,
             open_reasons: Vec::new(),
         }

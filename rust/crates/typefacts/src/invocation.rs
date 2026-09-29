@@ -911,6 +911,15 @@ pub struct ExportImplementationTranscript {
     /// is not a statement that nothing is kept.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub retained_arguments: Vec<RetainedArgument>,
+    /// ADR 0153 item C (handshake protocol 73): every run-time accessor
+    /// installation of this implementation's own installed package, whether
+    /// its target is a fresh allocation, every operation the package performs
+    /// on that target, and whether this implementation can execute one.
+    /// `None` is a producer with no opinion, which a consumer must read as
+    /// every site reaching it; an empty census is the claim that the package
+    /// installs nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accessor_installations: Option<AccessorInstallationCensus>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub primitive_completion: bool,
     /// The conjunction of seven independent gates, every one of which the
@@ -1265,6 +1274,65 @@ pub struct ContextLiteral {
 pub struct ContextExport {
     pub location: Location,
     pub name: String,
+}
+
+/// ADR 0153 item C: the run-time accessor installations of one installed
+/// package, as they bear on one implementation.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AccessorInstallationCensus {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sites: Vec<AccessorInstallationSite>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AccessorInstallationKind {
+    /// The target is an allocation its installing function makes, and every
+    /// use of it anywhere in the package is classified.
+    FreshTarget,
+    /// A `__proto__: null` literal key: no prototype, so no inherited
+    /// accessor.
+    NullPrototype,
+    /// Anything else; `refusal` says why.
+    Unbounded,
+}
+
+/// One installation site and, for a fresh target, the whole flow of the value
+/// it installs on.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AccessorInstallationSite {
+    /// The installing expression. It contains the span the closure's hazard
+    /// names.
+    pub site: Location,
+    pub kind: AccessorInstallationKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub function: Option<Location>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<Location>,
+    /// Every named function whose completion may hand the target back.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub returns: Vec<Location>,
+    /// Every operation the package performs on the target.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accesses: Vec<AccessorTargetAccess>,
+    /// Every named function that may execute one of `accesses`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub readers: Vec<Location>,
+    /// The implementation this census is attached to is one of `readers`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub reached: bool,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub refusal: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AccessorTargetAccess {
+    pub location: Location,
+    pub kind: String,
+    pub function: Location,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

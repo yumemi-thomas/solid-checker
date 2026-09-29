@@ -198,6 +198,13 @@
           "minItems": 1,
           "items": { "$ref": "#/$defs/nonemptyString" }
         },
+        "accessorBounds": {
+          "description": "ADR 0153 item C: the closure's runtime-accessor-installation hazard sources, as the closure manifest names them, that this export's closed reads holds against: each installs on a target its installing function allocates fresh and on which this export executes no operation. A consumer opens reads for every accessor hazard of the closure this list does not name. Stated only beside a closed reads.",
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/nonemptyString" }
+        },
         "callbacks": {
           "type": "array",
           "items": { "$ref": "#/$defs/callback" }

@@ -8,6 +8,8 @@
 
 use std::collections::BTreeSet;
 
+use crate::ClosureHazardKind;
+
 use solid_reactive_ir::{
     CallbackSchedule, ContractCallback, ContractClaim, ContractExport, ContractOwnerRequirement,
     ContractReturn, OwnerRequirementOperation, PackageContract,
@@ -130,12 +132,14 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                 // a run-time descriptor changes no declared type, so the read
                 // records no form. The hazard is the only place the premise is
                 // still visible, and it is a fact about the *closure*, so it
-                // withdraws the proposal for every export of the case — see
+                // withdraws the proposal — see
                 // `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
-                // § 6-§ 9.
+                // § 6-§ 9 — unless the export bounds every such site (ADR 0153
+                // item C), which the certifier's census then has to confirm
+                // site by site.
                 .filter(|domain| {
                     *domain != ClaimDomain::Reads
-                        || !resolved.closure.installs_runtime_accessor()
+                        || accessor_hazards_bounded(export.call.accessor_bounds(), resolved)
                 })
                 // The callbacks census decides the empty enumeration by the
                 // call walk dispositioning no caller-supplied invocation, and
@@ -253,6 +257,11 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                     origin: origin.clone(),
                 }));
             }
+            // A bound conditions a closed `reads`; one the proposal does not
+            // close leaves it nothing to bound.
+            if !proposable.contains(&ClaimDomain::Reads) {
+                export.open_call_domains([ClaimDomain::Reads]);
+            }
             export.propose_closures(proposable);
             candidates.extend(paths.into_iter().map(|path| SemanticClaimSubject {
                 artifact_case: artifact_case.id.clone(),
@@ -301,18 +310,31 @@ fn normalize_inferred_contract_identity(
     let scope = GenerationScope::for_package(&resolved.package_name);
     let mut withheld = Vec::new();
     let mut declined = Vec::new();
+    // ADR 0153 item C: the closure's accessor-installation hazard sites, which
+    // an export whose `reads` the inference closes proposes to be bounded
+    // against. Only the certifier's census can confirm a bound, site by site;
+    // one it refuses withholds the export's `reads` like any other census
+    // refusal.
+    let accessor_sources = resolved
+        .closure
+        .hazards
+        .iter()
+        .filter(|hazard| hazard.kind == ClosureHazardKind::RuntimeAccessorInstallation)
+        .map(|hazard| hazard.source.clone())
+        .collect::<BTreeSet<_>>();
     for (name, summary) in &entrypoint.exports {
-        artifact_case.exports.insert(
-            name.clone(),
-            normalize_export(
-                &artifact_case,
-                name,
-                summary,
-                scope,
-                &mut withheld,
-                &mut declined,
-            )?,
-        );
+        let mut export = normalize_export(
+            &artifact_case,
+            name,
+            summary,
+            scope,
+            &mut withheld,
+            &mut declined,
+        )?;
+        if !accessor_sources.is_empty() && !export.call.claim_state(ClaimDomain::Reads).is_open() {
+            export.add_accessor_bounds(accessor_sources.iter().cloned());
+        }
+        artifact_case.exports.insert(name.clone(), export);
     }
     let normalized = ContractProposal::new(package, vec![artifact_case])
         .normalize()
@@ -324,6 +346,17 @@ fn normalize_inferred_contract_identity(
     };
     declined.extend(hazard_declines(&selected, resolved));
     Ok((selected, withheld, declined))
+}
+
+/// Whether an export bounds every accessor-installation hazard of the closure
+/// (ADR 0153 item C), so that binding left its `reads` closed.
+fn accessor_hazards_bounded(bounds: &BTreeSet<String>, resolved: &ResolvedImport) -> bool {
+    resolved
+        .closure
+        .hazards
+        .iter()
+        .filter(|hazard| hazard.kind == ClosureHazardKind::RuntimeAccessorInstallation)
+        .all(|hazard| bounds.contains(&hazard.source))
 }
 
 /// Why a closure hazard left a proposable domain open, per export.
@@ -354,9 +387,16 @@ fn hazard_declines(
 ) -> Vec<DeclinedClosureRecord> {
     let mut records = Vec::new();
     for artifact_case in selected.artifact_cases() {
-        for name in artifact_case.exports.keys() {
+        for (name, export) in &artifact_case.exports {
             for (domain, hazard) in resolved.closure.domain_openings(name) {
                 if !domain.is_proposable() {
+                    continue;
+                }
+                // A bounded site opened nothing (ADR 0153 item C); whether the
+                // bound holds is the certifier's census to say.
+                if hazard.kind == ClosureHazardKind::RuntimeAccessorInstallation
+                    && export.call.accessor_bounds().contains(&hazard.source)
+                {
                     continue;
                 }
                 records.push(DeclinedClosureRecord {

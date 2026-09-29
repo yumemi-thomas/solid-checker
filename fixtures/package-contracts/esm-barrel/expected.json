@@ -13,13 +13,13 @@
             "sha256": "17cd27d928a303281246012890cd96b5d1038f02ebf0cb4420f2bb511fa5ad59"
           },
           "exports": {
-            "bootstrapSource": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
-            "createAlias": "summary-a162b302d7b2864351895844e279125d9b1e34888e08c9940fc52af266d2ee61",
-            "createConditional": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "createFromMemberFactory": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "createLocal": "summary-549d29acde9708aa95168ba8944622520eb54549a9125ee62824c573a584670e",
-            "createValue": "summary-549d29acde9708aa95168ba8944622520eb54549a9125ee62824c573a584670e",
-            "factoryComponent": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            "bootstrapSource": "summary-776ef708b4e4badb1aec430a2c4a00812bc6bef342b30153b6e6b7d6af5c2285",
+            "createAlias": "summary-8fc8798f495f4bfc3b108e18c9f9a29725a70a3dc355f984bf899a16dc2de4b8",
+            "createConditional": "summary-e8c8acc089d1fd868293ca15432bf6c0f58d967c98eb9ee85a386c2898947e8a",
+            "createFromMemberFactory": "summary-e8c8acc089d1fd868293ca15432bf6c0f58d967c98eb9ee85a386c2898947e8a",
+            "createLocal": "summary-ab83888b059f7764b9494e015741ce17339cead32e41b9a6631a10df03d38e0f",
+            "createValue": "summary-ab83888b059f7764b9494e015741ce17339cead32e41b9a6631a10df03d38e0f",
+            "factoryComponent": "summary-e8c8acc089d1fd868293ca15432bf6c0f58d967c98eb9ee85a386c2898947e8a"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -43,11 +43,51 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-549d29acde9708aa95168ba8944622520eb54549a9125ee62824c573a584670e": {
+    "summary-776ef708b4e4badb1aec430a2c4a00812bc6bef342b30153b6e6b7d6af5c2285": {
       "call": {
+        "accessorBounds": [
+          "./index.mjs:448-453"
+        ],
         "callbacks": [],
         "closed": [
           "callbacks",
+          "reads"
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
+      },
+      "shape": "plain"
+    },
+    "summary-8fc8798f495f4bfc3b108e18c9f9a29725a70a3dc355f984bf899a16dc2de4b8": {
+      "call": {
+        "accessorBounds": [
+          "./index.mjs:448-453"
+        ],
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-ab83888b059f7764b9494e015741ce17339cead32e41b9a6631a10df03d38e0f": {
+      "call": {
+        "accessorBounds": [
+          "./index.mjs:448-453"
+        ],
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
           "creates",
           "returns"
         ],
@@ -74,41 +114,30 @@
         ],
         "proposedClosures": [
           "callbacks",
+          "reads",
           "creates",
           "returns"
         ],
+        "reads": [],
         "returns": [
           "return"
         ]
       },
       "shape": "callable"
     },
-    "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76": {
+    "summary-e8c8acc089d1fd868293ca15432bf6c0f58d967c98eb9ee85a386c2898947e8a": {
       "call": {
-        "callbacks": [],
+        "accessorBounds": [
+          "./index.mjs:448-453"
+        ],
         "closed": [
-          "callbacks"
+          "reads"
         ],
         "proposedClosures": [
-          "callbacks"
-        ]
-      },
-      "shape": "plain"
-    },
-    "summary-a162b302d7b2864351895844e279125d9b1e34888e08c9940fc52af266d2ee61": {
-      "call": {
-        "callbacks": [],
-        "closed": [
-          "callbacks"
+          "reads"
         ],
-        "proposedClosures": [
-          "callbacks"
-        ]
+        "reads": []
       },
-      "shape": "callable"
-    },
-    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
-      "call": {},
       "shape": "callable"
     }
   }

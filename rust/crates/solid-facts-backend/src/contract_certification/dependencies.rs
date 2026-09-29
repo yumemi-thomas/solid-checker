@@ -2338,6 +2338,43 @@ fn certify_graphs_with_recipe_gating(
             }
             Err(error) => return Err(error),
         };
+        // ADR 0153 item C: every deferred `reads` bound was confirmed by the
+        // census this pass ran, so the recipe each still lacks is recorded
+        // now, before synthesis, which may yet serve it.
+        let mut deferred = 0_usize;
+        let mut deferred_seen = BTreeSet::new();
+        for node in gated.iter().flat_map(|graph| graph.nodes.iter()) {
+            let digest = node.identity.digest();
+            if !deferred_seen.insert(digest.to_owned()) {
+                continue;
+            }
+            let corpus = synthesized
+                .get(digest)
+                .map(|corpus| corpus.configuration().recipe_corpus())
+                .or(base_corpus);
+            let records = node.plan.deferred_bounded_reads(corpus).map_err(|source| {
+                PublishedGraphCertificationError::RecipeGatingAtNode {
+                    node: digest.into(),
+                    package: format!(
+                        "{}@{}",
+                        node.identity.package_name, node.identity.package_version
+                    ),
+                    source: Box::new(source),
+                }
+            })?;
+            deferred += records.len();
+            if !records.is_empty() {
+                already_withheld
+                    .entry(digest.to_owned())
+                    .or_default()
+                    .extend(records);
+            }
+        }
+        if deferred != 0 {
+            timing.withdrawn = deferred;
+            timing.emit(emit_timings, pass_started);
+            continue;
+        }
         let attempted_before = synthesis_attempted.len();
         let mut changed = false;
         {

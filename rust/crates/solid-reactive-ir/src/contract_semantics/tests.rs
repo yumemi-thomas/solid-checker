@@ -2518,6 +2518,66 @@ fn context_premise_digest_family_is_separate_frozen_and_moves_no_claim() {
     );
 }
 
+/// ADR 0153 item C: an accessor-installation bound is its own digest family
+/// under a frozen vector, moves no claim id or recipe address, survives the
+/// candidate weakening's knowledge-level round trip, and is cleared by every
+/// opening that withdraws `reads`.
+#[test]
+fn accessor_bound_digest_family_is_separate_frozen_and_cleared_with_reads() {
+    assert_eq!(
+        SEMANTIC_ACCESSOR_BOUNDS_MARKER,
+        "solid-checker:semantic-accessor-bounds:v1"
+    );
+    let plain = result_access_contract("case-a").unwrap();
+    let bounded = |sources: &[&str]| {
+        let mut cases = plain.artifact_cases().to_vec();
+        cases[0]
+            .exports
+            .get_mut("createResource")
+            .unwrap()
+            .add_accessor_bounds(sources.iter().map(|source| (*source).to_owned()));
+        ContractProposal::new(plain.package().clone(), cases)
+            .normalize()
+            .unwrap()
+    };
+    let one = bounded(&["./index.js:10-15"]);
+    let two = bounded(&["./index.js:10-15", "./other.js:1-6"]);
+    assert_ne!(one.semantic_digest(), plain.semantic_digest());
+    assert_ne!(one.semantic_digest(), two.semantic_digest());
+    assert_eq!(
+        one.semantic_digest().as_str(),
+        "sha256:098092b7feb71eaed5260bc30e9c64142ca598c74862789b1cee588ce24de478"
+    );
+    assert_eq!(
+        address_of(&one, "case-a", CALLBACKS, "closure"),
+        address_of(&plain, "case-a", CALLBACKS, "closure")
+    );
+    let subject = addressed_subject("case-a", CALLBACKS);
+    assert_eq!(
+        one.claim_id(&subject).unwrap(),
+        plain.claim_id(&subject).unwrap()
+    );
+    // Withdrawing `reads` withdraws what bounded it; any other domain keeps
+    // it.
+    let mut export = one.artifact_cases()[0].exports["createResource"].clone();
+    export.open_call_domains([ClaimDomain::Creates]);
+    assert_eq!(export.call.accessor_bounds().len(), 1);
+    export.open_call_domains([ClaimDomain::Reads]);
+    assert!(export.call.accessor_bounds().is_empty());
+    // An empty source bounds nothing and is refused.
+    let mut cases = plain.artifact_cases().to_vec();
+    cases[0]
+        .exports
+        .get_mut("createResource")
+        .unwrap()
+        .add_accessor_bounds([String::new()]);
+    assert!(
+        ContractProposal::new(plain.package().clone(), cases)
+            .normalize()
+            .is_err()
+    );
+}
+
 /// A `result-access` operation states exactly one shape, and exactly one
 /// `callbacks` item names it, from a bare parameter.
 #[test]

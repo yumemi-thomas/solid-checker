@@ -566,10 +566,20 @@ type ExportImplementationTranscript struct {
 	// parameter whose one store, every other use, and every member call of
 	// the key the producer censused (retainedArgumentsLocked). Absence is not
 	// a statement that nothing is kept.
-	RetainedArguments   []RetainedArgument `cbor:"retainedArguments,omitempty" json:"retainedArguments,omitempty"`
-	PrimitiveCompletion bool               `cbor:"primitiveCompletion,omitempty" json:"primitiveCompletion,omitempty"`
-	Complete            bool               `cbor:"complete,omitempty" json:"complete,omitempty"`
-	OpenReasons         []string           `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+	RetainedArguments []RetainedArgument `cbor:"retainedArguments,omitempty" json:"retainedArguments,omitempty"`
+	// AccessorInstallations is the census of every run-time accessor
+	// installation in this implementation's own installed package (ADR 0153
+	// item C, handshake protocol 73): each site the closure's
+	// `runtime-accessor-installation` hazard names, whether its target is an
+	// allocation the installing function makes fresh, every operation any
+	// code of the package performs on that target, and whether this
+	// implementation can execute one. Absent means the producer has no
+	// opinion, which a consumer must read as every site reaching it; an empty
+	// census is the positive claim that the package installs nothing.
+	AccessorInstallations *AccessorInstallationCensus `cbor:"accessorInstallations,omitempty" json:"accessorInstallations,omitempty"`
+	PrimitiveCompletion   bool                        `cbor:"primitiveCompletion,omitempty" json:"primitiveCompletion,omitempty"`
+	Complete              bool                        `cbor:"complete,omitempty" json:"complete,omitempty"`
+	OpenReasons           []string                    `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
 }
 
 // RetainedArgument is one constructor parameter a class export keeps on its
@@ -1184,6 +1194,67 @@ type ContextExport struct {
 type ContextInstallation struct {
 	Location Location `cbor:"location" json:"location"`
 	Keys     []string `cbor:"keys" json:"keys"`
+}
+
+// AccessorInstallationCensus is every run-time accessor installation of one
+// installed package, as it bears on one implementation (ADR 0153 item C).
+type AccessorInstallationCensus struct {
+	Sites []AccessorInstallationSite `cbor:"sites,omitempty" json:"sites,omitempty"`
+}
+
+// AccessorInstallationKind classifies one installation site.
+type AccessorInstallationKind string
+
+const (
+	// AccessorInstallationFreshTarget: the installation's target is an
+	// allocation its installing function makes, and every use of that value
+	// anywhere in the package is classified: installed on, returned, handed
+	// as a prop to a local component, discarded, or operated on.
+	AccessorInstallationFreshTarget AccessorInstallationKind = "fresh-target"
+	// AccessorInstallationNullPrototype: a `__proto__: null` literal key,
+	// which gives the object no prototype and so no inherited accessor.
+	AccessorInstallationNullPrototype AccessorInstallationKind = "null-prototype"
+	// AccessorInstallationUnbounded: anything else. Refusal says why.
+	AccessorInstallationUnbounded AccessorInstallationKind = "unbounded"
+)
+
+// AccessorInstallationSite is one installation and, for a fresh target, the
+// whole flow of the value it installs on.
+type AccessorInstallationSite struct {
+	// Site is the installing expression: the `new Proxy(…)`, the
+	// `Object.defineProperty(…)`-shaped call, the `__proto__:` member, or,
+	// for a spelling this census does not place, the node the closure
+	// hazard names.
+	Site Location                 `cbor:"site" json:"site"`
+	Kind AccessorInstallationKind `cbor:"kind" json:"kind"`
+	// Function is the function the target is allocated in.
+	Function *Location `cbor:"function,omitempty" json:"function,omitempty"`
+	// Target is the allocating expression.
+	Target *Location `cbor:"target,omitempty" json:"target,omitempty"`
+	// Returns is every named function whose completion may hand the target
+	// back, to a fixed point over their call sites.
+	Returns []Location `cbor:"returns,omitempty" json:"returns,omitempty"`
+	// Accesses is every operation any code of the package performs on the
+	// target, explicit or implicit: a member read or write, a call, a spread,
+	// an iteration, `in`, `instanceof`, a destructuring, an `await`, a
+	// coercion. A use that is none of these and none of the uses Kind admits
+	// makes the site unbounded instead.
+	Accesses []AccessorTargetAccess `cbor:"accesses,omitempty" json:"accesses,omitempty"`
+	// Readers is every named function that may execute one of Accesses:
+	// the functions the accesses sit in, closed backward over their call
+	// sites. Each is referenced only as a callee or by an export.
+	Readers []Location `cbor:"readers,omitempty" json:"readers,omitempty"`
+	// Reached states that the implementation this census is attached to is
+	// one of Readers.
+	Reached bool   `cbor:"reached,omitempty" json:"reached,omitempty"`
+	Refusal string `cbor:"refusal,omitempty" json:"refusal,omitempty"`
+}
+
+// AccessorTargetAccess is one operation on a fresh installation target.
+type AccessorTargetAccess struct {
+	Location Location `cbor:"location" json:"location"`
+	Kind     string   `cbor:"kind" json:"kind"`
+	Function Location `cbor:"function" json:"function"`
 }
 
 // ImportedModuleMember names a binding a module imports: the specifier

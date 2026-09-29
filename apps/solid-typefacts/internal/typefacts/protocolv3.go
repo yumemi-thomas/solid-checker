@@ -4,7 +4,19 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 71 (ADR 0152): **a call states the parameter
+// TypeFactsHandshakeProtocol is 73 (ADR 0153 item C; 72 was reserved for the
+// coercion amendment, which took no number): **an implementation states the run-time accessor
+// installations of its package that can reach it.**
+// ExportImplementationTranscript.AccessorInstallations names every site the
+// closure's `runtime-accessor-installation` hazard names in the
+// implementation's own installed package: whether the installation's target
+// is an allocation its function makes fresh, every operation the package
+// performs on that target, the named functions that may execute one, and
+// whether this implementation is one of them. A protocol-71 consumer decodes
+// with `deny_unknown_fields` and would reject the new field, so the number
+// moves.
+//
+// Protocol 71 (ADR 0152): **a call states the parameter
 // its callee is and whether it runs on every completion.**
 // ImplementationCall.CalleeUnwrittenParameter names the censused
 // implementation's parameter a callee is by binding identity, at any depth of
@@ -489,8 +501,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 71
-	TypeFactsSchemaSHA256             = "sha256:3dda600c56eab89b1b57e880b388022baaf02f92c43a9a55d2ccc813f08bdd0a"
+	TypeFactsHandshakeProtocol uint64 = 73
+	TypeFactsSchemaSHA256             = "sha256:de8a514b2368c571915e58d828ef5e93f6c7fea7cf5da2953ec4275f5a976826"
 )
 
 type ServiceHandshake struct {

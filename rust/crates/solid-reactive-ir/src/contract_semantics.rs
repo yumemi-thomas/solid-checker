@@ -73,6 +73,11 @@ pub const SEMANTIC_RESULT_ACCESS_MARKER: &str = "solid-checker:semantic-result-a
 /// none never writes it, so it hashes exactly as it did before premises
 /// existed.
 pub const SEMANTIC_CONTEXT_PREMISES_MARKER: &str = "solid-checker:semantic-context-premises:v1";
+/// The length-prefixed marker a semantic digest writes first when some export
+/// it encodes states an accessor-installation bound (ADR 0153 item C). A
+/// contract with none never writes it, so it hashes exactly as it did before
+/// bounds existed.
+pub const SEMANTIC_ACCESSOR_BOUNDS_MARKER: &str = "solid-checker:semantic-accessor-bounds:v1";
 pub const SEMANTIC_CLAIM_ID_VERSION: u16 = 1;
 /// Version of the byte-only artifact-case identity a [`RecipeAddress`] binds.
 pub const ARTIFACT_CASE_BYTES_VERSION: u16 = 1;
@@ -857,7 +862,18 @@ impl ExportSemantics {
         for domain in domains {
             self.call.claims.open(domain);
             self.call.proposed_closures.remove(&domain);
+            // A bound conditions a closed `reads` and nothing else (ADR 0153
+            // item C); an open one has nothing left for it to bound.
+            if domain == ClaimDomain::Reads {
+                self.call.accessor_bounds.clear();
+            }
         }
+    }
+
+    /// States that this export's closed `reads` holds against the named
+    /// accessor-installation hazard sites (ADR 0153 item C).
+    pub fn add_accessor_bounds(&mut self, sources: impl IntoIterator<Item = String>) {
+        self.call.accessor_bounds.extend(sources);
     }
 
     /// Adds context premises to this export's claims (ADR 0153 part 3). A
@@ -1291,6 +1307,15 @@ pub struct CallSemantics {
     /// keeps it, and a consumer that cannot show the condition holds reads
     /// every domain of the export as open.
     context_premises: BTreeSet<ContextPremise>,
+    /// ADR 0153 item C: the closure's `runtime-accessor-installation` hazard
+    /// sites, by the source each names, that this export's closed `reads`
+    /// holds against. Each is a site whose target is an allocation its
+    /// installing function makes fresh and on which this export can execute
+    /// no operation, so what was installed there cannot run inside a call of
+    /// it. A consumer opens `reads` for every accessor hazard of the closure
+    /// not named here, exactly as it did before bounds existed. Stated only
+    /// beside a closed `reads`.
+    accessor_bounds: BTreeSet<String>,
     pub operations: Vec<Operation>,
     pub edges: Vec<OperationEdge>,
     pub resources: Vec<Resource>,
@@ -1310,6 +1335,7 @@ impl CallSemantics {
             claims,
             proposed_closures: BTreeSet::new(),
             context_premises: BTreeSet::new(),
+            accessor_bounds: BTreeSet::new(),
             operations,
             edges,
             resources,
@@ -1347,6 +1373,19 @@ impl CallSemantics {
     #[must_use]
     pub const fn context_premises(&self) -> &BTreeSet<ContextPremise> {
         &self.context_premises
+    }
+
+    /// The same call semantics, with its closed `reads` bounded against the
+    /// named accessor-installation hazard sites as well (ADR 0153 item C).
+    #[must_use]
+    pub fn with_accessor_bounds(mut self, sources: impl IntoIterator<Item = String>) -> Self {
+        self.accessor_bounds.extend(sources);
+        self
+    }
+
+    #[must_use]
+    pub const fn accessor_bounds(&self) -> &BTreeSet<String> {
+        &self.accessor_bounds
     }
 
     #[must_use]

@@ -112,6 +112,28 @@ test("causes are read from the reason, and the catch-all keeps the obligation's 
   );
   assert.equal(scoped.key, "dialect row scoped to the browser host (solid-js)");
   assert.equal(causeOf({ status: "withheld", reason: "no recipe in corpus" }, "reads").class, "recipe");
+  assert.deepEqual(
+    causeOf(
+      {
+        status: "withheld",
+        reason:
+          "census refused: reads-census premise required: the accessor installation at ./dist/index.js:4104-4109 is unbounded: the target is passed to a call"
+      },
+      "reads"
+    ),
+    { class: "census refusal", key: "accessor installation unbounded: the target is passed to a call" }
+  );
+  assert.equal(
+    causeOf(
+      {
+        status: "withheld",
+        reason:
+          "census refused: reads-census premise required: the accessor installation at ./dist/index.js:4-9 installs on a fresh target this export can operate on"
+      },
+      "reads"
+    ).key,
+    "accessor installation the export operates on"
+  );
   assert.deepEqual(causeOf({ status: "never proposed" }, "returns"), {
     class: "missing claim form",
     key: "returns never proposed"

@@ -130,6 +130,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/creates-decline-records/node_modules/**
 !fixtures/package-contracts/implementation-census-reads/node_modules/
 !fixtures/package-contracts/implementation-census-reads/node_modules/**
+!fixtures/package-contracts/implementation-census-reads-fresh-target/node_modules/
+!fixtures/package-contracts/implementation-census-reads-fresh-target/node_modules/**
 !fixtures/package-contracts/implementation-census-returns/node_modules/
 !fixtures/package-contracts/implementation-census-returns/node_modules/**
 !fixtures/package-contracts/signals-reexport-creates/node_modules/

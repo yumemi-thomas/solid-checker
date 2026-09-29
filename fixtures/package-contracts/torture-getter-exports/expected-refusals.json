@@ -22,48 +22,6 @@
       "declaration": "",
       "shape": "",
       "spelling": ""
-    },
-    {
-      "entrypoint": ".",
-      "conditions": [],
-      "stage": "closure-proposal",
-      "export": "getterFunction",
-      "domain": "reads",
-      "kind": "runtime-accessor-installation",
-      "package": "",
-      "callee": "",
-      "location": "./index.js:168-189",
-      "declaration": "",
-      "shape": "",
-      "spelling": ""
-    },
-    {
-      "entrypoint": ".",
-      "conditions": [],
-      "stage": "closure-proposal",
-      "export": "getterObject",
-      "domain": "reads",
-      "kind": "runtime-accessor-installation",
-      "package": "",
-      "callee": "",
-      "location": "./index.js:168-189",
-      "declaration": "",
-      "shape": "",
-      "spelling": ""
-    },
-    {
-      "entrypoint": ".",
-      "conditions": [],
-      "stage": "closure-proposal",
-      "export": "getterResult",
-      "domain": "reads",
-      "kind": "runtime-accessor-installation",
-      "package": "",
-      "callee": "",
-      "location": "./index.js:168-189",
-      "declaration": "",
-      "shape": "",
-      "spelling": ""
     }
   ]
 }

@@ -56,6 +56,7 @@
     "implementation-census-member-returns",
     "implementation-census-owned-signal-reads",
     "implementation-census-reads",
+    "implementation-census-reads-fresh-target",
     "implementation-census-retained-argument",
     "implementation-census-returns",
     "json-import",

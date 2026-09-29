@@ -476,6 +476,15 @@ fn compact_call(
             ),
         );
     }
+    // ADR 0153 item C: the accessor-installation hazard sites this export's
+    // closed `reads` holds against. Additive: a document that omits the key
+    // bounds none, which is what every document said before the key existed.
+    if !call.accessor_bounds().is_empty() {
+        object.insert(
+            "accessorBounds".into(),
+            json!(call.accessor_bounds().iter().collect::<Vec<_>>()),
+        );
+    }
     if !call.operations.is_empty() {
         object.insert(
             "operations".into(),
@@ -1550,6 +1559,10 @@ struct WireCall {
     /// no value from outside the package for. Additive to `schemaVersion: 1`.
     #[serde(default, rename = "contextPremises")]
     context_premises: Vec<String>,
+    /// ADR 0153 item C: the closure hazard sources the closed `reads` holds
+    /// against. Additive to `schemaVersion: 1`.
+    #[serde(default, rename = "accessorBounds")]
+    accessor_bounds: Vec<String>,
     #[serde(default)]
     callbacks: Option<Vec<WireCallback>>,
     #[serde(default)]
@@ -2842,6 +2855,14 @@ fn expand_call(
             return invalid_document("call.contextPremises must name distinct, non-empty exports");
         }
     }
+    let mut bounds = BTreeSet::new();
+    for source in &call.accessor_bounds {
+        if source.is_empty() || !bounds.insert(source.clone()) {
+            return invalid_document(
+                "call.accessorBounds must name distinct, non-empty hazard sources",
+            );
+        }
+    }
 
     let callbacks = call
         .callbacks
@@ -2910,7 +2931,10 @@ fn expand_call(
         premises
             .into_iter()
             .map(|export| solid_reactive_ir::contract_semantics::ContextPremise { export }),
-    ))
+    )
+    // Whether a bound is admissible -- `reads` closed -- is a normalization
+    // invariant, refused by name in `validate_accessor_bounds`.
+    .with_accessor_bounds(bounds))
 }
 
 impl From<WireCallDomain> for ClaimDomain {
@@ -4276,6 +4300,54 @@ mod tests {
                     .and_then(|decoded| decoded.normalize())
                     .is_err(),
                 "{premises} is refused"
+            );
+        }
+    }
+
+    /// ADR 0153 item C: `accessorBounds` survives the round trip, puts the
+    /// document in a digest family of its own, and refuses an empty or
+    /// repeated source rather than ignoring it.
+    #[test]
+    fn accessor_bounds_round_trip_in_their_own_digest_family() {
+        let document = |bounds: &str| {
+            format!(
+                r#"{{"format":"solid-reactivity-contract","schemaVersion":1,"semanticModelVersion":1,"package":{{"name":"consumer","version":"1.0.0","integrity":"sha512:test","manifest":{{"path":"package.json","sha256":"{a}"}}}},"summaries":{{"fn":{{"shape":"callable","call":{{"reads":[],"closed":["reads"]{bounds}}}}}}},"entrypoints":{{".":{{"artifact":{{"path":"dist/index.js","sha256":"{b}","closureSha256":"{c}"}},"declarations":{{"path":"dist/index.d.ts","sha256":"{d}"}},"exports":{{"plainSum":"fn"}}}}}},"sidecars":{{}}}}"#,
+                a = "a".repeat(64),
+                b = "b".repeat(64),
+                c = "c".repeat(64),
+                d = "d".repeat(64),
+            )
+            .into_bytes()
+        };
+        let plain = normalized(&document(""));
+        let kept = normalized(&document(r#","accessorBounds":["./dist/index.js:10-15"]"#));
+        assert_eq!(
+            kept.artifact_cases()[0].exports["plainSum"]
+                .call
+                .accessor_bounds()
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["./dist/index.js:10-15"]
+        );
+        assert_ne!(kept.semantic_digest(), plain.semantic_digest());
+        let encoded = encode(&kept, &SidecarDigests::default(), true).unwrap();
+        assert!(
+            String::from_utf8_lossy(&encoded).contains("\"accessorBounds\""),
+            "the encoder dropped the bound"
+        );
+        assert_eq!(normalized(&encoded), kept);
+        let encoded = encode(&plain, &SidecarDigests::default(), true).unwrap();
+        assert!(!String::from_utf8_lossy(&encoded).contains("accessorBounds"));
+        for bounds in [
+            r#","accessorBounds":[""]"#,
+            r#","accessorBounds":["./a.js:1-2","./a.js:1-2"]"#,
+        ] {
+            assert!(
+                decode(&document(bounds))
+                    .and_then(|decoded| decoded.normalize())
+                    .is_err(),
+                "{bounds} is refused"
             );
         }
     }

@@ -42,9 +42,15 @@ records no invoking form for any census to refuse
 § 6-§ 10), and the syntactic hazard is the only place it stays visible.
 
 So a single `new Proxy` anywhere in a file withdraws `reads` for every export
-in it. The proxy therefore lives in `./owned`, with its own closure. Splitting
-per *export* would need dataflow from the installing expression to each read's
-receiver, which nothing in this pipeline has.
+in it. The proxy therefore lives in `./owned`, with its own closure.
+
+Since ADR 0153 item C (2026-09-29) the generator proposes `./owned`'s `reads`
+closures *bounded* against the installation (`accessorBounds`), because it
+cannot tell a fresh target from this one; the certifier's census refuses the
+bounds, since `ownProxy` is allocated at module scope and the producer's
+accessor-installation census states the site unbounded. A per-export lift for
+a target its function allocates fresh is
+`implementation-census-reads-fresh-target`'s subject.
 
 The rows above are the current behavior, not an intent. `reads` is in
 `ClaimDomain::PROPOSABLE`, the census decides it, and

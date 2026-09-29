@@ -234,6 +234,78 @@ memo-object proxy. It also needs a proof that no code writes `m` on the
 provided literal after creation. Neither exists yet, and this part is **not
 decided** here (see status).
 
+### 5. A fresh accessor target (item C; owner decision, 2026-09-29)
+
+The closure's `runtime-accessor-installation` hazard withdraws `reads` from
+every export of a case. **It is lifted for one export, site by site, when three
+things are proved about the site:**
+
+1. the installing function allocates the target fresh: `new Proxy(…)`,
+   `Object.create(p, d)`, or an `Object.defineProperty`-shaped installation on
+   an object or array literal (or a conditional between two), directly or
+   through an unwritten local binding declared in that function;
+2. the target leaves only as its return value or as a prop: every use of the
+   value anywhere in the package is classified, and the admitted ones are the
+   installation itself (the one use a nested callable may make), a `return` of
+   a named, synchronous function (whose call sites are then uses in their
+   turn, to a fixed point), an unwritten local alias, a plain prop of a
+   dialect `createComponent` whose component is a local named function reading
+   its props member by member, a discarded value, a condition, `typeof`,
+   `void`, strict equality, and an operation on it;
+3. the export provably never reads a member of the target: every operation
+   the package performs on it -- member read or write, call, construction,
+   spread, iteration, `in`, `instanceof`, destructuring, `await`, coercion --
+   is recorded with the named function it sits in, those functions are closed
+   backward over their call sites (each referenced only as a callee, the
+   component of `createComponent`, an export or an import), and the export is
+   not one of them.
+
+Anything unproved keeps the case-wide hazard: the target stored in an object,
+an array or a written binding, passed to any other call, thrown, yielded,
+returned from an async function or from a callable with no name (a method, a
+getter, an arrow no binding names), operated on inside an anonymous callable,
+allocated or reaching module scope, a reader referenced as a value or called
+from an anonymous callable or at module scope, an installation on a target the
+function did not allocate, and every spelling this census does not place.
+Among them, **every `Proxy` whose target reaches a context value**: the
+`value` of `createComponent(Context, …)` is not a local component's prop, and
+an object member (the router's `baseRoute.params`) is not a return.
+
+A `__proto__: null` literal key is admitted on its own: an object with no
+prototype inherits no accessor.
+
+**The producer states it** (handshake protocol 73; 72 was reserved for the
+coercion amendment, which took no number): `ExportImplementationTranscript.accessorInstallations` lists
+every installation site of the implementation's own installed package with
+its kind (`fresh-target`, `null-prototype`, `unbounded` with the reason), the
+allocating function and expression, the functions that return the target,
+every operation on it, the readers, and whether this implementation is one.
+Absent is no opinion; an empty census is the claim that nothing installs.
+
+**The contract carries it as a signed condition.** `call.accessorBounds` names
+the hazard sources, exactly as the closure manifest spells them, that the
+export's closed `reads` holds against. It is its own digest family
+(`solid-checker:semantic-accessor-bounds:v1`) and moves no claim id or recipe
+address. Opening `reads` clears it. The consumer opens `reads` for every
+accessor hazard of the closure an export does not bound, exactly as before; a
+bound names bytes the closure digest binds, so it cannot move to another site.
+
+**The generator proposes, the census decides.** An export whose inferred
+`reads` is closed proposes bounds for every accessor hazard of the closure.
+The `reads` census confirms each: a single producer site containing the hazard
+span, kind `null-prototype` or `fresh-target` not reached by this export, and
+every position it names in the artifact's own runtime source. Anything else
+refuses the closure with the producer's reason. Recipe gating defers a bounded
+`reads` candidate that has no recipe for one acquisition pass, so the census
+decides its bounds first; the missing recipe is recorded only after that pass
+succeeds, and a bound the census refuses is recorded as the wall instead.
+
+**What is not re-derived** is the producer's flow: that every use of the
+target is classified and that the readers are closed. The census binds the
+positions the producer names to the authenticated bytes. A value obtained from
+a caller-supplied callable, and a dependency that imports this package back,
+are the caller's and the dependency's, as everywhere else in this model.
+
 ### What each domain gains
 
 - `creates` and `callbacks`: the form is dispositioned
@@ -243,7 +315,8 @@ decided** here (see status).
 - `reads`: the form is a data read, but the case-wide
   `runtime-accessor-installation` hazard still withdraws the domain (router
   `dist/index.js` carries three `new Proxy` and three `Object.defineProperty`).
-  Lifting that is a separate per-export bound (status, item C).
+  Part 5 lifts it per export for fresh targets only; the router's proxies reach
+  its context value, so part 5 leaves them case-wide.
 - `returns`: part 4, not decided.
 
 ## Alternatives considered
@@ -320,34 +393,33 @@ decided** here (see status).
   census test's `escaped-stated`, `escaped-other-stated` and
   `escaped-stated-broken` legs.
 - **C. A per-export bound on `runtime-accessor-installation`** for `reads`.
-  Not landed: it needs an owner decision (2026-09-29). Read against the
-  router's next.26 `dist/index.js`, its seven hazard sites are:
-  `new Proxy({}, …)` in `createMemoObject`; `Object.defineProperty(obj,
-  "name", …)` in `setFunctionName` (the target a parameter); `new
-  Proxy(build, …)` in `createPathsProxy`; `Object.defineProperty(e.router ||
-  …, "matches", …)` on the request event; `Object.defineProperty(instance,
-  "paths", …)`; `new Proxy([], …)` in `useSubmissions`; and
-  `{ __proto__: null, … }` in a frozen namespace literal. Neither proposed
-  bound lifts `reads` from any router export:
-  - **key avoidance** (the export's complete member-access list avoids every
-    installable key) cannot bound a `Proxy`, whose traps answer every key and
-    `has`/`ownKeys` besides;
-  - **a fresh target that escapes only by return** (the tanstack scope's P2,
-    which covers all six tanstack sites) does not hold for
-    `createMemoObject`: its proxies are the router context's `params`
-    (`wrapParams`) and the location literal's `query`, so they escape into
-    the package-owned context value that every hook reads.
-
-  What would move the router is a field-sensitive bound: which exports read a
-  *member of* `router.params` or `location.query`, through the context chain
-  part 1 already binds. The decisions this needs are (1) where a per-export
-  bound lives: the closure manifest's hazard is a byte census computed twice
-  (oxc and the TypeScript replay) and hashed into the closure digest, so a
-  reachability-derived `affectedExports` either enters that replay or becomes
-  a signed contract condition that the consumer's `open_domains` must honour
-  over the manifest; (2) whether the escape analysis stops at "returned or
-  passed as a prop" (tanstack, 0 router sites) or follows the context value's
-  fields (router). Both need a producer fact enumerating every member access,
-  including implicit ones (destructuring, spread, `in`, builtins that read
-  their arguments), and so a handshake bump (73).
+  Landed as part 5 (owner decision, 2026-09-29): producer census on protocol
+  73, `call.accessorBounds` with its own digest family, the consumer's
+  `open_domains` honouring it, the `reads` census confirming each bound, and
+  the one-pass recipe deferral in the value-only and published-graph lanes.
+  The field-sensitive flow the router's proxies need is deferred: read against
+  next.26, `createMemoObject`'s proxies escape into the context value and stay
+  unbounded by name, as part 5 requires. Measured on the release binary with
+  `make primitives-checkpoint` (same base, every host): the clean export count
+  does not move (96); 62 of the 83 exports that stopped at
+  `runtime-accessor-installation` leave it. 32 now have their bounds confirmed
+  and wait on a missing probe recipe for `reads`; 16 reach another `reads`
+  census wall (12 property access on an unknown accessor, 2 coercion, 1
+  iteration protocol, 1 member invocation); 14 are refused by the producer's
+  named reason (7 returned from a callable that is not a named function, 4
+  operated on inside an anonymous callable, 2 stored in an array literal, 1
+  not an allocation of the installing function). The other 21 do not close
+  `reads` in the inference, so no bound is proposed. tanstack solid-router
+  rc.8 and rc.9: the three `linkProps` sites stay unbounded ("passed to a
+  call"). solid-query: two sites are fresh targets, one is unbounded
+  (anonymous callable). Fixture: `implementation-census-reads-fresh-target`
+  (a bounded proxy and a bounded object, the object's reader, and a
+  fresh target that escapes through a second path). Producer tests:
+  `accessor_installations_test.go` (the positive site, eleven refusals
+  including a second path, a context value, a module-scope target and an
+  aliased constructor, and the empty census). Rust:
+  `accessor_bound_digest_family_is_separate_frozen_and_cleared_with_reads`,
+  `accessor_bounds_round_trip_in_their_own_digest_family`,
+  `an_accessor_bound_lifts_only_the_hazard_it_names`, and
+  `a_fresh_accessor_target_bounds_every_export_but_its_reader`.
 - **D. Part 4.** Not landed. It needs its own claim-shape ADR.

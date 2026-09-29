@@ -435,6 +435,9 @@ func (p *project) exportImplementationTranscriptLocked(
 		transcript.OriginalHelperReads = p.originalHelperReadsLocked(implementation, transcript.Signature, transcript.Calls, transcript.ParameterUses)
 	}
 	transcript.UncensusedInvokingForms = p.uncensusedInvokingFormCensusLocked(implementation)
+	// ADR 0153 item C: which run-time accessor installations of this
+	// package can reach an operation this body performs.
+	transcript.AccessorInstallations = p.accessorInstallationsLocked(implementation)
 	// ADR 0045: whether the value this body hands its caller is provably a
 	// primitive, over the same program the forms above were classified on. A
 	// premised classification replaces it below, because the fact belongs to
@@ -664,6 +667,9 @@ func (p *project) localDeclarationImplementationTranscriptLocked(
 		transcript.OriginalHelperReads = p.originalHelperReadsLocked(implementation, transcript.Signature, transcript.Calls, transcript.ParameterUses)
 	}
 	transcript.UncensusedInvokingForms = p.uncensusedInvokingFormCensusLocked(implementation)
+	// ADR 0153 item C: which run-time accessor installations of this
+	// package can reach an operation this body performs.
+	transcript.AccessorInstallations = p.accessorInstallationsLocked(implementation)
 	// ADR 0045: whether the value this body hands its caller is provably a
 	// primitive, over the same program the forms above were classified on. A
 	// premised classification replaces it below, because the fact belongs to

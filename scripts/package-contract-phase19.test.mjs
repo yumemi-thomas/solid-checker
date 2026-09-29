@@ -298,7 +298,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // 168 on 2026-09-29 adds class-creator-caller-creates' main document,
       // ADR 0158's pin that a creating constructor withholds `creates` from
       // every export that reaches the construction.
-      stableMainDocuments: 168,
+      //
+      // 169 adds implementation-census-reads-fresh-target's main document,
+      // the corpus pin of ADR 0153 part 5's accessor bounds.
+      stableMainDocuments: 169,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

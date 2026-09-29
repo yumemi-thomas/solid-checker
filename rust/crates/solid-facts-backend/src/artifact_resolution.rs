@@ -518,12 +518,21 @@ impl ClosureManifest {
             })
     }
 
-    fn open_domains(&self, export: &str) -> BTreeSet<ClaimDomain> {
+    /// The domains this closure opens for `export`, less the accessor
+    /// installations the export's contract bounds its closed `reads` against
+    /// (ADR 0153 item C). `bounds` names hazard sources exactly as this
+    /// manifest spells them, and the bytes they point into are the ones the
+    /// closure digest binds; a bound naming no hazard here bounds nothing.
+    fn open_domains(&self, export: &str, bounds: &BTreeSet<String>) -> BTreeSet<ClaimDomain> {
         self.hazards
             .iter()
             .filter(|hazard| {
                 hazard.affected_exports.is_empty()
                     || hazard.affected_exports.iter().any(|name| name == export)
+            })
+            .filter(|hazard| {
+                hazard.kind != ClosureHazardKind::RuntimeAccessorInstallation
+                    || !bounds.contains(&hazard.source)
             })
             .flat_map(|hazard| hazard.affected_domains.iter().copied().map(Into::into))
             .collect()
@@ -1160,7 +1169,8 @@ fn bind_exports(
             name,
             external_targets,
         )?;
-        export.open_call_domains(resolved.closure.open_domains(name));
+        let bounds = export.call.accessor_bounds().clone();
+        export.open_call_domains(resolved.closure.open_domains(name, &bounds));
     }
     Ok(case)
 }
@@ -1622,6 +1632,53 @@ mod tests {
         }
     }
 
+    /// ADR 0153 item C: a bound lifts exactly the accessor hazard it names, and
+    /// nothing else -- not another accessor site, and not any other hazard kind
+    /// that happens to share the source.
+    #[test]
+    fn an_accessor_bound_lifts_only_the_hazard_it_names() {
+        let hazard = |kind, source: &str, domains: Vec<AffectedClaimDomain>| ClosureHazard {
+            kind,
+            source: source.into(),
+            affected_exports: vec![],
+            affected_domains: domains,
+        };
+        let manifest = ClosureManifest {
+            entries: vec![],
+            dependencies: vec![],
+            hazards: vec![
+                hazard(
+                    ClosureHazardKind::RuntimeAccessorInstallation,
+                    "./index.js:1-6",
+                    vec![AffectedClaimDomain::Reads],
+                ),
+                hazard(
+                    ClosureHazardKind::RuntimeAccessorInstallation,
+                    "./index.js:20-25",
+                    vec![AffectedClaimDomain::Reads],
+                ),
+                hazard(
+                    ClosureHazardKind::Eval,
+                    "./index.js:1-6",
+                    vec![AffectedClaimDomain::Creates],
+                ),
+            ],
+            packages: vec![],
+            digest: repeated_digest('0'),
+        };
+        let bound = |sources: &[&str]| {
+            manifest.open_domains(
+                "any",
+                &sources.iter().map(|source| (*source).to_owned()).collect(),
+            )
+        };
+        assert!(bound(&[]).contains(&ClaimDomain::Reads));
+        assert!(bound(&["./index.js:1-6"]).contains(&ClaimDomain::Reads));
+        let both = bound(&["./index.js:1-6", "./index.js:20-25"]);
+        assert!(!both.contains(&ClaimDomain::Reads));
+        assert!(both.contains(&ClaimDomain::Creates));
+    }
+
     /// `domain_openings` reports the same selection `open_domains` collapses,
     /// hazard by hazard, including the export filter.
     #[test]
@@ -1672,7 +1729,7 @@ mod tests {
                 .iter()
                 .map(|(domain, _)| *domain)
                 .collect::<BTreeSet<_>>(),
-            manifest.open_domains("named")
+            manifest.open_domains("named", &BTreeSet::new())
         );
     }
 

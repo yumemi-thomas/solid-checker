@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:3dda600c56eab89b1b57e880b388022baaf02f92c43a9a55d2ccc813f08bdd0a";
+    "sha256:de8a514b2368c571915e58d828ef5e93f6c7fea7cf5da2953ec4275f5a976826";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -405,7 +405,16 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // alone, and `ReturnSite::primitive_syntax` reaches a `let` or `var` every
 // value of which is one. The client is unchanged; producer and client still
 // ship as a pair by the build id.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 71;
+//
+// Protocol 73 (ADR 0153 item C; 72 was reserved for the coercion amendment,
+// which took no number) states, per implementation, the run-time accessor
+// installations of its own installed package
+// (`ExportImplementationTranscript::accessor_installations`): whether each installation's target is an allocation its function makes
+// fresh, every operation the package performs on that target, the named
+// functions that may execute one, and whether this implementation is one of
+// them. A protocol-71 consumer decodes with `deny_unknown_fields` and would
+// reject the new field, so the number moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 73;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

@@ -13,8 +13,8 @@
             "sha256": "6c1564d2d4b4b92017293dd29a858028daf7ce5d50bd623fa656ba72141bfb50"
           },
           "exports": {
-            "runtimeNamespace": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
-            "stable": "summary-549d29acde9708aa95168ba8944622520eb54549a9125ee62824c573a584670e"
+            "runtimeNamespace": "summary-99746357aa27c1e21a7b60dfa73629cd333e54c5d047baaa585b71176c068cd6",
+            "stable": "summary-b3c95e6db0fba07de16b466a74b43cabb5946437d7b9cb8c93f939961e315b20"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -38,11 +38,33 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-549d29acde9708aa95168ba8944622520eb54549a9125ee62824c573a584670e": {
+    "summary-99746357aa27c1e21a7b60dfa73629cd333e54c5d047baaa585b71176c068cd6": {
       "call": {
+        "accessorBounds": [
+          "./index.js:42-63"
+        ],
         "callbacks": [],
         "closed": [
           "callbacks",
+          "reads"
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
+      },
+      "shape": "plain"
+    },
+    "summary-b3c95e6db0fba07de16b466a74b43cabb5946437d7b9cb8c93f939961e315b20": {
+      "call": {
+        "accessorBounds": [
+          "./index.js:42-63"
+        ],
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
           "creates",
           "returns"
         ],
@@ -69,26 +91,16 @@
         ],
         "proposedClosures": [
           "callbacks",
+          "reads",
           "creates",
           "returns"
         ],
+        "reads": [],
         "returns": [
           "return"
         ]
       },
       "shape": "callable"
-    },
-    "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76": {
-      "call": {
-        "callbacks": [],
-        "closed": [
-          "callbacks"
-        ],
-        "proposedClosures": [
-          "callbacks"
-        ]
-      },
-      "shape": "plain"
     }
   }
 }
