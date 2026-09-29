@@ -279,8 +279,10 @@ func (p *project) primitiveWriteLocked(target *ast.Node, depth int) bool {
 // tagged -- whose callee is a non-computed, non-optional member read of an
 // identifier, where both the receiver and the member resolve to
 // default-library declarations alone and the file neither writes, deletes nor
-// lets escape either of them (immutableAliasLibrarySourceIsStable). Empty
-// otherwise.
+// lets escape either of them (immutableAliasLibrarySourceIsStable). ADR 0167
+// adds the receiverless form, `Number(raw)`: the callee is an identifier that
+// resolves to default-library declarations alone, named by that identifier
+// alone. Empty otherwise.
 //
 // The name is a fact about which built-in runs, by identity; what that
 // built-in hands back is the consumer's reviewed question, never this one's.
@@ -293,6 +295,9 @@ func (p *project) defaultLibraryCallLocked(expression *ast.Node) string {
 		return ""
 	}
 	callee := identityPreservingUnwrap(node.Expression())
+	if callee != nil && ast.IsIdentifier(callee) {
+		return p.defaultLibraryGlobalCallLocked(node, callee)
+	}
 	if callee == nil || !ast.IsPropertyAccessExpression(callee) ||
 		callee.QuestionDotToken() != nil {
 		return ""
@@ -313,6 +318,26 @@ func (p *project) defaultLibraryCallLocked(expression *ast.Node) string {
 		return ""
 	}
 	return receiver.Name + "." + member.Name
+}
+
+// defaultLibraryGlobalCallLocked is defaultLibraryCallLocked's receiverless
+// form (ADR 0167): a returned call whose callee is an identifier naming a
+// default-library declaration alone -- `Number(raw)`, never a parameter, an
+// import or a local binding, whose value is only as good as the binding -- and
+// which the file neither writes nor deletes. `new Number(raw)` is a `new`
+// expression, not a call, and never reaches here. The name alone is stated; the
+// consumer's reviewed table decides whether the function hands a primitive
+// back, so any other global (`setTimeout`) is stated and refused there.
+func (p *project) defaultLibraryGlobalCallLocked(node, callee *ast.Node) string {
+	function := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(callee))
+	if function == nil || !p.isDefaultLibraryMemberLocked(function, function.Name, nil) {
+		return ""
+	}
+	file := ast.GetSourceFileOfNode(node)
+	if file == nil || !p.immutableAliasLibrarySourceIsStable(file, function, nil) {
+		return ""
+	}
+	return function.Name
 }
 
 // isTypeScriptSourceFile answers whether a file is TypeScript source -- not a

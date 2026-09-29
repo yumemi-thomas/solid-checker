@@ -4697,6 +4697,48 @@ pub(crate) fn reviewed_default_library_alias_return(qualified: &str) -> Option<V
     })
 }
 
+/// The default-library functions a `return` may call by name, without a
+/// receiver, whose value is a primitive whatever the arguments are (ADR 0167).
+///
+/// Each is a total function into the primitives when *called*: `Number`,
+/// `parseFloat` and `parseInt` hand back a Number, `String` a String,
+/// `Boolean`, `isNaN` and `isFinite` a Boolean. A conversion may run the
+/// argument's `Symbol.toPrimitive`, `valueOf` or `toString` (the `callbacks`
+/// domain's business, decided elsewhere) or throw; it never hands back that
+/// object, and `new Number(x)`, which does, is a `new` expression the producer
+/// never states. Deliberately not the alias tables above: an export that *is*
+/// one of these (`export const num = Number`) names no container, so the alias
+/// premise (ADR 0103) does not reach it, and nothing here widens what that
+/// premise reviews. `setTimeout` and the rest of the default library are
+/// stated by the producer and refused here, because no row says what they hand
+/// back.
+const DEFAULT_LIBRARY_GLOBAL_CALL_RETURNS: &[(&str, DefaultLibraryAliasReturn)] = &[
+    ("Number", DefaultLibraryAliasReturn::Plain),
+    ("String", DefaultLibraryAliasReturn::Plain),
+    ("Boolean", DefaultLibraryAliasReturn::Plain),
+    ("parseFloat", DefaultLibraryAliasReturn::Plain),
+    ("parseInt", DefaultLibraryAliasReturn::Plain),
+    ("isNaN", DefaultLibraryAliasReturn::Plain),
+    ("isFinite", DefaultLibraryAliasReturn::Plain),
+];
+
+/// What a returned call the producer names by identity hands back, when a
+/// reviewed row states it: a member's (ADR 0103's tables) or a receiverless
+/// global function's (ADR 0167's). The two spellings never collide: a member
+/// is `Container.member`, a global function has no dot.
+fn reviewed_default_library_call_return(named: &str) -> Option<ValueShape> {
+    if let Some(shape) = reviewed_default_library_alias_return(named) {
+        return Some(shape);
+    }
+    let (_, reviewed) = DEFAULT_LIBRARY_GLOBAL_CALL_RETURNS
+        .iter()
+        .find(|(function, _)| *function == named)?;
+    match reviewed {
+        DefaultLibraryAliasReturn::Plain => Some(ValueShape::Plain),
+        DefaultLibraryAliasReturn::PlainArray => None,
+    }
+}
+
 /// The call half of [`default_library_alias_return_evidence`]: a selected-call
 /// demand on an export that *is* a reviewed member whose row states its return,
 /// and whose call summary states nothing else -- no callback item and exactly
@@ -14895,7 +14937,8 @@ fn primitive_return_sites_in(
 ///   hands back, called by identity
 ///   ([`typefacts::ReturnSite::default_library_call`]), and that member's
 ///   reviewed row states `plain` whatever its arguments are
-///   ([`reviewed_default_library_alias_return`]): `Math.min(...)`;
+///   ([`reviewed_default_library_call_return`]): `Math.min(...)`, and since
+///   ADR 0167 a global function called by name, `Number(...)`;
 /// * `typescript-source` -- the return sits in a TypeScript source file
 ///   ([`typefacts::ReturnSite::type_script_source`]), where the checker holds
 ///   every write to a binding to its declared type. What it does not hold is
@@ -14909,7 +14952,7 @@ fn plain_return_evidence(site: &typefacts::ReturnSite) -> Option<String> {
         return Some("syntax".into());
     }
     if !site.default_library_call.is_empty()
-        && reviewed_default_library_alias_return(&site.default_library_call)
+        && reviewed_default_library_call_return(&site.default_library_call)
             == Some(ValueShape::Plain)
     {
         return Some(format!("default-library:{}", site.default_library_call));
@@ -32178,10 +32221,35 @@ mod tests {
             json!({"defaultLibraryCall": "Math.min"}),
             "default-library:Math.min",
         );
+        // ADR 0167: a global function called by name, whose row states
+        // `plain` whatever the arguments are (`Number(raw)`).
+        for function in [
+            "Number",
+            "String",
+            "Boolean",
+            "parseFloat",
+            "parseInt",
+            "isNaN",
+            "isFinite",
+        ] {
+            certifies(
+                json!({"defaultLibraryCall": function}),
+                &format!("default-library:{function}"),
+            );
+        }
         // A built-in the reviewed table does not state `plain` for is not
         // evidence: `Object.keys` hands back an array, `Math.random` is not
-        // reviewed at all.
-        for member in ["Object.keys", "Math.random"] {
+        // reviewed at all, and a global function without a row (`setTimeout`,
+        // a spelling near a reviewed one) is stated by the producer and refused
+        // here.
+        for member in [
+            "Object.keys",
+            "Math.random",
+            "setTimeout",
+            "number",
+            "Number.",
+            "Number.parseFloat",
+        ] {
             let refusal = census(json!({"defaultLibraryCall": member}))
                 .expect_err("an unreviewed or non-plain member refuses");
             assert!(

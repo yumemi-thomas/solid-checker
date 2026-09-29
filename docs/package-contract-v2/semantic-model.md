@@ -944,6 +944,12 @@ row states `plain`, or a return in TypeScript source. In a JavaScript file `let
 x = 0; … x = () => 1; return x` is typed `number`, so the type alone is never
 the proof; a site with none of the three withdraws the `return`.
 
+**[Decision 2026-09-30, ADR 0167]** the reviewed default-library call may also
+be a global function called by its own name (`Number(raw)`), never a binding
+that only shares the spelling and never `new`; the reviewed row states
+`plain` for `Number`, `String`, `Boolean`, `parseFloat`, `parseInt`, `isNaN`
+and `isFinite`.
+
 ### cleanups
 
 `cleanups: [] closed` denies that one invocation of this export gives rise to

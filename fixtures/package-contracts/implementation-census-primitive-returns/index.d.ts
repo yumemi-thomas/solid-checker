@@ -14,3 +14,7 @@ export declare function add(a: number, b: number): number;
 export declare function widened(): number | object;
 export declare function limit(): number;
 export declare function reassignedLet(key: string): number;
+export declare const toNumber: (raw: string) => number;
+export declare function toLabel(value: unknown): string;
+export declare function shadowed(Number: (value: unknown) => number, value: unknown): number;
+export declare function wrapped(value: unknown): number;

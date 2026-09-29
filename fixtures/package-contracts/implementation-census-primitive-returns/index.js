@@ -48,7 +48,27 @@ export function limit() {
   return LIMIT;
 }
 
+// A global function called by name, resolved to the default library's own
+// declaration: `Number` hands back a Number whatever it is given (ADR 0167).
+export const toNumber = (raw) => Number(raw);
+
+// The same, in a block body, for a second reviewed function.
+export function toLabel(value) {
+  return String(value);
+}
+
 // --- Every export below is proposed the same closure and refused. ---
+
+// The spelling of a reviewed function bound to something else: a parameter
+// named `Number` is the caller's value, not the built-in, and names nothing.
+export function shadowed(Number, value) {
+  return Number(value);
+}
+
+// `new Number(value)` is a construction: the wrapper object, not the Number.
+export function wrapped(value) {
+  return new Number(value);
+}
 
 // The hole the 2026-09-28 amendment to ADR 0113 closes. In a JavaScript file
 // the checker types `x` by its declaration, `number`, whatever the unchecked

@@ -39,6 +39,19 @@ func TestReturnSitesStatePlainReturnEvidence(t *testing.T) {
 		{"mathWritten", "facts.js", `export function check(a) { Math.min = () => 1; return Math.min(a); }`, false, "", false, true},
 		{"mathAlias", "facts.js", "let M = Math;\nexport function check(a) { return M.min(a); }", false, "", false, true},
 		{"optionalCall", "facts.js", `export function check(a) { return Math.min?.(a); }`, false, "", false, false},
+		// ADR 0167: a global function called by name, by identity, and never a
+		// binding that only shares its spelling.
+		{"numberCall", "facts.js", `export function check(a) { return Number(a); }`, false, "Number", false, true},
+		{"numberParenthesized", "facts.js", `export function check(a) { return (Number(a)); }`, false, "Number", false, true},
+		{"numberShadowedByParameter", "facts.js", `export function check(Number, a) { return Number(a); }`, false, "", false, false},
+		{"numberShadowedByConst", "facts.js", "const Number = () => ({});\nexport function check(a) { return Number(a); }", false, "", false, false},
+		{"numberWritten", "facts.js", `export function check(a) { Number = () => 1; return Number(a); }`, false, "", false, true},
+		{"numberConstructed", "facts.js", `export function check(a) { return new Number(a); }`, false, "", false, false},
+		{"numberOptionalCall", "facts.js", `export function check(a) { return Number?.(a); }`, false, "", false, true},
+		{"parseFloatCall", "facts.js", `export function check(a) { return parseFloat(a); }`, false, "parseFloat", false, true},
+		// Any default-library function is stated by name; which of them hands a
+		// primitive back is the consumer's reviewed question.
+		{"setTimeoutCall", "facts.js", `export function check(a) { return setTimeout(a, 0); }`, false, "setTimeout", false, false},
 		{"typeScriptLet", "facts.ts", `export function check(n: number): number { let m = n; m = n; return m; }`, false, "", true, true},
 	}
 	for _, tc := range cases {

@@ -31,11 +31,15 @@ The certifier's side is pinned by
 | `isObject` | certifies | a comparison is a boolean whatever its operands are |
 | `sign` | certifies | a bare `return;` beside a number; `value > 0` makes the producer premise the transcript, and the return sites are still read off the original program |
 | `limit` | certifies | `return LIMIT` reads a never-written `const` whose initializer is a literal, a primitive by grammar |
+| `toNumber` | certifies | `Number(raw)`: a call of a default-library function by name (ADR 0167), whose row states `plain` whatever the argument is |
+| `toLabel` | certifies | `String(value)`, the same evidence for a second reviewed function |
 | `box` | refused | an object; the producer does not prove the completion primitive |
 | `passThrough` | refused | the caller's argument, which an unannotated parameter types `any` |
 | `annotatedBox` | refused | `@returns {number}` over `return {}`: the checker takes the annotation at its word, so the completion *is* stated primitive, and the return site's own type is what refuses |
 | `add` | refused | `a + b` always yields a primitive at run time, but TypeScript types it `any` over `any` operands; the named approximation of the census |
 | `widened` | refused | the body is a primitive and the declaration promises `number \| object`; the operation's positive fact refuses the declared result |
+| `shadowed` | refused | a parameter spelled `Number` is the caller's value: the producer states no default-library call for a binding that only shares the name |
+| `wrapped` | refused | `new Number(value)` is a construction, which hands back the wrapper object; the producer states no call for it and the completion is not primitive |
 | `reassignedLet` | refused | `let x = 0; if (key === "unlock-the-function") x = () => 1; return x`: typed `number` by its declaration, which an unchecked JavaScript write does not widen, and `primitiveCompletion` agrees; the veto's samples never pass that key. The census refuses because nothing *beside* the type stands (the 2026-09-28 amendment to ADR 0113) |
 
 Since that amendment every live value must carry, beside a primitive type,

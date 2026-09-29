@@ -19020,7 +19020,7 @@ export const value = phantom;
     // publishes (the generated side is pinned by `implementation-census-returns`'
     // own document). Every other domain stays open, so the only closure
     // candidates are the ones under test.
-    const PRIMITIVE_RETURNS_FIXTURE_EXPORTS: [&str; 13] = [
+    const PRIMITIVE_RETURNS_FIXTURE_EXPORTS: [&str; 17] = [
         "add",
         "annotatedBox",
         "box",
@@ -19030,10 +19030,14 @@ export const value = phantom;
         "limit",
         "passThrough",
         "reassignedLet",
+        "shadowed",
         "sign",
+        "toLabel",
+        "toNumber",
         "trueFn",
         "voidFn",
         "widened",
+        "wrapped",
     ];
 
     fn primitive_returns_fixture_certify(
@@ -19172,7 +19176,8 @@ export const value = phantom;
         });
         let main = finalized.canonical_main();
         for export in [
-            "clamp", "isObject", "label", "limit", "sign", "trueFn", "voidFn",
+            "clamp", "isObject", "label", "limit", "sign", "toLabel", "toNumber", "trueFn",
+            "voidFn",
         ] {
             assert!(
                 plain_return_is_closed_in(main, export),
@@ -19196,6 +19201,10 @@ export const value = phantom;
         for (export, needle) in [
             ("box", "did not prove primitive"),
             ("passThrough", "did not prove primitive"),
+            // ADR 0167: `Number` bound to a parameter is the caller's value,
+            // and a `new` expression is the wrapper object.
+            ("shadowed", "did not prove primitive"),
+            ("wrapped", "did not prove primitive"),
             (
                 "annotatedBox",
                 "whose own value the producer did not type as a primitive alone",
