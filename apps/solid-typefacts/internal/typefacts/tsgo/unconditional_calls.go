@@ -19,7 +19,12 @@ import (
 // leave the owner before the call. The optimistic `Reach` the body walk has
 // always stated keeps an `if` arm reachable; this fact is the lower bound that
 // reading does not give.
-func callRunsOnEveryCompletion(call *ast.Node, owner *ast.Node, reach typefacts.Reachability) bool {
+//
+// ADR 0166: a condition literalTruthinessLocked decides -- a literal, a
+// never-written const, or a host constant -- leaves one arm of an `if` or `?:`
+// dead. The live arm is then evaluated whenever its parent is, and an early
+// exit written only in the dead arm is no path out.
+func (p *project) callRunsOnEveryCompletionLocked(call *ast.Node, owner *ast.Node, reach typefacts.Reachability) bool {
 	if call == nil || owner == nil || reach != typefacts.Reachable {
 		return false
 	}
@@ -41,7 +46,7 @@ func callRunsOnEveryCompletion(call *ast.Node, owner *ast.Node, reach typefacts.
 		if isCallableDeclaration(parent) {
 			return false
 		}
-		if !evaluatesChildUnconditionally(parent, child) {
+		if !p.evaluatesChildUnconditionallyLocked(parent, child) {
 			return false
 		}
 	}
@@ -50,22 +55,34 @@ func callRunsOnEveryCompletion(call *ast.Node, owner *ast.Node, reach typefacts.
 
 // evaluatesChildUnconditionally is the whitelist: whether evaluating `parent`
 // evaluates `child` exactly once, whatever the values involved.
-func evaluatesChildUnconditionally(parent, child *ast.Node) bool {
+func (p *project) evaluatesChildUnconditionallyLocked(parent, child *ast.Node) bool {
 	switch {
 	case ast.IsBlock(parent):
 		for _, statement := range parent.AsBlock().Statements.Nodes {
 			if statement == child {
 				return true
 			}
-			if containsEarlyExit(statement) {
+			if p.mayExitEarlyLocked(statement) {
 				return false
 			}
 		}
 		return false
 	case ast.IsIfStatement(parent):
-		return parent.AsIfStatement().Expression == child
+		statement := parent.AsIfStatement()
+		if statement.Expression == child {
+			return true
+		}
+		truthy, known := p.literalTruthinessLocked(statement.Expression, 0)
+		return known && ((truthy && statement.ThenStatement == child) ||
+			(!truthy && statement.ElseStatement == child))
 	case ast.IsConditionalExpression(parent):
-		return parent.AsConditionalExpression().Condition == child
+		conditional := parent.AsConditionalExpression()
+		if conditional.Condition == child {
+			return true
+		}
+		truthy, known := p.literalTruthinessLocked(conditional.Condition, 0)
+		return known && ((truthy && conditional.WhenTrue == child) ||
+			(!truthy && conditional.WhenFalse == child))
 	case ast.IsBinaryExpression(parent):
 		binary := parent.AsBinaryExpression()
 		operator := binary.OperatorToken.Kind
@@ -113,28 +130,4 @@ func chainHasOptional(node *ast.Node) bool {
 		}
 	}
 	return false
-}
-
-// containsEarlyExit reports whether a statement holds a `return`, `break` or
-// `continue` of the enclosing callable -- one outside every callable nested in
-// it. A `break` whose target lies inside the statement is counted too; the
-// over-refusal claims nothing.
-func containsEarlyExit(node *ast.Node) bool {
-	if node == nil {
-		return false
-	}
-	if ast.IsReturnStatement(node) || ast.IsBreakStatement(node) || isContinueStatement(node) {
-		return true
-	}
-	found := false
-	node.ForEachChild(func(child *ast.Node) bool {
-		if found || isCallableDeclaration(child) {
-			return false
-		}
-		if containsEarlyExit(child) {
-			found = true
-		}
-		return false
-	})
-	return found
 }

@@ -2870,6 +2870,9 @@ func (p *project) literalTruthinessLocked(
 		)
 		return !operand, decided
 	case ast.IsIdentifier(expression):
+		if value, known := p.hostConstantTruthinessLocked(expression); known {
+			return value, true
+		}
 		return p.constBindingTruthinessLocked(expression, depth)
 	case ast.IsBinaryExpression(expression):
 		return p.literalComparisonTruthinessLocked(expression, depth)

@@ -45,6 +45,9 @@
     "external-reexport",
     "foreign-declaration-reexport",
     "forwarded-local-untrack-wrapper",
+    "host-constant-browser",
+    "host-constant-free",
+    "host-constant-node",
     "function-supertype-kind",
     "implementation-census-argument-returns",
     "implementation-census-callback-lower-bound",
@@ -118,5 +121,9 @@
     "value-exports",
     "wildcard-asset-entrypoints",
     "class-creator-caller-creates"
-  ]
+  ],
+  "hosts": {
+    "host-constant-browser": "browser",
+    "host-constant-node": "node"
+  }
 }

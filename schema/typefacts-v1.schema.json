@@ -189,6 +189,18 @@
         "strings": { "type": "array", "maxItems": 1000000, "items": { "type": "string" } }
       }
     },
+    "hostConstant": {
+      "$comment": "Handshake protocol 75 (ADR 0166): in the program module `importer`, the name `name` imported from the bare specifier `specifier` is the literal `value` under the certification's declared host. The producer reads a condition naming exactly that import binding as the literal wherever it decides a condition; any other reference is unaffected.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["importer", "specifier", "name", "value"],
+      "properties": {
+        "importer": { "type": "string", "minLength": 1 },
+        "specifier": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "value": { "type": "boolean" }
+      }
+    },
     "invocationDemand": {
       "type": "object",
       "additionalProperties": false,
@@ -1109,7 +1121,8 @@
         "cancelRequestId": { "type": "integer", "minimum": 0 },
         "moduleGraph": { "$ref": "#/$defs/moduleInventoryDemand" },
         "invocationDemands": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/invocationDemand" } },
-        "exportValueDemands": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/exportValueDemand" } }
+        "exportValueDemands": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/exportValueDemand" } },
+        "hostConstants": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/hostConstant" } }
       }
     },
     "timings": {

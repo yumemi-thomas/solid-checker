@@ -1729,6 +1729,7 @@ mod tests {
             module_graph: None,
             invocation_demands: Vec::new(),
             export_value_demands: Vec::new(),
+            host_constants: Vec::new(),
         };
         assert_eq!(
             encode_sidecar_request(&request).unwrap(),

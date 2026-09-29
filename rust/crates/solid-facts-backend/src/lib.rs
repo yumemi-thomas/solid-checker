@@ -104,6 +104,7 @@ mod first_party_bundles;
 /// analysis: the trust it mints is returned to the caller, not written
 /// into the project.
 pub mod fixture_authorization;
+pub mod host_constants;
 mod inferred_contract;
 mod installed_patches;
 mod package_requirements;
@@ -1452,6 +1453,32 @@ pub fn build_project_native_measured_with_demands(
     typescript: &mut impl TypeFactsProvider,
     semantic_demand_options: SemanticDemandOptions,
 ) -> Result<(ProjectFacts, NativeBuildTimings), BackendError> {
+    build_project_native_measured_with_program_hashes(
+        dialect,
+        project_id,
+        generation,
+        sources,
+        &HashMap::new(),
+        typescript,
+        semantic_demand_options,
+    )
+}
+
+/// [`build_project_native_measured_with_demands`] for sources some of which are
+/// a span-preserving rewrite of the text the Type Facts program holds (ADR
+/// 0166's host-constant fold): `program_hashes` names, per path, the digest of
+/// the program's text, which the join compares instead of the digest of the
+/// text the facts were extracted from. Every span of a rewrite is the span of
+/// the same position in the original, so a fact keyed by span joins as before.
+pub fn build_project_native_measured_with_program_hashes(
+    dialect: &'static Dialect,
+    project_id: impl Into<String>,
+    generation: u64,
+    sources: Vec<SourceFile>,
+    program_hashes: &HashMap<String, SourceHash>,
+    typescript: &mut impl TypeFactsProvider,
+    semantic_demand_options: SemanticDemandOptions,
+) -> Result<(ProjectFacts, NativeBuildTimings), BackendError> {
     let project_id = project_id.into();
     let generation = Generation::new(generation).map_err(|_| BackendError::Generation)?;
     let source_files_recomputed = u64::try_from(sources.len()).unwrap_or(u64::MAX);
@@ -1474,10 +1501,12 @@ pub fn build_project_native_measured_with_demands(
                     compiler.analyze(&request)?
                 };
                 execution.validate(&file.source)?;
-                Ok((
-                    start + offset,
-                    FileFacts::new(generation, Arc::clone(&file.source), ast, execution)?,
-                ))
+                let mut facts =
+                    FileFacts::new(generation, Arc::clone(&file.source), ast, execution)?;
+                if let Some(hash) = program_hashes.get(&file.path) {
+                    facts.source_hash = hash.clone();
+                }
+                Ok((start + offset, facts))
             })
             .collect::<Result<Vec<_>, BackendError>>()
     })?;

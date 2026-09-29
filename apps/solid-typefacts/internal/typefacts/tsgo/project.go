@@ -96,6 +96,9 @@ type project struct {
 	// is classifying, while it runs: the one whose own parameters a coercion
 	// operand may be proved primitive by (operandProvedPrimitiveLocked).
 	formImplementation *ast.Node
+	// hostConstants are the current request's host constants (ADR 0166),
+	// set by SetHostConstants before each invocations or export-values answer.
+	hostConstants map[hostConstantKey]bool
 	// ownLiteralSymbols memoizes ADR 0044's answer per symbol: the variable
 	// declaration a name is bound to when this program initialized it from an
 	// object or array literal, or nil. Keyed by symbol rather than by file

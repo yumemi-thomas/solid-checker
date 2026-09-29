@@ -509,8 +509,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 74
-	TypeFactsSchemaSHA256             = "sha256:7cd2479af5756e76e80e0b6524ca8ea7721ae5bb59f85bf03429a8f7a240a1f0"
+	TypeFactsHandshakeProtocol uint64 = 75
+	TypeFactsSchemaSHA256             = "sha256:741a079751ef8295aaefaf7b8cf03ca53bc2a2fbed6b3a48557d2fc932ee2b09"
 )
 
 type ServiceHandshake struct {
@@ -571,6 +571,22 @@ type LifecycleRequest struct {
 	ModuleGraph        *ModuleInventoryDemand `cbor:"moduleGraph,omitempty" json:"moduleGraph,omitempty"`
 	InvocationDemands  []InvocationDemand     `cbor:"invocationDemands,omitempty" json:"invocationDemands,omitempty"`
 	ExportValueDemands []ExportValueDemand    `cbor:"exportValueDemands,omitempty" json:"exportValueDemands,omitempty"`
+	// HostConstants (handshake protocol 72, ADR 0166) are imports whose value
+	// the requesting certification's declared host fixes. Read by invocations
+	// and export-values only, for that request.
+	HostConstants []HostConstant `cbor:"hostConstants,omitempty" json:"hostConstants,omitempty"`
+}
+
+// HostConstant says that in the program module Importer, the name Name
+// imported from the bare specifier Specifier is the literal Value (ADR 0166).
+// The Rust client proved it from the runtime bytes the declared host's
+// resolution selects; the producer applies it only to a reference the checker
+// binds to exactly that import specifier.
+type HostConstant struct {
+	Importer  string `cbor:"importer" json:"importer"`
+	Specifier string `cbor:"specifier" json:"specifier"`
+	Name      string `cbor:"name" json:"name"`
+	Value     bool   `cbor:"value" json:"value"`
 }
 
 // SymbolQueryV6 is one row in Rust's batched TSGo oracle request. Alias and

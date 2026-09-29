@@ -17,7 +17,9 @@ use std::path::Path;
 use crate::core::Span;
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
-use oxc_ast::ast::{AssignmentOperator, Statement};
+use oxc_ast::ast::{AssignmentOperator, Expression, Statement};
+
+use super::host_constants::{HostConstantFold, HostConstantScope};
 use oxc_ast_visit::Visit;
 use oxc_parser::Parser;
 use oxc_semantic::{AstNodes, NodeId, SemanticBuilder};
@@ -28,7 +30,12 @@ use oxc_span::{GetSpan, SourceType};
 /// completion of it. `None` when the source does not parse or no function
 /// node has that span.
 #[must_use]
-pub fn unconditional_calls(path: &Path, source: &str, function: Span) -> Option<Vec<Span>> {
+pub fn unconditional_calls(
+    path: &Path,
+    source: &str,
+    function: Span,
+    folds: &[HostConstantFold],
+) -> Option<Vec<Span>> {
     if source.len() > 4 * 1024 * 1024 {
         return None;
     }
@@ -40,6 +47,10 @@ pub fn unconditional_calls(path: &Path, source: &str, function: Span) -> Option<
     }
     let built = SemanticBuilder::new().build(&parsed.program);
     let nodes = built.semantic.nodes();
+    // ADR 0166: a condition a fold (or a literal) decides leaves one arm of an
+    // `if` or `?:` dead, exactly as the producer's walk reads it.
+    let scope = HostConstantScope::new(&parsed.program, &built.semantic, folds);
+    let scope = scope.as_ref();
     let owner = nodes.iter().find(|node| {
         let span = node.kind().span();
         span.start == function.start
@@ -69,7 +80,7 @@ pub fn unconditional_calls(path: &Path, source: &str, function: Span) -> Option<
             let span = node.kind().span();
             span.start >= function.start && span.end <= function.end
         })
-        .filter(|node| runs_on_every_completion(nodes, node.id(), owner.id()))
+        .filter(|node| runs_on_every_completion(nodes, scope, node.id(), owner.id()))
         .map(|node| {
             let span = node.kind().span();
             Span::new(span.start, span.end)
@@ -78,7 +89,12 @@ pub fn unconditional_calls(path: &Path, source: &str, function: Span) -> Option<
     Some(calls)
 }
 
-fn runs_on_every_completion(nodes: &AstNodes<'_>, call: NodeId, owner: NodeId) -> bool {
+fn runs_on_every_completion(
+    nodes: &AstNodes<'_>,
+    scope: Option<&HostConstantScope<'_, '_>>,
+    call: NodeId,
+    owner: NodeId,
+) -> bool {
     if let AstKind::CallExpression(expression) = nodes.kind(call)
         && expression.optional
     {
@@ -94,7 +110,7 @@ fn runs_on_every_completion(nodes: &AstNodes<'_>, call: NodeId, owner: NodeId) -
             return matches!(nodes.kind(child), AstKind::FunctionBody(_))
                 || matches!(nodes.kind(owner), AstKind::ArrowFunctionExpression(arrow) if arrow.expression);
         }
-        if !evaluates_child_once(nodes, parent, child) {
+        if !evaluates_child_once(nodes, scope, parent, child) {
             return false;
         }
         child = parent;
@@ -103,14 +119,41 @@ fn runs_on_every_completion(nodes: &AstNodes<'_>, call: NodeId, owner: NodeId) -
 
 /// Whether evaluating `parent` evaluates `child` exactly once, whatever the
 /// values involved.
-fn evaluates_child_once(nodes: &AstNodes<'_>, parent: NodeId, child: NodeId) -> bool {
+fn evaluates_child_once(
+    nodes: &AstNodes<'_>,
+    scope: Option<&HostConstantScope<'_, '_>>,
+    parent: NodeId,
+    child: NodeId,
+) -> bool {
     let child_span = nodes.kind(child).span();
     let is = |span: oxc_span::Span| span == child_span;
+    let decided = |test: &Expression<'_>| scope.and_then(|scope| scope.truthiness(test));
     match nodes.kind(parent) {
-        AstKind::FunctionBody(body) => statements_before_exit_free(&body.statements, child_span),
-        AstKind::BlockStatement(block) => statements_before_exit_free(&block.body, child_span),
-        AstKind::IfStatement(statement) => is(statement.test.span()),
-        AstKind::ConditionalExpression(expression) => is(expression.test.span()),
+        AstKind::FunctionBody(body) => {
+            statements_before_exit_free(scope, &body.statements, child_span)
+        }
+        AstKind::BlockStatement(block) => {
+            statements_before_exit_free(scope, &block.body, child_span)
+        }
+        AstKind::IfStatement(statement) => {
+            is(statement.test.span())
+                || match decided(&statement.test) {
+                    Some((true, _)) => is(statement.consequent.span()),
+                    Some((false, _)) => statement
+                        .alternate
+                        .as_ref()
+                        .is_some_and(|alternate| is(alternate.span())),
+                    None => false,
+                }
+        }
+        AstKind::ConditionalExpression(expression) => {
+            is(expression.test.span())
+                || match decided(&expression.test) {
+                    Some((true, _)) => is(expression.consequent.span()),
+                    Some((false, _)) => is(expression.alternate.span()),
+                    None => false,
+                }
+        }
         AstKind::LogicalExpression(expression) => is(expression.left.span()),
         AstKind::AssignmentExpression(expression) => {
             !matches!(
@@ -151,12 +194,19 @@ fn evaluates_child_once(nodes: &AstNodes<'_>, parent: NodeId, child: NodeId) -> 
 
 /// Whether the statement at `child` in `statements` exists and no earlier one
 /// can leave the enclosing function early.
-fn statements_before_exit_free(statements: &[Statement<'_>], child: oxc_span::Span) -> bool {
+fn statements_before_exit_free(
+    scope: Option<&HostConstantScope<'_, '_>>,
+    statements: &[Statement<'_>],
+    child: oxc_span::Span,
+) -> bool {
     for statement in statements {
         if statement.span() == child {
             return true;
         }
-        let mut exits = EarlyExit::default();
+        let mut exits = EarlyExit {
+            scope,
+            found: false,
+        };
         exits.visit_statement(statement);
         if exits.found {
             return false;
@@ -167,25 +217,45 @@ fn statements_before_exit_free(statements: &[Statement<'_>], child: oxc_span::Sp
 
 /// Finds a `return`, `break` or `continue` outside every function nested in
 /// the statement visited.
-#[derive(Default)]
-struct EarlyExit {
+/// An `if` whose condition is decided is read through its condition and its
+/// live arm only: a `return` in the dead arm is no path out (ADR 0166).
+struct EarlyExit<'f, 's, 'a> {
+    scope: Option<&'f HostConstantScope<'s, 'a>>,
     found: bool,
 }
 
-impl<'a> Visit<'a> for EarlyExit {
-    fn visit_return_statement(&mut self, _: &oxc_ast::ast::ReturnStatement<'a>) {
+impl<'v> Visit<'v> for EarlyExit<'_, '_, '_> {
+    fn visit_if_statement(&mut self, statement: &oxc_ast::ast::IfStatement<'v>) {
+        match self
+            .scope
+            .and_then(|scope| scope.truthiness(&statement.test))
+        {
+            Some((true, _)) => {
+                self.visit_expression(&statement.test);
+                self.visit_statement(&statement.consequent);
+            }
+            Some((false, _)) => {
+                self.visit_expression(&statement.test);
+                if let Some(alternate) = &statement.alternate {
+                    self.visit_statement(alternate);
+                }
+            }
+            None => oxc_ast_visit::walk::walk_if_statement(self, statement),
+        }
+    }
+    fn visit_return_statement(&mut self, _: &oxc_ast::ast::ReturnStatement<'v>) {
         self.found = true;
     }
-    fn visit_break_statement(&mut self, _: &oxc_ast::ast::BreakStatement<'a>) {
+    fn visit_break_statement(&mut self, _: &oxc_ast::ast::BreakStatement<'v>) {
         self.found = true;
     }
-    fn visit_continue_statement(&mut self, _: &oxc_ast::ast::ContinueStatement<'a>) {
+    fn visit_continue_statement(&mut self, _: &oxc_ast::ast::ContinueStatement<'v>) {
         self.found = true;
     }
-    fn visit_function(&mut self, _: &oxc_ast::ast::Function<'a>, _: oxc_syntax::scope::ScopeFlags) {
+    fn visit_function(&mut self, _: &oxc_ast::ast::Function<'v>, _: oxc_syntax::scope::ScopeFlags) {
     }
-    fn visit_arrow_function_expression(&mut self, _: &oxc_ast::ast::ArrowFunctionExpression<'a>) {}
-    fn visit_class(&mut self, _: &oxc_ast::ast::Class<'a>) {}
+    fn visit_arrow_function_expression(&mut self, _: &oxc_ast::ast::ArrowFunctionExpression<'v>) {}
+    fn visit_class(&mut self, _: &oxc_ast::ast::Class<'v>) {}
 }
 
 #[cfg(test)]
@@ -204,7 +274,7 @@ mod tests {
             .map(|offset| start + offset + 2)
             .expect("the function's end");
         let span = Span::new(start as u32, end as u32);
-        unconditional_calls(Path::new("test.js"), source, span)
+        unconditional_calls(Path::new("test.js"), source, span, &[])
             .expect("parses")
             .into_iter()
             .map(|span| source[span.start as usize..span.end as usize].to_owned())
@@ -315,5 +385,83 @@ async function later(cb) {\n  onCleanup(cb);\n}\n";
         let observer = unconditional(MUTATION_OBSERVER, "createMutationObserver");
         assert!(!observer.iter().any(|call| call == "onSettled(start)"));
         assert!(!observer.iter().any(|call| call == "onCleanup(stop)"));
+    }
+
+    /// ADR 0166: under a declared host, `isServer` is the value the host's
+    /// resolution of `@solidjs/web` binds (`false` in `dist/web.js`, `true` in
+    /// `dist/server.js`). The bodies are byte for byte
+    /// `@solid-primitives/memo@2.0.0-next.2` `dist/index.js` `createPureReaction`
+    /// and `@solid-primitives/lifecycle@1.0.0-next.2` `dist/index.js`
+    /// `onElementConnect`, under the import line both modules write.
+    #[test]
+    fn a_folded_host_constant_decides_the_guard() {
+        const MEMO: &str = r#"import { isServer } from "@solidjs/web";
+function createPureReaction(onInvalidate, options) {
+	if (isServer) return () => void 0;
+	const owner = getOwner();
+	let trackers = 0;
+	let disposed = false;
+	onCleanup(() => {
+		disposed = true;
+	});
+	return (tracking) => {
+		if (disposed) {
+			untrack(tracking);
+			return;
+		}
+		trackers++;
+		runWithOwner(owner, () => createReaction(() => {
+			if (--trackers === 0) untrack(onInvalidate);
+		}, options))(tracking);
+	};
+}"#;
+        const LIFECYCLE: &str = r#"import { isServer } from "@solidjs/web";
+function onElementConnect(el, fn) {
+	if (isServer) return;
+	if (el.isConnected) return fn();
+	const observer = new ResizeObserver(() => el.isConnected && (observer.disconnect(), fn()));
+	observer.observe(el);
+	onCleanup(() => observer.disconnect());
+}"#;
+        let fold = |value| {
+            vec![HostConstantFold {
+                specifier: "@solidjs/web".into(),
+                imported: "isServer".into(),
+                value,
+            }]
+        };
+        let calls = |source: &str, name: &str, folds: &[HostConstantFold]| {
+            let start = source
+                .find(&format!("function {name}"))
+                .expect("the function");
+            let end = source[start..]
+                .find("\n}")
+                .map(|offset| start + offset + 2)
+                .expect("end");
+            unconditional_calls(
+                Path::new("index.js"),
+                source,
+                Span::new(start as u32, end as u32),
+                folds,
+            )
+            .expect("parses")
+            .into_iter()
+            .map(|span| source[span.start as usize..span.end as usize].to_owned())
+            .collect::<Vec<_>>()
+        };
+        let cleanup = |calls: &[String]| calls.iter().any(|call| call.starts_with("onCleanup("));
+        // Host free: the guard may return, so nothing after it is unconditional.
+        assert!(!cleanup(&calls(MEMO, "createPureReaction", &[])));
+        // Browser: the guard never returns.
+        let browser = calls(MEMO, "createPureReaction", &fold(false));
+        assert!(cleanup(&browser), "{browser:?}");
+        assert!(browser.iter().any(|call| call == "getOwner()"));
+        // Node: the guard always returns, so nothing after it runs at all.
+        assert!(calls(MEMO, "createPureReaction", &fold(true)).is_empty());
+        // `onElementConnect` also returns under `el.isConnected`, which no fold
+        // decides: its `onCleanup` stays conditional under every host.
+        for folds in [Vec::new(), fold(false), fold(true)] {
+            assert!(!cleanup(&calls(LIFECYCLE, "onElementConnect", &folds)));
+        }
     }
 }

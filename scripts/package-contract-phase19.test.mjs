@@ -301,7 +301,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       //
       // 169 adds implementation-census-reads-fresh-target's main document,
       // the corpus pin of ADR 0153 part 5's accessor bounds.
-      stableMainDocuments: 169,
+      //
+      // 172 adds the three host-constant-{free,browser,node} fixtures' main
+      // documents, ADR 0166's per-host pin of `isServer` folding.
+      stableMainDocuments: 172,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

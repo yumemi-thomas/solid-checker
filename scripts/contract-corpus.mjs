@@ -37,6 +37,15 @@ const corpus = JSON.parse(readFileSync(join(fixturesRoot, "corpus.json"), "utf8"
 if (corpus.schemaVersion !== 1 || corpus.format !== "solid-checker-package-contract-generator-corpus") {
   throw new Error("fixture corpus manifest is not stable schema version 1");
 }
+// A fixture the corpus certifies under a declared host (ADR 0140) is named in
+// `hosts`: its `contract generate` runs with `--host`, exactly as a per-host
+// certification does. Every other fixture is generated host free.
+const hosts = corpus.hosts ?? {};
+for (const [name, host] of Object.entries(hosts)) {
+  if (!corpus.fixtures.includes(name) || !["browser", "node"].includes(host)) {
+    throw new Error(`corpus host declaration ${name}: ${host} names no listed fixture or no host`);
+  }
+}
 const fixtures = corpus.fixtures.map(name => join(fixturesRoot, name));
 const temporary = mkdtempSync(join(tmpdir(), "solid-checker-contract-corpus-"));
 
@@ -70,7 +79,8 @@ async function generate(directory) {
         "--output",
         output,
         "--integrity",
-        integrity
+        integrity,
+        ...(hosts[name] ? [`--host=${hosts[name]}`] : [])
       ],
       {
         cwd: root,

@@ -70,6 +70,7 @@ pub(super) fn acquire_isolated(
     })?;
     let mut session = TypeFactsCertificationSession::open(pin, project_id)
         .map_err(|error| error.at_graph_node(request.plan, "isolated graph producer launch"))?;
+    session.set_host_constants(project.host_constants());
     let result = acquire_in_session(
         request,
         &schedules[0],

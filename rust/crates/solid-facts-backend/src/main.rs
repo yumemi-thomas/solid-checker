@@ -19,7 +19,7 @@ use solid_facts_backend::{
     BackendError, ImportIdentityMeasurement, RequestedRuleEnablement, SemanticDemandOptions,
     SourceFile, TypeFactsProvider, TypeFactsSession, accepted_package_contract_statuses,
     analyze_project_accepted_measured_with_enablement, attest_import_identities,
-    build_project_native_measured_with_demands, contract_identity_scope,
+    build_project_native_measured_with_program_hashes, contract_identity_scope,
     default_typefacts_executable, dialect,
     encode_inferred_entrypoint_workflow_with_external_targets,
     external_package_contract_requirements, merge_contract_proposals, merge_plans,
@@ -547,6 +547,59 @@ fn missing_fact_program_module(path: &Path) -> String {
         "emit package contract: entry file {} is not part of the TypeScript project",
         path.display()
     )
+}
+
+/// ADR 0166: the sources a contract emission for a case that declares a host
+/// analyses. Each module's host constants are resolved from the installation
+/// on disk (`host_constants_of_module`), and every `if` they decide has its dead
+/// arm and the statements it leaves unreachable removed, with its condition
+/// rewritten to the literal it reads as -- the same decisions the producer
+/// makes from the same constants during certification. Spans and line breaks
+/// are preserved. A host-free case, or a module no constant is proved for, is
+/// analysed unchanged.
+///
+/// The Type Facts program keeps the text on disk, and the facts join it by
+/// source digest, so the fold is span-preserving and each folded file's
+/// original digest is returned beside it: the join compares the program's
+/// digest, and every fact keyed by span joins as before.
+fn fold_emission_host_constants(
+    sources: Vec<SourceFile>,
+    conditions: &BTreeSet<String>,
+) -> (
+    Vec<SourceFile>,
+    HashMap<String, solid_facts::core::SourceHash>,
+) {
+    let conditions = conditions.iter().cloned().collect::<Vec<_>>();
+    let mut program_hashes = HashMap::new();
+    let Some(host) = solid_facts_backend::host_constants::declared_host(&conditions) else {
+        return (sources, program_hashes);
+    };
+    let folded = sources
+        .into_iter()
+        .map(|mut file| {
+            let path = Path::new(&file.path);
+            let folds = solid_facts_backend::host_constants::host_constants_of_module(
+                path,
+                &file.source,
+                host,
+                None,
+            )
+            .into_iter()
+            .map(|resolved| resolved.fold)
+            .collect::<Vec<_>>();
+            if let Some(text) =
+                solid_facts::ast::fold_host_constant_branches(path, &file.source, &folds)
+            {
+                program_hashes.insert(
+                    file.path.clone(),
+                    solid_facts::core::SourceHash::of(file.source.as_ref()),
+                );
+                file.source = text.into();
+            }
+            file
+        })
+        .collect();
+    (folded, program_hashes)
 }
 
 fn contract_emission_target_sources(
@@ -3576,12 +3629,15 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 .map(|source| source.source.clone())
                 .collect::<Vec<_>>();
             target_sources.sort_by(|left, right| left.path.cmp(&right.path));
+            let (target_sources, program_hashes) =
+                fold_emission_host_constants(target_sources, &request.runtime.conditions);
             let fact_started = Instant::now();
-            let fact_result = build_project_native_measured_with_demands(
+            let fact_result = build_project_native_measured_with_program_hashes(
                 dialect,
                 request.project_id.clone(),
                 request.generation,
                 target_sources.clone(),
+                &program_hashes,
                 &mut typescript,
                 semantic_demand_options,
             );
@@ -3743,11 +3799,17 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         return Ok(0);
     }
     let (mut facts, native_timings) = {
-        let (facts, timings) = build_project_native_measured_with_demands(
+        let (sources, program_hashes) = if request.emit_contract.is_empty() {
+            (request.sources.clone(), HashMap::new())
+        } else {
+            fold_emission_host_constants(request.sources.clone(), &request.runtime.conditions)
+        };
+        let (facts, timings) = build_project_native_measured_with_program_hashes(
             dialect,
             request.project_id.clone(),
             request.generation,
-            request.sources.clone(),
+            sources,
+            &program_hashes,
             &mut typescript,
             semantic_demand_options,
         )?;
@@ -9168,10 +9230,13 @@ fn generated_owner_requirements_by_symbol(
             continue;
         };
         let unconditional = unconditional_calls.entry(key.clone()).or_insert_with(|| {
+            // ADR 0166: an emission under a declared host analyses sources
+            // whose host-constant conditions are already literals.
             solid_facts::ast::unconditional_calls(
                 Path::new(file.path.as_str()),
                 &file.source,
                 function.span,
+                &[],
             )
             .unwrap_or_default()
         });
@@ -9633,7 +9698,11 @@ fn runtime_binding_entity<'a>(
         return None;
     }
     let file = files_by_canonical_path.get(&module).copied()?;
-    if sha256_digest(file.source.as_bytes()) != binding.runtime.module.digest {
+    // The digest of the bytes the file holds in the artifact: `source_hash` is
+    // that digest even when the facts were extracted from a span-preserving
+    // host-constant fold of them (ADR 0166), whose own bytes are not the
+    // artifact's.
+    if file.source_hash.as_str() != binding.runtime.module.digest {
         return None;
     }
     entry_export_entity_indexed(
@@ -11284,5 +11353,77 @@ mod case_set_pointer_merge_tests {
             );
         }
         let _ = fs::remove_dir_all(&root);
+    }
+}
+
+#[cfg(test)]
+mod host_constant_fold_tests {
+    use super::*;
+    use std::sync::Arc;
+
+    /// ADR 0166. The emission analyses a span-preserving fold of a module, but
+    /// the module's identity is still its bytes in the artifact: the fold
+    /// reports the digest of the original for the join with the Type Facts
+    /// program, and the fact file keeps it as `source_hash`, which is what a
+    /// resolution record's module digest is compared to (a fold whose hash
+    /// were the folded bytes' left every export of `@solid-primitives/scroll`
+    /// unattributable).
+    #[test]
+    fn a_folded_module_keeps_the_digest_of_its_original_bytes() {
+        let root =
+            std::env::temp_dir().join(format!("solid-checker-fold-digest-{}", std::process::id()));
+        let web = root.join("node_modules/@solidjs/web");
+        std::fs::create_dir_all(web.join("dist")).unwrap();
+        std::fs::write(
+            web.join("package.json"),
+            r#"{"name":"@solidjs/web","version":"2.0.0-rc.9","exports":{".":{"browser":{"default":"./dist/web.js"},"node":{"default":"./dist/server.js"},"default":"./dist/web.js"}}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            web.join("dist/web.js"),
+            "const isServer = false;\nexport { isServer };\n",
+        )
+        .unwrap();
+        std::fs::write(
+            web.join("dist/server.js"),
+            "const isServer = true;\nexport { isServer };\n",
+        )
+        .unwrap();
+        let path = root.join("index.js");
+        let original: Arc<str> = Arc::from(
+            "import { isServer } from \"@solidjs/web\";\nexport function f(cb) {\n\tif (isServer) return;\n\tcb();\n}\n",
+        );
+        let source = |text: &Arc<str>| SourceFile {
+            path: path.to_string_lossy().into_owned(),
+            source: Arc::clone(text),
+            compiler_options: Default::default(),
+        };
+        let conditions = |host: &str| BTreeSet::from(["import".to_owned(), host.to_owned()]);
+
+        let (folded, hashes) =
+            fold_emission_host_constants(vec![source(&original)], &conditions("browser"));
+        assert_eq!(
+            folded[0].source.len(),
+            original.len(),
+            "spans are preserved"
+        );
+        assert_ne!(folded[0].source.as_ref(), original.as_ref());
+        assert_eq!(
+            hashes.get(&folded[0].path),
+            Some(&solid_facts::core::SourceHash::of(original.as_ref()))
+        );
+        // A host-free case, and a host the resolver proves nothing for, fold
+        // nothing and report nothing.
+        let (free, none) = fold_emission_host_constants(
+            vec![source(&original)],
+            &BTreeSet::from(["import".to_owned()]),
+        );
+        assert_eq!(free[0].source.as_ref(), original.as_ref());
+        assert!(none.is_empty());
+        let (worker, none) =
+            fold_emission_host_constants(vec![source(&original)], &conditions("worker"));
+        assert_eq!(worker[0].source.as_ref(), original.as_ref());
+        assert!(none.is_empty());
+        std::fs::remove_dir_all(&root).unwrap();
     }
 }

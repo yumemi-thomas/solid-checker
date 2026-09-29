@@ -1010,7 +1010,7 @@ func (p *project) implementationCallCensusLocked(
 					call.CalleeUnwrittenParameter = &index
 				}
 			}
-			call.Unconditional = callRunsOnEveryCompletion(node, flowOwner, reach)
+			call.Unconditional = p.callRunsOnEveryCompletionLocked(node, flowOwner, reach)
 			calls = append(calls, call)
 		},
 	)

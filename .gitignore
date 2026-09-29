@@ -128,6 +128,12 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/value-exports/node_modules/**
 !fixtures/package-contracts/creates-decline-records/node_modules/
 !fixtures/package-contracts/creates-decline-records/node_modules/**
+!fixtures/package-contracts/host-constant-browser/node_modules/
+!fixtures/package-contracts/host-constant-browser/node_modules/**
+!fixtures/package-contracts/host-constant-free/node_modules/
+!fixtures/package-contracts/host-constant-free/node_modules/**
+!fixtures/package-contracts/host-constant-node/node_modules/
+!fixtures/package-contracts/host-constant-node/node_modules/**
 !fixtures/package-contracts/implementation-census-reads/node_modules/
 !fixtures/package-contracts/implementation-census-reads/node_modules/**
 !fixtures/package-contracts/implementation-census-reads-fresh-target/node_modules/

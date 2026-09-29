@@ -1906,6 +1906,13 @@ type InvocationAnalyzer interface {
 	InvocationTranscripts(context.Context, []InvocationDemand) (InvocationAnswer, error)
 }
 
+// HostConstantScoped is implemented by a backend that reads host constants
+// (ADR 0166). The session sets them before each invocations or export-values
+// answer, for that answer only.
+type HostConstantScoped interface {
+	SetHostConstants([]HostConstant)
+}
+
 // ExportValueAnalyzer is intentionally separate from InvocationAnalyzer: an
 // implementation cannot answer exported-value proof from a selected call.
 type ExportValueAnalyzer interface {

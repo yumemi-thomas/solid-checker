@@ -377,6 +377,7 @@ func (s *Session) lifecycle(
 		if request.Generation != generation {
 			return fail("generation-mismatch", ErrGenerationMismatch)
 		}
+		s.closure.SetHostConstants(request.HostConstants)
 		answer, err := s.closure.InvocationTranscripts(ctx, request.InvocationDemands)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -396,6 +397,7 @@ func (s *Session) lifecycle(
 		if request.Generation != generation {
 			return fail("generation-mismatch", ErrGenerationMismatch)
 		}
+		s.closure.SetHostConstants(request.HostConstants)
 		answer, err := s.closure.ExportValueTranscripts(ctx, request.ExportValueDemands)
 		if err != nil {
 			if ctx.Err() != nil {

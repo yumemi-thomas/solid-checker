@@ -702,6 +702,8 @@ pub struct Session {
     last_exchange_timings: Option<ExchangeTimings>,
     last_update_timings: Option<UpdateTimings>,
     last_table_changes: Option<TableChanges>,
+    /// ADR 0166: attached to every `invocations` and `export-values` request.
+    host_constants: Vec<v3::HostConstant>,
     closed: bool,
 }
 
@@ -773,6 +775,7 @@ impl Session {
             last_exchange_timings: None,
             last_update_timings: None,
             last_table_changes: None,
+            host_constants: Vec::new(),
             closed: false,
         };
         session.exchange(request(
@@ -785,6 +788,16 @@ impl Session {
             session.update(sources)?;
         }
         Ok(session)
+    }
+
+    /// Sets the host constants (ADR 0166) every later `invocations` and
+    /// `export-values` request carries. They are a property of the program the
+    /// session certifies, so a certification sets them once, before its first
+    /// demand.
+    pub fn set_host_constants(&mut self, mut constants: Vec<v3::HostConstant>) {
+        constants.sort();
+        constants.dedup();
+        self.host_constants = constants;
     }
 
     #[must_use]
@@ -1195,6 +1208,7 @@ impl Session {
         }
         let mut request = request(Operation::Invocations, &self.project_id, self.generation);
         request.invocation_demands = demands.to_vec();
+        request.host_constants.clone_from(&self.host_constants);
         let response = self.exchange(request)?;
         let envelope = response.invocation_envelope.ok_or_else(|| {
             SessionError::InvalidResponse("invocation response has no identity envelope".into())
@@ -1244,6 +1258,7 @@ impl Session {
         }
         let mut request = request(Operation::ExportValues, &self.project_id, self.generation);
         request.export_value_demands = demands.to_vec();
+        request.host_constants.clone_from(&self.host_constants);
         let response = self.exchange(request)?;
         let envelope = response.export_value_envelope.ok_or_else(|| {
             SessionError::InvalidResponse("export-value response has no identity envelope".into())
@@ -2067,6 +2082,7 @@ fn request(operation: Operation, project_id: &str, generation: u64) -> Request {
         module_graph: None,
         invocation_demands: Vec::new(),
         export_value_demands: Vec::new(),
+        host_constants: Vec::new(),
     }
 }
 
@@ -3629,6 +3645,7 @@ mod tests {
             last_exchange_timings: None,
             last_update_timings: None,
             last_table_changes: None,
+            host_constants: Vec::new(),
             closed: false,
         };
         for version in 1..=32 {

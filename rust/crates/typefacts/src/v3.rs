@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:7cd2479af5756e76e80e0b6524ca8ea7721ae5bb59f85bf03429a8f7a240a1f0";
+    "sha256:741a079751ef8295aaefaf7b8cf03ca53bc2a2fbed6b3a48557d2fc932ee2b09";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -420,7 +420,14 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // functions that may execute one, and whether this implementation is one of
 // them. A protocol-71 consumer decodes with `deny_unknown_fields` and would
 // reject the new field, so the number moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 74;
+//
+// Protocol 75 (ADR 0166; 74 belongs to a concurrent change) lets an
+// `invocations` or `export-values` request carry `hostConstants`: named imports
+// whose value the certification's declared host fixes, which the producer reads
+// as literals wherever it decides a condition (branch reachability, loop exits,
+// `ImplementationCall::unconditional`). A protocol-73 producer decodes with
+// unknown fields refused and would reject the request, so the number moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 75;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
@@ -552,6 +559,23 @@ pub struct Request {
     pub invocation_demands: Vec<InvocationDemand>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub export_value_demands: Vec<ExportValueDemand>,
+    /// ADR 0166: host constants the requesting certification proved, read by
+    /// `invocations` and `export-values` only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub host_constants: Vec<HostConstant>,
+}
+
+/// One import whose value the declared host fixes (ADR 0166): in the program
+/// module `importer`, the name `name` imported from `specifier` is the literal
+/// `value`. The producer applies it only to a reference the checker binds to
+/// exactly that import specifier.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct HostConstant {
+    pub importer: String,
+    pub specifier: String,
+    pub name: String,
+    pub value: bool,
 }
 
 /// The wire form of a module-graph demand.

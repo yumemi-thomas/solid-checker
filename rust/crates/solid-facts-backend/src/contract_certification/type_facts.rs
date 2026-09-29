@@ -740,6 +740,12 @@ impl TypeFactsCertificationSession {
         })
     }
 
+    /// ADR 0166: the host constants every later request of this session
+    /// carries.
+    pub(super) fn set_host_constants(&mut self, constants: &[typefacts::v3::HostConstant]) {
+        self.session.set_host_constants(constants.to_vec());
+    }
+
     pub(crate) fn acquire(
         &mut self,
         plan: &CertificationPlan,
@@ -1192,6 +1198,7 @@ fn acquire_and_verify_export_values_batch_with_dependencies(
     let started = std::time::Instant::now();
     let mut session = TypeFactsCertificationSession::open(pin, project_id)
         .map_err(|error| error.at_stage("pinned producer launch"))?;
+    session.set_host_constants(project.host_constants());
     report_certification_timing("pinned-producer-launch", started, serde_json::json!({}));
     let started = std::time::Instant::now();
     let evidence = plans
@@ -1413,6 +1420,7 @@ fn acquire_graph_export_values_in_contexts(
     let started = std::time::Instant::now();
     let mut session = TypeFactsCertificationSession::open(pin, project_id)
         .map_err(|error| error.at_stage("pinned graph producer launch"))?;
+    session.set_host_constants(project.host_constants());
     report_certification_timing(
         "pinned-producer-launch",
         started,
@@ -1569,6 +1577,10 @@ struct PrivateTypeFactsProject {
     harness: PathBuf,
     package_roots: std::collections::BTreeMap<(String, String), PathBuf>,
     source_roots: std::collections::BTreeMap<String, PathBuf>,
+    /// ADR 0166: the host constants of the program's runtime modules, proved
+    /// from the materialized (authenticated) bytes under each plan's declared
+    /// host. Empty for a host-free program.
+    host_constants: Vec<typefacts::v3::HostConstant>,
 }
 
 impl PrivateTypeFactsProject {
@@ -1732,6 +1744,14 @@ impl PrivateTypeFactsProject {
         }
         files.sort();
         files.dedup();
+        let host_constants = private_project_host_constants(
+            std::iter::once(plan)
+                .chain(dependencies.iter().copied())
+                .filter(|_| !isolated)
+                .chain(program_plans.iter().copied()),
+            &package_roots,
+            &root,
+        );
         let configuration = serde_json::to_vec_pretty(&serde_json::json!({
             "compilerOptions": {
                 "strict": true,
@@ -1767,11 +1787,16 @@ impl PrivateTypeFactsProject {
             harness,
             package_roots,
             source_roots,
+            host_constants,
         })
     }
 
     fn project_id(&self) -> &Path {
         &self.project_id
+    }
+
+    fn host_constants(&self) -> &[typefacts::v3::HostConstant] {
+        &self.host_constants
     }
 
     fn package_root(&self, plan: &CertificationPlan) -> Result<&Path, TypeFactsCertificationError> {
@@ -1807,6 +1832,60 @@ impl PrivateTypeFactsProject {
                 )
             })
     }
+}
+
+/// ADR 0166: every host constant a program module of these plans imports, under
+/// the plan's own declared host, read from the private project's materialized
+/// bytes -- the authenticated snapshot of each package, at its original
+/// relative position, so Node's lookup from an importer finds exactly the
+/// installation the closure did. A plan with no declared host (or two) adds
+/// nothing.
+fn private_project_host_constants<'p>(
+    plans: impl Iterator<Item = &'p CertificationPlan>,
+    package_roots: &std::collections::BTreeMap<(String, String), PathBuf>,
+    boundary: &Path,
+) -> Vec<typefacts::v3::HostConstant> {
+    let mut constants = std::collections::BTreeSet::new();
+    for plan in plans {
+        let Some(host) =
+            crate::host_constants::declared_host(&plan.import_request.export_conditions)
+        else {
+            continue;
+        };
+        let Some(root) = package_roots.get(&private_project_plan_key(plan)) else {
+            continue;
+        };
+        let modules = plan
+            .verified_exports
+            .runtime_paths()
+            .map(ToOwned::to_owned)
+            .chain(
+                closure_runtime_modules(plan)
+                    .into_iter()
+                    .map(ToOwned::to_owned),
+            )
+            .collect::<std::collections::BTreeSet<_>>();
+        for module in modules {
+            let path = root.join(&module);
+            let Ok(source) = fs::read_to_string(&path) else {
+                continue;
+            };
+            for resolved in crate::host_constants::host_constants_of_module(
+                &path,
+                &source,
+                host,
+                Some(boundary),
+            ) {
+                constants.insert(typefacts::v3::HostConstant {
+                    importer: path.to_string_lossy().into_owned(),
+                    specifier: resolved.fold.specifier,
+                    name: resolved.fold.imported,
+                    value: resolved.fold.value,
+                });
+            }
+        }
+    }
+    constants.into_iter().collect()
 }
 
 fn private_project_plan_key(plan: &CertificationPlan) -> (String, String) {
