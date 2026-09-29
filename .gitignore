@@ -218,3 +218,5 @@ packages/wasm/wasi-worker*.mjs
 # Documents citing one by relative link are citing a local artifact, not a
 # repository file.
 docs/package-contract-v2/phase21/*measurement.json
+!fixtures/package-contracts/class-creator-caller-creates/node_modules/
+!fixtures/package-contracts/class-creator-caller-creates/node_modules/**

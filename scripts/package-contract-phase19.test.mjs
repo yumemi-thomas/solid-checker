@@ -294,7 +294,11 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       //
       // 167 on 2026-09-29 adds the six package-context-premise-* fixtures'
       // hand-stated router documents, the consumer half of ADR 0153 part 3.
-      stableMainDocuments: 167,
+      //
+      // 168 on 2026-09-29 adds class-creator-caller-creates' main document,
+      // ADR 0158's pin that a creating constructor withholds `creates` from
+      // every export that reaches the construction.
+      stableMainDocuments: 168,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

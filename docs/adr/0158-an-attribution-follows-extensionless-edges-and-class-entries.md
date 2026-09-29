@@ -209,3 +209,52 @@ All of their open domains came from the widenings.
   that it refuses.
 - Coverage (131 projects) is unchanged. The contract corpus (112 fixtures)
   has no moved contract, plan, or walk verdict.
+
+## Amendment of 2026-09-29: the `new`-site caller gap is sound, and still open
+
+**Certification refuses it.** Measured on
+`fixtures/package-contracts/class-creator-caller-creates`: a module-private
+`class Thing` whose constructor calls `createEffect(read, () => {})`,
+`createThing(read) { return new Thing(read); }`, and
+`wrapThing(read) { return createThing(read); }`. The tracer
+`a_creating_constructor_withholds_creates_from_every_export_that_reaches_it`
+plans the fixture's own generated document byte for byte (integrity
+rebound, as the census tracers do) and certifies it with the pinned
+producer and probe harness.
+
+- The generator proposes `creates: []` for `createThing` and `wrapThing`
+  both. The gap is wider than the Consequences above say: no caller is
+  needed. The proposal walk (`creates_walk.rs`) follows calls only into
+  project *functions*. `new Thing(read)` resolves to the class's
+  `Constructor` declaration (Type Facts' resolved declaration, span
+  364..443 in the probe), and the walk never enters it. The same
+  `createEffect` call in a plain function declines `dialect-silent`.
+- The certifier's `creates` census walks the construction into the
+  constructor (`census_call_disposition` dispositions `Construct` as it
+  does `Call`). It withholds both closures by name at that call:
+  `census refused: … (\`createEffect(read, () => {})\`)`. That refusal is
+  directly on `createThing`, and on `wrapThing` through `createThing`.
+  Neither can certify `creates` closed. The control `plain` passes the
+  census; its closure is withheld only by the veto, because the probe
+  worker cannot import `solid-js` in a transaction that carries no
+  `solid-js` archive.
+
+So no claim is withdrawn and no certified contract is affected. What
+remains is a proposal that cannot certify:
+
+- **Open (proposal side).** The walk should treat a construction whose
+  resolved declaration is a project `Constructor` as an edge into the
+  enclosing class's span. It must key on that exact resolved declaration,
+  not on the class name: the class name has no entity in the walk's table
+  (`classes_by_symbol` over `entity_symbol` found none in the probe). This
+  was not implemented. The owner's priority moved to the
+  `@solid-primitives` checkpoint.
+- **Open (`Router` escape; dropped before investigation).**
+  `routerStores.js`' four widenings still mark all 95 exports. Their
+  super-argument site (`super(options, getStoreFactory)`) refuses because
+  `Router`'s constructor passes `this` to `primeRouterFromRegistry`, which
+  `SuperArgumentSite::escapes` counts as an escape. Narrowing it would need
+  a premise that every function the escaping `this` reaches is enumerated
+  by the reach walk and performs no instance-member obligation. That
+  premise was not established or replayed here. Deliverable router sites
+  on rc.8 × rc.9 stay 0 of 308.

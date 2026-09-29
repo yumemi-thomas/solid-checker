@@ -16417,6 +16417,136 @@ export const value = phantom;
     }
 
     // ---------------------------------------------------------------------
+    // ADR 0158 amendment: fixtures/package-contracts/class-creator-caller-creates
+    // ---------------------------------------------------------------------
+
+    /// The fixture's own generated document, planned against its own archive,
+    /// as [`census_generated_fixture_plan`] plans the census fixture's.
+    fn class_creator_caller_plan() -> CertificationPlan {
+        let fixture =
+            repository_root().join("fixtures/package-contracts/class-creator-caller-creates");
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let generated = std::fs::read(fixture.join("expected.json")).expect("generated proposal");
+        let decoded = crate::contract_document::decode(&generated)
+            .expect("the generator's own document decodes")
+            .normalize()
+            .expect("the generator's own document normalizes");
+        let name = "class-creator-caller-creates-package";
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let root = "/project/node_modules/class-creator-caller-creates-package";
+        let bindings = ["createThing", "plain", "wrapThing"].map(|export| {
+            (
+                export,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        // The one rebound field, for the reason `census_generated_fixture_plan`
+        // gives: the corpus generates with a `fixture:sha256:` token.
+        let snapshot = ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2())
+            .expect("the fixture archive snapshots");
+        let mut package = decoded.package().clone();
+        package.integrity = snapshot.package_integrity().into();
+        let candidate = ContractProposal::new(package, decoded.artifact_cases().to_vec())
+            .normalize()
+            .expect("rebinding the integrity keeps the document normalizable");
+        try_plan_supplied_candidate_for_test_package(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            candidate,
+        )
+        .expect("the generated document plans against its own artifact")
+    }
+
+    /// The generator proposes `creates: []` for both `createThing` and
+    /// `wrapThing`, although `new Thing(read)` runs a constructor that calls
+    /// `createEffect`: its `creates` walk does not enter a class constructor.
+    /// The certifier's census does -- a construction runs its callee -- and
+    /// must withhold both closures by name. `plain` is the control that the
+    /// census ran at all.
+    #[test]
+    fn a_creating_constructor_withholds_creates_from_every_export_that_reaches_it() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let plan = class_creator_caller_plan();
+        let creates = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates));
+        let proposed = plan
+            .candidates
+            .closure_candidates()
+            .iter()
+            .filter(|candidate| candidate.path == creates)
+            .map(|candidate| candidate.export.as_str())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            proposed,
+            BTreeSet::from(["createThing", "plain", "wrapThing"]),
+            "the generator proposes creates for all three"
+        );
+        let scratch = TracerScratch::new("class-creator-caller");
+        let fixture =
+            repository_root().join("fixtures/package-contracts/class-creator-caller-creates");
+        let Some(configuration) =
+            tracer_configuration_from(&fixture, scratch.path(), "class-creator-caller", &[])
+        else {
+            return;
+        };
+        let finalized = tracer_certify(&plan, &pin, &configuration)
+            .expect("the row certifies with the refused closures withheld");
+        let main = finalized.canonical_main();
+        let creates_record = |export: &str| {
+            finalized
+                .withheld_closures()
+                .iter()
+                .find(|record| record.export == export && record.domain == "creates")
+                .map(|record| record.reason.clone())
+        };
+        // The control: the census passes `plain` (it calls nothing). Its
+        // closure is still withheld, by the veto, because the probe worker
+        // cannot import the module's `solid-js` in a transaction that carries
+        // no `solid-js` archive -- a veto outcome, never a census refusal.
+        let control = creates_record("plain").expect("plain: the veto withholds it here");
+        assert!(
+            control.starts_with(super::WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX),
+            "plain: the census passed it: {control}"
+        );
+        for export in ["createThing", "wrapThing"] {
+            assert!(
+                !creates_is_closed_in(main, export),
+                "{export} must never certify creates closed"
+            );
+            let reason = creates_record(export)
+                .unwrap_or_else(|| panic!("{export}: creates is withheld by name"));
+            // The census walked `new Thing(read)` into the constructor (and,
+            // for `wrapThing`, `createThing` first) and refused at the
+            // constructor's `createEffect` call. Without a `solid-js` archive
+            // the callee is unresolved; with one, no dialect denies `creates`
+            // for `createEffect`, so it refuses either way.
+            assert!(
+                reason.starts_with(super::WITHHELD_CLOSURE_CENSUS_REFUSED_PREFIX)
+                    && reason.contains("createEffect(read, () => {})"),
+                "{export}: withheld by the census at the constructor's call: {reason}"
+            );
+        }
+    }
+
+    // ---------------------------------------------------------------------
     // Creates-census tracer: fixtures/package-contracts/implementation-census-creates
     // ---------------------------------------------------------------------
 

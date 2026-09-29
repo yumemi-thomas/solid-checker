@@ -115,6 +115,7 @@
     "unresolved-dispatch-domains-control",
     "unresolved-dispatch-reachability",
     "value-exports",
-    "wildcard-asset-entrypoints"
+    "wildcard-asset-entrypoints",
+    "class-creator-caller-creates"
   ]
 }
