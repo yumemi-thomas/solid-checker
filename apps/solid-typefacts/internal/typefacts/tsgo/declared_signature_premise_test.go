@@ -277,30 +277,53 @@ func TestDeclaredSignaturePremiseKeepsRefusingUnknownAndHelpersAndProtocolContra
 	}
 }
 
+// The 2026-09-28 amendment to ADR 0149: the premise types these operands,
+// and a type is not proof. `scale`'s `p` is the returned arrow's own
+// parameter, whose value its invoker chooses, and `span`'s `axis.max` is a
+// member read of the caller's object; each coercion is recorded under the
+// declared signature, with the root the census would need.
 func TestDeclaredSignaturePremiseTypesAReturnedArrowAndADeclaredMember(t *testing.T) {
 	analyzer, dir := premiseProject(t)
-	for _, export := range []string{"scale", "span"} {
-		transcript := premiseTranscript(t, analyzer, dir, export)
-		kinds := markerKinds(transcript.UncensusedInvokingForms)
+	for _, testCase := range []struct {
+		export  string
+		root    typefacts.SubjectRootDerivation
+		refusal typefacts.SubjectRootRefusalReason
+	}{
+		{"scale", "", typefacts.SubjectRefusalNestedParameter},
+		{"span", typefacts.SubjectRootParameter, ""},
+	} {
+		transcript := premiseTranscript(t, analyzer, dir, testCase.export)
 		if len(transcript.ParameterPremises) == 0 {
-			t.Errorf("%s: premise not bound: %q", export, transcript.ParameterPremiseRefusal)
+			t.Errorf("%s: premise not bound: %q", testCase.export, transcript.ParameterPremiseRefusal)
 			continue
 		}
-		for _, kind := range kinds {
-			if kind == typefacts.UncensusedCoercion {
-				t.Errorf("%s: coercion still recorded under the declared signature: %v", export, kinds)
+		coercions := 0
+		for _, form := range transcript.UncensusedInvokingForms {
+			if form.Kind != typefacts.UncensusedCoercion {
+				continue
 			}
+			coercions++
+			if form.CoercionSubjectRoot != testCase.root || form.CoercionSubjectRootRefusal != testCase.refusal {
+				t.Errorf("%s: coercion root %q refusal %q, want %q %q", testCase.export,
+					form.CoercionSubjectRoot, form.CoercionSubjectRootRefusal, testCase.root, testCase.refusal)
+			}
+		}
+		if coercions != 1 {
+			t.Errorf("%s: %d coercions under the declared signature, want the one", testCase.export, coercions)
 		}
 	}
 	// `span` reads `axis.max` and `axis.min` on a declared interface: the
 	// member is a declaration-file property, not runtime bytes, so the read
 	// stays an unknown accessor — rooted at parameter 0, which is what the
-	// verifier dispositions. The premise cleared the coercion, not the read.
+	// verifier dispositions.
 	span := premiseTranscript(t, analyzer, dir, "span")
-	if len(span.UncensusedInvokingForms) != 2 {
-		t.Fatalf("span forms = %#v, want the two member reads", span.UncensusedInvokingForms)
+	if len(span.UncensusedInvokingForms) != 3 {
+		t.Fatalf("span forms = %#v, want the coercion and the two member reads", span.UncensusedInvokingForms)
 	}
 	for _, form := range span.UncensusedInvokingForms {
+		if form.Kind == typefacts.UncensusedCoercion {
+			continue
+		}
 		if form.Kind != typefacts.UncensusedPropertyAccessUnknownAccessor || form.SubjectParameter == nil || *form.SubjectParameter != 0 {
 			t.Fatalf("span form = %#v, want a parameter-0-rooted unknown accessor", form)
 		}
@@ -327,6 +350,9 @@ func TestDeclaredSignaturePremiseBindsOverADescriptionOnlyJSDoc(t *testing.T) {
 
 // A parameter or return type the declaration names through an alias cannot
 // be spelled from the twin's scope; the `import()` twin binds it by identity.
+// The coercions stand under it (the 2026-09-28 amendment to ADR 0149): their
+// operands are a returned arrow's own parameter and destructured elements,
+// which the declared types describe and nothing proves.
 func TestDeclaredSignaturePremiseFallsBackToTheImportTwinForAliasedTypes(t *testing.T) {
 	analyzer, dir := premiseProject(t)
 	for _, export := range []string{"mirrorAlias", "aliasTuple"} {
@@ -335,9 +361,12 @@ func TestDeclaredSignaturePremiseFallsBackToTheImportTwinForAliasedTypes(t *test
 			t.Errorf("%s: premise not bound: %q", export, transcript.ParameterPremiseRefusal)
 			continue
 		}
+		if !slices.Contains(markerKinds(transcript.UncensusedInvokingForms), typefacts.UncensusedCoercion) {
+			t.Errorf("%s: no coercion recorded over operands only a declared type describes", export)
+		}
 		for _, form := range transcript.UncensusedInvokingForms {
-			if form.Kind == typefacts.UncensusedCoercion {
-				t.Errorf("%s: coercion still recorded under the declared signature: %#v", export, form)
+			if form.Kind == typefacts.UncensusedCoercion && form.CoercionSubjectRoot == typefacts.SubjectRootParameter {
+				t.Errorf("%s: coercion rooted at the caller's parameter: %#v", export, form)
 			}
 		}
 	}
@@ -744,8 +773,15 @@ func TestOptionalImportedHelperPremisePreservesEveryConstituentIdentity(t *testi
 		t.Fatalf("optional imported type has no complete spelling: %+v", recorded[0])
 	}
 	helper := premiseLocalTranscript(t, analyzer, dir, "viaOptionalAxisHelper", "optionalLength", recorded)
-	if len(helper.ParameterPremises) != 1 || helper.ParameterPremises[0] != recorded[0] || slices.Contains(markerKinds(helper.UncensusedInvokingForms), typefacts.UncensusedCoercion) {
+	if len(helper.ParameterPremises) != 1 || helper.ParameterPremises[0] != recorded[0] {
 		t.Fatalf("optional premise failed: %+v; refusal %q; forms %+v", helper.ParameterPremises, helper.ParameterPremiseRefusal, helper.UncensusedInvokingForms)
+	}
+	// The member reads are typed by the premise, not proved (the 2026-09-28
+	// amendment to ADR 0149): the coercion stands, rooted at the parameter.
+	for _, form := range helper.UncensusedInvokingForms {
+		if form.Kind == typefacts.UncensusedCoercion && form.CoercionSubjectRoot != typefacts.SubjectRootParameter {
+			t.Fatalf("optionalLength coercion is not rooted at the premised parameter: %+v", form)
+		}
 	}
 	for _, spelling := range []string{
 		strings.ReplaceAll(recorded[0].Spelling, "undefined", "null"),
@@ -776,22 +812,25 @@ func TestAHelperPremiseIsSpelledAsAnImportTypeWhenItsNameIsForeign(t *testing.T)
 		t.Fatalf("recorded spelling = %q, want an import type naming Axis", recorded[0].Spelling)
 	}
 
-	// Demanded back, the helper binds the premise through that spelling and
-	// its coercion clears.
+	// Demanded back, the helper binds the premise through that spelling. Its
+	// coercion stands (the 2026-09-28 amendment to ADR 0149): `axis.max` is a
+	// member read the premise types and nothing proves, so the form is
+	// recorded, rooted at the premised parameter.
 	helper := premiseLocalTranscript(t, analyzer, dir, "viaAxisHelper", "lengthOf", recorded)
+	// The two reads of `axis` remain beside it, and remain rooted at the
+	// parameter: the premise types them, it does not turn a declaration file
+	// into runtime bytes, and ADR 0034 is what dispositions them.
+	if kinds := markerKinds(helper.UncensusedInvokingForms); len(kinds) != 3 {
+		t.Fatalf("lengthOf forms = %v, want the coercion and the two parameter-rooted reads", kinds)
+	}
 	for _, form := range helper.UncensusedInvokingForms {
 		if form.Kind == typefacts.UncensusedCoercion {
-			t.Fatalf("lengthOf still coerces under the caller's argument type (refusal %q): %#v",
-				helper.ParameterPremiseRefusal, form)
+			if form.CoercionSubjectRoot != typefacts.SubjectRootParameter ||
+				!slices.Equal(form.CoercionSubjectParameters, []int{0}) {
+				t.Fatalf("lengthOf coercion %#v is not rooted at the premised parameter", form)
+			}
+			continue
 		}
-	}
-	// The two reads of `axis` remain, and remain rooted at the parameter: the
-	// premise types them, it does not turn a declaration file into runtime
-	// bytes, and ADR 0034 is what dispositions them.
-	if kinds := markerKinds(helper.UncensusedInvokingForms); len(kinds) != 2 {
-		t.Fatalf("lengthOf forms = %v, want the two parameter-rooted reads", kinds)
-	}
-	for _, form := range helper.UncensusedInvokingForms {
 		if form.SubjectParameter == nil || *form.SubjectParameter != 0 {
 			t.Fatalf("lengthOf form %#v is not rooted at the premised parameter", form)
 		}
@@ -982,8 +1021,11 @@ export declare function restOnlyInDeclaration(a: number, ...b: number[]): number
 	}{
 		// The control that proves the premise path is live here at all.
 		{"fixed", []string{"number", "number"}, "", nil},
-		{"rest", []string{"number[]"}, "", nil},
-		{"restLeading", []string{"number", "number[]"}, "", nil},
+		// The premise binds the rest parameter; the loop binding over it is
+		// typed by the premise and proved by nothing, so each coercion of it
+		// stands (the 2026-09-28 amendment to ADR 0149).
+		{"rest", []string{"number[]"}, "", []typefacts.UncensusedInvokingFormKind{typefacts.UncensusedCoercion}},
+		{"restLeading", []string{"number", "number[]"}, "", []typefacts.UncensusedInvokingFormKind{typefacts.UncensusedCoercion}},
 		{"restOnlyInImplementation", nil, "implementation has a rest parameter",
 			[]typefacts.UncensusedInvokingFormKind{typefacts.UncensusedCoercion}},
 		{"restOnlyInDeclaration", nil, "implementation has a rest parameter",

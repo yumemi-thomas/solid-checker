@@ -1,6 +1,7 @@
 # ADR 0149: A built-in is named by identity, not by a binding's type
 
-- Status: accepted and implemented (2026-09-28); written with the implementation
+- Status: accepted and implemented (2026-09-28); written with the implementation;
+  amended 2026-09-28 (§ Amendment: a coercion operand is proved, not typed)
 - Date: 2026-09-28
 - Owners: the Type Facts producer's call census
   (`ImplementationCall::standard_library_identity`,
@@ -143,10 +144,91 @@ A helper that returns no value completes with `undefined`, which is one.
   sound to refuse; each would need its own evidence to return.
 - A coercion helper at census depth 1 or more that returns its parameter: the
   argument's premise is only its caller's, and the chain is not followed.
-- **Still trusted, the same class of hole on the producer side:** the
-  coercion *form* census omits a coercion whose operand is typed non-object
-  (`coercionFormLocked`), so `let v = 0; … v = { valueOf: run }; return v - 1`
-  records no form for the census to refuse. Closing it records a coercion for
-  every member read and binding typed a primitive, which the census would then
-  refuse unless it proved the operand; it is recorded here for the owner, not
-  changed.
+- ~~**Still trusted, the same class of hole on the producer side:** the
+  coercion *form* census omits a coercion whose operand is typed non-object.~~
+  Closed by the amendment below.
+
+## Amendment 2026-09-28: a coercion operand is proved, not typed
+
+**The hole.** The producer's forms census left a coercion unrecorded whenever
+every operand's *type* was non-object (`coercionFormLocked`), and the same test
+decided which operands a coercion premise and a coercion subject root skipped.
+In a JavaScript file that type is a binding's declaration:
+
+```js
+export function check(run) {
+  let v = 0;
+  v = { valueOf: run };
+  return v - 1; // `v` is typed `number`; `-` calls `run`
+}
+```
+
+recorded no form, so every census that reads forms -- `creates`, `reads`,
+`callbacks`, the described-callable walk -- saw nothing to refuse. The owner
+decided on 2026-09-28 to close it and accept the precision loss on member-read
+operands.
+
+**The rule.** `operandProvedPrimitiveLocked` replaces the type test at all three
+places. An operand is left out only when it is a primitive by one of:
+
+- **grammar** (`primitiveBySyntaxLocked`), which needs no type. It now also
+  reaches a `let` or `var` declared once with a plain name whose initializer
+  is absent or a primitive by grammar and every write in the file is one too:
+  a plain `=` of a primitive by grammar, a compound arithmetic, bitwise or
+  shift assignment, a logical assignment of a primitive by grammar, or `++` /
+  `--` (`let r = 0; for (…) r += n`). A destructuring or `for…in`/`for…of`
+  write makes it none;
+- **a built-in's declared primitive result, by identity** -- a call ADR 0149
+  already names (`standardLibraryIdentityLocked`) whose uninstantiated
+  signature declares a primitive (`Date.now()`, `Math.min(a, b)`,
+  `Math.random().toString(36)`), with a non-object type;
+- **an own parameter on a premised twin** -- a plain parameter of the
+  implementation being classified (never a nested callable's), with a default
+  that is a primitive by grammar if it has one, written only with primitives,
+  whose type is non-object on ADR 0038's declared-signature twin. On the
+  original program a JavaScript parameter is typed by its default or a JSDoc
+  that no caller is held to (`times = 1` is `number` whatever is passed), so it
+  proves nothing there; the premise pass, which a recorded coercion triggers,
+  is what clears it;
+- **TypeScript source**, with a non-object type, where the checker holds every
+  write to the declared type (ADR 0113's amendment, with the same `any`-write
+  trust stated there);
+- **a never-written `const`** whose initializer is proved by one of these.
+
+Anything else -- a member read, an element of the caller's array, a
+destructured element, a nested callable's parameter, the result of calling the
+caller's callback, any other call -- is recorded, and the census dispositions
+it by the premises it already has (ADR 0045's helper premise, ADR 0092's
+parameter-rooted coercion) or refuses it by name. No wire field changes, so the
+handshake number does not move; producer and client ship as a pair by build id.
+
+**What moved.**
+
+- Producer: `TestACoercionOperandMustBeProvedPrimitive` (14 cases: the
+  reassigned `let` and a member read are recorded; literals, a const literal,
+  a primitive `let`, a template, `Date.now()`, `Math.min`, a const over a
+  built-in's result stay clean; a shadowed `Math`, an untyped, a JSDoc-typed
+  and a default-typed parameter on the original program are recorded;
+  TypeScript source stays clean). The declared-signature tests now expect the
+  coercions over member reads (`span`, `lengthOf`, `optionalLength`), a
+  returned arrow's parameter (`scale`, `mirrorAlias`), destructured elements
+  (`aliasTuple`) and rest-loop elements (`rest`, `restLeading`) to stand under
+  the premise; `fixed`'s `let r = 0; r += a` clears.
+- Census tracers: `returnedCallbackCoercion` (`p * step`, a returned arrow's
+  parameter), `callAndAdd` (`f() + n`), `isPointInPolygon` and the
+  `optional-imported-premise` helper (member reads) now refuse on the coercion;
+  ADR 0152's `changed` loses its described callable (the literal's `--times`
+  coerces a parameter its own unpremised transcript types only by `= 1`);
+  `makeCounter` (`let count = 0; … count += 1; return count`) now certifies as
+  a plain-returning described callable. The fixtures' own comments predate the
+  amendment and are left as they are.
+- Contract corpus (114 fixtures) and coverage (138 projects): nothing moves.
+- `make contract-coverage-census`, host-free, against a run of the same
+  corpus at e4b404f8 (which equals the pin): degenerate sites 112 -> 123 and
+  "every import" 258 -> 279, 21 demanded sites in seven exports, all over
+  member-read or rest-element operands the premise only types:
+  `@kobalte/utils`' `isPointInPolygon` (6), and `@solid-primitives/utils`'
+  `./immutable` `filter`, `substract`, `multiply`, `divide`, `power` (3 each:
+  `for (const n of b) a -= n`, `list.length - newList.length`). Nothing else
+  moves; probe-recipe addressing is unchanged. The pin is rewritten for these
+  intended moves.

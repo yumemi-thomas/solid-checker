@@ -1899,7 +1899,9 @@ pub struct ReturnSite {
     /// a non-object literal, an untagged template, a unary, arithmetic,
     /// relational or equality operator, and conditionals and logical operators
     /// of them; since handshake protocol 67, also a never-written `const` with
-    /// a plain name whose initializer is one, and the intrinsic `undefined`.
+    /// a plain name whose initializer is one, and the intrinsic `undefined`;
+    /// since protocol 68 (the 2026-09-28 amendment to ADR 0149), a `let` or
+    /// `var` whose initializer and every write are.
     /// `false` is no claim. A checker type is not this proof in a JavaScript
     /// file, where an unchecked write does not widen a declaration's type.
     #[serde(default, skip_serializing_if = "is_false")]

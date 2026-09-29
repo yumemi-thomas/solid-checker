@@ -296,6 +296,11 @@ func (p *project) uncensusedInvokingFormCensusLocked(
 ) []typefacts.UncensusedInvokingForm {
 	var forms []typefacts.UncensusedInvokingForm
 	roots := p.parameterSubjectRootsLocked(implementation)
+	// The implementation whose own parameters operandProvedPrimitiveLocked
+	// may admit, for the duration of this walk only.
+	outer := p.formImplementation
+	p.formImplementation = implementation
+	defer func() { p.formImplementation = outer }()
 	p.walkImplementationBodyLocked(
 		implementation,
 		func(node *ast.Node, enclosing *ast.Node, reach typefacts.Reachability) {
@@ -2458,8 +2463,7 @@ func (p *project) coercionSubjectRootLocked(
 		// common shape, and refusing on the literal would have reported this
 		// whole family as `not-a-reference` and hidden its real size. Same
 		// predicate the classifier itself uses.
-		if node := identityPreservingUnwrap(operand); node != nil &&
-			!p.mayBeObjectTypedLocked(p.formChecker().GetTypeAtLocation(node)) {
+		if p.operandProvedPrimitiveLocked(operand) {
 			continue
 		}
 		root := p.subjectRootLocked(operand, roots)
@@ -2598,8 +2602,8 @@ func (p *project) operandIsPrimitiveOrRuntimeCallLocked(
 		return false
 	}
 	// The classifier's own test, asked of this operand alone: a value that is
-	// already a primitive has nothing for a coercion to reach.
-	if !p.mayBeObjectTypedLocked(p.formChecker().GetTypeAtLocation(node)) {
+	// proved a primitive has nothing for a coercion to reach.
+	if p.operandProvedPrimitiveLocked(node) {
 		return true
 	}
 	switch {
@@ -2732,18 +2736,21 @@ func (p *project) primitiveCompletionLocked(implementation *ast.Node) bool {
 	return !p.mayBeObjectTypedLocked(returned)
 }
 
-// coercionFormLocked records a coercion unless the operand is provably not an
-// object. `any`, `unknown`, a type parameter, and every other type the
+// coercionFormLocked records a coercion unless the operand is proved a
+// primitive (operandProvedPrimitiveLocked; the 2026-09-28 amendment to ADR
+// 0149). `any`, `unknown`, a type parameter, and every other type the
 // producer cannot decompose are *not* provably non-object, so they are
 // recorded: this is the fail-closed direction, and "the checker could not tell"
-// must never read as "no coercion happens here".
+// must never read as "no coercion happens here". Nor is a non-object *type*
+// enough on its own: in a JavaScript file a binding is typed by its
+// declaration, whatever an unchecked write stored since.
 func (p *project) coercionFormLocked(
 	operand *ast.Node,
 ) (typefacts.UncensusedInvokingFormKind, bool) {
 	if operand == nil {
 		return "", false
 	}
-	if !p.mayBeObjectTypedLocked(p.formChecker().GetTypeAtLocation(operand)) {
+	if p.operandProvedPrimitiveLocked(operand) {
 		return "", false
 	}
 	return typefacts.UncensusedCoercion, true

@@ -25,6 +25,12 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // protocol-69 consumer decodes with `deny_unknown_fields` and would reject the
 // new field, so the number moves.
 //
+// The 2026-09-28 amendment to ADR 0149 narrows, with no field change and so no
+// new number, what the producer leaves unrecorded: a coercion is omitted only
+// when every operand is proved a primitive, never by a JavaScript type alone,
+// and ReturnSite.PrimitiveSyntax reaches a `let` or `var` every value of which
+// is one.
+//
 // Protocol 68 (ADR 0149):
 // **a default-library call states whether it invokes its declaration by
 // identity.** ImplementationCall.StandardLibraryIdentity holds for a callee

@@ -61,7 +61,7 @@ func (p *project) standardLibraryIdentityLocked(call *ast.Node) bool {
 		if node.QuestionDotToken() != nil {
 			return false
 		}
-		member := p.canonicalSymbol(p.checker.GetSymbolAtLocation(node))
+		member := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(node))
 		if member == nil || !p.isDefaultLibraryMemberLocked(member, member.Name, nil) {
 			return false
 		}
@@ -78,7 +78,7 @@ func (p *project) standardLibraryIdentityLocked(call *ast.Node) bool {
 		return false
 	}
 	if ast.IsIdentifier(node) {
-		root := p.canonicalSymbol(p.checker.GetSymbolAtLocation(node))
+		root := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(node))
 		if root == nil {
 			return false
 		}
@@ -97,7 +97,7 @@ func (p *project) standardLibraryIdentityLocked(call *ast.Node) bool {
 // default-library declarations alone and the file neither writes, deletes nor
 // lets escape it.
 func (p *project) stableLibraryGlobalLocked(file *ast.SourceFile, identifier *ast.Node) bool {
-	symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(identifier))
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(identifier))
 	if symbol == nil || !p.isDefaultLibraryMemberLocked(symbol, symbol.Name, nil) {
 		return false
 	}
@@ -123,7 +123,7 @@ func (p *project) unstableLibrarySymbolsLocked(file *ast.SourceFile) map[*ast.Sy
 			(node.Parent != nil && nodeKindName(node.Parent) == "DeleteExpression")
 	}
 	library := func(node *ast.Node) *ast.Symbol {
-		symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(node))
+		symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(node))
 		if symbol == nil || !p.isDefaultLibraryMemberLocked(symbol, symbol.Name, nil) {
 			return nil
 		}
@@ -261,7 +261,7 @@ func (p *project) freshBindingUncachedLocked(file *ast.SourceFile, symbol *ast.S
 			return
 		}
 		if ast.IsIdentifier(node) && node != name &&
-			p.canonicalSymbol(p.checker.GetSymbolAtLocation(node)) == symbol {
+			p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(node)) == symbol {
 			parent := node.Parent
 			switch {
 			case parent == nil:
@@ -292,16 +292,21 @@ func (p *project) freshBindingUncachedLocked(file *ast.SourceFile, symbol *ast.S
 	return contained
 }
 
-// declaredFreshResultLocked answers whether the signature a call resolves to
-// declares, before any instantiation, a primitive or an array result:
-// `Date.now()`'s `number` and `Array.from`'s `T[]` do, `[x].at(0)`'s `T |
-// undefined` does not, since its instantiated `number` would be only `x`'s
-// declared type.
-func (p *project) declaredFreshResultLocked(call *ast.Node) bool {
-	signature := checker.Checker_getResolvedSignature(p.checker, call, nil, checker.CheckModeNormal)
+// declaredPrimitiveResultLocked is declaredFreshResultLocked's primitive half
+// alone: an array is fresh, but coercing one runs `Array.prototype.join` over
+// its elements, which is not a primitive's nothing.
+func (p *project) declaredPrimitiveResultLocked(call *ast.Node) bool {
+	returned, generic := p.declaredResultLocked(call)
+	return returned != nil && !generic && !p.mayBeObjectTypedLocked(returned)
+}
+
+// declaredResultLocked answers the uninstantiated result type of the signature
+// a call resolves to, and whether that signature declares type parameters.
+func (p *project) declaredResultLocked(call *ast.Node) (*checker.Type, bool) {
+	signature := checker.Checker_getResolvedSignature(p.formChecker(), call, nil, checker.CheckModeNormal)
 	for range maxStandardLibraryReceiverDepth {
 		if signature == nil {
-			return false
+			return nil, false
 		}
 		target := signature.Target()
 		if target == nil || target == signature {
@@ -310,14 +315,130 @@ func (p *project) declaredFreshResultLocked(call *ast.Node) bool {
 		signature = target
 	}
 	if signature == nil {
+		return nil, false
+	}
+	return checker.Checker_getReturnTypeOfSignature(p.formChecker(), signature), len(signature.TypeParameters()) != 0
+}
+
+// operandProvedPrimitiveLocked answers whether a coercion's operand is a
+// primitive by proof rather than by its type alone (the 2026-09-28 amendment
+// to ADR 0149): coercing it then reaches no `Symbol.toPrimitive`, `valueOf` or
+// `toString` of anyone's. The type is not that proof in a JavaScript file:
+// `let v = 0; … v = { valueOf: run }; v - 1` types `v` as `number` and runs
+// `run`. One of these must hold:
+//
+//   - the operand is a primitive by grammar (primitiveBySyntaxLocked), which
+//     needs no type at all;
+//   - its type is non-object and it is a call of a built-in by identity
+//     (standardLibraryIdentityLocked) whose uninstantiated signature declares a
+//     primitive result (`Math.min(a, b)`, `Date.now()`);
+//   - its type is non-object and it is a plain parameter of the implementation
+//     being classified, on a premised twin, where its type is the declared
+//     signature's (ADR 0038) -- never on the original program, where a
+//     JavaScript parameter is typed by its default (`times = 1` is `number`
+//     whatever the caller passes) or by a JSDoc nothing checks a caller
+//     against;
+//   - it is a never-written `const` whose initializer is proved a primitive by
+//     one of these (`const rand = Math.random().toString(36)`);
+//   - its type is non-object and it sits in TypeScript source, where the
+//     checker holds every write to a binding to its declared type (ADR 0113's
+//     amendment, with the same `any`-write trust stated there).
+//
+// A member read, a binding, and any other call are not: their type is only
+// their declaration's.
+func (p *project) operandProvedPrimitiveLocked(operand *ast.Node) bool {
+	return p.operandProvedPrimitiveAtLocked(operand, 0)
+}
+
+func (p *project) operandProvedPrimitiveAtLocked(operand *ast.Node, depth int) bool {
+	node := identityPreservingUnwrap(operand)
+	if node == nil || depth > maxStandardLibraryReceiverDepth {
 		return false
 	}
-	returned := checker.Checker_getReturnTypeOfSignature(p.checker, signature)
+	if p.primitiveBySyntaxLocked(node, 0) {
+		return true
+	}
+	if p.mayBeObjectTypedLocked(p.formChecker().GetTypeAtLocation(node)) {
+		return false
+	}
+	if isTypeScriptSourceFile(ast.GetSourceFileOfNode(node)) {
+		return true
+	}
+	if ast.IsCallExpression(node) {
+		return node.QuestionDotToken() == nil && p.standardLibraryIdentityLocked(node) &&
+			p.declaredPrimitiveResultLocked(node)
+	}
+	if p.unwrittenOwnParameterLocked(node) {
+		return true
+	}
+	initializer := p.unwrittenConstInitializerLocked(node)
+	return initializer != nil && p.operandProvedPrimitiveAtLocked(initializer, depth+1)
+}
+
+// unwrittenConstInitializerLocked answers the initializer of the `const` an
+// identifier names -- declared once, in the reading file, with a plain name,
+// and written nowhere -- or nil.
+func (p *project) unwrittenConstInitializerLocked(node *ast.Node) *ast.Node {
+	if node == nil || !ast.IsIdentifier(node) {
+		return nil
+	}
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(node))
+	if symbol == nil || len(symbol.Declarations) != 1 {
+		return nil
+	}
+	declaration := symbol.Declarations[0]
+	if declaration == nil || ast.GetSourceFileOfNode(declaration) != ast.GetSourceFileOfNode(node) ||
+		!ast.IsVariableDeclaration(declaration) || !ast.IsVarConst(declaration) ||
+		declaration.Name() == nil || !ast.IsIdentifier(declaration.Name()) ||
+		p.symbolIsAssignedLocked(symbol, declaration) {
+		return nil
+	}
+	return declaration.Initializer()
+}
+
+// unwrittenOwnParameterLocked answers whether an identifier names, on a
+// premised twin, a plain parameter of the implementation the forms census is
+// classifying -- not a nested callable's, whose value its invoker chooses --
+// declared once, whose
+// default (if any) is a primitive by grammar, and which the file writes only
+// with primitives (primitiveWriteLocked: `times += 1`, `--times`), so it holds
+// the caller's argument or a primitive computed from one.
+func (p *project) unwrittenOwnParameterLocked(node *ast.Node) bool {
+	if node == nil || !ast.IsIdentifier(node) || p.formImplementation == nil ||
+		p.formTwin == nil || ast.GetSourceFileOfNode(node) != p.formTwin.file {
+		return false
+	}
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(node))
+	if symbol == nil || len(symbol.Declarations) != 1 {
+		return false
+	}
+	declaration := symbol.Declarations[0]
+	if declaration == nil || !ast.IsParameterDeclaration(declaration) || declaration.Parent != p.formImplementation ||
+		declaration.Name() == nil || !ast.IsIdentifier(declaration.Name()) {
+		return false
+	}
+	if initializer := declaration.Initializer(); initializer != nil && !p.primitiveBySyntaxLocked(initializer, 0) {
+		return false
+	}
+	if !p.symbolIsAssignedLocked(symbol, declaration) {
+		return true
+	}
+	file := ast.GetSourceFileOfNode(declaration)
+	return file != nil && p.everyWritePrimitiveLocked(file, symbol, declaration.Name(), 0)
+}
+
+// declaredFreshResultLocked answers whether the signature a call resolves to
+// declares, before any instantiation, a primitive or an array result:
+// `Date.now()`'s `number` and `Array.from`'s `T[]` do, `[x].at(0)`'s `T |
+// undefined` does not, since its instantiated `number` would be only `x`'s
+// declared type.
+func (p *project) declaredFreshResultLocked(call *ast.Node) bool {
+	returned, generic := p.declaredResultLocked(call)
 	if returned == nil {
 		return false
 	}
-	if checker.Checker_isArrayOrTupleType(p.checker, returned) && !checker.IsTupleType(returned) {
+	if checker.Checker_isArrayOrTupleType(p.formChecker(), returned) && !checker.IsTupleType(returned) {
 		return true
 	}
-	return len(signature.TypeParameters()) == 0 && !p.mayBeObjectTypedLocked(returned)
+	return !generic && !p.mayBeObjectTypedLocked(returned)
 }

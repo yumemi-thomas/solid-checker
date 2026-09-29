@@ -19114,6 +19114,11 @@ export const value = phantom;
             ("makeNoop", vec![described(Vec::new())]),
             ("makeTicker", vec![described(vec![ValueShape::Plain])]),
             ("choose", vec![described(vec![ValueShape::Plain])]),
+            // The 2026-09-28 amendment to ADR 0149: `count` is a `let`
+            // initialized `0` and written only by `+= 1`, so every value it
+            // holds is a primitive by grammar and `return count` is plain.
+            // The fixture's own comment predates the amendment.
+            ("makeCounter", vec![described(vec![ValueShape::Plain])]),
         ] {
             assert_eq!(
                 closed_containers_in(main, export),
@@ -19129,7 +19134,6 @@ export const value = phantom;
             ("returnsObject", "by its syntax alone"),
             ("readsCapturedMember", "uncensused invoking form"),
             ("makeSilent", "which the claim does not enumerate"),
-            ("makeCounter", "by its syntax alone"),
         ] {
             assert!(
                 finalized.withheld_operations().iter().any(|record| {
@@ -19339,7 +19343,6 @@ export const value = phantom;
                 "pipe",
                 described(vec![ValueShape::InvocationResult { parameter: 1 }], &[0, 1]),
             ),
-            ("changed", described(vec![ValueShape::Plain], &[0])),
             ("required", described(Vec::new(), &[0])),
             // The export stores its argument elsewhere too, which is the
             // `callbacks` domain's question, not this one's.
@@ -19359,6 +19362,12 @@ export const value = phantom;
             ("twice", "more than once"),
             ("deferred", "a parameter of a nested callable"),
             ("defaulted", "a parameter of a nested callable"),
+            // The 2026-09-28 amendment to ADR 0149: the literal's `--times`
+            // coerces the export's captured parameter, which the literal's own
+            // unpremised transcript types only by its default `= 1`, so the
+            // coercion is recorded and refused. The fixture's comment predates
+            // the amendment.
+            ("changed", "uncensused invoking form: coercion"),
         ] {
             assert!(
                 finalized.withheld_operations().iter().any(|record| {
@@ -20043,7 +20052,6 @@ export const value = phantom;
             // `coerce` item is withdrawn from a closure that stays closed, and
             // the census confirms what is left.
             ("plainArithmetic", vec![]),
-            ("callAndAdd", vec![(Call, 0)]),
             ("isNonNullable", vec![]),
         ] {
             assert_eq!(
@@ -20075,18 +20083,25 @@ export const value = phantom;
                  2 call(s) into the parameter-rooted family (parameter-rooted-accessor 1, \
                  parameter-rooted-coercion 1): the parameter-rooted-coercion member (1)",
             ),
+            // The 2026-09-28 amendment to ADR 0149: `f()`'s result is typed
+            // `number` by the declared signature and proved by nothing, so
+            // its coercion is recorded, rooted at the caller's parameter, and
+            // is an invocation of caller-supplied code the call item alone
+            // does not describe.
+            (
+                "callAndAdd",
+                "the parameter-rooted-coercion member (1) is an invocation of caller-supplied code",
+            ),
             // `polygon.length` resolves to the engine's `Array.length` under
             // the premise, so the item finds no form; `Polygon` admits an
             // object, so it does not narrow and the domain opens.
             ("destructureAndMeasure", no_use),
-            // Its `polygon[i]` reads are sites, but `[x, y] = point` and
-            // `[xi, yi] = polygon[i]` record no form under the premise: the
-            // census refuses the enumeration whole rather than confirm it.
-            (
-                "isPointInPolygon",
-                "declared-signature premise for parameter(s) 0, 1 whose declared type admits \
-                 an object",
-            ),
+            // Its coercions of `x`, `y`, `xi` and `yi` -- destructured from the
+            // caller's tuples, typed by the premise and proved by nothing --
+            // are recorded since the 2026-09-28 amendment to ADR 0149, and the
+            // census refuses the first of them before it reaches the
+            // enumeration.
+            ("isPointInPolygon", "uncensused invoking form: coercion"),
         ] {
             assert!(
                 finalized
@@ -22414,7 +22429,7 @@ export const value = phantom;
     /// `omittedBoxScale` closes through an explicit `never` premise in the
     /// first leaf call, while the explicit `unknown` and `any` controls keep
     /// their leaf coercions and are refused.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 51] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 50] = [
         "chainCallbacks",
         "coerceBoundHelperResult",
         "coerceConditionalHelperResult",
@@ -22451,7 +22466,6 @@ export const value = phantom;
         "plain",
         "readBoundCallerResult",
         "readCallerResult",
-        "returnedCallbackCoercion",
         "setterOnParameter",
         "spreadArgs",
         "spreadParameter",
@@ -22467,7 +22481,7 @@ export const value = phantom;
         "writtenJoin",
         "writtenParameterOwnResult",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 60] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 61] = [
         ("accessorTableRead", "census"),
         ("arrayLikeIndexRead", "census"),
         ("arrayRestRead", "census"),
@@ -22509,6 +22523,10 @@ export const value = phantom;
         ("readLocalResult", "census"),
         ("reassignedHelper", "census"),
         ("reflectApply", "census"),
+        // The 2026-09-28 amendment to ADR 0149: `p * step`'s `p` is the
+        // returned arrow's own parameter, typed by the declared return type
+        // and proved by nothing, so the coercion is censused and refused.
+        ("returnedCallbackCoercion", "census"),
         ("setterOnModuleValue", "census"),
         ("spreadWrittenParameter", "census"),
         ("stdlibRefInvoker", "census"),
@@ -24946,7 +24964,7 @@ export const value = phantom;
     }
 
     #[test]
-    fn optional_imported_union_premise_closes_only_primitive_helper_coercion() {
+    fn optional_imported_union_premise_leaves_a_member_read_coercion_open() {
         let Some(pin) = pinned_producer_for_test() else {
             return;
         };
@@ -24985,21 +25003,26 @@ export const value = phantom;
             let finalized = graph
                 .certify_value_only(&pin, &issuer, 1, Some(&probes))
                 .unwrap();
-            assert_eq!(
-                creates_is_closed_in(finalized.root().canonical_main(), "value"),
-                types == "index.d.ts",
+            // The 2026-09-28 amendment to ADR 0149: the helper's `axis.max -
+            // axis.min` reads members the premise types and nothing proves, so
+            // the coercion stands under either declaration and `creates` is
+            // withheld on it. The premise's own binding of the optional union
+            // is pinned by the producer's
+            // `TestOptionalImportedHelperPremisePreservesEveryConstituentIdentity`.
+            assert!(
+                !creates_is_closed_in(finalized.root().canonical_main(), "value"),
                 "{types}: {:?}",
                 finalized.root().withheld_closures()
             );
-            if types == "unknown.d.ts" {
-                assert!(
-                    finalized
-                        .root()
-                        .withheld_closures()
-                        .iter()
-                        .any(|closure| closure.reason.contains("coercion"))
-                );
-            }
+            assert!(
+                finalized
+                    .root()
+                    .withheld_closures()
+                    .iter()
+                    .any(|closure| closure.reason.contains("coercion")),
+                "{types}: {:?}",
+                finalized.root().withheld_closures()
+            );
         }
     }
 

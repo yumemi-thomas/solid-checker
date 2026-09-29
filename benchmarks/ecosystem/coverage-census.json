@@ -11,16 +11,16 @@
     "sites": 1958,
     "ownerRequirement": 32,
     "measuredPackages": 16,
-    "operations": 696,
-    "closed-empty": 344,
-    "degenerate": 112,
+    "operations": 699,
+    "closed-empty": 330,
+    "degenerate": 123,
     "absent": 722,
     "unmeasured": 84,
     "consumer": {
       "value": 158,
       "clean": 536,
-      "some-uses": 200,
-      "every-import": 258
+      "some-uses": 179,
+      "every-import": 279
     }
   },
   "packages": [
@@ -29,31 +29,31 @@
       "sites": 942,
       "measured": true,
       "operations": 136,
-      "closed-empty": 78,
-      "degenerate": 6,
+      "closed-empty": 76,
+      "degenerate": 8,
       "absent": 722,
       "ownerRequirement": 0,
       "consumer": {
         "value": 28,
         "clean": 128,
-        "some-uses": 54,
-        "every-import": 10
+        "some-uses": 48,
+        "every-import": 16
       }
     },
     {
       "package": "@solid-primitives/utils",
       "sites": 820,
       "measured": true,
-      "operations": 524,
-      "closed-empty": 230,
-      "degenerate": 66,
+      "operations": 527,
+      "closed-empty": 218,
+      "degenerate": 75,
       "absent": 0,
       "ownerRequirement": 20,
       "consumer": {
         "value": 112,
         "clean": 408,
-        "some-uses": 146,
-        "every-import": 154
+        "some-uses": 131,
+        "every-import": 169
       }
     },
     {
@@ -409,8 +409,8 @@
         "package": "@solid-primitives/utils",
         "exports": 98,
         "value": 7,
-        "clean": 12,
-        "share": 0.1939
+        "clean": 13,
+        "share": 0.2041
       },
       {
         "package": "@solidjs/meta",

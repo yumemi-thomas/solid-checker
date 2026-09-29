@@ -2533,9 +2533,10 @@ func TestCoercionSubjectRootNamesWhatEveryOperandAgreedOn(t *testing.T) {
 			why:    "operands may agree on a derivation that is not the caller's; the diagnostic states what they agreed on and grants nothing",
 		},
 		{
-			export:  "parameterAndUninitialized",
-			refusal: typefacts.SubjectRefusalModuleUninitialized,
-			why:     "the first operand that roots at nothing decides the answer, and its own leg is the informative one",
+			export: "parameterAndUninitialized",
+			root:   typefacts.SubjectRootParameter,
+			slots:  []int{0},
+			why:    "a module `let` nothing writes and nothing initializes holds `undefined` for its whole life, a primitive by grammar (the 2026-09-28 amendment to ADR 0149), so it is skipped like a literal",
 		},
 		{
 			export:  "writtenParameterCoercion",

@@ -31,7 +31,12 @@ func TestReturnSitesStatePrimitiveSyntax(t *testing.T) {
 		{"conditionalOfLiterals", `export const check = (c: any) => c ? 1 : "one";`, true},
 		{"logicalOfLiterals", `export const check = (c: any) => c && 1;`, false},
 		{"logicalBothLiterals", `export const check = () => 0 || "x";`, true},
-		{"identifier", `export function check() { let n = 0; n = 2; return n; }`, false},
+		// The 2026-09-28 amendment to ADR 0149: a `let` every value of which
+		// is a primitive by grammar is one; one written an object is not.
+		{"primitiveLet", `export function check() { let n = 0; n = 2; return n; }`, true},
+		{"accumulatorLet", `export function check(a: any) { let r = 0; for (const x of a) r += x; return r; }`, true},
+		{"objectWrittenLet", `export function check() { let n = 0; n = ({} as any); return n; }`, false},
+		{"loopHeadWrittenLet", `export function check(a: any) { let n = 0; for (n of a); return n; }`, false},
 		{"member", `export const check = (o: any) => o.n;`, false},
 		{"call", `export const check = () => Math.random();`, false},
 		{"object", `export const check = () => ({});`, false},

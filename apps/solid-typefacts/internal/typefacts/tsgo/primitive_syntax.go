@@ -127,15 +127,17 @@ func (p *project) primitiveBySyntaxLocked(node *ast.Node, depth int) bool {
 }
 
 // primitiveIdentifierLocked is primitiveBySyntaxLocked's identifier arm: the
-// intrinsic `undefined`, or a `const` whose initializer is a primitive by
-// grammar. A `let`, a `var`, a parameter, a destructured or imported binding,
-// a function or class, and a binding declared twice are all false: each can
-// hold a value the grammar of its declaration does not fix.
+// intrinsic `undefined`, a `const` whose initializer is a primitive by
+// grammar, or -- since the 2026-09-28 amendment to ADR 0149 -- a `let` or
+// `var` every one of whose values is: see primitiveMutableBindingLocked. A
+// parameter, a destructured or imported binding, a function or class, and a
+// binding declared twice are all false: each can hold a value the grammar of
+// its declaration does not fix.
 func (p *project) primitiveIdentifierLocked(node *ast.Node, depth int) bool {
 	if p.checker == nil {
 		return false
 	}
-	symbol := p.checker.GetSymbolAtLocation(node)
+	symbol := p.formChecker().GetSymbolAtLocation(node)
 	if symbol == nil || symbol.Flags&ast.SymbolFlagsAlias != 0 {
 		return false
 	}
@@ -148,9 +150,14 @@ func (p *project) primitiveIdentifierLocked(node *ast.Node, depth int) bool {
 	declaration := symbol.Declarations[0]
 	file := ast.GetSourceFileOfNode(node)
 	if declaration == nil || file == nil || ast.GetSourceFileOfNode(declaration) != file ||
-		!ast.IsVariableDeclaration(declaration) || !ast.IsVarConst(declaration) ||
-		declaration.Name() == nil || !ast.IsIdentifier(declaration.Name()) ||
-		p.symbolIsAssignedLocked(symbol, declaration) {
+		!ast.IsVariableDeclaration(declaration) ||
+		declaration.Name() == nil || !ast.IsIdentifier(declaration.Name()) {
+		return false
+	}
+	if !ast.IsVarConst(declaration) {
+		return p.primitiveMutableBindingLocked(file, symbol, declaration, depth)
+	}
+	if p.symbolIsAssignedLocked(symbol, declaration) {
 		return false
 	}
 	initializer := declaration.Initializer()
@@ -158,6 +165,111 @@ func (p *project) primitiveIdentifierLocked(node *ast.Node, depth int) bool {
 		return false
 	}
 	return p.primitiveBySyntaxLocked(initializer, depth+1)
+}
+
+// primitiveMutableBindingLocked answers whether a `let` or `var` holds a
+// primitive whatever runs: its initializer is absent (`undefined`) or a
+// primitive by grammar, and every write the file makes to it is one too -- a
+// plain `=` of a primitive by grammar, a compound arithmetic, bitwise or shift
+// assignment (whose result is always a primitive), a logical assignment of a
+// primitive by grammar (it leaves the binding or stores that value), or `++`
+// and `--`. A destructuring assignment, a `for…in` or `for…of` head, and any
+// write this walk does not recognize make it none (`let r = 0; for (…) r +=
+// n` is one; `let v = 0; v = { valueOf: run }` is not). The depth bounds a
+// chain of such bindings written from one another; a cycle answers false.
+func (p *project) primitiveMutableBindingLocked(
+	file *ast.SourceFile, symbol *ast.Symbol, declaration *ast.Node, depth int,
+) bool {
+	if depth > maxPrimitiveSyntaxDepth {
+		return false
+	}
+	if answer, known := p.primitiveBindings[symbol]; known {
+		return answer
+	}
+	if p.primitiveBindings == nil {
+		p.primitiveBindings = make(map[*ast.Symbol]bool)
+	}
+	// A binding whose primitiveness depends on itself is not proved.
+	p.primitiveBindings[symbol] = false
+	answer := p.primitiveMutableBindingUncachedLocked(file, symbol, declaration, depth)
+	p.primitiveBindings[symbol] = answer
+	return answer
+}
+
+func (p *project) primitiveMutableBindingUncachedLocked(
+	file *ast.SourceFile, symbol *ast.Symbol, declaration *ast.Node, depth int,
+) bool {
+	if initializer := declaration.Initializer(); initializer != nil &&
+		!p.primitiveBySyntaxLocked(initializer, depth+1) {
+		return false
+	}
+	return p.everyWritePrimitiveLocked(file, symbol, declaration.Name(), depth)
+}
+
+// everyWritePrimitiveLocked answers whether every write the file makes to a
+// binding stores a primitive (primitiveWriteLocked); `name` is the
+// declaration's own name, which is not a write.
+func (p *project) everyWritePrimitiveLocked(
+	file *ast.SourceFile, symbol *ast.Symbol, name *ast.Node, depth int,
+) bool {
+	primitive := true
+	var visit func(*ast.Node)
+	visit = func(node *ast.Node) {
+		if node == nil || !primitive || ast.IsPartOfTypeNode(node) {
+			return
+		}
+		if ast.IsIdentifier(node) && node != name && ast.GetAssignmentTarget(node) != nil &&
+			p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(node)) == symbol {
+			primitive = p.primitiveWriteLocked(node, depth)
+			if !primitive {
+				return
+			}
+		}
+		node.ForEachChild(func(child *ast.Node) bool {
+			visit(child)
+			return false
+		})
+	}
+	visit(file.AsNode())
+	return primitive
+}
+
+// primitiveLogicalAssignmentOperators leave the binding as it was or store
+// their right operand.
+var primitiveLogicalAssignmentOperators = map[string]bool{
+	"BarBarEqualsToken":             true,
+	"AmpersandAmpersandEqualsToken": true,
+	"QuestionQuestionEqualsToken":   true,
+}
+
+// primitiveWriteLocked answers whether one write of an identifier stores a
+// primitive: see primitiveMutableBindingLocked.
+func (p *project) primitiveWriteLocked(target *ast.Node, depth int) bool {
+	parent := target.Parent
+	if parent == nil {
+		return false
+	}
+	if ast.IsPrefixUnaryExpression(parent) || nodeKindName(parent) == "PostfixUnaryExpression" {
+		return true
+	}
+	if !ast.IsBinaryExpression(parent) {
+		return false
+	}
+	binary := parent.AsBinaryExpression()
+	if binary == nil || binary.Left != target || binary.OperatorToken == nil {
+		return false
+	}
+	operator := nodeKindName(binary.OperatorToken)
+	switch {
+	case operator == "EqualsToken", primitiveLogicalAssignmentOperators[operator]:
+		return p.primitiveBySyntaxLocked(binary.Right, depth+1)
+	case primitiveBySyntaxOperators[operator] && strings.HasSuffix(operator, "EqualsToken") &&
+		operator != "EqualsEqualsToken" && operator != "ExclamationEqualsToken" &&
+		operator != "EqualsEqualsEqualsToken" && operator != "ExclamationEqualsEqualsToken" &&
+		operator != "LessThanEqualsToken" && operator != "GreaterThanEqualsToken":
+		return true
+	}
+	return false
 }
 
 // defaultLibraryCallLocked names the default-library member a returned call
@@ -189,8 +301,8 @@ func (p *project) defaultLibraryCallLocked(expression *ast.Node) string {
 	if object == nil || !ast.IsIdentifier(object) {
 		return ""
 	}
-	member := p.canonicalSymbol(p.checker.GetSymbolAtLocation(callee))
-	receiver := p.canonicalSymbol(p.checker.GetSymbolAtLocation(object))
+	member := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(callee))
+	receiver := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(object))
 	if member == nil || receiver == nil ||
 		!p.isDefaultLibraryMemberLocked(member, member.Name, nil) ||
 		!p.isDefaultLibraryMemberLocked(receiver, receiver.Name, nil) {

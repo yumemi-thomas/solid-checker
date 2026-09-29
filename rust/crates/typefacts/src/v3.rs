@@ -399,6 +399,12 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // owner (`ImplementationCall::unconditional`). A protocol-70 consumer decodes
 // with `deny_unknown_fields` and would reject the new fields, so the number
 // moves.
+// The 2026-09-28 amendment to ADR 0149 narrows, with no field change and so
+// no new number, what the producer leaves unrecorded: a coercion is omitted
+// only when every operand is proved a primitive, never by a JavaScript type
+// alone, and `ReturnSite::primitive_syntax` reaches a `let` or `var` every
+// value of which is one. The client is unchanged; producer and client still
+// ship as a pair by the build id.
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 71;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,

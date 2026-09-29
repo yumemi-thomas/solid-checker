@@ -27,7 +27,10 @@ func TestReturnSitesStatePlainReturnEvidence(t *testing.T) {
 		{"letReassignedToFunction", "facts.js", `export function check() { let x = 0; x = () => 1; return x; }`, false, "", false, true},
 		{"constLiteral", "facts.js", "const x = 5;\nexport function check() { return x; }", true, "", false, true},
 		{"constOfConst", "facts.js", "const a = 1;\nconst b = a;\nexport function check() { return b; }", true, "", false, true},
-		{"constOfLet", "facts.js", "let a = 1;\nconst b = a;\nexport function check() { return b; }", false, "", false, true},
+		// A `let` every value of which is a primitive by grammar (the
+		// 2026-09-28 amendment to ADR 0149), and one that is not.
+		{"constOfLet", "facts.js", "let a = 1;\nconst b = a;\nexport function check() { return b; }", true, "", false, true},
+		{"constOfObjectWrittenLet", "facts.js", "let a = 1;\na = { valueOf: () => 1 };\nconst b = a;\nexport function check() { return b; }", false, "", false, true},
 		{"constObject", "facts.js", "const o = { n: 1 };\nexport function check() { return o; }", false, "", false, false},
 		{"undefined", "facts.js", `export function check() { return undefined; }`, true, "", false, false},
 		{"shadowedUndefined", "facts.js", `export function check() { const undefined = {}; return undefined; }`, false, "", false, false},
@@ -36,7 +39,7 @@ func TestReturnSitesStatePlainReturnEvidence(t *testing.T) {
 		{"mathWritten", "facts.js", `export function check(a) { Math.min = () => 1; return Math.min(a); }`, false, "", false, true},
 		{"mathAlias", "facts.js", "let M = Math;\nexport function check(a) { return M.min(a); }", false, "", false, true},
 		{"optionalCall", "facts.js", `export function check(a) { return Math.min?.(a); }`, false, "", false, false},
-		{"typeScriptLet", "facts.ts", `export function check(): number { let n = 0; n = 2; return n; }`, false, "", true, true},
+		{"typeScriptLet", "facts.ts", `export function check(n: number): number { let m = n; m = n; return m; }`, false, "", true, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

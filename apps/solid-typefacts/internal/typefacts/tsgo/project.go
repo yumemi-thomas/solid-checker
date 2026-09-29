@@ -89,6 +89,13 @@ type project struct {
 	// freshConsts memoizes freshBindingLocked per symbol, for the same
 	// generation: its reference walk covers the whole file.
 	freshConsts map[*ast.Symbol]bool
+	// primitiveBindings memoizes primitiveMutableBindingLocked per symbol,
+	// for the same generation: its write walk covers the whole file.
+	primitiveBindings map[*ast.Symbol]bool
+	// formImplementation is the implementation uncensusedInvokingFormCensusLocked
+	// is classifying, while it runs: the one whose own parameters a coercion
+	// operand may be proved primitive by (operandProvedPrimitiveLocked).
+	formImplementation *ast.Node
 	// ownLiteralSymbols memoizes ADR 0044's answer per symbol: the variable
 	// declaration a name is bound to when this program initialized it from an
 	// object or array literal, or nil. Keyed by symbol rather than by file
@@ -340,6 +347,7 @@ func (p *project) ReleaseAnalysisState() {
 	p.assignedSymbols = nil
 	p.libraryStability = nil
 	p.freshConsts = nil
+	p.primitiveBindings = nil
 	p.calleeInvocations = nil
 	p.resolvedDeclarations = nil
 	p.resolvedParameters = nil
@@ -620,6 +628,7 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.assignedSymbols = nil
 	p.libraryStability = nil
 	p.freshConsts = nil
+	p.primitiveBindings = nil
 	p.calleeInvocations = nil
 	if incremental && incrementalPath != "" && currentExportsKnown {
 		if p.exportedIdentities == nil {
