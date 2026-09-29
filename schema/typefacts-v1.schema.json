@@ -686,6 +686,7 @@
         "callReceiver": { "$ref": "#/$defs/resolvedDeclaration" },
         "thisParameter": { "type": "integer", "minimum": 0 },
         "argumentParameters": { "type": "array", "maxItems": 1000000, "items": { "anyOf": [{ "$ref": "#/$defs/parameterValueSource" }, { "type": "null" }] } },
+        "argumentsPrimitiveSyntax": { "type": "array", "maxItems": 1000000, "items": { "type": "boolean" }, "description": "ADR 0168, handshake protocol 74: per written argument, whether it is a primitive by its grammar alone; a spread and every slot it displaces is false. Empty is not stated, or no argument." },
         "argumentSources": { "type": "array", "maxItems": 1000000, "items": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/implementationValueSource" } } },
         "calleeSources": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/implementationValueSource" } },
         "captured": { "type": "boolean" },

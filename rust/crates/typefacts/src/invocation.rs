@@ -1541,6 +1541,15 @@ pub struct ImplementationCall {
     pub callee_iterated_parameter: Option<ParameterValueSource>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub argument_parameters: Vec<Option<ParameterValueSource>>,
+    /// Per written argument slot, whether the expression written there is a
+    /// primitive by its grammar alone (ADR 0168, handshake protocol 74): the
+    /// same answer [`ImplementationValueSource::arguments_primitive_syntax`]
+    /// gives for a call-result source's arguments, stated for this call. A
+    /// spread is not one, and every slot at or after a spread is stated `false`.
+    /// Empty is "not stated", or a call with no argument, and a consumer
+    /// requiring a slot primitive reads a missing slot as not proved.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arguments_primitive_syntax: Vec<bool>,
     /// For a `.call` or `.apply` whose resolved callee is the default library's
     /// `Function.prototype` member: the resolved declaration of the *receiver*
     /// expression, e.g. `Object.prototype.toString` in

@@ -149,3 +149,89 @@ void check;
 		t.Fatalf("returned call = %q", text)
 	}
 }
+
+// ADR 0168, handshake protocol 74: a call states, per written argument, whether
+// the expression is a primitive by grammar, and a spread -- and every slot it
+// displaces -- is false, because the runtime value at that position is not the
+// one written there.
+func TestCallStatesItsArgumentsPrimitiveSyntax(t *testing.T) {
+	source := `declare function mk(...args: any[]): any;
+declare function untrackLike(fn: () => any): any;
+export function check(x: any, list: any[]) {
+  mk(0);
+  mk(x);
+  mk();
+  mk(1, {});
+  mk("a", -1, true, null, undefined);
+  mk(() => x());
+  mk(...list);
+  mk(0, ...list, 1);
+  untrackLike(() => x());
+  new Map([[0, 1]]);
+}
+void check;
+`
+	dir := t.TempDir()
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	p, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	path := filepath.Join(dir, "facts.ts")
+	start := strings.LastIndex(source, "check")
+	impl := strings.Index(source, "check")
+	answer, err := p.(typefacts.ExportValueAnalyzer).ExportValueTranscripts(context.Background(), []typefacts.ExportValueDemand{{
+		Location:               typefacts.Location{Path: path, StartByte: start, EndByte: start + 5},
+		ImplementationLocation: &typefacts.Location{Path: path, StartByte: impl, EndByte: impl + 5},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	implementation := answer.Transcripts[0].Implementation
+	if implementation == nil {
+		t.Fatal("missing implementation census")
+	}
+	want := map[string][]bool{
+		"mk(0)":                              {true},
+		"mk(x)":                              {false},
+		"mk()":                               nil,
+		"mk(1, {})":                          {true, false},
+		`mk("a", -1, true, null, undefined)`: {true, true, true, true, true},
+		"mk(() => x())":                      {false},
+		"mk(...list)":                        {false},
+		"mk(0, ...list, 1)":                  {true, false, false},
+		"untrackLike(() => x())":             {false},
+	}
+	seen := map[string]bool{}
+	for _, call := range implementation.Calls {
+		text := source[call.Location.StartByte:call.Location.EndByte]
+		if call.Kind == typefacts.CallKindConstruct {
+			if len(call.ArgumentsPrimitiveSyntax) != 0 {
+				t.Fatalf("%s: a construction states none, got %v", text, call.ArgumentsPrimitiveSyntax)
+			}
+			continue
+		}
+		expected, ok := want[text]
+		if !ok {
+			continue
+		}
+		seen[text] = true
+		got := call.ArgumentsPrimitiveSyntax
+		if len(got) != len(expected) {
+			t.Fatalf("%s: argumentsPrimitiveSyntax = %v, want %v", text, got, expected)
+		}
+		for index := range expected {
+			if got[index] != expected[index] {
+				t.Fatalf("%s: argumentsPrimitiveSyntax = %v, want %v", text, got, expected)
+			}
+		}
+		// One entry per written argument, like ArgumentParameters.
+		if len(call.ArgumentParameters) != len(got) {
+			t.Fatalf("%s: %d primitive entries beside %d argument slots", text, len(got), len(call.ArgumentParameters))
+		}
+	}
+	if len(seen) != len(want) {
+		t.Fatalf("saw %v of %d calls", seen, len(want))
+	}
+}

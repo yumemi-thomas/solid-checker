@@ -976,6 +976,16 @@ func (p *project) implementationCallCensusLocked(
 			// Kind first.
 			call.CalleeSources = p.returnValueSourcesLocked(node.Expression())
 			call.ArgumentCallables = p.argumentCallableLocationsLocked(node)
+			if !construct {
+				// ADR 0168 (handshake protocol 74): which written arguments are
+				// primitives by grammar, so a consumer can prove a slot is not a
+				// function. A slot a spread displaced is false, like the spread.
+				primitive := p.argumentsPrimitiveSyntaxLocked(node)
+				for index := exact; index < len(primitive); index++ {
+					primitive[index] = false
+				}
+				call.ArgumentsPrimitiveSyntax = primitive
+			}
 			call.DefaultLibraryInvoker, call.InvokedArguments = p.defaultLibraryInvokerLocked(node)
 			if !construct {
 				// Both remaining facts are claims about the body of a resolved

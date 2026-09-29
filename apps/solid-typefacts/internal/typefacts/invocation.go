@@ -1346,6 +1346,16 @@ type ImplementationCall struct {
 	// iterated".
 	CalleeIteratedParameter *ParameterValueSource   `cbor:"calleeIteratedParameter,omitempty" json:"calleeIteratedParameter,omitempty"`
 	ArgumentParameters      []*ParameterValueSource `cbor:"argumentParameters,omitempty" json:"argumentParameters,omitempty"`
+	// ArgumentsPrimitiveSyntax states, per written argument slot, whether the
+	// expression written there is a primitive by its grammar alone (ADR 0168,
+	// handshake protocol 74): the answer ImplementationValueSource states for a
+	// call-result source's arguments, stated for this call. A spread is not one,
+	// and neither is any slot a spread has displaced (exactArgumentSlots), so an
+	// entry is a fact about the value at that runtime position or it is false.
+	// Empty means not stated, or a call with no argument; a consumer that needs a
+	// slot primitive reads a missing slot as not proved. Calls only: a
+	// construction states none.
+	ArgumentsPrimitiveSyntax []bool `cbor:"argumentsPrimitiveSyntax,omitempty" json:"argumentsPrimitiveSyntax,omitempty"`
 	// CallReceiver is stated for a `.call` or `.apply` whose resolved callee is
 	// the default library's Function.prototype member: the resolved declaration
 	// of the *receiver* expression — `Object.prototype.toString` in

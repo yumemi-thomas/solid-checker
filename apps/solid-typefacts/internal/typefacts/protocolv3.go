@@ -4,7 +4,15 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 73 (ADR 0153 item C; 72 was reserved for the
+// TypeFactsHandshakeProtocol is 74 (ADR 0168): **a call states which of its
+// written arguments are primitives by grammar.** ImplementationCall.
+// ArgumentsPrimitiveSyntax answers, per written argument slot, the question
+// ImplementationValueSource.ArgumentsPrimitiveSyntax answers for a call-result
+// source, for the call itself; a spread and every slot it displaces is false.
+// A protocol-73 consumer decodes with `deny_unknown_fields` and would reject the
+// new field, so the number moves.
+//
+// Protocol 73 (ADR 0153 item C; 72 was reserved for the
 // coercion amendment, which took no number): **an implementation states the run-time accessor
 // installations of its package that can reach it.**
 // ExportImplementationTranscript.AccessorInstallations names every site the
@@ -501,8 +509,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 73
-	TypeFactsSchemaSHA256             = "sha256:de8a514b2368c571915e58d828ef5e93f6c7fea7cf5da2953ec4275f5a976826"
+	TypeFactsHandshakeProtocol uint64 = 74
+	TypeFactsSchemaSHA256             = "sha256:7cd2479af5756e76e80e0b6524ca8ea7721ae5bb59f85bf03429a8f7a240a1f0"
 )
 
 type ServiceHandshake struct {
