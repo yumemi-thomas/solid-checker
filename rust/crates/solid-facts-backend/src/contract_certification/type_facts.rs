@@ -488,6 +488,26 @@ impl VerifiedTypeFactsEvidence {
         plan: &CertificationPlan,
         claim_id: &str,
     ) -> Vec<CensusDependencyClaim> {
+        self.dependency_census_claims(plan, claim_id, CENSUS_DEPENDENCY_CLAIM_PREFIX)
+    }
+
+    /// ADR 0165: the dependency `reads` closures a `reads` census's call walk
+    /// rested on, each to be discharged against the dependency's receipt
+    /// exactly as [`Self::dependency_creates_claims`] are for `creates`.
+    pub(super) fn dependency_reads_claims(
+        &self,
+        plan: &CertificationPlan,
+        claim_id: &str,
+    ) -> Vec<CensusDependencyClaim> {
+        self.dependency_census_claims(plan, claim_id, CENSUS_DEPENDENCY_READS_PREFIX)
+    }
+
+    fn dependency_census_claims(
+        &self,
+        plan: &CertificationPlan,
+        claim_id: &str,
+        prefix: &str,
+    ) -> Vec<CensusDependencyClaim> {
         let Some(demand) = plan.demand_graph().demands().iter().find(|demand| {
             demand.family() == ProofFamily::DomainExhaustiveness
                 && matches!(demand.subject(), ProofDemandSubject::DomainClosure {
@@ -500,7 +520,7 @@ impl VerifiedTypeFactsEvidence {
             .iter()
             .filter(|binding| binding.demand_id() == demand.id().as_str())
             .flat_map(|binding| binding.site_ids())
-            .filter_map(|site| site.strip_prefix(CENSUS_DEPENDENCY_CLAIM_PREFIX))
+            .filter_map(|site| site.strip_prefix(prefix))
             .map(|json| serde_json::from_str(json).expect("native census claim encoding"))
             .collect()
     }
@@ -575,6 +595,7 @@ impl VerifiedTypeFactsEvidence {
                     .iter()
                     .filter(|site| {
                         site.starts_with(CENSUS_DEPENDENCY_CLAIM_PREFIX)
+                            || site.starts_with(CENSUS_DEPENDENCY_READS_PREFIX)
                             || site.starts_with(INHERITED_CLOSURE_CLAIM_PREFIX)
                             || site.starts_with(CENSUS_DEPENDENCY_RETURNS_PREFIX)
                     })
@@ -893,7 +914,7 @@ fn acquire_census_local_transcripts(
                     dependencies,
                 };
                 let pass = if domain == ClaimDomain::Reads {
-                    census_reads_domain(plan, proof, export, implementation, evidence)
+                    census_reads_domain(plan, proof, export, transcript, implementation, evidence)
                 } else if domain == ClaimDomain::Creates {
                     census_creates_domain(plan, proof, export, transcript, implementation, evidence)
                 } else {
@@ -4267,7 +4288,7 @@ fn verify_export_value_family(
                     ClosureCensus::Implementation,
                 )?;
                 let (outcome, census_sites, requested) =
-                    census_reads_domain(plan, proof, export, implementation, census)?;
+                    census_reads_domain(plan, proof, export, transcript, implementation, census)?;
                 if outcome == CensusOutcome::NeedsTranscripts {
                     // The same argument `creates` makes one branch up:
                     // acquisition batches every local declaration a census
@@ -11294,6 +11315,13 @@ struct CensusRun<'a> {
     /// admitted exactly when every name it escapes under is here. Empty for
     /// every census that is not a `creates` or `callbacks` closure's.
     context_premises: std::collections::BTreeSet<String>,
+    /// The call domain this walk dispositions callees for: which dialect rows
+    /// and which dependency claims may decide a call (ADR 0165). `Creates` for
+    /// the `creates`, `callbacks` and described-callable walks, as before;
+    /// `Reads` only for the `reads` census's call walk, which also refuses the
+    /// caller-supplied dispositions a nested frame would otherwise earn and
+    /// leaves a returned literal's body to ADR 0146.
+    domain: solid_dialect::CallClaimDomain,
 }
 
 /// ADR 0152: one call of an export argument a returned literal captured, as
@@ -11566,6 +11594,7 @@ fn census_call_walk(
         None,
         None,
         premises,
+        solid_dialect::CallClaimDomain::Creates,
     )
     .map(|(pass, _)| pass)
 }
@@ -11590,6 +11619,7 @@ fn census_call_walk_with_dispositions(
     owned_signal_scope: Option<&typefacts::ExportImplementationTranscript>,
     described_literal: Option<&typefacts::Location>,
     context_premises: std::collections::BTreeSet<String>,
+    domain: solid_dialect::CallClaimDomain,
 ) -> Result<(CensusWalkPass, CensusWalkRecord), TypeFactsCertificationError> {
     let mut run = CensusRun {
         certified: &plan.snapshot,
@@ -11611,6 +11641,7 @@ fn census_call_walk_with_dispositions(
         described_literal: described_literal.cloned(),
         captured_parameter_calls: Vec::new(),
         context_premises,
+        domain,
     };
     // Seeded with the demanded export, so a helper calling back into it refuses
     // as a cycle rather than running out of depth.
@@ -11846,13 +11877,18 @@ fn census_creates_domain(
 /// The `reads` implementation census: every uncensused invoking form this
 /// export reaches has to be dispositioned, and no operation may be proposed.
 ///
-/// This is the *form* half of the `creates` census and none of its callee
-/// walk. A `creates` claim is about what the export's reachable callees do, so
-/// it follows calls; a `reads` claim is about accesses in the export's own
-/// body, and `census_form_disposition` already decides whose value each
-/// subject is — `parameter`-rooted roots are the caller's read (ADR 0034), an
-/// own literal's members are data properties (ADR 0044), and an unreviewed
-/// root refuses.
+/// The export's own forms first — `census_form_disposition` decides whose value
+/// each subject is: `parameter`-rooted roots are the caller's read (ADR 0034),
+/// an own literal's members are data properties (ADR 0044), and an unreviewed
+/// root refuses — and then, since ADR 0165, the `creates` census's own callee
+/// walk run in the `reads` domain. A read is as often a call as an access (an
+/// accessor, a memo, a helper that calls one), so every reachable call needs a
+/// disposition: the caller's own argument, a standard-library member by
+/// identity, a dialect primitive with an audited closed `reads` row, a
+/// dependency export whose composed `reads` is closed and empty, or a
+/// same-package declaration walked under the cycle guard. In that walk a
+/// nested frame's parameter is never the caller's value, and a returned
+/// literal's body is ADR 0146's.
 ///
 /// **What this census cannot see, and does not try to.** A read through an
 /// accessor installed at run time records no form at all, so nothing here
@@ -12800,6 +12836,7 @@ fn census_reads_domain(
     plan: &CertificationPlan,
     proof: &ScheduledProofDemand,
     export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    declared: &typefacts::ExportValueTranscript,
     implementation: &typefacts::ExportImplementationTranscript,
     evidence: CensusEvidence<'_>,
 ) -> Result<CensusPass, TypeFactsCertificationError> {
@@ -12846,6 +12883,7 @@ fn census_reads_domain(
         described_literal: None,
         captured_parameter_calls: Vec::new(),
         context_premises: std::collections::BTreeSet::new(),
+        domain: solid_dialect::CallClaimDomain::Reads,
     };
     // ADR 0107: the one premise here whose other half lives in a callee, so
     // the transcripts it needs are demanded before any form is decided.
@@ -12952,14 +12990,47 @@ fn census_reads_domain(
     sites.extend(census_accessor_bounds(&run, plan, export, implementation).map_err(refuse)?);
     // The witness lines the premise bindings above recorded on the run.
     sites.append(&mut run.sites);
-    // Zero on both counts, and truthfully: this census dispositions no call
-    // and recurses into no declaration. The transcripts ADR 0107 demands are
-    // read as a premise's other half, never walked.
-    Ok((
-        CensusOutcome::Decided { calls: 0, depth: 0 },
-        sites,
-        run.requested,
-    ))
+    // ADR 0165: `reads` covers every tracked read the call performs, and a
+    // call is how most reads happen -- a signal accessor, a memo, a helper
+    // that reads one. So every call reachable in the export's synchronous
+    // execution is dispositioned by the shared walk, in the `reads` domain:
+    // the export's own caller's argument (the `callbacks` domain's item), a
+    // standard-library member by identity, a dialect primitive whose audited
+    // `reads` row is closed, a dependency export whose composed `reads` is
+    // closed and empty, or a same-package declaration walked the same way
+    // under the cycle guard. Anything else refuses, and a signal or memo this
+    // call created is anything else. A returned literal's body is ADR 0146's.
+    let walk_refuse = |reason: String| {
+        refuse(format!(
+            "reads-census premise required (ADR 0165 call walk; the shared walk speaks in the \
+             creates census's words): {reason}"
+        ))
+    };
+    let ((walk_outcome, walk_sites, walk_requested, _), _) = census_call_walk_with_dispositions(
+        plan,
+        &walk_refuse,
+        declared,
+        implementation,
+        evidence,
+        None,
+        None,
+        std::collections::BTreeSet::new(),
+        solid_dialect::CallClaimDomain::Reads,
+    )?;
+    let mut requested = run.requested;
+    for wanted in walk_requested {
+        if !requested.contains(&wanted) {
+            requested.push(wanted);
+        }
+    }
+    let CensusOutcome::Decided { calls, depth } = walk_outcome else {
+        return Ok((CensusOutcome::NeedsTranscripts, Vec::new(), requested));
+    };
+    sites.extend(walk_sites);
+    sites.push(format!(
+        "typefacts-implementation-census:reads:calls:{calls}:{depth}"
+    ));
+    Ok((CensusOutcome::Decided { calls, depth }, sites, requested))
 }
 
 /// ADR 0153 item C: confirms the accessor-installation bounds a `reads`
@@ -14175,6 +14246,7 @@ fn described_callable_body(
             Some(outer),
             Some(literal_location),
             std::collections::BTreeSet::new(),
+            solid_dialect::CallClaimDomain::Creates,
         )
         .map_err(|error| match error {
             TypeFactsCertificationError::UnsupportedDemand { reason, .. } => reason,
@@ -15357,6 +15429,19 @@ fn census_transcript_calls(
             run.record_form(disposition, form, depth);
             continue;
         }
+        // ADR 0165: the deferred arms below include ADR 0093's own-result
+        // derivation, whose other arm is the frame's parameter; in a nested
+        // frame of the `reads` walk that is not the caller's value.
+        if run.domain == solid_dialect::CallClaimDomain::Reads
+            && depth != 0
+            && census_form_is_caller_rooted(form)
+        {
+            return Err(format!(
+                "{} (ADR 0165: a nested frame's parameter is not the caller's value in the reads \
+                 census)",
+                refuse_form(form)
+            ));
+        }
         if form.kind == typefacts::UncensusedInvokingFormKind::Coercion
             && form.coercion_premise.is_some()
         {
@@ -15384,7 +15469,30 @@ fn census_transcript_calls(
         return Err(refuse_form(form));
     }
     let mut step = CensusStep::Decided;
+    // ADR 0165: the `reads` walk leaves a returned literal's body to ADR 0146.
+    // A literal that *is* a live return expression is referenced nowhere else,
+    // so nothing in this call can run it; whoever calls it later performs
+    // those reads under the returned value's own described claim.
+    let returned_literals = if run.domain == solid_dialect::CallClaimDomain::Reads {
+        census_returned_literals(implementation)
+    } else {
+        Vec::new()
+    };
     for call in &implementation.calls {
+        if let Some(literal) = returned_literals
+            .iter()
+            .find(|literal| census_location_contains(literal, &call.location))
+        {
+            run.sites.push(format!(
+                "census-reads-returned-literal-call:{}:{}..{}:in:{}..{}",
+                call.location.path,
+                call.location.start_byte,
+                call.location.end_byte,
+                literal.start_byte,
+                literal.end_byte
+            ));
+            continue;
+        }
         run.calls += 1;
         // The premise a callee this call reaches is censused under: the
         // argument types this transcript's premised census recorded at exactly
@@ -15454,6 +15562,29 @@ fn census_transcript_calls(
         );
     }
     Ok(step)
+}
+
+/// ADR 0165: every function or arrow literal a live return site's whole value
+/// is (`ReturnSite::callable`, and each arm's), as the producer states it.
+/// Empty when the transcript states no control flow, which leaves every call
+/// to the walk.
+fn census_returned_literals(
+    implementation: &typefacts::ExportImplementationTranscript,
+) -> Vec<typefacts::Location> {
+    let Some(control_flow) = implementation.control_flow.as_ref() else {
+        return Vec::new();
+    };
+    control_flow
+        .returns
+        .iter()
+        .filter(|site| site.reach != Reachability::Unreachable && site.value.is_some())
+        .flat_map(|site| {
+            site.callable
+                .iter()
+                .chain(site.arms.iter().filter_map(|arm| arm.callable.as_ref()))
+        })
+        .cloned()
+        .collect()
 }
 
 /// Bind the producer's complete return identity to the very call and local
@@ -16544,6 +16675,22 @@ fn census_call_disposition(
     // is why a spread-carrying call whose slots trace nothing still certifies
     // here — and why a callee rooted at a parameter is excused while the
     // arguments beside it are simply not consulted.
+    // ADR 0165: in the `reads` walk the caller's own argument is only the
+    // censused export's own parameter. A nested frame's parameter holds
+    // whatever a call site in this artifact handed it -- an accessor of a
+    // signal this very call created, say -- so invoking it is a read this
+    // census cannot attribute to the caller, and it refuses.
+    if run.domain == solid_dialect::CallClaimDomain::Reads
+        && depth != 0
+        && (call.callee_parameter.is_some() || call.callee_iterated_parameter.is_some())
+    {
+        return Err(format!(
+            "reads census refuses a call at {} of a parameter of the frame at depth {depth}: \
+             only the censused export's own parameters hold the caller's values, and a nested \
+             frame's may hold one this artifact built",
+            at()
+        ));
+    }
     if call.callee_parameter.is_some() {
         return Ok(Some((
             CensusDisposition::ParameterRooted,
@@ -16596,7 +16743,7 @@ fn census_call_disposition(
     // disposition (an accepted dependency claim) may still decide the call.
     let dialect_decline = match census_dialect_axiom(
         call,
-        solid_dialect::CallClaimDomain::Creates,
+        run.domain,
         floor,
         run.certified,
         run.evidence.roots,
@@ -16626,8 +16773,16 @@ fn census_call_disposition(
     };
     let Some((identity, relative)) = census_local_declaration_identity(run, declaration) else {
         if let Some(claim) = census_dependency_claim(run, call)? {
+            // ADR 0165: a `reads` walk's dependency claim is a different
+            // obligation from a `creates` one -- the dependency's `reads`
+            // closure, discharged against its receipt -- so it travels under
+            // its own prefix and no existing `creates` site moves.
+            let prefix = match run.domain {
+                solid_dialect::CallClaimDomain::Reads => CENSUS_DEPENDENCY_READS_PREFIX,
+                _ => CENSUS_DEPENDENCY_CLAIM_PREFIX,
+            };
             run.sites.push(format!(
-                "{CENSUS_DEPENDENCY_CLAIM_PREFIX}{}",
+                "{prefix}{}",
                 serde_json::to_string(&claim).expect("native census claim encoding")
             ));
             return Ok(Some((
@@ -16700,6 +16855,9 @@ fn census_call_disposition(
 }
 
 const CENSUS_DEPENDENCY_CLAIM_PREFIX: &str = "census-dependency-creates:";
+/// ADR 0165: the `reads` walk's dependency claim, discharged against the
+/// dependency's receipt for its closed, empty `reads`.
+const CENSUS_DEPENDENCY_READS_PREFIX: &str = "census-dependency-reads:";
 
 /// Where ADR 0155's dependency route may bind a return: the certification's
 /// plan and census evidence, and the export whose `returns` is being decided,
@@ -16910,15 +17068,20 @@ fn census_dependency_claim(
     let Some(parent) = run.plan else {
         return Ok(None);
     };
+    // ADR 0165: the dependency's claim in the walk's own domain.
+    let domain = match run.domain {
+        solid_dialect::CallClaimDomain::Reads => ClaimDomain::Reads,
+        _ => ClaimDomain::Creates,
+    };
     let mut matches = Vec::new();
     for callee in dependency_export_callees(parent, &run.evidence, call)? {
-        let Some(creates) = callee.export.operation_claim(ClaimDomain::Creates) else {
+        let Some(creates) = callee.export.operation_claim(domain) else {
             continue;
         };
         if !creates.items().is_empty() {
             continue;
         }
-        let subject = callee.subject(ClaimDomain::Creates);
+        let subject = callee.subject(domain);
         if !creates.is_closed()
             && !callee
                 .child
@@ -18053,6 +18216,16 @@ fn census_form_disposition(
     if form.local_literal_result.is_some() {
         return None;
     }
+    // ADR 0165: in the `reads` walk a nested frame's parameter is not the
+    // caller's value -- a call site in this artifact filled it, possibly with
+    // a store this very call created -- so no caller-provenance derivation
+    // clears a form there.
+    if run.domain == solid_dialect::CallClaimDomain::Reads
+        && depth != 0
+        && census_form_is_caller_rooted(form)
+    {
+        return None;
+    }
     // ADR 0092: a coercion states its subject in its own fields, because it has
     // operands rather than a receiver. Asked before the `subjectRoot` match and
     // never through it: the two vocabularies are the same spellings about
@@ -18197,6 +18370,24 @@ fn census_form_disposition(
         }
         _ => None,
     }
+}
+
+/// ADR 0165: whether a form's subject derivation, or a coercion's, names a
+/// parameter of the frame it sits in -- the premises that mean "the caller's
+/// value" only at depth 0.
+fn census_form_is_caller_rooted(form: &typefacts::UncensusedInvokingForm) -> bool {
+    const CALLER: [&str; 5] = [
+        "parameter",
+        "parameter-default",
+        "parameter-result",
+        "parameter-default-literal",
+        "parameter-or-own-result",
+    ];
+    form.subject_parameter.is_some()
+        || CALLER.contains(&form.subject_root.as_str())
+        || CALLER.contains(&form.coercion_subject_root.as_str())
+        || !form.coercion_subject_parameters.is_empty()
+        || !form.subject_local_literal_results.is_empty()
 }
 
 /// ADR 0092: a coercion every one of whose ToPrimitive operands is the
@@ -28218,6 +28409,7 @@ mod tests {
             described_literal: None,
             captured_parameter_calls: Vec::new(),
             context_premises: std::collections::BTreeSet::new(),
+            domain: solid_dialect::CallClaimDomain::Creates,
         }
     }
 

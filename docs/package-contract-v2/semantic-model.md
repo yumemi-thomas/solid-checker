@@ -449,10 +449,25 @@ current value* — `kind: "read"`, carrying its own `tracking` relation, so an
 `untracked` or `ambient-at-execution` read is still a read and only the
 dependency it registers differs — including a read this call schedules to a
 later `at` event, excluding a read a caller-supplied callable performs, and
-arising from non-call syntax: a property access on a store, props, or
-projection proxy, a whole-object observation (`$TRACK`, spread, `Object.keys`,
-`in`, iterating a store), and a JSX attribute or child expression whose
-lowering reads an accessor.
+arising from **a call as well as from non-call syntax** (**[Decision
+2026-09-29]**, [ADR 0165](../adr/0165-the-reads-census-walks-calls.md)): calling
+a signal or memo accessor, including one this very call created, and calling a
+helper or dependency export that does either, are reads of this export; so are
+a property access on a store, props, or projection proxy, a whole-object
+observation (`$TRACK`, spread, `Object.keys`, `in`, iterating a store), and a
+JSX attribute or child expression whose lowering reads an accessor.
+
+**[Decision 2026-09-29] Every tracked read the call performs.** The earlier
+text said "arising from non-call syntax", and the `reads` census followed it:
+it dispositioned forms and no call. That let `@solid-primitives/date`'s
+`createCountdown` certify `reads: []` while it reads a memo it created at the
+call, which ADR 0163's synthesized veto then observed. The domain now covers
+call-made reads, and the census walks every call reachable in the export's
+synchronous execution (ADR 0165). Two things are not this export's read: the
+caller's own callable invoked (the `callbacks` domain's item, whose `tracking`
+and `owner` fields say how it runs), and the body of a returned callable that
+nothing calls during the call — whoever calls it performs those reads, under
+the returned value's described claim (ADR 0146).
 
 `latest` publishes one `read` with `tracking: untracked` and closes every
 sibling domain; `createStore` publishes three; `Loading` and `isPending` leave

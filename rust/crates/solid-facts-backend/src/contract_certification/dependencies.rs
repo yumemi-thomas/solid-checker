@@ -4372,6 +4372,44 @@ impl VerifiedDependencyComposition {
                     receipt.receipt_digest()
                 ));
             }
+            // ADR 0165: the `reads` walk's dependency claims, discharged the
+            // same way against the same receipt for the dependency's closed,
+            // empty `reads`.
+            let reads_claims = requirement
+                .semantic_claim_id()
+                .and_then(|claim| {
+                    type_facts.map(|facts| facts.dependency_reads_claims(parent, claim))
+                })
+                .unwrap_or_default();
+            for claim in reads_claims.iter().filter(|claim| {
+                claim.package == requirement.dependency().package
+                    && claim.artifact_case == requirement.dependency().artifact_case
+                    && claim.accepted_contract_digest
+                        == requirement.dependency().accepted_contract_digest
+            }) {
+                let empty = dependency_gating
+                    .certified_candidate
+                    .artifact_case(&claim.artifact_case)
+                    .and_then(|case| case.exports.get(&claim.export))
+                    .and_then(|export| {
+                        export.operation_claim(
+                            solid_reactive_ir::contract_semantics::ClaimDomain::Reads,
+                        )
+                    })
+                    .is_some_and(|reads| reads.is_closed() && reads.items().is_empty());
+                if !empty || !receipt.contains_closed_claim_id(&claim.semantic_claim_id) {
+                    return Err(DependencyReceiptCompositionError::MissingClosedClaim {
+                        demand_id: requirement.demand_id().into(),
+                        semantic_claim_id: claim.semantic_claim_id.clone(),
+                    });
+                }
+                census_sites.push(format!(
+                    "census-dependency-reads:{}:{}:{}",
+                    claim.export,
+                    claim.semantic_claim_id,
+                    receipt.receipt_digest()
+                ));
+            }
             // The inherited-closure half. The parent's closure on a
             // re-exported name is the dependency's claim republished under this
             // package's identity, and the Type Facts arm that admitted it
@@ -4823,6 +4861,40 @@ impl VerifiedDependencyComposition {
                 }
                 census_sites.push(format!(
                     "census-dependency-creates:{}:{}:{}",
+                    claim.export,
+                    claim.semantic_claim_id,
+                    receipt.receipt_digest()
+                ));
+            }
+            // ADR 0165: as the graph lane above, for the `reads` walk's claims.
+            let reads_claims = requirement
+                .semantic_claim_id()
+                .and_then(|claim| {
+                    type_facts.map(|facts| facts.dependency_reads_claims(parent, claim))
+                })
+                .unwrap_or_default();
+            for claim in reads_claims.iter().filter(|claim| {
+                claim.package == wanted.package
+                    && claim.artifact_case == wanted.artifact_case
+                    && claim.accepted_contract_digest == wanted.accepted_contract_digest
+            }) {
+                let empty = contract
+                    .artifact_case(&claim.artifact_case)
+                    .and_then(|case| case.exports.get(&claim.export))
+                    .and_then(|export| {
+                        export.operation_claim(
+                            solid_reactive_ir::contract_semantics::ClaimDomain::Reads,
+                        )
+                    })
+                    .is_some_and(|reads| reads.is_closed() && reads.items().is_empty());
+                if !empty || !receipt.contains_closed_claim_id(&claim.semantic_claim_id) {
+                    return Err(DependencyReceiptCompositionError::MissingClosedClaim {
+                        demand_id: requirement.demand_id().into(),
+                        semantic_claim_id: claim.semantic_claim_id.clone(),
+                    });
+                }
+                census_sites.push(format!(
+                    "census-dependency-reads:{}:{}:{}",
                     claim.export,
                     claim.semantic_claim_id,
                     receipt.receipt_digest()

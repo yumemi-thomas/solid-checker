@@ -17835,6 +17835,140 @@ export const value = phantom;
         }
     }
 
+    // ADR 0165: the `reads` census walks calls.
+    fn reads_call_walk_fixture() -> std::path::PathBuf {
+        repository_root().join("fixtures/package-contracts/reads-call-walk")
+    }
+
+    const READS_CALL_WALK_EXPORTS: [&str; 9] = [
+        "callsNothing",
+        "callsPureHelper",
+        "callsReadingHelper",
+        "callsStandardLibrary",
+        "invokesArgument",
+        "mutualRecursion",
+        "readingCycle",
+        "readsCreatedAccessor",
+        "returnsReader",
+    ];
+
+    fn reads_call_walk_plan(closed: &str) -> CertificationPlan {
+        let fixture = reads_call_walk_fixture();
+        let read = |name: &str| std::fs::read(fixture.join(name)).expect("fixture file");
+        let manifest = read("package.json");
+        let (index, index_types) = (read("index.js"), read("index.d.ts"));
+        let name = "reads-call-walk-package";
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", index.as_slice()),
+                ("package/index.d.ts", index_types.as_slice()),
+            ],
+        );
+        let root = "/project/node_modules/reads-call-walk-package";
+        let bindings = READS_CALL_WALK_EXPORTS.map(|export| {
+            (
+                export,
+                ("index.js", index.as_slice()),
+                ("index.d.ts", index_types.as_slice()),
+                root,
+            )
+        });
+        plan_for_test_package_closing(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[(closed, ClaimDomain::Reads)],
+            &|_| ValueShape::Callable,
+        )
+    }
+
+    /// One `reads: []` transaction for `export` of the call-walk fixture, the
+    /// synthesized veto (ADR 0163) served by rc.9's audited signals, so that
+    /// the census alone decides whether the closure stands.
+    fn reads_call_walk_certify(export: &str) -> Option<super::FinalizedPolicy2Contract> {
+        let pin = pinned_producer_for_test()?;
+        let label = format!("reads-walk-{export}");
+        let scratch = TracerScratch::new(&label);
+        let mut plan = reads_call_walk_plan(export);
+        if !with_rc9_signals_source(&mut plan, rc9_signals_integrity()) {
+            return None;
+        }
+        let configuration =
+            tracer_configuration_from(&reads_call_walk_fixture(), scratch.path(), &label, &[])?;
+        Some(
+            tracer_certify(&plan, &pin, &configuration)
+                .unwrap_or_else(|error| panic!("{export}: the row certifies: {error}")),
+        )
+    }
+
+    /// Calls that read nothing close, and so does an export with no call at
+    /// all: a same-package helper, the caller's own
+    /// accessor (the `callbacks` domain's item), a standard-library member by
+    /// identity, a returned accessor nobody calls during the call (ADR 0146's),
+    /// and a cycle of helpers whose back edge closes.
+    #[test]
+    fn reads_call_walk_closes_calls_that_read_nothing() {
+        for export in [
+            "callsNothing",
+            "callsPureHelper",
+            "invokesArgument",
+            "callsStandardLibrary",
+            "returnsReader",
+            "mutualRecursion",
+        ] {
+            let Some(finalized) = reads_call_walk_certify(export) else {
+                return;
+            };
+            assert!(
+                finalized.withheld_closures().is_empty(),
+                "{export}: nothing is withheld: {:?}",
+                finalized.withheld_closures()
+            );
+            assert!(
+                reads_is_closed_in(finalized.canonical_main(), export),
+                "{export}: reads closes"
+            );
+        }
+    }
+
+    /// Calls that may read refuse, by the call walk's own name: calling an
+    /// accessor the call built (`createCountdown`'s shape), the same one frame
+    /// down in a helper, and a cycle one of whose frames does it -- the back
+    /// edge closes the cycle, it does not excuse the frame.
+    #[test]
+    fn reads_call_walk_refuses_a_call_that_may_read() {
+        for export in ["readsCreatedAccessor", "callsReadingHelper", "readingCycle"] {
+            let Some(finalized) = reads_call_walk_certify(export) else {
+                return;
+            };
+            let records = finalized
+                .withheld_closures()
+                .iter()
+                .filter(|record| record.export == export && record.domain == "reads")
+                .collect::<Vec<_>>();
+            assert_eq!(
+                records.len(),
+                1,
+                "{export}: {:?}",
+                finalized.withheld_closures()
+            );
+            let reason = &records[0].reason;
+            assert!(
+                reason.starts_with(super::WITHHELD_CLOSURE_CENSUS_REFUSED_PREFIX)
+                    && reason.contains("ADR 0165 call walk"),
+                "{export}: the call walk refuses: {reason}"
+            );
+            assert!(!reads_is_closed_in(finalized.canonical_main(), export));
+        }
+    }
+
     /// The reads fixture planned from **its own generated `expected.json`**,
     /// the way `census_generated_fixture_plan` plans the creates fixture: the
     /// exports' claims and proposals are the emitted document's byte for byte,
@@ -24507,6 +24641,130 @@ export const value = phantom;
                 );
             } else {
                 assert!(!finalized.root().withheld_closures().is_empty());
+            }
+        }
+    }
+
+    /// ADR 0165: a call of a dependency export decides a `reads: []` only
+    /// through that export's own closed, empty `reads`, named at the site and
+    /// discharged against the dependency's receipt. An open child leaves the
+    /// parent's call undecided, and the parent refuses by the walk's name.
+    #[test]
+    fn reads_call_walk_composes_a_dependency_whose_reads_is_closed() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        for closed_child in [true, false] {
+            let (leaf, leaf_archive, leaf_integrity) = synthetic_graph_certification_request_shaped(
+                "leaf-package",
+                "2.0.0",
+                "/project/node_modules/root-package/node_modules/leaf-package",
+                "/project/node_modules/root-package/dist/index.js",
+                b"export function value(step) { return step + 1; }",
+                b"export declare function value(step: number): number;",
+                vec![],
+                ValueShape::Callable,
+                CallClaims {
+                    reads: if closed_child {
+                        KnowledgeSet::complete(vec![])
+                    } else {
+                        KnowledgeSet::unknown()
+                    },
+                    ..CallClaims::default()
+                },
+            );
+            let leaf_plan = plan_certification(
+                leaf.clone(),
+                UntrustedArtifactEnvelope::Published(leaf_archive.clone()),
+            )
+            .unwrap();
+            let edge = AcceptedDependencyEdge {
+                specifier: "leaf-package".into(),
+                package_name: "leaf-package".into(),
+                artifact_case: leaf_plan.selected_artifact_case_id().into(),
+                accepted_contract_digest: leaf_plan
+                    .demand_graph()
+                    .candidate_semantic_digest()
+                    .as_str()
+                    .into(),
+            };
+            let (root, root_archive, root_integrity) = synthetic_graph_certification_request_shaped(
+                "root-package",
+                "1.0.0",
+                "/project/node_modules/root-package",
+                "/project/src/app.ts",
+                b"import { value as imported } from 'leaf-package'; export function value(step) { return imported(step); }",
+                b"export declare function value(step: number): number;",
+                vec![edge],
+                ValueShape::Callable,
+                CallClaims {
+                    reads: KnowledgeSet::complete(vec![]),
+                    ..CallClaims::default()
+                },
+            );
+            let graph = plan_published_contract_graph(
+                PublishedGraphNodeRequest::new(
+                    root,
+                    root_archive,
+                    graph_lock("root-package", "1.0.0", &root_integrity),
+                ),
+                [PublishedGraphNodeRequest::new(
+                    leaf,
+                    leaf_archive,
+                    graph_lock("leaf-package", "2.0.0", &leaf_integrity),
+                )],
+            )
+            .unwrap();
+            let claims = graph
+                .dependency_first_identities()
+                .into_iter()
+                .filter_map(|identity| graph.plan(identity))
+                .flat_map(|plan| {
+                    plan.probe_gate_schedule()
+                        .unwrap()
+                        .gates()
+                        .iter()
+                        .map(|gate| gate.semantic_claim_id().to_owned())
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            let entries = claims
+                .iter()
+                .map(|claim| (claim.as_str(), "quiet.mjs"))
+                .collect::<Vec<_>>();
+            let label = format!("reads-walk-dependency-{closed_child}");
+            let scratch = TracerScratch::new(&label);
+            let Some(probes) = tracer_configuration_from(
+                &reads_call_walk_fixture(),
+                scratch.path(),
+                &label,
+                &entries,
+            ) else {
+                return;
+            };
+            let issuer =
+                ConfiguredReceiptIssuer::persistent_local("reads-call-walk", [61; 32]).unwrap();
+            let finalized = graph
+                .certify_value_only(&pin, &issuer, 1, Some(&probes))
+                .unwrap();
+            let root = finalized.root();
+            assert_eq!(
+                reads_is_closed_in(root.canonical_main(), "value"),
+                closed_child,
+                "closed_child={closed_child}: {:?}",
+                root.withheld_closures()
+            );
+            if closed_child {
+                assert!(root.withheld_closures().is_empty());
+            } else {
+                assert!(
+                    root.withheld_closures()
+                        .iter()
+                        .any(|record| record.domain == "reads"
+                            && record.reason.contains("ADR 0165 call walk")),
+                    "{:?}",
+                    root.withheld_closures()
+                );
             }
         }
     }
