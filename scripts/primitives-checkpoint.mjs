@@ -545,15 +545,49 @@ export function hostOfConditions(conditions) {
   return "none";
 }
 
+/// The Solid runtime packages a bundle's recorded dependency environment must
+/// resolve to the corpus install's release, and which pin each one follows.
+/// `@solidjs/signals` has no pin of its own: the head probe's install holds it
+/// at the `solid-js` release, as the misuse runner's install does.
+const RUNTIME_PINS = Object.freeze({ "solid-js": "solid-js", "@solidjs/web": "@solidjs/web", "@solidjs/signals": "solid-js" });
+
+/// Whether a bundle's recorded environment is the runtime `pin` installs:
+/// every entry of every runtime package the environment records resolves to
+/// the pinned release. A consumer admits a bundle only in the environment it
+/// recorded (ADRs 0123, 0126), so a bundle certified on rc.3 is no tier entry
+/// for a corpus that installs rc.9, however exactly its package matches.
+/// An environment the index does not carry, or a pin the corpus does not
+/// state, is no match: absence proves nothing.
+export function bundleRuntimeMatches(bundle, index, pin) {
+  const entries = index?.environments?.[bundle.dependencyEnvironmentRoot];
+  if (!Array.isArray(entries) || !pin) return false;
+  for (const [name, pinnedBy] of Object.entries(RUNTIME_PINS)) {
+    const recorded = entries.filter(entry => entry.name === name);
+    const pinned = pin[pinnedBy];
+    if (recorded.length === 0) continue;
+    if (!pinned || recorded.some(entry => entry.version !== pinned)) return false;
+  }
+  return entries.some(entry => entry.name === "solid-js");
+}
+
 /// `name@version` -> host -> set of requested entrypoints the tier carries.
-export function tierEntrypoints(index) {
+///
+/// With `corpus`, only bundles whose recorded runtime is the one the corpus
+/// entry installs count (`bundleRuntimeMatches`); the others are kept apart in
+/// `tier.otherRuntime`, the same shape, so the report can say the package is in
+/// the tier for another runtime rather than absent.
+export function tierEntrypoints(index, corpus = null) {
   const tier = new Map();
+  const otherRuntime = new Map();
+  const pins = new Map((corpus?.packages ?? []).map(entry => [`${entry.package}@${entry.version}`, entry.solid ?? null]));
   for (const bundle of index?.bundles ?? []) {
     const key = `${bundle.packageName}@${bundle.packageVersion}`;
-    const hosts = tier.get(key) ?? new Map(HOSTS.map(host => [host, new Set()]));
+    const target = !corpus || bundleRuntimeMatches(bundle, index, pins.get(key)) ? tier : otherRuntime;
+    const hosts = target.get(key) ?? new Map(HOSTS.map(host => [host, new Set()]));
     hosts.get(hostOfConditions(bundle.exportConditions)).add(bundle.requestedEntrypoint);
-    tier.set(key, hosts);
+    target.set(key, hosts);
   }
+  tier.otherRuntime = otherRuntime;
   return tier;
 }
 
@@ -685,6 +719,8 @@ export function checkpoint({ hosts, tier, misuseResults = null, ledger = { cases
       const surfaceEntrypoints = [...new Set((measured?.exports ?? []).map(item => item.entrypoint))].sort();
       const inTier = tierHosts.get(host) ?? new Set();
       const missingTier = surfaceEntrypoints.filter(entrypoint => !inTier.has(entrypoint));
+      const otherRuntime = tier.otherRuntime?.get(`${entry.package}@${entry.version}`)?.get(host) ?? new Set();
+      const tierOtherRuntime = missingTier.filter(entrypoint => otherRuntime.has(entrypoint));
       const certified = measured?.certification === "certified" && measured.certifiable && (measured.refusedEntrypoints ?? 0) === 0;
       certification[host] = {
         status: measured?.certification ?? "not measured",
@@ -695,6 +731,7 @@ export function checkpoint({ hosts, tier, misuseResults = null, ledger = { cases
         refusedEntrypoints: measured?.refusedEntrypoints ?? 0,
         tierEntrypoints: inTier.size,
         missingTier,
+        tierOtherRuntime,
         met: Boolean(measured) && certified && missingTier.length === 0 && surfaceEntrypoints.length > 0
       };
     }
@@ -841,7 +878,13 @@ export function renderMarkdown(result) {
   lines.push("| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |");
   for (const entry of result.packages) {
     const certification = HOSTS.map(host => (entry.certification[host].status === "certified" && entry.certification[host].refusedEntrypoints === 0 ? "yes" : entry.certification[host].status)).join(" / ");
-    const tier = HOSTS.map(host => (entry.certification[host].missingTier.length === 0 && entry.certification[host].tierEntrypoints > 0 ? "yes" : entry.certification[host].tierEntrypoints > 0 ? `partial (${entry.certification[host].tierEntrypoints})` : "no")).join(" / ");
+    const tierCell = host => {
+      const state = entry.certification[host];
+      if (state.missingTier.length === 0 && state.tierEntrypoints > 0) return "yes";
+      const other = (state.tierOtherRuntime ?? []).length ? `, other runtime (${state.tierOtherRuntime.length})` : "";
+      return state.tierEntrypoints > 0 ? `partial (${state.tierEntrypoints}${other})` : other ? `no${other}` : "no";
+    };
+    const tier = HOSTS.map(tierCell).join(" / ");
     const clean = entry.exports.filter(item => item.certified).length;
     const paths = entry.exports.filter(item => item.misuse.length > 0).length;
     const reporting = entry.exports.filter(item => item.fixture === "reports correctly").length;
@@ -959,7 +1002,7 @@ async function main() {
   }
   if (!options.report) fail("one of --select, --print-probes, --measure, --misuse or --report is required");
   const hosts = options.report.map(path => JSON.parse(readFileSync(path, "utf8")));
-  const tier = tierEntrypoints(JSON.parse(readFileSync(TIER_INDEX_PATH, "utf8")));
+  const tier = tierEntrypoints(JSON.parse(readFileSync(TIER_INDEX_PATH, "utf8")), corpus);
   const misuseResults = options.misuseResults && existsSync(options.misuseResults) ? JSON.parse(readFileSync(options.misuseResults, "utf8")) : null;
   const result = checkpoint({ hosts, tier, misuseResults, ledger, corpus });
   const markdown = renderMarkdown(result);

@@ -372,3 +372,47 @@ test("walls join hosts by cause, and an unaccepted dependency behind a refused g
   assert.equal(byKey["unaccepted dependency|@solid-primitives/utils"].exports, 1);
   assert.equal(walls[0].key, "no probe recipe (reads)");
 });
+
+test("a tier bundle counts only in the runtime the corpus installs", () => {
+  const corpus = {
+    measuredOn: "2026-09-29",
+    packages: [{ package: "@solid-primitives/a", version: "1.0.0", solid: { "solid-js": "2.0.0-rc.9", "@solidjs/web": "2.0.0-rc.9" } }],
+    withoutSolid2: []
+  };
+  const runtime = release => [
+    { name: "solid-js", version: release },
+    { name: "@solidjs/web", version: release },
+    { name: "@solidjs/signals", version: release }
+  ];
+  const index = {
+    environments: {
+      "sha256:rc3": runtime("2.0.0-rc.3"),
+      "sha256:rc9": runtime("2.0.0-rc.9"),
+      "sha256:mixed": [...runtime("2.0.0-rc.9"), { name: "solid-js", version: "2.0.0-rc.3" }]
+    },
+    bundles: [
+      { packageName: "@solid-primitives/a", packageVersion: "1.0.0", requestedEntrypoint: ".", exportConditions: ["import"], dependencyEnvironmentRoot: "sha256:rc3" },
+      { packageName: "@solid-primitives/a", packageVersion: "1.0.0", requestedEntrypoint: ".", exportConditions: ["browser", "import"], dependencyEnvironmentRoot: "sha256:rc9" },
+      { packageName: "@solid-primitives/a", packageVersion: "1.0.0", requestedEntrypoint: ".", exportConditions: ["import", "node"], dependencyEnvironmentRoot: "sha256:mixed" },
+      { packageName: "@solid-primitives/a", packageVersion: "1.0.0", requestedEntrypoint: "./x", exportConditions: ["import"], dependencyEnvironmentRoot: "sha256:unknown" }
+    ]
+  };
+  const tier = tierEntrypoints(index, corpus);
+  const hosts = tier.get("@solid-primitives/a@1.0.0");
+  assert.deepEqual([...hosts.get("none")], []);
+  assert.deepEqual([...hosts.get("browser")], ["."]);
+  assert.deepEqual([...hosts.get("node")], []);
+  const other = tier.otherRuntime.get("@solid-primitives/a@1.0.0");
+  assert.deepEqual([...other.get("none")].sort(), [".", "./x"]);
+  assert.deepEqual([...other.get("node")], ["."]);
+  // Without a corpus every bundle counts, as before.
+  assert.deepEqual([...tierEntrypoints(index).get("@solid-primitives/a@1.0.0").get("none")].sort(), [".", "./x"]);
+
+  // Criterion 1 reads it: an rc.3-only bundle leaves the host unmet and says why.
+  const value = { entrypoint: ".", export: "isServer", bucket: "clean", causes: [], misuse: [] };
+  const measured = HOSTS.map(host => hostMeasurement(host, [value]));
+  const result = checkpoint({ hosts: measured, tier, ledger: { cases: [] }, corpus }).packages[0];
+  assert.equal(result.certification.none.met, false);
+  assert.deepEqual(result.certification.none.tierOtherRuntime, ["."]);
+  assert.equal(result.certification.browser.met, true);
+});
