@@ -6443,7 +6443,7 @@ struct CensusTerminator {
 /// rather than report a certification error of its own; this is where the
 /// information exists, so this is where it is named.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum AuditedArchiveDisagreement {
+pub(super) enum AuditedArchiveDisagreement {
     /// No dialect audited an archive under this name at all.
     Name,
     Version,
@@ -6461,7 +6461,7 @@ enum AuditedArchiveDisagreement {
 /// integrity refuses here, which is the failure mode ADR 0005 objection 1
 /// records: a registry serving a self-consistent `name@version` would otherwise
 /// receive the answer on bytes nobody in this repository ever read.
-fn audited_archive_for_snapshot(
+pub(super) fn audited_archive_for_snapshot(
     snapshot: &super::ArtifactSnapshot,
 ) -> Result<&'static solid_dialect::AuditedArchive, AuditedArchiveDisagreement> {
     let candidates = solid_dialect::audited_archives(snapshot.package_name());

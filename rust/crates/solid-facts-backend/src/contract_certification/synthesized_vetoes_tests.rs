@@ -1136,7 +1136,7 @@ fn the_described_reads_observation_is_selected_from_the_exact_enumeration() {
     assert_eq!(
         candidate_observation("reads", &export(&[], vec![])),
         None,
-        "the empty enumeration is served by hand recipes, deliberately"
+        "the empty enumeration is selected by `synthesize` against the workspace's tracking runtime (ADR 0163), never from the claim alone"
     );
     assert_eq!(
         candidate_observation(
@@ -1959,4 +1959,293 @@ fn the_counting_described_callable_module_fires_on_every_other_invocation() {
         let observed = execute(implementation, first, &two);
         assert!(observed.contradicted(), "{implementation}: {observed:?}");
     }
+}
+
+// ---------------------------------------------------------------------------
+// ADR 0163: the synthesized `reads: []` veto, against the real tracking runtime
+// ---------------------------------------------------------------------------
+
+/// The installed tree of one audited Solid 2 release, from the variable
+/// `make test-rust` sets for it. `None` skips the test when the variable is
+/// unset; a verification run (`SOLID_CHECKER_EXPECT_PROBE_PINS=1`) sets all
+/// three, so an absent one fails it instead of passing vacuously.
+fn audited_release_root(variable: &str) -> Option<std::path::PathBuf> {
+    if let Some(root) = std::env::var_os(variable) {
+        return Some(std::path::PathBuf::from(root));
+    }
+    assert!(
+        std::env::var_os("SOLID_CHECKER_EXPECT_PROBE_PINS").is_none(),
+        "{variable} is unset in a run that expects the audited archives"
+    );
+    None
+}
+
+fn reads_fixture() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../fixtures/package-contracts/synthesized-reads-veto")
+}
+
+/// A private directory laid out as the probe workspace lays one out: the
+/// package under test and the tracking runtime side by side under one
+/// `node_modules`, so the veto module and the package resolve the same
+/// `@solidjs/signals` copy. The package is copied, not linked -- Node resolves
+/// a linked module's own imports from its real path, which is the repository
+/// and not this tree. Removed with the value.
+struct ReadsWorkspace(std::path::PathBuf);
+
+impl ReadsWorkspace {
+    fn new(signals: &std::path::Path, label: &str) -> Self {
+        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-reads-veto-{}-{label}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        let package = root.join("node_modules/synthesized-reads-veto-package");
+        std::fs::create_dir_all(&package).unwrap();
+        for file in ["package.json", "index.js", "index.d.ts"] {
+            std::fs::copy(reads_fixture().join(file), package.join(file)).unwrap();
+        }
+        std::fs::create_dir_all(root.join("node_modules/@solidjs")).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(signals, root.join("node_modules/@solidjs/signals")).unwrap();
+        Self(root)
+    }
+
+    fn run(&self, module: &str) -> ObservationResult {
+        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let path = self.0.join(format!(
+            "veto-{}.mjs",
+            COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        let mut source = module.to_owned();
+        source.push_str(
+            r#"
+const observedEvents = [];
+let observedError = null;
+try {
+  await runProbeSession({}, { emit(event) { observedEvents.push(event); } });
+} catch (error) {
+  observedError = String(error);
+}
+process.stdout.write(JSON.stringify({ events: observedEvents, error: observedError }));
+"#,
+        );
+        std::fs::write(&path, &source).unwrap();
+        let output = Command::new("node")
+            .arg(&path)
+            .current_dir(&self.0)
+            .output()
+            .expect("generated-veto observation tests require Node");
+        assert!(
+            output.status.success(),
+            "generated module failed to execute: {}\n{source}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+        ObservationResult {
+            markers: result["events"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|event| event["marker"].as_str().unwrap().to_owned())
+                .collect(),
+            error: result["error"].as_str().map(str::to_owned),
+        }
+    }
+}
+
+impl Drop for ReadsWorkspace {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn number_signature() -> [typefacts::SelectedSignature; 1] {
+    [signature(&[value_fact(json!({"mayBeNumber": true}))])]
+}
+
+fn signals_runtime() -> &'static solid_dialect::TrackingRuntime {
+    solid_dialect::tracking_runtime("@solidjs/signals")
+        .expect("the Solid 2 dialect states its tracking runtime")
+}
+
+fn reads_veto(export: &str) -> String {
+    module_source(
+        "synthesized-reads-veto-package",
+        export,
+        Observation::EmptyReads(signals_runtime()),
+        &number_signature(),
+    )
+}
+
+fn observed_read(result: &ObservationResult) -> bool {
+    result
+        .markers
+        .iter()
+        .any(|marker| marker == "read-operation")
+}
+
+/// The veto can fail. Against rc.9's real bytes -- the audited release -- the
+/// one export that reads nothing passes cleanly, every export that reads a
+/// source at the call is contradicted whoever created the source, a read
+/// before a throw still counts, and a run in which nothing completed and
+/// nothing read is incomplete rather than a pass.
+#[test]
+fn empty_reads_veto_contradicts_every_read_at_the_call_on_the_audited_runtime() {
+    let Some(root) = audited_release_root("SOLID_CHECKER_RC9_ARCHIVE_ROOT") else {
+        return;
+    };
+    let workspace = ReadsWorkspace::new(&root.join("@solidjs/signals"), "rc9");
+
+    let clean = workspace.run(&reads_veto("readsNothing"));
+    assert!(!observed_read(&clean), "{clean:?}");
+    assert!(clean.error.is_none(), "{clean:?}");
+    assert!(!clean.markers.iter().any(|marker| marker == "sample-threw"));
+
+    for export in ["readsOwnSignal", "readsCreatedSignal", "readsCreatedMemo"] {
+        let observed = workspace.run(&reads_veto(export));
+        assert!(observed_read(&observed), "{export}: {observed:?}");
+        assert!(observed.error.is_none(), "{export}: {observed:?}");
+    }
+
+    let thrown = workspace.run(&reads_veto("readsThenThrows"));
+    assert!(observed_read(&thrown), "{thrown:?}");
+    assert!(thrown.markers.iter().any(|marker| marker == "sample-threw"));
+    assert!(
+        thrown.error.is_none(),
+        "a contradiction stands though no call completed: {thrown:?}"
+    );
+
+    let incomplete = workspace.run(&reads_veto("throwsWithoutReading"));
+    assert!(!observed_read(&incomplete), "{incomplete:?}");
+    assert!(
+        incomplete
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("no sample call completed normally")),
+        "nothing observed is incomplete, never a pass: {incomplete:?}"
+    );
+}
+
+/// What the entry's sampling limitation says the veto does not see, pinned as
+/// behaviour: an untracked read, a deferred read, and a read performed by a
+/// computation the call creates all pass. If one of these starts
+/// contradicting, the limitation text is wrong and has to move with it.
+#[test]
+fn empty_reads_veto_does_not_see_the_reads_its_limitation_names() {
+    let Some(root) = audited_release_root("SOLID_CHECKER_RC9_ARCHIVE_ROOT") else {
+        return;
+    };
+    let workspace = ReadsWorkspace::new(&root.join("@solidjs/signals"), "rc9-limits");
+    for export in ["readsUntracked", "readsLater", "createsAReadingMemo"] {
+        let observed = workspace.run(&reads_veto(export));
+        assert!(!observed_read(&observed), "{export}: {observed:?}");
+        assert!(observed.error.is_none(), "{export}: {observed:?}");
+    }
+    let limitation = Observation::EmptyReads(signals_runtime()).sampling_limitations();
+    for named in [
+        "an untracked read (untrack)",
+        "a read the export defers",
+        "a read performed by a computation the export creates",
+    ] {
+        assert!(limitation.contains(named), "{named}: {limitation}");
+    }
+}
+
+/// The dependency fields are calibrated, never named: every audited build
+/// mangles them differently (`nt`/`Ye` in rc.3, `ut`/`je` in rc.6, `Se`/`ot`
+/// in rc.9), and the same module tells a read from none on each.
+#[test]
+fn empty_reads_veto_calibrates_on_every_audited_release() {
+    for variable in [
+        "SOLID_CHECKER_RC3_ARCHIVE_ROOT",
+        "SOLID_CHECKER_RC6_ARCHIVE_ROOT",
+        "SOLID_CHECKER_RC9_ARCHIVE_ROOT",
+    ] {
+        let Some(root) = audited_release_root(variable) else {
+            continue;
+        };
+        let workspace = ReadsWorkspace::new(&root.join("@solidjs/signals"), "calibration");
+        let clean = workspace.run(&reads_veto("readsNothing"));
+        assert!(clean.error.is_none(), "{variable}: {clean:?}");
+        assert!(!observed_read(&clean), "{variable}: {clean:?}");
+        let read = workspace.run(&reads_veto("readsOwnSignal"));
+        assert!(observed_read(&read), "{variable}: {read:?}");
+    }
+}
+
+/// A tracking runtime whose observing node never tells a read from none --
+/// here a stub whose `getObserver` hands back a fresh object -- makes the
+/// calibration throw: the candidate is withheld, never passed on a clean run
+/// that could not have seen anything.
+#[test]
+fn empty_reads_veto_refuses_a_runtime_it_cannot_calibrate() {
+    let stub = std::env::temp_dir().join(format!(
+        "solid-checker-reads-veto-stub-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&stub).unwrap();
+    std::fs::write(
+        stub.join("package.json"),
+        r#"{"name":"@solidjs/signals","type":"module","exports":"./index.js"}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        stub.join("index.js"),
+        "export const createRoot = (fn) => fn(() => {});\n\
+         export const createMemo = (fn) => { fn(); return () => undefined; };\n\
+         export const createSignal = (value) => [() => value, () => {}];\n\
+         export const untrack = (fn) => fn();\n\
+         export const getObserver = () => ({ sources: null });\n",
+    )
+    .unwrap();
+    let observed = {
+        let workspace = ReadsWorkspace::new(&stub, "stub");
+        workspace.run(&reads_veto("readsNothing"))
+    };
+    let _ = std::fs::remove_dir_all(&stub);
+    assert!(
+        observed
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("calibration found no field")),
+        "{observed:?}"
+    );
+    assert!(!observed_read(&observed));
+}
+
+/// The manifest's expected marker and the module's emitted marker are one
+/// string: a mismatch would make the gate unmatchable, and an unmatchable gate
+/// passes. The module imports the runtime by the package name the entry
+/// declares, which is what makes the harness check the worker resolved the
+/// workspace's own copy.
+#[test]
+fn empty_reads_veto_emits_the_marker_its_entry_expects() {
+    let observation = Observation::EmptyReads(signals_runtime());
+    let reviewed = observation.reviewed();
+    let module = reads_veto("readsNothing");
+    assert!(module.contains(&format!("marker: \"{}\"", reviewed.marker)));
+    assert!(module.contains("import * as trackingModule from \"@solidjs/signals\";"));
+}
+
+/// ADR 0163's "synthesized in full": a slot the value facts say nothing about
+/// would be sampled with the unknown-input fallback, and that export gets no
+/// veto. A rest parameter is sampled empty and does not count against it.
+#[test]
+fn empty_reads_veto_needs_every_slot_described() {
+    assert!(every_slot_described(&number_signature()));
+    let unknown = [signature(&[
+        value_fact(json!({"mayBeNumber": true})),
+        value_fact(json!({"unknown": true})),
+    ])];
+    assert!(!every_slot_described(&unknown));
+    let mut rest = signature(&[value_fact(json!({"mayBeNumber": true}))]);
+    let mut tail = rest.parameters[0].clone();
+    tail.index = 1;
+    tail.rest = true;
+    tail.value = serde_json::from_value(value_fact(json!({"unknown": true}))).unwrap();
+    rest.parameters.push(tail);
+    assert!(every_slot_described(&[rest]));
+    assert!(!every_slot_described(&[]));
 }

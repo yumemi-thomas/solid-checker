@@ -2342,7 +2342,10 @@ fn certify_graphs_with_recipe_gating(
         let mut changed = false;
         {
             let synthesis_started = std::time::Instant::now();
-            for node in gated.iter().flat_map(|graph| graph.nodes.iter()) {
+            for (graph, node) in gated
+                .iter()
+                .flat_map(|graph| graph.nodes.iter().map(move |node| (graph, node)))
+            {
                 let digest = node.identity.digest();
                 let Some(evidence) = evidence_by_node.get(digest) else {
                     continue;
@@ -2351,11 +2354,16 @@ fn certify_graphs_with_recipe_gating(
                     continue;
                 }
                 let Some(base) = probes else { continue };
+                // The very plans the gate pre-pass hands this node's batch, so
+                // a veto importing a package beside the node (ADR 0163) is
+                // written only when that batch's workspace carries it.
+                let dependencies = graph.transitive_dependency_plans(node)?;
                 let corpus = super::synthesized_vetoes::synthesize(
                     &node.plan,
                     evidence,
                     base,
                     &node.withheld,
+                    &dependencies,
                 )
                 .map_err(|error| {
                     PublishedGraphCertificationError::FinalizationAtNode {

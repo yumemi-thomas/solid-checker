@@ -1137,6 +1137,48 @@ pub fn audited_archives(name: &str) -> Vec<&'static AuditedArchive> {
         .collect()
 }
 
+/// The public entry points of the package a dialect's dependency tracking
+/// lives in, by exact package name and exact export name (ADR 0163).
+///
+/// A synthesized `reads: []` veto runs the export under test as the compute of
+/// a fresh memo, created by these entry points under a fresh root, and observes
+/// whether that memo gained a dependency. Nothing here names a private field:
+/// the module finds the node's dependency fields at run time by comparing a
+/// memo that read a signal with one that read nothing, so the fields a build
+/// mangles are the build's own answer, never a constant of this crate.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TrackingRuntime {
+    /// The package whose bytes implement tracking: an exact npm name.
+    pub package: &'static str,
+    /// Runs a callback under a fresh owner, handing it a disposer.
+    pub create_root: &'static str,
+    /// Creates a computation whose compute runs, tracked, when it is created.
+    pub create_memo: &'static str,
+    /// Creates a readable source: `[read, write]`.
+    pub create_signal: &'static str,
+    /// The computation currently tracking reads, or `null`.
+    pub get_observer: &'static str,
+}
+
+/// The tracking runtime some carried dialect ships in `package`, if any.
+#[must_use]
+pub fn tracking_runtime(package: &str) -> Option<&'static TrackingRuntime> {
+    if package.is_empty() {
+        return None;
+    }
+    DIALECTS
+        .iter()
+        .filter_map(|dialect| dialect.tracking_runtime())
+        .find(|runtime| runtime.package == package)
+}
+
+/// Every tracking runtime a carried dialect ships.
+pub fn tracking_runtimes() -> impl Iterator<Item = &'static TrackingRuntime> {
+    DIALECTS
+        .iter()
+        .filter_map(|dialect| dialect.tracking_runtime())
+}
+
 /// Whether `name` is a canonical primitive spelling of some dialect — the name
 /// the dialect's own table round-trips, not an alias and not a near miss.
 #[must_use]
@@ -1706,6 +1748,15 @@ pub trait Dialect: Sync {
     /// where the question is "does this manifest depend on Solid at all",
     /// never to grant a package semantics.
     fn ecosystem_scopes(&self) -> &'static [&'static str];
+
+    /// Where this dialect's dependency tracking lives, for the synthesized
+    /// `reads: []` veto (ADR 0163). `None` -- the default -- synthesizes no such
+    /// veto: a dialect that has not stated which package tracks reads, and
+    /// through which entry points, leaves every `reads: []` candidate withheld
+    /// for want of a recipe, which is what it was before the veto existed.
+    fn tracking_runtime(&self) -> Option<&'static TrackingRuntime> {
+        None
+    }
 
     /// Identity of the reviewed built-in runtime model. Facts cite
     /// `builtin-solid://<identity>#<primitive>`, never a package receipt.
@@ -3520,6 +3571,9 @@ mod tests {
         assert!(!silent.false_attribute_value_removes_attribute());
         assert!(!silent.direct_jsx_return_is_component());
         assert!(!silent.component_name_may_be_component("Button"));
+        // No tracking runtime: inheriting 2.0's `@solidjs/signals` would gate
+        // this dialect's `reads: []` candidates on another language's graph.
+        assert_eq!(silent.tracking_runtime(), None);
 
         // The derived questions follow the required answers rather than a
         // second table: a dialect with no modules owns none, a dialect with no
@@ -4240,6 +4294,26 @@ mod tests {
         assert!(!primitive_defining_package("@solidjs/element"));
         assert!(!primitive_defining_package("solid-js-signals"));
         assert!(!primitive_defining_package("my-solid-js"));
+    }
+
+    /// ADR 0163: the tracking runtime is one of the dialect's own archives,
+    /// found by exact name only, and every release of it is audited -- a
+    /// synthesized `reads: []` veto runs only over an audited copy.
+    #[test]
+    fn the_tracking_runtime_is_an_audited_primitive_defining_archive() {
+        let runtime = tracking_runtime("@solidjs/signals").expect("Solid 2 states one");
+        assert!(primitive_defining_package(runtime.package));
+        assert!(!audited_archives(runtime.package).is_empty());
+        assert_eq!(tracking_runtimes().count(), 1);
+        for name in [
+            "",
+            "solid-js",
+            "@solidjs/web",
+            "@solidjs/signals/",
+            "signals",
+        ] {
+            assert_eq!(tracking_runtime(name), None, "{name:?}");
+        }
     }
 
     /// The specifier form reaches subpaths, which the archive-name form must

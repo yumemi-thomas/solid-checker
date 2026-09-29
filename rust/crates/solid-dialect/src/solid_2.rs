@@ -14,7 +14,7 @@ use crate::{
     AuditedArchive, AuditedCitation, Boundary, CallClaimDomain, CallbackOwner, CleanupRule,
     ContextRole, Dialect, DialectNegativeAuthority, Execution, HostTargetCondition,
     HostTargetScope, NegativeClaimRow, Primitive, ReactiveRole, ResultSlot, RowScope,
-    TrackedCallbackTiming, Version, lookup, reverse,
+    TrackedCallbackTiming, TrackingRuntime, Version, lookup, reverse,
 };
 
 mod releases;
@@ -4474,6 +4474,28 @@ impl Dialect for Solid2 {
 
     fn ecosystem_scopes(&self) -> &'static [&'static str] {
         &["@solidjs/"]
+    }
+
+    /// ADR 0163: 2.0's dependency tracking lives in `@solidjs/signals`, whose
+    /// every audited release (rc.3, rc.6, rc.9) exports these four names from
+    /// `dist/prod/index.js` and `dist/dev.js`, and rc.9 also from
+    /// `dist/observe/index.js`. A one-argument `createMemo` runs its compute
+    /// when it is created, under the memo as observer, and a read inside it
+    /// links a dependency onto the memo's node -- `link()` in
+    /// `dist/prod/core/graph.js` (rc.9). The node's two dependency fields are
+    /// named differently in every one of those seven builds (`nt`/`Ye`,
+    /// `ut`/`je`, `Se`/`ot`, `ee`/`Fe`, and `_deps`/`_depsTail` in the dev
+    /// builds), which is why the veto module calibrates them at run time and
+    /// nothing here names one.
+    fn tracking_runtime(&self) -> Option<&'static TrackingRuntime> {
+        static SIGNALS: TrackingRuntime = TrackingRuntime {
+            package: "@solidjs/signals",
+            create_root: "createRoot",
+            create_memo: "createMemo",
+            create_signal: "createSignal",
+            get_observer: "getObserver",
+        };
+        Some(&SIGNALS)
     }
 
     /// Reviewed Solid 2 semantics in this module, not a package certificate.

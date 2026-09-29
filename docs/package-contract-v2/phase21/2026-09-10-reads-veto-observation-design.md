@@ -1,7 +1,11 @@
 # `reads` veto observation: the design, and why I recommend not shipping it
 
-- **Status:** design for review. Nothing implemented;
-  `reviewed_observation("reads")` still returns `None`.
+- **Status:** design for review, **superseded 2026-09-29 by
+  [ADR 0163](../../adr/0163-a-synthesized-veto-observes-reads-through-a-tracking-memo.md)**,
+  which synthesizes the `reads: []` veto on the owner's decision and answers
+  § 3's two objections: the observer is a tracking memo, which sees owned
+  reads, and its dependency fields are calibrated per run, not named. The
+  sections below are the 2026-09-10 record, unchanged.
 - **Date:** 2026-09-10.
 - **Recommendation:** **do not add a synthesized veto for `reads`.** Gate the
   domain on hand-authored probe recipes instead, and let gate 3 proceed

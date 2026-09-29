@@ -5074,6 +5074,27 @@ fn authenticated_dependency_closure<'a>(
     Ok(closure)
 }
 
+/// The authenticated snapshot the private workspace will place at
+/// `<private>/node_modules/<package_name>` for this gate batch, exactly as
+/// [`authenticated_dependency_closure`] assembles it, or `None` when it places
+/// none there or the closure refuses to assemble (the gate batch then refuses
+/// on its own, by name).
+///
+/// A synthesized veto that imports a package beside the one under test (ADR
+/// 0163) asks this before it declares the specifier, so that it is only ever
+/// written for a batch whose workspace carries that package: one snapshot per
+/// name, the very copy the package under test resolves.
+pub(crate) fn authenticated_closure_snapshot<'a>(
+    plan: &'a CertificationPlan,
+    graph_dependencies: &[&'a CertificationPlan],
+    package_name: &str,
+) -> Option<&'a super::ArtifactSnapshot> {
+    authenticated_dependency_closure(plan, graph_dependencies)
+        .ok()?
+        .get(package_name)
+        .map(|dependency| dependency.snapshot)
+}
+
 fn dependency_materialization_root(
     dependencies: &BTreeMap<String, AuthenticatedDependency<'_>>,
 ) -> String {

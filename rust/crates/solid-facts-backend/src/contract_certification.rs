@@ -845,7 +845,7 @@ impl CertificationPlan {
                 && !synthesis_dropped
                 && let Some(base) = probes
                 && let Some(corpus) =
-                    synthesized_vetoes::synthesize(plan, &evidence, base, gated.withheld())
+                    synthesized_vetoes::synthesize(plan, &evidence, base, gated.withheld(), &[])
                         .map_err(|error| {
                             Policy2FinalizationError::VetoSynthesis(error.to_string())
                         })?
@@ -1541,7 +1541,7 @@ pub fn certify_value_only_case_set(
                             || evidence.default_library_alias(&record.export).is_some())
                 })
                 && let Some(corpus) =
-                    synthesized_vetoes::synthesize(plan, &evidence, base, gated.withheld())
+                    synthesized_vetoes::synthesize(plan, &evidence, base, gated.withheld(), &[])
                         .map_err(|error| {
                             Policy2FinalizationError::VetoSynthesis(error.to_string())
                         })?
@@ -17605,6 +17605,145 @@ export const value = phantom;
             super::finalization::empty_probe_gate_root(&plan),
             "and the gate that closure scheduled actually ran"
         );
+    }
+
+    /// rc.9's real `@solidjs/signals` -- every file of the audited install
+    /// `make test-rust` provisions -- as a certification source of `plan`, at
+    /// `integrity`, so the private probe workspace carries it. `false` (and the
+    /// caller skips) when the install is not provisioned outside a
+    /// verification run.
+    fn with_rc9_signals_source(plan: &mut CertificationPlan, integrity: &str) -> bool {
+        fn walk(
+            root: &std::path::Path,
+            directory: &std::path::Path,
+            files: &mut std::collections::BTreeMap<String, std::sync::Arc<[u8]>>,
+        ) {
+            for entry in std::fs::read_dir(directory).expect("the audited install reads") {
+                let path = entry.expect("a directory entry").path();
+                if path.is_dir() {
+                    walk(root, &path, files);
+                } else {
+                    let relative = path.strip_prefix(root).unwrap().to_string_lossy();
+                    files.insert(
+                        relative.replace('\\', "/"),
+                        std::sync::Arc::from(std::fs::read(&path).unwrap()),
+                    );
+                }
+            }
+        }
+        let Some(root) = std::env::var_os("SOLID_CHECKER_RC9_ARCHIVE_ROOT") else {
+            assert!(
+                std::env::var_os("SOLID_CHECKER_EXPECT_PROBE_PINS").is_none(),
+                "SOLID_CHECKER_RC9_ARCHIVE_ROOT is unset in a run that expects it"
+            );
+            return false;
+        };
+        let package = std::path::PathBuf::from(root).join("@solidjs/signals");
+        let mut files = std::collections::BTreeMap::new();
+        walk(&package, &package, &mut files);
+        plan.certification_sources
+            .push(super::dependencies::VerifiedGraphSourcePackage {
+                identity: "@solidjs/signals@2.0.0-rc.9".into(),
+                installed_package_root: "/project/node_modules/@solidjs/signals".into(),
+                snapshot: ArtifactSnapshot::for_test(
+                    "@solidjs/signals",
+                    "2.0.0-rc.9",
+                    integrity,
+                    files,
+                ),
+                resolved_from: Vec::new(),
+            });
+        true
+    }
+
+    fn rc9_signals_integrity() -> &'static str {
+        solid_dialect::audited_archives("@solidjs/signals")
+            .into_iter()
+            .find(|archive| archive.version == "2.0.0-rc.9")
+            .expect("rc.9 signals is an audited archive")
+            .integrity
+    }
+
+    /// `plainArithmetic`'s `reads` candidate, with no hand recipe and the
+    /// workspace carrying `signals`, certified or withheld.
+    fn reads_through_synthesis(
+        label: &str,
+        signals: Option<&str>,
+    ) -> Option<super::FinalizedPolicy2Contract> {
+        let pin = pinned_producer_for_test()?;
+        let scratch = TracerScratch::new(label);
+        let mut plan = reads_census_fixture_plan("plainArithmetic");
+        if let Some(integrity) = signals
+            && !with_rc9_signals_source(&mut plan, integrity)
+        {
+            return None;
+        }
+        let configuration =
+            tracer_configuration_from(&reads_census_fixture(), scratch.path(), label, &[])?;
+        let finalized = tracer_certify(&plan, &pin, &configuration)
+            .unwrap_or_else(|error| panic!("{label}: the row certifies: {error}"));
+        if finalized.withheld_closures().is_empty() {
+            assert_ne!(
+                finalized.bindings().probe_gate_root,
+                super::finalization::empty_probe_gate_root(&plan),
+                "{label}: nothing withheld means the synthesized gate ran"
+            );
+        }
+        Some(finalized)
+    }
+
+    /// ADR 0163: with no hand recipe, the `reads: []` closure the census
+    /// proved is carried through a **synthesized** veto -- the export run as the
+    /// compute of a memo of the workspace's own audited `@solidjs/signals`, the
+    /// dependency fields calibrated on the run -- and the receipt binds it.
+    #[test]
+    fn a_reads_closure_certifies_through_a_synthesized_tracking_veto() {
+        let Some(finalized) =
+            reads_through_synthesis("reads-synthesized", Some(rc9_signals_integrity()))
+        else {
+            return;
+        };
+        assert!(
+            finalized.withheld_closures().is_empty(),
+            "nothing is withheld: {:?}",
+            finalized.withheld_closures()
+        );
+        assert!(reads_is_closed_in(
+            finalized.canonical_main(),
+            "plainArithmetic"
+        ));
+    }
+
+    /// The controls: a workspace that carries no tracking runtime, or one that
+    /// carries `@solidjs/signals` at bytes that are not an audited archive,
+    /// synthesizes no `reads` veto, and the candidate stays withheld for want
+    /// of a recipe exactly as before ADR 0163.
+    #[test]
+    fn a_reads_veto_is_synthesized_only_over_an_audited_tracking_runtime() {
+        for (label, signals) in [
+            ("reads-no-runtime", None),
+            (
+                "reads-unaudited-runtime",
+                Some("sha512-bm90IHRoZSBhdWRpdGVkIGFyY2hpdmU="),
+            ),
+        ] {
+            let Some(finalized) = reads_through_synthesis(label, signals) else {
+                return;
+            };
+            let withheld = finalized.withheld_closures();
+            assert!(
+                withheld
+                    .iter()
+                    .any(|record| record.export == "plainArithmetic"
+                        && record.domain == "reads"
+                        && record.reason == super::WITHHELD_CLOSURE_NO_RECIPE),
+                "{label}: {withheld:?}"
+            );
+            assert!(!reads_is_closed_in(
+                finalized.canonical_main(),
+                "plainArithmetic"
+            ));
+        }
     }
 
     /// The reads fixture planned from **its own generated `expected.json`**,

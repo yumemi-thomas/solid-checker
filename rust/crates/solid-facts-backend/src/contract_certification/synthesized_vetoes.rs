@@ -16,7 +16,10 @@
 //! a *described* `callbacks` enumeration: each callable slot gets its own
 //! recording callable, and the marker fires for an invocation of a slot the
 //! enumeration does not describe, or of a described slot outside the sample
-//! call's own stack.
+//! call's own stack. ADR 0163 observes `reads: []`: each sample call runs as
+//! the compute of a fresh memo of the workspace's audited tracking runtime,
+//! and the marker fires when that memo gained a dependency, its dependency
+//! fields calibrated on the same run.
 //!
 //! The merged corpus — every hand module and manifest entry copied verbatim,
 //! plus the synthesized entries marked `provenance: "synthesized"` — is
@@ -71,12 +74,25 @@ pub enum VetoSynthesisError {
 /// want of a recipe and whose export stated a call signature or a complete
 /// overload set. `None` when nothing could be synthesized, so the caller keeps
 /// the hand corpus.
+///
+/// `graph_dependencies` are the plans whose snapshots the gate batch's private
+/// workspace will carry beside `plan`'s own closure -- exactly what the caller
+/// hands the probe harness for this batch -- so a veto that imports a package
+/// beside the one under test (ADR 0163) is written only when that workspace
+/// carries it.
 pub(crate) fn synthesize(
     plan: &CertificationPlan,
     evidence: &VerifiedTypeFactsEvidence,
     base: &ProbeHarnessConfiguration,
     withheld: &[WithheldClosure],
+    graph_dependencies: &[&CertificationPlan],
 ) -> Result<Option<SynthesizedCorpus>, VetoSynthesisError> {
+    // ADR 0163: asked once, and only when a `reads` candidate could use it.
+    let tracking = withheld
+        .iter()
+        .any(|record| record.reason == WITHHELD_CLOSURE_NO_RECIPE && record.domain == "reads")
+        .then(|| tracking_runtime_in_workspace(plan, graph_dependencies))
+        .flatten();
     let candidates = withheld
         .iter()
         .filter(|record| record.reason == WITHHELD_CLOSURE_NO_RECIPE)
@@ -147,6 +163,18 @@ pub(crate) fn synthesize(
                 }
                 return Some((record, &[][..], Observation::NotCallable));
             };
+            // ADR 0163: the empty `reads` enumeration, observed through the
+            // workspace's tracking runtime, and only for an export every one of
+            // whose parameter slots the signature facts describe -- a slot
+            // sampled with the unknown-input fallback would make a clean run a
+            // statement about values nobody said the export accepts.
+            if record.domain == "reads" && empty_enumeration("reads", export) {
+                let runtime = tracking?;
+                if !every_slot_described(signatures) {
+                    return None;
+                }
+                return Some((record, signatures, Observation::EmptyReads(runtime)));
+            }
             let observation = candidate_observation(&record.domain, export)?;
             if let Observation::ParameterReturn(index) = observation
                 && !identity_signatures_supported(signatures, index)
@@ -223,11 +251,19 @@ pub(crate) fn synthesize(
         let source = module_source(specifier, &record.export, observation, signatures);
         std::fs::write(directory.join(&module), source)?;
         let reviewed = observation.reviewed();
+        // ADR 0163 imports the tracking runtime beside the package under test;
+        // declaring it makes the harness require the worker's resolution of it
+        // to land inside the workspace's one authenticated copy -- the copy
+        // `synthesize` found, and the one the package under test resolves.
+        let dependency_specifiers = match observation {
+            Observation::EmptyReads(runtime) => vec![runtime.package],
+            _ => Vec::new(),
+        };
         entries.push(serde_json::json!({
             "claimId": record.semantic_claim_id,
             "module": module,
             "importKind": import_kind,
-            "dependencySpecifiers": [],
+            "dependencySpecifiers": dependency_specifiers,
             "scenario": "operation",
             "expectedEvent": { "marker": reviewed.marker, "class": "call" },
             "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
@@ -239,7 +275,7 @@ pub(crate) fn synthesize(
                     )
                 } else {
                     format!(
-                        "synthesized veto ({}) for {} `{}`: a finite sample of {} call(s) derived from the export's Type Facts call signature{}; a throwing sample call is recorded as a sample-threw event and observes nothing",
+                        "synthesized veto ({}) for {} `{}`: a finite sample of {} call(s) derived from the export's Type Facts call signature{}; a throwing sample call is recorded as a sample-threw event and {}",
                         match observation {
                             Observation::DescribedCallbacks(_) => {
                                 "ADR 0100, described callbacks enumeration"
@@ -263,6 +299,9 @@ pub(crate) fn synthesize(
                             Observation::ArgumentContainers(_) => {
                                 "ADR 0115, argument container returns"
                             }
+                            Observation::EmptyReads(_) => {
+                                "ADR 0163, empty reads under a tracking memo"
+                            }
                             _ => "ADR 0036",
                         },
                         record.domain,
@@ -272,6 +311,11 @@ pub(crate) fn synthesize(
                             format!(" ({} overloads, every one sampled)", signatures.len())
                         } else {
                             String::new()
+                        },
+                        if matches!(observation, Observation::EmptyReads(_)) {
+                            "the reads it linked before throwing are still observed"
+                        } else {
+                            "observes nothing"
                         }
                     )
                 },
@@ -332,6 +376,53 @@ enum Sample {
 /// list is nonempty: a slot the facts say nothing about is sampled with the
 /// two values most callables accept without throwing on arrival.
 fn slot_candidates(parameter: &typefacts::SelectedParameter) -> (Vec<Sample>, Vec<String>) {
+    let (mut candidates, literals) = described_slot_candidates(parameter);
+    if candidates.is_empty() {
+        candidates.push(Sample::Undefined);
+        candidates.push(Sample::Object);
+    }
+    (candidates, literals)
+}
+
+/// Whether every non-rest parameter slot of every signature has candidates
+/// its value facts describe, with no unknown-input fallback (ADR 0163's "the
+/// arguments can be synthesized in full"). A rest parameter is sampled empty,
+/// which is a call every signature admits.
+fn every_slot_described(signatures: &[typefacts::SelectedSignature]) -> bool {
+    !signatures.is_empty()
+        && signatures.iter().all(|signature| {
+            signature
+                .parameters
+                .iter()
+                .filter(|parameter| !parameter.rest)
+                .all(|parameter| !described_slot_candidates(parameter).0.is_empty())
+        })
+}
+
+/// ADR 0163: the tracking runtime some carried dialect ships, when this gate
+/// batch's private workspace carries it as an **audited** archive -- the one
+/// copy the package under test resolves, at bytes this repository read. Any
+/// other copy, or none, synthesizes no `reads: []` veto, and the candidate
+/// stays withheld for want of a recipe.
+fn tracking_runtime_in_workspace(
+    plan: &CertificationPlan,
+    graph_dependencies: &[&CertificationPlan],
+) -> Option<&'static solid_dialect::TrackingRuntime> {
+    solid_dialect::tracking_runtimes().find(|runtime| {
+        super::probe_harness::authenticated_closure_snapshot(
+            plan,
+            graph_dependencies,
+            runtime.package,
+        )
+        .is_some_and(|snapshot| super::type_facts::audited_archive_for_snapshot(snapshot).is_ok())
+    })
+}
+
+/// [`slot_candidates`] before the unknown-input fallback: empty when the
+/// slot's value facts describe no value at all.
+fn described_slot_candidates(
+    parameter: &typefacts::SelectedParameter,
+) -> (Vec<Sample>, Vec<String>) {
     let value = &parameter.value;
     let mut candidates = Vec::new();
     let mut literals = Vec::new();
@@ -396,10 +487,6 @@ fn slot_candidates(parameter: &typefacts::SelectedParameter) -> (Vec<Sample>, Ve
     }
     if primitive.may_be_undefined || parameter.optional || parameter.defaulted {
         candidates.push(Sample::Undefined);
-    }
-    if candidates.is_empty() {
-        candidates.push(Sample::Undefined);
-        candidates.push(Sample::Object);
     }
     (candidates, literals)
 }
@@ -593,6 +680,15 @@ enum Observation {
     /// the slot itself is the `callbacks` domain's item and is not observed
     /// here.
     DescribedReads(u64),
+    /// ADR 0163: the empty `reads` enumeration. Each sample call runs as the
+    /// compute of a fresh memo of the workspace's tracking runtime, under a
+    /// fresh root; the contradiction is that memo gaining a dependency -- a
+    /// read of any source, whoever created it, since the sample hands the
+    /// export no source of the caller's. The dependency fields are found at
+    /// run time by comparing a memo that read a signal with one that read
+    /// nothing, never named, because every audited build mangles them
+    /// differently.
+    EmptyReads(&'static solid_dialect::TrackingRuntime),
     /// ADR 0099: the export's value cannot be invoked, per the producer, so
     /// every empty proposable call domain closes vacuously. The runtime half
     /// observes `typeof` of the exported value and emits when it is a
@@ -687,13 +783,14 @@ fn candidate_observation(domain: &str, export: &ExportSemantics) -> Option<Obser
                 Observation::DescribedCallbacks(masks.call)
             })
         }
-        // The empty `reads` enumeration deliberately registers no observation
-        // (`reviewed_observation`): its contradiction is a read of a source the
-        // export owns, which no synthesized module can see, so it is served by
-        // hand recipes. A described enumeration is different in kind -- its
-        // items are member invocations of the caller's own values, which the
-        // module can hand in and watch -- and is observed on the same footing
-        // as a described `callbacks` enumeration (ADR 0101).
+        // The empty `reads` enumeration is not selected from the claim alone:
+        // its observation (ADR 0163) runs through the tracking runtime the
+        // gate batch's workspace carries, which only `synthesize` can ask
+        // about, so it is chosen there and this arm answers `None` for it. A
+        // described enumeration is different in kind -- its items are member
+        // invocations of the caller's own values, which the module can hand in
+        // and watch -- and is observed on the same footing as a described
+        // `callbacks` enumeration (ADR 0101).
         "reads" => {
             let claim = export.operation_claim(ClaimDomain::Reads)?;
             if claim.items().is_empty() {
@@ -1192,6 +1289,7 @@ impl Observation {
             Self::Creates => reviewed_observation("creates").unwrap(),
             Self::EmptyReturns => reviewed_observation("returns").unwrap(),
             Self::EmptyCallbacks => reviewed_observation("callbacks").unwrap(),
+            Self::EmptyReads(_) => reviewed_observation("reads").unwrap(),
             Self::DescribedCallbacks(_) => ReviewedObservation {
                 marker: "callback-invocation",
                 observation: "exact: a callable argument the sample supplied at a slot the enumeration does not describe was invoked at any time up to the end of the session's drain, or one at a described slot was invoked outside the sample call's own stack",
@@ -1357,6 +1455,9 @@ impl Observation {
             }
             Self::DescribedMembers(..) => {
                 "at most six tuples per overload; no variadic tail or structural object construction; every described slot and every object-, array- or callable-typed slot is sampled with a recording Proxy over an empty object, an empty array or a zero-arity function, whose traps answer as the target does, and a slot a member item names is also sampled with the array Proxy; a member slot's target carries a recording function at each index up to one past the highest described one and nothing past it, so a call of a member at a higher index or at a property key throws and observes nothing; a symbol-keyed member other than the iteration, coercion and hasInstance symbols is not recorded, and a use on a value the export derived from an argument, rather than the argument itself, is not observed"
+            }
+            Self::EmptyReads(_) => {
+                "at most six tuples per overload, synthesized only when the signature facts describe every non-rest slot; no variadic tail or structural object construction, so an object slot is sampled with an empty object; each call runs as the compute of a fresh memo under a fresh root, disposed before anything is flushed, so a read the export defers (a microtask, a timer, an effect's later run, an await) is not observed, a read performed by a computation the export creates is that computation's and is not observed, an untracked read (untrack) links nothing and is not observed, a read of a non-reactive value the export owns -- a plain Proxy or getter -- is not observed, and a read through a second copy of the tracking runtime the package bundles is not observed; the dependency fields are calibrated on every run and the run throws, withholding the candidate, when no field tells a read from none or the calibration no longer holds after the samples; a run in which no sample call completes normally and none read is incomplete and cannot satisfy the veto"
             }
             Self::DescribedReads(_) => {
                 "at most six tuples per overload; no variadic tail; every described slot and every object-typed slot is sampled with a recording tripwire whose members are all callable to a depth of eight, so an export that expects a real value there throws and observes nothing, and a walk along a member chain ends; engine-protocol members (then, valueOf, toString, toJSON, constructor, symbols) are not recorded, and iterating or coercing a tripwire throws"
@@ -1530,6 +1631,16 @@ fn reviewed_observation(domain: &str) -> Option<ReviewedObservation> {
             observation: "own-property additions to globalThis during the call window; not an exact observation of a create operation",
             emit: "  if (Reflect.ownKeys(globalThis).some((key) => !before.includes(key))) {\n    harness.emit({ marker: \"create-operation\", kind: \"call\", phase: \"enter\" });\n  }",
         }),
+        // ADR 0163. Exact for what it observes -- a dependency linked onto the
+        // observing memo is a tracked read, and the sample supplies no source
+        // of its own -- but not exhaustive, so it does not start `exact:`: the
+        // untracked, deferred and non-reactive reads its sampling limitation
+        // names are reads it cannot see.
+        "reads" => Some(ReviewedObservation {
+            marker: "read-operation",
+            observation: "the memo each sample call ran under gained a dependency in the workspace's tracking runtime, the dependency fields calibrated on the same run against a memo that read a signal and one that read nothing; a tracked read of any source during the call, including one the export owns or creates, and no untracked, deferred or non-reactive read",
+            emit: "",
+        }),
         _ => None,
     }
 }
@@ -1583,6 +1694,9 @@ fn module_source(
     if let Observation::DescribedReads(mask) = observation {
         return described_reads_module_source(specifier, export, mask, signatures);
     }
+    if let Observation::EmptyReads(runtime) = observation {
+        return empty_reads_module_source(specifier, export, runtime, signatures);
+    }
     let domain = match observation {
         Observation::Creates => "creates",
         Observation::EmptyReturns => "returns",
@@ -1597,7 +1711,8 @@ fn module_source(
         | Observation::ConstructedCallbacks(_)
         | Observation::DescribedProtocols(_)
         | Observation::DescribedMembers(..)
-        | Observation::DescribedReads(_) => unreachable!(),
+        | Observation::DescribedReads(_)
+        | Observation::EmptyReads(_) => unreachable!(),
     };
     // Only this observation emits from inside the callback. Giving every
     // synthesized module that emitter would spend the session's event budget on
@@ -1802,6 +1917,139 @@ fn described_reads_module_source(
          }}\n",
         specifier_json = serde_json::to_string(specifier).unwrap_or_default(),
         export_json = serde_json::to_string(export).unwrap_or_default(),
+    )
+}
+
+/// ADR 0163: the module for the empty `reads` enumeration.
+///
+/// Every sample call runs as the compute of a fresh memo under a fresh root of
+/// `runtime`, and the memo's own data fields are read once the compute has
+/// returned, before the root is disposed. Which of them hold dependencies is
+/// not named anywhere: each run first *calibrates* them -- the fields a memo
+/// that read a signal holds as objects where a memo that read nothing holds
+/// none -- and throws, which withholds the candidate, when no field tells the
+/// two apart, or when the same pair no longer does after the samples ran. A
+/// sample memo holding anything in a calibrated field is the contradiction.
+///
+/// A throw inside the export is caught inside the compute, so the memo
+/// completes and what the call linked before throwing is still observed. A run
+/// in which every call threw and none read observed nothing, and throws.
+fn empty_reads_module_source(
+    specifier: &str,
+    export: &str,
+    runtime: &solid_dialect::TrackingRuntime,
+    signatures: &[typefacts::SelectedSignature],
+) -> String {
+    let json = |value: &str| serde_json::to_string(value).unwrap_or_default();
+    let tuples = sample_tuples(signatures)
+        .into_iter()
+        .map(|arguments| format!("  [{}],", arguments.join(", ")))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "// Synthesized veto (ADR 0163) for the `reads: []` claim of `{export}`.\n\
+         // Derived from the export's Type Facts call signature; deterministic in it.\n\
+         // It observes, it never proves: the implementation census is the proof.\n\
+         import * as subjectModule from {specifier_json};\n\
+         import * as trackingModule from {package_json};\n\
+         \n\
+         const subject = subjectModule[{export_json}];\n\
+         const createRoot = trackingModule[{create_root}];\n\
+         const createMemo = trackingModule[{create_memo}];\n\
+         const createSignal = trackingModule[{create_signal}];\n\
+         const getObserver = trackingModule[{get_observer}];\n\
+         const callback = () => undefined;\n\
+         const samples = [\n{tuples}\n];\n\
+         \n\
+         const absent = (value) => value === null || value === undefined;\n\
+         // The observing node's own data properties, read without running a getter.\n\
+         const fieldsOf = (node) => {{\n\
+         \x20 const fields = new Map();\n\
+         \x20 for (const key of Reflect.ownKeys(node)) {{\n\
+         \x20   const descriptor = Reflect.getOwnPropertyDescriptor(node, key);\n\
+         \x20   if (descriptor !== undefined && \"value\" in descriptor) fields.set(key, descriptor.value);\n\
+         \x20 }}\n\
+         \x20 return fields;\n\
+         }};\n\
+         // Runs `body` as the compute of a fresh memo under a fresh root, and\n\
+         // returns the memo's fields as they stand once the compute has returned,\n\
+         // before the root is disposed.\n\
+         const observe = (body) => {{\n\
+         \x20 let node = null;\n\
+         \x20 let fields = null;\n\
+         \x20 let threw = false;\n\
+         \x20 createRoot((dispose) => {{\n\
+         \x20   try {{\n\
+         \x20     createMemo(() => {{\n\
+         \x20       node = getObserver();\n\
+         \x20       try {{\n\
+         \x20         body();\n\
+         \x20       }} catch {{\n\
+         \x20         threw = true;\n\
+         \x20       }}\n\
+         \x20       return undefined;\n\
+         \x20     }});\n\
+         \x20     if (node !== null && typeof node === \"object\") fields = fieldsOf(node);\n\
+         \x20   }} finally {{\n\
+         \x20     dispose();\n\
+         \x20   }}\n\
+         \x20 }});\n\
+         \x20 if (fields === null) {{\n\
+         \x20   throw new Error(\"synthesized veto: the tracking runtime ran no tracked compute to observe\");\n\
+         \x20 }}\n\
+         \x20 return {{ fields, threw }};\n\
+         }};\n\
+         const [calibrationSource] = createSignal(0);\n\
+         const readsNothing = () => {{}};\n\
+         const readsTheSource = () => {{\n\
+         \x20 calibrationSource();\n\
+         }};\n\
+         const subscribed = (keys, fields) => keys.some((key) => !absent(fields.get(key)));\n\
+         \n\
+         export async function runProbeSession(_session, harness) {{\n\
+         \x20 harness.emit({{ marker: \"call\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 if (typeof subject !== \"function\") {{\n\
+         \x20   throw new Error(\"synthesized veto: the export is not callable in this realm\");\n\
+         \x20 }}\n\
+         \x20 const quiet = observe(readsNothing).fields;\n\
+         \x20 const loud = observe(readsTheSource).fields;\n\
+         \x20 const keys = [...loud.keys()].filter((key) => {{\n\
+         \x20   const value = loud.get(key);\n\
+         \x20   return typeof value === \"object\" && value !== null && absent(quiet.get(key));\n\
+         \x20 }});\n\
+         \x20 if (keys.length === 0) {{\n\
+         \x20   throw new Error(\"synthesized veto: calibration found no field a read sets on the observing memo\");\n\
+         \x20 }}\n\
+         \x20 let read = false;\n\
+         \x20 let threw = 0;\n\
+         \x20 let completed = 0;\n\
+         \x20 for (const args of samples) {{\n\
+         \x20   const run = observe(() => {{\n\
+         \x20     subject(...args);\n\
+         \x20   }});\n\
+         \x20   if (run.threw) threw += 1;\n\
+         \x20   else completed += 1;\n\
+         \x20   if (subscribed(keys, run.fields)) read = true;\n\
+         \x20 }}\n\
+         \x20 // The apparatus still tells a read from none after the samples ran.\n\
+         \x20 if (!subscribed(keys, observe(readsTheSource).fields) || subscribed(keys, observe(readsNothing).fields)) {{\n\
+         \x20   throw new Error(\"synthesized veto: the calibrated fields no longer tell a read from none after the samples ran\");\n\
+         \x20 }}\n\
+         \x20 if (threw > 0) harness.emit({{ marker: \"sample-threw\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 if (read) {{\n\
+         \x20   harness.emit({{ marker: \"read-operation\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 }} else if (completed === 0) {{\n\
+         \x20   throw new Error(\"synthesized veto: no sample call completed normally, so nothing was observed\");\n\
+         \x20 }}\n\
+         \x20 harness.emit({{ marker: \"call\", kind: \"call\", phase: \"exit\" }});\n\
+         }}\n",
+        specifier_json = json(specifier),
+        package_json = json(runtime.package),
+        export_json = json(export),
+        create_root = json(runtime.create_root),
+        create_memo = json(runtime.create_memo),
+        create_signal = json(runtime.create_signal),
+        get_observer = json(runtime.get_observer),
     )
 }
 
@@ -2654,11 +2902,20 @@ mod tests {
             "the callbacks observation emits from inside the callback, not at a checkpoint"
         );
 
+        // ADR 0163: reviewed, and stated as not exhaustive.
+        let reads = reviewed_observation("reads").expect("reads is reviewed");
+        assert_eq!(reads.marker, "read-operation");
+        assert!(!reads.observation.starts_with("exact:"));
+        assert!(
+            reads
+                .observation
+                .contains("no untracked, deferred or non-reactive read")
+        );
+
         for domain in [
             "cleanups",
             "disposals",
             "invalidates",
-            "reads",
             "writes",
             "throws",
             "",
