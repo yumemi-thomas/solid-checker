@@ -119,6 +119,11 @@ primitives by exports blocked: `solid-js:createSignal` 83, `solid-js:createMemo`
 
 ## Remaining approximations
 
+- Follow-up ADR 0171 now requires callback attribution before a flat reads
+  row terminates the census, including delegated rows. It uses the complete
+  callback execution vocabulary rather than the rule-specific callback
+  positions. The by-reference gap described below is the historical reason
+  for that change; the new restriction does not widen the factory audits.
 - **The flat rows already shipped.** `createMemo`'s row (and the other flat rc.9
   `reads` rows) denies the archive's own code and leaves a callable passed by
   reference unattributed: the audit's § 8 probes show `untrack(lazyMemo)`,

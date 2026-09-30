@@ -1,5 +1,37 @@
 # Precision backlog
 
+## Flat reads callback attribution (2026-09-30)
+
+Status: **implemented and verified; 147 focused certification tests, full
+source verification and post-tier checks passed; tier authenticated**.
+Full `make verify` passed in the isolated worktree, exit zero, TOTAL 936.14 s,
+with no `FAILED during step` marker. ADR 0171 makes a flat reads denial account
+for every callback execution the dialect models, including delegates. A
+locally created lazy memo passed by reference no longer vanishes
+behind the runtime's negative row. Literals walked in the frame and the
+caller's own depth-zero parameters remain attributable.
+
+The real rc.9 signals prod, development and observe builds each run the lazy
+compute once at the enclosing `createMemo` call. The construction has zero
+TypeScript 5.9.3 diagnostics against the published typings. No new rule, claim
+form, value shape or Type Facts protocol is added. Structural returns,
+additional options behavior and the actual `solid-js` hydration/server
+factories remain separate proof work. Fresh census comparisons pass without
+repinning. The rebuilt release retains 101 / 101 / 131 clean exports;
+the 1,480 bundle identities and contract documents are unchanged. Refreshed
+receipts/2,009 objects authenticate. This is evidence strengthening without a
+coverage gain. The final rebuilt-release misuse ledger is unchanged: two of
+123 cases report correctly and all 246 twins are TypeScript-clean against
+published typings. The checkpoint remains 1/97, with criteria 1/2/3 at 83/6/4.
+Post-tier Rust tests, formatting, workspace Clippy, coverage (141 projects/733
+findings), contract corpus (120 cases), ownership (41 cases/465 rows, zero
+pending), contract conformance and `git diff --check` all passed. Legacy
+conformance has no active bundle cases; the separate focused authentication
+test covers the actual delivered accepted tier. The app-import metric was not
+rerun; its previous 1/1,850, with primitives at 0/292, remains the latest
+application measurement.
+The detailed integrated measurement below predates this slice.
+
 ## Integrated primitives tier and misuse measurement (2026-09-30)
 
 Status: **partly implemented, measured and verified**, source `6208b85f`,

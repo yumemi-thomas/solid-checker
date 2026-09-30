@@ -6815,9 +6815,12 @@ fn census_dialect_axiom(
 
     let archive = audited_archive_for_snapshot(snapshot).map_err(|_| None)?;
     if solid_dialect::primitive_performs_no_operation(archive, &call.target_name, domain) {
+        let callbacks =
+            census_flat_reads_arguments(&call.target_name, domain, Some(argument_premises))
+                .map_err(Some)?;
         return Ok(CensusTerminator {
             witness_site: format!(
-                "census-dialect-axiom:{}@{}#{}:{}:{}",
+                "census-dialect-axiom:{}@{}#{}:{}:{}{callbacks}",
                 archive.name,
                 archive.version,
                 sri_prefix(archive.integrity),
@@ -6861,8 +6864,8 @@ fn census_dialect_axiom(
 }
 
 /// [`census_dialect_axiom`] with no requested conditions, which is what every
-/// gate test above the scoped row asks: an unconditional row answers exactly as
-/// it always did, and a scoped row never does.
+/// gate test above the scoped row asks: a row needing callback attribution or
+/// an argument scope never answers without call-site premises.
 #[cfg(test)]
 fn census_dialect_axiom_for_callee(
     call: &typefacts::ImplementationCall,
@@ -6990,6 +6993,55 @@ fn census_host_target_terminator(
 /// (ADR 0168): the witness label of the premises that hold, or the reason one
 /// does not.
 type ArgumentPremises<'a> = dyn Fn(&solid_dialect::ArgumentScope) -> Result<String, String> + 'a;
+
+/// A flat negative row accounts for the archive's own code, not an arbitrary
+/// callable supplied to it. Attribute every callback slot the dialect models
+/// before using such a row to close `reads`. A primitive by grammar cannot run
+/// code; every possible callable must be walked or belong to the caller at
+/// depth zero. In particular, an accessor of a locally created lazy memo is
+/// neither: invoking it can run this artifact's own computation.
+///
+/// Use callback executions, not callback_positions (which is a rule-specific
+/// subset). Check every recognizing dialect; disagreement cannot omit a slot.
+fn census_flat_reads_arguments(
+    export: &str,
+    domain: solid_dialect::CallClaimDomain,
+    premises: Option<&ArgumentPremises<'_>>,
+) -> Result<String, String> {
+    if domain != solid_dialect::CallClaimDomain::Reads {
+        return Ok(String::new());
+    }
+    let mut checked = std::collections::BTreeSet::new();
+    for dialect in solid_dialect::DIALECTS {
+        let Some(primitive) = dialect
+            .primitive(export)
+            .filter(|primitive| dialect.name_of(*primitive) == Some(export))
+        else {
+            continue;
+        };
+        for (slot, _) in dialect.callback_executions(primitive) {
+            let scope = solid_dialect::ArgumentScope {
+                primitive_slots: &[],
+                callable_or_primitive_slots: std::slice::from_ref(slot),
+                invoked_slots: &[],
+                delegates: &[],
+            };
+            let label = premises
+                .ok_or_else(|| format!("the flat reads row for {export} requires callback argument {slot} attribution, but this census has no call-site premises"))?
+                (&scope)
+                .map_err(|reason| format!("the flat reads row for {export} requires callback argument {slot} attribution: {reason}"))?;
+            checked.insert(label);
+        }
+    }
+    if checked.is_empty() {
+        Ok(String::new())
+    } else {
+        Ok(format!(
+            ":callbacks={}",
+            checked.into_iter().collect::<Vec<_>>().join("+")
+        ))
+    }
+}
 
 /// One argument-scoped dialect row (ADR 0168), bound to its audited archive.
 struct ArgumentRow {
@@ -7240,14 +7292,20 @@ fn census_delegated_denials(
         // -- a reading that follows the call into the archive says which of its
         // arguments the delegate receives, and a row may delegate this way only
         // where it forwards them (the audit section states it).
-        let mut argument_label = String::new();
-        if !solid_dialect::primitive_performs_no_operation(audited, delegate, delegate_domain) {
+        let argument_label = if solid_dialect::primitive_performs_no_operation(
+            audited,
+            delegate,
+            delegate_domain,
+        ) {
+            census_flat_reads_arguments(delegate, delegate_domain, delegate_arguments)
+                .map_err(|reason| format!("{name}, and its delegate: {reason}"))?
+        } else {
             let scope = solid_dialect::argument_row(audited, delegate, delegate_domain);
             let held = scope
                 .zip(delegate_arguments)
                 .map(|(scope, premises)| premises(scope));
             match held {
-                Some(Ok(checked)) => argument_label = format!(":arguments={checked}"),
+                Some(Ok(checked)) => format!(":arguments={checked}"),
                 Some(Err(reason)) => {
                     return Err(format!(
                         "{name}, and it delegates {delegate} {} to {}@{}, whose row holds only \
@@ -7267,7 +7325,7 @@ fn census_delegated_denials(
                     ));
                 }
             }
-        }
+        };
         delegated.push(format!(
             "{}@{}#{}:{delegate}:{}{argument_label}",
             audited.name,
@@ -28400,13 +28458,16 @@ mod tests {
                 snapshot,
                 dependency: true,
             }];
-            census_dialect_axiom_for_callee(
+            census_dialect_axiom(
                 &signals_call(export, json!({})),
                 domain,
                 ReachabilityFloor::MayExecute,
                 &certified,
                 &roots,
+                &[],
+                &|scope| census_scope_label(scope),
             )
+            .ok()
         };
         let rc6 = archive_snapshot(
             "@solidjs/signals",
@@ -28551,13 +28612,16 @@ mod tests {
                 snapshot,
                 dependency: true,
             }];
-            census_dialect_axiom_for_callee(
+            census_dialect_axiom(
                 &signals_call(export, json!({})),
                 domain,
                 ReachabilityFloor::MayExecute,
                 &certified,
                 &roots,
+                &[],
+                &|scope| census_scope_label(scope),
             )
+            .ok()
         };
         let rc9 = archive_snapshot(
             "@solidjs/signals",
@@ -28590,12 +28654,17 @@ mod tests {
             ("reconcile", solid_dialect::CallClaimDomain::Reads),
         ];
         for (export, domain) in granted {
+            let callbacks = if matches!(export, "createMemo" | "flush") {
+                ":callbacks=primitive[]+either[0]+invoked[]"
+            } else {
+                ""
+            };
             assert_eq!(
                 terminator(&rc9, export, domain)
                     .unwrap_or_else(|| panic!("rc.9 denies {export} {domain:?}"))
                     .witness_site,
                 format!(
-                    "census-dialect-axiom:@solidjs/signals@2.0.0-rc.9#sha512-o3pqiTgpH5NR2Dst:{export}:{}",
+                    "census-dialect-axiom:@solidjs/signals@2.0.0-rc.9#sha512-o3pqiTgpH5NR2Dst:{export}:{}{callbacks}",
                     domain.wire_name()
                 )
             );
@@ -30086,6 +30155,59 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn flat_reads_rows_require_all_callback_executions_and_bind_delegates() {
+        use solid_dialect::CallClaimDomain::{Creates, Reads};
+        let seen = std::cell::RefCell::new(Vec::new());
+        let check = |scope: &solid_dialect::ArgumentScope| {
+            seen.borrow_mut()
+                .extend_from_slice(scope.callable_or_primitive_slots);
+            census_scope_label(scope)
+        };
+        assert_eq!(
+            census_flat_reads_arguments("createEffect", Reads, Some(&check)),
+            Ok(":callbacks=primitive[]+either[0]+invoked[]+primitive[]+either[1]+invoked[]".into())
+        );
+        assert_eq!(*seen.borrow(), vec![0, 1]);
+        assert_eq!(
+            census_flat_reads_arguments("createEffect", Creates, None),
+            Ok(String::new())
+        );
+        assert_eq!(
+            census_flat_reads_arguments("getOwner", Reads, None),
+            Ok(String::new())
+        );
+        assert!(
+            census_flat_reads_arguments("createMemo", Reads, None)
+                .unwrap_err()
+                .contains("no call-site premises")
+        );
+
+        let certified = consumer_snapshot();
+        let signals = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.9",
+            SIGNALS_RC9_INTEGRITY,
+            &audited_phase0_manifest("rc9", "solidjs-signals"),
+            "/snapshot/signals-rc9",
+        );
+        let roots = vec![signals_root(&signals)];
+        let delegates = &[("@solidjs/signals", "createMemo", Reads)];
+        assert!(
+            census_delegated_denials("test", delegates, &certified, &roots, None)
+                .unwrap_err()
+                .contains("no call-site premises")
+        );
+        let sites =
+            census_delegated_denials("test", delegates, &certified, &roots, Some(&check)).unwrap();
+        assert_eq!(
+            sites,
+            vec![
+                "@solidjs/signals@2.0.0-rc.9#sha512-o3pqiTgpH5NR2Dst:createMemo:reads:callbacks=primitive[]+either[0]+invoked[]"
+            ]
+        );
+    }
+
     /// ADR 0168, end to end through the census's own walk over synthesized
     /// transcripts: `untrack(() => sig())` closes `reads` when `sig` is the
     /// caller's parameter, and `createSignal(() => sig())` does not, because
@@ -30185,6 +30307,36 @@ mod tests {
         let error = refused.expect_err("an accessor passed by reference refuses");
         assert!(
             error.contains("the dialect row @solidjs/signals@2.0.0-rc.9:untrack:reads holds only")
+                && error.contains("neither rooted at a parameter"),
+            "{error}"
+        );
+
+        // A flat `createMemo` row denies the archive's own reads, but must
+        // attribute its compute too. A lazy memo accessor or helper passed by
+        // reference must not disappear behind that denial.
+        let memo = |overrides: serde_json::Value| {
+            let mut call = untrack(overrides);
+            call.target_name = "createMemo".into();
+            call.declaration.as_mut().unwrap().name = "createMemo".into();
+            call
+        };
+        let (closed, sites) = outcome(memo(json!({})), Some(inner.clone()));
+        assert_eq!(closed, Ok(CensusStep::Decided));
+        assert!(
+            sites
+                .iter()
+                .any(|site| site.contains("createMemo:reads:callbacks=")),
+            "{sites:?}"
+        );
+        let (closed, _) = outcome(
+            memo(json!({"argumentCallables": [], "argumentParameters": [{"parameterIndex": 0}]})),
+            None,
+        );
+        assert_eq!(closed, Ok(CensusStep::Decided));
+        let (refused, _) = outcome(memo(json!({"argumentCallables": []})), None);
+        let error = refused.expect_err("a flat row cannot hide an unattributed compute");
+        assert!(
+            error.contains("flat reads row for createMemo")
                 && error.contains("neither rooted at a parameter"),
             "{error}"
         );
