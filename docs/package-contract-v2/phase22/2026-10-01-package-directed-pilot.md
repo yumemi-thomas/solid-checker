@@ -7,6 +7,9 @@ to complete certification of every package.
 
 The offline, repeatable experiment is
 [`benchmarks/package-directed-pilot/pilot.mjs`](../../../benchmarks/package-directed-pilot/pilot.mjs).
+The [extended experiment](2026-10-01-package-directed-extension.md) compares
+bounds and hosts, and corrects the initial RAF return proposal's `min: 1`
+authoring mistake before identifying its unsupported callable-member leaves.
 It changes no analyzer, dialect, schema, receipt policy, accepted tier or misuse
 ledger. Generated proposals, trial receipts and observations remain under
 `rust/target/package-directed-pilot-checked/`. These are experimental artifacts,
@@ -81,6 +84,10 @@ The RAF return operation is withheld at `domain-exhaustiveness` with
 retains only the proposed cleanup operation for this target. Receipt issuance
 for this partial document must never be reported as acceptance of its proposed
 tuple or certification of the whole package.
+The later extension establishes that this initial refusal was caused by the
+proposal's return bound; its corrected conditional return reaches a separate
+unsupported-member refusal. Do not cite the initial message alone as evidence
+of a returned-value proof gap.
 
 ## Negative control
 

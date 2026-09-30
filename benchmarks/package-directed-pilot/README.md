@@ -36,3 +36,16 @@ The three positive package trials use browser conditions. The fourth is a
 negative callback-enumeration control. Ten strict TypeScript checks precede
 twenty consumer analyses; their expected findings are asserted. A successful
 run establishes the recorded partial results, not full package certification.
+
+Append `extended` after the output directory to compare listener owner bounds,
+RAF ownership in none/browser/node, the corrected conditional RAF tuple return,
+and a browser `memo.createPureReaction` replication control. This mode performs
+eight trials, sixteen TypeScript checks and thirty-two consumer analyses.
+The [extension result](../../docs/package-contract-v2/phase22/2026-10-01-package-directed-extension.md)
+records the remaining proof gaps. To check a saved extended record without
+repeating analysis:
+
+```sh
+bun benchmarks/package-directed-pilot/check-extended.mjs \
+  rust/target/package-directed-extended/results.json
+```
