@@ -372,6 +372,93 @@ func (p *project) argumentsPrimitiveSyntaxLocked(call *ast.Node) []bool {
 	return answers
 }
 
+// notFunctionBySyntaxLocked answers whether an expression's value is provably
+// not a function by its grammar alone (ADR 0162, handshake protocol 76): a
+// primitive by grammar (primitiveBySyntaxLocked), or an array literal or an
+// object literal, each of which evaluates to a fresh object whatever its
+// members are. It is the condition `typeof first !== "function"` tests in the
+// audited `createSignal` bodies (audit 2026-09-30, § 6), so a value this
+// states cannot take the memo path. A binding, a member, a call, a
+// construction, a class or function expression and everything else is false.
+func (p *project) notFunctionBySyntaxLocked(node *ast.Node) bool {
+	node = identityPreservingUnwrap(node)
+	if node == nil {
+		return false
+	}
+	if ast.IsArrayLiteralExpression(node) || ast.IsObjectLiteralExpression(node) {
+		return true
+	}
+	return p.primitiveBySyntaxLocked(node, 0)
+}
+
+// plainOptionsBySyntaxLocked answers whether an expression is an object literal
+// whose every member is a plain `key: value` assignment -- a non-computed
+// identifier, string or numeric key -- of a primitive by grammar (ADR 0162,
+// handshake protocol 76). No member can then be a function, so an options
+// object so written carries no `equals` or `unobserved` callback, and no member
+// can be a spread of an unknown object, a shorthand naming a binding, a
+// method, an accessor or a computed key. The empty literal is one.
+func (p *project) plainOptionsBySyntaxLocked(node *ast.Node) bool {
+	node = identityPreservingUnwrap(node)
+	if node == nil || !ast.IsObjectLiteralExpression(node) {
+		return false
+	}
+	for _, member := range node.AsObjectLiteralExpression().Properties.Nodes {
+		if member == nil || nodeKindName(member) != "PropertyAssignment" {
+			return false
+		}
+		name := member.Name()
+		if name == nil || !(ast.IsIdentifier(name) || ast.IsStringLiteral(name) || ast.IsNumericLiteral(name)) {
+			return false
+		}
+		if !p.primitiveBySyntaxLocked(member.Initializer(), 0) {
+			return false
+		}
+	}
+	return true
+}
+
+// argumentsNotFunctionSyntaxLocked answers notFunctionBySyntaxLocked for each
+// written argument of a call, in order (ADR 0162); a spread is never one.
+func (p *project) argumentsNonSpreadSyntaxLocked(call *ast.Node) []bool {
+	if call == nil || !ast.IsCallExpression(call) {
+		return nil
+	}
+	answers := make([]bool, 0, len(call.Arguments()))
+	displaced := false
+	for _, argument := range call.Arguments() {
+		displaced = displaced || ast.IsSpreadElement(argument)
+		answers = append(answers, !displaced)
+	}
+	return answers
+}
+
+func (p *project) argumentsNotFunctionSyntaxLocked(call *ast.Node) []bool {
+	if call == nil || !ast.IsCallExpression(call) {
+		return nil
+	}
+	arguments := call.Arguments()
+	answers := make([]bool, 0, len(arguments))
+	for _, argument := range arguments {
+		answers = append(answers, p.notFunctionBySyntaxLocked(argument))
+	}
+	return answers
+}
+
+// argumentsPlainOptionsSyntaxLocked answers plainOptionsBySyntaxLocked for each
+// written argument of a call, in order (ADR 0162); a spread is never one.
+func (p *project) argumentsPlainOptionsSyntaxLocked(call *ast.Node) []bool {
+	if call == nil || !ast.IsCallExpression(call) {
+		return nil
+	}
+	arguments := call.Arguments()
+	answers := make([]bool, 0, len(arguments))
+	for _, argument := range arguments {
+		answers = append(answers, p.plainOptionsBySyntaxLocked(argument))
+	}
+	return answers
+}
+
 // returnedCallExpression answers the exact location of the call expression a
 // returned expression is, after identity-preserving wrappers (ADR 0146), and
 // nil for every other expression: the site hands back what that call returned.

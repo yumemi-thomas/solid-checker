@@ -5479,13 +5479,59 @@ impl Dialect for Solid2 {
     /// no pending status serves the committed or staged value, linking the
     /// current observer when tracking: it runs no code. With every argument a
     /// primitive by grammar there is neither a function first argument nor an
-    /// options object, so no path through it runs any. `createMemo`'s accessor
-    /// recomputes its caller's function and is not stated.
+    /// options object, so no path through it runs any. ADR 0162 states the
+    /// precondition by what it excludes, which is all the bytes test: the memo
+    /// path is taken only for `typeof e === "function"` (also the only test
+    /// `solid-js`' `hydratedCreateSignal` and server `createSignal` make of
+    /// the first argument, audit 2026-09-30 § 6), so an array or object
+    /// literal first argument takes the plain path exactly as a primitive
+    /// does; and `signal(e, t)` reads `t.equals`, `t.ownedWrite`, `t.unobserved`
+    /// off the options object, so an options object every member of which is a
+    /// primitive keeps no callback. `createMemo`'s accessor recomputes its
+    /// caller's function and is not stated here (see
+    /// [`Dialect::computed_accessor_read`]).
     fn inert_accessor_read(&self, primitive: Primitive, slot: ResultSlot) -> bool {
         matches!(
             (primitive, slot),
             (Primitive::CreateSignal, ResultSlot::TupleItem(0))
         )
+    }
+
+    /// ADR 0162. Source: `@solidjs/signals@2.0.0-rc.9`, the audited release
+    /// (`dist/prod/signals.js` `createMemo`, `accessor`; `dist/prod/core/core.js`
+    /// `computed` and `read`). `createMemo(e, t)` is `accessor(computed(e, t))`
+    /// and `accessor(n)` is `read.bind(null, n)`. `read` of a node that has a
+    /// compute function (`ce`) calls `prepareComputed` / `updateIfNecessary`,
+    /// which re-run **that registered function `e`** when the node is stale --
+    /// and nothing else of anyone's: not the read's arguments (`read` ignores
+    /// what it is bound over), not the options' callbacks except `equals`,
+    /// which the same recomputation compares with. It may also throw the node's
+    /// own error or a not-ready signal. So invoking the whole result of
+    /// `createMemo` is a tracked read whose only possible execution is the
+    /// registered computation, the one the creating call already registered
+    /// (the dialect's `createMemo` row is that registration), and whose
+    /// executions the creating call's own claims account for. The same slot of
+    /// `createSignal` is a different row, [`Dialect::inert_accessor_read`], and
+    /// the two are never both true.
+    fn computed_accessor_read(&self, primitive: Primitive, slot: ResultSlot) -> bool {
+        matches!(
+            (primitive, slot),
+            (Primitive::CreateMemo, ResultSlot::Whole)
+        )
+    }
+
+    fn computed_accessor_read_archive(
+        &self,
+        primitive: Primitive,
+        slot: ResultSlot,
+        archive: &AuditedArchive,
+    ) -> bool {
+        self.computed_accessor_read(primitive, slot)
+            && AUDITED_ARCHIVES.iter().any(|audited| {
+                audited.name == "@solidjs/signals"
+                    && audited.version == "2.0.0-rc.9"
+                    && audited == archive
+            })
     }
 
     /// Source: the match this replaced in `solid-reactive-ir/src/static_api.rs`,

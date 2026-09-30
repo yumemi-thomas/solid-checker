@@ -235,3 +235,102 @@ void check;
 		t.Fatalf("saw %v of %d calls", seen, len(want))
 	}
 }
+
+// ADR 0162, handshake protocol 76: a call-result source states, per written
+// argument, whether its grammar alone proves the value is not a function, and
+// whether it is a plain options literal. Each is a fact about the written
+// expression and never about a binding: an identifier, a member, a call, a
+// construction and a function are all "not stated true", and a spread is false.
+func TestCallResultSourcesStateNotFunctionAndPlainOptionsSyntax(t *testing.T) {
+	cases := []struct {
+		name, arguments string
+		notFunction     []bool
+		plainOptions    []bool
+	}{
+		{"primitive", `0`, []bool{true}, []bool{false}},
+		{"undefined", `void 0, { ownedWrite: true }`, []bool{true, true}, []bool{false, true}},
+		{"emptyArray", `[]`, []bool{true}, []bool{false}},
+		{"arrayOfAnything", `[x, () => 1]`, []bool{true}, []bool{false}},
+		{"objectLiteral", `{ a: x }`, []bool{true}, []bool{false}},
+		{"emptyOptions", `0, {}`, []bool{true, true}, []bool{false, true}},
+		{"flagOptions", `0, { ownedWrite: true, name: "n", 3: 1 }`, []bool{true, true}, []bool{false, true}},
+		{"falseEquals", `0, { equals: false }`, []bool{true, true}, []bool{false, true}},
+		{"optionsWithFunction", `0, { equals: () => true }`, []bool{true, true}, []bool{false, false}},
+		{"optionsWithBinding", `0, { ownedWrite: x }`, []bool{true, true}, []bool{false, false}},
+		{"optionsWithSpread", `0, { ...x }`, []bool{true, true}, []bool{false, false}},
+		{"optionsWithShorthand", `0, { x }`, []bool{true, true}, []bool{false, false}},
+		{"optionsWithComputedKey", `0, { [x]: 1 }`, []bool{true, true}, []bool{false, false}},
+		{"optionsWithMethod", `0, { equals() { return true; } }`, []bool{true, true}, []bool{false, false}},
+		{"optionsWithAccessor", `0, { get equals() { return x; } }`, []bool{true, true}, []bool{false, false}},
+		{"nestedObjectValue", `0, { a: { b: 1 } }`, []bool{true, true}, []bool{false, false}},
+		{"binding", `x`, []bool{false}, []bool{false}},
+		{"member", `x.value`, []bool{false}, []bool{false}},
+		{"call", `x()`, []bool{false}, []bool{false}},
+		{"arrow", `() => 1`, []bool{false}, []bool{false}},
+		{"functionExpression", `function () { return 1; }`, []bool{false}, []bool{false}},
+		{"construction", `new Map()`, []bool{false}, []bool{false}},
+		{"spread", `...list`, []bool{false}, []bool{false}},
+		{"spreadBeforeOptions", `...list, { equals: false }`, []bool{false, true}, []bool{false, true}},
+		{"wrappedLiteral", `([] as any)`, []bool{true}, []bool{false}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			source := "declare function mk(...args: any[]): any;\nexport function check(x: any, list: any[]) {\n  return mk(" + tc.arguments + ");\n}\nvoid check;\n"
+			dir := t.TempDir()
+			writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+			p, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer p.Close()
+			path := filepath.Join(dir, "facts.ts")
+			start := strings.LastIndex(source, "check")
+			impl := strings.Index(source, "check")
+			answer, err := p.(typefacts.ExportValueAnalyzer).ExportValueTranscripts(context.Background(), []typefacts.ExportValueDemand{{
+				Location:               typefacts.Location{Path: path, StartByte: start, EndByte: start + 5},
+				ImplementationLocation: &typefacts.Location{Path: path, StartByte: impl, EndByte: impl + 5},
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			implementation := answer.Transcripts[0].Implementation
+			if implementation == nil || implementation.ControlFlow == nil || len(implementation.ControlFlow.Returns) != 1 {
+				t.Fatal("missing return census")
+			}
+			var source0 *typefacts.ImplementationValueSource
+			for index := range implementation.ControlFlow.Returns[0].Sources {
+				candidate := &implementation.ControlFlow.Returns[0].Sources[index]
+				if candidate.Kind == typefacts.ImplementationValueCallResult && len(candidate.Path) == 0 {
+					source0 = candidate
+				}
+			}
+			if source0 == nil {
+				t.Fatalf("no call-result source in %+v", implementation.ControlFlow.Returns[0].Sources)
+			}
+			equal := func(got, want []bool) bool {
+				if len(got) != len(want) {
+					return false
+				}
+				for index := range want {
+					if got[index] != want[index] {
+						return false
+					}
+				}
+				return true
+			}
+			if !equal(source0.ArgumentsNotFunctionSyntax, tc.notFunction) {
+				t.Fatalf("argumentsNotFunctionSyntax = %v, want %v", source0.ArgumentsNotFunctionSyntax, tc.notFunction)
+			}
+			if !equal(source0.ArgumentsPlainOptionsSyntax, tc.plainOptions) {
+				t.Fatalf("argumentsPlainOptionsSyntax = %v, want %v", source0.ArgumentsPlainOptionsSyntax, tc.plainOptions)
+			}
+			wantNonSpread := make([]bool, len(tc.notFunction))
+			for index := range wantNonSpread {
+				wantNonSpread[index] = tc.name != "spread" && tc.name != "spreadBeforeOptions"
+			}
+			if !equal(source0.ArgumentsNonSpreadSyntax, wantNonSpread) {
+				t.Fatalf("argumentsNonSpreadSyntax = %v, want %v", source0.ArgumentsNonSpreadSyntax, wantNonSpread)
+			}
+		})
+	}
+}

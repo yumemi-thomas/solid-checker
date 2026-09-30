@@ -18,7 +18,7 @@
             "derivedSignalShape": "summary-c341c230b1445395b521966ce3b41a9cf14f62c46fd568e104137806817bd020",
             "inlineShape": "summary-c341c230b1445395b521966ce3b41a9cf14f62c46fd568e104137806817bd020",
             "memoInsideUntrack": "summary-83f8148d2f3d575931f096b8120b6d8d743d76427e33b1baaa5c984cbc3e509a",
-            "memoShape": "summary-a08378b6e30c2a2470713d95217b13fe7823b9e11ab6881ef7038a3828069262",
+            "memoShape": "summary-8b379b9ccbab66434c5d981d4b80183b871c178ec1e2d6d31de9ee9c3593bc82",
             "mountShape": "summary-9c017cf14f5a4997e2be86c478806c8d87f12c6ec31cfc495df34603ca9ef541",
             "trackedShape": "summary-4ec3db41117ea7d78c929cb7894fb5ffb37d60f9fe3b2f342738f7c7daf94a66",
             "trackedThroughLocalHelper": "summary-4ec3db41117ea7d78c929cb7894fb5ffb37d60f9fe3b2f342738f7c7daf94a66",
@@ -245,6 +245,77 @@
       },
       "shape": "callable"
     },
+    "summary-8b379b9ccbab66434c5d981d4b80183b871c178ec1e2d6d31de9ee9c3593bc82": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "described-callable",
+              "reads": [
+                "owned-memo"
+              ],
+              "returns": [
+                "read-value"
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
     "summary-9c017cf14f5a4997e2be86c478806c8d87f12c6ec31cfc495df34603ca9ef541": {
       "call": {
         "callbacks": [
@@ -310,69 +381,6 @@
         ],
         "reads": [],
         "returns": []
-      },
-      "shape": "callable"
-    },
-    "summary-a08378b6e30c2a2470713d95217b13fe7823b9e11ab6881ef7038a3828069262": {
-      "call": {
-        "callbacks": [
-          {
-            "from": {
-              "arg": 0,
-              "path": []
-            },
-            "operation": "callback-0"
-          }
-        ],
-        "closed": [
-          "reads",
-          "returns"
-        ],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "callback-0",
-            "kind": "invoke",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          },
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": "plain",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "reads",
-          "returns"
-        ],
-        "reads": [],
-        "returns": [
-          "return"
-        ]
       },
       "shape": "callable"
     },

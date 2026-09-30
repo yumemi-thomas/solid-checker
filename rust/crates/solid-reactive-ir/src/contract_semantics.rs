@@ -2275,6 +2275,18 @@ pub enum DescribedRead {
     /// created through a dialect primitive and captured, whose read runs no
     /// code of anyone's.
     OwnedSignal,
+    /// ADR 0162: a read of a memo accessor the export's own invocation
+    /// created with the dialect's `createMemo` and handed back unaltered. It
+    /// observes the memo's current value in the invoking caller's tracking
+    /// context. Unlike [`DescribedRead::OwnedSignal`] it is **not inert**: when
+    /// the memo is stale the read re-runs the computation the creating call
+    /// registered, and that computation -- the code the export defined or was
+    /// handed, and every callable it invokes -- is accounted for by the
+    /// export's own `creates` and `callbacks` claims where it was registered,
+    /// never by this read. Its creating call's options are certified to retain
+    /// no callback; the read invokes no other callable, and may throw
+    /// the memo's own error or a not-ready signal.
+    OwnedMemo,
 }
 
 impl DescribedRead {
@@ -2282,6 +2294,7 @@ impl DescribedRead {
     pub const fn wire_name(self) -> &'static str {
         match self {
             Self::OwnedSignal => "owned-signal",
+            Self::OwnedMemo => "owned-memo",
         }
     }
 
@@ -2289,6 +2302,7 @@ impl DescribedRead {
     pub fn from_wire(value: &str) -> Option<Self> {
         match value {
             "owned-signal" => Some(Self::OwnedSignal),
+            "owned-memo" => Some(Self::OwnedMemo),
             _ => None,
         }
     }

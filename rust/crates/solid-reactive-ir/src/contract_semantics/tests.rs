@@ -2755,7 +2755,24 @@ fn a_described_callable_is_validated_to_its_one_position_and_vocabulary() {
         )
         .is_ok()
     );
+    // ADR 0162: a memo read is a described read, and a read value may be
+    // returned beside it.
+    assert!(
+        with_output(
+            OperationKind::Return,
+            callable(vec![DescribedRead::OwnedMemo], vec![ValueShape::ReadValue])
+        )
+        .is_ok()
+    );
     for (kind, output, needle) in [
+        (
+            OperationKind::Return,
+            callable(
+                vec![DescribedRead::OwnedMemo, DescribedRead::OwnedMemo],
+                Vec::new(),
+            ),
+            "a described read is repeated",
+        ),
         (
             OperationKind::Return,
             callable(Vec::new(), vec![ValueShape::Undefined]),

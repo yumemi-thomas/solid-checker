@@ -426,7 +426,7 @@ ADR 0145 adds `described-callable`, valid only as the whole `output` of a
 `return` operation: `{ "kind": "described-callable", "reads": [], "returns":
 ["plain"] }`. Both lists are required -- an absent one would read as the
 strongest claim it can make -- canonically sorted, and without duplicates.
-`reads` items are drawn from `owned-signal` (ADR 0146), `returns` items from
+`reads` items are drawn from `owned-signal` (ADR 0146) and `owned-memo` (ADR 0162; canonical byte 1, appended, so no earlier document moves), `returns` items from
 `plain` and (ADR 0146, only beside a read) `read-value`, a shorthand whose
 detailed spelling is `{ "kind": "read-value" }` and which is valid nowhere
 else; its canonical tag is 22. It carries no `closed` list: the shape is exact, and states what one

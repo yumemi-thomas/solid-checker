@@ -1216,7 +1216,10 @@ func (p *project) returnValueSourcesLocked(expression *ast.Node) []typefacts.Imp
 				sources = append(sources, typefacts.ImplementationValueSource{
 					Path: append([]typefacts.PathSegment(nil), path...), Kind: typefacts.ImplementationValueCallResult,
 					Target: target, TargetName: name, TargetModule: module,
-					ArgumentsPrimitiveSyntax: p.argumentsPrimitiveSyntaxLocked(node),
+					ArgumentsPrimitiveSyntax:    p.argumentsPrimitiveSyntaxLocked(node),
+					ArgumentsNonSpreadSyntax:    p.argumentsNonSpreadSyntaxLocked(node),
+					ArgumentsNotFunctionSyntax:  p.argumentsNotFunctionSyntaxLocked(node),
+					ArgumentsPlainOptionsSyntax: p.argumentsPlainOptionsSyntaxLocked(node),
 				})
 			}
 			return
@@ -1298,8 +1301,11 @@ func (p *project) returnValueSourcesLocked(expression *ast.Node) []typefacts.Imp
 			sources = append(sources, typefacts.ImplementationValueSource{
 				Path: append([]typefacts.PathSegment(nil), path...), Kind: typefacts.ImplementationValueCallResult,
 				Target: target, TargetName: name, TargetModule: module,
-				TargetPath:               []typefacts.PathSegment{{Kind: typefacts.PathSegmentTuple, Index: &item}},
-				ArgumentsPrimitiveSyntax: p.argumentsPrimitiveSyntaxLocked(variable.AsVariableDeclaration().Initializer),
+				TargetPath:                  []typefacts.PathSegment{{Kind: typefacts.PathSegmentTuple, Index: &item}},
+				ArgumentsPrimitiveSyntax:    p.argumentsPrimitiveSyntaxLocked(variable.AsVariableDeclaration().Initializer),
+				ArgumentsNonSpreadSyntax:    p.argumentsNonSpreadSyntaxLocked(variable.AsVariableDeclaration().Initializer),
+				ArgumentsNotFunctionSyntax:  p.argumentsNotFunctionSyntaxLocked(variable.AsVariableDeclaration().Initializer),
+				ArgumentsPlainOptionsSyntax: p.argumentsPlainOptionsSyntaxLocked(variable.AsVariableDeclaration().Initializer),
 			})
 			return
 		}

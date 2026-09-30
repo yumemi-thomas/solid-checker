@@ -57,6 +57,7 @@
     "implementation-census-described-callbacks",
     "implementation-census-member-callee",
     "implementation-census-member-returns",
+    "implementation-census-memo-accessors",
     "implementation-census-owned-signal-reads",
     "implementation-census-reads",
     "implementation-census-reads-fresh-target",

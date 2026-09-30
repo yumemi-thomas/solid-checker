@@ -652,6 +652,64 @@ pub fn unambiguous_inert_accessor_read(name: &str, slot: ResultSlot) -> bool {
     !answers.is_empty() && answers.into_iter().all(|answer| answer)
 }
 
+/// The argument position every dialect that canonically exports `name` agrees
+/// holds its options object ([`Dialect::options_argument`]), or `None` when one
+/// is silent or they disagree.
+#[must_use]
+pub fn unambiguous_options_argument(name: &str) -> Option<usize> {
+    let answers = DIALECTS
+        .iter()
+        .copied()
+        .filter_map(|dialect| {
+            let primitive = dialect.primitive(name)?;
+            (dialect.name_of(primitive) == Some(name)).then(|| dialect.options_argument(primitive))
+        })
+        .collect::<Vec<_>>();
+    let first = (*answers.first()?)?;
+    answers
+        .into_iter()
+        .all(|answer| answer == Some(first))
+        .then_some(first)
+}
+
+/// Whether every dialect that canonically exports `name` states that invoking
+/// the accessor at `slot` of its result is a read of the computation the
+/// creating call registered ([`Dialect::computed_accessor_read`], ADR 0162).
+/// Silence in any one of them answers `false`.
+#[must_use]
+pub fn unambiguous_computed_accessor_read(name: &str, slot: ResultSlot) -> bool {
+    let answers = DIALECTS
+        .iter()
+        .copied()
+        .filter_map(|dialect| {
+            let primitive = dialect.primitive(name)?;
+            (dialect.name_of(primitive) == Some(name))
+                .then(|| dialect.computed_accessor_read(primitive, slot))
+        })
+        .collect::<Vec<_>>();
+    !answers.is_empty() && answers.into_iter().all(|answer| answer)
+}
+
+/// Bind a computed-accessor row to the exact archive its runtime was read in.
+/// An audited archive alone does not establish every row about every export.
+#[must_use]
+pub fn computed_accessor_read_is_audited_for(
+    name: &str,
+    slot: ResultSlot,
+    archive: &AuditedArchive,
+) -> bool {
+    let answers = DIALECTS
+        .iter()
+        .copied()
+        .filter_map(|dialect| {
+            let primitive = dialect.primitive(name)?;
+            (dialect.name_of(primitive) == Some(name))
+                .then(|| dialect.computed_accessor_read_archive(primitive, slot, archive))
+        })
+        .collect::<Vec<_>>();
+    !answers.is_empty() && answers.into_iter().all(|answer| answer)
+}
+
 /// Whether some dialect exports `name` from `origin_module` in value position.
 ///
 /// This is a dialect answer about *where a name can come from*, not a resolved
@@ -2543,15 +2601,51 @@ pub trait Dialect: Sync {
 
     /// Whether invoking the accessor at `slot` of what `primitive` returns runs
     /// no code at all -- not the caller's, not the package's, not a callback's
-    /// -- when **every argument of the creating call is a primitive by its
-    /// grammar** (ADR 0146): a read that observes the source's current value
-    /// and does nothing else. `false` is the silence every unaudited row keeps.
+    /// -- when **the creating call's first argument cannot be a function and
+    /// its options argument, if any, carries no callback** (ADR 0146, and ADR
+    /// 0162 for what discharges it): a read that observes the source's current
+    /// value and does nothing else. `false` is the silence every unaudited row
+    /// keeps.
     ///
     /// The precondition is the dialect's to state because it is what makes the
     /// answer true: a callable first argument, or an options object whose
     /// callbacks the source keeps, is exactly how a read comes to run code.
+    /// The census discharges it at the call site from the producer's grammar
+    /// facts: each argument a primitive by grammar; or the first argument an
+    /// array or object literal (`typeof first !== "function"` is the only test
+    /// the audited bodies make of it); or the options slot
+    /// ([`unambiguous_options_argument`]) an object literal of primitives.
     fn inert_accessor_read(&self, primitive: Primitive, slot: ResultSlot) -> bool {
         let _ = (primitive, slot);
+        false
+    }
+
+    /// Whether invoking the accessor at `slot` of what `primitive` returns is a
+    /// read of a computation the creating call registered (ADR 0162): it
+    /// observes the computation's current value in the invoking caller's
+    /// tracking context, and when that value is stale it re-runs **the
+    /// registered computation itself**, which is the code the creating call
+    /// was handed and whose executions are the *creating* call's `creates` and
+    /// `callbacks` claims, not an invocation of the read. It invokes no other
+    /// callable. `false` is the silence every unaudited row keeps.
+    ///
+    /// The computation is accounted where it is registered. Additional
+    /// options callbacks are not covered: certification requires undisplaced
+    /// non-spread arguments and callback-free options by grammar.
+    fn computed_accessor_read(&self, primitive: Primitive, slot: ResultSlot) -> bool {
+        let _ = (primitive, slot);
+        false
+    }
+
+    /// The exact audited archive that supports the computed-accessor row.
+    /// Metadata without a runtime audit cannot certify a returned value.
+    fn computed_accessor_read_archive(
+        &self,
+        primitive: Primitive,
+        slot: ResultSlot,
+        archive: &AuditedArchive,
+    ) -> bool {
+        let _ = (primitive, slot, archive);
         false
     }
 
@@ -4208,6 +4302,71 @@ mod tests {
             ("notADialectName", ResultSlot::TupleItem(0)),
         ] {
             assert!(!unambiguous_inert_accessor_read(name, slot), "{name}");
+        }
+    }
+
+    /// ADR 0162: the options argument of `createSignal` and `createMemo` is at
+    /// index 1 in the audited dialect, and a name no dialect exports has none.
+    #[test]
+    fn the_options_argument_is_the_dialects_own() {
+        assert_eq!(unambiguous_options_argument("createSignal"), Some(1));
+        assert_eq!(unambiguous_options_argument("createMemo"), Some(1));
+        assert_eq!(unambiguous_options_argument("createStore"), Some(2));
+        assert_eq!(unambiguous_options_argument("onCleanup"), None);
+        assert_eq!(unambiguous_options_argument("notADialectName"), None);
+    }
+
+    /// ADR 0162: only `createMemo`'s whole result is a computed read, and the
+    /// two rows never overlap -- a memo's read is not inert.
+    #[test]
+    fn only_the_memo_accessor_read_is_computed() {
+        assert!(unambiguous_computed_accessor_read(
+            "createMemo",
+            ResultSlot::Whole
+        ));
+        assert!(!unambiguous_inert_accessor_read(
+            "createMemo",
+            ResultSlot::Whole
+        ));
+        for (name, slot) in [
+            ("createMemo", ResultSlot::TupleItem(0)),
+            ("createSignal", ResultSlot::Whole),
+            ("createSignal", ResultSlot::TupleItem(0)),
+            ("createSignal", ResultSlot::TupleItem(1)),
+            ("createStore", ResultSlot::TupleItem(0)),
+            ("createOptimistic", ResultSlot::TupleItem(0)),
+            ("notADialectName", ResultSlot::Whole),
+        ] {
+            assert!(!unambiguous_computed_accessor_read(name, slot), "{name}");
+        }
+    }
+
+    #[test]
+    fn the_computed_accessor_read_binds_only_its_audited_archive() {
+        for name in ["@solidjs/signals", "solid-js", "@solidjs/web"] {
+            for archive in audited_archives(name) {
+                assert_eq!(
+                    computed_accessor_read_is_audited_for("createMemo", ResultSlot::Whole, archive,),
+                    archive.name == "@solidjs/signals" && archive.version == "2.0.0-rc.9",
+                    "{}@{}",
+                    archive.name,
+                    archive.version,
+                );
+                assert!(!computed_accessor_read_is_audited_for(
+                    "createSignal",
+                    ResultSlot::TupleItem(0),
+                    archive,
+                ));
+                let changed = AuditedArchive {
+                    integrity: "sha512-other",
+                    ..*archive
+                };
+                assert!(!computed_accessor_read_is_audited_for(
+                    "createMemo",
+                    ResultSlot::Whole,
+                    &changed,
+                ));
+            }
         }
     }
 

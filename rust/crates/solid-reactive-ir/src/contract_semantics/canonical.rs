@@ -1233,6 +1233,8 @@ impl CanonicalWriter {
                 self.sequence(&call.reads, |writer, read| {
                     writer.u8(match read {
                         super::DescribedRead::OwnedSignal => 0,
+                        // ADR 0162. Appended; no document before it carries it.
+                        super::DescribedRead::OwnedMemo => 1,
                     });
                 });
                 self.sequence(&call.returns, Self::value);

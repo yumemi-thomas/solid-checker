@@ -1843,6 +1843,22 @@ pub struct ImplementationValueSource {
     /// argument list, so it must also require the source to be a call result.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub arguments_primitive_syntax: Vec<bool>,
+    /// Each written argument is not a spread and has not been displaced by
+    /// an earlier spread (ADR 0162, handshake protocol 76). Missing is unproved.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arguments_non_spread_syntax: Vec<bool>,
+    /// For a call-result source, whether each written argument's grammar alone
+    /// proves its value is not a function (ADR 0162, handshake protocol 76): a
+    /// primitive by grammar, an array literal or an object literal. A spread is
+    /// not one. A missing slot is not proved.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arguments_not_function_syntax: Vec<bool>,
+    /// For a call-result source, whether each written argument is an object
+    /// literal whose every member is a plain non-computed `key: value` of a
+    /// primitive by grammar, so it carries no callback (ADR 0162, handshake
+    /// protocol 76). A spread is not one. A missing slot is not proved.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arguments_plain_options_syntax: Vec<bool>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

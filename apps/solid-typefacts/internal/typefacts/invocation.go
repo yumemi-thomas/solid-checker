@@ -1579,6 +1579,20 @@ type ImplementationValueSource struct {
 	// primitive by its grammar alone (primitiveBySyntax; ADR 0146, handshake
 	// protocol 66). A spread is not one. Absent for every other source.
 	ArgumentsPrimitiveSyntax []bool `cbor:"argumentsPrimitiveSyntax,omitempty" json:"argumentsPrimitiveSyntax,omitempty"`
+	// ArgumentsNonSpreadSyntax proves that each written slot is not a spread
+	// and no earlier spread displaced it (ADR 0162, handshake protocol 76).
+	ArgumentsNonSpreadSyntax []bool `cbor:"argumentsNonSpreadSyntax,omitempty" json:"argumentsNonSpreadSyntax,omitempty"`
+	// ArgumentsNotFunctionSyntax states, for a call-result source, whether each
+	// written argument's grammar alone proves its value is not a function (ADR
+	// 0162, handshake protocol 76): a primitive by grammar, an array literal or
+	// an object literal. A spread is not one. Absent for every other source.
+	ArgumentsNotFunctionSyntax []bool `cbor:"argumentsNotFunctionSyntax,omitempty" json:"argumentsNotFunctionSyntax,omitempty"`
+	// ArgumentsPlainOptionsSyntax states, for a call-result source, whether each
+	// written argument is an object literal whose every member is a plain,
+	// non-computed `key: value` of a primitive by grammar, so it carries no
+	// callback (ADR 0162, handshake protocol 76). A spread is not one. Absent
+	// for every other source.
+	ArgumentsPlainOptionsSyntax []bool `cbor:"argumentsPlainOptionsSyntax,omitempty" json:"argumentsPlainOptionsSyntax,omitempty"`
 }
 
 type DeclaredTypeReference struct {

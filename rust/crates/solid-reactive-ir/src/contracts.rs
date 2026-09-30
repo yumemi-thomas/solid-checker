@@ -1041,6 +1041,19 @@ mod owner_requirement_projection_tests {
         assert_eq!(returned.kind, "accessor");
         assert!(!reading.open_claims.contains(&ClaimDomain::Returns));
 
+        // ADR 0162: a memo's read is a tracked read too, so calling what
+        // `createMemo` handed back is the same reactive read in whatever scope
+        // calls it -- an accessor leaf, not a value.
+        let memo = project(vec![DescribedRead::OwnedMemo], closed());
+        let ContractClaim::Known(Some(returned)) = &memo.returns else {
+            panic!(
+                "a described memo read projects to a leaf: {:?}",
+                memo.returns
+            );
+        };
+        assert_eq!(returned.kind, "accessor");
+        assert!(!memo.open_claims.contains(&ClaimDomain::Returns));
+
         let open = project(
             Vec::new(),
             KnowledgeSet::Partial(vec![OperationId("return".into())]),

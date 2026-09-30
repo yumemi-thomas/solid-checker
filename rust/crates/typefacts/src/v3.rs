@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:741a079751ef8295aaefaf7b8cf03ca53bc2a2fbed6b3a48557d2fc932ee2b09";
+    "sha256:cee2f0ca524b8f4fe2e4e475fba081ed84cbe5363512f483d1e07a84db545a68";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -427,7 +427,18 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // as literals wherever it decides a condition (branch reachability, loop exits,
 // `ImplementationCall::unconditional`). A protocol-73 producer decodes with
 // unknown fields refused and would reject the request, so the number moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 75;
+//
+// Protocol 76 (ADR 0162) states, per call-result source, which of its written
+// arguments are not functions by grammar
+// (`ImplementationValueSource::arguments_not_function_syntax`) and which is a
+// plain options literal (`arguments_plain_options_syntax`), so the inert
+// accessor row of ADR 0146 can be discharged at the creating call.
+// `arguments_non_spread_syntax` proves undisplaced slots, so a memo's
+// computation argument cannot also supply options callbacks through a spread.
+// A protocol-75
+// consumer decodes with `deny_unknown_fields` and would reject the new fields,
+// so the number moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 76;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

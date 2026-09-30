@@ -923,6 +923,27 @@ the creating call's declaration in an audited dialect archive among the
 certified package's authenticated dependencies. The consumer reads it as an
 accessor: calling it is a reactive read in whatever scope calls it.
 
+**[Decision 2026-09-30, ADR 0162]** a described callable's `reads` may also
+name `owned-memo`: one invocation observes the current value of a memo the
+export's own invocation created with the dialect's `createMemo` and handed back
+unaltered (`return createMemo(...)`, the site's whole value). Unlike
+`owned-signal` the read is not inert: a stale memo's read re-runs the
+computation the creating call registered, and that computation -- the code the
+export defined or was handed, and every callable it invokes -- is accounted for
+by the export's own `creates` and `callbacks` claims where it was registered,
+never by the read. The creating call must have no spreads and its options
+must be primitives or a plain literal of primitives: a user comparator or
+unobserved callback is outside this claim and refuses certification. The read
+row binds only the exact `@solidjs/signals@2.0.0-rc.9` archive it was audited
+against; `solid-js`'s hydration/server factories and older releases are refused.
+The read
+invokes no other callable, and may throw the memo's
+own error or a not-ready signal. The consumer reads it as an accessor, exactly
+as it reads `owned-signal`. ADR 0162 also widens what discharges
+`owned-signal`'s premise at the creating call: a first argument that cannot be
+a function by grammar (an array or object literal) and an options argument that
+is an object literal of primitives.
+
 **[Decision 2026-09-28, ADR 0152]** a described callable may state
 `callbacks`: the callables one invocation of it runs that it did not define,
 each an argument the **export** was handed and the returned callable captured.

@@ -17,8 +17,8 @@
             "later": "summary-717a197e69ca5c6079c66ef9dad3b108ec84225c12020c56a465cc88de548079",
             "listen": "summary-3bd97ff2d639c9b64a58ca403da107a10a17bbc0c26a0287df65df74a22b63ba",
             "throughUnclassified": "summary-eddbbcccc94909bc88dd11ddfe910f989617c926702d413aa499f4d3a6e5e4d4",
-            "trackedThroughLocalHelper": "summary-83f8148d2f3d575931f096b8120b6d8d743d76427e33b1baaa5c984cbc3e509a",
-            "untrackedThroughLocalWrapper": "summary-a08378b6e30c2a2470713d95217b13fe7823b9e11ab6881ef7038a3828069262"
+            "trackedThroughLocalHelper": "summary-a0a49c119277b701bace9b7b64115d336c42981c61b75ecf77a17834d75e0319",
+            "untrackedThroughLocalWrapper": "summary-8b379b9ccbab66434c5d981d4b80183b871c178ec1e2d6d31de9ee9c3593bc82"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -162,7 +162,7 @@
       },
       "shape": "callable"
     },
-    "summary-83f8148d2f3d575931f096b8120b6d8d743d76427e33b1baaa5c984cbc3e509a": {
+    "summary-8b379b9ccbab66434c5d981d4b80183b871c178ec1e2d6d31de9ee9c3593bc82": {
       "call": {
         "callbacks": [
           {
@@ -190,7 +190,7 @@
             },
             "id": "callback-0",
             "kind": "invoke",
-            "tracking": "tracked",
+            "tracking": "untracked",
             "trigger": {
               "event": "call"
             }
@@ -207,7 +207,15 @@
             },
             "id": "return",
             "kind": "return",
-            "output": "plain",
+            "output": {
+              "kind": "described-callable",
+              "reads": [
+                "owned-memo"
+              ],
+              "returns": [
+                "read-value"
+              ]
+            },
             "tracking": "untracked",
             "trigger": {
               "event": "call"
@@ -319,7 +327,7 @@
       },
       "shape": "callable"
     },
-    "summary-a08378b6e30c2a2470713d95217b13fe7823b9e11ab6881ef7038a3828069262": {
+    "summary-a0a49c119277b701bace9b7b64115d336c42981c61b75ecf77a17834d75e0319": {
       "call": {
         "callbacks": [
           {
@@ -347,7 +355,7 @@
             },
             "id": "callback-0",
             "kind": "invoke",
-            "tracking": "untracked",
+            "tracking": "tracked",
             "trigger": {
               "event": "call"
             }
@@ -364,7 +372,15 @@
             },
             "id": "return",
             "kind": "return",
-            "output": "plain",
+            "output": {
+              "kind": "described-callable",
+              "reads": [
+                "owned-memo"
+              ],
+              "returns": [
+                "read-value"
+              ]
+            },
             "tracking": "untracked",
             "trigger": {
               "event": "call"

@@ -668,7 +668,10 @@
         "targetName": { "type": "string" },
         "targetModule": { "type": "string" },
         "targetPath": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/pathSegment" } },
-        "argumentsPrimitiveSyntax": { "type": "array", "maxItems": 1000000, "items": { "type": "boolean" } }
+        "argumentsPrimitiveSyntax": { "type": "array", "maxItems": 1000000, "items": { "type": "boolean" } },
+        "argumentsNotFunctionSyntax": { "type": "array", "maxItems": 1000000, "items": { "type": "boolean" }, "description": "ADR 0162, handshake protocol 76: per written argument of a call-result source, whether its grammar alone proves the value is not a function (a primitive by grammar, an array literal or an object literal); a spread is false. Empty is not stated, or no argument." },
+        "argumentsNonSpreadSyntax": { "type": "array", "maxItems": 1000000, "items": { "type": "boolean" }, "description": "ADR 0162, handshake protocol 76: each written argument is not a spread and no earlier spread displaced it. Missing is unproved." },
+        "argumentsPlainOptionsSyntax": { "type": "array", "maxItems": 1000000, "items": { "type": "boolean" }, "description": "ADR 0162, handshake protocol 76: per written argument of a call-result source, whether it is an object literal whose every member is a plain non-computed `key: value` of a primitive by grammar, so it carries no callback; a spread is false. Empty is not stated, or no argument." }
       }
     },
     "declaredTypeReference": {

@@ -4,7 +4,22 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 74 (ADR 0168): **a call states which of its
+// TypeFactsHandshakeProtocol is 76 (ADR 0162): **a call-result source states
+// which of its written arguments are not functions by grammar, and which is a
+// plain options literal or an undisplaced non-spread slot.**
+// ImplementationValueSource.ArgumentsNonSpreadSyntax rejects spreads that
+// could supply memo options callbacks beside the registered computation.
+// ImplementationValueSource.ArgumentsNotFunctionSyntax
+// (a primitive by grammar, an array literal or an object literal) and
+// ImplementationValueSource.ArgumentsPlainOptionsSyntax (an object literal every
+// member of which is a plain `key: value` of a primitive by grammar) let the
+// inert-accessor row of ADR 0146 be discharged at the creating call: a first
+// argument that cannot be a function never takes `createSignal`'s memo path, and
+// options that carry no function keep no callback. A protocol-75 consumer decodes
+// with `deny_unknown_fields` and would reject the new fields, so the number moves.
+// (Protocol 75, ADR 0166, adds the request field `hostConstants`.)
+//
+// Protocol 74 (ADR 0168): **a call states which of its
 // written arguments are primitives by grammar.** ImplementationCall.
 // ArgumentsPrimitiveSyntax answers, per written argument slot, the question
 // ImplementationValueSource.ArgumentsPrimitiveSyntax answers for a call-result
@@ -509,8 +524,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 75
-	TypeFactsSchemaSHA256             = "sha256:741a079751ef8295aaefaf7b8cf03ca53bc2a2fbed6b3a48557d2fc932ee2b09"
+	TypeFactsHandshakeProtocol uint64 = 76
+	TypeFactsSchemaSHA256             = "sha256:cee2f0ca524b8f4fe2e4e475fba081ed84cbe5363512f483d1e07a84db545a68"
 )
 
 type ServiceHandshake struct {

@@ -266,6 +266,29 @@ fn described_callable_returns_in<'s>(
             pending.push((conditional.alternate, depth + 1));
             continue;
         }
+        // ADR 0162: a completion that is, whole, a call spelled `createMemo`
+        // (or `<namespace>.createMemo`) proposes the computed-accessor read.
+        // Spelling only proposes: the census proves the callee is the
+        // dialect's `createMemo` by resolved identity, from an audited
+        // archive, and withdraws the return by name when it is not (a local
+        // function of that name, an alias, a shadowed import). A conditional
+        // of such calls proposes nothing here: an arm the producer states no
+        // literal for is not something the census can decide.
+        if depth == 0
+            && let Some(call) = ast
+                .calls
+                .iter()
+                .find(|call| call.span == span && call.static_callee && !call.construct)
+            && text(call.callee)
+                .is_some_and(|callee| callee == "createMemo" || callee.ends_with(".createMemo"))
+        {
+            calls.insert(DescribedCall {
+                reads: vec![crate::contract_semantics::DescribedRead::OwnedMemo],
+                returns: vec![ValueShape::ReadValue],
+                callbacks: Vec::new(),
+            });
+            continue;
+        }
         let literal = ast.functions.iter().find(|candidate| {
             candidate.span == span && !candidate.r#async && !candidate.generator
         })?;
@@ -1063,6 +1086,50 @@ mod tests {
             "function f() { return async () => 1; }",
             "function f() { return () => () => 1; }",
             "function f() { return () => ({ a: 1 }); }",
+        ] {
+            assert_eq!(outer(source), None, "{source}");
+        }
+    }
+
+    /// ADR 0162: a completion that is, whole, a `createMemo` call proposes the
+    /// computed-accessor read; a conditional of them, a binding holding one, an
+    /// aliased spelling, a construction and every other call propose nothing.
+    #[test]
+    fn a_memo_accessor_is_proposed_only_for_a_whole_creatememo_completion() {
+        use crate::contract_semantics::DescribedRead;
+        let outer = |source: &str| {
+            let facts = ast::extract("test.js", source).unwrap();
+            let function = facts
+                .functions
+                .iter()
+                .min_by_key(|function| (function.span.start, std::cmp::Reverse(function.span.end)))
+                .expect("the source declares a function")
+                .clone();
+            described_callable_returns_in(&facts, &function, |span| {
+                source.get(span.start as usize..span.end as usize)
+            })
+        };
+        let memo = DescribedCall {
+            reads: vec![DescribedRead::OwnedMemo],
+            returns: vec![ValueShape::ReadValue],
+            callbacks: Vec::new(),
+        };
+        for source in [
+            "const f = (a) => createMemo(() => a() + 1);",
+            "function f(a) { return createMemo(() => a()); }",
+            "function f(a) { return s.createMemo(() => a()); }",
+            "function f(a) { if (a) return createMemo(a); return createMemo(() => 1); }",
+        ] {
+            assert_eq!(outer(source), Some(vec![memo.clone()]), "{source}");
+        }
+        for source in [
+            "function f(a) { const m = createMemo(() => a()); return m; }",
+            "function f(a, b) { return a ? createMemo(a) : createMemo(b); }",
+            "function f(a) { return memo(() => a()); }",
+            "function f(a) { return new createMemo(a); }",
+            "function f(a) { return createMemo(a)(); }",
+            "function f(a) { return createMemoized(a); }",
+            "async function f(a) { return createMemo(a); }",
         ] {
             assert_eq!(outer(source), None, "{source}");
         }

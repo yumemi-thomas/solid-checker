@@ -1849,6 +1849,23 @@
       "correct": "import { capitalize } from \"@solid-primitives/signal-builders\";\n\nexport default function App() {\n  const title = capitalize(() => \"hello\");\n  return <p>{String(title())}</p>;\n}\n"
     },
     {
+      "id": "signal-builders-ceil-top-level-read",
+      "package": "@solid-primitives/signal-builders",
+      "version": "1.0.0-next.4",
+      "entrypoint": ".",
+      "export": "ceil",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "ceil returns a memo's accessor over the accessor it was given (ADR 0162). Read at the component's top level it is read once, untracked, and the view never updates.",
+      "misuse": "import { createSignal } from \"solid-js\";\nimport { ceil } from \"@solid-primitives/signal-builders\";\n\nexport default function App() {\n  const [price] = createSignal(1.2);\n  const rounded = ceil(price);\n  const current = rounded();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createSignal } from \"solid-js\";\nimport { ceil } from \"@solid-primitives/signal-builders\";\n\nexport default function App() {\n  const [price] = createSignal(1.2);\n  const rounded = ceil(price);\n  return <p>{String(rounded())}</p>;\n}\n"
+    },
+    {
       "id": "signal-builders-capitalize-write-in-tracked-callback",
       "package": "@solid-primitives/signal-builders",
       "version": "1.0.0-next.4",

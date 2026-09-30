@@ -197,6 +197,8 @@ fixtures/upstream-parity/.staging/
 # ADR 0146: the solid-js stub is what lets the generator see an accessor.
 !fixtures/package-contracts/implementation-census-owned-signal-reads/node_modules/
 !fixtures/package-contracts/implementation-census-owned-signal-reads/node_modules/**
+!fixtures/package-contracts/implementation-census-memo-accessors/node_modules/
+!fixtures/package-contracts/implementation-census-memo-accessors/node_modules/**
 !fixtures/package-contracts/entry-reexport-identity/node_modules/
 !fixtures/package-contracts/entry-reexport-identity/node_modules/**
 !fixtures/package-contracts/conditional-returns-divergence/node_modules/

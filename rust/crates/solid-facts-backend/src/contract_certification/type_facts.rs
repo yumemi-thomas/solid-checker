@@ -14230,6 +14230,138 @@ fn inert_owned_accessor_witness(
     certified: &super::ArtifactSnapshot,
     roots_longest_first: &[SnapshotSourceRoot<'_>],
 ) -> Result<String, String> {
+    owned_accessor_witness(
+        solid_reactive_ir::contract_semantics::DescribedRead::OwnedSignal,
+        source,
+        scope,
+        certified,
+        roots_longest_first,
+    )
+}
+
+/// ADR 0162: the witness that one traced value is the memo accessor the
+/// certified export's own invocation created with the dialect's `createMemo`
+/// and handed back unaltered, or why not.
+///
+/// Every premise of [`inert_owned_accessor_witness`] holds except the argument
+/// one: a memo's read is not inert, and the dialect's row
+/// (`Dialect::computed_accessor_read`) states instead what it does -- it may
+/// re-run the registered computation, which is the creating call's own
+/// registration and accounted there. The computation may be the export's
+/// literal or a callable it was handed. Other options callbacks are outside
+/// that registration: the call must have no spread and callback-free options.
+fn computed_owned_accessor_witness(
+    source: &typefacts::ImplementationValueSource,
+    scope: &typefacts::ExportImplementationTranscript,
+    certified: &super::ArtifactSnapshot,
+    roots_longest_first: &[SnapshotSourceRoot<'_>],
+) -> Result<String, String> {
+    owned_accessor_witness(
+        solid_reactive_ir::contract_semantics::DescribedRead::OwnedMemo,
+        source,
+        scope,
+        certified,
+        roots_longest_first,
+    )
+}
+
+/// A memo may re-run its registered computation, but this read claim does not
+/// describe additional options callbacks. Prove the computation occupies one
+/// undisplaced slot and every other argument is inert by grammar. Missing
+/// non-spread facts refuse: a spread in slot zero could also supply options.
+fn memo_arguments_discharged(source: &typefacts::ImplementationValueSource) -> Result<(), String> {
+    let arguments = &source.arguments_primitive_syntax;
+    if arguments.is_empty()
+        || source.arguments_non_spread_syntax.len() != arguments.len()
+        || source
+            .arguments_non_spread_syntax
+            .iter()
+            .any(|plain| !plain)
+    {
+        return Err("memo arguments are missing or displaced by a spread".into());
+    }
+    let options = solid_dialect::unambiguous_options_argument(&source.target_name);
+    for (slot, primitive) in arguments.iter().enumerate().skip(1) {
+        if !primitive
+            && !(options == Some(slot)
+                && source.arguments_plain_options_syntax.get(slot) == Some(&true))
+        {
+            return Err(format!(
+                "memo argument {slot} is not a primitive or a callback-free options literal"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The read a returned value's own trace states, with its witness: the
+/// inert signal accessor of ADR 0146 or the computed accessor of ADR 0162, by
+/// the dialect's own rows. A trace that proves neither refuses with the
+/// signal's reason (the older premise, and the one a reader of a refusal
+/// already knows).
+fn owned_returned_accessor_witness(
+    source: &typefacts::ImplementationValueSource,
+    scope: &typefacts::ExportImplementationTranscript,
+    certified: &super::ArtifactSnapshot,
+    roots_longest_first: &[SnapshotSourceRoot<'_>],
+) -> Result<(solid_reactive_ir::contract_semantics::DescribedRead, String), String> {
+    use solid_reactive_ir::contract_semantics::DescribedRead;
+    match inert_owned_accessor_witness(source, scope, certified, roots_longest_first) {
+        Ok(witness) => Ok((DescribedRead::OwnedSignal, witness)),
+        Err(reason) => {
+            // Only a call of a name the memo row states can be the memo's.
+            let memo_row = traced_result_slot(source).is_some_and(|slot| {
+                solid_dialect::unambiguous_computed_accessor_read(&source.target_name, slot)
+            });
+            if !memo_row {
+                return Err(reason);
+            }
+            computed_owned_accessor_witness(source, scope, certified, roots_longest_first)
+                .map(|witness| (DescribedRead::OwnedMemo, witness))
+        }
+    }
+}
+
+/// ADR 0146's argument condition, discharged at the creating call (ADR 0162):
+/// every written argument is a primitive by grammar, **or** it is the first and
+/// its grammar alone proves it is not a function (an array or object literal),
+/// **or** it is the options argument the dialect names and it is an object
+/// literal of primitives. The audited bodies test only `typeof first ===
+/// "function"` to take the memo path, and read callbacks only off the options
+/// object, so those are the two ways a read comes to run code and each is
+/// excluded by grammar. A slot the producer did not state, a spread, a binding
+/// and everything else is not proved: the call is refused by name.
+fn inert_signal_arguments_discharged(
+    source: &typefacts::ImplementationValueSource,
+) -> Result<(), String> {
+    let options = solid_dialect::unambiguous_options_argument(&source.target_name);
+    for (slot, primitive) in source.arguments_primitive_syntax.iter().enumerate() {
+        if *primitive {
+            continue;
+        }
+        let not_function =
+            slot == 0 && source.arguments_not_function_syntax.get(slot) == Some(&true);
+        let plain_options =
+            options == Some(slot) && source.arguments_plain_options_syntax.get(slot) == Some(&true);
+        if !not_function && !plain_options {
+            return Err(format!(
+                "argument {slot} of the {} call is not a primitive by its grammar, nor a \
+                 non-function first argument, nor a plain options literal",
+                source.target_name
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn owned_accessor_witness(
+    kind: solid_reactive_ir::contract_semantics::DescribedRead,
+    source: &typefacts::ImplementationValueSource,
+    scope: &typefacts::ExportImplementationTranscript,
+    certified: &super::ArtifactSnapshot,
+    roots_longest_first: &[SnapshotSourceRoot<'_>],
+) -> Result<String, String> {
+    use solid_reactive_ir::contract_semantics::DescribedRead;
     if source.kind != typefacts::ImplementationValueSourceKind::CallResult
         || !source.path.is_empty()
         || source.target.is_empty()
@@ -14238,21 +14370,28 @@ fn inert_owned_accessor_witness(
         return Err("the value does not trace to a dialect call's result".into());
     }
     let slot = traced_result_slot(source).ok_or("the traced result slot is not addressable")?;
-    if !solid_dialect::unambiguous_inert_accessor_read(&source.target_name, slot) {
+    let row = match kind {
+        DescribedRead::OwnedSignal => {
+            solid_dialect::unambiguous_inert_accessor_read(&source.target_name, slot)
+        }
+        DescribedRead::OwnedMemo => {
+            solid_dialect::unambiguous_computed_accessor_read(&source.target_name, slot)
+        }
+    };
+    if !row {
         return Err(format!(
-            "no dialect states an inert accessor read at {}'s traced slot",
+            "no dialect states {} accessor read at {}'s traced slot",
+            match kind {
+                DescribedRead::OwnedSignal => "an inert",
+                DescribedRead::OwnedMemo => "a computed",
+            },
             source.target_name
         ));
     }
-    if !source
-        .arguments_primitive_syntax
-        .iter()
-        .all(|primitive| *primitive)
-    {
-        return Err(format!(
-            "an argument of the {} call is not a primitive by its grammar",
-            source.target_name
-        ));
+    if kind == DescribedRead::OwnedSignal {
+        inert_signal_arguments_discharged(source)?;
+    } else {
+        memo_arguments_discharged(source)?;
     }
     let creating = scope
         .calls
@@ -14307,8 +14446,21 @@ fn inert_owned_accessor_witness(
         }
         let archive = audited_archive_for_snapshot(root.snapshot)
             .map_err(|_| "the dialect declaration's snapshot is no audited archive")?;
+        if kind == DescribedRead::OwnedMemo
+            && !solid_dialect::computed_accessor_read_is_audited_for(
+                &source.target_name,
+                slot,
+                archive,
+            )
+        {
+            return Err("no computed accessor read row was audited for this archive".into());
+        }
         witness = Some(format!(
-            "inert-owned-accessor:{}@{}#{}:{}:{}:{}..{}",
+            "{}:{}@{}#{}:{}:{}:{}..{}",
+            match kind {
+                DescribedRead::OwnedSignal => "inert-owned-accessor",
+                DescribedRead::OwnedMemo => "computed-owned-accessor",
+            },
             archive.name,
             archive.version,
             sri_prefix(archive.integrity),
@@ -14408,7 +14560,10 @@ enum DescribedReturnedValue {
     /// A signal accessor the export's own invocation created, inert by the
     /// dialect's row (ADR 0146): invoking it is one owned-signal read that
     /// hands back the value read, and nothing else. The witness sites say why.
-    OwnedAccessor(Vec<String>),
+    OwnedAccessor(
+        solid_reactive_ir::contract_semantics::DescribedRead,
+        Vec<String>,
+    ),
 }
 
 /// ADR 0145/0146: every value the export's live completions hand back is
@@ -14450,7 +14605,7 @@ fn described_callable_returned_values(
                 rooted
                     .into_iter()
                     .map(|source| {
-                        inert_owned_accessor_witness(
+                        owned_returned_accessor_witness(
                             source,
                             implementation,
                             certified,
@@ -14458,19 +14613,34 @@ fn described_callable_returned_values(
                         )
                     })
                     .collect::<Result<Vec<_>, _>>()
+                    .and_then(|witnesses| {
+                        // One value has one read. Two traces that state
+                        // different reads are the producer disagreeing with
+                        // itself, and refuse rather than pick.
+                        let kind = witnesses[0].0;
+                        if witnesses.iter().any(|(other, _)| *other != kind) {
+                            return Err(
+                                "the value's traces state different accessor reads".to_owned()
+                            );
+                        }
+                        Ok((
+                            kind,
+                            witnesses.into_iter().map(|(_, w)| w).collect::<Vec<_>>(),
+                        ))
+                    })
             };
             match witnessed {
-                Ok(witness) => values.push((
+                Ok((kind, witness)) => values.push((
                     site.location.clone(),
-                    DescribedReturnedValue::OwnedAccessor(witness),
+                    DescribedReturnedValue::OwnedAccessor(kind, witness),
                     site.reach,
                 )),
                 Err(reason) => {
                     return Err(format!(
                         "described callable returns census refuses a value at {}:{}..{}, reach \
                          {}, that the producer did not state is a function or arrow literal, \
-                         and that is no inert signal accessor this export created ({reason}), \
-                         for {at}",
+                         and that is no inert signal accessor or computed accessor this \
+                         export created ({reason}), for {at}",
                         site.location.path,
                         site.location.start_byte,
                         site.location.end_byte,
@@ -14866,14 +15036,18 @@ fn described_callable_return_sites(
                     format!("literal:{}..{}", literal.start_byte, literal.end_byte),
                 )
             }
-            DescribedReturnedValue::OwnedAccessor(witness) => (
+            DescribedReturnedValue::OwnedAccessor(kind, witness) => (
                 DescribedCall {
-                    reads: vec![DescribedRead::OwnedSignal],
+                    reads: vec![*kind],
                     returns: vec![ValueShape::ReadValue],
                     callbacks: Vec::new(),
                 },
                 witness.clone(),
-                "owned-accessor".to_owned(),
+                match kind {
+                    DescribedRead::OwnedSignal => "owned-accessor",
+                    DescribedRead::OwnedMemo => "owned-memo-accessor",
+                }
+                .to_owned(),
             ),
         };
         if !claimed.contains(&call) {
@@ -27492,10 +27666,92 @@ mod tests {
             )
             .is_ok()
         );
+        // ADR 0162: the argument condition is discharged at the call site by
+        // what the grammar excludes. An array or object literal first
+        // argument cannot be a function; an options literal of primitives
+        // keeps no callback.
+        for (why, overrides) in [
+            (
+                "an array literal first argument",
+                json!({"argumentsPrimitiveSyntax": [false], "argumentsNotFunctionSyntax": [true]}),
+            ),
+            (
+                "an array literal beside a plain options literal",
+                json!({
+                    "argumentsPrimitiveSyntax": [false, false],
+                    "argumentsNotFunctionSyntax": [true, true],
+                    "argumentsPlainOptionsSyntax": [false, true],
+                }),
+            ),
+            (
+                "a primitive first argument beside a plain options literal",
+                json!({
+                    "argumentsPrimitiveSyntax": [true, false],
+                    "argumentsNotFunctionSyntax": [true, true],
+                    "argumentsPlainOptionsSyntax": [false, true],
+                }),
+            ),
+        ] {
+            assert!(
+                inert_owned_accessor_witness(&source(overrides), &own, &certified, &roots).is_ok(),
+                "{why}"
+            );
+        }
         for (why, traced, transcript, roots, needle) in [
             (
                 "a function or an options object may be the argument",
                 source(json!({"argumentsPrimitiveSyntax": [true, false]})),
+                own.clone(),
+                vec![root(true)],
+                "not a primitive by its grammar",
+            ),
+            (
+                "an options object is not a plain literal (it may carry equals)",
+                source(json!({
+                    "argumentsPrimitiveSyntax": [true, false],
+                    "argumentsNotFunctionSyntax": [true, true],
+                    "argumentsPlainOptionsSyntax": [false, false],
+                })),
+                own.clone(),
+                vec![root(true)],
+                "not a primitive by its grammar",
+            ),
+            (
+                "a non-function literal is a first-argument premise only",
+                source(json!({
+                    "argumentsPrimitiveSyntax": [true, false],
+                    "argumentsNotFunctionSyntax": [true, true],
+                })),
+                own.clone(),
+                vec![root(true)],
+                "not a primitive by its grammar",
+            ),
+            (
+                "a plain options literal is an options-slot premise only",
+                source(json!({
+                    "argumentsPrimitiveSyntax": [false],
+                    "argumentsPlainOptionsSyntax": [true],
+                })),
+                own.clone(),
+                vec![root(true)],
+                "not a primitive by its grammar",
+            ),
+            (
+                "a third argument is neither slot",
+                source(json!({
+                    "argumentsPrimitiveSyntax": [true, true, false],
+                    "argumentsNotFunctionSyntax": [true, true, true],
+                    "argumentsPlainOptionsSyntax": [false, false, true],
+                })),
+                own.clone(),
+                vec![root(true)],
+                "not a primitive by its grammar",
+            ),
+            (
+                "a producer that stated nothing about the slot proves nothing",
+                source(
+                    json!({"argumentsPrimitiveSyntax": [false, false], "argumentsNotFunctionSyntax": [true]}),
+                ),
                 own.clone(),
                 vec![root(true)],
                 "not a primitive by its grammar",
@@ -27547,6 +27803,356 @@ mod tests {
         ] {
             let error = inert_owned_accessor_witness(&traced, &transcript, &certified, &roots)
                 .expect_err(why);
+            assert!(error.contains(needle), "{why}: {error}");
+        }
+    }
+
+    /// ADR 0162: a traced value is a computed owned accessor exactly when it is
+    /// the whole result of a `createMemo` call made in the export's own
+    /// implementation whose declaration is inside an audited dialect archive
+    /// that is a dependency. Its computation is accounted where it was
+    /// registered; options callbacks and displaced argument slots refuse.
+    /// Every other shape refuses by name: the signal
+    /// row and the memo row never answer for each other's slot.
+    #[test]
+    fn a_memo_is_witnessed_only_for_a_computed_audited_accessor() {
+        use solid_reactive_ir::contract_semantics::DescribedRead;
+        let manifest = audited_phase0_manifest("rc9", "solidjs-signals");
+        let dependency = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.9",
+            SIGNALS_RC9_INTEGRITY,
+            &manifest,
+            "/snapshot/signals",
+        );
+        let certified = archive_snapshot(
+            "consumer",
+            "1.0.0",
+            "sha512-consumer",
+            b"{\"name\":\"consumer\"}",
+            "/snapshot/consumer",
+        );
+        let root = |dependency_root: bool| SnapshotSourceRoot {
+            path: "/project/node_modules/@solidjs/signals/".to_owned(),
+            evidence_prefix: "/node_modules/@solidjs/signals/".to_owned(),
+            snapshot: &dependency,
+            dependency: dependency_root,
+        };
+        let roots = vec![root(true)];
+        let scope = |calls: Vec<typefacts::ImplementationCall>| {
+            let mut transcript: typefacts::ExportImplementationTranscript =
+                serde_json::from_value(json!({
+                    "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 0, "endByte": 200},
+                    "completionForm": "plain",
+                }))
+                .unwrap();
+            transcript.calls = calls;
+            transcript
+        };
+        let source = |overrides: serde_json::Value| {
+            let mut value = json!({
+                "kind": "callResult",
+                "target": "symbol:createMemo",
+                "targetName": "createMemo",
+                "targetModule": "solid-js",
+                "argumentsPrimitiveSyntax": [false],
+                "argumentsNonSpreadSyntax": [true],
+            });
+            let object = value.as_object_mut().unwrap();
+            for (key, replacement) in overrides.as_object().unwrap() {
+                if replacement.is_null() {
+                    object.remove(key);
+                } else {
+                    object.insert(key.clone(), replacement.clone());
+                }
+            }
+            serde_json::from_value::<typefacts::ImplementationValueSource>(value).unwrap()
+        };
+        let own = scope(vec![signals_call("createMemo", json!({}))]);
+        let witness = computed_owned_accessor_witness(&source(json!({})), &own, &certified, &roots)
+            .expect("the whole result of an audited createMemo is a computed accessor");
+        assert!(
+            witness.starts_with("computed-owned-accessor:@solidjs/signals@2.0.0-rc.9#"),
+            "{witness}"
+        );
+        let solid_js_rc9 = solid_dialect::audited_archives("solid-js")
+            .into_iter()
+            .find(|archive| archive.version == "2.0.0-rc.9")
+            .unwrap();
+        for (name, version, integrity, manifest) in [
+            (
+                "@solidjs/signals",
+                "2.0.0-rc.3",
+                SIGNALS_INTEGRITY,
+                audited_rc3_manifest("solidjs-signals"),
+            ),
+            (
+                "solid-js",
+                "2.0.0-rc.9",
+                solid_js_rc9.integrity,
+                audited_phase0_manifest("rc9", "solid-js"),
+            ),
+        ] {
+            let other = archive_snapshot(
+                name,
+                version,
+                integrity,
+                &manifest,
+                "/snapshot/other-audited",
+            );
+            let other_roots = vec![SnapshotSourceRoot {
+                path: "/project/node_modules/@solidjs/signals/".to_owned(),
+                evidence_prefix: "/node_modules/other-audited/".to_owned(),
+                snapshot: &other,
+                dependency: true,
+            }];
+            let error =
+                computed_owned_accessor_witness(&source(json!({})), &own, &certified, &other_roots)
+                    .expect_err("an audited archive is not an audit of this computed-accessor row");
+            assert!(error.contains("no computed accessor read row"), "{error}");
+        }
+        for options in [
+            json!({"argumentsPrimitiveSyntax": [false, true],
+                   "argumentsNonSpreadSyntax": [true, true]}),
+            json!({"argumentsPrimitiveSyntax": [false, false],
+                   "argumentsNonSpreadSyntax": [true, true],
+                   "argumentsPlainOptionsSyntax": [false, true]}),
+        ] {
+            computed_owned_accessor_witness(&source(options), &own, &certified, &roots)
+                .expect("no callback is retained in these options");
+        }
+        for (why, arguments) in [
+            (
+                "a callback or unknown options object",
+                json!({"argumentsPrimitiveSyntax": [false, false],
+                    "argumentsNonSpreadSyntax": [true, true],
+                    "argumentsPlainOptionsSyntax": [false, false]}),
+            ),
+            (
+                "a spread can provide a comparator as well as the computation",
+                json!({"argumentsNonSpreadSyntax": [false]}),
+            ),
+            (
+                "missing spread facts",
+                json!({"argumentsNonSpreadSyntax": null}),
+            ),
+            (
+                "short spread facts",
+                json!({"argumentsPrimitiveSyntax": [false, true]}),
+            ),
+        ] {
+            computed_owned_accessor_witness(&source(arguments), &own, &certified, &roots)
+                .expect_err(why);
+        }
+        // The returned-value entry point names which read it is, and never
+        // reads a memo as the older inert row.
+        assert_eq!(
+            owned_returned_accessor_witness(&source(json!({})), &own, &certified, &roots)
+                .map(|(kind, _)| kind),
+            Ok(DescribedRead::OwnedMemo)
+        );
+        let signal_own = scope(vec![signals_call("createSignal", json!({}))]);
+        let signal = source(json!({
+            "target": "symbol:createSignal",
+            "targetName": "createSignal",
+            "targetPath": [{"kind": "tuple", "index": 0}],
+            "argumentsPrimitiveSyntax": [true],
+        }));
+        assert_eq!(
+            owned_returned_accessor_witness(&signal, &signal_own, &certified, &roots)
+                .map(|(kind, _)| kind),
+            Ok(DescribedRead::OwnedSignal)
+        );
+        for (why, traced, transcript, roots, needle) in [
+            (
+                "the signal's accessor is the inert row, not this one",
+                signal.clone(),
+                signal_own.clone(),
+                vec![root(true)],
+                "no dialect states a computed accessor read",
+            ),
+            (
+                "a member of a memo's result is not the accessor",
+                source(json!({"targetPath": [{"kind": "tuple", "index": 0}]})),
+                own.clone(),
+                vec![root(true)],
+                "no dialect states a computed accessor read",
+            ),
+            (
+                "a local createMemo is not the dialect's",
+                source(json!({"targetModule": ""})),
+                own.clone(),
+                vec![root(true)],
+                "does not trace to a dialect call's result",
+            ),
+            (
+                "a composed dependency's accessor is not this export's own memo",
+                source(json!({
+                    "targetModule": "@scope/dependency",
+                    "targetName": "createSharedMemo",
+                    "target": "symbol:createSharedMemo",
+                })),
+                own.clone(),
+                vec![root(true)],
+                "does not trace to a dialect call's result",
+            ),
+            (
+                "a literal callable is not a call result",
+                source(json!({"kind": "directCallable"})),
+                own.clone(),
+                vec![root(true)],
+                "does not trace to a dialect call's result",
+            ),
+            (
+                "the memo was not created by the export",
+                source(json!({})),
+                scope(Vec::new()),
+                vec![root(true)],
+                "no call of createMemo",
+            ),
+            (
+                "the declaration is in no authenticated dependency",
+                source(json!({})),
+                own.clone(),
+                vec![root(false)],
+                "not in an authenticated dependency",
+            ),
+        ] {
+            let error = computed_owned_accessor_witness(&traced, &transcript, &certified, &roots)
+                .expect_err(why);
+            assert!(error.contains(needle), "{why}: {error}");
+        }
+        // A trace no row states refuses with the older, better-known reason.
+        let error = owned_returned_accessor_witness(
+            &source(json!({"targetModule": ""})),
+            &own,
+            &certified,
+            &roots,
+        )
+        .expect_err("a local createMemo");
+        assert!(
+            error.contains("does not trace to a dialect call's result"),
+            "{error}"
+        );
+    }
+
+    /// ADR 0162: a returned value is a memo accessor only when the site's whole
+    /// value is the `createMemo` call result itself. A conditional the producer
+    /// decomposed into arms with no literal, a binding the producer traced to
+    /// nothing (a memo that is bound, written to, or returned through an
+    /// alias), and a value that is a member of a call's result each refuse by
+    /// name, and a site that is the accessor beside one that is not refuses the
+    /// whole return.
+    #[test]
+    fn a_returned_memo_accessor_is_a_whole_call_completion_only() {
+        use solid_reactive_ir::contract_semantics::DescribedRead;
+        let manifest = audited_phase0_manifest("rc9", "solidjs-signals");
+        let dependency = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.9",
+            SIGNALS_RC9_INTEGRITY,
+            &manifest,
+            "/snapshot/signals",
+        );
+        let certified = archive_snapshot(
+            "consumer",
+            "1.0.0",
+            "sha512-consumer",
+            b"{\"name\":\"consumer\"}",
+            "/snapshot/consumer",
+        );
+        let roots = vec![SnapshotSourceRoot {
+            path: "/project/node_modules/@solidjs/signals/".to_owned(),
+            evidence_prefix: "/node_modules/@solidjs/signals/".to_owned(),
+            snapshot: &dependency,
+            dependency: true,
+        }];
+        let value = json!({"callability": "callable", "constructability": "nonConstructable", "primitive": {}});
+        let location = |start: u64| json!({"path": "/project/node_modules/consumer/dist/index.js", "startByte": start, "endByte": start + 10});
+        let memo_source = json!({
+            "kind": "callResult", "target": "symbol:createMemo", "targetName": "createMemo",
+            "targetModule": "solid-js", "argumentsPrimitiveSyntax": [false],
+            "argumentsNonSpreadSyntax": [true],
+        });
+        let site = |start: u64, sources: serde_json::Value, arms: serde_json::Value| {
+            json!({
+                "location": location(start), "reach": "reachable", "carryReach": "reachable",
+                "value": value, "sources": sources, "arms": arms,
+            })
+        };
+        let implementation = |returns: Vec<serde_json::Value>| {
+            let mut transcript: typefacts::ExportImplementationTranscript =
+                serde_json::from_value(json!({
+                    "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 0, "endByte": 400},
+                    "completionForm": "plain",
+                    "controlFlow": {"returns": returns},
+                }))
+                .expect("a valid transcript");
+            transcript.calls = vec![signals_call("createMemo", json!({}))];
+            transcript
+        };
+        let decide = |returns: Vec<serde_json::Value>| {
+            described_callable_returned_values(&implementation(returns), "at", &certified, &roots)
+                .map(|values| {
+                    values
+                        .into_iter()
+                        .map(|(_, value, _)| match value {
+                            DescribedReturnedValue::OwnedAccessor(kind, _) => Some(kind),
+                            DescribedReturnedValue::Literal(_) => None,
+                        })
+                        .collect::<Vec<_>>()
+                })
+        };
+        assert_eq!(
+            decide(vec![site(10, json!([memo_source.clone()]), json!([]))]),
+            Ok(vec![Some(DescribedRead::OwnedMemo)]),
+            "a whole createMemo completion"
+        );
+        assert_eq!(
+            decide(vec![
+                site(10, json!([memo_source.clone()]), json!([])),
+                site(30, json!([memo_source.clone()]), json!([])),
+            ]),
+            Ok(vec![Some(DescribedRead::OwnedMemo); 2]),
+            "two completions, each a whole createMemo call"
+        );
+        for (why, returns, needle) in [
+            (
+                "a conditional of memos is decomposed into arms with no literal",
+                vec![site(
+                    10,
+                    json!([]),
+                    json!([{"location": location(10), "value": value}, {"location": location(20), "value": value}]),
+                )],
+                "did not state is a function or arrow literal",
+            ),
+            (
+                "a memo bound, written to and returned through its binding traces to nothing",
+                vec![site(10, json!([]), json!([]))],
+                "traces to nothing",
+            ),
+            (
+                "a member of a call's result is not the call's result",
+                vec![site(
+                    10,
+                    json!([{
+                        "kind": "callResult", "target": "symbol:createMemo", "targetName": "createMemo",
+                        "targetModule": "solid-js", "path": [{"kind": "tuple", "index": 0}],
+                    }]),
+                    json!([]),
+                )],
+                "traces to nothing",
+            ),
+            (
+                "one completion that is not the accessor refuses the whole return",
+                vec![
+                    site(10, json!([memo_source.clone()]), json!([])),
+                    site(30, json!([]), json!([])),
+                ],
+                "traces to nothing",
+            ),
+        ] {
+            let error = decide(returns).expect_err(why);
             assert!(error.contains(needle), "{why}: {error}");
         }
     }

@@ -304,7 +304,11 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       //
       // 172 adds the three host-constant-{free,browser,node} fixtures' main
       // documents, ADR 0166's per-host pin of `isServer` folding.
-      stableMainDocuments: 172,
+      //
+      // 174 adds implementation-census-memo-accessors' main document, the corpus
+      // pin of ADR 0162's memo accessor, and package-memo-accessor-consumer's
+      // hand-stated document, its consumer half.
+      stableMainDocuments: 174,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
