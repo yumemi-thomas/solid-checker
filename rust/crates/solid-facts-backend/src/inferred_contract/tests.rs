@@ -1289,6 +1289,7 @@ fn inherited_summary() -> ContractExport {
         // The dependency's `returns` is `[]`, not a closure over a plain
         // return: both project to `Known(None)` (ADR 0143).
         returns_closed_empty: true,
+        returns_restated: Vec::new(),
         // Silence, and deliberately: no walk reached this export, because this
         // package contains nothing to walk.
         creates_walk_clean: false,
@@ -1366,6 +1367,7 @@ fn an_inherited_summary_proposes_the_dependencys_closure_despite_silent_local_wa
 fn an_inherited_plain_return_is_not_restated_as_returns_empty() {
     let summary = ContractExport {
         returns_closed_empty: false,
+        returns_restated: Vec::new(),
         ..inherited_summary()
     };
     let normalized = normalize_inferred_contract_with_candidates(
@@ -1381,6 +1383,112 @@ fn an_inherited_plain_return_is_not_restated_as_returns_empty() {
     assert_eq!(
         export.claim_state(ClaimDomain::Returns),
         KnowledgeState::Unknown
+    );
+}
+
+/// A bare `return` of one output, as the generator writes it.
+fn bare_return(id: &str, output: ValueShape) -> Operation {
+    Operation {
+        output: Some(output),
+        ..operation(
+            OperationId(id.into()),
+            OperationKind::Return,
+            Vec::new(),
+            None,
+        )
+    }
+}
+
+/// ADR 0170: a re-export of a dependency whose `returns` closes over exact
+/// operations states those operations again, under its own names, and proposes
+/// the closure -- where ADR 0143 left the domain unproposed.
+#[test]
+fn an_inherited_plain_return_is_restated_as_the_dependencys_own_operation() {
+    let summary = ContractExport {
+        returns_closed_empty: false,
+        returns_restated: vec![bare_return(
+            "dependency:number:operation:return",
+            ValueShape::Plain,
+        )],
+        ..inherited_summary()
+    };
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(summary),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    assert!(
+        export
+            .call
+            .proposed_closures()
+            .contains(&ClaimDomain::Returns)
+    );
+    let claim = export
+        .operation_claim(ClaimDomain::Returns)
+        .expect("returns is an operation domain");
+    let [id] = claim.items() else {
+        panic!("one restated return: {:?}", claim.items());
+    };
+    assert!(
+        id.0.ends_with(":read:operation:return"),
+        "the restatement is named under this package's own case and export: {id:?}"
+    );
+    let operation = export.operation(&id.0).expect("the return operation");
+    assert_eq!(operation.output, Some(ValueShape::Plain));
+    assert!(operation.is_bare_return());
+    // Restating the return claims nothing about a domain the dependency left
+    // open.
+    assert_eq!(
+        export.claim_state(ClaimDomain::Reads),
+        KnowledgeState::Unknown
+    );
+}
+
+/// The falsifiers: nothing restated (a dependency whose `returns` was open, or
+/// whose items were not all exact) proposes no `returns` closure, and a local
+/// summary never reads the restatement, whatever it carries.
+#[test]
+fn a_restatement_is_read_only_of_an_inherited_summary_that_carries_one() {
+    let returns_state = |summary: ContractExport| {
+        let normalized = normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution(["read".into()]),
+        )
+        .unwrap();
+        let export = &normalized.contract.artifact_cases()[0].exports["read"];
+        (
+            export
+                .call
+                .proposed_closures()
+                .contains(&ClaimDomain::Returns),
+            export.claim_state(ClaimDomain::Returns),
+        )
+    };
+    let restated = || {
+        vec![bare_return(
+            "dependency:number:operation:return",
+            ValueShape::Plain,
+        )]
+    };
+    let inherited = ContractExport {
+        returns_closed_empty: false,
+        ..inherited_summary()
+    };
+    // No restatement: ADR 0143's silence stands.
+    assert_eq!(
+        returns_state(inherited.clone()),
+        (false, KnowledgeState::Unknown)
+    );
+    // The restatement without an inherited origin is a local summary's, which
+    // has no dependency to have certified it.
+    assert_eq!(
+        returns_state(ContractExport {
+            inherited_from: None,
+            returns_restated: restated(),
+            ..inherited
+        }),
+        (false, KnowledgeState::Unknown)
     );
 }
 

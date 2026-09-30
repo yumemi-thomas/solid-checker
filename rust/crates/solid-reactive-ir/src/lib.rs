@@ -1193,6 +1193,20 @@ pub struct ContractExport {
     /// closure licenses a re-exporting package to state `returns: []` again.
     /// `false` is the fail-closed default every locally inferred summary keeps.
     pub returns_closed_empty: bool,
+    /// The operations of the *accepted* contract's closed, non-empty `returns`
+    /// claim, when a re-exporting package can state them again exactly (ADR
+    /// 0170): every item a bare `return` ([`contract_semantics::Operation::is_bare_return`])
+    /// whose output names no resource, operation or callable of the
+    /// dependency's own -- `plain`, `undefined`, an argument, a fresh array of
+    /// arguments, an invocation result, a props merge, an array of plains --
+    /// in the accepted order.
+    ///
+    /// Empty is "nothing to restate", which is what every locally inferred
+    /// summary keeps, what a projection of an open or empty `returns` keeps
+    /// (the empty closure is [`Self::returns_closed_empty`]'s), and what a claim
+    /// with any other item keeps: a partly restated enumeration would be a
+    /// stronger claim than the dependency's.
+    pub returns_restated: Vec<contract_semantics::Operation>,
     /// Whether the generator's own [`crate::CreatesProposalWalk`] found no call
     /// inside this export's implementation that a `creates: []` proposal would
     /// contradict.

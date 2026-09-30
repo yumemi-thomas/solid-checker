@@ -1814,6 +1814,36 @@ impl Operation {
             && !matches!(self.owner.source, OwnerSource::Created(_))
     }
 
+    /// Whether this is a `return` that states nothing but its output: unguarded,
+    /// triggered by and at the call, on the same stack, untracked, under no
+    /// owner relation, of the default per-call cardinality, with no input, no
+    /// resource, no provenance and no protocol (ADR 0170).
+    ///
+    /// The shape every generated `return` has. A dependency's return that
+    /// states anything more -- a guard, an owner, a resource it names -- is not
+    /// one a re-exporting package can state again by output alone, because the
+    /// restatement would drop what the extra field said.
+    #[must_use]
+    pub fn is_bare_return(&self) -> bool {
+        self.kind == OperationKind::Return
+            && self.guard.is_none()
+            && self.trigger == Some(Trigger::Event(Event::Call))
+            && self.at == Some(Event::Call)
+            && self.schedule == Some(Schedule::SameStack)
+            && self.tracking == Tracking::Untracked
+            && self.owner == OwnerRelation::default()
+            && self.cardinality
+                == (Cardinality {
+                    scope: Some(CardinalityScope::Call),
+                    min: Some(0),
+                    max: Some(UpperBound::Many),
+                })
+            && self.inputs.is_empty()
+            && self.resources.is_empty()
+            && self.composed_from.is_none()
+            && self.protocol.is_none()
+    }
+
     /// The protocol this operation invokes, `Call` for every operation that
     /// states none.
     #[must_use]

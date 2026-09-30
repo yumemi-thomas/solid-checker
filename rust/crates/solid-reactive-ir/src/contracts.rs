@@ -158,6 +158,7 @@ pub fn project_export_semantics(
         .operation_claim(ClaimDomain::Returns)
         .expect("returns is an operation domain");
     let returns_closed_empty = returns_claim.is_closed() && returns_claim.items().is_empty();
+    let returns_restated = restatable_returns(export);
 
     ContractExport {
         kind: kind.into(),
@@ -201,6 +202,7 @@ pub fn project_export_semantics(
         open_claims,
         creates_closed_empty,
         returns_closed_empty,
+        returns_restated,
         creates_walk_clean: false,
         creates_walk_declines: Vec::new(),
         returns_walk_clean: false,
@@ -229,6 +231,65 @@ pub fn project_export_semantics(
             .map(|premise| premise.export.clone())
             .collect(),
     }
+}
+
+/// ADR 0170: the operations of a closed, non-empty `returns` claim that a
+/// re-exporting package states again as they are.
+///
+/// All or nothing. The claim must be closed, every item must be a bare `return`
+/// whose output is one of the exact shapes below, and each output must reach no
+/// resource or operation of its own package: those are the shapes
+/// that mean the same thing in whichever package restates them. One item that
+/// is anything else -- a guarded return, a reactive leaf -- answers nothing
+/// for the whole claim, because the remaining items alone
+/// would state a smaller enumeration than the dependency certified.
+fn restatable_returns(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> Vec<crate::contract_semantics::Operation> {
+    let claim = export
+        .operation_claim(ClaimDomain::Returns)
+        .expect("returns is an operation domain");
+    if !claim.is_closed() || claim.items().is_empty() {
+        return Vec::new();
+    }
+    let mut restated = Vec::new();
+    for id in claim.items() {
+        let Some(operation) = export.operation(&id.0) else {
+            return Vec::new();
+        };
+        let exact = operation.is_bare_return()
+            && operation
+                .output
+                .as_ref()
+                .is_some_and(|output| match output {
+                    ValueShape::Plain
+                    | ValueShape::Undefined
+                    | ValueShape::Parameter { .. }
+                    | ValueShape::ArgumentArray { .. }
+                    | ValueShape::InvocationResult { .. }
+                    | ValueShape::MergedProps { .. } => true,
+                    ValueShape::Array { element, .. } => **element == ValueShape::Plain,
+                    // ADR 0145's described callable, whose claims name the
+                    // export's arguments by position and no resource of the
+                    // dependency's own.
+                    ValueShape::DescribedCallable(call) => call.callbacks.iter().all(|callback| {
+                        !matches!(
+                            callback.owner.source,
+                            OwnerSource::Captured(_) | OwnerSource::Created(_)
+                        ) && callback.owner.productions.items().is_empty()
+                            && !matches!(
+                                callback.cardinality.scope,
+                                Some(crate::contract_semantics::CardinalityScope::Resource(_))
+                            )
+                    }),
+                    _ => false,
+                });
+        if !exact {
+            return Vec::new();
+        }
+        restated.push(operation.clone());
+    }
+    restated
 }
 
 /// ADR 0152: the export argument slots the returned value invokes on its own
@@ -1023,6 +1084,127 @@ mod owner_requirement_projection_tests {
             Vec::new(),
         ));
         assert!(!open.returns_closed_empty);
+    }
+
+    /// ADR 0170: the projection carries a closed, non-empty `returns` claim's
+    /// operations for a re-export to state again, and only when every item is a
+    /// bare `return` with an exact output that means the same in any package.
+    #[test]
+    fn only_an_exact_closed_returns_claim_projects_as_restatable() {
+        let returning = |id: &str, output: ValueShape| {
+            let mut operation = operation(id, OperationKind::Return, &[]);
+            operation.output = Some(output);
+            operation
+        };
+        let project = |returns: KnowledgeSet<OperationId>, operations: Vec<Operation>| {
+            project_export_semantics(&export(
+                CallClaims {
+                    returns,
+                    ..claims()
+                },
+                operations,
+                Vec::new(),
+            ))
+        };
+        let one = || KnowledgeSet::Complete(vec![OperationId("return".into())]);
+
+        // A plain return is restated as it is.
+        let plain = project(one(), vec![returning("return", ValueShape::Plain)]);
+        assert_eq!(plain.returns_restated.len(), 1);
+        assert_eq!(plain.returns_restated[0].output, Some(ValueShape::Plain));
+        assert!(!plain.returns_closed_empty);
+
+        // So is a union of exact outputs, in the accepted order.
+        let union = project(
+            KnowledgeSet::Complete(vec![
+                OperationId("return-0".into()),
+                OperationId("return-1".into()),
+            ]),
+            vec![
+                returning(
+                    "return-0",
+                    ValueShape::Parameter {
+                        index: 0,
+                        path: Vec::new(),
+                    },
+                ),
+                returning("return-1", ValueShape::Plain),
+            ],
+        );
+        assert_eq!(union.returns_restated.len(), 2);
+
+        // The empty closure has nothing to restate; ADR 0143's flag owns it.
+        let empty = project(KnowledgeSet::Complete(Vec::new()), Vec::new());
+        assert!(empty.returns_restated.is_empty());
+        assert!(empty.returns_closed_empty);
+
+        // An open or partial claim states nothing complete.
+        let partial = project(
+            KnowledgeSet::Partial(vec![OperationId("return".into())]),
+            vec![returning("return", ValueShape::Plain)],
+        );
+        assert!(partial.returns_restated.is_empty());
+        assert!(
+            project(KnowledgeSet::Unknown, Vec::new())
+                .returns_restated
+                .is_empty()
+        );
+
+        // A return that states more than its output is not restated by output
+        // alone: a guard, a resource.
+        let mut guarded = returning("return", ValueShape::Plain);
+        guarded.cardinality.min = Some(1);
+        assert!(project(one(), vec![guarded]).returns_restated.is_empty());
+        let mut resourced = returning("return", ValueShape::Plain);
+        resourced.resources.insert(ResourceId("resource".into()));
+        assert!(project(one(), vec![resourced]).returns_restated.is_empty());
+
+        // An output that names a resource of the dependency's own, or a
+        // callable it defines, means something else in another package.
+        let reactive = ValueShape::Reactive {
+            role: crate::contract_semantics::ReactiveRole::Accessor,
+            resource: None,
+            capabilities: KnowledgeSet::Unknown,
+        };
+        assert!(
+            project(one(), vec![returning("return", reactive.clone())])
+                .returns_restated
+                .is_empty()
+        );
+        // A described callable names the export's arguments by position only,
+        // so it is restated as it is.
+        use crate::contract_semantics::{DescribedCall, DescribedCallback};
+        let described = |call: DescribedCall| {
+            project(
+                one(),
+                vec![returning(
+                    "return",
+                    ValueShape::DescribedCallable(Box::new(call)),
+                )],
+            )
+        };
+        let invoking = DescribedCall {
+            reads: Vec::new(),
+            returns: vec![ValueShape::InvocationResult { parameter: 0 }],
+            callbacks: vec![DescribedCallback::same_stack_once(0)],
+        };
+        assert_eq!(described(invoking.clone()).returns_restated.len(), 1);
+        // ... unless a callback of it names a resource of the dependency's own.
+        let mut owned = invoking;
+        owned.callbacks[0].owner.source = OwnerSource::Created(ResourceId("resource".into()));
+        assert!(described(owned).returns_restated.is_empty());
+        // All or nothing: one exact item beside one that is not restates none.
+        let mixed = project(
+            KnowledgeSet::Complete(vec![
+                OperationId("return-0".into()),
+                OperationId("return-1".into()),
+            ]),
+            vec![
+                returning("return-0", ValueShape::Plain),
+                returning("return-1", reactive),
+            ],
+        );
+        assert!(mixed.returns_restated.is_empty());
     }
 
     /// Item A of ways-to-improve § 3.3: a closed `callbacks` whose items include
@@ -2338,6 +2520,7 @@ fn premise_unmet_summary(summary: &ContractExport) -> ContractExport {
         .collect(),
         creates_closed_empty: false,
         returns_closed_empty: false,
+        returns_restated: Vec::new(),
         ..summary.clone()
     }
 }
@@ -3099,6 +3282,7 @@ fn contract_export_function(
         // `Program::creates_proposal_walk`. Both defaults refuse.
         creates_closed_empty: false,
         returns_closed_empty: false,
+        returns_restated: Vec::new(),
         creates_walk_clean: false,
         // This summary *is* the local inference, so it is never inherited.
         inherited_from: None,

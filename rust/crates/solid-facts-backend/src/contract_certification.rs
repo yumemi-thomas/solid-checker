@@ -7257,6 +7257,210 @@ mod tests {
         );
     }
 
+    /// The dependency's plan with `value` closing `returns` over the given
+    /// outputs, one bare `return` each (`None`: `returns` stays open, a
+    /// dependency that certified nothing about it) and `callbacks`/`creates`
+    /// closed empty, as ADR 0170's tracer wants it.
+    fn returning_dependency_plan(
+        archive: &PublishedArchive,
+        outputs: Option<Vec<ValueShape>>,
+    ) -> CertificationPlan {
+        let manifest = br#"{"name":"dependency-package","version":"2.0.0","exports":{".":{"types":"./index.d.ts","import":"./index.js","default":"./index.js"}}}"#;
+        plan_with_export_semantics(
+            archive,
+            "dependency-package",
+            "2.0.0",
+            "/project/node_modules/dependency-package",
+            manifest,
+            &[(
+                "value",
+                ("index.js", b"export function value(run) {\n  run();\n}\n"),
+                (
+                    "index.d.ts",
+                    b"export declare function value(run: () => void): void;\n",
+                ),
+                "/project/node_modules/dependency-package",
+            )],
+            &[],
+            "/project/node_modules/root-package/index.js",
+            &|case, name| {
+                let single = outputs.as_ref().is_some_and(|outputs| outputs.len() == 1);
+                let returns = outputs.iter().flatten().enumerate().map(|(index, output)| {
+                    let id = OperationId(if single {
+                        format!("{}:{name}:operation:return", case.id)
+                    } else {
+                        format!("{}:{name}:operation:return-{index}", case.id)
+                    });
+                    Operation {
+                        output: Some(output.clone()),
+                        ..test_return_operation(id)
+                    }
+                });
+                let returns = returns.collect::<Vec<_>>();
+                ExportSemantics {
+                    identity: test_export_identity(case, name),
+                    shape: ValueShape::Callable,
+                    stability: StabilityKnowledge::Unknown,
+                    call: CallSemantics::new(
+                        CallClaims {
+                            callbacks: KnowledgeSet::complete(vec![]),
+                            creates: KnowledgeSet::complete(vec![]),
+                            returns: if outputs.is_some() {
+                                KnowledgeSet::complete(
+                                    returns
+                                        .iter()
+                                        .map(|operation| operation.id.clone())
+                                        .collect(),
+                                )
+                            } else {
+                                KnowledgeSet::Unknown
+                            },
+                            ..CallClaims::default()
+                        },
+                        returns,
+                        Vec::new(),
+                        Vec::new(),
+                        GuardPartition::default(),
+                    ),
+                }
+            },
+        )
+    }
+
+    /// A `return` the way the generator writes one: nothing stated but its
+    /// output (`Operation::is_bare_return`).
+    fn test_return_operation(id: OperationId) -> Operation {
+        Operation {
+            kind: OperationKind::Return,
+            owner: OwnerRelation::default(),
+            ..test_invoke_operation(id)
+        }
+    }
+
+    /// ADR 0170: a re-export whose dependency closes `returns` over one plain
+    /// return restates that operation, and composition discharges it against
+    /// the dependency's own claim -- where ADR 0143 left it unproposed.
+    #[test]
+    fn a_reexport_restates_its_dependencys_closed_plain_return() {
+        let (root_archive, dependency_archive) = inherited_reexport_archives();
+        let dependency =
+            returning_dependency_plan(&dependency_archive, Some(vec![ValueShape::Plain]));
+        let root = inherited_root_plan(&root_archive, &dependency, &|case, name| {
+            inherited_projection(&dependency, case, name)
+        });
+
+        // The restatement is the dependency's operation under the re-exporting
+        // package's own names, not a resemblance of it.
+        let root_case = root
+            .selected_candidate
+            .artifact_case(root.selected_artifact_case_id())
+            .unwrap();
+        let export = &root_case.exports["value"];
+        let claim = export.operation_claim(ClaimDomain::Returns).unwrap();
+        let [id] = claim.items() else {
+            panic!("one restated return: {:?}", claim.items());
+        };
+        assert_eq!(id.0, format!("{}:value:operation:return", root_case.id));
+        assert_eq!(
+            export.operation(&id.0).unwrap().output,
+            Some(ValueShape::Plain)
+        );
+
+        let sites = super::type_facts::inherited_dependency_closure_for_test(
+            &root,
+            &[&dependency],
+            "value",
+            ClaimDomain::Returns,
+        )
+        .unwrap_or_else(|error| panic!("returns must discharge: {error}"))
+        .expect("returns must be recognized as inherited");
+        let claim = sites
+            .iter()
+            .find_map(|site| site.strip_prefix("inherited-closure-dependency:"))
+            .expect("an inherited closure records its dependency obligation");
+        let claim: serde_json::Value = serde_json::from_str(claim).unwrap();
+        assert_eq!(claim["package"], "dependency-package");
+        assert_eq!(claim["domain"], ClaimDomain::Returns.wire_name());
+    }
+
+    /// The falsifiers: a re-export claiming a return the dependency does not
+    /// certify (a different output, or an open domain) is not inherited, and a
+    /// name the package implements itself never is.
+    #[test]
+    fn a_reexport_restates_only_the_return_its_dependency_certified() {
+        let (root_archive, dependency_archive) = inherited_reexport_archives();
+        let plain = returning_dependency_plan(&dependency_archive, Some(vec![ValueShape::Plain]));
+        let argument = returning_dependency_plan(
+            &dependency_archive,
+            Some(vec![ValueShape::Parameter {
+                index: 0,
+                path: Vec::new(),
+            }]),
+        );
+        let open = returning_dependency_plan(&dependency_archive, None);
+
+        // The published claim justifies a plain return; the dependency says
+        // something else, or nothing.
+        for (label, dependency) in [("an argument", &argument), ("an open domain", &open)] {
+            let root = inherited_root_plan(&root_archive, dependency, &|case, name| {
+                inherited_projection(&plain, case, name)
+            });
+            let error = super::type_facts::inherited_dependency_closure_for_test(
+                &root,
+                &[dependency],
+                "value",
+                ClaimDomain::Returns,
+            )
+            .expect_err("a return the dependency does not certify cannot be inherited");
+            assert!(
+                error.to_string().contains("is not the projection"),
+                "{label}: the refusal names what failed: {error}"
+            );
+        }
+
+        // A restatement that says less -- a stronger negative -- is refused too:
+        // the same dependency, a root closed over nothing.
+        let root = inherited_root_plan(&root_archive, &plain, &|case, name| {
+            let mut export = inherited_projection(&plain, case, name);
+            export.call = CallSemantics::new(
+                CallClaims {
+                    callbacks: KnowledgeSet::complete(vec![]),
+                    creates: KnowledgeSet::complete(vec![]),
+                    returns: KnowledgeSet::complete(vec![]),
+                    ..CallClaims::default()
+                },
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                GuardPartition::default(),
+            );
+            export
+        });
+        let error = super::type_facts::inherited_dependency_closure_for_test(
+            &root,
+            &[&plain],
+            "value",
+            ClaimDomain::Returns,
+        )
+        .expect_err("`returns: []` is not a dependency's plain return");
+        assert!(
+            error.to_string().contains("is not the projection"),
+            "{error}"
+        );
+
+        // The dependency's own export is its own: nothing to inherit.
+        assert_eq!(
+            super::type_facts::inherited_dependency_closure_for_test(
+                &plain,
+                &[&plain],
+                "value",
+                ClaimDomain::Returns,
+            )
+            .unwrap(),
+            None
+        );
+    }
+
     /// A name this package implements is not inherited, whatever else is in the
     /// graph: its binding is inside its own snapshot, so the implementation
     /// census answers it and this premise never applies.
@@ -25920,6 +26124,221 @@ export const value = phantom;
                  dependency claim: {withheld}"
             );
         }
+    }
+
+    /// A graph node request for a package whose whole entrypoint is
+    /// `export { names } from "leaf-package"`: each export bound, on both axes,
+    /// to the leaf's own binding, and proposed as the generator proposes a
+    /// re-export -- the projection of the leaf's export, carrying its origin
+    /// (ADR 0170's fixture).
+    fn reexporting_graph_request(
+        leaf: &CertificationRequest,
+        leaf_plan: &CertificationPlan,
+        edge: AcceptedDependencyEdge,
+        runtime: &[u8],
+        declarations: &[u8],
+        names: &[&str],
+    ) -> (CertificationRequest, PublishedArchive, String) {
+        use solid_reactive_ir::{
+            ContractEntrypoint, ContractExport, ContractPackage, PackageContract,
+        };
+        let (shaped, archive, integrity) = synthetic_graph_certification_request_shaped(
+            "root-package",
+            "1.0.0",
+            "/project/node_modules/root-package",
+            "/project/src/app.ts",
+            runtime,
+            declarations,
+            vec![edge.clone()],
+            ValueShape::Callable,
+            CallClaims::default(),
+        );
+        let mut resolved = shaped.resolved_import.clone();
+        resolved.exports = names
+            .iter()
+            .map(|name| {
+                (
+                    (*name).to_owned(),
+                    leaf.resolved_import.exports[*name].clone(),
+                )
+            })
+            .collect();
+        let leaf_case = leaf_plan
+            .selected_candidate
+            .artifact_case(leaf_plan.selected_artifact_case_id())
+            .unwrap();
+        let inferred = PackageContract {
+            package: ContractPackage {
+                name: "root-package".into(),
+                version: "1.0.0".into(),
+                integrity: String::new(),
+            },
+            entrypoints: BTreeMap::from([(
+                ".".into(),
+                ContractEntrypoint {
+                    exports: names
+                        .iter()
+                        .map(|name| {
+                            let dependency = &leaf_case.exports[*name];
+                            (
+                                (*name).to_owned(),
+                                ContractExport {
+                                    inherited_from: Some(
+                                        solid_reactive_ir::InheritedExportOrigin {
+                                            package_name: "leaf-package".into(),
+                                            package_version: "2.0.0".into(),
+                                            artifact_case: leaf_plan
+                                                .selected_artifact_case_id()
+                                                .into(),
+                                            semantic_digest: edge.accepted_contract_digest.clone(),
+                                            entrypoint: ".".into(),
+                                            export: (*name).to_owned(),
+                                        },
+                                    ),
+                                    ..solid_reactive_ir::project_export_semantics(dependency)
+                                },
+                            )
+                        })
+                        .collect(),
+                },
+            )]),
+            source_path: String::new(),
+        };
+        // As the emit boundary does for an accepted re-export: the leaf's
+        // modules are exact external targets, not members of this archive.
+        let external_targets = resolved
+            .exports
+            .values()
+            .flat_map(|binding| {
+                [
+                    (
+                        binding.runtime.module.path.clone(),
+                        binding.runtime.module.digest.clone(),
+                    ),
+                    (
+                        binding.declarations.module.path.clone(),
+                        binding.declarations.module.digest.clone(),
+                    ),
+                ]
+            })
+            .collect::<BTreeSet<_>>();
+        let candidate =
+            crate::inferred_contract::normalize_inferred_contract_with_candidates_and_external_targets(
+                &inferred,
+                &resolved,
+                &external_targets,
+            )
+            .unwrap()
+            .contract;
+        (
+            CertificationRequest::new(candidate, shaped.import_request.clone(), resolved),
+            archive,
+            integrity,
+        )
+    }
+
+    /// ADR 0170 end to end in the published graph: a package that re-exports a
+    /// dependency's function states the dependency's closed `returns` again,
+    /// and the claim is discharged against the dependency's receipt. A forward
+    /// of an export whose `returns` the dependency withheld stays open, and the
+    /// empty closure keeps ADR 0143's path.
+    #[test]
+    fn a_reexport_restates_its_dependencys_closed_returns_end_to_end() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let fixture =
+            repository_root().join("fixtures/package-contracts/dependency-reexport-returns");
+        let bytes = |file: &str| std::fs::read(fixture.join(file)).unwrap();
+        let (leaf, leaf_archive, leaf_integrity) = inferred_graph_request(
+            "leaf-package",
+            "2.0.0",
+            "/project/node_modules/root-package/node_modules/leaf-package",
+            "/project/node_modules/root-package/dist/index.js",
+            &bytes("leaf.js"),
+            &bytes("leaf.d.ts"),
+            &[
+                ("count", true, false),
+                ("reset", false, true),
+                ("widened", true, false),
+            ],
+            vec![],
+        );
+        let leaf_plan = plan_certification(
+            leaf.clone(),
+            UntrustedArtifactEnvelope::Published(leaf_archive.clone()),
+        )
+        .unwrap();
+        let edge = AcceptedDependencyEdge {
+            specifier: "leaf-package".into(),
+            package_name: "leaf-package".into(),
+            artifact_case: leaf_plan.selected_artifact_case_id().into(),
+            accepted_contract_digest: leaf_plan
+                .demand_graph()
+                .candidate_semantic_digest()
+                .as_str()
+                .into(),
+        };
+        let (root, root_archive, root_integrity) = reexporting_graph_request(
+            &leaf,
+            &leaf_plan,
+            edge,
+            &bytes("root.js"),
+            &bytes("root.d.ts"),
+            &["count", "reset", "widened"],
+        );
+        // The premise the arm rests on: the root proposes the leaf's plain
+        // return itself, under its own names.
+        assert!(
+            root.candidate.artifact_cases()[0].exports["count"]
+                .operation_claim(ClaimDomain::Returns)
+                .is_some_and(|claim| !claim.items().is_empty()),
+            "the generator's projection restates the leaf's closed plain return"
+        );
+        let graph = plan_published_contract_graph(
+            PublishedGraphNodeRequest::new(
+                root,
+                root_archive,
+                graph_lock("root-package", "1.0.0", &root_integrity),
+            ),
+            [PublishedGraphNodeRequest::new(
+                leaf,
+                leaf_archive,
+                graph_lock("leaf-package", "2.0.0", &leaf_integrity),
+            )],
+        )
+        .unwrap();
+        let scratch = TracerScratch::new("dependency-reexport-returns");
+        let Some(probes) =
+            tracer_configuration_from(&fixture, scratch.path(), "dependency-reexport-returns", &[])
+        else {
+            return;
+        };
+        let issuer =
+            ConfiguredReceiptIssuer::persistent_local("dependency-reexport-returns", [71; 32])
+                .unwrap();
+        let finalized = graph
+            .certify_value_only(&pin, &issuer, 1, Some(&probes))
+            .unwrap_or_else(|error| panic!("the graph certifies: {error}"));
+        let leaf_node = finalized
+            .nodes()
+            .iter()
+            .find(|node| node.identity().package_name == "leaf-package")
+            .expect("the leaf node is finalized");
+        let leaf_main = leaf_node.finalized().canonical_main();
+        assert!(plain_return_is_closed_in(leaf_main, "count"));
+        assert!(!plain_return_is_closed_in(leaf_main, "widened"));
+        let root_main = finalized.root().canonical_main();
+        assert!(
+            plain_return_is_closed_in(root_main, "count"),
+            "the forward restates the leaf's plain return: {:?} {:?}",
+            finalized.root().withheld_closures(),
+            finalized.root().withheld_operations()
+        );
+        assert!(
+            !plain_return_is_closed_in(root_main, "widened"),
+            "nothing is restated that the leaf withheld"
+        );
     }
 
     #[test]

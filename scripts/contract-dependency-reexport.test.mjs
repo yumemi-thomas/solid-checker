@@ -125,26 +125,36 @@ describe("a contract describes what it re-exports from an accepted dependency", 
     // an unresolved global, so every domain stays open and a consumer that
     // re-exports it inherits that openness as an obligation.
     write(join(modules, "depkg/package.json"), manifest("depkg"));
+    //
+    // `count` hands back a primitive (ADR 0113), so the dependency proposes one
+    // plain return that a re-exporting package states again (ADR 0170).
     write(
       join(modules, "depkg/dist/index.js"),
       "export function clean(handler) {\n  handler();\n}\n" +
-        "export const opaque = globalThis.hostFactory();\n"
+        "export const opaque = globalThis.hostFactory();\n" +
+        "export function count(items) {\n  return items ? 1 : 0;\n}\n"
     );
     write(
       join(modules, "depkg/dist/index.d.ts"),
       "export declare function clean(handler: () => void): void;\n" +
-        "export declare const opaque: (node: Element) => unknown;\n"
+        "export declare const opaque: (node: Element) => unknown;\n" +
+        "export declare function count(items: unknown): number;\n"
     );
 
     const consumerSources = {
       // Only the proven name. Pins mechanic 1 on its own.
-      reexporter: 'export { clean } from "depkg";\n',
+      reexporter: 'export { clean, count } from "depkg";\n',
       // The proven name beside the open one. Pins mechanic 2.
-      mixed: 'export { clean, opaque } from "depkg";\n'
+      mixed: 'export { clean, opaque } from "depkg";\n',
+      // A local wrapper of the same dependency name (ADR 0170): its `returns`
+      // is its own body's, not the dependency's.
+      wrapper:
+        'import { count } from "depkg";\nexport function wrapped(items) {\n  return { total: count(items) };\n}\n'
     };
     const consumerDeclarations = {
-      reexporter: 'export { clean } from "depkg";\n',
-      mixed: 'export { clean, opaque } from "depkg";\n'
+      reexporter: 'export { clean, count } from "depkg";\n',
+      mixed: 'export { clean, opaque } from "depkg";\n',
+      wrapper: "export declare function wrapped(items: unknown): { total: number };\n"
     };
     for (const [name, source] of Object.entries(consumerSources)) {
       write(join(modules, name, "package.json"), manifest(name, { depkg: "1.0.0" }));
@@ -304,5 +314,36 @@ describe("a contract describes what it re-exports from an accepted dependency", 
     expect(closure(consumers.mixed, "local")).toEqual(closure(consumers.reexporter, "local"));
     // And the name the obligation is actually about keeps every domain open.
     expect(closure(consumers.mixed, "opaque")).toEqual({ closed: [], proposed: [] });
+  });
+
+  test("a re-export restates its dependency's closed plain return, operation for operation (ADR 0170)", () => {
+    const returned = (document, exportName) => {
+      const artifactCase = document.entrypoints["."].cases[0];
+      const summary = document.summaries[artifactCase.exports[exportName]];
+      return (summary.call?.operations ?? [])
+        .filter(operation => operation.kind === "return")
+        .map(operation => JSON.stringify(operation.output));
+    };
+    const stated = closure(dependency, "count");
+    // Non-vacuous: the dependency proposes `returns`, and what it returns is
+    // one plain value.
+    expect(stated.proposed).toContain("returns");
+    expect(returned(dependency, "count")).toHaveLength(1);
+    // The re-export proposes the same closure and states the same output.
+    expect(closure(consumers.reexporter, "count")).toEqual(stated);
+    expect(returned(consumers.reexporter, "count")).toEqual(returned(dependency, "count"));
+    // ADR 0143's falsifier stays: a dependency that closes nothing restates
+    // nothing.
+    expect(closure(consumers.mixed, "opaque").proposed).not.toContain("returns");
+  });
+
+  test("a local wrapper of a dependency function states no return of the dependency's (ADR 0170)", () => {
+    // `wrapped` calls `count`, whose plain return the dependency closes, but
+    // returns an object of its own. Nothing about `count` describes it, so its
+    // `returns` is decided by its own body alone: not proposed.
+    expect(closure(dependency, "count").proposed).toContain("returns");
+    expect(closure(consumers.wrapper, "wrapped").proposed).not.toContain("returns");
+    // The one-statement re-export of the same name, beside it, does restate.
+    expect(closure(consumers.reexporter, "count").proposed).toContain("returns");
   });
 });

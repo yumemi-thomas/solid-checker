@@ -68,3 +68,12 @@ never read the inherited premise.
   argument containers) on a re-export would close those domains too. That needs
   the projection to carry the operations and the certifier to discharge each
   one by composition, and is not done here.
+
+## Amendment (2026-09-30): ADR 0170
+
+The remaining item above is done for the exact outputs: the projection now
+carries a closed non-empty `returns` claim's operations
+(`ContractExport::returns_restated`) and a re-export states them again, so
+`@solid-primitives/sse`'s `number` restates `utils`' plain return. The empty
+closure is unchanged, and so is the rule that `Known(None)` alone is never read
+as `returns: []`.

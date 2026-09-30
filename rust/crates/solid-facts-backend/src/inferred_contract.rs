@@ -842,11 +842,44 @@ fn normalize_export(
             && summary.inherited_from.is_none())
         .then(|| KnowledgeSet::Complete(Vec::new()))
     };
+    // ADR 0170: a re-export states its dependency's closed `returns` again,
+    // operation for operation. The projection carries the accepted claim's
+    // items only when every one is a bare `return` with an exact output that
+    // means the same in any package (`plain`, an argument, a fresh array of
+    // arguments, ...), so the copies differ from the dependency's operations
+    // only in their names. Ordered after every local proposal, which all
+    // require `inherited_from` to be `None`, so it answers only for a summary
+    // no body produced; and after ADR 0143's empty closure, which is the
+    // restatement of a claim with no item.
+    let restated_returns = |operations: &mut Vec<Operation>| {
+        (scope.publishes_bootstrapped_reactive_domains()
+            && summary.kind == "function"
+            && summary.inherited_from.is_some()
+            && !summary.returns_restated.is_empty())
+        .then(|| {
+            let single = summary.returns_restated.len() == 1;
+            let mut ids = Vec::new();
+            for (index, restated) in summary.returns_restated.iter().enumerate() {
+                let id = if single {
+                    OperationId(format!("{prefix}return"))
+                } else {
+                    OperationId(format!("{prefix}return-{index}"))
+                };
+                operations.push(Operation {
+                    id: id.clone(),
+                    ..restated.clone()
+                });
+                ids.push(id);
+            }
+            KnowledgeSet::Complete(ids)
+        })
+    };
     let returns = match &summary.returns {
         ContractClaim::Open => valueless_returns()
             .or_else(|| container_returns(&mut operations))
             .or_else(|| alias_return(&mut operations))
             .or_else(|| described_returns(&mut operations))
+            .or_else(|| restated_returns(&mut operations))
             .unwrap_or(KnowledgeSet::Unknown),
         // ADR 0109, before the empty closure and deliberately: a body that
         // returns a props merge *does* yield a value, so the two are mutually
@@ -906,6 +939,9 @@ fn normalize_export(
                 // ADR 0145, before ADR 0113's plain return: a function literal
                 // is never a primitive, so the two walks never both answer.
                 described
+            } else if let Some(restated) = restated_returns(&mut operations) {
+                // ADR 0170: the dependency's own closed `returns`, restated.
+                restated
             } else if scope.publishes_bootstrapped_reactive_domains()
                 && summary.kind == "function"
                 && summary.returns_value_completion
