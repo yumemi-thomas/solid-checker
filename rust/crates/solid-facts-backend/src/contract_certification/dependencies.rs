@@ -2441,6 +2441,7 @@ fn certify_graphs_with_recipe_gating(
         // in node order, which keeps every withdrawal, every cache entry, and
         // the first reported error where the sequential loop put them.
         let mut withdrawals = Vec::<(String, super::WithheldClosure)>::new();
+        let mut operation_withdrawals = Vec::<(String, super::WithheldOperation)>::new();
         let mut dropped_corpora = BTreeSet::<String>::new();
         let mut gated_this_pass = BTreeSet::<String>::new();
         let mut jobs = Vec::new();
@@ -2517,9 +2518,16 @@ fn certify_graphs_with_recipe_gating(
                 }
                 Err(source) => {
                     let incomplete = super::incomplete_gate_withholding(&node.plan, &source);
-                    if !incomplete.is_empty() {
+                    let operations =
+                        super::incomplete_structural_gate_withholding(&node.plan, &source);
+                    if !incomplete.is_empty() || !operations.is_empty() {
                         withdrawals.extend(
                             incomplete
+                                .into_iter()
+                                .map(|record| (digest.to_owned(), record)),
+                        );
+                        operation_withdrawals.extend(
+                            operations
                                 .into_iter()
                                 .map(|record| (digest.to_owned(), record)),
                         );
@@ -2626,10 +2634,13 @@ fn certify_graphs_with_recipe_gating(
         for digest in &dropped_corpora {
             synthesized.remove(digest);
         }
-        if !withdrawals.is_empty() {
-            timing.withdrawn = withdrawals.len();
+        if !withdrawals.is_empty() || !operation_withdrawals.is_empty() {
+            timing.withdrawn = withdrawals.len() + operation_withdrawals.len();
             for (digest, record) in withdrawals {
                 already_withheld.entry(digest).or_default().push(record);
+            }
+            for (digest, record) in operation_withdrawals {
+                withheld_operations.entry(digest).or_default().push(record);
             }
             timing.emit(emit_timings, pass_started);
             continue;

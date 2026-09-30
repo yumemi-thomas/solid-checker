@@ -708,17 +708,23 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
             elements: items.iter().map(project_return_shape).collect(),
             ..ContractReturn::default()
         }),
-        ValueShape::Object(KnowledgeSet::Complete(properties)) => Some(ContractReturn {
-            kind: "object".into(),
-            properties: properties
+        ValueShape::Object(KnowledgeSet::Complete(properties)) => {
+            let properties = properties
                 .iter()
                 .filter_map(|property| {
                     project_return_shape(&property.value)
                         .map(|value| (property.name.clone(), value))
                 })
-                .collect(),
-            ..ContractReturn::default()
-        }),
+                .collect::<BTreeMap<_, _>>();
+            // This projection retains reactive leaves, not the certified
+            // container's full enumeration. No retained leaf means no local
+            // return summary; an empty object is not a valid ContractReturn.
+            (!properties.is_empty()).then_some(ContractReturn {
+                kind: "object".into(),
+                properties,
+                ..ContractReturn::default()
+            })
+        }
         ValueShape::Promise(value) | ValueShape::AsyncIterable(value) => {
             project_return_shape(value)
         }
@@ -1735,6 +1741,21 @@ mod owner_requirement_projection_tests {
                 value: ValueShape::Unknown,
             }])
         )));
+    }
+
+    #[test]
+    fn a_plain_structural_object_projects_no_empty_reactive_summary() {
+        let mut returned = operation("plain-object", OperationKind::Return, &[]);
+        returned.output = Some(ValueShape::Object(KnowledgeSet::Complete(vec![
+            crate::contract_semantics::ObjectProperty {
+                name: "fieldProps".into(),
+                value: ValueShape::Plain,
+            },
+        ])));
+        let mut claims = claims();
+        claims.returns = KnowledgeSet::Complete(vec![returned.id.clone()]);
+        let projected = project_export_semantics(&export(claims, vec![returned], vec![]));
+        assert_eq!(projected.returns, ContractClaim::Known(None));
     }
 
     /// The shape the two frozen Solid 1.x authority documents still carry, and

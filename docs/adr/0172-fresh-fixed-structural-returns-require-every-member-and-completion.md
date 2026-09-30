@@ -76,6 +76,15 @@ proof withdraws its entire return operation through the existing withholding
 mechanism; it cannot retain guessed positive members or block a separately
 provable sibling export.
 
+An incomplete member-enumeration veto also withdraws its exact bare return
+operation in both standalone and dependency-graph certification. It never
+leaves guessed positive members or marks the failed gate complete. Local
+projection omits a plain object with no retained reactive leaves rather than
+emitting an invalid empty reactive object summary. The all-host checkpoint
+exposed both paths in `gestures` and the `form` re-export of `a11y` respectively;
+the focused controls preserve good siblings when a valid object-parameter
+signature cannot be exercised by the synthesized empty-object samples.
+
 The isolated published trials now certify and admit, per none/browser/node,
 `frequencyToPattern`, including `closed: ["items"]` on both plain tuple
 members and all four call domains. Each exact canonical consumer environment
@@ -92,7 +101,7 @@ receives guessed reactive behavior. Real-package certification and regenerated
 accepted artifacts determine the coverage gain after verification.
 
 Full source `make verify` passes in the isolated verification worktree, exit
-zero, TOTAL 851.47 s, with no `FAILED during step`. This includes 755 backend
+zero, TOTAL 856.76 s, with no `FAILED during step`. This includes 755 backend
 library tests, the new complete-return/sibling-withdrawal integration test,
 Go race tests, fmt/clippy, 142 fixture projects with 737 findings, 120 contract
 corpus fixtures, ownership, performance, 375 script tests, the 102-case

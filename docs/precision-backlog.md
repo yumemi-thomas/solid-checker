@@ -18,7 +18,7 @@ excluded, consumer checking is not). Namespace admission and unresolved
 computed dispatch remain explicit uncertifiable results. Focused construction,
 completion, shape projection and mutation controls pass. Main `make test-rust`
 passes. Final source `make verify` passes in the isolated worktree, exit zero,
-TOTAL 851.47 s and no `FAILED during step`, including 755 backend library
+TOTAL 856.76 s and no `FAILED during step`, including 755 backend library
 tests, Go race tests, fmt/clippy, coverage 142 projects/737 findings, the
 120-fixture contract corpus, ownership, performance, script tests, TypeScript
 oracle, obligation audit and conformance. The delivered tier has not yet been
@@ -35,6 +35,19 @@ misuse class, so the caller-side read is not counted as a new ledger case.
 The previous authenticated checkpoint remains 1/97 packages, 101/101/131 clean
 exports of 721, criterion 1/2/3 at 83/6/4 and misuse 2/123. No coverage gain is
 claimed from a partially closed contract or from the synthetic consumer fixture.
+
+The first broad rerun exposed two proposal-isolation regressions: a plain
+object projected as an invalid empty reactive summary refused `form` through
+its `a11y` re-export, and a throwing-only structural veto refused `gestures`
+including its independently provable constants. The narrow fixes omit the
+empty local summary and withdraw the exact return operation whose required
+enumeration veto did not complete, in both standalone and graph transactions.
+No guessed member or failed gate is retained as proof. The focused sibling
+integration and plain-object projection controls pass, followed by full source
+verification (TOTAL 856.76 s). Exact published-package rechecks restore form's
+seven measured exports and gestures' two clean constants. All three published
+vibrate consumer twins also pass with the corrected release checker. The
+fresh complete checkpoint and delivered-tier measurements are pending.
 
 ## Flat reads callback attribution (2026-09-30)
 

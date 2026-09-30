@@ -868,9 +868,10 @@ impl CertificationPlan {
             let probe_gates = match finalization::authenticate_probe_gates(plan, configuration, pin)
             {
                 Ok(gates) => gates,
-                Err(error) => match incomplete_gate_withholding(plan, &error) {
-                    records if !records.is_empty() => {
+                Err(error) => match incomplete_gate_withdrawals(plan, &error) {
+                    (records, operations) if !records.is_empty() || !operations.is_empty() => {
                         already_withheld.extend(records);
+                        withheld_operations.extend(operations);
                         continue;
                     }
                     _ => {
@@ -1293,8 +1294,22 @@ pub(super) fn incomplete_gate_withholding(
     plan: &CertificationPlan,
     error: &Policy2FinalizationError,
 ) -> Vec<WithheldClosure> {
+    incomplete_gate_withdrawals(plan, error).0
+}
+
+pub(super) fn incomplete_structural_gate_withholding(
+    plan: &CertificationPlan,
+    error: &Policy2FinalizationError,
+) -> Vec<WithheldOperation> {
+    incomplete_gate_withdrawals(plan, error).1
+}
+
+fn incomplete_gate_withdrawals(
+    plan: &CertificationPlan,
+    error: &Policy2FinalizationError,
+) -> (Vec<WithheldClosure>, Vec<WithheldOperation>) {
     let Ok(schedule) = plan.probe_gate_schedule() else {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     };
     // Every incomplete gate the error names, the first with its account and
     // any further ones of the same batch with theirs. One pass withholds them
@@ -1304,7 +1319,7 @@ pub(super) fn incomplete_gate_withholding(
     match error {
         Policy2FinalizationError::Probe(ProbeGateError::IncompleteGate(gate_id)) => {
             let Some(gate) = schedule.gates().iter().find(|gate| gate.id() == gate_id) else {
-                return Vec::new();
+                return (Vec::new(), Vec::new());
             };
             incomplete.push((gate, String::new()));
         }
@@ -1317,7 +1332,7 @@ pub(super) fn incomplete_gate_withholding(
                 .chain(further.iter().map(|(gate_id, detail)| (gate_id, detail)))
             {
                 let Some(gate) = schedule.gates().iter().find(|gate| gate.id() == gate_id) else {
-                    return Vec::new();
+                    return (Vec::new(), Vec::new());
                 };
                 incomplete.push((gate, format!(" ({detail})")));
             }
@@ -1328,7 +1343,7 @@ pub(super) fn incomplete_gate_withholding(
                 .iter()
                 .find(|gate| gate.semantic_claim_id() == claim_id)
             else {
-                return Vec::new();
+                return (Vec::new(), Vec::new());
             };
             incomplete.push((
                 gate,
@@ -1347,20 +1362,44 @@ pub(super) fn incomplete_gate_withholding(
                 .iter()
                 .find(|gate| gate.semantic_claim_id() == claim_id)
             else {
-                return Vec::new();
+                return (Vec::new(), Vec::new());
             };
             incomplete.push((gate, format!(" ({detail})")));
         }
-        _ => return Vec::new(),
+        _ => return (Vec::new(), Vec::new()),
     }
     let mut records = Vec::with_capacity(incomplete.len());
+    let mut operations = Vec::new();
     for (gate, detail) in incomplete {
         let gate_id = gate.id();
         let subject = gate.subject();
-        // A gate on anything but a call domain is not a closure candidate's
-        // veto; nothing here may withhold it, so the whole error propagates.
+        // A failed enumeration veto cannot leave guessed positive members.
+        // Withdraw the exact bare return operation, reopening its call domain.
+        if let Some((artifact_case, export, operation)) =
+            refused_structural_return_operation(&ProofDemandSubject::DomainClosure {
+                subject: subject.clone(),
+                semantic_claim_id: gate.semantic_claim_id().to_owned(),
+            })
+        {
+            if !plan
+                .selected_candidate
+                .artifact_case(artifact_case)
+                .and_then(|case| case.exports.get(export))
+                .and_then(|export| export.operation(&operation))
+                .is_some_and(|operation| operation.is_bare_return())
+            {
+                return (Vec::new(), Vec::new());
+            }
+            operations.push(WithheldOperation {
+                artifact_case: artifact_case.to_owned(),
+                export: export.to_owned(),
+                operation,
+                reason: format!("{WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX}{gate_id}{detail}"),
+            });
+            continue;
+        }
         let SemanticClaimPath::Domain(ClaimPath::Call(domain)) = subject.path else {
-            return Vec::new();
+            return (Vec::new(), Vec::new());
         };
         records.push(WithheldClosure {
             artifact_case: subject.artifact_case.clone(),
@@ -1371,7 +1410,7 @@ pub(super) fn incomplete_gate_withholding(
             recipe_address: plan.recipe_address_string(subject),
         });
     }
-    records
+    (records, operations)
 }
 
 /// The candidates whose mandatory vetoes could not *run at all* because the
@@ -1608,6 +1647,7 @@ pub fn certify_value_only_case_set(
                 Ok(gates) => gates,
                 Err(error)
                     if !incomplete_gate_withholding(plan, &error).is_empty()
+                        || !incomplete_structural_gate_withholding(plan, &error).is_empty()
                         || !workspace_refusal_withholding(plan, &error).is_empty() =>
                 {
                     return individually(original);
@@ -4536,8 +4576,8 @@ mod tests {
             return;
         };
         let manifest = br#"{"name":"fixed-structural-returns","version":"1.0.0","type":"module","exports":{".":{"types":"./index.d.ts","import":"./index.js"}}}"#;
-        let runtime = b"export function good() { return [1, 2]; }\nexport function bad() { const value = {}; return [value]; }\n";
-        let declarations = b"export declare function good(): [number, number];\nexport declare function bad(): [{}];\n";
+        let runtime = b"export function good() { return [1, 2]; }\nexport function bad() { const value = {}; return [value]; }\nexport function throwsOnly(value) { if (!value.ready) throw 1; return [1, 2]; }\n";
+        let declarations = b"export declare function good(): [number, number];\nexport declare function bad(): [{}];\nexport declare function throwsOnly(value: {ready: true}): [number, number];\n";
         let archive = published_archive_for(
             "fixed-structural-returns",
             "1.0.0",
@@ -4548,7 +4588,7 @@ mod tests {
             ],
         );
         let root = "/project/node_modules/fixed-structural-returns";
-        let bindings = ["good", "bad"].map(|name| {
+        let bindings = ["good", "bad", "throwsOnly"].map(|name| {
             (
                 name,
                 ("index.js", runtime.as_slice()),
@@ -4568,7 +4608,7 @@ mod tests {
             &|case, name| {
                 let operation = Operation {
                     output: Some(ValueShape::Tuple(KnowledgeSet::Complete(
-                        vec![ValueShape::Plain; if name == "good" { 2 } else { 1 }],
+                        vec![ValueShape::Plain; if name == "bad" { 1 } else { 2 }],
                     ))),
                     ..test_return_operation(OperationId(format!(
                         "{}:{name}:operation:return",
@@ -4617,6 +4657,24 @@ mod tests {
             exports["bad"].operation_claim(ClaimDomain::Returns),
             Some(KnowledgeSet::Complete(_))
         ));
+        assert!(
+            exports["throwsOnly"]
+                .call
+                .operations
+                .iter()
+                .all(|op| op.output.is_none())
+        );
+        assert!(!matches!(
+            exports["throwsOnly"].operation_claim(ClaimDomain::Returns),
+            Some(KnowledgeSet::Complete(_))
+        ));
+        assert!(
+            finalized
+                .withheld_operations()
+                .iter()
+                .any(|record| record.export == "throwsOnly"
+                    && record.reason.contains("no sample completed normally"))
+        );
         assert_ne!(
             finalized.bindings().probe_gate_root,
             super::finalization::empty_probe_gate_root(&plan)
