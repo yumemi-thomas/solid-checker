@@ -259,9 +259,23 @@ export function contractMisuse(summary) {
     const relation = operation.owner ?? {};
     if (relation.requires === "required" || relation.requiresCleanup === "required") classes.add("owner");
     if (operation.kind === "return" && outputCarriesRead(operation.output)) classes.add("returnedAccessor");
-    if (operation.kind === "invoke" && synchronous(operation)) {
+    if (operation.kind === "invoke" && (operation.protocol ?? "call") === "call" && synchronous(operation)) {
       if (operation.tracking === "untracked") classes.add("untrackedCallback");
       if (operation.tracking === "tracked") classes.add("trackedCallback");
+      // An inline invocation inherits the caller's listener unless the
+      // contract states otherwise. Passing an accessor at a component's top
+      // level therefore has an argument-read misuse path (utils.access),
+      // even though the package performs no package-owned reactive read.
+      if (
+        operation.tracking === "ambient-at-execution" &&
+        operation.at?.event === "call" &&
+        operation.trigger?.event === "call" &&
+        (summary.call.callbacks ?? []).some(callback =>
+          callback.operation === operation.id &&
+          Number.isInteger(callback.from?.arg) && callback.from.arg >= 0 &&
+          (callback.from.path ?? []).length === 0
+        )
+      ) classes.add("argumentRead");
     }
     if (
       operation.kind === "read" &&

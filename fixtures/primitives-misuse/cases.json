@@ -226,12 +226,13 @@
       "export": "access",
       "class": "argumentRead",
       "rule": "strict-read-untracked",
+      "kind": "uncertifiable",
       "hosts": [
         "none",
         "browser",
         "node"
       ],
-      "why": "access(accessor) calls the accessor. Called at the component's top level it reads the signal once, untracked.",
+      "why": "The accepted access contract states an ambient inline invocation with min: 0. Passing an accessor at the component's top level exposes an untracked read, but the contract does not prove this call takes the invoking branch. The checker must report that read as uncertifiable until an accepted guard proves the invocation; JSX use remains clean.",
       "misuse": "import { createSignal } from \"solid-js\";\nimport { access } from \"@solid-primitives/utils\";\n\nexport default function App() {\n  const [count] = createSignal(0);\n  const current = access(count);\n  return <p>{String(current)}</p>;\n}\n",
       "correct": "import { createSignal } from \"solid-js\";\nimport { access } from \"@solid-primitives/utils\";\n\nexport default function App() {\n  const [count] = createSignal(0);\n  return <p>{String(access(count))}</p>;\n}\n"
     },

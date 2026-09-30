@@ -17,8 +17,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-described-callback-consumer/App.tsx",
-      "start": 1464,
-      "end": 1501,
+      "start": 1715,
+      "end": 1752,
       "fixes": 0
     },
     {

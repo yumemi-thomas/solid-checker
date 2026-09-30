@@ -127,6 +127,23 @@ test("an accepted claim outranks a proposed one, and types stand in only where n
   assert.deepEqual(misusePathsOf(".\u0000none", paths, types), []);
 });
 
+test("an ambient inline callable invocation exposes an accessor-argument misuse, unlike a non-call protocol or a retained callback", () => {
+  const invoke = fields => operation({ id: "invoke", kind: "invoke", trigger: { event: "call" }, tracking: "ambient-at-execution", ...fields });
+  const summary = operations => ({ call: { operations, callbacks: [{ from: { arg: 0, path: [] }, operation: "invoke" }] } });
+  assert.deepEqual([...contractMisuse(summary([invoke({})]))], ["argumentRead"]);
+  assert.deepEqual([...contractMisuse(summary([
+    invoke({ protocol: "get" }),
+    invoke({ protocol: "coerce" }),
+    invoke({ at: { event: "result-access", schedule: "external" } }),
+    invoke({ at: { event: "result-access", schedule: "same-stack" } }),
+    invoke({ trigger: { event: "settle" } })
+  ]))], []);
+  assert.deepEqual([...contractMisuse({ call: { operations: [invoke({})] } })], []);
+  const member = summary([invoke({})]);
+  member.call.callbacks[0].from.path = ["read"];
+  assert.deepEqual([...contractMisuse(member)], []);
+});
+
 test("types-only paths read the published declaration, and never look inside library types", () => {
   const ts = createRequire(join(root, "packages/cli/package.json"))("typescript");
   const dir = mkdtempSync(join(tmpdir(), "primitives-checkpoint-types-"));

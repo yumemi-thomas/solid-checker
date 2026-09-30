@@ -499,6 +499,23 @@ impl<'a> SemanticLookup<'a> {
             })
     }
 
+    pub(super) fn contract_inline_accessor_invocation(
+        &self,
+        symbol: &str,
+        parameter: usize,
+    ) -> Option<bool> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .and_then(|binding| {
+                binding
+                    .summary
+                    .inline_accessor_invocations
+                    .get(&parameter)
+                    .copied()
+            })
+    }
+
     /// ADR 0152: the argument slots the value the contract export bound to
     /// `symbol` returns invokes on its own invoker's stack, or `None` when no
     /// contract is bound to it.

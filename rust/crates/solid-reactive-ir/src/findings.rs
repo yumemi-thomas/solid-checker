@@ -323,6 +323,22 @@ pub fn strict_read_message(read: &ReactiveRead) -> String {
     } else {
         "rendering function"
     };
+    if read.callback_invocation_unproven {
+        let tracking = if read.missing_jsx_census
+            || read.host_callback_timing
+            || read.callee_callback_timing
+        {
+            "its execution or tracking context is also unresolved"
+        } else {
+            "the call is outside a tracking scope"
+        };
+        return format!(
+            "{} {:?} may be read through {} at a call written in {context}; the accepted contract states an inline invocation but does not prove this call invokes the accessor; {tracking}, so the untracked read is uncertifiable",
+            reactive_value_label(&read.kind),
+            read.accessor,
+            read.via,
+        );
+    }
     // A census gap unmakes the second half of the ordinary sentence. "Which
     // does not track" and "never updates" are claims about the execution
     // context, and the only evidence for them here would be the compiler's
@@ -407,7 +423,11 @@ fn reactive_value_label(kind: &str) -> &'static str {
 /// facts; over a census hole it would be an overstatement, since the compiler
 /// never reported on that region at all.
 fn untracked_evidence_sentence(read: &ReactiveRead, subject: &str) -> String {
-    if read.missing_jsx_census {
+    if read.callback_invocation_unproven {
+        format!(
+            "{subject} is an accessor passed to an accepted inline callback slot whose call-scoped cardinality does not guarantee an invocation"
+        )
+    } else if read.missing_jsx_census {
         format!(
             "{subject} sits inside a JSX expression the compiler's execution census does not cover, so no compiler fact places it inside or outside a tracked region"
         )
@@ -445,15 +465,25 @@ pub fn strict_read_evidence(read: &ReactiveRead) -> Vec<EvidenceStep> {
         };
         evidence.push(EvidenceStep {
             message: format!(
-                "{origin_context} reads the {}",
+                "{origin_context} {} the {}",
+                if read.callback_invocation_unproven {
+                    "may read"
+                } else {
+                    "reads"
+                },
                 reactive_value_label(&read.kind)
             ),
             location: Some(origin.clone()),
         });
         evidence.push(EvidenceStep {
             message: format!(
-                "the call to {} propagates that read into {}",
+                "the call to {} propagates that {}read into {}",
                 read.via,
+                if read.callback_invocation_unproven {
+                    "possible "
+                } else {
+                    ""
+                },
                 if !read.context.is_empty() {
                     &read.context
                 } else if read.execution == crate::ExecutionRole::ModuleInitialization {
@@ -580,6 +610,7 @@ mod tests {
             uncertain: false,
             missing_jsx_census,
             host_callback_timing: false,
+            callback_invocation_unproven: false,
             callee_callback_timing: false,
         }
     }
@@ -624,6 +655,34 @@ mod tests {
         assert!(
             last.contains("no compiler fact places it inside or outside a tracked region"),
             "the evidence must state the missing fact: {last}"
+        );
+    }
+
+    #[test]
+    fn an_optional_inline_accessor_invocation_is_not_a_proven_read() {
+        let mut optional = read(false);
+        optional.via = "access".into();
+        optional.callback_invocation_unproven = true;
+        assert!(optional.is_uncertifiable());
+        let message = strict_read_message(&optional);
+        assert!(message.contains("may be read through access"));
+        assert!(message.contains("does not prove this call invokes the accessor"));
+        assert!(!message.contains("never updates"));
+        optional.origin = Some(optional.location.clone());
+        let evidence = strict_read_evidence(&optional);
+        assert!(evidence[1].message.contains("may read"));
+        assert!(evidence[2].message.contains("possible read"));
+        optional.missing_jsx_census = true;
+        let message = strict_read_message(&optional);
+        assert!(message.contains("tracking context is also unresolved"));
+        assert!(!message.contains("outside a tracking scope"));
+        optional.missing_jsx_census = false;
+        assert!(
+            strict_read_evidence(&optional)
+                .last()
+                .unwrap()
+                .message
+                .contains("does not guarantee an invocation")
         );
     }
 

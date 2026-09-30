@@ -706,9 +706,10 @@ pub(crate) fn contract_callback_invoked_value<'c>(
 }
 
 /// The symbol a value written at `span` names: the compiler entity at the span
-/// itself, or -- for an identifier the binder resolves to a declaration in
-/// this file, whose reference inside a literal no demand asked the compiler
-/// about -- the entity at that declaration's name.
+/// itself or its transparent TypeScript operand, or -- for an identifier the
+/// binder resolves to a declaration in this file, whose reference inside a
+/// literal no demand asked the compiler about -- the entity at that
+/// declaration's name.
 fn value_symbol<'e>(
     file: &solid_facts::FileFacts,
     span: Span,
@@ -716,6 +717,10 @@ fn value_symbol<'e>(
 ) -> Option<&'e SymbolId> {
     entities
         .get(&location(file.path.shared(), span))
+        .or_else(|| {
+            let peeled = file.ast.peel_ts_sugar_span(span);
+            entities.get(&location(file.path.shared(), peeled))
+        })
         .or_else(|| {
             let peeled = file.ast.peel_ts_sugar_span(span);
             file.ast
@@ -5577,15 +5582,12 @@ fn interprocedural_result_reads_for_file(
                 // empty path, a member of it the call names exactly for a
                 // member-path row (item B), and nothing folded otherwise --
                 // never the whole argument for a member row.
-                let Some((_, Some(invoked))) = contract_callback_invoked_value(call, callback)
+                let Some((argument, Some(invoked))) =
+                    contract_callback_invoked_value(call, callback)
                 else {
                     continue;
                 };
-                let argument_symbol = if callback.invokes_member() {
-                    value_symbol(file, invoked, entities)
-                } else {
-                    entities.get(&location(file.path.shared(), invoked))
-                };
+                let argument_symbol = value_symbol(file, invoked, entities);
                 let argument_summary = argument_symbol
                     .and_then(|argument_symbol| {
                         dependencies.insert(InterproceduralResultDependency::Symbol(
@@ -5614,7 +5616,44 @@ fn interprocedural_result_reads_for_file(
                                 &summaries[index][..]
                             })
                     });
-                let Some(argument_summary) = argument_summary else {
+                // A signal accessor has no project function summary. An
+                // accepted inline invocation nevertheless may read that exact
+                // accessor during this call, just as a project helper's
+                // parameter invocation does above. A retained callback, a
+                // displaced spread slot, or ambiguous dispatch proves no
+                // such read. Non-call protocol rows were filtered by source
+                // discovery and must never be interpreted as accessor calls.
+                let accessor_read = (argument_summary.is_none()
+                    && valid_call
+                    && ambiguous_candidates.is_none()
+                    && callback.invokes_argument()
+                    && callback.execution == "inline"
+                    && !callback.clears_tracking
+                    && lookup
+                        .contract_inline_accessor_invocation(symbol, callback.parameter)
+                        .is_some()
+                    && !argument.spread)
+                    .then(|| {
+                        let symbol = argument_symbol?;
+                        if source_kinds.get(symbol.as_str()) != Some(&ReactiveSourceKind::Accessor)
+                        {
+                            return None;
+                        }
+                        let (display, declaration) = accessors.get(symbol.as_str())?;
+                        Some(SummaryRead {
+                            symbol: symbol.clone(),
+                            display: display.clone(),
+                            kind: Some("accessor".into()),
+                            declaration: declaration.clone(),
+                            origin: location(file.path.shared(), call.span),
+                            origin_context: label.clone(),
+                            owner: None,
+                        })
+                    })
+                    .flatten();
+                let Some(argument_summary) =
+                    argument_summary.or_else(|| accessor_read.as_ref().map(std::slice::from_ref))
+                else {
                     continue;
                 };
                 let callback_execution = match callback.execution.as_str() {
@@ -5662,6 +5701,11 @@ fn interprocedural_result_reads_for_file(
                                 callback_execution,
                                 lookup,
                             ),
+                            callback_invocation_unproven: accessor_read.is_some()
+                                && lookup.contract_inline_accessor_invocation(
+                                    symbol,
+                                    callback.parameter,
+                                ) != Some(true),
                         });
                     }
                 }
@@ -5694,6 +5738,7 @@ fn interprocedural_result_reads_for_file(
                     uncertain: false,
                     missing_jsx_census: missing_jsx_census(file, call.span, execution),
                     host_callback_timing: host_callback_timing(file, call.span, execution, lookup),
+                    callback_invocation_unproven: false,
                     callee_callback_timing: callee_callback_timing(
                         file, call.span, execution, lookup,
                     ),

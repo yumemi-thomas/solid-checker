@@ -7,13 +7,19 @@ items -- an `invoke` stating `protocol: get` or `protocol: coerce` -- leaves
 nothing open at the import, where the same export with `callbacks` left open
 raises `SC9005`.
 
-`App.tsx` calls three exports:
+`App.tsx` exercises these exports:
 
 | component | export | `callbacks` | verdict |
 | --- | --- | --- | --- |
-| `Counter` | `access` | closed over `call 0`, `get 0` | clean, in the component body and in JSX |
+| `Counter` | `access` | closed over `call 0`, `get 0`; invocation `min: 0` | SC1001 uncertifiable in the component body; clean in JSX |
 | `Counter` | `compare` | closed over `coerce 0`, `coerce 1` | clean, in the component body and in JSX |
 | `CounterOpen` | `accessOpen` | open (the same two items, partial) | `SC9005` for `callbacks` |
+| `Handler` | `access` | closed over `call 0`, `get 0` | clean in the event handler and for the static argument |
+| `Spread` | `access` | closed over `call 0`, `get 0` | no accessor read inferred from a spread slot |
+| `NamespaceRead` | `primitives.access` | namespace binding not admitted by this fixture receipt | SC9011; no accessor read inferred from an unaccepted binding |
+| `WrapperRead` | `access` | closed over `call 0`, `get 0`; invocation `min: 0` | SC1001 uncertifiable; `satisfies` preserves exact accessor identity |
+| `Shadowed` | a local `access` | no package export called | clean; storing the accessor is not invoking it |
+| `GuaranteedRead` | fixture-only `accessAlways` | ambient inline invocation `min: 1`, scope `call` | SC1001 violation in the body; clean in JSX |
 
 A non-call item is projected with its protocol and kept, so the domain stays
 closed and re-emission republishes it, but no consumer pass reads it as an
@@ -21,7 +27,14 @@ invocation of the argument (`ContractCallback::is_invocation`): a property read
 or a coercion of the caller's value runs that value's own code, at the call, on
 the caller's stack, in the caller's tracking context, and a non-callable
 argument used that way raised no obligation before either. The call item of
-`access` is the ordinary inline row, so `count` is still read inline.
+`access` is the ordinary inline row, so passing `count` itself may read it during
+the call even though that accessor has no project function summary. The call
+site determines tracking. The `get` and `coerce` rows contribute no accessor
+invocation. `package-described-callback-consumer` also pins that passing a bare
+accessor to a result-access row does not read it during construction. The
+optional invocation exposes a proof obligation, not a proven violation: domain
+closure does not strengthen its cardinality. `accessAlways` is a fixture-only
+cardinality control, not a claim about the published `utils.access` export.
 
 ## Why this fixture needs an accepted contract
 
@@ -30,9 +43,9 @@ fixture ships `.solid-checker/authorize-contract.json` rather than a catalog,
 exactly as `../package-plain-return-consumer` does and for the same reasons.
 The document states its claims rather than proving them;
 `../../package-contracts/implementation-census-described-accessor` is the
-census that earns them. Unauthorized, the fixture reports five `SC9011`
-findings instead (no contract describes the three exports), so the
-authorization is what is under test. A decoder that predates the `protocol`
+census that earns them. Without authorization, the fixture has no accepted
+package behavior for these exports, so authorization is what is under test.
+A decoder that predates the `protocol`
 field refuses the document outright.
 
 ## Stubs

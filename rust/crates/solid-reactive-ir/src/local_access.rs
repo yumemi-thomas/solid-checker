@@ -457,6 +457,7 @@ impl LocalAccessContext<'_, '_> {
                             execution,
                             self.lookup,
                         ),
+                        callback_invocation_unproven: false,
                         callee_callback_timing: callee_callback_timing(
                             file,
                             call.span,
@@ -554,6 +555,7 @@ impl LocalAccessContext<'_, '_> {
                         execution,
                         self.lookup,
                     ),
+                    callback_invocation_unproven: false,
                     callee_callback_timing: callee_callback_timing(
                         file,
                         call.span,
@@ -640,6 +642,7 @@ impl LocalAccessContext<'_, '_> {
                         execution,
                         self.lookup,
                     ),
+                    callback_invocation_unproven: false,
                     callee_callback_timing: callee_callback_timing(
                         file,
                         call.span,
@@ -680,6 +683,7 @@ impl LocalAccessContext<'_, '_> {
                                 execution,
                                 self.lookup,
                             ),
+                            callback_invocation_unproven: false,
                             callee_callback_timing: callee_callback_timing(
                                 file,
                                 call.span,
@@ -744,6 +748,7 @@ impl LocalAccessContext<'_, '_> {
                                 execution,
                                 self.lookup,
                             ),
+                            callback_invocation_unproven: false,
                             callee_callback_timing: callee_callback_timing(
                                 file,
                                 call.span,
@@ -986,6 +991,7 @@ impl LocalAccessContext<'_, '_> {
                     execution,
                     self.lookup,
                 ),
+                callback_invocation_unproven: false,
                 callee_callback_timing: callee_callback_timing(
                     file,
                     member.span,
@@ -1107,6 +1113,7 @@ impl LocalAccessContext<'_, '_> {
                     execution,
                     self.lookup,
                 ),
+                callback_invocation_unproven: false,
                 callee_callback_timing: callee_callback_timing(
                     file,
                     spread.span,

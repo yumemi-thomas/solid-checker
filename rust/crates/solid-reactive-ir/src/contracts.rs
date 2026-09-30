@@ -164,6 +164,38 @@ pub fn project_export_semantics(
         reactive_reads,
         returns,
         callbacks,
+        inline_accessor_invocations: export
+            .callbacks()
+            .items()
+            .iter()
+            .filter_map(|callback| {
+                let ValueSource::Parameter { index, path } = &callback.from else {
+                    return None;
+                };
+                let operation = export.operation(&callback.operation.0)?;
+                (path.is_empty()
+                    && operation.kind == OperationKind::Invoke
+                    && operation.invoke_protocol()
+                        == crate::contract_semantics::InvokeProtocol::Call
+                    && operation.at == Some(crate::contract_semantics::Event::Call)
+                    && operation.trigger
+                        == Some(crate::contract_semantics::Trigger::Event(
+                            crate::contract_semantics::Event::Call,
+                        ))
+                    && projected_execution(operation) == Some("inline")
+                    && operation.tracking == Tracking::AmbientAtExecution)
+                    .then_some((
+                        usize::from(*index),
+                        operation.guard.is_none()
+                            && operation.cardinality.scope
+                                == Some(crate::contract_semantics::CardinalityScope::Call)
+                            && operation.cardinality.min.is_some_and(|min| min >= 1),
+                    ))
+            })
+            .fold(BTreeMap::new(), |mut slots, (slot, guaranteed)| {
+                *slots.entry(slot).or_insert(false) |= guaranteed;
+                slots
+            }),
         owner_requirements,
         async_behavior,
         open_claims,
@@ -743,7 +775,7 @@ fn project_owner_requirements(
 /// an empty vector.
 #[cfg(test)]
 mod owner_requirement_projection_tests {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
 
     use super::{project_export_semantics, project_owner_requirements, project_return};
     use crate::contract_semantics::{
@@ -846,6 +878,70 @@ mod owner_requirement_projection_tests {
             disposals: KnowledgeSet::Unknown,
             computations: KnowledgeSet::Unknown,
         }
+    }
+
+    #[test]
+    fn an_inline_accessor_invocation_needs_its_own_call_scoped_lower_bound() {
+        use crate::contract_semantics::{CallbackInvocation, InvokeProtocol, ValueSource};
+
+        let mut invoke = operation("invoke", OperationKind::Invoke, &[]);
+        invoke.tracking = Tracking::AmbientAtExecution;
+        invoke.cardinality.min = Some(1);
+        let project = |invoke: Operation, closed: bool| {
+            let callback = CallbackInvocation {
+                from: ValueSource::Parameter {
+                    index: 0,
+                    path: Vec::new(),
+                },
+                operation: invoke.id.clone(),
+            };
+            project_export_semantics(&export(
+                CallClaims {
+                    callbacks: if closed {
+                        KnowledgeSet::Complete(vec![callback])
+                    } else {
+                        KnowledgeSet::Partial(vec![callback])
+                    },
+                    ..claims()
+                },
+                vec![invoke],
+                Vec::new(),
+            ))
+            .inline_accessor_invocations
+        };
+        assert_eq!(project(invoke.clone(), true), BTreeMap::from([(0, true)]));
+        // A verified positive fact need not close its sibling enumeration.
+        assert_eq!(project(invoke.clone(), false), BTreeMap::from([(0, true)]));
+        let mut optional = invoke.clone();
+        optional.cardinality.min = Some(0);
+        assert_eq!(project(optional, true), BTreeMap::from([(0, false)]));
+        let mut unknown = invoke.clone();
+        unknown.cardinality.min = None;
+        assert_eq!(project(unknown, true), BTreeMap::from([(0, false)]));
+        let mut per_trigger = invoke.clone();
+        per_trigger.cardinality.scope = Some(CardinalityScope::Trigger);
+        assert_eq!(project(per_trigger, true), BTreeMap::from([(0, false)]));
+        let mut property_get = invoke.clone();
+        property_get.protocol = Some(InvokeProtocol::Get);
+        assert!(project(property_get, true).is_empty());
+        let mut guarded = invoke.clone();
+        guarded.guard = Some(crate::contract_semantics::Guard(vec![
+            crate::contract_semantics::GuardAtom::ArgumentCount {
+                min: 1,
+                max: Some(1),
+            },
+        ]));
+        assert_eq!(project(guarded, true), BTreeMap::from([(0, false)]));
+        let mut later_event = invoke.clone();
+        later_event.at = Some(Event::Settle);
+        later_event.trigger = Some(crate::contract_semantics::Trigger::Event(Event::Settle));
+        assert!(project(later_event, true).is_empty());
+        let mut unknown_event = invoke.clone();
+        unknown_event.at = None;
+        assert!(project(unknown_event, true).is_empty());
+        let mut deferred = invoke;
+        deferred.schedule = Some(Schedule::Queued);
+        assert!(project(deferred, true).is_empty());
     }
 
     /// ADR 0145/0146: a closed claim over one described callable projects to
@@ -2226,6 +2322,7 @@ fn unmet_context_premises(
 /// gives an export whose context premise this project does not meet.
 fn premise_unmet_summary(summary: &ContractExport) -> ContractExport {
     ContractExport {
+        inline_accessor_invocations: BTreeMap::new(),
         reactive_reads: ContractClaim::Open,
         returns: ContractClaim::Open,
         callbacks: ContractClaim::Open,
@@ -2988,6 +3085,7 @@ fn contract_export_function(
         },
         callbacks,
         owner_requirements: Vec::new().into(),
+        inline_accessor_invocations: BTreeMap::new(),
         returns: returns.into(),
         async_behavior: if node.r#async {
             String::from("promise").into()

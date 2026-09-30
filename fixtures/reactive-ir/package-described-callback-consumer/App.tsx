@@ -28,6 +28,13 @@ export function UnusedPipe() {
   return <div />;
 }
 
+// Passing an accessor itself does not read it during construction: both
+// callback rows are result-access, not inline invocations at the pipe call.
+export function UnusedAccessorPipe() {
+  pipe(count, (value: number) => value);
+  return <div />;
+}
+
 // The control: the same declaration and the same use with `callbacks` left
 // open, so the import reports the open claim and the read inside the callback
 // is of unproven timing, never a proven untracked read.

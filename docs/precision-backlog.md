@@ -1,5 +1,104 @@
 # Precision backlog
 
+## Primitives consumer milestone: an accessor passed to an accepted inline callback (2026-09-30)
+
+Status: **partly implemented**, on top of `6c78aca5`. This is one consumer
+slice, not certification of an entire primitives package or a refreshed
+97-package checkpoint.
+
+- The installed published `@solid-primitives/utils@7.0.0-next.4`, with
+  `solid-js`, `@solidjs/signals` and `@solidjs/web` at `2.0.0-rc.9`, exposes
+  the missed read: `access(count)` in a component body was silent even with
+  its accepted contract admitted. An accessor has no project function summary,
+  so the callback consumer discarded its read.
+- The consumer now carries that exact accessor read through an accepted ambient
+  inline invocation. Transparent TypeScript wrappers retain exact identity.
+  The namespace fixture is refused at contract admission rather than given an
+  inferred accessor read. A spread, shadowed callee, non-call protocol, member
+  callback, clearing wrapper or deferred invocation establishes no new read in
+  this slice.
+- **Cardinality remains a soundness boundary.** An unguarded ambient inline
+  invocation with a call-scoped lower bound of at least one produces a violation.
+  A possible invocation is uncertifiable; callback-domain closure does not prove
+  that a particular call invokes its accessor. Missing bounds, trigger-scoped
+  bounds and guarded operations establish no guarantee. Both the execution
+  event and trigger must be the export call; a same-stack invocation at a
+  later event establishes no read during that call.
+- Against the real published typings, both original `access` ledger twins are
+  TypeScript-clean. In all three hosts, the misuse now reports exactly one
+  `SC1001` **uncertifiable** finding and the JSX twin reports nothing. The
+  ledger records that kind explicitly instead of demanding an unsupported
+  violation. Proving the invoking branch of published `access` remains open.
+- The checkpoint now identifies an ambient inline invocation as an
+  accessor-argument misuse path. Non-call `get`/`coerce` items and retained
+  callbacks do not manufacture that path. This changes measurement, not an
+  accepted claim or its proof.
+- Focused regressions: `package-protocol-callbacks-consumer` covers optional
+  and guaranteed invocation, namespace admission refusal, `satisfies`, tracked
+  JSX, a handler, static arguments, shadowing and spread;
+  `package-described-callback-consumer` covers an unused accessor in a
+  result-access callback. The guaranteed `accessAlways` export is a fixture-only
+  control, not a claim about `utils`.
+- Validation: 1,540 workspace tests passed before the final invocation-event
+  restriction. After that restriction, all 293 IR tests, 15 checkpoint tests,
+  workspace Clippy and formatting passed. The final release binary passed the
+  140-project coverage comparison (729 findings), the 119-fixture contract
+  corpus, the ownership gate (41 cases, 465 ledger rows, none pending), and
+  all six published `access` host/twin checks. The real examples and edited
+  consumer fixtures type-check without diagnostics. Schema JSON, dialect
+  manifests and whitespace checks passed. Only the two edited consumer
+  snapshots were updated; no accepted tier, contract schema or Type Facts
+  protocol changed. Full `make verify` subsequently passed in
+  `codex-primitives-consumer-verify` (814.83 s; no
+  `FAILED during step` marker), including the Go race tests, armed Rust
+  suite, 373 script tests, 102 TypeScript/checker oracle cases and
+  obligation audit. Log: `/private/tmp/solid-checker-consumer-full-verify.log`.
+  The 97-package checkpoint is still awaiting integrated certification work.
+
+Remaining package walls are still those in
+`package-contract-v2/phase22/2026-09-30-primitives-last-blockers.md` and ADR 0168:
+returned values and callables, callback/property/coercion census premises,
+core-runtime reads, host/environment admission, and published-package defects.
+Invocation cardinality for ordinary callback-body summaries is outside this
+bare-accessor slice and still needs its own review.
+The incomplete worktrees were not merged. The checkpoint and app-import totals
+have not been remeasured; the owner's 1/97 and 0/1,872 baselines are not new
+results of this slice.
+
+## Solid-primitives checkpoint and ADRs 0161–0169 (2026-09-30)
+
+Status: **partly implemented** at `6c78aca5`; the returned-accessor work
+(ADR 0162) remains in an unmerged worktree.
+
+- Owner's recorded checkpoint: **1/97 packages**, with **100/100/130**
+  clean exports of 721 for none/browser/node. Criterion 1's committed tier
+  (`b2b6fbfb`) contains 89 primitives packages; criterion 2 is **6/97** and
+  criterion 3 is **4/97**. These are the supplied baseline measurements,
+  not results of the consumer slice above. The app-import baseline remains
+  **0/1,872** certified sites.
+- ADR 0161 follows owner-operation lower bounds: possible registrations
+  produce proof obligations, while a violation requires a guaranteed
+  operation. Return evidence also follows its demanded lower bound.
+- ADRs 0163–0165 replace the reads veto with a tracking memo, propose empty
+  returns for valueless completions, and walk calls for the reads census.
+- ADRs 0166–0167 fold host constants per certified host and admit reviewed
+  default-library global calls by resolved identity.
+- ADR 0168 provides argument-scoped runtime reads rows; broader
+  `solid-js` `createSignal`/`createRoot`/`createMemo` rows remain open.
+  ADR 0169 attributes imports forwarded through sibling barrels to the
+  entrypoint's published exports.
+- ADR 0162 and the dependency re-export work require soundness review and
+  integration. Any certification change must regenerate the census,
+  consumer-environment runs, retained primitives checkpoint and accepted
+  tier together, followed by bundle authentication. No earlier retained run
+  substitutes for that regeneration.
+
+The ranked walls are returned callables refused by their own census (36),
+objects/arrays requiring value shapes (58), node-only imported
+`noop`/`trueFn` identity (eight node exports), the ADR 0168 runtime rows
+and the criterion-3 misuse gaps. New claim forms or value shapes require
+the owner's decision; unresolved behavior remains uncertifiable.
+
 ## App-import metric, node graph and the demand-ranked walls (2026-09-29)
 
 Status: **partly implemented**, 9aaae14c through 0fcdac2e. `make test-rust`

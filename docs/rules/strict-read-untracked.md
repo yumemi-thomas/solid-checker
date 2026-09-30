@@ -58,6 +58,15 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   from a timer callback, a closure it returns, or an `async` body, or that only
   stores it, is not proven to read it during the call, and nothing is reported
   (`fixtures/reactive-ir/accessor-passed-by-reference`).
+  An accepted package contract's exact ambient inline callback invocation exposes
+  the same read for `access(count)`. A call-scoped lower bound of at least one
+  proves the read; an optional invocation is **uncertifiable**. Neither callback
+  closure nor a possible invocation proves that this call invokes the accessor.
+  The invocation's execution event and trigger must both be the export call;
+  a same-stack schedule at a later event is insufficient. Tracked JSX and event
+  handlers remain clean; a retained callback, a spread slot, or a non-call protocol item does
+  not establish a read during the package call
+  (`fixtures/reactive-ir/package-protocol-callbacks-consumer`).
 - **`flush(fn)` keeps the caller's read role.** It runs `fn` inline without
   touching the listener, so a read inside it subscribes a memo or effect compute
   that calls it, and in a component body it is reported exactly as a bare read

@@ -364,13 +364,17 @@ pub struct ReactiveRead {
     /// and worded separately for that reason.
     #[serde(default, skip_serializing_if = "is_false")]
     pub callee_callback_timing: bool,
+    /// An accepted inline invocation may read an accessor passed by reference,
+    /// but its call-scoped cardinality does not prove an invocation occurs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub callback_invocation_unproven: bool,
 }
 
 impl ReactiveRead {
     /// Whether a finding about this read is **uncertifiable** rather than a
     /// proven violation.
     ///
-    /// Four independent holes, any of which is enough: the reactive
+    /// Independent holes, any of which is enough: the reactive
     /// backing cannot be established because the component's callers cannot be
     /// enumerated ([`Self::uncertain`]), the execution context cannot be
     /// established because the compiler reported no census for the JSX region
@@ -378,7 +382,8 @@ impl ReactiveRead {
     /// inside the strict-read window or after it
     /// ([`Self::host_callback_timing`]), or the read's function literal is
     /// handed to a project function not proven to invoke it during the call
-    /// ([`Self::callee_callback_timing`]).
+    /// ([`Self::callee_callback_timing`]), or an accepted callback invocation
+    /// is possible but not guaranteed ([`Self::callback_invocation_unproven`]).
     ///
     /// This is one predicate on purpose. The projection sets a finding's `kind`
     /// from it and each dialect's wording selects its hint from it; when the two
@@ -390,6 +395,7 @@ impl ReactiveRead {
             || self.missing_jsx_census
             || self.host_callback_timing
             || self.callee_callback_timing
+            || self.callback_invocation_unproven
     }
 }
 
@@ -1156,6 +1162,11 @@ pub struct ContractExport {
     pub reactive_reads: ContractClaim<Vec<ContractReactiveRead>>,
     pub returns: ContractClaim<Option<ContractReturn>>,
     pub callbacks: ContractClaim<Vec<ContractCallback>>,
+    /// Exact argument slots an accepted ambient invocation may call inline
+    /// during the export call. The value is true only for an unguarded,
+    /// call-scoped lower bound of at least one. Internal projection only;
+    /// callback-domain closure never strengthens a possible invocation.
+    pub inline_accessor_invocations: BTreeMap<usize, bool>,
     pub owner_requirements: ContractClaim<Vec<ContractOwnerRequirement>>,
     pub async_behavior: ContractClaim<String>,
     /// Wire-independent open domains retained when normalized partial
