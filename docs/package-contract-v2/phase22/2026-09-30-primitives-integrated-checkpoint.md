@@ -18,6 +18,8 @@ The pinned corpus remains 97 published packages and 721 exports.
 | Exports accounted for, including published defects | 134/721 |
 | Misuse ledger cases passing in every named host | 2/123 |
 | Twins with TypeScript errors against published typings | 0/246 |
+| App-import sites certified, freshly measured | 1/1,850 |
+| Primitives app-import sites certified | 0/292 |
 
 The supplied clean-export baseline was 100 / 100 / 130. `sse:number` is the
 one-export gain per host. The distinct-name tier count is not criterion 1:
@@ -73,8 +75,28 @@ pending), contract conformance and `git diff --check` passed. The retired
 bundled-contract conformance paths have no active cases; accepted-tier
 authentication and the contract corpus provide the receipt-tier checks.
 
-The fresh app-import measurement is pending.
-The previous owner-supplied app-import figure, 0/1,872, is not a fresh result.
+The fresh `make app-import-metric` completed in 1,839.126 s: **1/1,850**
+third-party application sites certified, 265 open, 1,584 without an admitted
+contract. It analysed **37/38 applications**. `en-passant` was refused during
+installation because the configured npm policy disables Git dependency
+fetching. The supplied 0/1,872 baseline is therefore not a directly comparable
+denominator; the skipped application is not measured or credited.
+
+The one certified site is router `defineFileRoute` in
+`oscartbeaumont-website`, **not a primitives gain**. All **292 primitives app
+sites remain without an admitted contract**. The tier carries their exact
+version/specifier for 235 sites, but their installed dependency environment
+does not admit those bundles; 57 sites have no exact version/specifier in the
+tier. For example, readingroom resolves the same websocket and marker package
+versions under rc.8 while the corresponding bundles were certified under
+rc.9/rc.0. Further delivery must certify the actual reviewed environments;
+loosening environment admission would not establish their behavior.
+
+Full reports are `rust/target/app-import-metric/metric.json` and `metric.md`.
+The measured checker digest is
+`sha256:8f1159da0fcb30c179d819757b59610031ebed48ddf71c6ffe26adcb365807a0`;
+the Type Facts digest is
+`sha256:d267119a9f6751f4cc1bf0aaf1e62287e3709516833f2949cd747cc1a1b286ec`.
 
 ## Remaining proof work
 

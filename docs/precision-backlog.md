@@ -2,8 +2,8 @@
 
 ## Integrated primitives tier and misuse measurement (2026-09-30)
 
-Status: **partly implemented, measured and verified**, source `6208b85f`;
-fresh app-import measurement pending. The two unfinished
+Status: **partly implemented, measured and verified**, source `6208b85f`,
+delivered tier `222d3b50`. The two unfinished
 branches are integrated as `3eb6417a` (ADR 0170) and `ba751770` (ADR 0162), on
 top of consumer fix `5381c7c8`.
 
@@ -33,6 +33,14 @@ host runs and rerunning the complete published-typings misuse ledger.
   19-export gain preceded the exact archive/options/spread restrictions and
   is not delivered coverage. The actual `solid-js` hydration/server factories
   need their own returned-value audit.
+- Fresh **app-import metric: 1/1,850**, 37/38 applications analysed, in
+  1,839.126 s. `en-passant` could not install under the configured npm Git
+  dependency policy, so the denominator is not directly comparable with the
+  supplied 0/1,872 baseline. The single certified site is router
+  `defineFileRoute`, not a primitives gain. **Primitives remain 0/292 app
+  sites certified**: 235 have an exact version/specifier in the tier but no
+  admitted environment; 57 have no exact version/specifier. Environment
+  admission remains exact rather than borrowing proof from another runtime.
 
 Full source `make verify` passed (TOTAL **847.77 s**, no `FAILED during step`,
 exit 0), including 141 fixtures/733 findings, 120 corpus cases, 375 script
