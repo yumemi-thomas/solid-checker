@@ -1,6 +1,6 @@
 # Fixed structural return proofs: initial implementation boundary
 
-Date: 2026-09-30. Status: implemented and source verified; tier regeneration in progress.
+Date: 2026-09-30. Status: implemented, verified and delivered; integrated checkpoint measured.
 This is an implementation plan, not certified coverage or a runtime audit.
 
 ## First supported structures

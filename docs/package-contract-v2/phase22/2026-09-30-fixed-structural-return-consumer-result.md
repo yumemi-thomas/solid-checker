@@ -1,7 +1,7 @@
 # Published fixed-tuple return: certification and consumer result
 
-Date: 2026-09-30. Scope: ADR 0172's first complete published export.
-The overall primitives checkpoint and regenerated tier are still in progress.
+Date: 2026-09-30; delivery checks completed 2026-10-01 JST.
+Scope: ADR 0172's first complete published export and the integrated checkpoint.
 
 `@solid-primitives/vibrate@1.0.0-next.2:frequencyToPattern` certifies and admits
 independently for none, browser and node. Each issued stable-v1 document closes
@@ -63,7 +63,50 @@ Retained trial roots are
 `/private/tmp/solid-checker-structures-vibrate-0v84JX` (node). Consumer results
 and published-type logs are retained under
 `/private/tmp/solid-checker-structures-vibrate-consumer`. These are local
-measurement artifacts, not the delivered compiled tier.
+measurement artifacts. The regenerated compiled tier now supplies the same
+result without any trial catalog or receipt-trust configuration: all three
+correct-use consumers certify with zero findings, and each misuse reports one
+SC1001 violation. Those results are retained as `*.embedded-tier.json` beside
+the trial consumer results.
+
+The integrated retained checkpoint measures 102 / 103 / 135 clean exports
+for none / browser / node, against 101 / 101 / 131 previously, with the full
+721-export surface retained and no formerly clean export lost. The gains are
+`frequencyToPattern` on every host, `url:setLocationFallback` in browser, and
+`sensors:createCompass`, `sensors:createGyroscope` and `url:updateLocation`
+in node. The node sensor branches return fresh numeric data objects; their
+browser getter objects remain outside this proof boundary.
+
+Packages at the checkpoint remain 1/97. Criteria 1/2/3 remain 83/6/4;
+135 exports are accounted for, including 33 accounted as published defects.
+The entire post-tier misuse ledger remains 2/123 reporting correctly, with
+zero TypeScript errors across all 246 misuse/correct-use examples. Its
+outcomes match the pre-tier run. The wider misuse objective remains open.
+
+Delivery contains 1,448 bundles and 1,967 objects, all authenticated by
+`every_bundle_this_build_carries_authenticates`. All 837 primitives bundle
+identities and all 89 primitives package names are retained. Compared with
+the previous tier, 32 non-primitives identities are withheld: the host-free
+Viviana `@tanstack/solid-start-client` graph fails on a missing mandatory
+`@tanstack/router-core` veto recipe, and two router bindings cite receipts
+the selected tier does not carry. This is an unresolved orchestration and
+delivery limitation, not evidence of a package runtime defect. No failed
+gate or uncarried receipt is treated as authority.
+
+Full source `make verify` passes (856.76 s, no `FAILED during step`). Post-tier
+Rust tests, formatting, workspace Clippy, coverage (142 projects/737 findings),
+ownership (41 cases/465 rows, zero pending), the 120-fixture contract corpus
+and conformance pass. Legacy conformance contains zero active receipt-issued
+bundle cases; the separate authentication test above covers the actual
+accepted tier. The fresh application-import sweep remains **1/1,850 certified**,
+with primitives **0/292**, across 37 of 38 apps. `en-passant` remains unmeasured
+because its npm installation requires a git dependency the measurement refuses
+to fetch. Partial admitted sites fall from 265 to 21 and sites without an
+admitted contract rise from 1,584 to 1,828. No certified site is lost, but the
+non-primitives orchestration/admission gap above costs partial coverage and
+remains unresolved. The run was not retried around the external installation
+blocker. Actual primitives environments at rc.4 and rc.8 remain unaudited;
+no rc.3/rc.9 authority is copied across them.
 
 The pure conversion helper has no separate intrinsic misuse class. Its
 caller-side untracked read therefore supplies no invented criterion-3 ledger

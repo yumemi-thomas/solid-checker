@@ -2,8 +2,8 @@
 
 ## Fresh fixed structural return proof (2026-09-30)
 
-Status: **implemented; full source verification passed; delivered tier and
-checkpoint measurement in progress**. ADR 0172 uses existing stable tuple/object shapes
+Status: **implemented, source verified, tier authenticated and checkpoint
+measured**. ADR 0172 uses existing stable tuple/object shapes
 and protocol 77 runtime construction trees. Complete member enumeration is
 independent of each leaf's primitive/whole-parameter/owned-accessor proof;
 every live completion must match. Fallthrough, partial trees, unknown leaves,
@@ -21,8 +21,8 @@ passes. Final source `make verify` passes in the isolated worktree, exit zero,
 TOTAL 856.76 s and no `FAILED during step`, including 755 backend library
 tests, Go race tests, fmt/clippy, coverage 142 projects/737 findings, the
 120-fixture contract corpus, ownership, performance, script tests, TypeScript
-oracle, obligation audit and conformance. The delivered tier has not yet been
-regenerated for this slice.
+oracle, obligation audit and conformance. The delivered tier has been
+regenerated for this slice and all 1,448 bundles/1,967 objects authenticate.
 
 The published `vibrate@1.0.0-next.2:frequencyToPattern` trials for none, browser
 and node now
@@ -32,9 +32,16 @@ findings and an untracked-read twin with one SC1001 violation; all six pass
 published TypeScript checking. The conversion helper supplies no new intrinsic
 misuse class, so the caller-side read is not counted as a new ledger case.
 
-The previous authenticated checkpoint remains 1/97 packages, 101/101/131 clean
-exports of 721, criterion 1/2/3 at 83/6/4 and misuse 2/123. No coverage gain is
-claimed from a partially closed contract or from the synthetic consumer fixture.
+The authenticated checkpoint remains 1/97 packages and criterion 1/2/3 at
+83/6/4. Clean exports improve from 101/101/131 to **102/103/135 of 721**, with
+no formerly clean or measured export lost. `frequencyToPattern` gains on all
+hosts, `url:setLocationFallback` in browser, and `sensors:createCompass`,
+`sensors:createGyroscope` and `url:updateLocation` in node. The sensor node
+branches return plain numeric objects; browser getter objects remain open.
+135 exports are accounted for, including 33 published defects. The post-tier
+misuse ledger remains **2/123**, all 246 examples TypeScript-clean, with
+unchanged outcomes. No coverage gain is claimed from a partially closed
+contract or from the synthetic consumer fixture.
 
 The first broad rerun exposed two proposal-isolation regressions: a plain
 object projected as an invalid empty reactive summary refused `form` through
@@ -47,7 +54,26 @@ integration and plain-object projection controls pass, followed by full source
 verification (TOTAL 856.76 s). Exact published-package rechecks restore form's
 seven measured exports and gestures' two clean constants. All three published
 vibrate consumer twins also pass with the corrected release checker. The
-fresh complete checkpoint and delivered-tier measurements are pending.
+fresh complete checkpoint and delivered-tier measurements are recorded above.
+
+All 837 primitives bundle identities and 89 primitives package names remain
+in the tier. Thirty-two non-primitives identities are withheld: the host-free
+Viviana start-client graph refuses a missing router-core mandatory veto recipe,
+and two router bindings cite receipts not selected into the carried tier.
+This orchestration/delivery limitation is still open; no absent veto or
+uncarried receipt becomes authority. Post-tier `make test-rust`, fmt, workspace
+Clippy, coverage (142 projects/737 findings), contract corpus (120 fixtures),
+ownership (41 cases/465 rows, zero pending) and conformance pass. The separate
+bundle-authentication test covers the actual accepted tier; legacy conformance
+has zero active bundle cases. The fresh application-import sweep remains
+**1/1,850 certified**, primitives **0/292**, across 37 of 38 apps. `en-passant`
+is unmeasured because its npm install needs a git dependency the measurement
+refuses to fetch; no retry bypasses that blocker. Partial admitted sites fall
+from 265 to 21, while sites without admitted contracts rise from 1,584 to
+1,828. No certified site is lost, but non-primitives partial admission coverage
+regresses and remains open alongside the missing-veto/citation limitations.
+The rc.4 and rc.8 environments of the actual primitives apps still need their
+own audits; no existing rc.3/rc.9 rows are copied across them.
 
 ## Flat reads callback attribution (2026-09-30)
 

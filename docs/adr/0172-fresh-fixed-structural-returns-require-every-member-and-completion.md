@@ -1,6 +1,6 @@
 # ADR 0172: fresh fixed structural returns require every member and completion
 
-Date: 2026-09-30. Status: implemented; source verified; tier regeneration in progress.
+Date: 2026-09-30. Status: implemented; source verified; delivered tier authenticated.
 
 The stable contract language already describes tuples and objects. Previously
 the runtime return census could not prove their complete construction, leaving
@@ -91,7 +91,9 @@ members and all four call domains. Each exact canonical consumer environment
 certifies the memo twin with zero findings and reports one SC1001 violation
 on line 6 of the untracked-read twin. All six compile against the installed
 published typings without diagnostics. This is a usable export result; the
-fresh per-host checkpoint and delivered tier remain in progress. The pure
+fresh checkpoint records 102/103/135 clean exports of 721, up from
+101/101/131, with no formerly clean export lost. The embedded tier supplies
+the same three consumer twins without separate trial catalogs. The pure
 conversion helper has no separate intrinsic misuse class, so this caller-side
 read does not manufacture a criterion-3 ledger entry.
 
