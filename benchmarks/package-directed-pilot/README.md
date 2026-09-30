@@ -49,3 +49,26 @@ repeating analysis:
 bun benchmarks/package-directed-pilot/check-extended.mjs \
   rust/target/package-directed-extended/results.json
 ```
+
+Append `completion` instead to compare the dispatcher's inert node return with
+its browser refusal and a platform control using all 23 exports. Six published
+TypeScript checks precede twelve consumer analyses. These are replication and
+refusal controls, with no new complete package claimed. The
+[completion result](../../docs/package-contract-v2/phase22/2026-10-01-package-directed-completion.md)
+also records the nested-handler consumer limit and checkpoint-wide inventory.
+
+```sh
+bun benchmarks/package-directed-pilot/check-completion.mjs \
+  rust/target/package-directed-completion/results.json
+SOLID_CHECKER_PROBE_NODE=/Users/thomas/.vite-plus/js_runtime/node/24.21.0/bin/node \
+bun benchmarks/package-directed-pilot/probe-dispatcher.mjs \
+  rust/target/package-directed-completion
+bun benchmarks/package-directed-pilot/inventory.mjs \
+  rust/target/primitives-checkpoint \
+  rust/target/package-directed-completion/domain-families-fresh.json
+```
+
+Runtime probes and the inventory refuse to overwrite earlier evidence. The
+probes compare exact source hashes and resolution conditions; passing samples
+confer no proof authority. Inventory counts reuse retained measurements and do
+not predict the gain from a future proof rule.

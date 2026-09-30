@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 import { generatePackageContract } from "../../packages/cli/scripts/generate-package-contract.mjs";
 import { certifyContract, certificationImporterPathFor } from "../../packages/cli/scripts/certify-contract.mjs";
 import { checkExtended } from "./check-extended.mjs";
+import { checkCompletion } from "./check-completion.mjs";
+import { consumerState } from "../../scripts/contract-coverage-census.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const runPath = resolve(process.argv[2] ?? join(repo, "rust/target/primitives-checkpoint/run.json"));
@@ -15,7 +17,8 @@ const out = resolve(process.argv[3] ?? join(repo, "rust/target/package-directed-
 const run = JSON.parse(readFileSync(runPath));
 const ledger = JSON.parse(readFileSync(join(repo, "fixtures/primitives-misuse/cases.json")));
 const extended = process.argv[4] === "extended";
-if (process.argv[4] && !extended) throw new Error("The optional experiment mode must be extended");
+const completion = process.argv[4] === "completion";
+if (process.argv[4] && !extended && !completion) throw new Error("The optional experiment mode must be extended or completion");
 for (const key of ["SOLID_CHECKER_NATIVE_BIN", "SOLID_TYPEFACTS_BIN", "SOLID_CHECKER_PROBE_NODE"]) {
   if (!process.env[key] || !existsSync(process.env[key])) throw new Error(`${key} must name the existing pinned binary`);
 }
@@ -47,16 +50,21 @@ const extendedTrials = [
   ["raf", "createRAF", ["raf-createRAF-top-level-read"], "browser", "return-possible"],
   ["memo", "createPureReaction", ["memo-createPureReaction-module-scope"], "browser", "owner-only"]
 ];
-for (const [name, target, cases, host = "browser", mode = "initial"] of extended ? extendedTrials : initialTrials) {
+const completionTrials = [
+  ["event-dispatcher", "createEventDispatcher", ["dispatcher-completion"], "node", "complete"],
+  ["event-dispatcher", "createEventDispatcher", ["dispatcher-completion"], "browser", "complete"],
+  ["platform", "isAndroid", ["platform-completion"], "node", "complete"]
+];
+for (const [name, target, cases, host = "browser", mode = "initial"] of completion ? completionTrials : extended ? extendedTrials : initialTrials) {
   const negative = cases.length === 0;
-  const trial = extended ? `${name}-${host}-${mode}` : negative ? "utils-omitted-getter" : name;
+  const trial = extended || completion ? `${name}-${host}-${mode}` : negative ? "utils-omitted-getter" : name;
   const hostArgs = host === "none" ? [] : ["--host", host];
   const dir = join(out, trial);
   mkdirSync(dir);
   const row = run.results.find(row => row.package === `@solid-primitives/${name}`);
   if (!row?.retainedArtifacts) throw new Error(`No retained published install for ${name}`);
   const packageRoot = realpathSync(join(row.retainedArtifacts.projectDir, "node_modules", row.package));
-  const expectedVersion = { utils: "7.0.0-next.4", "event-listener": "3.0.0-next.5", raf: "4.0.0-next.2", memo: "2.0.0-next.2" }[name];
+  const expectedVersion = { utils: "7.0.0-next.4", "event-listener": "3.0.0-next.5", raf: "4.0.0-next.2", memo: "2.0.0-next.2", "event-dispatcher": "1.0.0-next.2", platform: "1.0.0-next.2" }[name];
   if (row.version !== expectedVersion) throw new Error(`Unaudited package version: ${row.version}`);
   for (const dependency of ["solid-js", "@solidjs/web", "@solidjs/signals"]) {
     const manifest = JSON.parse(readFileSync(join(dirname(dirname(packageRoot)), dependency, "package.json")));
@@ -101,6 +109,12 @@ for (const [name, target, cases, host = "browser", mode = "initial"] of extended
     // Ownership alone: claims about the returned reaction and its delayed
     // callbacks are deliberately still open.
     summary.call = { operations: [cleanup], cleanups: [cleanup.id] };
+  } else if (name === "event-dispatcher") {
+    const ret = operation("pilot-return", "return");
+    ret.count.min = 0;
+    ret.output = { kind: "described-callable", reads: [], returns: ["plain"] };
+    summary.call = { operations: [ret], returns: [ret.id], callbacks: [], reads: [], creates: [],
+      closed: ["callbacks", "reads", "creates", "returns"], proposedClosures: ["callbacks", "reads", "creates", "returns"] };
   }
   // utils positive control preserves both source-supported invocations and
   // min:0. Neither callable input nor its length implies unconditional calling.
@@ -129,11 +143,21 @@ for (const [name, target, cases, host = "browser", mode = "initial"] of extended
     packageRoot, integrity, artifact: artifactCase.artifact, declarations: artifactCase.declarations,
     acceptedSummary, withheldClosures: audit.withheldClosures.filter(item => item.export === target),
     withheldOperations: audit.withheldOperations.filter(item => item.export === target), consumers: [] };
+  observed.surface = Object.entries(acceptedCase.exports).map(([name, reference]) => ({ export: name, state: consumerState(main, reference) }));
   for (const id of cases) {
-    const item = ledger.cases.find(item => item.id === id);
+    let item = ledger.cases.find(item => item.id === id);
+    if (id === "dispatcher-completion") {
+      item = { rule: null, kind: null,
+        misuse: 'import { createSignal } from "solid-js";\nimport { createEventDispatcher } from "@solid-primitives/event-dispatcher";\nexport default function App() {\n  const [count] = createSignal(0);\n  const dispatch = createEventDispatcher({ onPing: (_event: CustomEvent<number>) => count() });\n  const result = dispatch("ping", 1);\n  return <p>{String(result)}</p>;\n}\n',
+        correct: 'import { createEventDispatcher } from "@solid-primitives/event-dispatcher";\nexport default function App() {\n  const dispatch = createEventDispatcher({ onPing: (_event: CustomEvent<number>) => {} });\n  return <p>{String(dispatch("ping", 1))}</p>;\n}\n' };
+    } else if (id === "platform-completion") {
+      const exports = Object.keys(artifactCase.exports).sort();
+      const source = `import { ${exports.join(", ")} } from "@solid-primitives/platform";\nexport default function App() { return <p>{[${exports.join(", ")}].map(String).join(",")}</p>; }\n`;
+      item = { rule: null, kind: null, misuse: source, correct: source };
+    }
     const consumerRoot = join(dirname(dirname(dirname(packageRoot))), `solid-checker-package-directed-${digest(out).slice(7, 19)}`, trial, id);
     mkdirSync(consumerRoot, { recursive: true });
-    const pair = { id, expectedRule: item.rule, expectedKind: item.kind ?? "violation", tsc: {}, baseline: {}, authored: {} };
+    const pair = { id, expectedRule: item.rule, expectedKind: item.rule ? item.kind ?? "violation" : null, tsc: {}, baseline: {}, authored: {} };
     for (const part of ["misuse", "correct"]) {
       writeFileSync(join(consumerRoot, part + ".tsx"), item[part]);
       const project = join(consumerRoot, `tsconfig.${part}.json`);
@@ -173,8 +197,9 @@ for (const [name, target, cases, host = "browser", mode = "initial"] of extended
   if (!extended && name === "event-listener" && acceptedSummary.call?.operations?.some(op => op.id === "pilot-effect-owner"))
     throw new Error("Listener proof behavior changed; review the stronger acceptance before declaring success");
   results.push(observed);
-  write(join(out, "results.json"), { mode: extended ? "extended" : "initial", runPath, results });
+  write(join(out, "results.json"), { mode: completion ? "completion" : extended ? "extended" : "initial", runPath, results });
   console.log(JSON.stringify({ trial, status: result.status, withheld: observed.withheldOperations.length,
     consumers: observed.consumers.map(pair => ({ id: pair.id, baseline: pair.baseline, authored: pair.authored })) }));
 }
 if (extended) console.log(JSON.stringify(checkExtended({ mode: "extended", results })));
+if (completion) console.log(JSON.stringify(checkCompletion({ mode: "completion", results })));
