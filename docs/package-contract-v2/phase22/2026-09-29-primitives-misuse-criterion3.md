@@ -19,8 +19,17 @@ real published typings. The accepted contract states a possible inline
 invocation, so it does not justify a proven violation; a fixture-only
 guaranteed-invocation control does. The project-helper path and ordinary
 callback-body invocation cardinality still need separate review. The counts
-below remain the historical measurement; the full ledger is being rerun
-after integrated certification and tier regeneration.
+below remain the historical measurement. The full ledger was rerun after
+integrated certification and tier regeneration at source `6208b85f`: **123
+cases**, all **246 twins TypeScript-clean**, **two cases reporting correctly**
+across every named host (`utils:access`, uncertifiable, and
+`utils:createMicrotask`, violation). Host-free verdicts are 30 correct twins
+not clean, 22 expected rules only uncertifiable, 69 wrong findings and two
+passing cases. Criterion 3 remains **4/97 packages**, with **358 exports
+missing a case**, 81 present but not reporting and two reporting. This fresh
+run finds no SC2001 in the correct twins; the older false-positive observations
+below must be reproduced against the current build before being treated as
+current defects. Open contract domains still prevent most cases from passing.
 
 ## Headline
 

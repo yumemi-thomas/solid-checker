@@ -242,6 +242,16 @@ open control keeps its `SC9005`).
 
 ## Measured
 
+Integrated measurement, 2026-09-30, source `6208b85f`: the three retained
+97-package checkpoint runs completed and the accepted tier was regenerated.
+The delivered tier carries **no `owned-memo` export**. The corpus factories
+resolve into `solid-js`'s own hydration/server implementation, which this
+ADR's signals-only witness correctly refuses. The historical 19-export gain
+below is therefore **not delivered coverage**. Clean exports in the integrated
+run are 101 / 101 / 131; its one-export gain per host is `sse:number` under
+ADR 0170. A separate audit of the actual `solid-js` returned factory behavior
+is required before those memo claims can be carried.
+
 The measurements below predate the lead's archive binding, options-callback and spread
 restriction. They are historical branch measurements, not a checkpoint of the
 integrated implementation. The stricter implementation must be measured again.

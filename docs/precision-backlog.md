@@ -1,9 +1,53 @@
 # Precision backlog
 
+## Integrated primitives tier and misuse measurement (2026-09-30)
+
+Status: **partly implemented, measured and verified**, source `6208b85f`;
+fresh app-import measurement pending. The two unfinished
+branches are integrated as `3eb6417a` (ADR 0170) and `ba751770` (ADR 0162), on
+top of consumer fix `5381c7c8`.
+
+The required census, consumer-environment and retained checkpoint runs
+completed, then `accepted-bundles PRIMITIVES_CHECKPOINT_KEEP=1` regenerated
+the reviewed tier. Its 1,480 bundles and 2,009 objects authenticate; no
+conflicting certifications or uncarried citations were dropped. The release
+checker was rebuilt with those artifacts before remeasuring all three retained
+host runs and rerunning the complete published-typings misuse ledger.
+
+- **1/97 packages at the checkpoint**, unchanged; criterion 1 is **83/97**,
+  criterion 2 **6/97**, criterion 3 **4/97**. The tier contains 89 distinct
+  primitives package names, which is a different measure from criterion 1's
+  required entrypoints and runtime. Nine certified runs lack required tier
+  entries, and five published defects remain refused.
+- **101 / 101 / 131 clean exports of 721**, one more per host than the
+  supplied 100 / 100 / 130 baseline. `sse:number` is the gain. **134 exports
+  accounted for**, including 33 measured exports of published defects.
+- **Two of 123 misuse cases pass** across every named host, up from the
+  historical one: `utils.access(count)` reports one SC1001 uncertifiable
+  read, with its JSX twin clean; `utils.createMicrotask` reports SC4001.
+  All **246 twins are TypeScript-clean against real published typings**.
+  A possible callback invocation is still not a proven violation. There are
+  358 exports with a misuse path and no ledger case; 81 have a case that does
+  not report correctly.
+- **No `owned-memo` export is carried**. The older ADR 0162 branch's
+  19-export gain preceded the exact archive/options/spread restrictions and
+  is not delivered coverage. The actual `solid-js` hydration/server factories
+  need their own returned-value audit.
+
+Full source `make verify` passed (TOTAL **847.77 s**, no `FAILED during step`,
+exit 0), including 141 fixtures/733 findings, 120 corpus cases, 375 script
+tests, 102 oracle cases and the complete ownership gate. The generated tier's
+`every_bundle_this_build_carries_authenticates` passed separately.
+Post-tier `make test-rust`, Clippy/formatting, coverage (141 projects/733
+findings), contract corpus (120 cases), ownership (41 cases/465 rows, none
+pending), contract conformance and `git diff --check` all passed. Detailed
+measurements and remaining entrypoint/runtime gaps are in
+[`2026-09-30-primitives-integrated-checkpoint.md`](package-contract-v2/phase22/2026-09-30-primitives-integrated-checkpoint.md).
+
 ## Certification runtime selection through Make (2026-09-30)
 
-Status: **implemented and verified**, integrated primitives checkpoint and
-accepted-tier regeneration pending.
+Status: **implemented and verified**; integrated primitives checkpoint and
+accepted-tier regeneration completed (entry above).
 
 The first integrated census generated its proposals but most certification
 attempts refused them: Make pinned the real Node executable, while the adapter

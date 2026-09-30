@@ -108,7 +108,12 @@ the certifier re-derives the same operations.
   `@solid-primitives/sse` `number`. All three host measurements completed,
   but the branch's end-to-end checkpoint was interrupted (exit 143);
   these counts do not establish a completed misuse-ledger or tier run.
-  Integrated regeneration through `ba751770` is pending.
+  Integrated regeneration at source `6208b85f` confirms 101 / 101 / 131
+  clean exports, the same one-export gain per host. The freshly bundled tier
+  authenticates, and the complete ledger rerun against its rebuilt release
+  checker passes two cases (including the separate consumer `access` fix).
+  The full package checkpoint remains 1/97; details are in
+  `../package-contract-v2/phase22/2026-09-30-primitives-integrated-checkpoint.md`.
 - **Demand in the checkpoint is ten exports.** An analysis of every entrypoint
   of the retained trees finds 10 exports that are exact forwards, runtime and
   declaration, of another package's export, all of them in corpus dependencies

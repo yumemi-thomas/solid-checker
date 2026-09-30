@@ -1,5 +1,15 @@
 # What is the last blocker of a @solid-primitives export
 
+Integrated update, 2026-09-30, source `6208b85f`: the complete retained
+checkpoint host runs measure **101 / 101 / 131 clean exports** after ADR 0170.
+`sse:number` now closes; the sibling-barrel recommendation below is historical.
+The strict ADR 0162 witness delivers no `owned-memo` export: the factories in
+this corpus resolve into the unaudited `solid-js` hydration/server bodies.
+The fresh none-host distribution is 101 clean, 64 with one cause, 44 with two,
+46 with three and 466 with four. Of the sole blockers, ten remain
+`recursive-value-shape`, five have no proposed returns shape, and two are
+`callable-path`. The following tables preserve their original measurement.
+
 2026-09-30. Base 816d6f58 (ADR 0165). The checkpoint's three host runs (the
 `make primitives-checkpoint` procedure, release binary, the pinned 97 packages,
 721 exports, without the misuse ledger) read **clean 99 / 99 / 100** (none /
