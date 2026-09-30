@@ -101,10 +101,14 @@ the certifier re-derives the same operations.
   restated operation equals the dependency's; a local wrapper of the same
   dependency function proposes no `returns`). The generator-level re-export pin
   fails against a binary built without this change.
-- **Measured** with `make primitives-checkpoint` (release), before and after at
+- **Historical branch measurement** with `make primitives-checkpoint`
+  (release), before and after at
   base `6c78aca5`, 97 probes per host: exports clean host free 100 → 101,
   `browser` 100 → 101, `node` 130 → 131. The one export is
-  `@solid-primitives/sse` `number`.
+  `@solid-primitives/sse` `number`. All three host measurements completed,
+  but the branch's end-to-end checkpoint was interrupted (exit 143);
+  these counts do not establish a completed misuse-ledger or tier run.
+  Integrated regeneration through `ba751770` is pending.
 - **Demand in the checkpoint is ten exports.** An analysis of every entrypoint
   of the retained trees finds 10 exports that are exact forwards, runtime and
   declaration, of another package's export, all of them in corpus dependencies

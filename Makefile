@@ -21,6 +21,10 @@ TYPEFACTS_CERTIFICATION_ENV = \
 # (`make PROBE_NODE=/usr/local/bin/node …`); CI pins whichever `node` its
 # toolchain step installed, which is what the default expression resolves.
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
+# Certification adapters use this variable, while the native build and tracers
+# use PROBE_NODE. Keep both on the executable whose bytes the build pins;
+# resolving PATH again can select a launcher shim instead of that executable.
+export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 #
 # `PROBE_NODE` is exported alongside the digests, not only consumed here: the
 # probe-gate tracers and `scripts/check-bundled-contracts.mjs` would otherwise

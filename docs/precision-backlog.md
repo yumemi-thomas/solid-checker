@@ -1,5 +1,37 @@
 # Precision backlog
 
+## Certification runtime selection through Make (2026-09-30)
+
+Status: **implemented and verified**, integrated primitives checkpoint and
+accepted-tier regeneration pending.
+
+The first integrated census generated its proposals but most certification
+attempts refused them: Make pinned the real Node executable, while the adapter
+resolved a regular launcher shim from `PATH`. The refusal correctly named the
+different executable digests. Those runs are invalid as coverage measurements;
+the resulting 20/1,958 stated-operation sites are not a semantic baseline and
+the census pin was not updated. One Kobalte probe also exceeded its process-tree
+memory ceiling; that remains an infrastructure result rather than a package
+defect or certified behavior.
+
+Make now exports `SOLID_CHECKER_PROBE_NODE` from its existing `PROBE_NODE`
+selection, so certification adapters receive the same executable the build
+hashes. The pinned `platform` floor and head probes both subsequently certified
+their full entrypoint. No interpreter pin, claim form or proof check was
+weakened. The corrected census certified all 30 probes in each of the three
+hosts and matched both existing coverage and recipe-addressing pins. The
+process-tree memory failure did not recur, without a ceiling change. The nine
+consumer-environment runs also completed; their refused packages remain
+refused rather than being promoted into the tier. The failed runs and their
+temporary trees are retained for comparison.
+
+Full `make verify` with this Make change passed in the isolated
+returned-accessor worktree (847.77 s, exit 0, no `FAILED during step` marker),
+including 141 fixture projects with 733 findings, 120 contract-corpus cases,
+375 script tests, 102 oracle cases, the 41-case/465-row ownership gate (none
+pending), armed workspace Rust tests, Go race tests, Clippy and formatting.
+Log: `/private/tmp/solid-checker-runtime-selection-full-verify.log`.
+
 ## Primitives consumer milestone: an accessor passed to an accepted inline callback (2026-09-30)
 
 Status: **partly implemented**, on top of `6c78aca5`. This is one consumer
@@ -61,14 +93,22 @@ returned values and callables, callback/property/coercion census premises,
 core-runtime reads, host/environment admission, and published-package defects.
 Invocation cardinality for ordinary callback-body summaries is outside this
 bare-accessor slice and still needs its own review.
-The incomplete worktrees were not merged. The checkpoint and app-import totals
-have not been remeasured; the owner's 1/97 and 0/1,872 baselines are not new
+The dependency re-export and returned-accessor worktrees were subsequently
+reviewed and merged as `3eb6417a` and `ba751770`. The integrated code passed
+full `make verify` in the returned-accessor worktree (765.97 s, no
+`FAILED during step` marker): 141 fixture projects with 733 findings,
+120 contract-corpus cases, 102 TypeScript/checker oracle cases, and the
+41-case ownership gate with 465 ledger rows and none pending. Formatting,
+workspace Clippy, the armed Rust suite and Go race tests also passed.
+Log: `/private/tmp/solid-checker-final-accessor-verify.log`.
+The census, environment runs, checkpoint and accepted tier are being
+regenerated together; the owner's 1/97 and 0/1,872 baselines are not new
 results of this slice.
 
 ## Solid-primitives checkpoint and ADRs 0161–0169 (2026-09-30)
 
-Status: **partly implemented** at `6c78aca5`; the returned-accessor work
-(ADR 0162) remains in an unmerged worktree.
+Status: **partly implemented**, integrated through `ba751770`; refreshed
+checkpoint and accepted-tier measurements are pending.
 
 - Owner's recorded checkpoint: **1/97 packages**, with **100/100/130**
   clean exports of 721 for none/browser/node. Criterion 1's committed tier
@@ -87,11 +127,18 @@ Status: **partly implemented** at `6c78aca5`; the returned-accessor work
   `solid-js` `createSignal`/`createRoot`/`createMemo` rows remain open.
   ADR 0169 attributes imports forwarded through sibling barrels to the
   entrypoint's published exports.
-- ADR 0162 and the dependency re-export work require soundness review and
-  integration. Any certification change must regenerate the census,
-  consumer-environment runs, retained primitives checkpoint and accepted
-  tier together, followed by bundle authentication. No earlier retained run
-  substitutes for that regeneration.
+- ADR 0162 now certifies a whole returned memo accessor only against its exact
+  audited `@solidjs/signals@2.0.0-rc.9` archive. Callback-free literal options
+  are accounted for; callback-bearing or unknown options, spreads, other
+  runtime archives and unproved call targets remain refused. The producer,
+  client and schema move together to Type Facts protocol 76.
+- ADR 0170 restates a dependency's exact closed, package-independent returns
+  claims at a direct re-export. Certification rederives the full projection
+  from the same-host, same-environment dependency receipt; wrappers, partial
+  claims and resource-bearing shapes remain refused.
+- These changes require fresh census, consumer-environment runs, retained
+  primitives checkpoint and accepted tier, followed by bundle authentication.
+  No earlier retained run substitutes for that regeneration.
 
 The ranked walls are returned callables refused by their own census (36),
 objects/arrays requiring value shapes (58), node-only imported

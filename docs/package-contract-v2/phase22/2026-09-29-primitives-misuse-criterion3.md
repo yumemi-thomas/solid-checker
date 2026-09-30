@@ -12,6 +12,16 @@ Criterion 3: every export with a misuse path has a ledger case that reports the
 expected rule on the misuse and nothing on the correct use, against the real
 published package, with `tsc` silent on both, in every host the case names.
 
+Update 2026-09-30, consumer slice `5381c7c8`: gap G's published
+`utils.access(count)` case now reports one `SC1001` **uncertifiable** finding
+in each host, and its JSX twin stays clean. Both twins pass `tsc` against the
+real published typings. The accepted contract states a possible inline
+invocation, so it does not justify a proven violation; a fixture-only
+guaranteed-invocation control does. The project-helper path and ordinary
+callback-body invocation cardinality still need separate review. The counts
+below remain the historical measurement; the full ledger is being rerun
+after integrated certification and tier regeneration.
+
 ## Headline
 
 | | value |
