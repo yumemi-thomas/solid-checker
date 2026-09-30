@@ -15,7 +15,7 @@
           "exports": {
             "Derived": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "Held": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "Steady": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            "Steady": "summary-087d9d4614ddea5394ecf1448fc439c56fc63ad2b1544b0a640ff6dc2a43ee7d"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -39,6 +39,42 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
+    "summary-087d9d4614ddea5394ecf1448fc439c56fc63ad2b1544b0a640ff6dc2a43ee7d": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return-structural-0",
+            "kind": "return",
+            "output": {
+              "kind": "object",
+              "properties": [
+                {
+                  "name": "view",
+                  "value": "plain"
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return-structural-0"
+        ]
+      },
+      "shape": "callable"
+    },
     "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
       "call": {},
       "shape": "callable"

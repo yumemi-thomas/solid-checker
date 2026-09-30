@@ -451,6 +451,103 @@ fn never_primitive(returned: &ReturnFact) -> bool {
     returned.value == ReturnValueKind::Function || returned.structure.is_some()
 }
 
+/// ADR 0172: a deliberately optimistic proposal over a directly returned
+/// literal. Normalized syntax may retain only some properties; it is never
+/// evidence of exhaustiveness. The independent producer census must account
+/// for the whole construction and prove each proposed Plain member.
+pub fn literal_structural_returns(
+    file: &FileFacts,
+    function: &FunctionFact,
+    typescript: &solid_facts::TypeScriptTable,
+) -> Vec<crate::contract_semantics::ValueShape> {
+    use crate::contract_semantics::{KnowledgeSet, ObjectProperty, ValueShape};
+    if function.r#async || function.generator {
+        return Vec::new();
+    }
+    let symbols = typescript
+        .entities()
+        .filter(|entity| entity.location.path.as_ref() == file.path.as_str())
+        .map(|entity| {
+            (
+                (entity.location.start_byte, entity.location.end_byte),
+                entity.symbol.as_ref(),
+            )
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+    let parameter_symbols = function
+        .parameters
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| {
+            p.shape == solid_facts::ast::BindingShape::Identifier
+                && p.initializer.is_none()
+                && p.names.len() == 1
+        })
+        .filter_map(|(index, p)| {
+            let span = p.names[0].span;
+            let symbol = *symbols.get(&(u64::from(span.start), u64::from(span.end)))?;
+            (!symbol.is_empty()).then_some((symbol, u16::try_from(index).ok()?))
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+    let member = |span: solid_facts::core::Span| {
+        let span = file.ast.peel_ts_sugar_span(span);
+        let parameter = symbols
+            .get(&(u64::from(span.start), u64::from(span.end)))
+            .and_then(|symbol| parameter_symbols.get(symbol))
+            .copied();
+        parameter.map_or(ValueShape::Plain, |index| ValueShape::Parameter {
+            index,
+            path: vec![],
+        })
+    };
+    let returns = function
+        .expression_return
+        .iter()
+        .chain(own_returns(&file.ast, function));
+    let mut shapes = Vec::new();
+    for returned in returns.filter(|returned| returned.argument.is_some()) {
+        let Some(structure) = returned.structure.as_ref() else {
+            return Vec::new();
+        };
+        if !structure.complete_literal {
+            return Vec::new();
+        }
+        let shape =
+            if !structure.elements.is_empty() && structure.elements.iter().all(Option::is_some) {
+                ValueShape::Tuple(KnowledgeSet::Complete(
+                    structure
+                        .elements
+                        .iter()
+                        .map(|span| member(span.expect("checked above")))
+                        .collect(),
+                ))
+            } else if structure.elements.is_empty() && !structure.properties.is_empty() {
+                let mut properties = structure
+                    .properties
+                    .iter()
+                    .map(|p| ObjectProperty {
+                        name: p.name.to_string(),
+                        value: member(p.value),
+                    })
+                    .collect::<Vec<_>>();
+                properties.sort_by(|a, b| a.name.cmp(&b.name));
+                if properties
+                    .windows(2)
+                    .any(|pair| pair[0].name == pair[1].name)
+                {
+                    return Vec::new();
+                }
+                ValueShape::Object(KnowledgeSet::Complete(properties))
+            } else {
+                return Vec::new();
+            };
+        if !shapes.contains(&shape) {
+            shapes.push(shape)
+        }
+    }
+    shapes
+}
+
 /// The return facts `function`'s *own* body writes, in source order.
 fn own_returns<'a>(
     ast: &'a AstFacts,
@@ -979,6 +1076,63 @@ mod tests {
     };
     use crate::contract_semantics::{DescribedCall, ValueShape};
     use solid_facts::ast;
+
+    #[test]
+    fn literal_structural_returns_propose_all_fixed_members() {
+        use solid_facts::{
+            TypeScriptTable,
+            compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap},
+            core::{Generation, SourceHash, SourcePath},
+        };
+        use std::sync::Arc;
+        for (source, expected) in [
+            (
+                "function f(hz) { const period = 1000 / Math.max(0.001, hz); return [Math.max(1, Math.round(period)), Math.max(1, Math.round(period))]; }",
+                1,
+            ),
+            ("function f() { return {x: 1, y: 2}; }", 1),
+            ("function f() { return [1, 2]; }", 1),
+            ("function f() { return [, 2]; }", 0),
+            ("function f() { return [1, ...tail]; }", 0),
+            ("function f() { const a = [1, 2]; return a; }", 0),
+            ("function f(x) { return {x}; }", 0),
+            ("function f() { return {get x() { return 1; }}; }", 0),
+            ("function f() { return {x() { return 1; }}; }", 0),
+            ("function f() { return {...other, x: 1}; }", 0),
+            ("function f() { return {[key]: 1}; }", 0),
+            ("function f() { return {1: 1}; }", 0),
+            ("function f() { return {x: 1, x: 2}; }", 0),
+            ("function f() { return {x: 1, '\\x78': 2}; }", 0),
+            ("function f() { return {__proto__: 1}; }", 0),
+        ] {
+            let facts = ast::extract("test.js", source).unwrap();
+            let function = facts.functions[0].clone();
+            let file = solid_facts::FileFacts {
+                generation: Generation::new(1).unwrap(),
+                path: SourcePath::new("test.js").unwrap(),
+                source_hash: SourceHash::of(source),
+                source: Arc::from(source),
+                ast: Arc::new(facts),
+                compiler: Arc::new(ExecutionMap {
+                    compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+                    source_hash: SourceHash::of(source),
+                    semantic_model: Default::default(),
+                    tracked_regions: vec![],
+                    untracked_regions: vec![],
+                    discarded_regions: vec![],
+                    ownership_regions: vec![],
+                    callback_roles: vec![],
+                    jsx_operations: vec![],
+                }),
+            };
+            let table = TypeScriptTable::from_parts(3, 1, "test", vec![], vec![], vec![], vec![]);
+            assert_eq!(
+                super::literal_structural_returns(&file, &function, &table).len(),
+                expected,
+                "{source}"
+            );
+        }
+    }
 
     /// ADR 0146: the reading walk proposes an owned-signal read for every
     /// returned literal, and the accessor itself for a returned identifier.

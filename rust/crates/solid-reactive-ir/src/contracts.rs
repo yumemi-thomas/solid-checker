@@ -207,6 +207,7 @@ pub fn project_export_semantics(
         creates_walk_declines: Vec::new(),
         returns_walk_clean: false,
         returns_value_completion: false,
+        returns_literal_structures: Vec::new(),
         returns_described_callables: Vec::new(),
         returns_reading_callables: Vec::new(),
         member_alias_initializer: false,
@@ -591,7 +592,10 @@ fn project_return(
                 ) || matches!(
                     &operation.output,
                     Some(ValueShape::Array { element, .. }) if **element == ValueShape::Plain
-                )
+                ) || operation.output.as_ref().is_some_and(|output| {
+                    matches!(output, ValueShape::Tuple(_) | ValueShape::Object(_))
+                        && exact_structural_return(output)
+                })
             })
         });
     let dropped = knowledge
@@ -637,6 +641,19 @@ fn project_return(
 /// `parameter`, path or not -- would invent a return. Contract returns are
 /// only ever read to *find* a reactive leaf, so this can hide one (a store's
 /// member, say) and never invents one.
+fn exact_structural_return(shape: &ValueShape) -> bool {
+    match shape {
+        ValueShape::Plain | ValueShape::Parameter { .. } | ValueShape::Reactive { .. } => true,
+        ValueShape::Tuple(KnowledgeSet::Complete(items)) => {
+            items.iter().all(exact_structural_return)
+        }
+        ValueShape::Object(KnowledgeSet::Complete(properties)) => {
+            properties.iter().all(|p| exact_structural_return(&p.value))
+        }
+        _ => false,
+    }
+}
+
 fn project_returned_output(shape: &ValueShape) -> Option<ContractReturn> {
     match shape {
         ValueShape::Parameter { path, .. } if !path.is_empty() => None,
@@ -838,7 +855,10 @@ fn project_owner_requirements(
 mod owner_requirement_projection_tests {
     use std::collections::{BTreeMap, BTreeSet};
 
-    use super::{project_export_semantics, project_owner_requirements, project_return};
+    use super::{
+        exact_structural_return, project_export_semantics, project_owner_requirements,
+        project_return,
+    };
     use crate::contract_semantics::{
         ArtifactIdentity, CallClaims, CallSemantics, Cardinality, CardinalityScope, ClaimDomain,
         Digest, Event, ExportIdentity, ExportSemantics, ExportTargetIdentity, GuardPartition,
@@ -1687,6 +1707,34 @@ mod owner_requirement_projection_tests {
             project(false, vec![returned("return-0", member(0, "key"))]),
             (ContractClaim::Open, true)
         );
+    }
+
+    #[test]
+    fn structural_returns_do_not_project_one_reactive_arm_over_a_plain_alternative() {
+        let reactive = ValueShape::Reactive {
+            role: crate::contract_semantics::ReactiveRole::Accessor,
+            resource: None,
+            capabilities: KnowledgeSet::Unknown,
+        };
+        let tuple = ValueShape::Tuple(KnowledgeSet::Complete(vec![reactive]));
+        let mut first = operation("a", OperationKind::Return, &[]);
+        first.output = Some(tuple.clone());
+        let mut second = operation("b", OperationKind::Return, &[]);
+        second.output = Some(ValueShape::Plain);
+        let mut claims = claims();
+        claims.returns = KnowledgeSet::Complete(vec![first.id.clone(), second.id.clone()]);
+        let projected = project_export_semantics(&export(claims, vec![first, second], vec![]));
+        assert_eq!(projected.returns, ContractClaim::Known(None));
+        assert!(exact_structural_return(&tuple));
+        assert!(!exact_structural_return(&ValueShape::Tuple(
+            KnowledgeSet::Partial(vec![ValueShape::Plain])
+        )));
+        assert!(!exact_structural_return(&ValueShape::Object(
+            KnowledgeSet::Complete(vec![crate::contract_semantics::ObjectProperty {
+                name: "open".into(),
+                value: ValueShape::Unknown,
+            }])
+        )));
     }
 
     /// The shape the two frozen Solid 1.x authority documents still carry, and
@@ -3307,6 +3355,7 @@ fn contract_export_function(
         creates_walk_declines: Vec::new(),
         returns_walk_clean: false,
         returns_value_completion: false,
+        returns_literal_structures: Vec::new(),
         returns_described_callables: Vec::new(),
         returns_reading_callables: Vec::new(),
         member_alias_initializer: false,

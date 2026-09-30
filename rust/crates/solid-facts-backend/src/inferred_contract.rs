@@ -21,7 +21,8 @@ use solid_reactive_ir::{
         OperationId, OperationKind, OwnerCapabilities, OwnerProduction, OwnerRelation,
         OwnerRequirements, OwnerSource, ReactiveRole, Requirement, Resource, ResourceId,
         ResourceKind, ResourceState, Schedule, SemanticClaimPath, SemanticClaimSubject,
-        StabilityKnowledge, Tracking, Trigger, UpperBound, ValueShape, ValueSource,
+        StabilityKnowledge, Tracking, Trigger, UpperBound, ValueClaimDomain, ValueRoot, ValueShape,
+        ValueSource,
     },
 };
 
@@ -211,6 +212,16 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                                         && matches!(&operation.output, Some(ValueShape::Array { element, .. }) if **element == ValueShape::Plain)
                                 }))
                             })
+                        // ADR 0172: fresh fixed structures have an independent
+                        // completion/member census, including every alternative.
+                        || export.operation_claim(ClaimDomain::Returns).is_some_and(|claim| {
+                            !claim.items().is_empty() && claim.items().iter().all(|id| {
+                                export.operation(&id.0).is_some_and(|operation| {
+                                    operation.is_bare_return()
+                                        && matches!(operation.output, Some(ValueShape::Tuple(_) | ValueShape::Object(_)))
+                                })
+                            })
+                        })
                         // ADR 0145: returns that each hand back a described
                         // callable, which the census decides from the
                         // producer's `callable` fact and the literal's own
@@ -261,6 +272,28 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
             // close leaves it nothing to bound.
             if !proposable.contains(&ClaimDomain::Reads) {
                 export.open_call_domains([ClaimDomain::Reads]);
+            }
+            // ADR 0172: the sidecar alone is not certification input. Restate
+            // precisely the complete literal enumerations withdrawn above,
+            // so the independent structural census can close them for users.
+            if proposable.contains(&ClaimDomain::Returns)
+                && summary.is_some_and(|summary| !summary.returns_literal_structures.is_empty())
+            {
+                for path in &paths {
+                    if matches!(
+                        path,
+                        ClaimPath::Value {
+                            root: ValueRoot::OperationOutput { .. },
+                            domain: ValueClaimDomain::TupleItems
+                                | ValueClaimDomain::ObjectProperties,
+                            ..
+                        }
+                    ) {
+                        export
+                            .propose_return_value_closure(path)
+                            .map_err(model_failure)?;
+                    }
+                }
             }
             export.propose_closures(proposable);
             candidates.extend(paths.into_iter().map(|path| SemanticClaimSubject {
@@ -874,11 +907,37 @@ fn normalize_export(
             KnowledgeSet::Complete(ids)
         })
     };
+    let literal_returns = |operations: &mut Vec<Operation>| {
+        (scope.publishes_bootstrapped_reactive_domains()
+            && summary.kind == "function"
+            && !summary.returns_literal_structures.is_empty()
+            && summary.inherited_from.is_none())
+        .then(|| {
+            KnowledgeSet::Complete(
+                summary
+                    .returns_literal_structures
+                    .iter()
+                    .enumerate()
+                    .map(|(index, shape)| {
+                        let id = OperationId(format!("{prefix}return-structural-{index}"));
+                        operations.push(operation(
+                            id.clone(),
+                            OperationKind::Return,
+                            Vec::new(),
+                            Some(shape.clone()),
+                        ));
+                        id
+                    })
+                    .collect(),
+            )
+        })
+    };
     let returns = match &summary.returns {
         ContractClaim::Open => valueless_returns()
             .or_else(|| container_returns(&mut operations))
             .or_else(|| alias_return(&mut operations))
             .or_else(|| described_returns(&mut operations))
+            .or_else(|| literal_returns(&mut operations))
             .or_else(|| restated_returns(&mut operations))
             .unwrap_or(KnowledgeSet::Unknown),
         // ADR 0109, before the empty closure and deliberately: a body that
@@ -939,6 +998,8 @@ fn normalize_export(
                 // ADR 0145, before ADR 0113's plain return: a function literal
                 // is never a primitive, so the two walks never both answer.
                 described
+            } else if let Some(literal) = literal_returns(&mut operations) {
+                literal
             } else if let Some(restated) = restated_returns(&mut operations) {
                 // ADR 0170: the dependency's own closed `returns`, restated.
                 restated
@@ -1002,6 +1063,10 @@ fn normalize_export(
         ContractClaim::Known(Some(returned)) => {
             let id = OperationId(format!("{prefix}return"));
             let mut output = return_shape(returned)?;
+            if summary.returns_literal_structures.len() == 1 {
+                output =
+                    supplement_structural_proposal(output, &summary.returns_literal_structures[0]);
+            }
             if let ContractClaim::Known(protocol) = &summary.async_behavior {
                 output = match protocol.as_str() {
                     "promise" => ValueShape::Promise(Box::new(output)),
@@ -1749,6 +1814,59 @@ fn owner_requirement_operation(
             Ok(compute)
         }
         OwnerRequirementOperation::Boundary => Err(WithheldOwnerRequirement::Boundary),
+    }
+}
+
+/// The local summary names reactive leaves and omits other members. Literal
+/// syntax fills proposal slots only; certification must independently prove
+/// every member and the exact complete construction.
+fn supplement_structural_proposal(known: ValueShape, literal: &ValueShape) -> ValueShape {
+    match (&known, literal) {
+        (ValueShape::Tuple(items), ValueShape::Tuple(proposed))
+            if items.items().len() == proposed.items().len() =>
+        {
+            ValueShape::Tuple(KnowledgeSet::Complete(
+                items
+                    .items()
+                    .iter()
+                    .zip(proposed.items())
+                    .map(|(item, proposed)| {
+                        if *item == ValueShape::Unknown {
+                            proposed.clone()
+                        } else {
+                            supplement_structural_proposal(item.clone(), proposed)
+                        }
+                    })
+                    .collect(),
+            ))
+        }
+        (ValueShape::Object(properties), ValueShape::Object(proposed))
+            if properties
+                .items()
+                .iter()
+                .all(|p| proposed.items().iter().any(|q| q.name == p.name)) =>
+        {
+            ValueShape::Object(KnowledgeSet::Complete(
+                proposed
+                    .items()
+                    .iter()
+                    .map(|property| ObjectProperty {
+                        name: property.name.clone(),
+                        value: properties
+                            .items()
+                            .iter()
+                            .find(|p| p.name == property.name)
+                            .map_or_else(
+                                || property.value.clone(),
+                                |p| {
+                                    supplement_structural_proposal(p.value.clone(), &property.value)
+                                },
+                            ),
+                    })
+                    .collect(),
+            ))
+        }
+        _ => known,
     }
 }
 

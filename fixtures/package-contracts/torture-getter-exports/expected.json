@@ -15,7 +15,7 @@
           "exports": {
             "getterFunction": "summary-3025730d88387d79ae5225978530d08b68c0d6ab22a1f1bdc06df93b7fd807db",
             "getterObject": "summary-ea7d38071394cce8048cc66e98ad89e66aaedb2d9a523c04e5806d8817441366",
-            "getterResult": "summary-f04280f3c0d4bf8edc4b2cc38370f30f85d4fec556458c36c53739f4dc248d06"
+            "getterResult": "summary-bc3fd24463eac27323c6994ff3459b3109e954b6c73f11860e4d8ae5b0afaaaf"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -54,7 +54,7 @@
       },
       "shape": "callable"
     },
-    "summary-ea7d38071394cce8048cc66e98ad89e66aaedb2d9a523c04e5806d8817441366": {
+    "summary-bc3fd24463eac27323c6994ff3459b3109e954b6c73f11860e4d8ae5b0afaaaf": {
       "call": {
         "accessorBounds": [
           "./index.js:168-189"
@@ -62,25 +62,8 @@
         "callbacks": [],
         "closed": [
           "callbacks",
-          "reads"
-        ],
-        "proposedClosures": [
-          "callbacks",
-          "reads"
-        ],
-        "reads": []
-      },
-      "shape": "plain"
-    },
-    "summary-f04280f3c0d4bf8edc4b2cc38370f30f85d4fec556458c36c53739f4dc248d06": {
-      "call": {
-        "accessorBounds": [
-          "./index.js:168-189"
-        ],
-        "callbacks": [],
-        "closed": [
-          "callbacks",
-          "reads"
+          "reads",
+          "returns"
         ],
         "operations": [
           {
@@ -115,7 +98,8 @@
         ],
         "proposedClosures": [
           "callbacks",
-          "reads"
+          "reads",
+          "returns"
         ],
         "reads": [],
         "returns": [
@@ -123,6 +107,24 @@
         ]
       },
       "shape": "callable"
+    },
+    "summary-ea7d38071394cce8048cc66e98ad89e66aaedb2d9a523c04e5806d8817441366": {
+      "call": {
+        "accessorBounds": [
+          "./index.js:168-189"
+        ],
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
+      },
+      "shape": "plain"
     }
   }
 }

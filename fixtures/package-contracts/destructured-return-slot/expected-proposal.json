@@ -2,7 +2,7 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:68f8603615f040a4fea2f4cdfa2e1180766a638eddec1aac6a2a638d6919b6b9",
+  "semanticDigest": "sha256:2bfebc29585a9ab8a4f32266096fecdf00c79e8827383e94d59a2e37bf7dfbd5",
   "closureCandidates": [
     {
       "claimId": "claim:v1:sha256:0288628dfae4c3a85b80675dd3fb488ec8979ca4256271bdc731d267691f745c",
@@ -1757,30 +1757,6 @@
       }
     },
     {
-      "claimId": "claim:v1:sha256:3584cbebf5a88f6bfb96f979cf0ee36a11cc9ef1ff12efee76535da126f318ca",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.ts",
-        "runtimeDigest": "sha256:87a0ea207971f76b5048ebada6faceaa578a226f39e849d29410db9431a9b4ca",
-        "declarationsPath": "./index.ts",
-        "declarationsDigest": "sha256:87a0ea207971f76b5048ebada6faceaa578a226f39e849d29410db9431a9b4ca",
-        "closureDigest": "sha256:dcc17222d38cbdc9442a0036f4508d06daea72666a878052b0d15d7f43a59ed8"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:cc883ee9846e92cb0b36bd64bbecee7e8a01a8ce7d435ea602353e1fa09164d6",
-        "export": "literalIndex",
-        "path": {
-          "kind": "value",
-          "root": {
-            "kind": "operation-output",
-            "operation": "artifact-case:cc883ee9846e92cb0b36bd64bbecee7e8a01a8ce7d435ea602353e1fa09164d6:literalIndex:operation:return"
-          },
-          "path": [],
-          "domain": "capabilities"
-        }
-      }
-    },
-    {
       "claimId": "claim:v1:sha256:36167dbd5341a3d01db90f092af111699f9af805f282058ca3eb35417e6d5fd1",
       "artifact": {
         "entrypoint": ".",
@@ -2965,30 +2941,6 @@
       }
     },
     {
-      "claimId": "claim:v1:sha256:7e1708eed89422be458edfb6d029b60f0aad79b920ec86d23b0d187bc46403e8",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.ts",
-        "runtimeDigest": "sha256:87a0ea207971f76b5048ebada6faceaa578a226f39e849d29410db9431a9b4ca",
-        "declarationsPath": "./index.ts",
-        "declarationsDigest": "sha256:87a0ea207971f76b5048ebada6faceaa578a226f39e849d29410db9431a9b4ca",
-        "closureDigest": "sha256:dcc17222d38cbdc9442a0036f4508d06daea72666a878052b0d15d7f43a59ed8"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:cc883ee9846e92cb0b36bd64bbecee7e8a01a8ce7d435ea602353e1fa09164d6",
-        "export": "wrappedLiteralIndex",
-        "path": {
-          "kind": "value",
-          "root": {
-            "kind": "operation-output",
-            "operation": "artifact-case:cc883ee9846e92cb0b36bd64bbecee7e8a01a8ce7d435ea602353e1fa09164d6:wrappedLiteralIndex:operation:return"
-          },
-          "path": [],
-          "domain": "capabilities"
-        }
-      }
-    },
-    {
       "claimId": "claim:v1:sha256:7e8d6f0c027fc6ea2bfcd761c07e3bfbccbe64a86257d045b24dc6cf9e0e3995",
       "artifact": {
         "entrypoint": ".",
@@ -4024,30 +3976,6 @@
         "path": {
           "kind": "call",
           "domain": "creates"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:b8e749bb6ca4b61a05226d059f38fd9be1b9272319a367ce24965e44b1b5df1e",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.ts",
-        "runtimeDigest": "sha256:87a0ea207971f76b5048ebada6faceaa578a226f39e849d29410db9431a9b4ca",
-        "declarationsPath": "./index.ts",
-        "declarationsDigest": "sha256:87a0ea207971f76b5048ebada6faceaa578a226f39e849d29410db9431a9b4ca",
-        "closureDigest": "sha256:dcc17222d38cbdc9442a0036f4508d06daea72666a878052b0d15d7f43a59ed8"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:cc883ee9846e92cb0b36bd64bbecee7e8a01a8ce7d435ea602353e1fa09164d6",
-        "export": "staticProperty",
-        "path": {
-          "kind": "value",
-          "root": {
-            "kind": "operation-output",
-            "operation": "artifact-case:cc883ee9846e92cb0b36bd64bbecee7e8a01a8ce7d435ea602353e1fa09164d6:staticProperty:operation:return"
-          },
-          "path": [],
-          "domain": "capabilities"
         }
       }
     },

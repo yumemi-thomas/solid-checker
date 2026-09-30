@@ -9017,6 +9017,10 @@ struct GeneratedOwnerRequirements {
     /// census's to decide.
     value_returns_walk_by_symbol: HashSet<String>,
     value_returns_walk_by_function: HashSet<FunctionKey>,
+    literal_structures_by_symbol:
+        HashMap<String, Vec<solid_reactive_ir::contract_semantics::ValueShape>>,
+    literal_structures_by_function:
+        HashMap<FunctionKey, Vec<solid_reactive_ir::contract_semantics::ValueShape>>,
     /// ADR 0145: the call claims the described callable walk proposes for the
     /// function literals a function's every value-carrying completion returns,
     /// by the same two identities. Absence is "do not propose".
@@ -9198,6 +9202,18 @@ fn generated_owner_requirements_by_symbol(
                     indexed.value_returns_walk_by_symbol.insert(symbol.clone());
                 }
                 indexed.value_returns_walk_by_function.insert(key.clone());
+            }
+            let structures =
+                solid_reactive_ir::literal_structural_returns(file, function, &facts.typescript);
+            if !structures.is_empty() {
+                if let Some(Some(symbol)) = function_symbols.get(&key) {
+                    indexed
+                        .literal_structures_by_symbol
+                        .insert(symbol.clone(), structures.clone());
+                }
+                indexed
+                    .literal_structures_by_function
+                    .insert(key.clone(), structures);
             }
             // ADR 0145: the walk's third positive answer, independent of the
             // two above -- a function whose every value-carrying completion is
@@ -9526,6 +9542,16 @@ fn attach_generated_owner_requirements(
         || default_function
             .as_ref()
             .is_some_and(|key| generated.value_returns_walk_by_function.contains(key));
+    summary.returns_literal_structures = symbol
+        .as_ref()
+        .and_then(|symbol| generated.literal_structures_by_symbol.get(symbol))
+        .or_else(|| {
+            default_function
+                .as_ref()
+                .and_then(|key| generated.literal_structures_by_function.get(key))
+        })
+        .cloned()
+        .unwrap_or_default();
     // ADR 0145: the described callable walk's answer, read the same way.
     summary.returns_described_callables = symbol
         .as_ref()

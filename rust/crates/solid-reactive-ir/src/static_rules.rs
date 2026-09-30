@@ -327,12 +327,6 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
             };
             let mut reported_calls = HashSet::new();
             for call in &function.calls_after_await {
-                let Some(symbol) = ctx.entities.get(call) else {
-                    continue;
-                };
-                let Some((name, _)) = ctx.accessors.get(symbol) else {
-                    continue;
-                };
                 let ast_call = ctx
                     .facts
                     .files
@@ -348,6 +342,25 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                             })
                             .map(|candidate| (file, candidate))
                     });
+                // Whole member spans may retain their receiver's symbol.
+                // The exact property demand carries the callable member's
+                // identity; a reactive receiver does not prove its method
+                // invokes that receiver or reads an accessor.
+                let symbol =
+                    ast_call.and_then(|(file, candidate)| {
+                        if let Some(member) = file.ast.members.iter().find(|member| {
+                            member.span == file.ast.peel_ts_sugar_span(candidate.callee)
+                        }) {
+                            (!file.ast.computed_members.contains(&member.span))
+                                .then(|| ctx.entities.at(file.path.as_str(), member.property))
+                                .flatten()
+                        } else {
+                            ctx.entities.get(call)
+                        }
+                    });
+                let Some((name, _)) = symbol.and_then(|symbol| ctx.accessors.get(symbol)) else {
+                    continue;
+                };
                 let display = ast_call
                     .and_then(|(file, candidate)| candidate.static_callee(&file.source))
                     .unwrap_or(name);

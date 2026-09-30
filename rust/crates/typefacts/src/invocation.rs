@@ -1951,6 +1951,9 @@ pub enum Reachability {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ReturnSite {
+    /// ADR 0172: exhaustive fresh literal construction; absence is open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structure: Option<ReturnStructure>,
     pub location: Location,
     pub reach: Reachability,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2025,6 +2028,8 @@ pub struct ReturnSite {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ReturnArm {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structure: Option<ReturnStructure>,
     pub location: Location,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<InvocationValueFact>,
@@ -2055,6 +2060,44 @@ pub struct ReturnArm {
     /// [`ReturnSite::callable`] for one arm (ADR 0145, handshake protocol 66).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub callable: Option<Location>,
+}
+
+/// Exhaustive literal construction, independently of each leaf's behavior.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReturnStructure {
+    pub location: Location,
+    pub kind: ReturnStructureKind,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub complete: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<ReturnStructure>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub properties: Vec<ReturnStructureProperty>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub primitive_syntax: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameter: Option<ParameterValueSource>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<ImplementationValueSource>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub default_library_call: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReturnStructureProperty {
+    pub name: String,
+    pub key: Location,
+    pub value: ReturnStructure,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReturnStructureKind {
+    Leaf,
+    Tuple,
+    Object,
 }
 
 /// One element of an array-literal [`ReturnArm`].
@@ -2159,6 +2202,12 @@ pub struct ControlFlowIncompleteness {
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ControlFlowCensus {
+    /// Protocol 77: exact body frame, distinct from a queried export name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body_location: Option<Location>,
+    /// Protocol 77: absence is open; only Unreachable excludes fallthrough.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_reach: Option<Reachability>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub returns: Vec<ReturnSite>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

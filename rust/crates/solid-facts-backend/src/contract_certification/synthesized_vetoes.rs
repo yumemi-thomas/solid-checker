@@ -33,8 +33,8 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest as _, Sha256};
 use solid_reactive_ir::contract_semantics::{
-    ClaimDomain, Event, ExportSemantics, InvokeProtocol, OperationKind, Schedule, ValueShape,
-    ValueSource,
+    ClaimDomain, ClaimPath, Event, ExportSemantics, InvokeProtocol, OperationKind, Schedule,
+    SemanticClaimPath, ValueClaimDomain, ValueRoot, ValueShape, ValueSource,
 };
 
 use super::ProbeHarnessConfiguration;
@@ -70,10 +70,9 @@ pub enum VetoSynthesisError {
     Manifest(String),
 }
 
-/// Synthesizes a veto for every candidate in `withheld` that was withheld for
-/// want of a recipe and whose export stated a call signature or a complete
-/// overload set. `None` when nothing could be synthesized, so the caller keeps
-/// the hand corpus.
+/// Synthesizes a veto for candidates withheld for want of a recipe and for
+/// admitted fixed-return member enumerations. Both need an exact call
+/// signature or complete overload set. `None` keeps the hand corpus.
 ///
 /// `graph_dependencies` are the plans whose snapshots the gate batch's private
 /// workspace will carry beside `plan`'s own closure -- exactly what the caller
@@ -87,6 +86,73 @@ pub(crate) fn synthesize(
     withheld: &[WithheldClosure],
     graph_dependencies: &[&CertificationPlan],
 ) -> Result<Option<SynthesizedCorpus>, VetoSynthesisError> {
+    // Recursive enumerations have their own mandatory veto gates. They are
+    // not call domains, so the call-domain recipe-withholding list cannot
+    // serve them. Bind the same whole-return observation to each exact claim
+    // id, preserving any hand recipe that already addresses it.
+    let structural_subjects = plan
+        .candidates
+        .closure_candidates()
+        .iter()
+        .filter(|subject| {
+            matches!(
+                &subject.path,
+                SemanticClaimPath::Domain(ClaimPath::Value {
+                    root: ValueRoot::OperationOutput { .. },
+                    domain: ValueClaimDomain::TupleItems | ValueClaimDomain::ObjectProperties,
+                    ..
+                })
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut structural = Vec::new();
+    if !structural_subjects.is_empty() {
+        let corpus = super::probe_harness::RecipeCorpus::load(base.recipe_corpus(), plan)
+            .map_err(|error| VetoSynthesisError::Manifest(error.to_string()))?;
+        for subject in structural_subjects {
+            let Some(export) = plan
+                .selected_candidate
+                .artifact_case(&subject.artifact_case)
+                .and_then(|case| case.exports.get(&subject.export))
+            else {
+                continue;
+            };
+            let SemanticClaimPath::Domain(ClaimPath::Value {
+                root: ValueRoot::OperationOutput { operation },
+                ..
+            }) = &subject.path
+            else {
+                continue;
+            };
+            if !export
+                .operation(&operation.0)
+                .is_some_and(|operation| operation.is_bare_return())
+            {
+                continue;
+            }
+            if !matches!(
+                candidate_observation("returns", export),
+                Some(Observation::StructuralReturns(_))
+            ) {
+                continue;
+            }
+            let claim = plan
+                .selected_candidate
+                .claim_id(subject)
+                .map_err(|error| VetoSynthesisError::Manifest(error.to_string()))?;
+            if corpus.recipe_for(claim.as_str()).is_some() {
+                continue;
+            }
+            structural.push(WithheldClosure {
+                artifact_case: subject.artifact_case.clone(),
+                export: subject.export.clone(),
+                domain: "returns".into(),
+                semantic_claim_id: claim.as_str().to_owned(),
+                reason: WITHHELD_CLOSURE_NO_RECIPE.into(),
+                recipe_address: plan.recipe_address_string(subject),
+            });
+        }
+    }
     // ADR 0163: asked once, and only when a `reads` candidate could use it.
     let tracking = withheld
         .iter()
@@ -95,6 +161,7 @@ pub(crate) fn synthesize(
         .flatten();
     let candidates = withheld
         .iter()
+        .chain(structural.iter())
         .filter(|record| record.reason == WITHHELD_CLOSURE_NO_RECIPE)
         .filter_map(|record| {
             let case = plan
@@ -248,7 +315,7 @@ pub(crate) fn synthesize(
                 .take(16)
                 .collect::<String>()
         );
-        let source = module_source(specifier, &record.export, observation, signatures);
+        let source = module_source(specifier, &record.export, observation.clone(), signatures);
         std::fs::write(directory.join(&module), source)?;
         let reviewed = observation.reviewed();
         // ADR 0163 imports the tracking runtime beside the package under test;
@@ -293,6 +360,7 @@ pub(crate) fn synthesize(
                                 "ADR 0101, described reads enumeration"
                             }
                             Observation::PrimitiveReturn => "ADR 0113, primitive return",
+                            Observation::StructuralReturns(_) => "ADR 0172, fixed structural returns",
                             Observation::DescribedCallable { .. } => {
                                 "ADR 0145, described callable returns"
                             }
@@ -592,7 +660,7 @@ enum NestedReturns {
 
 /// Observations are selected from the exact normalized claim, not just its
 /// domain. An empty-return observation would contradict a permitted value.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum Observation {
     Creates,
     EmptyReturns,
@@ -603,6 +671,11 @@ enum Observation {
     /// completion rules out. An empty-return observation would contradict
     /// every value this claim permits, so it is never substituted.
     PrimitiveReturn,
+    /// ADR 0172: every member is described independently. Reflection checks
+    /// only the returned structure, never invokes a getter or an accessor.
+    /// The authenticated census, rather than these finite samples, proves
+    /// freshness, accessor behavior, and exhaustive completion.
+    StructuralReturns(Vec<ValueShape>),
     /// ADR 0115: returns that each hand back the caller's own argument or a
     /// fresh array of the caller's arguments. The contradiction is a normal
     /// completion whose result is none of them: not the argument at a claimed
@@ -878,6 +951,27 @@ fn candidate_observation(domain: &str, export: &ExportSemantics) -> Option<Obser
                     always,
                     ever,
                 });
+            }
+            let structures = claim
+                .items()
+                .iter()
+                .map(|id| {
+                    let operation = export.operation(&id.0)?;
+                    let shape = operation.output.as_ref()?;
+                    if operation.kind != OperationKind::Return
+                        || !matches!(shape, ValueShape::Tuple(_) | ValueShape::Object(_))
+                    {
+                        return None;
+                    }
+                    let mut nodes = 0;
+                    structural_veto_shape(shape, 0, &mut nodes)?;
+                    Some(shape.clone())
+                })
+                .collect::<Option<Vec<_>>>();
+            if let Some(structures) = structures
+                && !structures.is_empty()
+            {
+                return Some(Observation::StructuralReturns(structures));
             }
             let [id] = claim.items() else {
                 // ADR 0115 is the one multi-return claim with a reviewed
@@ -1284,7 +1378,7 @@ fn identity_signatures_supported(signatures: &[typefacts::SelectedSignature], in
 }
 
 impl Observation {
-    fn reviewed(self) -> ReviewedObservation {
+    fn reviewed(&self) -> ReviewedObservation {
         match self {
             Self::Creates => reviewed_observation("creates").unwrap(),
             Self::EmptyReturns => reviewed_observation("returns").unwrap(),
@@ -1355,12 +1449,17 @@ impl Observation {
                 observation: "exact on a normal completion: typeof result is \"function\", or \"object\" and result is not null; throwing calls and unsampled inputs are not observed",
                 emit: "",
             },
+            Self::StructuralReturns(_) => ReviewedObservation {
+                marker: "return-outside-structure",
+                observation: "on a normal completion, the returned value matches no claimed fixed structure: array brand, exact own keys and length, or plain-object prototype and exact own keys, with own data descriptors at every member; primitive leaves are primitives, whole-parameter leaves match the original argument by Object.is, and accessor leaves have typeof function; no getter or accessor is invoked; freshness, reactive behavior, and a Proxy that imitates reflection are not observed",
+                emit: "",
+            },
         }
     }
 
-    fn sample_tuples(self, signatures: &[typefacts::SelectedSignature]) -> Vec<Vec<String>> {
+    fn sample_tuples(&self, signatures: &[typefacts::SelectedSignature]) -> Vec<Vec<String>> {
         match self {
-            Self::ParameterReturn(index) => identity_sample_tuples(signatures, index),
+            Self::ParameterReturn(index) => identity_sample_tuples(signatures, *index),
             Self::ArgumentContainers(set) => {
                 let mut tuples = Vec::new();
                 for index in set.indices() {
@@ -1433,16 +1532,16 @@ impl Observation {
             Self::DescribedCallbacks(_) | Self::ConstructedCallbacks(_) => {
                 sample_tuples_with(signatures, true)
             }
-            Self::DescribedProtocols(masks) => protocol_sample_tuples(signatures, masks),
+            Self::DescribedProtocols(masks) => protocol_sample_tuples(signatures, *masks),
             Self::DescribedMembers(masks, members) => {
-                member_sample_tuples(signatures, masks, members)
+                member_sample_tuples(signatures, *masks, *members)
             }
-            Self::DescribedReads(mask) => reads_sample_tuples(signatures, mask),
+            Self::DescribedReads(mask) => reads_sample_tuples(signatures, *mask),
             _ => sample_tuples(signatures),
         }
     }
 
-    fn sampling_limitations(self) -> &'static str {
+    fn sampling_limitations(&self) -> &'static str {
         match self {
             Self::DescribedCallbacks(_) => {
                 "at most six tuples per overload; no variadic tail or structural object construction; a described slot the signature does not type as callable is sampled with a non-callable value, so a call of it throws and observes nothing"
@@ -1473,6 +1572,9 @@ impl Observation {
             }
             Self::PrimitiveReturn => {
                 "at most six tuples per overload, no variadic tail or structural object construction; an input outside the sample that makes the export return an object is not observed; throwing-only runs are incomplete and cannot satisfy the veto"
+            }
+            Self::StructuralReturns(_) => {
+                "at most six tuples per overload, no variadic tail or structural argument construction; structures are bounded to depth eight and 128 nodes per alternative; reflection can be imitated by a Proxy and depends on the probe realm's built-ins; callable leaves are not invoked and their behavior is not observed; unsampled inputs are not observed; throwing-only runs or reflection failures are incomplete and cannot satisfy the veto"
             }
             Self::DescribedCallable { ever: 0, .. } => {
                 "at most six tuples per overload for the export and four nested samples per result (no argument, a recording callable, an empty object, a number); an input outside the sample, a callable handed to the export itself running later, and a reactive read are not observed; a run in which no nested call completes normally is incomplete and cannot satisfy the veto"
@@ -1657,6 +1759,9 @@ fn module_source(
     if observation == Observation::PrimitiveReturn {
         return primitive_return_module_source(specifier, export, signatures);
     }
+    if let Observation::StructuralReturns(ref shapes) = observation {
+        return structural_return_module_source(specifier, export, shapes, signatures);
+    }
     if let Observation::DescribedCallable {
         nested,
         always,
@@ -1703,6 +1808,7 @@ fn module_source(
         Observation::EmptyCallbacks => "callbacks",
         Observation::ParameterReturn(_)
         | Observation::PrimitiveReturn
+        | Observation::StructuralReturns(_)
         | Observation::DescribedCallable { .. }
         | Observation::ArgumentContainers(_)
         | Observation::NotCallable
@@ -2635,6 +2741,133 @@ export async function runProbeSession(_session, harness) {{
             .map(u16::to_string)
             .collect::<Vec<_>>()
             .join(", "),
+    )
+}
+
+/// A bounded representation of precisely the members the census can prove.
+/// Missing/partial leaf behavior never becomes an unchecked runtime wildcard.
+fn structural_veto_shape(
+    shape: &ValueShape,
+    depth: usize,
+    nodes: &mut usize,
+) -> Option<serde_json::Value> {
+    use solid_reactive_ir::contract_semantics::{KnowledgeSet, ReactiveRole};
+    *nodes += 1;
+    if depth > 8 || *nodes > 128 {
+        return None;
+    }
+    Some(match shape {
+        ValueShape::Plain => serde_json::json!({"kind": "primitive"}),
+        ValueShape::Parameter { index, path } if path.is_empty() => {
+            serde_json::json!({"kind": "parameter", "index": index})
+        }
+        ValueShape::Reactive {
+            role: ReactiveRole::Accessor,
+            resource: None,
+            capabilities: KnowledgeSet::Unknown,
+        } => serde_json::json!({"kind": "accessor"}),
+        ValueShape::Tuple(items) if !matches!(items, KnowledgeSet::Unknown) => {
+            let members = items
+                .items()
+                .iter()
+                .map(|member| structural_veto_shape(member, depth + 1, nodes))
+                .collect::<Option<Vec<_>>>()?;
+            serde_json::json!({"kind": "tuple", "members": members})
+        }
+        ValueShape::Object(properties) if !matches!(properties, KnowledgeSet::Unknown) => {
+            let mut seen = std::collections::BTreeSet::new();
+            let members = properties
+                .items()
+                .iter()
+                .map(|property| {
+                    if property.name == "__proto__" || !seen.insert(&property.name) {
+                        return None;
+                    }
+                    Some(serde_json::json!({
+                        "key": property.name,
+                        "shape": structural_veto_shape(&property.value, depth + 1, nodes)?,
+                    }))
+                })
+                .collect::<Option<Vec<_>>>()?;
+            serde_json::json!({"kind": "object", "members": members})
+        }
+        _ => return None,
+    })
+}
+
+fn structural_return_module_source(
+    specifier: &str,
+    export: &str,
+    shapes: &[ValueShape],
+    signatures: &[typefacts::SelectedSignature],
+) -> String {
+    let alternatives = shapes
+        .iter()
+        .map(|shape| structural_veto_shape(shape, 0, &mut 0).expect("reviewed structural shape"))
+        .collect::<Vec<_>>();
+    let tuples = sample_tuples(signatures)
+        .into_iter()
+        .map(|arguments| format!("  [{}],", arguments.join(", ")))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        r#"// Synthesized fixed-structure veto (ADR 0172).
+// Finite observations only falsify; the authenticated census proves closure.
+import * as subjectModule from {specifier};
+const subject = subjectModule[{export}];
+const alternatives = {alternatives};
+const callback = () => undefined;
+const samples = [
+{tuples}
+];
+function matchesStructure(value, shape, args) {{
+  if (shape.kind === "primitive") {{
+    return typeof value !== "function" && (typeof value !== "object" || value === null);
+  }}
+  if (shape.kind === "parameter") return Object.is(value, args[shape.index]);
+  if (shape.kind === "accessor") return typeof value === "function";
+  if (value === null || typeof value !== "object") return false;
+  let members;
+  if (shape.kind === "tuple") {{
+    if (!Array.isArray(value)) return false;
+    const length = Object.getOwnPropertyDescriptor(value, "length");
+    if (!length || !("value" in length) || length.value !== shape.members.length) return false;
+    members = shape.members.map((member, index) => ({{key: String(index), shape: member}}));
+  }} else {{
+    if (Object.getPrototypeOf(value) !== Object.prototype) return false;
+    members = shape.members;
+  }}
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== members.length + (shape.kind === "tuple" ? 1 : 0)) return false;
+  for (const member of members) {{
+    const descriptor = Object.getOwnPropertyDescriptor(value, member.key);
+    if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) return false;
+    if (!matchesStructure(descriptor.value, member.shape, args)) return false;
+  }}
+  return true;
+}}
+export async function runProbeSession(_session, harness) {{
+  harness.emit({{ marker: "call", kind: "call", phase: "enter" }});
+  if (typeof subject !== "function") throw new Error("synthesized veto: export is not callable");
+  let completed = 0;
+  let threw = 0;
+  for (const args of samples) {{
+    const originalArguments = args.slice();
+    let result;
+    try {{ result = subject(...args); }} catch {{ threw += 1; continue; }}
+    completed += 1;
+    if (!alternatives.some(shape => matchesStructure(result, shape, originalArguments))) {{
+      harness.emit({{ marker: "return-outside-structure", kind: "call", phase: "enter" }});
+    }}
+  }}
+  if (threw > 0) harness.emit({{ marker: "sample-threw", kind: "call", phase: "enter" }});
+  if (completed === 0) throw new Error("synthesized structural-return veto: no sample completed normally");
+  harness.emit({{ marker: "call", kind: "call", phase: "exit" }});
+}}
+"#,
+        specifier = serde_json::to_string(specifier).unwrap(),
+        export = serde_json::to_string(export).unwrap(),
+        alternatives = serde_json::to_string(&alternatives).unwrap(),
     )
 }
 

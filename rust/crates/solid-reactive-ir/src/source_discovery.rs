@@ -136,11 +136,38 @@ fn effective_call_return(
     context: &EffectiveReturnContext<'_>,
     depth: usize,
 ) -> Option<ContractReturn> {
-    if !matches!(returned.kind.as_str(), "argument" | "callback-result") {
-        return Some(returned.clone());
-    }
     if depth == 0 {
         return None;
+    }
+    if returned.kind == "tuple" {
+        return Some(ContractReturn {
+            elements: returned
+                .elements
+                .iter()
+                .map(|element| {
+                    element.as_ref().and_then(|element| {
+                        effective_call_return(element, call, context, depth - 1)
+                    })
+                })
+                .collect(),
+            ..returned.clone()
+        });
+    }
+    if returned.kind == "object" {
+        return Some(ContractReturn {
+            properties: returned
+                .properties
+                .iter()
+                .filter_map(|(name, value)| {
+                    effective_call_return(value, call, context, depth - 1)
+                        .map(|value| (name.clone(), value))
+                })
+                .collect(),
+            ..returned.clone()
+        });
+    }
+    if !matches!(returned.kind.as_str(), "argument" | "callback-result") {
+        return Some(returned.clone());
     }
     let argument = call.arguments.get(returned.parameter?)?;
     if returned.kind == "callback-result" {
@@ -201,16 +228,116 @@ fn effective_call_return(
         }
         return resolved;
     }
-    let inner = context.ast_index.call_by_span(argument.span).or_else(|| {
-        context
-            .file
-            .ast
-            .calls
+    effective_value_return(argument.span, context, depth - 1)
+}
+
+/// Follow an exact immutable identity into a proved source-producing call.
+/// Nested/default/rest binding slots carry no direct-value identity fact.
+fn effective_value_return(
+    span: solid_facts::core::Span,
+    context: &EffectiveReturnContext<'_>,
+    depth: usize,
+) -> Option<ContractReturn> {
+    if depth == 0 {
+        return None;
+    }
+    let span = context.file.ast.peel_ts_sugar_span(span);
+    if let Some(call) = context.ast_index.call_by_span(span) {
+        return effective_inner_call_return(call, context, depth - 1);
+    }
+    if !context
+        .file
+        .ast
+        .identifiers
+        .iter()
+        .any(|id| id.span == span)
+    {
+        return None;
+    }
+    let symbol = context.entities.at(context.file.path.as_str(), span)?;
+    if crate::value_identity::binding_has_write(context.file, context.entities, symbol) {
+        return None;
+    }
+    let binding = context.file.ast.bindings.iter().find(|binding| {
+        binding
+            .names
             .iter()
-            .filter(|candidate| argument.span.contains(candidate.span))
-            .max_by_key(|candidate| candidate.span.end - candidate.span.start)
+            .any(|name| context.entities.at(context.file.path.as_str(), name.span) == Some(symbol))
     })?;
-    effective_inner_call_return(inner, context, depth - 1)
+    let initializer = binding.initializer?;
+    let returned = effective_value_return(initializer, context, depth - 1)?;
+    match binding.shape {
+        solid_facts::ast::BindingShape::Identifier => {
+            if matches!(returned.kind.as_str(), "tuple" | "object")
+                && !crate::value_identity::structural_binding_is_stable(
+                    context.file,
+                    context.entities,
+                    symbol,
+                    &returned,
+                )
+            {
+                return None;
+            }
+            Some(returned)
+        }
+        solid_facts::ast::BindingShape::Array if returned.kind == "tuple" => {
+            let index = binding.array_slots.iter().position(|slot| {
+                slot.as_ref().is_some_and(|name| {
+                    context.entities.at(context.file.path.as_str(), name.span) == Some(symbol)
+                })
+            })?;
+            returned.elements.get(index)?.clone()
+        }
+        solid_facts::ast::BindingShape::Object if returned.kind == "object" => {
+            let slot = binding.object_slots.iter().find(|slot| {
+                context
+                    .entities
+                    .at(context.file.path.as_str(), slot.local.span)
+                    == Some(symbol)
+            })?;
+            returned.properties.get(slot.property.as_str()).cloned()
+        }
+        _ => None,
+    }
+}
+
+/// A declared member type cannot restore a container identity invalidated by
+/// runtime writes/escape. Contracted containers use their explicit value flow
+/// instead of the generic typed-accessor fallback, including direct aliases.
+fn is_contracted_container_value(
+    file: &FileFacts,
+    entities: &EntitySymbols,
+    contracts: &ResolvedContracts,
+    span: solid_facts::core::Span,
+    depth: usize,
+) -> bool {
+    if depth == 0 {
+        return true;
+    }
+    let span = file.ast.peel_ts_sugar_span(span);
+    if let Some(call) = file.ast.calls.iter().find(|call| call.span == span) {
+        return entities
+            .at(file.path.as_str(), call.callee)
+            .and_then(|symbol| contracts.by_symbol.get(symbol))
+            .and_then(|contract| contract.summary.returns.known())
+            .and_then(Option::as_ref)
+            .is_some_and(|value| matches!(value.kind.as_str(), "tuple" | "object"));
+    }
+    let Some(symbol) = entities.at(file.path.as_str(), span) else {
+        return false;
+    };
+    file.ast
+        .bindings
+        .iter()
+        .find(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && entities.at(file.path.as_str(), binding.names[0].span) == Some(symbol)
+        })
+        .and_then(|binding| binding.initializer)
+        .is_some_and(|initializer| {
+            is_contracted_container_value(file, entities, contracts, initializer, depth - 1)
+        })
 }
 
 fn effective_inner_call_return(
@@ -708,6 +835,14 @@ pub(crate) fn discover_file_sources(
                         .first()
                         .and_then(|name| entities.at(file.path.as_str(), name.span));
                     if let Some(root_symbol) = root {
+                        if !crate::value_identity::structural_binding_is_stable(
+                            file,
+                            entities,
+                            root_symbol,
+                            contracted_return,
+                        ) {
+                            continue;
+                        }
                         for member in &file.ast.members {
                             // Exact receiver identity only. A same-spelled
                             // member elsewhere in the file -- a shadowing
@@ -913,6 +1048,10 @@ pub(crate) fn discover_file_sources(
             }
         }
     }
+    result.accessors.retain(|(symbol, _)| {
+        !result.contracted_accessor_symbols.contains(symbol)
+            || !crate::value_identity::binding_has_write(file, entities, symbol)
+    });
     for assignment in &file.ast.assignments {
         let (Some(initializer), Some(name)) = (
             assignment.call_initializer,
@@ -1630,6 +1769,46 @@ pub(crate) fn discover_sources(
             role,
             solid_dialect::TypeRole::Component | solid_dialect::TypeRole::Owner
         ) {
+            continue;
+        }
+        // ADR 0172: a tuple containing an accessor is not itself an accessor.
+        // Demanded member/call spans may carry the member's type beside a
+        // receiver symbol. Only an exact value's own callable type can
+        // introduce the typed root; a member must also resolve separately
+        // from its receiver. Nested alias declarations cannot do so.
+        if matches!(
+            role,
+            solid_dialect::TypeRole::Accessor | solid_dialect::TypeRole::Signal
+        ) && (entity.callability != Some(typefacts::Callability::Callable)
+            || semantic_lookup
+                .file_by_path(entity.location.path.as_ref())
+                .is_some_and(|file| {
+                    crate::value_identity::binding_has_write(file, entities, symbol)
+                })
+            || !semantic_lookup
+                .file_by_path(entity.location.path.as_ref())
+                .is_some_and(|file| {
+                    file.ast.identifiers.iter().any(|identifier| {
+                        u64::from(identifier.span.start) == entity.location.start_byte
+                            && u64::from(identifier.span.end) == entity.location.end_byte
+                    }) || file.ast.members.iter().any(|member| {
+                        ((u64::from(member.span.start) == entity.location.start_byte
+                            && u64::from(member.span.end) == entity.location.end_byte)
+                            || (u64::from(member.property.start) == entity.location.start_byte
+                                && u64::from(member.property.end) == entity.location.end_byte))
+                            && !file.ast.computed_members.contains(&member.span)
+                            && entities.at(file.path.as_str(), member.property) == Some(symbol)
+                            && entities.at(file.path.as_str(), member.object) != Some(symbol)
+                            && !is_contracted_container_value(
+                                file,
+                                entities,
+                                resolved_contracts,
+                                member.object,
+                                16,
+                            )
+                    })
+                }))
+        {
             continue;
         }
         let declaration = source_declarations.get(symbol);

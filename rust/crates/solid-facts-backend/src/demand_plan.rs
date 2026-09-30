@@ -733,9 +733,17 @@ fn plan_file(
             || argumentless_primitive;
         planned.query_location = Some(property.clone());
         planned.type_descriptor = call.arguments.is_empty();
+        // Typed source discovery must distinguish the exact callable value
+        // from a container carrying that value's nested alias declarations.
+        planned.callability = planned.type_descriptor;
+        planned.constructability = planned.type_descriptor;
         demands.push(planned);
         if property != callee {
-            demands.push(demand(property).symbol(false));
+            let mut member = demand(property).symbol(false);
+            member.type_descriptor = call.arguments.is_empty();
+            member.callability = member.type_descriptor;
+            member.constructability = member.type_descriptor;
+            demands.push(member);
         }
     }
     Ok(())

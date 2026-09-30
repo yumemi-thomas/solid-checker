@@ -4269,6 +4269,20 @@ impl StructuredReturnDiscovery<'_, '_> {
                     ..ContractReturn::default()
                 })
         }?;
+        if matches!(base.kind.as_str(), "tuple" | "object")
+            && let Some(symbol) = self.entities.at(
+                file.path.as_str(),
+                file.ast.peel_ts_sugar_span(member.object),
+            )
+            && !crate::value_identity::structural_binding_is_stable(
+                file,
+                self.entities,
+                symbol,
+                &base,
+            )
+        {
+            return None;
+        }
         let property = file.source_text(member.property).unwrap_or_default();
         // A computed member's property span is an *expression*, not a name, so
         // its source text is not the property it reads: `createRecord(x)[key]`

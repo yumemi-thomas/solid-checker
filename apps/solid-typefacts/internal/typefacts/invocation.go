@@ -1663,9 +1663,12 @@ const (
 )
 
 type ReturnSite struct {
-	Location Location             `cbor:"location" json:"location"`
-	Reach    Reachability         `cbor:"reach" json:"reach"`
-	Value    *InvocationValueFact `cbor:"value,omitempty" json:"value,omitempty"`
+	// Structure is an exhaustive fresh literal census (ADR 0172, protocol 77).
+	// Absence does not describe the returned value; no prefix is emitted.
+	Structure *ReturnStructure     `cbor:"structure,omitempty" json:"structure,omitempty"`
+	Location  Location             `cbor:"location" json:"location"`
+	Reach     Reachability         `cbor:"reach" json:"reach"`
+	Value     *InvocationValueFact `cbor:"value,omitempty" json:"value,omitempty"`
 	// Parameter identifies an unchanged whole input binding, not its type.
 	// Absence carries no identity premise.
 	Parameter *ParameterValueSource `cbor:"parameter,omitempty" json:"parameter,omitempty"`
@@ -1727,8 +1730,9 @@ type ReturnSite struct {
 
 // ReturnArm is one value a return site can hand back (ADR 0115).
 type ReturnArm struct {
-	Location Location             `cbor:"location" json:"location"`
-	Value    *InvocationValueFact `cbor:"value,omitempty" json:"value,omitempty"`
+	Structure *ReturnStructure     `cbor:"structure,omitempty" json:"structure,omitempty"`
+	Location  Location             `cbor:"location" json:"location"`
+	Value     *InvocationValueFact `cbor:"value,omitempty" json:"value,omitempty"`
 	// Parameter identifies an unchanged whole input binding, exactly as on
 	// ReturnSite, when its Path is empty. A non-empty Path (handshake protocol
 	// 64) states that the arm is a non-call read of that member of the
@@ -1756,6 +1760,26 @@ type ReturnArm struct {
 	// protocol 66): the arm is, after identity-preserving wrappers, a function
 	// or arrow expression at exactly this location.
 	Callable *Location `cbor:"callable,omitempty" json:"callable,omitempty"`
+}
+
+// ReturnStructure describes construction, not behavior. Leaf evidence is
+// independent of closed member enumeration and may remain wholly unknown.
+type ReturnStructure struct {
+	Location           Location                    `cbor:"location" json:"location"`
+	Kind               string                      `cbor:"kind" json:"kind"`
+	Complete           bool                        `cbor:"complete,omitempty" json:"complete,omitempty"`
+	Items              []ReturnStructure           `cbor:"items,omitempty" json:"items,omitempty"`
+	Properties         []ReturnStructureProperty   `cbor:"properties,omitempty" json:"properties,omitempty"`
+	PrimitiveSyntax    bool                        `cbor:"primitiveSyntax,omitempty" json:"primitiveSyntax,omitempty"`
+	Parameter          *ParameterValueSource       `cbor:"parameter,omitempty" json:"parameter,omitempty"`
+	Sources            []ImplementationValueSource `cbor:"sources,omitempty" json:"sources,omitempty"`
+	DefaultLibraryCall string                      `cbor:"defaultLibraryCall,omitempty" json:"defaultLibraryCall,omitempty"`
+}
+
+type ReturnStructureProperty struct {
+	Name  string          `cbor:"name" json:"name"`
+	Key   Location        `cbor:"key" json:"key"`
+	Value ReturnStructure `cbor:"value" json:"value"`
 }
 
 // ReturnArmElement is one element of an array-literal ReturnArm.
@@ -1852,9 +1876,14 @@ type ControlFlowIncompleteness struct {
 }
 
 type ControlFlowCensus struct {
-	Returns  []ReturnSite `cbor:"returns,omitempty" json:"returns,omitempty"`
-	Throws   []ThrowSite  `cbor:"throws,omitempty" json:"throws,omitempty"`
-	Branches []BranchSite `cbor:"branches,omitempty" json:"branches,omitempty"`
+	// Protocol 77: exact body span, distinct from the queried export name.
+	BodyLocation *Location `cbor:"bodyLocation,omitempty" json:"bodyLocation,omitempty"`
+	// Protocol 77: reachability of falling off this callable's body. Absence
+	// is open; only Unreachable excludes an implicit undefined completion.
+	EndReach *Reachability `cbor:"endReach,omitempty" json:"endReach,omitempty"`
+	Returns  []ReturnSite  `cbor:"returns,omitempty" json:"returns,omitempty"`
+	Throws   []ThrowSite   `cbor:"throws,omitempty" json:"throws,omitempty"`
+	Branches []BranchSite  `cbor:"branches,omitempty" json:"branches,omitempty"`
 	// Unsupported is the deduplicated set of marker strings, unchanged: any
 	// entry still means this census is incomplete and still appends
 	// `controlFlowUnsupported` to the transcript's open reasons.

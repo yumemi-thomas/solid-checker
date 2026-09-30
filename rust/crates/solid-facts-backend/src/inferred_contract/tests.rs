@@ -16,6 +16,130 @@ fn sha(byte: char) -> String {
     format!("sha256:{}", byte.to_string().repeat(64))
 }
 
+#[test]
+fn structural_proposals_preserve_known_members_without_promoting_them_to_proof() {
+    let parameter = ValueShape::Parameter {
+        index: 1,
+        path: vec![],
+    };
+    let known = ValueShape::Tuple(KnowledgeSet::Complete(vec![
+        parameter.clone(),
+        ValueShape::Unknown,
+    ]));
+    let literal = ValueShape::Tuple(KnowledgeSet::Complete(vec![ValueShape::Plain; 2]));
+    assert_eq!(
+        supplement_structural_proposal(known.clone(), &literal),
+        ValueShape::Tuple(KnowledgeSet::Complete(vec![
+            parameter.clone(),
+            ValueShape::Plain
+        ]))
+    );
+    assert_eq!(
+        supplement_structural_proposal(
+            known.clone(),
+            &ValueShape::Tuple(KnowledgeSet::Complete(vec![]))
+        ),
+        known
+    );
+    let known = ValueShape::Object(KnowledgeSet::Complete(vec![ObjectProperty {
+        name: "value".into(),
+        value: parameter.clone(),
+    }]));
+    let literal = ValueShape::Object(KnowledgeSet::Complete(vec![
+        ObjectProperty {
+            name: "count".into(),
+            value: ValueShape::Plain,
+        },
+        ObjectProperty {
+            name: "value".into(),
+            value: ValueShape::Plain,
+        },
+    ]));
+    assert_eq!(
+        supplement_structural_proposal(known, &literal),
+        ValueShape::Object(KnowledgeSet::Complete(vec![
+            ObjectProperty {
+                name: "count".into(),
+                value: ValueShape::Plain
+            },
+            ObjectProperty {
+                name: "value".into(),
+                value: parameter
+            },
+        ]))
+    );
+}
+
+#[test]
+fn literal_structures_propose_returns_even_when_async_summary_is_open() {
+    let summary = ContractExport {
+        kind: "function".into(),
+        returns_literal_structures: vec![ValueShape::Tuple(KnowledgeSet::Complete(vec![
+            ValueShape::Plain; 2
+        ]))],
+        ..ContractExport::default()
+    };
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(summary),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    assert!(
+        export
+            .call
+            .proposed_closures()
+            .contains(&ClaimDomain::Returns)
+    );
+    assert!(matches!(
+        export.call.claims().returns,
+        KnowledgeSet::Complete(_)
+    ));
+    assert!(export.call.operations.iter().any(|operation| {
+        operation.kind == OperationKind::Return
+            && matches!(
+                operation.output,
+                Some(ValueShape::Tuple(KnowledgeSet::Complete(_)))
+            )
+    }));
+    assert!(normalized.closure_candidates.iter().any(|candidate| {
+        matches!(
+            candidate.path,
+            SemanticClaimPath::Domain(solid_reactive_ir::contract_semantics::ClaimPath::Call(
+                ClaimDomain::Returns
+            ))
+        )
+    }));
+    let round_trip = crate::contract_document::decode(
+        &crate::contract_document::encode(
+            &normalized.contract,
+            &crate::contract_document::SidecarDigests::default(),
+            false,
+        )
+        .unwrap(),
+    )
+    .unwrap()
+    .normalize()
+    .unwrap();
+    let candidates = solid_reactive_ir::contract_semantics::certification::proof_policy_2()
+        .inspect_candidates(&round_trip)
+        .unwrap();
+    assert!(
+        candidates
+            .closure_candidates()
+            .iter()
+            .any(|candidate| matches!(
+                candidate.path,
+                SemanticClaimPath::Domain(ClaimPath::Value {
+                    root: ValueRoot::OperationOutput { .. },
+                    domain: ValueClaimDomain::TupleItems,
+                    ..
+                })
+            )),
+        "the emitted document must preserve the enumeration proposal, not only its sidecar"
+    );
+}
+
 fn resolution(exports: impl IntoIterator<Item = String>) -> ResolvedImport {
     resolution_for_package("package", exports)
 }

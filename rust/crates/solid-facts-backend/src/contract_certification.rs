@@ -10,7 +10,7 @@ use serde_json::Value;
 use sha2::{Digest as _, Sha256, Sha512};
 use solid_reactive_ir::contract_semantics::{
     ClaimDomain, ClaimPath, ContractProposal, NormalizedContract, RecipeAddress, SemanticClaimPath,
-    SemanticClaimSubject, ValueRoot,
+    SemanticClaimSubject, ValueClaimDomain, ValueRoot,
     certification::{
         CertificationCandidates, DemandPlanningError, DependencyDemandInput, PositiveFactSubject,
         ProofDemandGraph, ProofDemandSubject, ProofFamily, ProofWitnessVariant, WitnessBinding,
@@ -1155,8 +1155,8 @@ pub(super) fn census_refusal_withholding(
         .collect()
 }
 
-/// The operation a refused positive-fact demand states, when the refusal names
-/// one.
+/// The operation a refused positive-fact or structural-return enumeration
+/// demand states, when the refusal names one.
 ///
 /// The counterpart of [`census_refusal_withholding`] for the *positive* half of
 /// a proposal. A closure candidate that cannot be decided is withheld and the
@@ -1165,6 +1165,8 @@ pub(super) fn census_refusal_withholding(
 /// it. Both are weakenings, and both leave the rest of the export publishable —
 /// which is the whole difference between a package with a contract and a
 /// package with none.
+/// A refused structural enumeration also withdraws its return operation:
+/// guessing the remaining members after construction failed is not evidence.
 ///
 /// A demand that names no operation — a selected call, a guard case, an
 /// exported value's own shape — yields nothing here and still refuses the
@@ -1198,10 +1200,16 @@ pub(super) fn positive_fact_refusal_withholding(
                 .demands()
                 .iter()
                 .find(|demand| demand.id().as_str() == demand_id)?;
-            let ProofDemandSubject::PositiveFact(subject) = demand.subject() else {
-                return None;
+            let (artifact_case, export, operation) = match demand.subject() {
+                ProofDemandSubject::PositiveFact(subject) => positive_fact_operation(subject)?,
+                // ADR 0172: an unsupported member enumeration withdraws the
+                // entire return operation. Keeping guessed positive members
+                // after their construction proof failed would be unsound.
+                subject if demand.family() == ProofFamily::DomainExhaustiveness => {
+                    refused_structural_return_operation(subject)?
+                }
+                _ => return None,
             };
-            let (artifact_case, export, operation) = positive_fact_operation(subject)?;
             let prefix = if reason.contains(PROTOCOL_ITEM_NARROWS) {
                 WITHHELD_OPERATION_NARROWED_PREFIX
             } else {
@@ -1215,6 +1223,23 @@ pub(super) fn positive_fact_refusal_withholding(
             })
         })
         .collect()
+}
+
+fn refused_structural_return_operation(
+    subject: &ProofDemandSubject,
+) -> Option<(&str, &str, String)> {
+    let ProofDemandSubject::DomainClosure { subject, .. } = subject else {
+        return None;
+    };
+    let SemanticClaimPath::Domain(ClaimPath::Value {
+        root: ValueRoot::OperationOutput { operation },
+        domain: ValueClaimDomain::TupleItems | ValueClaimDomain::ObjectProperties,
+        ..
+    }) = &subject.path
+    else {
+        return None;
+    };
+    Some((&subject.artifact_case, &subject.export, operation.0.clone()))
 }
 
 /// The `(artifact case, export, operation)` a positive-fact subject names.
@@ -4452,6 +4477,151 @@ mod tests {
 
     use std::io::Write as _;
     use std::sync::Arc;
+
+    #[test]
+    fn a_refused_structural_enumeration_names_only_its_own_return_operation() {
+        use super::{ProofDemandSubject, ValueClaimDomain, ValueRoot};
+        use solid_reactive_ir::contract_semantics::ValuePath;
+        let subject = |root, domain| ProofDemandSubject::DomainClosure {
+            subject: SemanticClaimSubject {
+                artifact_case: "case".into(),
+                export: "bad".into(),
+                path: SemanticClaimPath::Domain(ClaimPath::Value {
+                    root,
+                    path: ValuePath(vec![]),
+                    domain,
+                }),
+            },
+            semantic_claim_id: "claim".into(),
+        };
+        for domain in [
+            ValueClaimDomain::TupleItems,
+            ValueClaimDomain::ObjectProperties,
+        ] {
+            let refusal = subject(
+                ValueRoot::OperationOutput {
+                    operation: OperationId("return-bad".into()),
+                },
+                domain,
+            );
+            assert_eq!(
+                super::refused_structural_return_operation(&refusal),
+                Some(("case", "bad", "return-bad".into()))
+            );
+            assert!(
+                super::refused_structural_return_operation(&subject(ValueRoot::Export, domain))
+                    .is_none()
+            );
+        }
+        let call = ProofDemandSubject::DomainClosure {
+            subject: SemanticClaimSubject {
+                artifact_case: "case".into(),
+                export: "good".into(),
+                path: SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Returns)),
+            },
+            semantic_claim_id: "other".into(),
+        };
+        assert!(super::refused_structural_return_operation(&call).is_none());
+    }
+
+    #[test]
+    fn fixed_structural_returns_serve_every_veto_and_withdraw_an_unsupported_sibling() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("fixed-structural-returns");
+        let Some(configuration) =
+            tracer_configuration(scratch.path(), "fixed-structural-returns", &[])
+        else {
+            return;
+        };
+        let manifest = br#"{"name":"fixed-structural-returns","version":"1.0.0","type":"module","exports":{".":{"types":"./index.d.ts","import":"./index.js"}}}"#;
+        let runtime = b"export function good() { return [1, 2]; }\nexport function bad() { const value = {}; return [value]; }\n";
+        let declarations = b"export declare function good(): [number, number];\nexport declare function bad(): [{}];\n";
+        let archive = published_archive_for(
+            "fixed-structural-returns",
+            "1.0.0",
+            &[
+                ("package/package.json", manifest),
+                ("package/index.js", runtime),
+                ("package/index.d.ts", declarations),
+            ],
+        );
+        let root = "/project/node_modules/fixed-structural-returns";
+        let bindings = ["good", "bad"].map(|name| {
+            (
+                name,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        let plan = plan_with_export_semantics(
+            &archive,
+            "fixed-structural-returns",
+            "1.0.0",
+            root,
+            manifest,
+            &bindings,
+            &[],
+            "/project/src/app.ts",
+            &|case, name| {
+                let operation = Operation {
+                    output: Some(ValueShape::Tuple(KnowledgeSet::Complete(
+                        vec![ValueShape::Plain; if name == "good" { 2 } else { 1 }],
+                    ))),
+                    ..test_return_operation(OperationId(format!(
+                        "{}:{name}:operation:return",
+                        case.id
+                    )))
+                };
+                ExportSemantics {
+                    identity: test_export_identity(case, name),
+                    shape: ValueShape::Callable,
+                    stability: StabilityKnowledge::Unknown,
+                    call: CallSemantics::new(
+                        CallClaims {
+                            callbacks: KnowledgeSet::Complete(vec![]),
+                            creates: KnowledgeSet::Complete(vec![]),
+                            returns: KnowledgeSet::Complete(vec![operation.id.clone()]),
+                            ..CallClaims::default()
+                        },
+                        vec![operation],
+                        vec![],
+                        vec![],
+                        GuardPartition::default(),
+                    ),
+                }
+            },
+        );
+        let finalized = tracer_certify(&plan, &pin, &configuration)
+            .expect("the unsupported sibling must not refuse the package");
+        let accepted = crate::contract_document::decode(finalized.canonical_main())
+            .unwrap()
+            .normalize()
+            .unwrap();
+        let exports = &accepted.artifact_cases()[0].exports;
+        assert!(matches!(
+            exports["good"].operation_claim(ClaimDomain::Returns),
+            Some(KnowledgeSet::Complete(_))
+        ));
+        assert!(exports["good"].call.operations.iter().any(|op| matches!(&op.output, Some(ValueShape::Tuple(KnowledgeSet::Complete(items))) if items == &[ValueShape::Plain, ValueShape::Plain])));
+        assert!(
+            exports["bad"]
+                .call
+                .operations
+                .iter()
+                .all(|op| op.output.is_none())
+        );
+        assert!(!matches!(
+            exports["bad"].operation_claim(ClaimDomain::Returns),
+            Some(KnowledgeSet::Complete(_))
+        ));
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan)
+        );
+    }
 
     /// ADR 0153 part 3: stating a premise is progress exactly once per name.
     /// A requirement whose names are all stated already is not, so its

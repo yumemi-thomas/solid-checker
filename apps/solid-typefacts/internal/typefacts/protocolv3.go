@@ -4,7 +4,12 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 76 (ADR 0162): **a call-result source states
+// TypeFactsHandshakeProtocol is 77 (ADR 0172): fresh literal returns carry an
+// exhaustive construction tree with independent leaf identity evidence, and
+// control-flow censuses state body-end reachability. Absence remains open.
+// A protocol-76 consumer rejects these fields, so both endpoints move together.
+//
+// Protocol 76 (ADR 0162): **a call-result source states
 // which of its written arguments are not functions by grammar, and which is a
 // plain options literal or an undisplaced non-spread slot.**
 // ImplementationValueSource.ArgumentsNonSpreadSyntax rejects spreads that
@@ -524,8 +529,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 76
-	TypeFactsSchemaSHA256             = "sha256:cee2f0ca524b8f4fe2e4e475fba081ed84cbe5363512f483d1e07a84db545a68"
+	TypeFactsHandshakeProtocol uint64 = 77
+	TypeFactsSchemaSHA256             = "sha256:4f847aa5054745ce5a4fe1f2f2c41cc1d6329dceb44c68e14e6d1d90474f149f"
 )
 
 type ServiceHandshake struct {

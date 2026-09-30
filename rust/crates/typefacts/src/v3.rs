@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:cee2f0ca524b8f4fe2e4e475fba081ed84cbe5363512f483d1e07a84db545a68";
+    "sha256:4f847aa5054745ce5a4fe1f2f2c41cc1d6329dceb44c68e14e6d1d90474f149f";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -438,7 +438,8 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // A protocol-75
 // consumer decodes with `deny_unknown_fields` and would reject the new fields,
 // so the number moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 76;
+// Protocol 77 (ADR 0172) adds exhaustive fresh literal return structures.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 77;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

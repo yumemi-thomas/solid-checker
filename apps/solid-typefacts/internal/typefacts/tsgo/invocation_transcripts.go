@@ -1812,6 +1812,7 @@ func (p *project) returnArmsLocked(implementation, expression *ast.Node) []typef
 			return
 		}
 		arm := typefacts.ReturnArm{
+			Structure: p.returnStructureLocked(implementation, node),
 			Location:  nodeLocation(node),
 			Value:     &value,
 			Parameter: p.unwrittenParameterIdentityLocked(implementation, node),
@@ -1947,11 +1948,18 @@ func (p *project) returnedMemberLocked(implementation, node *ast.Node) *returned
 func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.ControlFlowCensus {
 	census := &typefacts.ControlFlowCensus{}
 	body := implementation.Body()
+	if body != nil {
+		location := nodeLocation(body)
+		census.BodyLocation = &location
+	}
 	if body != nil && !ast.IsBlock(body) {
+		endReach := typefacts.Unreachable
+		census.EndReach = &endReach
 		value := p.invocationValueFactLocked(p.checker.GetTypeAtLocation(body))
 		carried := p.carriedCallableLocationsLocked(body)
 		reachable := typefacts.Reachable
 		census.Returns = append(census.Returns, typefacts.ReturnSite{
+			Structure:          p.returnStructureLocked(implementation, body),
 			Location:           nodeLocation(body),
 			Reach:              typefacts.Reachable,
 			Value:              &value,
@@ -2029,7 +2037,8 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 				carryReach = &edgeReach
 			}
 			census.Returns = append(census.Returns, typefacts.ReturnSite{
-				Location: nodeLocation(node), Reach: state.reach, Value: value,
+				Structure: p.returnStructureLocked(implementation, node.Expression()),
+				Location:  nodeLocation(node), Reach: state.reach, Value: value,
 				Parameter:        p.returnedParameterIdentityLocked(implementation, node.Expression()),
 				CarriedCallables: carried, CarryReach: carryReach,
 				Sources:            p.returnValueSourcesLocked(node.Expression()),
@@ -2206,7 +2215,8 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 		})
 		return current
 	}
-	scan(body, flowState{reach: typefacts.Reachable, carryReach: typefacts.Reachable})
+	end := scan(body, flowState{reach: typefacts.Reachable, carryReach: typefacts.Reachable})
+	census.EndReach = &end.reach
 	sort.Strings(census.Unsupported)
 	census.Unsupported = compactStrings(census.Unsupported)
 	census.Incompleteness = sortedControlFlowIncompleteness(census.Incompleteness)

@@ -1,5 +1,41 @@
 # Precision backlog
 
+## Fresh fixed structural return proof (2026-09-30)
+
+Status: **implemented; full source verification passed; delivered tier and
+checkpoint measurement in progress**. ADR 0172 uses existing stable tuple/object shapes
+and protocol 77 runtime construction trees. Complete member enumeration is
+independent of each leaf's primitive/whole-parameter/owned-accessor proof;
+every live completion must match. Fallthrough, partial trees, unknown leaves,
+saved containers and unsupported constructors remain fail-closed.
+
+The new consumer controls prove SC1001 violations for untracked tuple/object
+member reads, preserve a clean tracked JSX twin, and invalidate identities
+after rebinding, alias member writes, deletion and escape. All examples compile
+against published rc.9 Solid/signals/web typings with TypeScript 5.9.3,
+renderer-owned JSX and `skipLibCheck` (published declaration-file defects are
+excluded, consumer checking is not). Namespace admission and unresolved
+computed dispatch remain explicit uncertifiable results. Focused construction,
+completion, shape projection and mutation controls pass. Main `make test-rust`
+passes. Final source `make verify` passes in the isolated worktree, exit zero,
+TOTAL 851.47 s and no `FAILED during step`, including 755 backend library
+tests, Go race tests, fmt/clippy, coverage 142 projects/737 findings, the
+120-fixture contract corpus, ownership, performance, script tests, TypeScript
+oracle, obligation audit and conformance. The delivered tier has not yet been
+regenerated for this slice.
+
+The published `vibrate@1.0.0-next.2:frequencyToPattern` trials for none, browser
+and node now
+issues a complete two-Plain-member tuple and closes all four call domains.
+Its accepted exact-environment consumer has a certified memo twin with zero
+findings and an untracked-read twin with one SC1001 violation; all six pass
+published TypeScript checking. The conversion helper supplies no new intrinsic
+misuse class, so the caller-side read is not counted as a new ledger case.
+
+The previous authenticated checkpoint remains 1/97 packages, 101/101/131 clean
+exports of 721, criterion 1/2/3 at 83/6/4 and misuse 2/123. No coverage gain is
+claimed from a partially closed contract or from the synthetic consumer fixture.
+
 ## Flat reads callback attribution (2026-09-30)
 
 Status: **implemented and verified; 147 focused certification tests, full

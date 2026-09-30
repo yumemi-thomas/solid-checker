@@ -26,14 +26,15 @@ mod static_rules;
 mod symbols;
 mod timings;
 mod upstream_compat;
+mod value_identity;
 
 pub use attribution::ObligationReach;
 pub use creates_walk::{CreatesDecline, CreatesDeclineKind, CreatesProposalWalk};
 pub use owners::function_binding_name;
 pub use pipeline::{build, build_with_accepted_contracts_measured};
 pub use returns_walk::{
-    ArgumentContainer, ReturnsDecline, described_callable_returns, reading_callable_returns,
-    value_completion, valueless_completion,
+    ArgumentContainer, ReturnsDecline, described_callable_returns, literal_structural_returns,
+    reading_callable_returns, value_completion, valueless_completion,
 };
 
 pub use upstream_compat::rule_options::{RuleOptions, RuleOverride};
@@ -1240,6 +1241,8 @@ pub struct ContractExport {
     /// census decides that from the producer's types. `false` is "do not
     /// propose", including for a summary no walk reached.
     pub returns_value_completion: bool,
+    /// ADR 0172: literal container proposals; member behavior is census-owned.
+    pub returns_literal_structures: Vec<contract_semantics::ValueShape>,
     /// ADR 0145's proposal input: when every value-carrying completion of this
     /// export's own body is a function or arrow literal, the call claims each
     /// literal's syntax does not already rule out, one per distinct shape

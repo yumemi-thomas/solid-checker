@@ -308,7 +308,9 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // 174 adds implementation-census-memo-accessors' main document, the corpus
       // pin of ADR 0162's memo accessor, and package-memo-accessor-consumer's
       // hand-stated document, its consumer half.
-      stableMainDocuments: 174,
+      // 175 adds fixed-structural-return-consumer's hand-stated document,
+      // ADR 0172's mutation and whole-parameter projection controls.
+      stableMainDocuments: 175,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

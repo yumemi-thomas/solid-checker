@@ -29,7 +29,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 46;
+pub const AST_FACTS_SCHEMA: u32 = 47;
 
 mod binding_references;
 mod class_obligation;
@@ -266,6 +266,9 @@ pub struct AstFacts {
     pub iterated_operands: Vec<Span>,
     #[serde(default)]
     pub assignments: Vec<AssignmentFact>,
+    /// Exact operands of delete expressions, independently of assignments.
+    #[serde(default)]
+    pub deleted_targets: Vec<Span>,
     #[serde(default)]
     pub if_regions: Vec<IfRegionFact>,
     /// Every `break` and `continue` statement, by span, sorted.
@@ -849,6 +852,10 @@ impl ReturnFact {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReturnStructureFact {
+    /// Whether the entire literal uses the initial fixed-construction grammar.
+    /// This selects proposals only; the independent compiler census proves it.
+    #[serde(default)]
+    pub complete_literal: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub elements: Vec<Option<Span>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1347,6 +1354,7 @@ impl AstFacts {
             coercing_operands: Vec::new(),
             iterated_operands: Vec::new(),
             assignments: Vec::new(),
+            deleted_targets: Vec::new(),
             if_regions: Vec::new(),
             jump_statements: Vec::new(),
             iteration_targets: Vec::new(),
@@ -1489,6 +1497,7 @@ struct Collector<'s, 'semantic> {
     coercing_operands: Vec<Span>,
     iterated_operands: Vec<Span>,
     assignments: Vec<AssignmentFact>,
+    deleted_targets: Vec<Span>,
     if_regions: Vec<IfRegionFact>,
     jump_statements: Vec<Span>,
     iteration_targets: Vec<Span>,
@@ -1631,6 +1640,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             coercing_operands: Vec::new(),
             iterated_operands: Vec::new(),
             assignments: Vec::new(),
+            deleted_targets: Vec::new(),
             if_regions: Vec::new(),
             jump_statements: Vec::new(),
             iteration_targets: Vec::new(),
@@ -1732,6 +1742,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             coercing_operands: self.coercing_operands,
             iterated_operands: self.iterated_operands,
             assignments: self.assignments,
+            deleted_targets: self.deleted_targets,
             if_regions: self.if_regions,
             jump_statements: self.jump_statements,
             iteration_targets: self.iteration_targets,
@@ -1781,21 +1792,18 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                 })
                 .collect(),
             array_slots: match pattern {
-                BindingPattern::ArrayPattern(array) => {
-                    array
-                        .elements
-                        .iter()
-                        .map(|element| {
-                            element.as_ref().and_then(|pattern| {
-                                pattern.get_binding_identifiers().into_iter().next().map(
-                                    |identifier| NamedSpan {
-                                        span: span(identifier.span),
-                                    },
-                                )
-                            })
+                BindingPattern::ArrayPattern(array) => array
+                    .elements
+                    .iter()
+                    .map(|element| {
+                        element.as_ref().and_then(|pattern| match pattern {
+                            BindingPattern::BindingIdentifier(identifier) => Some(NamedSpan {
+                                span: span(identifier.span),
+                            }),
+                            _ => None,
                         })
-                        .collect()
-                }
+                    })
+                    .collect(),
                 _ => vec![],
             },
             object_slots: match pattern {
@@ -1803,11 +1811,12 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                     .properties
                     .iter()
                     .filter_map(|property| {
-                        let local = property
-                            .value
-                            .get_binding_identifiers()
-                            .into_iter()
-                            .next()?;
+                        let BindingPattern::BindingIdentifier(local) = &property.value else {
+                            return None;
+                        };
+                        if property.computed {
+                            return None;
+                        }
                         let property_name = self
                             .source
                             .get(
@@ -1883,6 +1892,36 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             _ => Vec::new(),
         };
         let conditional = matches!(expression, Expression::ConditionalExpression(_));
+        let complete_literal = match expression {
+            Expression::ArrayExpression(array) => array.elements.iter().all(|element| {
+                !matches!(
+                    element,
+                    ArrayExpressionElement::Elision(_) | ArrayExpressionElement::SpreadElement(_)
+                )
+            }),
+            Expression::ObjectExpression(object) => {
+                let mut keys = std::collections::BTreeSet::new();
+                object.properties.iter().all(|property| {
+                    let ObjectPropertyKind::ObjectProperty(property) = property else {
+                        return false;
+                    };
+                    if property.kind != PropertyKind::Init
+                        || property.method
+                        || property.shorthand
+                        || property.computed
+                    {
+                        return false;
+                    }
+                    let key = match &property.key {
+                        PropertyKey::StaticIdentifier(key) => key.name.as_str(),
+                        PropertyKey::StringLiteral(key) => key.value.as_str(),
+                        _ => return false,
+                    };
+                    key != "__proto__" && keys.insert(key)
+                })
+            }
+            _ => false,
+        };
         let (value, callee) = match expression {
             Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_) => {
                 (ReturnValueKind::Function, None)
@@ -1916,6 +1955,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             callee,
             structure: (!elements.is_empty() || !properties.is_empty()).then(|| {
                 Box::new(ReturnStructureFact {
+                    complete_literal,
                     elements,
                     properties,
                 })
@@ -3551,6 +3591,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_unary_expression(&mut self, expression: &UnaryExpression<'a>) {
         use oxc_syntax::operator::UnaryOperator;
+        if expression.operator == UnaryOperator::Delete {
+            self.deleted_targets.push(span(expression.argument.span()));
+        }
 
         // Every unary operator here accepts a function operand in TypeScript
         // (probed against the published typings: `-f`, `+f`, `~f`, and `!f`
@@ -3763,6 +3806,21 @@ fn array_literal_elements(expression: &Expression<'_>) -> Option<Box<[Option<Spa
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn structural_binding_slots_require_direct_identifiers() {
+        let facts = super::extract("slots.ts", "const [first, {nested}, fallback = 0, ...rest] = make(); const {value: direct, nested: {inner}, optional = 0, [key]: computed} = other(); delete (other as any).value;").unwrap();
+        let array = &facts.bindings[0];
+        assert!(array.array_slots[0].is_some());
+        assert!(array.array_slots[1..].iter().all(Option::is_none));
+        let object = facts
+            .bindings
+            .iter()
+            .find(|binding| binding.shape == super::BindingShape::Object)
+            .unwrap();
+        assert_eq!(object.object_slots.len(), 1);
+        assert_eq!(object.object_slots[0].property, "value");
+        assert_eq!(facts.deleted_targets.len(), 1);
+    }
     use super::*;
 
     /// `result_discarded` proves the result reaches nothing, and proves it in

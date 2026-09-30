@@ -13,7 +13,7 @@
             "sha256": "c0d84fa06d769ef701d23e804ede3db7ba2bcf1e1f8cf3982b35c0b82e93baf7"
           },
           "exports": {
-            "Isolated": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "Isolated": "summary-e1e10df6f8f6d43286d4ad0032b410bcb3a9e7b20f0012e21341cd11e43f9fcf",
             "Reaches": "summary-2bea96ef54a98a43971017a6037500e6147b57eee612e1b64a4bb8a48e2097ce"
           },
           "resolution": {
@@ -81,21 +81,57 @@
       },
       "shape": "callable"
     },
-    "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
+    "summary-e1e10df6f8f6d43286d4ad0032b410bcb3a9e7b20f0012e21341cd11e43f9fcf": {
       "call": {
         "callbacks": [],
         "closed": [
           "callbacks",
           "reads",
-          "creates"
+          "creates",
+          "returns"
         ],
         "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return-structural-0",
+            "kind": "return",
+            "output": {
+              "closed": [
+                "properties"
+              ],
+              "kind": "object",
+              "properties": [
+                {
+                  "name": "value",
+                  "value": "plain"
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
         "proposedClosures": [
           "callbacks",
           "reads",
-          "creates"
+          "creates",
+          "returns"
         ],
-        "reads": []
+        "reads": [],
+        "returns": [
+          "return-structural-0"
+        ]
       },
       "shape": "callable"
     }

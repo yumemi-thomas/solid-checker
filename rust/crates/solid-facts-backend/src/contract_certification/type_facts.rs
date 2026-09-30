@@ -7,6 +7,9 @@
 //! manifest, launches that exact path, and accepts evidence only through the
 //! resulting live session token.
 
+#[path = "structural_returns.rs"]
+mod structural_returns;
+
 use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
 use solid_reactive_ir::contract_semantics::{
@@ -4235,7 +4238,40 @@ fn verify_export_value_family(
                     reason: "domain-exhaustiveness demand has no closure subject".into(),
                 });
             };
-            if let Some(aliased) =
+            if let SemanticClaimPath::Domain(ClaimPath::Value {
+                root: ValueRoot::OperationOutput { operation },
+                path,
+                domain,
+            }) = &subject.path
+            {
+                let (export, implementation) =
+                    require_export_implementation(plan, proof, transcript, &open)?;
+                let output = export
+                    .operation(&operation.0)
+                    .filter(|operation| operation.is_bare_return())
+                    .and_then(|op| op.output.as_ref())
+                    .ok_or_else(|| {
+                        open("structural closure output is absent or not a bare return")
+                    })?;
+                let member = structural_returns::candidate_at_path(output, &path.0)
+                    .ok_or_else(|| open("structural closure path is absent"))?;
+                if !matches!(
+                    (member, domain),
+                    (ValueShape::Tuple(_), ValueClaimDomain::TupleItems)
+                        | (ValueShape::Object(_), ValueClaimDomain::ObjectProperties)
+                ) {
+                    return Err(open("no literal structural census for this output domain"));
+                }
+                sites.extend(
+                    structural_returns::return_sites(
+                        export,
+                        implementation,
+                        &plan.snapshot,
+                        census.roots,
+                    )
+                    .map_err(|reason| open(&reason))?,
+                );
+            } else if let Some(aliased) =
                 census_default_library_alias_export(plan, proof, &subject.path, transcript, &open)?
             {
                 // ADR 0103: the export *is* a reviewed default-library member,
@@ -9127,6 +9163,33 @@ fn require_operation_recursive_subject(
         let operation = exported
             .operation(&operation.0)
             .ok_or_else(|| open("recursive output operation is absent"))?;
+        if operation.is_bare_return()
+            && matches!(
+                operation.output,
+                Some(ValueShape::Tuple(_) | ValueShape::Object(_))
+            )
+        {
+            let (_, implementation) = require_export_implementation(plan, proof, transcript, open)?;
+            sites.extend(
+                structural_returns::return_sites(
+                    exported,
+                    implementation,
+                    &plan.snapshot,
+                    census.roots,
+                )
+                .map_err(|reason| open(&reason))?,
+            );
+            structural_returns::require_callability(
+                operation
+                    .output
+                    .as_ref()
+                    .expect("matched structural output"),
+                &path.0,
+                *callable,
+            )
+            .map_err(|reason| open(&reason))?;
+            return Ok(());
+        }
         // ADR 0145: a described callable output is proved by the evidence the
         // closure census reads, over the whole enumeration the claim makes --
         // every live value a literal showing one of them, and this one handed
@@ -13975,6 +14038,22 @@ fn census_returns_domain(
     let proposed = export
         .operation_claim(ClaimDomain::Returns)
         .ok_or_else(|| refuse("returns is not an operation domain of this export".into()))?;
+    if proposed.items().iter().any(|id| {
+        export.operation(&id.0).is_some_and(|op| {
+            matches!(
+                op.output,
+                Some(ValueShape::Tuple(_) | ValueShape::Object(_))
+            )
+        })
+    }) {
+        return structural_returns::return_sites(
+            export,
+            implementation,
+            &plan.snapshot,
+            census.roots,
+        )
+        .map_err(refuse);
+    }
     if let [operation] = proposed.items()
         && let Some(operation) = export.operation(&operation.0)
         && operation.kind == OperationKind::Return
@@ -21630,6 +21709,228 @@ mod tests {
             .expect("a reachable call witnesses the root"),
         );
         assert_eq!(root_sites.len(), 1);
+    }
+
+    #[test]
+    fn structural_returns_require_complete_trees_and_every_completion() {
+        let at = |start, end| json!({"path":"/p/index.js", "startByte":start, "endByte":end});
+        let leaf =
+            |start, end| json!({"location":at(start,end), "kind":"leaf", "primitiveSyntax":true});
+        let tree = json!({"location":at(15,35), "kind":"tuple", "complete":true,
+            "items":[leaf(16,17),leaf(20,21)]});
+        let mut op = operation("return", OperationKind::Return, Default::default());
+        op.trigger = Some(solid_reactive_ir::contract_semantics::Trigger::Event(
+            solid_reactive_ir::contract_semantics::Event::Call,
+        ));
+        op.at = Some(solid_reactive_ir::contract_semantics::Event::Call);
+        op.schedule = Some(solid_reactive_ir::contract_semantics::Schedule::SameStack);
+        op.tracking = solid_reactive_ir::contract_semantics::Tracking::Untracked;
+        op.cardinality = per_call_cardinality(Some(0));
+        op.output = Some(ValueShape::Tuple(KnowledgeSet::Partial(
+            vec![ValueShape::Plain; 2],
+        )));
+        let mut export = export_semantics(vec![], vec![]);
+        export.call = solid_reactive_ir::contract_semantics::CallSemantics::new(
+            solid_reactive_ir::contract_semantics::CallClaims {
+                returns: KnowledgeSet::Partial(vec![OperationId("return".into())]),
+                ..Default::default()
+            },
+            vec![op],
+            vec![],
+            vec![],
+            solid_reactive_ir::contract_semantics::GuardPartition {
+                cases: KnowledgeSet::Unknown,
+            },
+        );
+        let mut base = json!({"location":at(2,5), "declaration":{"kind":"function","location":at(0,60)}, "completionForm":"plain",
+        "controlFlow":{"bodyLocation":at(5,60), "endReach":"unreachable", "returns":[{
+            "location":at(10,40), "reach":"reachable", "value":primitive_census_value(json!({"mayBeObject":true}), "nonCallable"),
+            "structure":tree
+        }]}});
+        let census = |value: serde_json::Value| {
+            let implementation = serde_json::from_value(value).unwrap();
+            structural_returns::return_sites(&export, &implementation, &consumer_snapshot(), &[])
+        };
+        census(base.clone()).expect("complete independently proved tuple");
+        for change in [
+            "missing",
+            "partial",
+            "prefix",
+            "extra",
+            "unknown",
+            "frame",
+            "overlap",
+            "missing-body",
+            "wrong-body",
+            "bare",
+            "fallthrough",
+            "open-end",
+            "async",
+            "unsupported-arm",
+        ] {
+            let mut value = base.clone();
+            let site = &mut value["controlFlow"]["returns"][0];
+            match change {
+                "missing" => {
+                    site.as_object_mut().unwrap().remove("structure");
+                }
+                "partial" => site["structure"]["complete"] = json!(false),
+                "prefix" => {
+                    site["structure"]["items"].as_array_mut().unwrap().pop();
+                }
+                "extra" => site["structure"]["items"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(leaf(25, 26)),
+                "unknown" => site["structure"]["items"][0]["primitiveSyntax"] = json!(false),
+                "frame" => site["structure"]["items"][0]["location"] = at(1, 2),
+                "overlap" => site["structure"]["items"][1]["location"] = at(16, 18),
+                "missing-body" => {
+                    value["controlFlow"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("bodyLocation");
+                }
+                "wrong-body" => value["controlFlow"]["bodyLocation"] = at(41, 59),
+                "bare" => {
+                    site.as_object_mut().unwrap().remove("value");
+                }
+                "fallthrough" => value["controlFlow"]["endReach"] = json!("reachable"),
+                "open-end" => {
+                    value["controlFlow"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("endReach");
+                }
+                "async" => value["completionForm"] = json!("async"),
+                "unsupported-arm" => site["arms"] = json!([{"location":at(15,35)}]),
+                _ => unreachable!(),
+            }
+            assert!(census(value).is_err(), "{change} must refuse");
+        }
+        // Every arm is required even when the site's own construction looks valid.
+        base["controlFlow"]["returns"][0]["arms"] = json!([
+            {"location":at(15,35), "structure":tree},
+            {"location":at(15,35), "structure":tree}
+        ]);
+        assert!(census(base.clone()).is_ok());
+        // Objects and nested tuples use the same full-tree comparison;
+        // whole-parameter identity is a relation, not a callable type claim.
+        let nested = json!({"location":at(15,35),"kind":"object","complete":true,
+        "properties":[{"name":"value","key":at(16,19),"value":{
+            "location":at(20,33),"kind":"tuple","complete":true,"items":[
+                {"location":at(21,22),"kind":"leaf","parameter":{"parameterIndex":0}},
+                leaf(25,26)
+            ]
+        }}]});
+        let nested_shape = ValueShape::Object(KnowledgeSet::Partial(vec![
+            solid_reactive_ir::contract_semantics::ObjectProperty {
+                name: "value".into(),
+                value: ValueShape::Tuple(KnowledgeSet::Partial(vec![
+                    ValueShape::Parameter {
+                        index: 0,
+                        path: vec![],
+                    },
+                    ValueShape::Plain,
+                ])),
+            },
+        ]));
+        let mut nested_export = export.clone();
+        // Build a separate operation list: the normalized representation is
+        // immutable and must not be mutated behind its public accessor.
+        let mut nested_op = export.operation("return").unwrap().clone();
+        nested_op.output = Some(nested_shape);
+        nested_export.call = solid_reactive_ir::contract_semantics::CallSemantics::new(
+            export.call.claims().clone(),
+            vec![nested_op],
+            vec![],
+            vec![],
+            solid_reactive_ir::contract_semantics::GuardPartition {
+                cases: KnowledgeSet::Unknown,
+            },
+        );
+        base["controlFlow"]["returns"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("arms");
+        base["controlFlow"]["returns"][0]["structure"] = nested;
+        let nested_census = |value| {
+            let implementation = serde_json::from_value(value).unwrap();
+            structural_returns::return_sites(
+                &nested_export,
+                &implementation,
+                &consumer_snapshot(),
+                &[],
+            )
+        };
+        assert!(nested_census(base.clone()).is_ok());
+        for change in [
+            "duplicate",
+            "proto",
+            "key-frame",
+            "unknown-leaf",
+            "member-path",
+            "prefix",
+        ] {
+            let mut value = base.clone();
+            let node = &mut value["controlFlow"]["returns"][0]["structure"];
+            match change {
+                "duplicate" => {
+                    let mut second = node["properties"][0].clone();
+                    second["key"] = at(33, 34);
+                    node["properties"].as_array_mut().unwrap().push(second);
+                }
+                "proto" => node["properties"][0]["name"] = json!("__proto__"),
+                "key-frame" => node["properties"][0]["key"] = at(1, 2),
+                "unknown-leaf" => {
+                    node["properties"][0]["value"]["items"][0]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("parameter");
+                }
+                "member-path" => {
+                    node["properties"][0]["value"]["items"][0]["parameter"]["path"] =
+                        json!([{"kind":"property","property":"x"}])
+                }
+                "prefix" => {
+                    node["properties"][0]["value"]["items"]
+                        .as_array_mut()
+                        .unwrap()
+                        .pop();
+                }
+                _ => unreachable!(),
+            }
+            assert!(nested_census(value).is_err(), "nested {change} must refuse");
+        }
+        let tuple = ValueShape::Tuple(KnowledgeSet::Complete(vec![ValueShape::Plain]));
+        assert!(
+            structural_returns::require_callability(&tuple, &[], DemandedCallability::Unknown)
+                .is_ok()
+        );
+        assert!(
+            structural_returns::require_callability(
+                &tuple,
+                &[ValuePathSegment::TupleItem(0)],
+                DemandedCallability::NonCallable
+            )
+            .is_ok()
+        );
+        assert!(
+            structural_returns::require_callability(
+                &tuple,
+                &[ValuePathSegment::TupleItem(0)],
+                DemandedCallability::Callable
+            )
+            .is_err()
+        );
+        assert!(
+            structural_returns::require_callability(
+                &tuple,
+                &[ValuePathSegment::TupleItem(1)],
+                DemandedCallability::NonCallable
+            )
+            .is_err()
+        );
     }
 
     fn export_semantics(

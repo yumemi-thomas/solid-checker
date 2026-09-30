@@ -63,6 +63,7 @@ impl ObservationResult {
                     | "return-outside-identity"
                     | "return-not-primitive"
                     | "return-outside-containers"
+                    | "return-outside-structure"
                     | "described-callable-contradicted"
             )
         })
@@ -77,7 +78,7 @@ fn execute(
     let mut source = module_source(
         &data_module(implementation),
         "subject",
-        observation,
+        observation.clone(),
         signatures,
     );
     source.push_str(
@@ -551,6 +552,114 @@ fn claim_filter_selects_only_one_whole_parameter_return() {
     }
 }
 
+#[test]
+fn the_structural_return_veto_checks_all_members_without_invoking_getters() {
+    use solid_reactive_ir::contract_semantics::{ObjectProperty, ReactiveRole};
+    let tuple = ValueShape::Tuple(KnowledgeSet::complete(vec![
+        ValueShape::Plain,
+        ValueShape::Plain,
+    ]));
+    let record = ValueShape::Object(KnowledgeSet::complete(vec![
+        ObjectProperty {
+            name: "value".into(),
+            value: ValueShape::Parameter {
+                index: 0,
+                path: vec![],
+            },
+        },
+        ObjectProperty {
+            name: "nested".into(),
+            value: tuple.clone(),
+        },
+        ObjectProperty {
+            name: "read".into(),
+            value: ValueShape::Reactive {
+                role: ReactiveRole::Accessor,
+                resource: None,
+                capabilities: KnowledgeSet::Unknown,
+            },
+        },
+    ]));
+    let signatures = [signature(&[value_fact(json!({"mayBeObject": true}))])];
+    let observation = Observation::StructuralReturns(vec![tuple, record]);
+    for implementation in [
+        "export function subject() { return [1, null]; }",
+        "export function subject() { return [undefined, Symbol('x')]; }",
+        "export function subject(value) { return {value, nested: [true, 1n], read: () => 1}; }",
+    ] {
+        let observed = execute(implementation, observation.clone(), &signatures);
+        assert!(!observed.contradicted(), "{implementation}: {observed:?}");
+        assert!(observed.error.is_none(), "{implementation}: {observed:?}");
+    }
+    for implementation in [
+        "export function subject() { return [1]; }",
+        "export function subject() { return [1, 2, 3]; }",
+        "export function subject() { return [, 2]; }",
+        "export function subject() { return [1, {}]; }",
+        "export function subject() { const a = [1, 2]; a.extra = 3; return a; }",
+        "export function subject() { return {0: 1, 1: 2, length: 2}; }",
+        "export async function subject() { return [1, 2]; }",
+        "export function* subject() { return [1, 2]; }",
+        "export function subject(value) { return {value: {}, nested: [1, 2], read: () => 1}; }",
+        "export function subject(value) { return {value, nested: [1, {}], read: () => 1}; }",
+        "export function subject(value) { return {value, nested: [1, 2], read: 1}; }",
+        "export function subject(value) { return {value, nested: [1, 2], read: () => 1, extra: 1}; }",
+        "export function subject(value) { return Object.assign(Object.create(null), {value, nested: [1, 2], read: () => 1}); }",
+        "export function subject() { return {get value() { throw new Error('getter must not run'); }, nested: [1, 2], read: () => 1}; }",
+        "export function subject() { const a = [1, 2]; Object.defineProperty(a, '0', {get() { throw new Error('getter must not run'); }}); return a; }",
+        "export function subject() { const a = [1, 2]; a[Symbol('extra')] = 1; return a; }",
+    ] {
+        let observed = execute(implementation, observation.clone(), &signatures);
+        assert!(observed.contradicted(), "{implementation}: {observed:?}");
+        assert!(
+            observed.error.is_none(),
+            "reflection must not invoke a getter: {observed:?}"
+        );
+    }
+    for implementation in [
+        "export function subject() { throw new Error('no observation'); }",
+        "export function subject() { const {proxy, revoke} = Proxy.revocable([], {}); revoke(); return proxy; }",
+    ] {
+        let observed = execute(implementation, observation.clone(), &signatures);
+        assert!(!observed.contradicted(), "{observed:?}");
+        assert!(observed.error.is_some(), "{observed:?}");
+    }
+    let mut operation = return_operation();
+    operation.output = Some(ValueShape::Tuple(KnowledgeSet::complete(vec![
+        ValueShape::Plain,
+    ])));
+    let claim = KnowledgeSet::complete(vec![operation.id.clone()]);
+    assert!(matches!(
+        candidate_observation(
+            "returns",
+            &export_with_returns(claim.clone(), vec![operation.clone()])
+        ),
+        Some(Observation::StructuralReturns(_))
+    ));
+    for shape in [
+        ValueShape::Tuple(KnowledgeSet::Unknown),
+        ValueShape::Tuple(KnowledgeSet::complete(vec![ValueShape::Unknown])),
+        ValueShape::Tuple(KnowledgeSet::complete(vec![ValueShape::Callable])),
+        ValueShape::Tuple(KnowledgeSet::complete(vec![ValueShape::Parameter {
+            index: 0,
+            path: vec!["member".into()],
+        }])),
+        ValueShape::Object(KnowledgeSet::complete(vec![ObjectProperty {
+            name: "__proto__".into(),
+            value: ValueShape::Plain,
+        }])),
+    ] {
+        operation.output = Some(shape);
+        assert!(
+            candidate_observation(
+                "returns",
+                &export_with_returns(claim.clone(), vec![operation.clone()])
+            )
+            .is_none()
+        );
+    }
+}
+
 /// ADR 0113: the primitive-return module stays quiet on every primitive, `null`
 /// included, and fires on anything a primitive completion rules out: an
 /// object, an array, a function, a proxy, and the promise or iterator an
@@ -642,7 +751,7 @@ fn the_argument_container_module_emits_only_outside_the_claimed_containers() {
         "export function subject(value) { return value; }",
         "export function subject() { return []; }",
     ] {
-        let observed = execute(implementation, observation, &signatures);
+        let observed = execute(implementation, observation.clone(), &signatures);
         assert!(!observed.contradicted(), "{implementation}: {observed:?}");
         assert!(observed.error.is_none(), "{implementation}: {observed:?}");
     }
@@ -653,7 +762,7 @@ fn the_argument_container_module_emits_only_outside_the_claimed_containers() {
         "export function subject() { return {}; }",
         "export function subject() { return 1; }",
     ] {
-        let observed = execute(implementation, observation, &signatures);
+        let observed = execute(implementation, observation.clone(), &signatures);
         assert!(observed.contradicted(), "{implementation}: {observed:?}");
         assert!(observed.error.is_none(), "{implementation}: {observed:?}");
     }
@@ -713,7 +822,7 @@ fn the_invocation_result_module_admits_only_what_the_invocation_returned() {
         "export function subject(value) { return typeof value === 'function' && !value.length ? value() : value; }",
         "export function subject(value) { return value; }",
     ] {
-        let observed = execute(implementation, observation, &signatures);
+        let observed = execute(implementation, observation.clone(), &signatures);
         assert!(!observed.contradicted(), "{implementation}: {observed:?}");
         assert!(observed.error.is_none(), "{implementation}: {observed:?}");
     }
@@ -724,7 +833,7 @@ fn the_invocation_result_module_admits_only_what_the_invocation_returned() {
         "let last; export function subject(value) { if (typeof value === 'function') { const previous = last; last = value(); return previous ?? last; } return value; }",
         "export function subject(value) { return typeof value === 'function' ? [value()] : value; }",
     ] {
-        let observed = execute(implementation, observation, &signatures);
+        let observed = execute(implementation, observation.clone(), &signatures);
         assert!(observed.contradicted(), "{implementation}: {observed:?}");
         assert!(observed.error.is_none(), "{implementation}: {observed:?}");
     }
@@ -789,7 +898,7 @@ fn the_member_module_admits_what_the_argument_holds_at_return_and_undefined() {
         "export function subject(event) { if (event) event.defaultPrevented = 1; return event?.defaultPrevented; }",
         "export function subject(event) { return event == null ? undefined : event.defaultPrevented; }",
     ] {
-        let observed = execute(implementation, chain, &two);
+        let observed = execute(implementation, chain.clone(), &two);
         assert!(!observed.contradicted(), "{implementation}: {observed:?}");
         assert!(observed.error.is_none(), "{implementation}: {observed:?}");
     }
@@ -801,12 +910,16 @@ fn the_member_module_admits_what_the_argument_holds_at_return_and_undefined() {
         "export function subject(event) { return event; }",
         "export function subject() { return null; }",
     ] {
-        let observed = execute(implementation, chain, &two);
+        let observed = execute(implementation, chain.clone(), &two);
         assert!(observed.contradicted(), "{implementation}: {observed:?}");
         assert!(observed.error.is_none(), "{implementation}: {observed:?}");
     }
     let one = [signature(&[object()])];
-    let quiet = execute("export function subject(p) { return p.key; }", read, &one);
+    let quiet = execute(
+        "export function subject(p) { return p.key; }",
+        read.clone(),
+        &one,
+    );
     assert!(!quiet.contradicted(), "{quiet:?}");
     assert!(quiet.error.is_none(), "{quiet:?}");
     // The object sample whose member holds a fresh token is what tells the
@@ -818,7 +931,7 @@ fn the_member_module_admits_what_the_argument_holds_at_return_and_undefined() {
         "export function subject(p) { return {}; }",
         "export function subject(p) { return p; }",
     ] {
-        let observed = execute(implementation, read, &one);
+        let observed = execute(implementation, read.clone(), &one);
         assert!(observed.contradicted(), "{implementation}: {observed:?}");
     }
     // A set naming no member and no undefined is synthesized as it was.
@@ -1815,44 +1928,65 @@ fn the_described_callable_module_emits_only_outside_the_described_call() {
         ever: 0,
     };
     for (implementation, observation) in [
-        ("export function subject() { return () => {}; }", valueless),
+        (
+            "export function subject() { return () => {}; }",
+            valueless.clone(),
+        ),
         (
             "export function subject() { return () => undefined; }",
-            valueless,
+            valueless.clone(),
         ),
         (
             "export function subject() { let n = 0; return () => ++n; }",
-            plain,
+            plain.clone(),
         ),
-        ("export function subject() { return () => 'text'; }", plain),
-        ("export function subject() { return () => null; }", plain),
-        ("export function subject() { return () => {}; }", plain),
+        (
+            "export function subject() { return () => 'text'; }",
+            plain.clone(),
+        ),
+        (
+            "export function subject() { return () => null; }",
+            plain.clone(),
+        ),
+        (
+            "export function subject() { return () => {}; }",
+            plain.clone(),
+        ),
     ] {
-        let observed = execute(implementation, observation, &signatures);
+        let observed = execute(implementation, observation.clone(), &signatures);
         assert!(!observed.contradicted(), "{implementation}: {observed:?}");
         assert!(observed.error.is_none(), "{implementation}: {observed:?}");
     }
     for (implementation, observation) in [
-        ("export function subject() { return 1; }", plain),
-        ("export function subject() { return {}; }", plain),
-        ("export function subject() { return () => 1; }", valueless),
-        ("export function subject() { return () => ({}); }", plain),
-        ("export function subject() { return () => () => 1; }", plain),
+        ("export function subject() { return 1; }", plain.clone()),
+        ("export function subject() { return {}; }", plain.clone()),
+        (
+            "export function subject() { return () => 1; }",
+            valueless.clone(),
+        ),
+        (
+            "export function subject() { return () => ({}); }",
+            plain.clone(),
+        ),
+        (
+            "export function subject() { return () => () => 1; }",
+            plain.clone(),
+        ),
         (
             "export function subject() { return (f) => { if (typeof f === 'function') f(); }; }",
-            plain,
+            plain.clone(),
         ),
         (
             "export function subject() { return (f) => { if (typeof f === 'function') queueMicrotask(f); }; }",
-            plain,
+            plain.clone(),
         ),
     ] {
-        let observed = execute(implementation, observation, &signatures);
+        let observed = execute(implementation, observation.clone(), &signatures);
         assert!(observed.contradicted(), "{implementation}: {observed:?}");
     }
     let nothing = execute(
         "export function subject() { return () => { throw new Error('rejected'); }; }",
-        plain,
+        plain.clone(),
         &signatures,
     );
     assert!(!nothing.contradicted(), "{nothing:?}");
@@ -1939,10 +2073,10 @@ fn the_counting_described_callable_module_fires_on_every_other_invocation() {
         ),
         (
             "export function subject(source, times) { return () => { source(); return 1; }; }",
-            first,
+            first.clone(),
         ),
     ] {
-        let observed = execute(implementation, observation, &two);
+        let observed = execute(implementation, observation.clone(), &two);
         assert!(!observed.contradicted(), "{implementation}: {observed:?}");
         assert!(observed.error.is_none(), "{implementation}: {observed:?}");
     }
@@ -1956,7 +2090,7 @@ fn the_counting_described_callable_module_fires_on_every_other_invocation() {
         // A slot no item names.
         "export function subject(source, other) { return () => { source(); other(); return 1; }; }",
     ] {
-        let observed = execute(implementation, first, &two);
+        let observed = execute(implementation, first.clone(), &two);
         assert!(observed.contradicted(), "{implementation}: {observed:?}");
     }
 }

@@ -840,6 +840,24 @@ impl ExportSemantics {
         }
     }
 
+    /// Restates an unaccepted fixed-return enumeration as a proposal. The
+    /// certifier withdraws it again and independently proves every member.
+    /// This cannot propose capability or unrelated call-domain closure.
+    pub fn propose_return_value_closure(&mut self, claim: &ClaimPath) -> Result<(), ModelError> {
+        let supported = matches!(claim, ClaimPath::Value {
+            root: ValueRoot::OperationOutput { operation },
+            domain: ValueClaimDomain::TupleItems | ValueClaimDomain::ObjectProperties,
+            ..
+        } if self.operation(&operation.0).is_some_and(Operation::is_bare_return));
+        if !supported {
+            return Err(ModelError::InvalidKnowledge {
+                path: format!("{claim:?}"),
+                reason: "only a fixed return's member enumeration can be proposed here".into(),
+            });
+        }
+        self.close_verified_claim(claim)
+    }
+
     fn close_verified_claim(&mut self, claim: &ClaimPath) -> Result<(), ModelError> {
         validate::close_verified_claim(self, claim)
     }

@@ -337,12 +337,22 @@ describe("a contract describes what it re-exports from an accepted dependency", 
     expect(closure(consumers.mixed, "opaque").proposed).not.toContain("returns");
   });
 
-  test("a local wrapper of a dependency function states no return of the dependency's (ADR 0170)", () => {
+  test("a local wrapper proposes its own structural return, never the dependency's plain return", () => {
     // `wrapped` calls `count`, whose plain return the dependency closes, but
     // returns an object of its own. Nothing about `count` describes it, so its
-    // `returns` is decided by its own body alone: not proposed.
+    // `returns` is decided by its own body alone. ADR 0172 now proposes its
+    // fresh object for independent proof; the dependency's plain result must
+    // never replace that object.
     expect(closure(dependency, "count").proposed).toContain("returns");
-    expect(closure(consumers.wrapper, "wrapped").proposed).not.toContain("returns");
+    expect(closure(consumers.wrapper, "wrapped").proposed).toContain("returns");
+    const artifactCase = consumers.wrapper.entrypoints["."].cases[0];
+    const summary = consumers.wrapper.summaries[artifactCase.exports.wrapped];
+    const outputs = summary.call.operations
+      .filter(operation => operation.kind === "return")
+      .map(operation => operation.output);
+    expect(outputs).toHaveLength(1);
+    expect(outputs[0].kind).toBe("object");
+    expect(outputs[0].properties.map(property => property.name)).toEqual(["total"]);
     // The one-statement re-export of the same name, beside it, does restate.
     expect(closure(consumers.reexporter, "count").proposed).toContain("returns");
   });
