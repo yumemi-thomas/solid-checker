@@ -211,3 +211,38 @@ bun benchmarks/package-directed-pilot/diagnose-media-bounds.mjs \
   rust/target/package-composition-breadth-1/media-node/execution.json \
   rust/target/package-composition-media-bounds-fresh
 ```
+
+`surface-census.mjs` extends automatic graph certification to the pinned
+97-package corpus without inventing consumer snippets or proposals. It uses
+the retained installs and measured entrypoint inventory, refuses unavailable
+offline artifacts, and preserves each native transaction. Choose a fresh
+prefix and retain the same pinned checker, producer, probe Node and caches:
+
+```sh
+SURFACE_EXPERIMENT_PREFIX=rust/target/package-composition-full-fresh
+for host in none browser node; do
+  bun benchmarks/package-directed-pilot/surface-census.mjs \
+    rust/target/primitives-checkpoint/run-node.json \
+    "${SURFACE_EXPERIMENT_PREFIX}-${host}-1" "$host"
+done
+bun benchmarks/package-directed-pilot/check-surface-census.mjs \
+  rust/target/primitives-checkpoint "$SURFACE_EXPERIMENT_PREFIX"
+bun benchmarks/package-directed-pilot/probe-batch-emits-consumers.mjs \
+  rust/target/primitives-checkpoint/run-node.json "$SURFACE_EXPERIMENT_PREFIX" \
+  rust/target/package-composition-batch-emits-consumers-fresh
+```
+
+The comparison reads native plain and case-set pointers, counts proven
+noncallable values, and rejects missing or additional exports as complete
+packages. The historical run-1 comparison also reads its named SSE supplements;
+the current runner includes that recovered entrypoint directly. Run the two
+observation-reader tests in a worktree because of the known main-checkout
+subprocess EBADF:
+
+```sh
+bun test benchmarks/package-directed-pilot/catalog-surface.test.mjs \
+  benchmarks/package-directed-pilot/surface-census-comparison.test.mjs
+```
+
+See the [whole-corpus result and consumer limitation](../../docs/package-contract-v2/phase22/2026-10-01-whole-corpus-composition-experiment.md).
+These observations do not promote receipts into the production tier.
