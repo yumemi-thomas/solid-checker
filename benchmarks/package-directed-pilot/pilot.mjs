@@ -9,6 +9,7 @@ import { generatePackageContract } from "../../packages/cli/scripts/generate-pac
 import { certifyContract, certificationImporterPathFor } from "../../packages/cli/scripts/certify-contract.mjs";
 import { checkExtended } from "./check-extended.mjs";
 import { checkCompletion } from "./check-completion.mjs";
+import { checkCover, checkBounds } from "./check-cover.mjs";
 import { consumerState } from "../../scripts/contract-coverage-census.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -18,7 +19,9 @@ const run = JSON.parse(readFileSync(runPath));
 const ledger = JSON.parse(readFileSync(join(repo, "fixtures/primitives-misuse/cases.json")));
 const extended = process.argv[4] === "extended";
 const completion = process.argv[4] === "completion";
-if (process.argv[4] && !extended && !completion) throw new Error("The optional experiment mode must be extended or completion");
+const cover = process.argv[4] === "cover";
+const bounds = process.argv[4] === "bounds";
+if (process.argv[4] && !extended && !completion && !cover && !bounds) throw new Error("The optional experiment mode must be extended, completion, cover or bounds");
 for (const key of ["SOLID_CHECKER_NATIVE_BIN", "SOLID_TYPEFACTS_BIN", "SOLID_CHECKER_PROBE_NODE"]) {
   if (!process.env[key] || !existsSync(process.env[key])) throw new Error(`${key} must name the existing pinned binary`);
 }
@@ -55,16 +58,30 @@ const completionTrials = [
   ["event-dispatcher", "createEventDispatcher", ["dispatcher-completion"], "browser", "complete"],
   ["platform", "isAndroid", ["platform-completion"], "node", "complete"]
 ];
-for (const [name, target, cases, host = "browser", mode = "initial"] of completion ? completionTrials : extended ? extendedTrials : initialTrials) {
-  const negative = cases.length === 0;
-  const trial = extended || completion ? `${name}-${host}-${mode}` : negative ? "utils-omitted-getter" : name;
+const coverTrials = [
+  ["event-listener", "createEventListener", ["event-listener-createEventListener-module-scope"], "browser", "owner-guaranteed"],
+  ["event-listener", "createEventListener", ["event-listener-createEventListener-module-scope"], "node", "owner-guaranteed"],
+  ["event-listener", "createEventListener", ["event-listener-createEventListener-module-scope"], "none", "owner-guaranteed"],
+  ["raf", "createRAF", ["raf-createRAF-module-scope"], "browser", "owner-only"],
+  ["memo", "createPureReaction", ["memo-createPureReaction-module-scope"], "browser", "owner-only"]
+];
+const boundsTrials = [
+  ["lifecycle", "onElementConnect", ["lifecycle-connect-control"], "browser", "owner-bounds"],
+  ["permission", "createPermission", ["permission-createPermission-module-scope"], "browser", "owner-bounds"],
+  ["sensors", "createSensor", [], "browser", "owner-bounds"],
+  ["timer", "createTimer", ["timer-createTimer-module-scope", "timer-createTimeoutLoop-module-scope"], "browser", "owner-bounds"],
+  ["workers", "createReactiveWorker", [], "browser", "owner-bounds"]
+];
+for (const [name, target, cases, host = "browser", mode = "initial"] of bounds ? boundsTrials : cover ? coverTrials : completion ? completionTrials : extended ? extendedTrials : initialTrials) {
+  const negative = name === "utils" && cases.length === 0;
+  const trial = extended || completion || cover || bounds ? `${name}-${host}-${mode}` : negative ? "utils-omitted-getter" : name;
   const hostArgs = host === "none" ? [] : ["--host", host];
   const dir = join(out, trial);
   mkdirSync(dir);
   const row = run.results.find(row => row.package === `@solid-primitives/${name}`);
   if (!row?.retainedArtifacts) throw new Error(`No retained published install for ${name}`);
   const packageRoot = realpathSync(join(row.retainedArtifacts.projectDir, "node_modules", row.package));
-  const expectedVersion = { utils: "7.0.0-next.4", "event-listener": "3.0.0-next.5", raf: "4.0.0-next.2", memo: "2.0.0-next.2", "event-dispatcher": "1.0.0-next.2", platform: "1.0.0-next.2" }[name];
+  const expectedVersion = { utils: "7.0.0-next.4", "event-listener": "3.0.0-next.5", raf: "4.0.0-next.2", memo: "2.0.0-next.2", "event-dispatcher": "1.0.0-next.2", platform: "1.0.0-next.2", lifecycle: "1.0.0-next.2", permission: "2.0.0-next.2", sensors: "1.0.0-next.3", timer: "1.4.5-next.1", workers: "2.0.1-next.1" }[name];
   if (row.version !== expectedVersion) throw new Error(`Unaudited package version: ${row.version}`);
   for (const dependency of ["solid-js", "@solidjs/web", "@solidjs/signals"]) {
     const manifest = JSON.parse(readFileSync(join(dirname(dirname(packageRoot)), dependency, "package.json")));
@@ -86,6 +103,22 @@ for (const [name, target, cases, host = "browser", mode = "initial"] of completi
   const references = new Set(Object.values(document.entrypoints).flatMap(entry => entry.cases.flatMap(c =>
     Object.values(c.exports).map(ref => typeof ref === "string" ? ref : ref.summary))));
   for (const id of Object.keys(document.summaries)) if (!references.has(id)) delete document.summaries[id];
+  const proposedOwnerBounds = [];
+  if (bounds) {
+    for (const [exportName, reference] of Object.entries(artifactCase.exports)) {
+      const value = document.summaries[typeof reference === "string" ? reference : reference.summary];
+      for (const op of value.call?.operations ?? []) {
+        if (op.owner?.requires === "required" && [0, 1].includes(op.count?.min)) {
+          proposedOwnerBounds.push({ export: exportName, operation: op.id, originalMin: op.count.min, proposedMin: 1 });
+        }
+      }
+    }
+    for (const value of Object.values(document.summaries)) {
+      for (const op of value.call?.operations ?? []) {
+        if (op.owner?.requires === "required" && op.count?.min === 0) op.count.min = 1;
+      }
+    }
+  }
   if (negative) {
     summary.call.operations = summary.call.operations.filter(op => op.id !== "callback-1");
     summary.call.callbacks = summary.call.callbacks.filter(item => item.operation !== "callback-1");
@@ -141,8 +174,15 @@ for (const [name, target, cases, host = "browser", mode = "initial"] of completi
   const acceptedSummary = main.summaries[acceptedCase.exports[target]];
   const observed = { trial, package: row.package, version: row.version, host, mode, result,
     packageRoot, integrity, artifact: artifactCase.artifact, declarations: artifactCase.declarations,
-    acceptedSummary, withheldClosures: audit.withheldClosures.filter(item => item.export === target),
-    withheldOperations: audit.withheldOperations.filter(item => item.export === target), consumers: [] };
+    acceptedSummary, withheldClosures: audit.withheldClosures.filter(item => bounds || item.export === target),
+    withheldOperations: audit.withheldOperations.filter(item => bounds || item.export === target), consumers: [] };
+  if (bounds) {
+    observed.ownerBounds = proposedOwnerBounds.map(item => {
+      const reference = acceptedCase.exports[item.export];
+      const value = main.summaries[typeof reference === "string" ? reference : reference.summary];
+      return { ...item, acceptedMin: value.call?.operations?.find(op => op.id === item.operation)?.count?.min ?? null };
+    });
+  }
   observed.surface = Object.entries(acceptedCase.exports).map(([name, reference]) => ({ export: name, state: consumerState(main, reference) }));
   for (const id of cases) {
     let item = ledger.cases.find(item => item.id === id);
@@ -150,6 +190,11 @@ for (const [name, target, cases, host = "browser", mode = "initial"] of completi
       item = { rule: null, kind: null,
         misuse: 'import { createSignal } from "solid-js";\nimport { createEventDispatcher } from "@solid-primitives/event-dispatcher";\nexport default function App() {\n  const [count] = createSignal(0);\n  const dispatch = createEventDispatcher({ onPing: (_event: CustomEvent<number>) => count() });\n  const result = dispatch("ping", 1);\n  return <p>{String(result)}</p>;\n}\n',
         correct: 'import { createEventDispatcher } from "@solid-primitives/event-dispatcher";\nexport default function App() {\n  const dispatch = createEventDispatcher({ onPing: (_event: CustomEvent<number>) => {} });\n  return <p>{String(dispatch("ping", 1))}</p>;\n}\n' };
+    } else if (id === "lifecycle-connect-control") {
+      const call = 'onElementConnect(document.createElement("div"), () => {});';
+      item = { rule: "missing-owner", kind: "uncertifiable",
+        misuse: `import { onElementConnect } from "@solid-primitives/lifecycle";\n${call}\n`,
+        correct: `import { createRoot } from "solid-js";\nimport { onElementConnect } from "@solid-primitives/lifecycle";\ncreateRoot(dispose => { ${call} return dispose; });\n` };
     } else if (id === "platform-completion") {
       const exports = Object.keys(artifactCase.exports).sort();
       const source = `import { ${exports.join(", ")} } from "@solid-primitives/platform";\nexport default function App() { return <p>{[${exports.join(", ")}].map(String).join(",")}</p>; }\n`;
@@ -194,12 +239,17 @@ for (const [name, target, cases, host = "browser", mode = "initial"] of completi
         contains(pair.authored.correct, "SC4001", "violation")) throw new Error("RAF owner claim did not produce the measured improvement");
     if (acceptedSummary.call?.operations?.some(op => op.id === "pilot-return")) throw new Error("Unsupported RAF tuple was accepted");
   }
-  if (!extended && name === "event-listener" && acceptedSummary.call?.operations?.some(op => op.id === "pilot-effect-owner"))
-    throw new Error("Listener proof behavior changed; review the stronger acceptance before declaring success");
+  if (!extended && !cover && name === "event-listener" && acceptedSummary.call?.operations?.some(op => op.id === "pilot-effect-owner")) {
+    const pair = observed.consumers[0];
+    if (!contains(pair.authored.misuse, "SC4001", "violation") || pair.authored.correct.some(item => item.id === "SC4001"))
+      throw new Error("Accepted listener registration did not project the reviewed owner finding");
+  }
   results.push(observed);
-  write(join(out, "results.json"), { mode: completion ? "completion" : extended ? "extended" : "initial", runPath, results });
+  write(join(out, "results.json"), { mode: bounds ? "bounds" : cover ? "cover" : completion ? "completion" : extended ? "extended" : "initial", runPath, results });
   console.log(JSON.stringify({ trial, status: result.status, withheld: observed.withheldOperations.length,
     consumers: observed.consumers.map(pair => ({ id: pair.id, baseline: pair.baseline, authored: pair.authored })) }));
 }
 if (extended) console.log(JSON.stringify(checkExtended({ mode: "extended", results })));
 if (completion) console.log(JSON.stringify(checkCompletion({ mode: "completion", results })));
+if (cover) console.log(JSON.stringify(checkCover({ mode: "cover", results })));
+if (bounds) console.log(JSON.stringify(checkBounds({ mode: "bounds", results })));

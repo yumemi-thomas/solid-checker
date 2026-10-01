@@ -1,8 +1,9 @@
 # Package-directed contract pilot
 
 This offline experiment tests whether explicit proposals improve findings while
-using the existing verifier. It does not add proof rules or publish into the
-accepted tier. Read the [result](../../docs/package-contract-v2/phase22/2026-10-01-package-directed-pilot.md)
+using independently authenticated proposals. The first three modes use the
+original verifier capabilities; `cover` and `bounds` test ADR 0173's bounded
+owner proof. No mode publishes into the accepted tier. Read the [result](../../docs/package-contract-v2/phase22/2026-10-01-package-directed-pilot.md)
 for measured limits, including the distinction between an authenticated partial
 receipt and a complete package.
 
@@ -72,3 +73,21 @@ Runtime probes and the inventory refuse to overwrite earlier evidence. The
 probes compare exact source hashes and resolution conditions; passing samples
 confer no proof authority. Inventory counts reuse retained measurements and do
 not predict the gain from a future proof rule.
+
+Append `cover` for the listener's guaranteed registration across browser/node/
+none, plus browser RAF/memo controls. Append `bounds` for attempts to strengthen
+the ten remaining possible owner operations across lifecycle, permission,
+sensors, timer and workers. See the
+[owner-cover experiment](../../docs/package-contract-v2/phase22/2026-10-01-owner-cover-experiment.md).
+The earlier reports remain historical measurements; the new proof changes the
+default pilot's listener result to a browser owner violation when running the
+prototype checker. That implementation lives on `codex/owner-cover-experiment`
+in `.claude/worktrees/codex-owner-cover-experiment`; point
+`SOLID_CHECKER_NATIVE_BIN` at its release binary. The main verifier is unchanged.
+
+```sh
+bun benchmarks/package-directed-pilot/check-cover.mjs \
+  rust/target/package-directed-owner-cover-final/results.json
+bun benchmarks/package-directed-pilot/check-cover.mjs \
+  rust/target/package-directed-owner-bounds/results.json
+```
