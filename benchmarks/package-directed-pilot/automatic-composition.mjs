@@ -9,11 +9,16 @@ import { preparePublishedGraphCases, buildPublishedGraphExecutionRequest, certif
   withheldClosuresFromNativeOutput, withheldOperationsFromNativeOutput } from "../../packages/cli/scripts/certify-contract.mjs";
 import { consumerState } from "../../scripts/contract-coverage-census.mjs";
 import { automaticCompositionCases as specs, callTimeProbeSource } from "./automatic-composition-cases.mjs";
+import { parameterPassthroughCases } from "./parameter-passthrough-cases.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const run = JSON.parse(readFileSync(resolve(process.argv[2]))), out = resolve(process.argv[3]);
 const requested = process.argv[4]?.split(",");
-if (requested) assert(requested.length > 0 && requested.every(name => specs.some(spec => spec.name === name)),
+const hosts = process.argv[5]?.split(",") ?? ["node", "browser"];
+assert(hosts.length > 0 && new Set(hosts).size === hosts.length
+  && hosts.every(host => ["none", "node", "browser"].includes(host)), "Select exact hosts");
+const selectedSpecs = requested ? [...specs, ...parameterPassthroughCases].filter(spec => requested.includes(spec.name)) : specs;
+if (requested) assert(requested.length > 0 && requested.every(name => selectedSpecs.some(spec => spec.name === name)),
   "Select known package names separated by commas");
 assert(!existsSync(out), "Preserve earlier evidence; choose a fresh directory");
 for (const key of ["SOLID_CHECKER_NATIVE_BIN", "SOLID_TYPEFACTS_BIN", "SOLID_CHECKER_PROBE_NODE"])
@@ -29,7 +34,7 @@ async function child(args) {
 mkdirSync(out, { recursive: true });
 const document = { authority: false, kind: "automatic-composition-breadth", authoredProposals: 0,
   checkerSha256: hash(readFileSync(process.env.SOLID_CHECKER_NATIVE_BIN)), producerSha256: hash(readFileSync(process.env.SOLID_TYPEFACTS_BIN)), results: [] };
-for (const spec of specs.filter(spec => !requested || requested.includes(spec.name))) {
+for (const spec of selectedSpecs) {
   const row = run.results.find(item => item.package === `@solid-primitives/${spec.name}`);
   assert.equal(row?.version, spec.version);
   const packageRoot = realpathSync(join(row.retainedArtifacts.projectDir, "node_modules", row.package));
@@ -37,11 +42,11 @@ for (const spec of specs.filter(spec => !requested || requested.includes(spec.na
     assert.equal(JSON.parse(readFileSync(join(dirname(dirname(packageRoot)), dependency, "package.json"))).version, "2.0.0-rc.9");
   const retained = join(realpathSync(row.retainedArtifacts.outputDir), `@solid-primitives__${spec.name}@${spec.version}--solid2--head.json`);
   const integrity = JSON.parse(readFileSync(retained)).package.integrity;
-  for (const host of ["node", "browser"]) {
+  for (const host of hosts) {
     const dir = join(out, `${spec.name}-${host}`); mkdirSync(dir);
     const catalog = join(dir, "accepted");
     const options = { packageRoot, integrity, registryOrigin: "https://registry.npmjs.org", catalog,
-      issuerConfiguration: retained + ".accepted-catalog.authority/issuer.json", host, conditions: [], entrypoints: ["."],
+      issuerConfiguration: retained + ".accepted-catalog.authority/issuer.json", host: host === "none" ? null : host, conditions: [], entrypoints: ["."],
       probeRecipeCorpus: join(repo, "scripts/ecosystem-benchmark/probe-recipes") };
     const observed = { package: row.package, version: row.version, integrity, host, targets: spec.targets, consumers: [] };
     document.results.push(observed);
@@ -49,7 +54,7 @@ for (const spec of specs.filter(spec => !requested || requested.includes(spec.na
     try {
       graph = await preparePublishedGraphCases({ options, manifest: JSON.parse(readFileSync(join(packageRoot, "package.json"))),
         scratch: join(dir, "graph"), certificationImporter: certificationImporterPathFor({ packageRoot, catalog }),
-        dependencyCases: [{ entrypoint: ".", conditions: [host] }],
+        dependencyCases: [{ entrypoint: ".", conditions: host === "none" ? [] : [host] }],
         fetch_: async () => { throw new Error("Offline experiment: exact archive unavailable"); } });
       if (graph.preparedCases.length !== 1) throw new Error(`Exact graph unavailable: ${JSON.stringify(graph)}`);
     } catch (error) {
@@ -102,7 +107,8 @@ for (const spec of specs.filter(spec => !requested || requested.includes(spec.na
       for (const variant of ["baseline", "generated"]) {
         const flags = variant === "generated" ? ["--accepted-contracts", join(catalog, "accepted-contracts.json"),
           "--receipt-trust-configuration", join(dir, "trust.json")] : [];
-        const response = await child([process.env.SOLID_CHECKER_NATIVE_BIN, "--format", "json", "--project", project, "--conditions", host, ...flags]);
+        const response = await child([process.env.SOLID_CHECKER_NATIVE_BIN, "--format", "json", "--project", project,
+          ...(host === "none" ? [] : ["--runtime-target", host]), ...flags]);
         write(join(dir, `${specimen.id}.${variant}.json`), response);
         assert([0, 1].includes(response.status), response.stderr);
         const parsed = JSON.parse(response.stdout);

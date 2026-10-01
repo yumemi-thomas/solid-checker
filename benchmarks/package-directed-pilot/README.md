@@ -1,5 +1,29 @@
 # Package-directed contract pilot
 
+The [parameter-only body experiment](../../docs/package-contract-v2/phase22/2026-10-01-parameter-only-bodies-and-i18n.md)
+adds an explicit `i18n` selection to the automatic runner. An optional fifth
+argument selects hosts (`none,browser,node`); the historical default cohort
+and two-host selection remain unchanged. Consumer analysis uses the
+checkpoint's runtime-target option. With the pinned environment below:
+
+```sh
+bun benchmarks/package-directed-pilot/automatic-composition.mjs \
+  rust/target/primitives-checkpoint/run-node.json \
+  rust/target/package-composition-passthrough-fresh i18n none,browser,node
+bun benchmarks/package-directed-pilot/check-parameter-passthrough.mjs \
+  rust/target/package-composition-passthrough-before-2/results.json \
+  rust/target/package-composition-passthrough-after-1/results.json \
+  rust/target/package-composition-passthrough-none-1/results.json \
+  rust/target/package-composition-passthrough-comparison-fresh.json
+bun benchmarks/package-directed-pilot/probe-i18n-consumers.mjs \
+  rust/target/primitives-checkpoint/run-node.json \
+  rust/target/package-composition-passthrough-after-1/results.json \
+  rust/target/package-composition-passthrough-none-1/results.json \
+  rust/target/package-composition-i18n-twins-fresh
+bun benchmarks/package-directed-pilot/check-i18n-consumers.mjs \
+  rust/target/package-composition-i18n-consumers-1/results.json
+```
+
 The [active browser and host-misuse experiment](../../docs/package-contract-v2/phase22/2026-10-01-active-browser-and-host-misuse.md)
 replays the automatic matrix after ADR 0176 and tests host-specific ledger
 expectations. The automatic runner accepts an optional comma-separated list
