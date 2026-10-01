@@ -9,6 +9,8 @@ import { withheldClosuresFromNativeOutput, withheldOperationsFromNativeOutput } 
 const read = path => JSON.parse(readFileSync(path));
 const write = (path, value) => writeFileSync(path, JSON.stringify(value, null, 2) + "\n");
 const original = resolve(process.argv[2]), out = resolve(process.argv[3]);
+const scope = process.argv[4] ?? "target";
+assert(["target", "all"].includes(scope));
 assert(!existsSync(out), "Choose a fresh directory; preserve earlier evidence");
 assert(process.env.SOLID_CHECKER_NATIVE_BIN && existsSync(process.env.SOLID_CHECKER_NATIVE_BIN));
 mkdirSync(out, { recursive: true });
@@ -19,8 +21,11 @@ assert.deepEqual(request.graph.root.planning.exportConditions, ["import", "node"
 const ref = candidate.entrypoints["."].cases[0].exports.makeMediaQueryListener;
 const summary = candidate.summaries[typeof ref === "string" ? ref : ref.summary];
 assert(summary.call.accessorBounds?.length > 0);
-const removedBounds = summary.call.accessorBounds;
-delete summary.call.accessorBounds;
+const removedBounds = scope === "target"
+  ? [{ summary: ref, bounds: summary.call.accessorBounds }]
+  : Object.entries(candidate.summaries).filter(([, value]) => value.call?.accessorBounds?.length)
+    .map(([key, value]) => ({ summary: key, bounds: value.call.accessorBounds }));
+for (const item of removedBounds) delete candidate.summaries[item.summary].call.accessorBounds;
 const proposal = join(out, "proposal.json"); write(proposal, candidate);
 request.graph.root.planning.proposal = proposal;
 request.catalogRoot = join(out, "accepted");
@@ -30,7 +35,7 @@ const process_ = Bun.spawn([process.env.SOLID_CHECKER_NATIVE_BIN, "--execute-con
   { stdout: "pipe", stderr: "pipe", env: { ...process.env, SOLID_CHECKER_DAEMON: "0" } });
 const [status, stdout, stderr] = await Promise.all([process_.exited, new Response(process_.stdout).text(), new Response(process_.stderr).text()]);
 const document = { authority: false, kind: "media-accessor-bounds-diagnostic", authoredProposals: 1,
-  original, removedBounds, native: { status, stdout, stderr } };
+  original, scope, removedBounds, native: { status, stdout, stderr } };
 if (status === 0) {
   const pointer = read(join(request.catalogRoot, "accepted-contracts.json"));
   const accepted = read(join(request.catalogRoot, pointer.contracts[0].document));

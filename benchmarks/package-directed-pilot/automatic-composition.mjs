@@ -12,6 +12,9 @@ import { automaticCompositionCases as specs, callTimeProbeSource } from "./autom
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const run = JSON.parse(readFileSync(resolve(process.argv[2]))), out = resolve(process.argv[3]);
+const requested = process.argv[4]?.split(",");
+if (requested) assert(requested.length > 0 && requested.every(name => specs.some(spec => spec.name === name)),
+  "Select known package names separated by commas");
 assert(!existsSync(out), "Preserve earlier evidence; choose a fresh directory");
 for (const key of ["SOLID_CHECKER_NATIVE_BIN", "SOLID_TYPEFACTS_BIN", "SOLID_CHECKER_PROBE_NODE"])
   assert(process.env[key] && existsSync(process.env[key]), `${key} must name a pinned binary`);
@@ -26,7 +29,7 @@ async function child(args) {
 mkdirSync(out, { recursive: true });
 const document = { authority: false, kind: "automatic-composition-breadth", authoredProposals: 0,
   checkerSha256: hash(readFileSync(process.env.SOLID_CHECKER_NATIVE_BIN)), producerSha256: hash(readFileSync(process.env.SOLID_TYPEFACTS_BIN)), results: [] };
-for (const spec of specs) {
+for (const spec of specs.filter(spec => !requested || requested.includes(spec.name))) {
   const row = run.results.find(item => item.package === `@solid-primitives/${spec.name}`);
   assert.equal(row?.version, spec.version);
   const packageRoot = realpathSync(join(row.retainedArtifacts.projectDir, "node_modules", row.package));

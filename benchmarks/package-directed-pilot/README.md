@@ -1,5 +1,29 @@
 # Package-directed contract pilot
 
+The [active browser and host-misuse experiment](../../docs/package-contract-v2/phase22/2026-10-01-active-browser-and-host-misuse.md)
+replays the automatic matrix after ADR 0176 and tests host-specific ledger
+expectations. The automatic runner accepts an optional comma-separated list
+of package names after its output directory for focused replays.
+
+```sh
+bun benchmarks/package-directed-pilot/compare-composition-replay.mjs \
+  rust/target/package-composition-breadth-1/results.json \
+  rust/target/package-composition-deferred-reads-1/results.json \
+  rust/target/package-composition-deferred-reads-1/comparison-fresh.json
+SOLID_CHECKER_PROBE_NODE=/Users/thomas/.vite-plus/js_runtime/node/24.21.0/bin/node \
+bun benchmarks/package-directed-pilot/probe-active-listeners.mjs \
+  rust/target/primitives-checkpoint/run-node.json \
+  rust/target/package-composition-deferred-reads-1/results.json \
+  rust/target/package-composition-active-listeners-fresh
+```
+
+With the pinned checker/producer/probe environment below,
+`check-host-misuse-controls.mjs` takes the same three arguments as the listener
+probe. It uses existing ledger source verbatim without changing expectations.
+`diagnose-media-bounds.mjs` optionally takes `all` after its output directory
+to remove all bounds in an authored diagnostic; default `target` removes only
+the maker's shared summary. Neither observation grants proof authority.
+
 This offline experiment tests whether explicit proposals improve findings while
 using independently authenticated proposals. The first three modes use the
 original verifier capabilities; `cover` and `bounds` test ADR 0173's bounded
