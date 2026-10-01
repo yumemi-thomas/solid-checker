@@ -91,3 +91,38 @@ bun benchmarks/package-directed-pilot/check-cover.mjs \
 bun benchmarks/package-directed-pilot/check-cover.mjs \
   rust/target/package-directed-owner-bounds/results.json
 ```
+
+`composition.mjs` records the whole timer package's node/browser baseline and
+an exact-runtime counterexample to claiming that its captured callback result
+is always plain. It uses existing forms only. The
+[composition baseline and proposed boundary](../../docs/package-contract-v2/phase22/2026-10-01-composition-timer-baseline.md)
+records the owner decision needed before implementation. Use the same binary
+and cache environment above, with a fresh output directory:
+
+```sh
+bun benchmarks/package-directed-pilot/composition.mjs \
+  rust/target/primitives-checkpoint/run-node.json \
+  rust/target/package-composition-baseline-fresh
+bun benchmarks/package-directed-pilot/check-composition.mjs \
+  rust/target/package-composition-baseline/results.json
+```
+
+`composed-cursor.mjs` tests existing described-callable shapes across a local
+helper and an authenticated dependency graph. It uses the isolated
+`codex/composition-callables` checker and authors proposals for all six cursor
+exports. See the [result and limits](../../docs/package-contract-v2/phase22/2026-10-01-composed-callables-experiment.md).
+Keep the producer, probe Node and cache environment above, but point
+`SOLID_CHECKER_NATIVE_BIN` at that worktree's release checker:
+
+```sh
+bun benchmarks/package-directed-pilot/composed-cursor.mjs \
+  rust/target/primitives-checkpoint/run-node.json \
+  rust/target/package-composition-cursor-fresh
+bun benchmarks/package-directed-pilot/check-composed-cursor.mjs \
+  rust/target/package-composition-cursor-final/results.json
+```
+
+Append `open-dependency` or `withheld-dependency` to the runner with a fresh
+output directory for the two node refusal controls. The latter proves an
+incorrect child return cannot survive as a parent guarantee. No mode updates
+the committed tier or treats the runtime falsifier as proof authority.
