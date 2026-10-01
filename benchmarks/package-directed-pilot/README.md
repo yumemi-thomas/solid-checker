@@ -126,3 +126,40 @@ Append `open-dependency` or `withheld-dependency` to the runner with a fresh
 output directory for the two node refusal controls. The latter proves an
 incorrect child return cannot survive as a parent guarantee. No mode updates
 the committed tier or treats the runtime falsifier as proof authority.
+
+Append `automatic` for the cursor trial using only native-generated proposals,
+including dependencies. The historical consumer field `authored` names the
+experiment receipt in this mode too; `automatic: true` identifies the mode.
+
+`automatic-composition.mjs` extends that test across seven additional exact
+published packages and both hosts. It hashes every generated graph input and
+asserts it is unchanged after certification. See the
+[breadth results and remaining walls](../../docs/package-contract-v2/phase22/2026-10-01-automatic-composition-breadth.md).
+Use the same pinned worktree checker, producer, probe Node and offline caches:
+
+```sh
+bun benchmarks/package-directed-pilot/automatic-composition.mjs \
+  rust/target/primitives-checkpoint/run-node.json \
+  rust/target/package-composition-breadth-fresh
+bun benchmarks/package-directed-pilot/probe-automatic-composition.mjs \
+  rust/target/primitives-checkpoint/run-node.json \
+  rust/target/package-composition-breadth-1/results.json \
+  rust/target/package-composition-breadth-call-time-fresh
+bun benchmarks/package-directed-pilot/check-automatic-composition.mjs \
+  rust/target/package-composition-breadth-1/results.json \
+  rust/target/package-composition-breadth-call-time-1/results.json
+```
+
+The separate probe runner repeats only runtime observations against unchanged
+certification evidence. It installs guards after normal module import. Earlier
+pre-import guard failures are retained harness defects, not semantic findings.
+
+`diagnose-media-bounds.mjs` is a separate authored control that removes only
+the media listener's accessor bounds and asks native certification to prove
+the stronger proposal. It is excluded from the automatic-generation counts:
+
+```sh
+bun benchmarks/package-directed-pilot/diagnose-media-bounds.mjs \
+  rust/target/package-composition-breadth-1/media-node/execution.json \
+  rust/target/package-composition-media-bounds-fresh
+```

@@ -5,6 +5,11 @@ Date: 2026-10-01. Implementation is isolated on
 No production verifier or accepted tier has changed.
 Implementation commit: `2726e7f94`, based on delivery branch commit `e6eb94400`.
 
+This records the authored-proposal trial. The subsequent
+[automatic generation and breadth trial](2026-10-01-automatic-composition-breadth.md)
+reaches the same cursor result without authored proposals and measures six more
+runnable package surfaces plus a published-artifact refusal.
+
 The existing described-callable shape now composes an exact local helper and
 an exact dependency's authenticated claims. The published
 `@solid-primitives/cursor@1.0.0-next.2` trial, pinned to Solid rc.9, closes all

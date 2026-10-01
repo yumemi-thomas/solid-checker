@@ -16,7 +16,8 @@ assert.equal(JSON.parse(readFileSync(join(repo, "packages/cli/node_modules/types
 const runPath = resolve(process.argv[2]), out = resolve(process.argv[3]);
 const openDependency = process.argv[4] === "open-dependency";
 const withheldDependency = process.argv[4] === "withheld-dependency";
-assert(!process.argv[4] || openDependency || withheldDependency, "Unknown composition mode");
+const automatic = process.argv[4] === "automatic";
+assert(!process.argv[4] || openDependency || withheldDependency || automatic, "Unknown composition mode");
 assert(!existsSync(out), "Choose a fresh output directory; preserve earlier evidence");
 for (const key of ["SOLID_CHECKER_NATIVE_BIN", "SOLID_TYPEFACTS_BIN", "SOLID_CHECKER_PROBE_NODE"])
   assert(process.env[key] && existsSync(process.env[key]), `${key} must name an existing pinned binary`);
@@ -35,7 +36,7 @@ async function child(args) {
   return { status, stdout, stderr };
 }
 mkdirSync(out, { recursive: true });
-const document = { authority: false, kind: "composed-cursor", openDependency, withheldDependency, package: row.package, version: row.version, integrity,
+const document = { authority: false, kind: "composed-cursor", openDependency, withheldDependency, automatic, package: row.package, version: row.version, integrity,
   checkerSha256: digest(readFileSync(process.env.SOLID_CHECKER_NATIVE_BIN)),
   producerSha256: digest(readFileSync(process.env.SOLID_TYPEFACTS_BIN)), results: [] };
 const imports = 'import { createBodyCursor, createDragCursor, createElementCursor, cursorRef, makeBodyCursor, makeElementCursor } from "@solid-primitives/cursor";\n';
@@ -60,6 +61,7 @@ for (const host of openDependency || withheldDependency ? ["node"] : ["node", "b
   assert.equal(graph.preparedCases.length, 1, "The exact host graph must survive preparation");
   const graphCase = graph.preparedCases[0];
   for (const state of graphCase.nodes) {
+    if (automatic) continue;
     if (state.node.packageName !== "@solid-primitives/utils") continue;
     const dependency = JSON.parse(readFileSync(state.planning.proposal));
     for (const item of dependency.entrypoints["."].cases) {
@@ -105,6 +107,7 @@ for (const host of openDependency || withheldDependency ? ["node"] : ["node", "b
   graphCase.root.planning.inapplicableCases = regenerated.inapplicableCases ?? [];
   const candidate = JSON.parse(readFileSync(graphCase.root.planning.proposal)); write(join(dir, "automatic-proposal.json"), candidate);
   const artifact = candidate.entrypoints["."].cases[0];
+  if (!automatic) {
   for (const [target, ref] of Object.entries(artifact.exports)) {
     const summary = structuredClone(candidate.summaries[typeof ref === "string" ? ref : ref.summary]);
     artifact.exports[target] = `composition-${target}`; candidate.summaries[artifact.exports[target]] = summary;
@@ -133,6 +136,7 @@ for (const host of openDependency || withheldDependency ? ["node"] : ["node", "b
   const referenced = new Set(Object.values(candidate.entrypoints).flatMap(entry => entry.cases.flatMap(item =>
     Object.values(item.exports).map(ref => typeof ref === "string" ? ref : ref.summary))));
   for (const id of Object.keys(candidate.summaries)) if (!referenced.has(id)) delete candidate.summaries[id];
+  }
   write(proposal, candidate);
   graphCase.root.planning.proposal = proposal;
   const execution = buildPublishedGraphExecutionRequest({ cases: graph.preparedCases,
