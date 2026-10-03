@@ -3,8 +3,9 @@
 // The synchronous stack is captured up to `maxFrames`; a record whose stack
 // reaches that depth says so, because a missing application frame below it
 // cannot then be distinguished from one that was never there.
-export function createReadCollector({ maxEvents = 256, maxBytes = 1024 * 1024, maxFrames = 40, maxScopes = 4096 } = {}) {
-  const events = [], nodes = new WeakMap(), scopes = new Map();
+export function createReadCollector({ maxEvents = 256, maxBytes = 1024 * 1024, maxFrames = 40, maxScopes = 4096, maxDiagnostics = 256 } = {}) {
+  const events = [], nodes = new WeakMap(), scopes = new Map(), diagnostics = [];
+  let diagnosticsDropped = 0;
   let nextNode = 0, intent = 0, bytes = 0, dropped = 0, reads = 0, queries = 0, inspecting = 0, current = null, scopesDropped = 0;
   function frames(skip) {
     const limit = Error.stackTraceLimit;
@@ -45,6 +46,16 @@ export function createReadCollector({ maxEvents = 256, maxBytes = 1024 * 1024, m
   }
   return {
     events,
+    diagnostics,
+    get diagnosticsDropped() { return diagnosticsDropped; },
+    // A Solid dev diagnostic is emitted synchronously at the operation that
+    // triggered it, so the stack captured here locates that operation.
+    diagnostic(event) {
+      if (diagnostics.length >= maxDiagnostics) { diagnosticsDropped++; return; }
+      const stack = frames(this.diagnostic);
+      diagnostics.push({ code: event?.code ?? null, kind: event?.kind ?? null, severity: event?.severity ?? null,
+        message: String(event?.message ?? "").slice(0, 400), frames: stack.frames, stackTruncated: stack.truncated });
+    },
     get stats() { return { reads, observerQueries: queries, retained: events.length, dropped, bytes, complete: false }; },
     get scopes() { return { rows: [...scopes.values()].map(row => ({ ...row })), dropped: scopesDropped }; },
     enterFunction(encoded, parent) {

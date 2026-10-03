@@ -131,3 +131,21 @@ test("candidate scope summary separates unloaded files, skipped instrumentation 
   const located = summarizeCandidateScopes([model], { instrumented, scopes, lineOf: (file, byte) => `${file}@${byte}` });
   assert.equal(located.notEntered.find(row => row.status === "not-entered").line, `${path}@50`);
 });
+
+test("Solid dev diagnostics keep their code, message and a bounded stack", () => {
+  const collector = createReadCollector({ maxDiagnostics: 1 });
+  collector.diagnostic({ code: "NO_OWNER_CLEANUP", kind: "lifecycle", severity: "warn", message: "x".repeat(600) });
+  collector.diagnostic({ code: "STRICT_READ_UNTRACKED", kind: "strict-read", severity: "warn", message: "second" });
+  assert.equal(collector.diagnostics.length, 1); assert.equal(collector.diagnosticsDropped, 1);
+  const [row] = collector.diagnostics;
+  assert.equal(row.code, "NO_OWNER_CLEANUP"); assert.equal(row.message.length, 400);
+  assert(Array.isArray(row.frames)); assert.equal(typeof row.stackTruncated, "boolean");
+});
+
+test("a diagnosed operation is attributed past Solid's runtime to the code that performed it", async () => {
+  const { operationFrame } = await import("../scripts/feedback-attribution.mjs");
+  const signals = await attribute(reader), routing = await attribute(router), app = await attribute(frame("/src/App.tsx", 1, 3));
+  assert.deepEqual(operationFrame([signals, routing, app]), { in: "package", package: { name: "@solidjs/router", version: "0.16.0" } });
+  assert.deepEqual(operationFrame([signals, app]), { in: "application" });
+  assert.deepEqual(operationFrame([await attribute(frame(`/@fs${root}/collector.mjs`)), signals]), { in: "unknown" });
+});

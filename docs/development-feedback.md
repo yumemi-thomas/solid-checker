@@ -284,6 +284,27 @@ candidates read their reactive inputs before `await` or inside tracked memos,
 so the quiet result is consistent with the source. That is one application's
 three candidates, not a precision rate.
 
+### Solid dev diagnostics
+
+The collector subscribes to the dev build's `OBSERVE.diagnostics` channel. Solid
+emits each diagnostic synchronously at the operation that triggered it
+(`STRICT_READ_UNTRACKED`, `NO_OWNER_CLEANUP`, `NO_OWNER_EFFECT`,
+`REACTIVE_WRITE_IN_OWNED_SCOPE`, `CLEANUP_IN_FORBIDDEN_SCOPE`, …), so the
+stack captured there locates it. `execution.diagnostics` lists each one with
+its code, severity and message. It has a `site` when a frame maps to configured
+source; otherwise it keeps the same `attribution` class and
+`firstPackageFrame` as an unmapped read. These are the runtime's own reports
+(`channel: "runtime-diagnostic"`), not inferences. The collector keeps at most
+256 per document.
+
+The misuse ledgers measure this channel against seeded pairs. Each runs the
+misuse and the correct twin as small client apps on published packages
+(`benchmarks/reviewed-package-models/development/misuse-runtime-ledger.mjs`,
+`fixtures/primitives-misuse/cases.json` and
+`misuse-extra-cases.json`). A case is detected when the misuse twin gets an
+expected diagnostic, or an uncaught exception, at the case file and the correct
+twin gets none.
+
 ### Measure a supplied comparison
 
 Add `--compare-project /absolute/path/comparison/tsconfig.json` to execute the

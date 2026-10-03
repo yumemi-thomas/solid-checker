@@ -10,7 +10,7 @@ import { instrumentFeedbackReads, sharedReaderSha256 } from "./feedback-native-h
 import { selectAssertionFeedback } from "./feedback-assertion-selector.mjs";
 import { instrumentFeedbackSource } from "./feedback-source-hook.mjs";
 import { selectReadFeedback } from "./feedback-read-selector.mjs";
-import { classifyUnmappedFrames, createFrameAttributor, summarizeCandidateScopes, summarizeUnmapped } from "./feedback-attribution.mjs";
+import { classifyUnmappedFrames, createFrameAttributor, operationFrame, summarizeCandidateScopes, summarizeUnmapped } from "./feedback-attribution.mjs";
 
 const hash = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 const runtimePath = fileURLToPath(new URL("./feedback-read-runtime.mjs", import.meta.url));
@@ -144,16 +144,12 @@ export function feedbackReadPlugin({ snapshot, runtimeInputs, coverage }) {
       // Reads during unload itself are not reported.
       return `import {reads} from ${JSON.stringify("/@fs" + runtimePath)};
         import * as Solid from 'solid-js';
-        globalThis.__solidCheckerDiagnostics=[];
         globalThis.__solidCheckerDocument=crypto.randomUUID();
-        Solid.OBSERVE?.diagnostics?.subscribe(event=>{
-          const rows=globalThis.__solidCheckerDiagnostics;
-          if(rows.length<256)rows.push({code:event.code,kind:event.kind,severity:event.severity});
-        });
+        Solid.OBSERVE?.diagnostics?.subscribe(event=>reads.diagnostic(event));
         globalThis.__solidCheckerFlush?.(JSON.stringify({phase:'start',id:globalThis.__solidCheckerDocument}));
         addEventListener('beforeunload',()=>globalThis.__solidCheckerFlush?.(JSON.stringify({phase:'end',
           id:globalThis.__solidCheckerDocument,state:{events:reads.events,stats:reads.stats,scopes:reads.scopes,
-          diagnostics:globalThis.__solidCheckerDiagnostics}})));`;
+          diagnostics:reads.diagnostics}})));`;
     },
     transformIndexHtml() { return [{ tag: "script", attrs: { type: "module", src: "/@id/" + publicId }, injectTo: "head-prepend" }]; },
     transform(code, id) {
@@ -207,7 +203,7 @@ export function mergeDocumentStates(messages, final) {
   }
   return { events: states.flatMap((state, document) => (state?.events ?? []).map(event => ({ ...event, document }))),
     stats, scopes: { rows: [...scopes.values()], dropped: scopesDropped },
-    diagnostics: present.flatMap(state => state.diagnostics ?? []),
+    diagnostics: states.flatMap((state, document) => (state?.diagnostics ?? []).map(row => ({ ...row, document }))),
     documents: { loaded: states.length, reported: present.length, lost: states.length - present.length } };
 }
 
@@ -290,7 +286,7 @@ async function collectProject(project, scenario, tools, browser, responses = new
     const { assertions, checkpoints, failure } = await executeFeedbackScenario(page, scenario);
     const final = await page.evaluate(() => globalThis.__solidCheckerDocument ? { id: globalThis.__solidCheckerDocument,
       state: { events: globalThis.__solidCheckerReads?.events ?? [], stats: globalThis.__solidCheckerReads?.stats ?? null,
-        scopes: globalThis.__solidCheckerReads?.scopes ?? { rows: [], dropped: 0 }, diagnostics: globalThis.__solidCheckerDiagnostics ?? [] } } : null);
+        scopes: globalThis.__solidCheckerReads?.scopes ?? { rows: [], dropped: 0 }, diagnostics: globalThis.__solidCheckerReads?.diagnostics ?? [] } } : null);
     const raw = mergeDocumentStates(documentMessages, final);
     coverage.documents = raw.documents;
     const capture = captureTemplate(snapshot), maps = new Map();
@@ -317,10 +313,10 @@ async function collectProject(project, scenario, tools, browser, responses = new
       const attributions = [];
       for (const frame of frames) {
         const row = await attribute(frame);
-        if (row.outcome === "mapped") return { site: site(row) };
         attributions.push(row);
+        if (row.outcome === "mapped") return { site: site(row), attributions };
       }
-      return { unmapped: classifyUnmappedFrames(frames, attributions, { stackTruncated }) };
+      return { unmapped: classifyUnmappedFrames(frames, attributions, { stackTruncated }), attributions };
     }
     const authoredEvents = [];
     for (const [index, event] of raw.events.entries()) {
@@ -347,6 +343,17 @@ async function collectProject(project, scenario, tools, browser, responses = new
       if (located.site) capture.events.push({ id: `error-${index}`, kind: "runtime-exception", message: error.message, ...located.site });
       else unmapped.push({ kind: "runtime-exception", message: error.message, ...located.unmapped });
     }
+    // A Solid dev diagnostic is the runtime's own report. Its site is the first
+    // frame that maps to configured source; otherwise it keeps its frames and
+    // attribution class, exactly as an unmapped read does.
+    const diagnostics = [];
+    for (const row of raw.diagnostics) {
+      const located = await locate(row.frames ?? [], row.stackTruncated ?? null);
+      diagnostics.push({ code: row.code, kind: row.kind, severity: row.severity, message: row.message, document: row.document,
+        channel: "runtime-diagnostic", authority: false, certification: false, operation: operationFrame(located.attributions),
+        ...(located.site ? { site: located.site } : { site: null, attribution: located.unmapped.attribution,
+          firstPackageFrame: located.unmapped.firstPackageFrame, packages: located.unmapped.packages }) });
+    }
     coverage.candidateScopes = summarizeCandidateScopes([...models.values()], { instrumented, scopes: raw.scopes,
       lineOf(path, byte) {
         const text = sourceFiles.get(path)?.text;
@@ -362,7 +369,7 @@ async function collectProject(project, scenario, tools, browser, responses = new
     if (raw.documents.lost) automatic.open?.push({ reason: "A loaded document unloaded without reporting its records", lost: raw.documents.lost });
     return { feedback, capture, assertions: snapshot.typingErrors ? [] : assertions,
       automatic,
-      coverage, stats: raw.stats, diagnostics: raw.diagnostics, checkpoints, unmapped, blockedRequests,
+      coverage, stats: raw.stats, diagnostics, checkpoints, unmapped, blockedRequests,
       suppliedResponses: [...responses.values()].map(row => ({ url: row.url, status: row.status, contentType: row.contentType,
         body: row.pin, served: row.served, channel: "scenario-input" })),
       pageErrors, consoleDiagnostics, consoleDiagnosticsDropped, failure,

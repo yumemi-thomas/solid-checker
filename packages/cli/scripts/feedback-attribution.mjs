@@ -139,3 +139,21 @@ export function summarizeCandidateScopes(models, { instrumented, scopes, limit =
   return { ...totals, notEntered, notEnteredDropped, scopeRecordsDropped: scopes.dropped,
     asyncSettlement: "unobserved", complete: false };
 }
+
+// Solid's own runtime packages: a diagnostic is emitted from inside them, so
+// their frames say nothing about which code performed the operation.
+export const SOLID_RUNTIME_PACKAGES = new Set(["@solidjs/signals", "solid-js", "@solidjs/web"]);
+
+// The code that performed a diagnosed operation: the innermost frame that is
+// neither Solid's runtime, the collector nor an unserved frame. "application"
+// is code the project owns; "package" is an installed package called from it.
+export function operationFrame(attributions) {
+  for (const row of attributions) {
+    if (!row.served || row.outcome === "collector") continue;
+    if (row.package?.installed && SOLID_RUNTIME_PACKAGES.has(row.package.name)) continue;
+    return row.package?.installed
+      ? { in: "package", package: { name: row.package.name, version: row.package.version } }
+      : { in: "application" };
+  }
+  return { in: "unknown" };
+}
