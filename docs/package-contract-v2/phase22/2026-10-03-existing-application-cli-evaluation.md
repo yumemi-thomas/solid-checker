@@ -152,6 +152,10 @@ No assertions from the failed run are counted.
 3. **Explain runtime coverage.** Preserve mapping-failure provenance and report
    entered/completed candidate scopes. Distinguish package-internal records
    without an authored frame from lost application attribution.
+   *Done:* see "Explain what the run covered" in
+   [development feedback](../../development-feedback.md). The six helge
+   records are complete `@solidjs/router` package-only stacks, and the
+   scenario entered none of the three derived-origin candidates.
 4. **Measure the larger application by phase.** Attribute the timeout before
    optimizing. The completed small-project runs already argue for background
    analysis and reuse, rather than a whole cold process on each edit.

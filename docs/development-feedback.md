@@ -186,7 +186,8 @@ with their original browser locations; these are not inferred causal findings.
 If a readiness step times out, `execution.failure` identifies the step and
 selector. Earlier assertions, browser errors and read evidence remain in the
 result, and later interactions stop. Unmapped reads retain their runtime
-frames for inspection without claiming authored source attribution.
+frames, classified as described under "Explain what the run covered", without
+claiming authored source attribution.
 Native findings keep their original proof classification.
 
 The read hook is tied to the reviewed `@solidjs/signals@2.0.0-rc.9`
@@ -202,6 +203,38 @@ retains at most 256 records and 1 MiB of event data; it reports dropped records
 and always labels coverage incomplete. A different runtime profile refuses
 instrumentation. The RC.13 **analysis compiler** does not expand this runtime
 profile to RC.13.
+
+### Explain what the run covered
+
+A read or exception with no mapped frame lands in `execution.unmapped` with an
+`attribution` class. Each of its frames also records the `outcome` that stopped
+mapping (`foreign-origin`, `virtual-module`, `collector`, `no-source-map`,
+`no-original-position`, `outside-configured-sources`, `position-out-of-range`,
+…). The frame also records the installed package that serves it, and, where
+the package's own map resolves it, the original location:
+
+| `attribution` | Meaning |
+| --- | --- |
+| `application-frame-unmapped` | A frame served from an application-owned file failed to map: lost application attribution. |
+| `package-frames-only` | The complete synchronous stack holds only installed-package frames (e.g. a router computation run by the scheduler). `firstPackageFrame` is the first frame outside `@solidjs/signals`. This names where the code lives, not who is responsible. |
+| `stack-incomplete` | No application frame, but the stack reached the collector's 40-frame limit (`stackTruncated`) or its depth is the page's own (exceptions), so no frame can be ruled out. |
+| `no-attributable-frame` | No frame came from the application server. |
+
+`execution.coverage.unmapped` counts records per class.
+`execution.coverage.candidateScopes` joins the native candidates to what ran:
+derived-origin functions and operations with an accepted result relationship,
+counted as modeled, instrumented and entered (operations also report whether
+they returned or threw synchronously). `notEntered` lists up to 64 candidates
+with path, span, line and status: `file-not-loaded`, `not-instrumented` or
+`not-entered`. An async body's settlement is not observed. A quiet run whose
+derived origins were never entered says nothing about warning precision. In
+that case, extend the scenario to reach them.
+
+On the unchanged helge-dev replay, all six retained records are
+`package-frames-only`, made of `@solidjs/router@2.0.0-next.26` computations
+reading through the scheduler. None of the three derived-origin candidates (in
+`Blog.tsx` and `Article.tsx`, pages the scenario never visits) was entered;
+9 of 32 result operations were.
 
 ### Measure a supplied comparison
 

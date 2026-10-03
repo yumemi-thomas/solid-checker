@@ -10,6 +10,7 @@ import { instrumentFeedbackReads, sharedReaderSha256 } from "./feedback-native-h
 import { selectAssertionFeedback } from "./feedback-assertion-selector.mjs";
 import { instrumentFeedbackSource } from "./feedback-source-hook.mjs";
 import { selectReadFeedback } from "./feedback-read-selector.mjs";
+import { classifyUnmappedFrames, createFrameAttributor, summarizeCandidateScopes, summarizeUnmapped } from "./feedback-attribution.mjs";
 
 const hash = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 const runtimePath = fileURLToPath(new URL("./feedback-read-runtime.mjs", import.meta.url));
@@ -159,6 +160,7 @@ async function collectProject(project, scenario, tools, browser) {
   assert(Array.isArray(nativeFeedback.analysis.feedbackFacts), "Native checker does not expose development models");
   const models = new Map(nativeFeedback.analysis.feedbackFacts.map(model => [model.path, model]));
   const runtimeInputs = new Map(), coverage = { nativeReader: null, sourceInstrumentation: [], complete: false }, unmapped = [];
+  const instrumented = new Map();
   const sourceFiles = new Map(snapshot.sources.filter(source => !source.isDeclarationFile)
     .map(source => [resolve(source.fileName), source]));
   const record = path => {
@@ -179,6 +181,7 @@ async function collectProject(project, scenario, tools, browser) {
         if (!model || snapshot.typingErrors || !model.functions.length) return null;
         const result = instrumentFeedbackSource(code, path, model, "/@fs" + runtimePath);
         coverage.sourceInstrumentation.push({ path, ...result.counts });
+        instrumented.set(path, result.instrumented);
         return { code: result.code, map: result.map };
       }
     }, ...configuration.plugins, {
@@ -214,35 +217,43 @@ async function collectProject(project, scenario, tools, browser) {
     await page.goto(new URL(server.config.base, origin).href, { waitUntil: "domcontentloaded" });
     const { assertions, checkpoints, failure } = await executeFeedbackScenario(page, scenario);
     const raw = await page.evaluate(() => ({ events: globalThis.__solidCheckerReads?.events ?? [],
-      stats: globalThis.__solidCheckerReads?.stats ?? null, diagnostics: globalThis.__solidCheckerDiagnostics ?? [] }));
+      stats: globalThis.__solidCheckerReads?.stats ?? null, scopes: globalThis.__solidCheckerReads?.scopes ?? { rows: [], dropped: 0 },
+      diagnostics: globalThis.__solidCheckerDiagnostics ?? [] }));
     const capture = captureTemplate(snapshot), maps = new Map();
-    async function original(frame) {
-      let url; try { url = new URL(frame.path); } catch { return null; }
-      if (url.origin !== origin) return null;
-      const key = url.pathname + url.search;
-      if (!maps.has(key)) {
-        const transformed = await server.transformRequest(key);
-        maps.set(key, transformed?.map ? new tools.TraceMap(transformed.map) : null);
-      }
-      const map = maps.get(key); if (!map) return null;
-      const position = tools.originalPositionFor(map, { line: frame.line, column: frame.column - 1 });
-      if (!position.source || !position.line) return null;
-      const served = url.pathname.startsWith("/@fs/") ? decodeURIComponent(url.pathname.slice(4)) : join(root, decodeURIComponent(url.pathname));
-      const path = resolve(dirname(served), position.source), source = sourceFiles.get(path);
-      if (!source) return null;
+    const attribute = createFrameAttributor({ origin, root, sourceFiles, collectorPaths: [realpathSync(runtimePath)],
+      originalPositionFor: tools.originalPositionFor,
+      async mapFor(key) {
+        if (!maps.has(key)) {
+          const transformed = await server.transformRequest(key);
+          maps.set(key, transformed?.map ? new tools.TraceMap(transformed.map) : null);
+        }
+        return maps.get(key);
+      } });
+    function site({ source, original: { path, line, column } }) {
       const lines = source.text.split("\n");
-      if (position.line > lines.length || position.column >= lines[position.line - 1].length) return null;
-      const offset = lines.slice(0, position.line - 1).reduce((n, line) => n + line.length + 1, 0) + position.column;
+      const offset = lines.slice(0, line - 1).reduce((n, row) => n + row.length + 1, 0) + column - 1;
       const character = String.fromCodePoint(source.text.codePointAt(offset));
       return { location: { path, startByte: Buffer.byteLength(source.text.slice(0, offset)),
         endByte: Buffer.byteLength(source.text.slice(0, offset)) + Buffer.byteLength(character) },
-        sourceSha256: hash(source.text), line: position.line, column: position.column + 1 };
+        sourceSha256: hash(source.text), line, column };
+    }
+    // The first mapped frame is the authored site. Otherwise every frame's
+    // outcome is retained and the record is classified without a site.
+    async function locate(frames, stackTruncated) {
+      const attributions = [];
+      for (const frame of frames) {
+        const row = await attribute(frame);
+        if (row.outcome === "mapped") return { site: site(row) };
+        attributions.push(row);
+      }
+      return { unmapped: classifyUnmappedFrames(frames, attributions, { stackTruncated }) };
     }
     const authoredEvents = [];
     for (const [index, event] of raw.events.entries()) {
-      let site;
-      for (const frame of event.frames) { site = await original(frame); if (site) break; }
-      if (!site || !coverage.nativeReader) { unmapped.push({ kind: event.kind ?? "untracked-read", reason: "No configured authored source frame", nodeId: event.nodeId, frames: event.frames }); continue; }
+      const located = coverage.nativeReader ? await locate(event.frames, event.stackTruncated ?? null) :
+        { unmapped: { attribution: "no-reviewed-reader", reason: "The reviewed native reader was not instrumented", frames: event.frames } };
+      if (!located.site) { unmapped.push({ kind: event.kind ?? "untracked-read", nodeId: event.nodeId, ...located.unmapped }); continue; }
+      const site = located.site;
       authoredEvents.push({ ...event, site });
       capture.events.push({ id: `read-${index}`, kind: event.kind ?? "untracked-read", message: event.kind === "observer-query" ?
         "Queried tracking and found no observer. Whether package code skipped subscribing remains open." :
@@ -251,15 +262,23 @@ async function collectProject(project, scenario, tools, browser) {
     }
     // Uncaught errors remain recorded failures. Source attribution is accepted
     // only when the browser stack maps to a configured original source.
+    // A page error's stack depth is the page's own limit, so its completeness
+    // is unknown and it can never be classified as package frames only.
     for (const [index, error] of pageErrors.entries()) {
-      let site;
-      for (const line of (error.stack ?? "").split("\n")) {
+      const frames = (error.stack ?? "").split("\n").flatMap(line => {
         const match = line.match(/(https?:\/\/.*?):(\d+):(\d+)\)?$/);
-        if (match) { site = await original({ path: match[1], line: Number(match[2]), column: Number(match[3]) }); if (site) break; }
-      }
-      if (site) capture.events.push({ id: `error-${index}`, kind: "runtime-exception", message: error.message, ...site });
-      else unmapped.push({ kind: "runtime-exception", message: error.message, reason: "No configured authored source frame" });
+        return match ? [{ path: match[1], line: Number(match[2]), column: Number(match[3]) }] : [];
+      });
+      const located = await locate(frames, null);
+      if (located.site) capture.events.push({ id: `error-${index}`, kind: "runtime-exception", message: error.message, ...located.site });
+      else unmapped.push({ kind: "runtime-exception", message: error.message, ...located.unmapped });
     }
+    coverage.candidateScopes = summarizeCandidateScopes([...models.values()], { instrumented, scopes: raw.scopes,
+      lineOf(path, byte) {
+        const text = sourceFiles.get(path)?.text;
+        return text === undefined ? null : Buffer.from(text).subarray(0, byte).toString().split("\n").length;
+      } });
+    coverage.unmapped = summarizeUnmapped(unmapped);
     capture.runtimeInputs = [...runtimeInputs.values()];
     for (const pin of capture.runtimeInputs) assert.equal(hash(readFileSync(pin.path)), pin.sha256, `Runtime input changed: ${pin.path}`);
     validateFeedbackInputs(snapshot.manifest);

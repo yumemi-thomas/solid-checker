@@ -21,7 +21,7 @@ export function instrumentFeedbackSource(text, path, model, runtimeSpecifier) {
   const data = value => f.createStringLiteral(JSON.stringify(value));
   const zero = () => f.createNull();
   const counts = { functions: 0, operations: 0, skipped: 0 };
-  const matched = new Set();
+  const matched = new Set(), instrumentedOperations = new Set();
   function suspends(node) {
     if (ts.isFunctionLike(node)) return false;
     if (ts.isAwaitExpression(node) || ts.isYieldExpression(node)) return true;
@@ -71,7 +71,7 @@ export function instrumentFeedbackSource(text, path, model, runtimeSpecifier) {
         // Moving await/yield or direct eval into a new arrow changes semantics.
         if (suspends(node) || node.expression.kind === ts.SyntaxKind.SuperKeyword || node.expression.kind === ts.SyntaxKind.ImportKeyword ||
           (ts.isIdentifier(node.expression) && node.expression.text === "eval")) { counts.skipped++; return next; }
-        counts.operations++;
+        counts.operations++; instrumentedOperations.add(key(operation.span));
         return ts.setTextRange(ts.setOriginalNode(call("withOperation", [tokens.get(key(active.span)),
           data({ path, sourceSha256: model.sourceSha256, ...operation }),
           f.createArrowFunction(undefined, undefined, [], undefined, f.createToken(ts.SyntaxKind.EqualsGreaterThanToken), next)]), node), node);
@@ -86,5 +86,6 @@ export function instrumentFeedbackSource(text, path, model, runtimeSpecifier) {
       return f.updateSourceFile(transformed, statements);
     }] }
   });
-  return { code: result.outputText, map: JSON.parse(result.sourceMapText), counts };
+  return { code: result.outputText, map: JSON.parse(result.sourceMapText), counts,
+    instrumented: { functions: matched, operations: instrumentedOperations } };
 }
