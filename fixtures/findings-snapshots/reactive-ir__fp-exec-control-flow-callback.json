@@ -1,0 +1,75 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "prefer-show",
+      "code": "SC8015",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
+      "start": 2561,
+      "end": 2586,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
+      "start": 2881,
+      "end": 2884,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
+      "start": 3009,
+      "end": 3022,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
+      "start": 3232,
+      "end": 3235,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
+      "start": 3452,
+      "end": 3455,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
+      "start": 3672,
+      "end": 3675,
+      "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    }
+  ]
+}

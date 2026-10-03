@@ -70,6 +70,8 @@ fixtures/upstream-parity/.staging/
 # option, omit's predicate, until) are only valid against rc.9's typings.
 !fixtures/reactive-ir/rc9-*/node_modules/
 !fixtures/reactive-ir/rc9-*/node_modules/**
+!fixtures/reactive-ir/fp-exec-*/node_modules/
+!fixtures/reactive-ir/fp-exec-*/node_modules/**
 !fixtures/package-contracts/rc9-callback-forms/node_modules/
 !fixtures/package-contracts/rc9-callback-forms/node_modules/**
 !fixtures/reactive-ir/solid2-precision/node_modules/

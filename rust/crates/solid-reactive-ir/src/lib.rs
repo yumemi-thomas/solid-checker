@@ -2568,6 +2568,18 @@ fn call_primitive_name(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     dialect: &dyn Dialect,
 ) -> Option<PrimitiveName> {
+    // A callee that is itself a call (`untrack(() => props.ref)?.(fn)`,
+    // `factory()()`) is the *result* of that inner call. The compiler's entity
+    // at its span answers with the inner callee's symbol, which would make the
+    // outer call the primitive and hand its arguments to the primitive's
+    // callback slots.
+    if file
+        .ast
+        .call_at(file.ast.peel_ts_sugar_span(call.callee))
+        .is_some()
+    {
+        return None;
+    }
     let name = primitive_name(
         file.path.as_str(),
         call.callee,

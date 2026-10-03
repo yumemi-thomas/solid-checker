@@ -27267,3 +27267,64 @@ do with conditions or resolution.
 
 None of the four is a defect. Each is a reviewed decision with a measured price,
 and the two cheapest by sites are the two that are not premise work at all.
+
+## Execution-role false positives: the lexical default is inverted (2026-10-03, development-feedback sweep)
+
+Source: the 48-project defect sweep triage (`triage-strict.md`, `triage-other.md`).
+Fixtures: `fp-exec-control-flow-callback`, `fp-exec-stored-literals`,
+`fp-exec-handler-writes`, `fp-exec-true-defects` (each type-checks against its
+stub and against the real 2.0.0-rc.9 typings).
+
+**Rule.** Code written inside a component takes the body's strict-read role
+(`UntrackedRendering`) only where the facts prove it runs during the body. For a
+read, `callee_callback_timing` now answers *unproven* (the read becomes
+`uncertifiable`) for everything nested in a component that is not: directly in
+the body; an immediately invoked function; a standard-library inline callback; a
+project function that calls its parameter during the call; a contract `inline`
+row; a control-flow component's own children callback (written or passed by
+name); or a named helper every reference of which is a call, and every call of
+which is itself written where the rendering role holds (`named_helper_runs_during_body`;
+a default parameter additionally needs every call to omit the argument). A
+function stored where it is written, a callback handed to a consumer not proven
+to invoke it, a standard-library call not modelled as inline, an attribute-valued
+function, and a helper referenced as a value or called from a handler or a
+tracked attribute are unproven. A tracked JSX region no longer gives its role to
+a function inside it that is an attribute value or an argument not proven
+inline (`attribute_function_within`): such a function is `Unknown`, which
+`reactive-write-in-owned-scope` and `async-outside-loading-boundary` do not
+claim on.
+
+| Pattern | Change | Residual |
+| --- | --- | --- |
+| Strict P1: a helper merely mentioned in `<Show when>`/`<For each>`/`<Match>`/`<Repeat>` was admitted as the render callback (`named_callback_roles`) | an identifier is admitted only when it *is* a children expression of the element | none known |
+| Strict P4a: a function inside an attribute (`each={xs.filter(...)}`) was taken as the render callback | the callback must be written in one of the element's children | `{xs.map(...)}` in children is still the callback, as before |
+| Strict P4b, P6, P7: anonymous literals, getters, array elements, default-parameter initializers, `onCleanup` callbacks, helpers called from handlers or tracked attributes | the inversion above | a stored literal or helper that is in fact invoked in the body (`o.run()`) is uncertifiable, not a violation; a destructured-pattern default has no argument slot and is unproven |
+| Strict P5: a read directly in a JSX fragment inside a Show/For callback | `control_flow_execution_role` consults `jsx_fragments` | none known |
+| Writes P-G (handlers under `&&`, ternary, `.map`, IIFE, call-argument JSX) and P-M (callback-prop closure read as tracked) | `attribute_function_within` in the tracked-region arm; `enclosed_by_jsx_attribute_function` for the write role | a callback prop the child invokes during render is no claim, not a violation |
+| Writes P-H: closures nested in `createTrackedEffect`/`onSettled` | `nested_in_leaf_scope`: the innermost primitive callback decides | an owner-creating primitive nested in the leaf keeps its own answer |
+| Writes P-I: a write after an `await` in a hook called from a body | `follows_await_in_async_function`: no claim | the `await` is not proven to dominate (a branch-only `await` also silences the write); same-function awaits only; `unconditional_awaits` was not used because it excludes the try/catch shape the defect has |
+| Writes P-J: `onCleanup` callbacks, closures handed to a callback prop or a parent | `nested_literal_runs_during_body`: a primitive with no modelled callback at the position does not run it; `call_argument_invocation_unproven` | any other unmodelled primitive's callback is likewise no claim for a write |
+| A call whose callee is itself a call (`untrack(() => props.ref)?.(fn)`) taken as the primitive | `call_primitive_name` answers none when the callee is a call expression | none known |
+
+Measured on the 48-project sweep (release binary, violations only, against the
+`baseline` directory): `strict-read-untracked` 1,962 -> 430,
+`reactive-write-in-owned-scope` 239 -> 3 (the third, `dashiboard-ui`
+`FilePicker.tsx:44`, is removed by the `call_primitive_name` change, which was
+verified on its repro but not re-swept when work stopped). The other rules did
+not move. Kept: queue-management-ui `button.tsx:36` and probus-hk
+`RouteDetail.tsx:1555` (`strict-read-untracked`), queue-management-ui
+`video-frame-store.tsx:79` and `theme.ts:20` (`reactive-write-in-owned-scope`).
+
+ADDED (3, all `strict-read-untracked`; baseline had no violation at the key):
+derp-media-server `VirtualDirectoryList.tsx:247` is a real read of
+`props.renderFileRow` directly in a `<For>` callback, which the P1 admission bug
+had hidden; sefer `FindingsPanel.tsx:526` (`opened`, `pinned` through `line`) is
+the same interprocedural-summary imprecision the baseline already reported at
+`:539` (the summary counts reads in `line`'s tracked JSX attributes), exposed
+because the call at `:526` now keeps its For-callback role. That summary path is
+`interproc.rs`, not changed here.
+
+Residual after this change: the remaining `strict-read-untracked` violations are
+the direct reads in a body, an effect apply or a Show/For callback (K8-K11),
+plus the summary-path reads through hooks and helpers (`read through ...`)
+that `interproc.rs` still attributes.

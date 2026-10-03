@@ -501,6 +501,36 @@ fn write_region_adjustment(
             }
             None
         })
+        .or_else(|| nested_in_leaf_scope(file, span, lookup))
+}
+
+/// A closure nested in a leaf callback (`createTrackedEffect`, `onSettled`):
+/// a timer, a listener, a continuation, a helper the callback defines. It runs
+/// later (deferred) or inside the leaf, and the runtime's write guard exempts
+/// both. Only the *innermost* primitive callback containing the span decides --
+/// an owner-creating primitive nested in the leaf (`createMemo`) is its own
+/// scope and keeps its own answer -- and a call that is no primitive (the
+/// scheduler a closure is handed to) is looked through.
+fn nested_in_leaf_scope(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<WriteRegionAdjustment> {
+    if !lookup.dialect.leaf_scopes_allow_writes() {
+        return None;
+    }
+    let (call, index) = file
+        .ast
+        .arguments_containing(span)
+        .filter(|(call, _)| lookup.primitive_at_call(file, call.span).is_some())
+        .min_by_key(|(call, index)| {
+            let argument = call.arguments[*index].span;
+            argument.end - argument.start
+        })?;
+    let primitive = lookup.primitive_at_call(file, call.span)?;
+    (callback_owner_at_call(file, call, primitive, index, lookup)
+        == Some(solid_dialect::CallbackOwner::Leaf))
+    .then_some(WriteRegionAdjustment::LeafScope)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -600,6 +630,33 @@ fn semantic_write_execution_role_within(
     } else {
         direct
     };
+    // A function literal that is a JSX attribute's value -- an event handler,
+    // a callback prop -- is handed to the element; constructing it runs
+    // nothing, and whatever expression wraps the JSX (`cond && <el onClick=… />`,
+    // a ternary, a `.map` callback, an argument to a helper call) does not
+    // change that. The tracked or rendering role such a wrapper gives the
+    // *expression* is not a proof about the function inside it.
+    if direct.reports_disallowed_write() && enclosed_by_jsx_attribute_function(file, span) {
+        return ExecutionRole::Unknown;
+    }
+    // A tracked role reaches every closure written inside the tracked region
+    // or callback, including ones only stored there (`createMemo(() => ({ go:
+    // () => set(1) }))`). The role is a proof for the closure only if the
+    // closure runs inline in the scope that earned it.
+    if direct == ExecutionRole::TrackedJsx
+        && enclosed_by_stored_function(file, span, entities, symbol_names, lookup)
+    {
+        return ExecutionRole::Unknown;
+    }
+    // Code after an `await` in an async function runs on a later task, with no
+    // owner; neither the lexical role nor the role at the function's call sites
+    // describes it. Not proven to follow an await on every path (an `await`
+    // inside a branch), so the answer is no claim rather than a legal write.
+    if (direct == ExecutionRole::Unknown || direct.reports_disallowed_write())
+        && follows_await_in_async_function(file, span)
+    {
+        return ExecutionRole::Unknown;
+    }
     if direct != ExecutionRole::Unknown {
         return direct;
     }
@@ -637,6 +694,165 @@ fn semantic_write_execution_role_within(
     }
     visiting.remove(&key);
     imperative.unwrap_or(ExecutionRole::Unknown)
+}
+
+/// Whether `span` sits in a function literal that is the value of a JSX
+/// attribute, or in a function nested inside one.
+fn enclosed_by_jsx_attribute_function(file: &solid_facts::FileFacts, span: Span) -> bool {
+    file.ast
+        .functions_body_containing(span)
+        .any(|function| jsx_attribute_value_function(file, function.span))
+}
+
+/// Whether `span` sits in a function literal, written strictly inside `region`,
+/// that the region's own evaluation is not proven to run: a JSX attribute's
+/// value (an event handler, a callback prop), an argument handed to a call that
+/// is not proven to invoke it during the call, or a stored literal. What such a
+/// function does runs when something calls it, not in the region's pass.
+fn attribute_function_within(
+    file: &solid_facts::FileFacts,
+    region: Span,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast.functions_body_containing(span).any(|function| {
+        region.contains(function.span)
+            && region != function.span
+            && (jsx_attribute_value_function(file, function.span)
+                || call_argument_invocation_unproven(file, function, lookup))
+    })
+}
+
+/// Whether the function written at `function` is the value of a JSX attribute.
+fn jsx_attribute_value_function(file: &solid_facts::FileFacts, function: Span) -> bool {
+    file.ast.jsx_containing(function).any(|element| {
+        element.attributes.iter().any(|attribute| {
+            attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
+                && attribute
+                    .expression
+                    .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == function)
+        })
+    })
+}
+
+/// Whether `literal` is the argument of a call that is not a primitive and is
+/// not proven to invoke that argument during the call: an unresolved callee, a
+/// project function that keeps or forwards it, a standard-library call not
+/// modelled as running it inline, a callee with no accepted `inline` row. A
+/// primitive's callback is classified by the dialect arms, so it is not asked
+/// here; a literal that is no call's argument is not either.
+fn call_argument_invocation_unproven(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use crate::runtime_semantics::RuntimeArgumentBehavior;
+    let Some((call, index)) = file
+        .ast
+        .arguments_containing(literal.span)
+        .filter(|(call, index)| {
+            file.ast
+                .functions_within(call.arguments[*index].span)
+                .filter(|function| function.span.contains(literal.span))
+                .max_by_key(|function| function.span.end - function.span.start)
+                .is_some_and(|outer| outer.span == literal.span)
+        })
+        .min_by_key(|(call, _)| call.span.end - call.span.start)
+    else {
+        return false;
+    };
+    if lookup.primitive_at_call(file, call.span).is_some() {
+        return false;
+    }
+    let argument = &call.arguments[index];
+    let direct = !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == literal.span;
+    if let Some((callee_file, callee)) = lookup
+        .callee_symbol(file, call.callee)
+        .and_then(|symbol| lookup.function_for_symbol(symbol))
+        .or_else(|| lookup.function_called_at(file.path.as_str(), call.callee))
+    {
+        return !(direct && invokes_parameter_during_call(callee_file, callee, index, lookup));
+    }
+    if let Some(resolved) = lookup
+        .resolved_callee_call(file, call.callee)
+        .filter(|resolved| {
+            resolved
+                .declaration
+                .as_ref()
+                .is_some_and(|declaration| declaration.standard_library)
+        })
+    {
+        let callability = lookup
+            .entity_at(file.path.as_str(), argument.span)
+            .and_then(|entity| entity.callability);
+        return !(direct
+            && matches!(
+                crate::runtime_semantics::argument_behavior(resolved, callability, index),
+                Some(RuntimeArgumentBehavior::InlineCallback)
+            ));
+    }
+    !(direct
+        && lookup
+            .callee_symbol(file, call.callee)
+            .and_then(|symbol| lookup.contract_callbacks(symbol))
+            .is_some_and(|rows| {
+                rows.iter()
+                    .any(|row| row.parameter == index && row.execution == "inline")
+            }))
+}
+
+/// Whether `span` sits in a function literal that is merely *stored* where it
+/// is written -- an object property, a getter, an array element, a returned
+/// closure -- or in a function nested inside one. Constructing such a literal
+/// runs nothing, so no scope around the construction runs what is inside.
+///
+/// A literal handed to a call, invoked in place, or written as a control-flow
+/// component's render callback is not stored: those have their own proofs.
+fn enclosed_by_stored_function(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast.functions_body_containing(span).any(|literal| {
+        stored_literal_invocation_unproven(file, literal, lookup)
+            && !file
+                .ast
+                .arguments_containing(literal.span)
+                .any(|(call, index)| {
+                    let argument = &call.arguments[index];
+                    !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == literal.span
+                })
+            && !file
+                .ast
+                .calls
+                .iter()
+                .any(|call| file.ast.peel_ts_sugar_span(call.callee) == literal.span)
+            && control_flow_execution_role(
+                file,
+                literal.body,
+                entities,
+                symbol_names,
+                lookup.dialect,
+            )
+            .is_none()
+    })
+}
+
+/// Whether `span` is written in an async function after an `await` of that
+/// same function, by position. Only the function's own awaits count: one in a
+/// nested closure suspends that closure.
+fn follows_await_in_async_function(file: &solid_facts::FileFacts, span: Span) -> bool {
+    containing_ast_function(&file.ast, span).is_some_and(|function| {
+        function.r#async
+            && file.ast.awaits.iter().any(|awaited| {
+                awaited.end <= span.start
+                    && function.body.contains(*awaited)
+                    && containing_ast_function(&file.ast, *awaited)
+                        .is_some_and(|owner| owner.span == function.span)
+            })
+    })
 }
 
 /// Whether code at `span`, classified [`ExecutionRole::UntrackedRendering`],
@@ -680,7 +896,7 @@ pub(super) fn nested_literal_runs_during_body(
         if lookup.function_component_status(file, literal) != ComponentStatus::No {
             return true;
         }
-        let Some((call, _)) = file
+        let Some((call, index)) = file
             .ast
             .arguments_containing(literal.span)
             .filter(|(call, index)| {
@@ -709,10 +925,21 @@ pub(super) fn nested_literal_runs_during_body(
             return control_flow_execution_role(file, span, entities, symbol_names, lookup.dialect)
                 .is_some_and(ExecutionRole::reports_disallowed_write);
         };
-        if lookup.primitive_at_call(file, call.span).is_none()
-            && callee_callback_timing(file, span, ExecutionRole::UntrackedRendering, lookup)
-        {
-            return false;
+        match lookup.primitive_at_call(file, call.span) {
+            // A primitive whose dialect models no callback at this position
+            // (a cleanup registration, say) does not say it runs the
+            // function during the call: it keeps it for later, or never.
+            Some(primitive)
+                if callback_execution_at_call(file, call, primitive, index, lookup).is_none() =>
+            {
+                return false;
+            }
+            Some(_) => {}
+            None => {
+                if callee_callback_timing(file, span, ExecutionRole::UntrackedRendering, lookup) {
+                    return false;
+                }
+            }
         }
         // The call contains the literal strictly, so the walk terminates.
         span = call.span;
@@ -900,13 +1127,27 @@ fn semantic_execution_role_within(
     if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, dialect) {
         return role;
     }
-    if file
-        .compiler
-        .tracked_regions
-        .iter()
-        .any(|region| region.span.contains(span))
     {
-        return ExecutionRole::TrackedJsx;
+        let mut regions = file
+            .compiler
+            .tracked_regions
+            .iter()
+            .filter(|region| region.span.contains(span))
+            .peekable();
+        if regions.peek().is_some() {
+            // A region is tracked for its *expression*. A function literal
+            // that is a JSX attribute's value inside it (an event handler, a
+            // callback prop) is handed to the element and runs when something
+            // calls it, not in the region's tracking pass; JSX written inside
+            // such a function is a region of its own, which still tracks.
+            return if regions
+                .any(|region| !attribute_function_within(file, region.span, span, lookup))
+            {
+                ExecutionRole::TrackedJsx
+            } else {
+                ExecutionRole::Unknown
+            };
+        }
     }
     if file.ast.arguments_containing(span).any(|(call, index)| {
         matches!(
@@ -1150,6 +1391,33 @@ fn callee_callback_timing_within(
     }
     let mut span = span;
     loop {
+        // A default-parameter initializer is written in the enclosing body but
+        // runs when its function is *called* without that argument, which no
+        // lexical position proves happens during that body.
+        if let Some(function) = parameter_default_owner(file, span)
+            && lookup.function_component_status(file, function) == ComponentStatus::No
+        {
+            let Some(index) = function.parameters.iter().position(|parameter| {
+                parameter
+                    .initializer
+                    .is_some_and(|value| value.contains(span))
+            }) else {
+                // A default inside a destructuring pattern has no argument slot
+                // of its own.
+                return true;
+            };
+            // Proven only for a named helper every call of which omits that
+            // argument and runs during the body.
+            return !(function.method_name.is_none()
+                && named_helper_runs_during_body(
+                    file,
+                    function,
+                    Some(index),
+                    execution,
+                    lookup,
+                    following,
+                ));
+        }
         let Some(literal) = containing_ast_function(&file.ast, span) else {
             return false;
         };
@@ -1174,16 +1442,41 @@ fn callee_callback_timing_within(
             // context proves none of those invocation times. Require the
             // literal itself as the prop value: an IIFE inside that value
             // still executes while the value is evaluated.
-            return file.ast.jsx_elements.iter().any(|element| {
+            if file.ast.jsx_elements.iter().any(|element| {
                 element.attributes.iter().any(|attribute| {
                     attribute
                         .expression
                         .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == literal.span)
                 })
-            });
+            }) {
+                return true;
+            }
+            // An IIFE runs where it is written, so its timing is its
+            // surroundings'.
+            if let Some(call) = file
+                .ast
+                .calls
+                .iter()
+                .filter(|call| file.ast.peel_ts_sugar_span(call.callee) == literal.span)
+                .min_by_key(|call| call.span.end - call.span.start)
+            {
+                span = call.span;
+                continue;
+            }
+            // Only the lexical rendering role places code by where it is
+            // written; a role a dialect arm proved for this position (an
+            // effect's apply callback, an untrack callback) is not.
+            return execution == ExecutionRole::UntrackedRendering
+                && literal_invocation_unproven(file, literal, execution, lookup, following);
         };
         if lookup.primitive_at_call(file, call.span).is_some() {
-            return false;
+            // A primitive's own callback argument is classified by the
+            // dialect arms. A literal nested in a container argument
+            // (`merge(props, { get class() { return cls(); } })`) is a value
+            // the primitive stores, not a callback it invokes.
+            return !(!call.arguments[index].spread
+                && file.ast.peel_ts_sugar_span(call.arguments[index].span) == literal.span)
+                && stored_literal_invocation_unproven(file, literal, lookup);
         }
         let argument = &call.arguments[index];
         // Resolved by symbol, members included (`bus.addEventListener` of a
@@ -1219,7 +1512,11 @@ fn callee_callback_timing_within(
                     span = call.span;
                     continue;
                 }
-                _ => return false,
+                // A standard-library call that is not modelled as running this
+                // argument inline (it may keep it, schedule it, or hand it to
+                // something that does) does not prove the callback runs during
+                // the call.
+                _ => return true,
             }
         }
         // ADR 0152: the contract's returned value runs the argument on its own
@@ -1266,6 +1563,185 @@ fn callee_callback_timing_within(
         }
         span = call.span;
     }
+}
+
+/// Whether a function literal that is no call's argument is *not proven* to run
+/// where it is written -- the complement of every position that does:
+///
+/// - the component body itself, the rendering role's own proof;
+/// - a control-flow component's children callback
+///   ([`control_flow_execution_role`] proves it);
+/// - a function bound to a name whose every reference is a call and whose every
+///   call runs during the body ([`named_helper_runs_during_body`]).
+///
+/// Every other literal is *stored* (an object property, method or getter, an
+/// array element, a returned closure, an anonymous value) or handed to a JSX
+/// element that is not a rendering control-flow component. Constructing such a
+/// literal runs nothing, and wherever it is later called -- from a handler,
+/// from the object's reader, from a hook's returned closure, or never -- is not
+/// something its lexical position proves.
+fn literal_invocation_unproven(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+    execution: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
+    following: &mut HashSet<(String, Span)>,
+) -> bool {
+    // An anonymous component (`export default function () {}`) is the body
+    // itself, which is the rendering role's own proof.
+    if lookup.function_component_status(file, literal) != ComponentStatus::No {
+        return false;
+    }
+    if control_flow_execution_role(
+        file,
+        literal.body,
+        lookup.entities(),
+        lookup.symbol_names(),
+        lookup.dialect,
+    )
+    .is_some()
+    {
+        return false;
+    }
+    // A function passed by name as a control-flow component's children callback
+    // (`<For each={xs}>{renderItem}</For>`) is that callback.
+    if named_callback_execution_role(file, literal.body, lookup)
+        == Some(ExecutionRole::UntrackedRendering)
+    {
+        return false;
+    }
+    if literal.method_name.is_none() && function_binding_name(file, literal).is_some() {
+        return !named_helper_runs_during_body(file, literal, None, execution, lookup, following);
+    }
+    true
+}
+
+/// Whether `literal` is a function that is *stored* where it is written: an
+/// anonymous function expression or an object-literal method or getter, outside
+/// every position that runs it ([`literal_invocation_unproven`]). A function
+/// bound to a name is the interprocedural summary's business through its call
+/// sites, and is left alone here.
+fn stored_literal_invocation_unproven(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    (literal.method_name.is_some() || function_binding_name(file, literal).is_none())
+        && literal_invocation_unproven(
+            file,
+            literal,
+            ExecutionRole::UntrackedRendering,
+            lookup,
+            &mut HashSet::new(),
+        )
+}
+
+/// Whether the function bound to a name runs only during the body it is written
+/// in: it has at least one call, every reference to its binding is one of those
+/// calls (no alias, no handler, no argument), and every call is itself proven
+/// to run during the body.
+///
+/// A call written in a handler, a timer, a stored closure or a callback prop is
+/// unproven by the same walk, so the helper is too; a call cycle is unproven.
+///
+/// With `default_parameter` the question is about that parameter's default
+/// initializer, which runs only when a call leaves the argument out: every call
+/// must then pass fewer arguments than the parameter's position, spread-free.
+fn named_helper_runs_during_body(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+    default_parameter: Option<usize>,
+    execution: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
+    following: &mut HashSet<(String, Span)>,
+) -> bool {
+    let Some(binding) = function_binding_name(file, literal) else {
+        return false;
+    };
+    let path = file.path.as_str();
+    let Some(symbol) = lookup.entities().at(path, binding.span) else {
+        return false;
+    };
+    let sites = lookup.function_call_sites(path, literal.span);
+    if sites.is_empty() {
+        return false;
+    }
+    let accounted: HashSet<(String, u32, u32)> = lookup
+        .function_call_site_references(path, literal.span)
+        .into_iter()
+        .map(|(caller, callee)| (caller.path.to_string(), callee.start, callee.end))
+        .collect();
+    let escapes = lookup
+        .symbol_references(symbol.as_str())
+        .iter()
+        .any(|reference| {
+            let start = u32::try_from(reference.start_byte).unwrap_or(u32::MAX);
+            let end = u32::try_from(reference.end_byte).unwrap_or(u32::MAX);
+            let declaration = reference.path.as_ref() == path
+                && start == binding.span.start
+                && end == binding.span.end;
+            !declaration && !accounted.contains(&(reference.path.to_string(), start, end))
+        });
+    if escapes {
+        return false;
+    }
+    let key = (path.to_string(), literal.span);
+    if !following.insert(key.clone()) {
+        return false;
+    }
+    let proven = sites.iter().all(|(caller, callee)| {
+        let omits_argument = default_parameter.is_none_or(|index| {
+            caller
+                .ast
+                .calls
+                .iter()
+                .find(|call| caller.ast.peel_ts_sugar_span(call.callee) == *callee)
+                .is_some_and(|call| {
+                    call.arguments.len() <= index && !call.arguments.iter().any(|a| a.spread)
+                })
+        });
+        // The call must itself be written where the rendering role holds: a
+        // call in a tracked JSX attribute or child, a memo or a deferred
+        // callback runs in that scope, not in the body's strict-read window.
+        omits_argument
+            && semantic_execution_role(
+                caller,
+                *callee,
+                &allowed_callback_spans(caller, lookup),
+                lookup.entities(),
+                lookup.symbol_names(),
+                lookup,
+            ) == ExecutionRole::UntrackedRendering
+            && !callee_callback_timing_within(caller, *callee, execution, lookup, following)
+    });
+    following.remove(&key);
+    proven
+}
+
+/// The innermost function whose default-parameter initializer contains `span`.
+///
+/// A parameter initializer lies outside its function's *body*, so the
+/// body-based containment queries place a read in it in the surrounding
+/// function. Only functions nested in the span's own enclosing body (or any
+/// function, at module level) can own it, which bounds the scan.
+fn parameter_default_owner(
+    file: &solid_facts::FileFacts,
+    span: Span,
+) -> Option<&solid_facts::ast::FunctionFact> {
+    let region = containing_ast_function(&file.ast, span)
+        .map_or_else(|| Span::new(0, u32::MAX), |function| function.body);
+    file.ast
+        .functions_within(region)
+        .filter(|function| {
+            function.span.contains(span)
+                && !function.body.contains(span)
+                && function.parameters.iter().any(|parameter| {
+                    parameter
+                        .initializer
+                        .is_some_and(|value| value.contains(span))
+                })
+        })
+        .min_by_key(|function| function.span.end - function.span.start)
 }
 
 /// Whether the synchronous project function `function` calls its parameter
@@ -1700,11 +2176,22 @@ pub(super) fn control_flow_execution_role(
     // which runs when the event fires, with no owner (probed on the audited
     // 2.0.0-rc.9, dev and prod: a signal write there neither throws nor
     // warns). The named-callback index draws the same line for identifiers.
+    //
+    // Only a function written in one of the element's *children* is that
+    // callback (or code run inline from it). A function in an attribute --
+    // the predicate inside `each={items.filter((p) => p.id !== props.id)}`, a
+    // `when` expression's callback -- is an ordinary expression of the
+    // attribute it is written in, not what the component invokes with the
+    // item.
     let callback =
         file.ast
             .functions_body_containing(span)
             .filter(|function| {
                 element.span.contains(function.span)
+                    && element
+                        .children
+                        .iter()
+                        .any(|child| child.contains(function.span))
                     && !file.ast.jsx_containing(function.span).any(|nested| {
                         nested.span != element.span && element.span.contains(nested.span)
                     })
@@ -1714,15 +2201,34 @@ pub(super) fn control_flow_execution_role(
     if owner.span != callback.span {
         return Some(ExecutionRole::DeferredCallback);
     }
+    // A fragment has no element fact, so its children are consulted through
+    // its own span table: `<>{tone()}</>` is as tracked as `<b>{tone()}</b>`.
     if file
         .ast
         .jsx_containing(span)
         .any(|nested| callback.body.contains(nested.span))
+        || file
+            .ast
+            .jsx_fragments
+            .iter()
+            .any(|fragment| fragment.contains(span) && callback.body.contains(*fragment))
     {
         Some(ExecutionRole::TrackedJsx)
     } else {
         Some(ExecutionRole::UntrackedRendering)
     }
+}
+
+/// The expression an expression-container child (`{expression}`) holds, with
+/// transparent TypeScript wrappers peeled. `None` for a text, element or
+/// fragment child, which holds no expression of its own.
+fn jsx_child_expression(file: &solid_facts::FileFacts, child: Span) -> Option<Span> {
+    let text = file.source_text(child)?;
+    let inner = text.strip_prefix('{')?.strip_suffix('}')?;
+    let leading = u32::try_from(inner.len() - inner.trim_start().len()).ok()?;
+    let trailing = u32::try_from(inner.len() - inner.trim_end().len()).ok()?;
+    let (start, end) = (child.start + 1 + leading, child.end - 1 - trailing);
+    (start < end).then(|| file.ast.peel_ts_sugar_span(Span::new(start, end)))
 }
 
 /// How this file's primitive calls and control-flow JSX name each of its own
@@ -2047,7 +2553,16 @@ pub(super) fn named_callback_roles(
             continue;
         }
         for identifier in file.ast.identifiers_within(element.span) {
+            // The identifier must *be* a children expression
+            // (`<For each={xs}>{renderItem}</For>`). Merely mentioning a
+            // helper elsewhere in the element -- `when={visible()}`,
+            // `each={rows()}`, a `fallback` -- passes it nothing to invoke as a
+            // render callback.
             if identifier.role != solid_facts::ast::IdentifierRole::Reference
+                || !element
+                    .children
+                    .iter()
+                    .any(|child| jsx_child_expression(file, *child) == Some(identifier.span))
                 || file
                     .ast
                     .jsx_containing(identifier.span)
