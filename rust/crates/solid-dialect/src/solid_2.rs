@@ -5652,7 +5652,15 @@ impl Dialect for Solid2 {
             }
             Primitive::MapArray => &[(1, Execution::Tracked)],
             Primitive::RepeatMap => &[(0, Execution::Tracked), (1, Execution::Inline)],
-            Primitive::CreateReaction
+            // `onCleanup(fn)` registers `fn` on the current owner and returns;
+            // the runtime runs it when that owner is disposed or re-runs,
+            // never inside the strict-read window of the body that registered
+            // it (probed on 2.0.0-rc.9, dev, from a component body: a read in
+            // the callback raises no `STRICT_READ_UNTRACKED`). It is attributed
+            // `Deferred`, as `onSettled` is. The *contract* word is stated
+            // separately (`contract_callback_execution_at`) and is unchanged.
+            Primitive::OnCleanup
+            | Primitive::CreateReaction
             | Primitive::OnSettled
             | Primitive::Resolve
             // The same attribution answer as `resolve`, on the same reading:
@@ -5729,8 +5737,8 @@ impl Dialect for Solid2 {
     /// always enqueues (`options.user` selects `EFFECT_USER`), so `deferred`
     /// is a true promise about it. Everything else is stated directly,
     /// because the contract word is not derivable from the attribution one --
-    /// `onCleanup` carries no `callback_executions` row at all here and still
-    /// promises `deferred` to a consumer.
+    /// `createRenderEffect`'s apply is attributed `Deferred` and has no
+    /// contract word.
     ///
     /// `createRenderEffect`'s apply has **no** word, and that is the answer
     /// the bytes support rather than a gap. `deferred` promises the callback
@@ -6394,8 +6402,8 @@ mod tests {
     ///
     /// The contract word is **not** derivable from
     /// [`Dialect::callback_execution_at`], which is why the two are asserted
-    /// apart: `onCleanup` carries no `callback_executions` row at all and
-    /// still promises `deferred` to a consumer.
+    /// apart: `createRenderEffect`'s apply is attributed `Deferred` and
+    /// promises no contract word at all.
     #[test]
     fn the_contract_words_are_stated_by_this_dialect_not_by_shared_code() {
         let two = &Solid2 as &dyn Dialect;
@@ -6469,8 +6477,13 @@ mod tests {
             Some(Execution::Deferred)
         );
 
-        // `onCleanup` is the case that proves the word is stated, not derived.
-        assert!(two.callback_executions(Primitive::OnCleanup).is_empty());
+        // `onCleanup` agrees in both vocabularies: attributed `Deferred` (a
+        // read in its callback is outside the registering body's strict-read
+        // window) and promised `deferred` to a consumer.
+        assert_eq!(
+            two.callback_execution_at(Primitive::OnCleanup, 0, 1),
+            Some(Execution::Deferred)
+        );
         assert_eq!(word(Primitive::OnCleanup, 0, 1), Some(Execution::Deferred));
 
         // Silence is an answer contract emission must keep as "unknown".

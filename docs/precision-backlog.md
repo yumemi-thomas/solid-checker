@@ -1,5 +1,73 @@
 # Precision backlog
 
+## strict-read-untracked summary-path false positives (2026-10-03)
+
+Measured on the 48-project real-app sweep (1,962 `strict-read-untracked`
+violations; triage in `rust/target/defect-sweep/triage-strict.md`), three
+patterns on the interprocedural summary path are removed. Each case passes
+`tsc --noEmit` against the real `solid-js@2.0.0-rc.9` typings; none is
+TypeScript's job. Rule applied throughout: the summary path attributes a read
+to a caller's body only when invocation during that body is proven; the lexical
+`inside_component` role it falls back to is never the proof.
+
+Sweep result (release binary, same 48 projects): `strict-read-untracked`
+violations 1,962 to 1,166 (748 distinct sites removed, 796 counting repeats);
+**0 added**. By message shape, "read through a helper/hook" 1,047 to 252 and
+"read directly" 915 to 914. The two verified true defects are kept
+(queue-management-ui `ui/src/components/ui/button.tsx:36`, probus-hk
+`src/routes/RouteDetail.tsx:1555`). Five `reactive-write-in-owned-scope`
+violations also disappeared, all writes performed only from an `onCleanup`
+callback or a helper reached only from one (P7 below): `setCanvasRef` and
+`setValue` written directly in an `onCleanup` callback, and `setReloadKey`
+(a `subscribe` callback whose disposer is registered by `onCleanup`) and two
+`setDraft` writes in helpers reached only through a cleanup.
+
+- **P2, nested helper (about 573; most of the 742 removed "read through"
+  sites).** The summary path attributed a call written inside a helper nested
+  in a component (`const b = () => a() * 2`) to the component body through the
+  lexical `inside_component` role. It now skips such a call exactly as the
+  direct-read path does (`inside_non_component_function` without a named
+  callback role) and also a call written in an anonymous literal that is
+  stored, returned or set as a JSX attribute value, whose invocation during the
+  body nothing proves (`interproc::runs_in_unproven_stored_literal`). A literal
+  that is a call argument keeps the callee-timing answer (a not-proven result),
+  an immediately invoked literal and a control-flow render callback are still
+  the body. A derived chain is reported only at the call that runs it in the
+  body. Fixture `reactive-ir/fp-summary-nested-helper` (the
+  `shared-reactivity-v2` snapshot lost the `doubled()` read inside `labelled`,
+  which its own README text already said is not reported). Remaining
+  approximation: a helper admitted as a named control-flow callback merely
+  because it is mentioned (`<Show when={helper()}>`, the P1 pattern) keeps that
+  admission until `named_callback_roles` is narrowed. Of the 252 remaining
+  "read through" sites 136 are written inside a lowercase (nested) helper; the
+  ones sampled (kui `Dialog.tsx:219` `canConfirm`, civil `SetupPage.tsx:346`
+  `summary`, ai-memory-ui `data-grid.tsx:243` `visible`) are that P1 shape, the
+  rest were not classified.
+- **P3, closure built into a hook result (about 192).** An anonymous closure
+  that is a data property of an object literal (or a getter) or an element of a
+  returned array literal is no summary node, so its reads (and its call edges)
+  were folded into the hook's call (`createMutation().busy`). They are now held
+  back when the literal is not inside a call argument written in the hook
+  (`interproc::runs_in_retained_value_literal`). Fixture
+  `reactive-ir/fp-summary-returned-closure`, which also pins the cross-file
+  case (`hooks.ts`, `Remote.tsx`). Remaining approximation: a
+  `const b = m.busy()` written in a component body is no longer reported
+  through the hook call (the member call resolves to no summary node), and the
+  same for a hook that calls its own property closure (`o.f()`); an object or
+  array handed to a call keeps its legacy attribution; an array literal that is
+  stored and not returned is not recognised.
+- **P7, `onCleanup` callback (2).** `Solid2::callback_executions` had no
+  `OnCleanup` row, so the callback took the lexical component-body role. It is
+  attributed `Deferred`, as `onSettled` is; the contract word was already
+  `deferred`. Fixture `reactive-ir/fp-summary-cleanup-callback`. The removed
+  "read directly" site is derp-media-server `ReaderPreferences.tsx:131`.
+- **P6, default-parameter initializer (21), not handled here.** It is the
+  direct-read path (`semantic_execution_role_within`, a parameter span lies
+  outside the function body), not the summary path; the repro
+  (`repros-strict/r19`) is unchanged. The fix belongs with the lexical default
+  in `execution_role.rs`, and must keep the 6 real findings where the helper is
+  also called from an effect apply.
+
 ## Existing-application feedback precision fixes (2026-10-03)
 
 The fifteen reviewed overclaims are corrected in the unchanged applications.

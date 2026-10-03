@@ -77,16 +77,6 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 5543,
-      "end": 5552,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
       "start": 5569,
       "end": 5579,
       "fixes": 0

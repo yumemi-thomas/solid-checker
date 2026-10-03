@@ -1,0 +1,55 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-nested-helper/App.tsx",
+      "start": 2564,
+      "end": 2570,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-nested-helper/App.tsx",
+      "start": 2824,
+      "end": 2827,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-nested-helper/App.tsx",
+      "start": 3056,
+      "end": 3062,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-nested-helper/App.tsx",
+      "start": 3297,
+      "end": 3300,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-nested-helper/App.tsx",
+      "start": 3486,
+      "end": 3499,
+      "fixes": 0
+    }
+  ]
+}

@@ -41,12 +41,14 @@ use crate::cache::{
     InterproceduralResultDependencyState, TypedAccessorContribution, same_compiler_semantics,
 };
 use crate::execution_role::{
-    callee_callback_timing, direct_callback_contains, host_callback_timing, missing_jsx_census,
+    callee_callback_timing, control_flow_execution_role, direct_callback_contains,
+    host_callback_timing, missing_jsx_census, named_callback_execution_role,
 };
+use crate::indexes::ComponentStatus;
 use crate::owners::{
     containing_ast_function, enclosing_function_label, enclosing_render_function,
-    function_binding_name, read_escapes_synchronous_extent, solid_accessor_declaration,
-    source_function_exported,
+    function_binding_name, inside_non_component_function, read_escapes_synchronous_extent,
+    solid_accessor_declaration, source_function_exported,
 };
 use crate::pipeline::{parallel_file_results, parallel_slice_results};
 
@@ -257,6 +259,131 @@ pub(super) struct InterproceduralTimings {
     pub(super) result_recomputed_files: u64,
 }
 
+/// Whether the code at `span` sits in an anonymous function literal, written
+/// inside the summary node `owner`, that the node's call does **not** run: the
+/// value of an object-literal property (`return { busy: () => state() }`, or a
+/// getter) or an element of a returned array literal
+/// (`return [state, () => state() > 0]`).
+///
+/// [`discover_summary_nodes`] admits a function only when it is bound, a
+/// method, or in the TypeScript function universe, so such a literal is no
+/// node and the nearest node containing its reads is the enclosing hook. That
+/// folds `state()` into the *call* of the hook -- which only builds the object
+/// -- and every component body that calls the hook is then charged with a
+/// strict-window read of `state` it never performs (about 192 of 1,962
+/// measured `strict-read-untracked` violations; `createMutation().busy`). The
+/// closure runs when its holder invokes it, so its reads are neither the
+/// owner's nor reachable from the owner's call edges.
+///
+/// Only the two shapes whose holder is a plain value qualify, and only when no
+/// call argument inside the owner contains the literal: an object or array
+/// handed to a call (`track({ run: () => state() })`) may be invoked by that
+/// call, which is the callee-timing question and keeps its legacy attribution.
+/// A method or a bound arrow is a node of its own and is never asked here. The
+/// walk covers every function between `span` and the owner, so a read in
+/// `() => items.map(() => state())` inside a property closure is covered by the
+/// property closure.
+fn runs_in_retained_value_literal(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    owner: &SummaryNode,
+) -> bool {
+    file.ast.functions_body_containing(span).any(|literal| {
+        literal.span != owner.span
+            && owner.body.contains(literal.span)
+            && literal.name.is_none()
+            && literal.method_name.is_none()
+            && function_binding_name(file, literal).is_none()
+            // The indexed argument query goes first: most anonymous literals
+            // are callbacks, and the property scan below is linear.
+            && !file
+                .ast
+                .arguments_containing(literal.span)
+                .any(|(call, _)| owner.body.contains(call.span))
+            && is_retained_value_position(file, literal.span, owner.body)
+    })
+}
+
+/// Whether the call at `span`, written inside a component, sits in a function
+/// literal that nothing proves runs while the component body does: a literal
+/// stored in a binding or an object property, returned, or written as a JSX
+/// attribute value (`const api = { go: () => helper() }`,
+/// `return () => helper()`, `ref={() => helper()}`).
+///
+/// The summary path may attribute a call to the body only when invocation
+/// during that body is established, and the lexical `inside_component` role
+/// that [`semantic_execution_role`] falls back to proves nothing of the kind,
+/// so this asks first and never depends on that fallback answering "body".
+///
+/// The walk goes outward from the innermost function. A (possible) component
+/// is the body itself: not this case. An IIFE runs where it is written, so the
+/// walk continues from its call; a control-flow component's render callback
+/// runs while its children render. A literal that is a call argument is *not*
+/// answered here: whether that callee runs it during the call is the
+/// callee-timing question [`callee_callback_timing`] already reports (a
+/// not-proven result, never a proven one), so it keeps that answer.
+fn runs_in_unproven_stored_literal(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let mut span = span;
+    loop {
+        let Some(literal) = containing_ast_function(&file.ast, span) else {
+            return false;
+        };
+        if lookup.function_component_status(file, literal) != ComponentStatus::No {
+            return false;
+        }
+        if file
+            .ast
+            .arguments_containing(literal.span)
+            .any(|(call, index)| {
+                file.ast
+                    .functions_within(call.arguments[index].span)
+                    .filter(|function| function.span.contains(literal.span))
+                    .max_by_key(|function| function.span.end - function.span.start)
+                    .is_some_and(|outer| outer.span == literal.span)
+            })
+        {
+            return false;
+        }
+        if let Some(call) = file
+            .ast
+            .calls
+            .iter()
+            .filter(|call| file.ast.peel_ts_sugar_span(call.callee) == literal.span)
+            .min_by_key(|call| call.span.end - call.span.start)
+        {
+            span = call.span;
+            continue;
+        }
+        return control_flow_execution_role(file, span, entities, symbol_names, lookup.dialect)
+            .is_none();
+    }
+}
+
+fn is_retained_value_position(
+    file: &solid_facts::FileFacts,
+    literal: Span,
+    owner_body: Span,
+) -> bool {
+    // Any property whose value is the literal: a data property, and also a
+    // getter or setter, whose body runs on access and never while the object
+    // is built.
+    file.ast.object_properties.iter().any(|property| {
+        property.span.contains(literal) && file.ast.peel_ts_sugar_span(property.value) == literal
+    }) || file.ast.returns_within(owner_body).any(|returned| {
+        returned
+            .elements()
+            .iter()
+            .flatten()
+            .any(|element| file.ast.peel_ts_sugar_span(*element) == literal)
+    })
+}
+
 fn discover_typed_accessors(
     file: &solid_facts::FileFacts,
     nodes: &[SummaryNode],
@@ -292,6 +419,7 @@ fn discover_typed_accessors(
             continue;
         };
         if read_escapes_synchronous_extent(file, call.callee, entities, symbol_names, dialect)
+            || runs_in_retained_value_literal(file, call.callee, &nodes[owner])
             || enclosing_render_function(file, call.callee, lookup)
         {
             continue;
@@ -1521,7 +1649,13 @@ fn discover_interprocedural_graph(
                 }
             }
         }
-        if !ambiguous_dispatch && !contracts.reads.contains_key(symbol) {
+        // A call written in a closure the owner only builds into its result
+        // is not made when the owner is called, so its target's reads do not
+        // propagate to the owner (`runs_in_retained_value_literal`).
+        if !ambiguous_dispatch
+            && !contracts.reads.contains_key(symbol)
+            && !runs_in_retained_value_literal(file, call.span, &nodes[owner])
+        {
             let returned_target = call
                 .direct_callee
                 .then(|| returned_function_targets.get(symbol).copied());
@@ -5587,6 +5721,23 @@ fn interprocedural_result_reads_for_file(
                 }
             }
         }
+        // A call written inside a helper nested in the component -- `const b =
+        // () => a() * 2`, a nested function declaration -- runs when that
+        // helper does, not while the component body does. The lexical role
+        // below would charge the component body with it, so a derived chain
+        // read only from JSX, a handler or a memo was reported as an untracked
+        // read it never performs (about 573 of 1,962 measured findings). The
+        // read belongs to the helper's own summary and is claimed where the
+        // helper is *called*: the call in the body below, or the callback
+        // position that runs it. The direct-read path asks the same question
+        // (`LocalAccess::discover`), so the two paths agree on which function
+        // a read is written in.
+        if (inside_non_component_function(file, call.callee, lookup)
+            || runs_in_unproven_stored_literal(file, call.callee, entities, symbol_names, lookup))
+            && named_callback_execution_role(file, call.callee, lookup).is_none()
+        {
+            continue;
+        }
         let execution =
             semantic_execution_role(file, call.callee, &allowed, entities, symbol_names, lookup);
         let mut context = None::<String>;
@@ -5900,7 +6051,8 @@ fn direct_reference_contributions(
             entities,
             symbol_names,
             lookup.dialect,
-        ) {
+        ) || runs_in_retained_value_literal(file, reference_span, &nodes[owner])
+        {
             continue;
         }
         if let Some(call) = project_indexes
