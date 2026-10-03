@@ -26,11 +26,70 @@ paths. The compiler candidate has not been published. Production Git pins
 remain on their prior compiler revision. The integration patch and restoration
 instructions are in `benchmarks/compiler-facts/rc13/`.
 
-The manifest command works without a native binary. Project references require
-explicit project sessions and currently refuse. TypeScript checks the installed
+The manifest command works without a native binary. TypeScript checks the installed
 package declarations; it supplies no behavioral package inference here. When
 the input has TypeScript errors, additional capture guidance is suppressed.
 Existing native findings retain their own classification.
+
+## Native analysis: binary, time limit, failures
+
+**Binary selection.** The native checker is, in order: `--native-bin <path>`
+(or `SOLID_CHECKER_NATIVE_BIN`), the installed platform package, then
+`bin/solid-checker-rust` of a repository checkout (which runs `make build-rust`
+if absent). An explicit path that does not exist is refused; it never falls back
+to a build. The report's `native.binary` records the path and a `kind`
+(`debug` / `release` from the cargo profile directory, otherwise `unknown`).
+Use a **release** build: debug is roughly 9-19x slower. A debug build on a
+project with 50 or more source files adds a `warnings` entry (also printed to
+stderr). The repository's `bin/solid-checker-rust` can be a debug build and is
+reported as `unknown`.
+
+**Time limit.** Each native analysis is bounded by `--native-timeout <seconds>`
+or `SOLID_CHECKER_FEEDBACK_NATIVE_TIMEOUT` (default 600 s, `0` disables the
+limit; applies to `feedback run` too). The adapter itself had no limit; the
+120 s limit seen in the existing-application evaluation was the evaluation
+runner's own `spawnSync` timeout (`run()` in
+`benchmarks/reviewed-package-models/development/evaluate-existing-applications.mjs`),
+which expired on a debug binary (`finds-team/frontend`: 25 s release, 228 s
+debug).
+
+**Failures are structured.** A timeout, crash, signal, spawn error or malformed
+output prints a `status: "native-failed"` document on stdout with a `failure`
+object (`kind`, `message`, `binary`, `timeoutMs`, `wallMs`, `exitStatus`,
+`signal`, `typingErrorCount`, the retained native `stderr`, and `phase`), prints
+the message to stderr and exits 2. `phase.lastCompletedStage` is the last
+reactive-IR stage the child reported (the adapter always runs the child with
+`SOLID_CHECKER_TIMINGS=1` for this); `null` means the child never finished a
+stage, i.e. it was still in native setup (project contract admission, source and
+Type Facts acquisition, compiler facts). A timeout is never a clean result.
+
+**Measured cost.** A release build analysed all 48 tsconfig projects of 38 real
+Solid 2 applications with no adapter failure (records in
+`rust/target/adapter-eval/`). Most take 2-30 s. The slow tail is native:
+`openbot` 249 s, `solid-groove` 127 s, `app-game` 85 s and `derp-media-server`
+77 s are almost entirely the reactive-IR `static-prepass` stage, and
+`finds-team/frontend` spends ~24 of 25 s before the first IR stage (a stack
+sample shows project contract admission parsing the pnpm lockfile). The default
+limit is sized for such projects under a debug build, not for them to be fast.
+
+**Native stderr and timings.** `native.stderr` retains the child's non-timing
+stderr (compiler warnings and the like; the last 16 KiB). With
+`SOLID_CHECKER_TIMINGS=1` in the caller's environment, `native.timings` also
+carries the per-stage list and the native summary object. Native stdout of any
+size is accepted.
+
+**Project references.** A project that has files of its own and lists
+`references` is analysed as itself. TypeScript checks it as an editor does:
+referenced projects contribute their sources, so unbuilt outputs do not raise
+TS6305 (plain `tsc -p` on a kui package reports 241 such errors; this check
+reports 0). Errors inside a referenced project belong to that project's own
+check. The referenced `tsconfig` files are pinned as inputs and listed in
+`projectReferences`. A solution-style tsconfig (no files of its own, only
+`references`) is expanded recursively to its leaf projects; each is analysed in
+its own native session and the report carries `solution.referencedProjects`,
+per-leaf `projects[]` (a `report` or a `failure`) and aggregated `findings` /
+`gaps`. An unresolvable reference, `feedback manifest`, `--capture`, and
+`feedback run` on a solution refuse with the list of leaf projects.
 
 ## Capture format
 

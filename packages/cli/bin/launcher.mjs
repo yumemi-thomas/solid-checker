@@ -103,13 +103,24 @@ function nativeInvocation(command) {
   return invocation;
 }
 
+// The executable `runNative` would spawn, resolved the same way (override,
+// packaged binding, repository `bin/`). Callers that report or warn about the
+// binary in use ask here instead of re-deriving the search order.
+export function nativeExecutable(command) {
+  return nativeInvocation(command).executable;
+}
+
 export function runNative(command, args, options = {}) {
   const { executable, env } = nativeInvocation(command);
   return spawnSync(executable, args, {
     cwd: options.cwd ?? process.cwd(),
     env: { ...env, ...options.env },
     stdio: options.stdio ?? "inherit",
-    encoding: options.encoding
+    encoding: options.encoding,
+    // Only forwarded when given: `undefined` keeps spawnSync's own defaults.
+    ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
+    ...(options.killSignal === undefined ? {} : { killSignal: options.killSignal }),
+    ...(options.maxBuffer === undefined ? {} : { maxBuffer: options.maxBuffer })
   });
 }
 
