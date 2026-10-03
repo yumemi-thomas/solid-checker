@@ -11,7 +11,7 @@ use crate::owners::{
 };
 use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::runtime_semantics::is_proven_array_filter;
-use crate::symbols::async_symbol_root;
+use crate::symbols::AsyncSymbolRoots;
 use crate::{
     ReactiveSourceKind, StaticDefect, StaticDefectKind, call_primitive_name, known_primitive,
     location,
@@ -312,6 +312,8 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
         .iter()
         .map(|file| (file.path.as_str(), file))
         .collect();
+    // Built on first use: only a function with something to report needs it.
+    let mut computations: Option<AsyncComputations> = None;
     for typescript_file in ctx.facts.typescript.files() {
         for function in typescript_file.async_functions.iter() {
             let member_site = ctx
@@ -322,7 +324,10 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
             if function.calls_after_await.is_empty() && member_site.is_none() {
                 continue;
             }
-            let Some(analysis_context) = tracked_async_computation_context(ctx, function) else {
+            let index = computations
+                .get_or_insert_with(|| AsyncComputations::new(ctx, &ctx.facts.typescript));
+            let Some(analysis_context) = tracked_async_computation_context(ctx, function, index)
+            else {
                 continue;
             };
             let mut reported_calls = HashSet::new();
@@ -567,51 +572,106 @@ fn member_read_site<'f>(
 fn tracked_async_computation_context(
     ctx: &AnalysisContext<'_>,
     function: &typefacts::AsyncFunctionFact,
+    index: &AsyncComputations,
 ) -> Option<String> {
-    let function_symbol = async_symbol_root(
+    let function_symbol = index.roots.root(
         ctx.aliases
             .get(function.symbol.as_ref())
             .map_or(function.symbol.as_ref(), SymbolId::as_str),
-        &ctx.facts.typescript,
     );
-    ctx.facts.files.iter().find_map(|file| {
-        file.ast.calls.iter().find_map(|candidate| {
-            let argument = candidate.arguments.first()?;
-            // The async function must BE the tracked callback. One merely
-            // nested in the argument -- an async IIFE, or an async closure the
-            // computation returns -- is not suspended by the primitive, and
-            // its reads are not the computation's reads.
-            let lexical = *file.path.as_str() == *function.expression.path
-                && file.ast.peel_ts_sugar_span(argument.span)
-                    == Span::new(
-                        u32::try_from(function.expression.start_byte).ok()?,
-                        u32::try_from(function.expression.end_byte).ok()?,
-                    );
-            let semantic = ctx
-                .entities
-                .get(&location(file.path.shared(), argument.span))
-                .is_some_and(|symbol| {
-                    async_symbol_root(symbol, &ctx.facts.typescript) == function_symbol
-                });
-            if !lexical && !semantic {
-                return None;
+    // The calls that name this function, in project order: a call whose first
+    // argument IS the function's expression (an async function merely nested in
+    // the argument -- an async IIFE, an async closure the computation returns
+    // -- is not suspended by the primitive), or whose argument resolves to the
+    // same async root. The first one whose callee tracks reads
+    // decides, exactly as a scan over every call of every file would.
+    let mut candidates = std::collections::BTreeSet::<(usize, usize)>::new();
+    let range = u32::try_from(function.expression.start_byte)
+        .ok()
+        .zip(u32::try_from(function.expression.end_byte).ok())
+        .map(|(start, end)| Span::new(start, end));
+    // A range that does not fit a span cannot be compared, which refused every
+    // call of the function's own file, semantic or not.
+    let own_file =
+        |file_index: usize| *ctx.facts.files[file_index].path.as_str() == *function.expression.path;
+    if let Some(range) = range {
+        for (file_index, file) in ctx.facts.files.iter().enumerate() {
+            if !own_file(file_index) {
+                continue;
             }
-            let primitive =
-                call_primitive_name(file, candidate, ctx.entities, ctx.symbol_names, ctx.dialect)?;
-            // A tracked callback is what makes this a computation
-            // whose reads matter after an await. The list this
-            // replaced was 2.0's eight; under 1.x three of them
-            // resolve to nothing and `createComputed` was absent.
-            primitive
-                .primitive()
-                .is_some_and(|resolved| {
-                    ctx.dialect
-                        .callback_semantics_at(resolved, 0, candidate.arguments.len())
-                        .tracks_reads
-                })
-                .then(|| format!("{primitive} async computation"))
-        })
+            for (call_index, call) in file.ast.calls.iter().enumerate() {
+                if call
+                    .arguments
+                    .first()
+                    .is_some_and(|argument| file.ast.peel_ts_sugar_span(argument.span) == range)
+                {
+                    candidates.insert((file_index, call_index));
+                }
+            }
+        }
+    }
+    if let Some(semantic) = index.by_argument_root.get(function_symbol) {
+        candidates.extend(
+            semantic
+                .iter()
+                .copied()
+                .filter(|&(file_index, _)| range.is_some() || !own_file(file_index)),
+        );
+    }
+    candidates.into_iter().find_map(|(file_index, call_index)| {
+        let file = &ctx.facts.files[file_index];
+        let candidate = &file.ast.calls[call_index];
+        let primitive =
+            call_primitive_name(file, candidate, ctx.entities, ctx.symbol_names, ctx.dialect)?;
+        // A tracked callback is what makes this a computation
+        // whose reads matter after an await. The list this
+        // replaced was 2.0's eight; under 1.x three of them
+        // resolve to nothing and `createComputed` was absent.
+        primitive
+            .primitive()
+            .is_some_and(|resolved| {
+                ctx.dialect
+                    .callback_semantics_at(resolved, 0, candidate.arguments.len())
+                    .tracks_reads
+            })
+            .then(|| format!("{primitive} async computation"))
     })
+}
+
+/// What [`tracked_async_computation_context`] asks of the whole project, built
+/// once per prepass instead of once per async function: the alias chains of
+/// async functions, and every call whose first argument resolves to a symbol,
+/// keyed by that symbol's async root.
+struct AsyncComputations<'t> {
+    roots: AsyncSymbolRoots<'t>,
+    /// `(file index, call index)` pairs in project order.
+    by_argument_root: std::collections::HashMap<String, Vec<(usize, usize)>>,
+}
+
+impl<'t> AsyncComputations<'t> {
+    fn new(ctx: &AnalysisContext<'_>, table: &'t solid_facts::TypeScriptTable) -> Self {
+        let roots = AsyncSymbolRoots::new(table);
+        let mut by_argument_root = std::collections::HashMap::<String, Vec<(usize, usize)>>::new();
+        for (file_index, file) in ctx.facts.files.iter().enumerate() {
+            for (call_index, call) in file.ast.calls.iter().enumerate() {
+                let Some(symbol) = call
+                    .arguments
+                    .first()
+                    .and_then(|argument| ctx.entities.at(file.path.as_str(), argument.span))
+                else {
+                    continue;
+                };
+                by_argument_root
+                    .entry(roots.root(symbol).to_owned())
+                    .or_default()
+                    .push((file_index, call_index));
+            }
+        }
+        Self {
+            roots,
+            by_argument_root,
+        }
+    }
 }
 
 /// Store-path and component-props member reads dominated by a straight-line

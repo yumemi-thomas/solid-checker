@@ -373,6 +373,12 @@ pub struct ReactiveRead {
     /// but its call-scoped cardinality does not prove an invocation occurs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub callback_invocation_unproven: bool,
+    /// The read is the called package export reading reactive state of its
+    /// own while it runs, as its contract's `reads` states. Solid warns about
+    /// it at every use, so it is the package's implementation, not misuse at
+    /// the call site.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub package_internal: bool,
 }
 
 impl ReactiveRead {
@@ -2716,6 +2722,17 @@ fn jsx_primitive_name(
 
 fn location(path: impl Into<Arc<str>>, span: Span) -> Location {
     span.location(path)
+}
+
+/// Whether `declaration` is reactive state a package contract declares for
+/// one of its exports (`<contract source>#<export>`), rather than a binding in
+/// the project's own source.
+pub(crate) fn contract_declared_state(declaration: &Location) -> bool {
+    let path = declaration.path.as_ref();
+    path.starts_with("accepted:")
+        || path
+            .split_once('#')
+            .is_some_and(|(source, _)| source.ends_with(".json"))
 }
 
 #[cfg(test)]

@@ -1084,6 +1084,19 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             if read.is_uncertifiable() {
                 finding.kind = "uncertifiable".into();
             }
+            // A read the called export makes of its own reactive state, as
+            // its package contract declares it, happens inside the package's
+            // implementation while it runs. Solid's dev build warns about it
+            // in this component, but the call site controls nothing about it:
+            // the same warning fires for every correct use. It is the
+            // package's behaviour, not proven misuse here.
+            if read.package_internal {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "{} reads reactive state of its own while it runs, outside any tracking scope, as its package contract declares; Solid's dev build warns STRICT_READ_UNTRACKED here for every use of it, so this is the package's implementation rather than misuse at this call: {}",
+                    read.via, finding.message
+                );
+            }
         }
         FindingSeed::OwnedWrite(write) => {
             finding.analysis_context = if write.context.is_empty() {

@@ -7056,6 +7056,11 @@ fn census_flat_reads_arguments(
             continue;
         };
         for (slot, _) in dialect.callback_executions(primitive) {
+            // A callback the runtime never invokes during the call cannot add
+            // to the call's reads, so it needs no attribution here.
+            if dialect.callback_never_invoked_during_call(primitive, *slot) {
+                continue;
+            }
             let scope = solid_dialect::ArgumentScope {
                 primitive_slots: &[],
                 callable_or_primitive_slots: std::slice::from_ref(slot),

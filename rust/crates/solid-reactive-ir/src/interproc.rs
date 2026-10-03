@@ -5841,6 +5841,7 @@ fn interprocedural_result_reads_for_file(
                         ),
                     )) {
                         result.push(ReactiveRead {
+                            package_internal: false,
                             kind: "accessor".into(),
                             accessor: read.display.to_string().into(),
                             location: location(file.path.shared(), call.span),
@@ -5883,6 +5884,10 @@ fn interprocedural_result_reads_for_file(
         }
         for read in effective {
             let accessor = read.display.to_string();
+            // A summary read whose symbol is the callee itself is the export's
+            // own contracted `reads`, not a value passed in.
+            let package_internal =
+                read.symbol.as_str() == symbol && crate::contract_declared_state(&read.declaration);
             if seen.insert((
                 callee.path.clone(),
                 callee.start_byte,
@@ -5912,6 +5917,7 @@ fn interprocedural_result_reads_for_file(
                     callee_callback_timing: callee_callback_timing(
                         file, call.span, execution, lookup,
                     ),
+                    package_internal,
                 });
             }
         }

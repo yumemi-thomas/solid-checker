@@ -68,7 +68,7 @@ pub(crate) use dependencies::{BUN_LOCKFILE_VERSIONS, is_sri_integrity};
 pub use dependencies::{
     CanonicalDependencyNodeIdentity, DependencyCompositionError, DependencyCompositionRequirement,
     DependencyCompositionSchedule, DependencyNodeIdentity, DependencyQueueNode,
-    DependencyReceiptCompositionError, FinalizedGraphNode, FinalizedPolicy2Graph,
+    DependencyReceiptCompositionError, FinalizedGraphNode, FinalizedPolicy2Graph, PnpmLockIndex,
     PublishedContractGraphPlan, PublishedGraphCertificationError, PublishedGraphLockSelection,
     PublishedGraphNodeRequest, PublishedGraphPlanningError, PublishedGraphSourceRequest,
     VerifiedDependencyComposition, certify_published_contract_graph_case_set,

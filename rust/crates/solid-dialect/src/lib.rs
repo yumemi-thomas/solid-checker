@@ -2722,6 +2722,15 @@ pub trait Dialect: Sync {
     /// in an "apply callback" that version does not have.
     fn callback_executions(&self, primitive: Primitive) -> &'static [(usize, Execution)];
 
+    /// Whether the runtime never invokes callback `slot` of `primitive` while
+    /// the call runs, on every path: it only stores or returns the callable.
+    /// Stronger than [`Execution::Deferred`], which is a tracking attribution
+    /// and usually, but not always, means later than the call. A call's own
+    /// `reads` cannot depend on such a callback. Unknown is `false`.
+    fn callback_never_invoked_during_call(&self, _primitive: Primitive, _slot: usize) -> bool {
+        false
+    }
+
     /// Whether one callback argument describes work performed by a function
     /// returned from the primitive rather than by the primitive call itself.
     ///

@@ -457,22 +457,39 @@ pub(super) fn patch_typescript_indexes(
     Some((alias_elapsed, entities_elapsed))
 }
 
-pub(super) fn async_symbol_root(symbol: &str, table: &TypeScriptTable) -> String {
-    let aliases = table
-        .files()
-        .flat_map(|file| file.async_functions.iter())
-        .filter(|function| !function.symbol.is_empty() && !function.target.is_empty())
-        .map(|function| (function.symbol.as_ref(), function.target.as_ref()))
-        .collect::<HashMap<_, _>>();
-    let mut current = symbol;
-    let mut seen = HashSet::new();
-    while seen.insert(current) {
-        let Some(target) = aliases.get(current).copied() else {
-            break;
-        };
-        current = target;
+/// The async-function alias chains of one project: an async function's symbol
+/// maps to the `target` it wraps, and [`AsyncSymbolRoots::root`] follows the
+/// chain to its end (cycle-safe). Built once from the whole table; a caller
+/// that asks per function or per call must not rebuild it per question.
+pub(super) struct AsyncSymbolRoots<'a> {
+    aliases: HashMap<&'a str, &'a str>,
+}
+
+impl<'a> AsyncSymbolRoots<'a> {
+    pub(super) fn new(table: &'a TypeScriptTable) -> Self {
+        let aliases = table
+            .files()
+            .flat_map(|file| file.async_functions.iter())
+            .filter(|function| !function.symbol.is_empty() && !function.target.is_empty())
+            .map(|function| (function.symbol.as_ref(), function.target.as_ref()))
+            .collect::<HashMap<_, _>>();
+        Self { aliases }
     }
-    current.into()
+
+    pub(super) fn root<'s>(&self, symbol: &'s str) -> &'s str
+    where
+        'a: 's,
+    {
+        let mut current = symbol;
+        let mut seen = HashSet::new();
+        while seen.insert(current) {
+            let Some(target) = self.aliases.get(current).copied() else {
+                break;
+            };
+            current = target;
+        }
+        current
+    }
 }
 
 pub(super) fn entity_symbols(

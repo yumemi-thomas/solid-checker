@@ -1,5 +1,32 @@
 # Precision backlog
 
+## Package-internal reads and the onCleanup census row (2026-10-04)
+
+- **A package export reading its own state is not call-site misuse.** The
+  runtime misuse ledger (`benchmarks/reviewed-package-models/development/
+  misuse-runtime-ledger.mjs`) showed the correct twins of
+  `timer-createPolled-top-level-read` and
+  `timer-createIntervalCounter-top-level-read` drawing a proven
+  `strict-read-untracked`. Solid's dev build warns there too, because
+  `createPolled` seeds `createSignal(depSignal())` during the call
+  (`@solid-primitives/timer@1.4.5-next.1` `dist/index.js:124`). The read is the
+  package's implementation, so a read a contract's `reads` declares as the
+  export's own state (`ReactiveRead::package_internal`, set in
+  `local_access.rs` and the interprocedural summary) is now uncertifiable, with
+  a message that says so. A value the package returned and the caller reads
+  (`package-return-consumer`'s `count()`) is still a proven violation.
+- **onCleanup's callback is never invoked during the call.** fix3's
+  `OnCleanup` row in `callback_executions` made the census ask a premise for
+  its callback before closing the flat `reads` row. `Execution::Deferred` is a
+  tracking attribution, not a schedule, so it cannot waive that.
+  `Dialect::callback_never_invoked_during_call` states the stronger fact,
+  probed in the rc.9 dev and prod builds; only `onCleanup` slot 0 has it.
+- **Performance (fix1).** The pnpm lockfile is parsed once per distinct byte
+  content (`diagnostics.rs` `pnpm_lock_index`), and
+  `tracked_async_computation_context` uses a project-wide call index instead
+  of scanning every call per async function. The index keeps P-L's rule: the
+  argument must be the async function itself.
+
 ## strict-read-untracked summary-path false positives (2026-10-03)
 
 Measured on the 48-project real-app sweep (1,962 `strict-read-untracked`

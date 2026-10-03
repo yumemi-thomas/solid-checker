@@ -376,17 +376,16 @@ fn pnpm_scalar(text: &str) -> Option<String> {
     Some(trimmed.to_owned())
 }
 
-/// Finds the exact `packages:` entry for `exact` and returns its registry
-/// integrity.
+/// Reads the registry integrity of `exact` from an already scanned block.
 ///
 /// A repeated key is a refusal rather than a last-one-wins read: two records for
 /// one `name@version` is exactly the ambiguity the Bun locator exists to
 /// separate, and pnpm's key space gives nothing to separate them with.
 fn pnpm_packages_integrity(
-    text: &str,
+    block: &PnpmPackagesBlock,
     exact: &str,
 ) -> Result<String, super::ArtifactSnapshotError> {
-    match pnpm_packages_entry(text, exact)? {
+    match block.entry(exact)? {
         None => Err(super::ArtifactSnapshotError::InvalidProvenance(
             "pnpm lockfile has no packages block".into(),
         )),
@@ -444,17 +443,16 @@ fn pnpm_packages_keys(text: &str) -> Result<Vec<String>, super::ArtifactSnapshot
 /// reader refuses. Checked for every shared key, not only the selected one, as
 /// the acquisition twin does, so the two refuse the same lockfiles.
 fn require_pnpm_documents_agree(
-    documents: &PnpmDocuments,
+    main: &PnpmPackagesBlock,
+    env: &str,
 ) -> Result<(), super::ArtifactSnapshotError> {
-    let Some(env) = &documents.env else {
-        return Ok(());
-    };
+    let env_block = PnpmPackagesBlock::scan(env);
     for key in pnpm_packages_keys(env)? {
-        let project = pnpm_packages_entry(&documents.main, &key)?;
+        let project = main.entry(&key)?;
         if matches!(project, None | Some(PnpmPackageEntry::Absent)) {
             continue;
         }
-        if pnpm_packages_entry(env, &key)? != project {
+        if env_block.entry(&key)? != project {
             return Err(super::ArtifactSnapshotError::InvalidProvenance(format!(
                 "pnpm lockfile's env document records {key} with a different resolution than \
                  its project document"
@@ -464,83 +462,148 @@ fn require_pnpm_documents_agree(
     Ok(())
 }
 
-/// The `packages:` entry for `exact` in one document, or `None` when the
-/// document has no `packages:` block. An inline `packages: {}` is an empty
-/// block.
-fn pnpm_packages_entry(
-    text: &str,
-    exact: &str,
-) -> Result<Option<PnpmPackageEntry>, super::ArtifactSnapshotError> {
-    let lines: Vec<&str> = text.lines().collect();
-    if lines.iter().any(|line| line.trim_end() == "packages: {}") {
-        return Ok(Some(PnpmPackageEntry::Absent));
-    }
-    let Some(start) = lines.iter().position(|line| *line == "packages:") else {
-        return Ok(None);
-    };
-    let mut selected: Option<String> = None;
-    let mut seen = false;
-    let mut key: Option<String> = None;
-    let mut index = start + 1;
-    while index < lines.len() {
-        let line = lines[index];
-        if line.trim().is_empty() {
-            index += 1;
-            continue;
-        }
-        if !line.starts_with(' ') {
-            break;
-        }
-        if let Some(rest) = entry_key_line(line) {
-            let parsed = pnpm_scalar(rest).ok_or_else(|| {
-                super::ArtifactSnapshotError::InvalidProvenance(format!(
-                    "pnpm lockfile has an unreadable packages key on line {}",
-                    index + 1
-                ))
-            })?;
-            if parsed == exact {
-                if seen {
-                    return Err(super::ArtifactSnapshotError::InvalidProvenance(format!(
-                        "pnpm lockfile repeats packages key {exact}"
-                    )));
-                }
-                seen = true;
-            }
-            key = Some(parsed);
-            index += 1;
-            continue;
-        }
-        let resolution = line
-            .strip_prefix("    resolution:")
-            .filter(|_| key.as_deref() == Some(exact));
-        let Some(head) = resolution else {
-            index += 1;
-            continue;
+/// What the scan of one `packages:` block recorded for one key.
+#[derive(Debug, Default)]
+struct PnpmKeyRecord {
+    /// How many times the key line occurs.
+    occurrences: usize,
+    selected: Option<String>,
+    /// The first refusal the key earned, with the line it was met on, so that it
+    /// can be ordered against the block-wide refusal.
+    refusal: Option<(usize, String)>,
+}
+
+/// One document's `packages:` block, scanned once for every key.
+///
+/// Selecting a package used to re-scan the whole document per call, which is
+/// quadratic in a project with thousands of installed packages. The scan is
+/// per-block and the lookup per-key; a refusal is stored with its line so a
+/// lookup reports the same refusal the single-key scan would have met first.
+#[derive(Debug, Default)]
+struct PnpmPackagesBlock {
+    /// An inline `packages: {}`: an empty block.
+    inline_empty: bool,
+    /// Whether a `packages:` line opens a block.
+    has_block: bool,
+    keys: BTreeMap<String, PnpmKeyRecord>,
+    /// An unreadable key line stops the scan; it refuses every lookup that has
+    /// not already met an earlier refusal of its own.
+    block_refusal: Option<(usize, String)>,
+}
+
+impl PnpmPackagesBlock {
+    fn scan(text: &str) -> Self {
+        let lines: Vec<&str> = text.lines().collect();
+        let mut block = Self {
+            inline_empty: lines.iter().any(|line| line.trim_end() == "packages: {}"),
+            ..Self::default()
         };
-        let mut body = head.trim().to_owned();
-        // pnpm writes this inline; a formatter may wrap it across lines. Gather
-        // until the braces balance rather than assuming either layout.
-        while !body.ends_with('}') && index + 1 < lines.len() {
-            index += 1;
-            if !lines[index].starts_with("    ") {
+        let Some(start) = lines.iter().position(|line| *line == "packages:") else {
+            return block;
+        };
+        block.has_block = true;
+        let mut key: Option<String> = None;
+        let mut index = start + 1;
+        while index < lines.len() {
+            let line = lines[index];
+            if line.trim().is_empty() {
+                index += 1;
+                continue;
+            }
+            if !line.starts_with(' ') {
                 break;
             }
-            body.push_str(lines[index].trim());
+            if let Some(rest) = entry_key_line(line) {
+                let Some(parsed) = pnpm_scalar(rest) else {
+                    block.block_refusal = Some((
+                        index,
+                        format!(
+                            "pnpm lockfile has an unreadable packages key on line {}",
+                            index + 1
+                        ),
+                    ));
+                    break;
+                };
+                let record = block.keys.entry(parsed.clone()).or_default();
+                record.occurrences += 1;
+                if record.occurrences > 1 && record.refusal.is_none() {
+                    record.refusal = Some((
+                        index,
+                        format!("pnpm lockfile repeats packages key {parsed}"),
+                    ));
+                }
+                key = Some(parsed);
+                index += 1;
+                continue;
+            }
+            let (Some(current), Some(head)) = (&key, line.strip_prefix("    resolution:")) else {
+                index += 1;
+                continue;
+            };
+            let mut body = head.trim().to_owned();
+            // pnpm writes this inline; a formatter may wrap it across lines. Gather
+            // until the braces balance rather than assuming either layout.
+            while !body.ends_with('}') && index + 1 < lines.len() {
+                index += 1;
+                if !lines[index].starts_with("    ") {
+                    break;
+                }
+                body.push_str(lines[index].trim());
+            }
+            let record = block.keys.entry(current.clone()).or_default();
+            // Past a refusal the single-key scan would already have stopped.
+            if record.refusal.is_none() {
+                match pnpm_flow_mapping(&body, current) {
+                    Ok(mapping) => {
+                        if let Some(integrity) = mapping
+                            .into_iter()
+                            .find_map(|(name, value)| (name == "integrity").then_some(value))
+                            .filter(|value| is_sri_integrity(value))
+                        {
+                            record.selected = Some(integrity);
+                        }
+                    }
+                    Err(super::ArtifactSnapshotError::InvalidProvenance(message)) => {
+                        record.refusal = Some((index, message));
+                    }
+                    Err(other) => record.refusal = Some((index, other.to_string())),
+                }
+            }
+            index += 1;
         }
-        if let Some(integrity) = pnpm_flow_mapping(&body, exact)?
-            .into_iter()
-            .find_map(|(name, value)| (name == "integrity").then_some(value))
-            .filter(|value| is_sri_integrity(value))
-        {
-            selected = Some(integrity);
-        }
-        index += 1;
+        block
     }
-    Ok(Some(match (seen, selected) {
-        (false, _) => PnpmPackageEntry::Absent,
-        (true, None) => PnpmPackageEntry::NoRegistryIntegrity,
-        (true, Some(integrity)) => PnpmPackageEntry::Integrity(integrity),
-    }))
+
+    /// The `packages:` entry for `exact`, or `None` when the document has no
+    /// `packages:` block. An inline `packages: {}` is an empty block.
+    fn entry(&self, exact: &str) -> Result<Option<PnpmPackageEntry>, super::ArtifactSnapshotError> {
+        if self.inline_empty {
+            return Ok(Some(PnpmPackageEntry::Absent));
+        }
+        if !self.has_block {
+            return Ok(None);
+        }
+        let record = self.keys.get(exact);
+        let refusal = [
+            record.and_then(|record| record.refusal.as_ref()),
+            self.block_refusal.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        .min_by_key(|(line, _)| *line);
+        if let Some((_, message)) = refusal {
+            return Err(super::ArtifactSnapshotError::InvalidProvenance(
+                message.clone(),
+            ));
+        }
+        Ok(Some(match record {
+            None => PnpmPackageEntry::Absent,
+            Some(record) => match &record.selected {
+                None => PnpmPackageEntry::NoRegistryIntegrity,
+                Some(integrity) => PnpmPackageEntry::Integrity(integrity.clone()),
+            },
+        }))
+    }
 }
 
 /// A `packages:` entry key line: exactly two spaces, then a scalar, then `:`.
@@ -692,6 +755,91 @@ fn pnpm_flow_mapping(
     Ok(entries)
 }
 
+/// One pnpm lockfile, parsed once, from which any number of exact selections
+/// are read.
+///
+/// Everything [`PublishedGraphLockSelection::from_pnpm_lock`] checks that does
+/// not depend on the selected package -- size, encoding, YAML subset, document
+/// split, lockfile major, the `packages:` scan and the env/project agreement --
+/// is done by [`PnpmLockIndex::parse`], and the outcomes that are refusals are
+/// kept rather than raised so [`PnpmLockIndex::select`] reports them in the
+/// order the one-shot reader always did. A caller that selects many packages
+/// from one lockfile therefore pays for the parse once instead of once per
+/// package.
+#[derive(Debug)]
+pub struct PnpmLockIndex {
+    lockfile_digest: String,
+    major: Result<(), String>,
+    main: PnpmPackagesBlock,
+    agreement: Result<(), String>,
+}
+
+impl PnpmLockIndex {
+    /// Parses untrusted pnpm lockfile bytes. See
+    /// [`PublishedGraphLockSelection::from_pnpm_lock`] for what is read.
+    pub fn parse(lockfile: &[u8]) -> Result<Self, super::ArtifactSnapshotError> {
+        if lockfile.len() > 8 * 1024 * 1024 {
+            return Err(super::ArtifactSnapshotError::ResourceLimit(
+                "lockfile bytes exceed graph policy limit".into(),
+            ));
+        }
+        let source = std::str::from_utf8(lockfile).map_err(|_| {
+            super::ArtifactSnapshotError::InvalidProvenance(
+                "pnpm lockfile is not valid UTF-8".into(),
+            )
+        })?;
+        let text = source.replace("\r\n", "\n");
+        refuse_pnpm_yaml_beyond_subset(&text)?;
+        let documents = pnpm_documents(&text)?;
+        let provenance = |error: super::ArtifactSnapshotError| match error {
+            super::ArtifactSnapshotError::InvalidProvenance(message) => message,
+            other => other.to_string(),
+        };
+        let major = require_pnpm_lockfile_major_9(&documents.main).map_err(provenance);
+        let main = PnpmPackagesBlock::scan(&documents.main);
+        let agreement = match &documents.env {
+            Some(env) => require_pnpm_documents_agree(&main, env).map_err(provenance),
+            None => Ok(()),
+        };
+        Ok(Self {
+            lockfile_digest: format!("sha256:{:x}", Sha256::digest(lockfile)),
+            major,
+            main,
+            agreement,
+        })
+    }
+
+    /// Selects one exact `name@version` from the parsed lockfile.
+    pub fn select(
+        &self,
+        locator: impl Into<String>,
+        package_name: impl Into<String>,
+        package_version: impl Into<String>,
+    ) -> Result<PublishedGraphLockSelection, super::ArtifactSnapshotError> {
+        let refuse = super::ArtifactSnapshotError::InvalidProvenance;
+        let locator = locator.into();
+        let package_name = package_name.into();
+        let package_version = package_version.into();
+        let exact = format!("{package_name}@{package_version}");
+        if locator != exact {
+            return Err(refuse(format!(
+                "pnpm lock locator {locator:?} is not the exact key {exact:?}"
+            )));
+        }
+        self.major.clone().map_err(refuse)?;
+        let integrity = pnpm_packages_integrity(&self.main, &exact)?;
+        self.agreement.clone().map_err(refuse)?;
+        PublishedGraphLockSelection::new(
+            "pnpm",
+            self.lockfile_digest.clone(),
+            locator,
+            package_name,
+            package_version,
+            integrity,
+        )
+    }
+}
+
 impl PublishedGraphLockSelection {
     /// The registry integrity this lockfile selected for the package.
     #[must_use]
@@ -801,39 +949,7 @@ impl PublishedGraphLockSelection {
         package_name: impl Into<String>,
         package_version: impl Into<String>,
     ) -> Result<Self, super::ArtifactSnapshotError> {
-        if lockfile.len() > 8 * 1024 * 1024 {
-            return Err(super::ArtifactSnapshotError::ResourceLimit(
-                "lockfile bytes exceed graph policy limit".into(),
-            ));
-        }
-        let locator = locator.into();
-        let package_name = package_name.into();
-        let package_version = package_version.into();
-        let source = std::str::from_utf8(lockfile).map_err(|_| {
-            super::ArtifactSnapshotError::InvalidProvenance(
-                "pnpm lockfile is not valid UTF-8".into(),
-            )
-        })?;
-        let text = source.replace("\r\n", "\n");
-        refuse_pnpm_yaml_beyond_subset(&text)?;
-        let documents = pnpm_documents(&text)?;
-        let exact = format!("{package_name}@{package_version}");
-        if locator != exact {
-            return Err(super::ArtifactSnapshotError::InvalidProvenance(format!(
-                "pnpm lock locator {locator:?} is not the exact key {exact:?}"
-            )));
-        }
-        require_pnpm_lockfile_major_9(&documents.main)?;
-        let integrity = pnpm_packages_integrity(&documents.main, &exact)?;
-        require_pnpm_documents_agree(&documents)?;
-        Self::new(
-            "pnpm",
-            format!("sha256:{:x}", Sha256::digest(lockfile)),
-            locator,
-            package_name,
-            package_version,
-            integrity,
-        )
+        PnpmLockIndex::parse(lockfile)?.select(locator, package_name, package_version)
     }
 
     /// Replays an exact npm lock selection from a `lockfileVersion` 2 or 3
@@ -6139,6 +6255,50 @@ mod tests {
             name,
             version,
         )
+    }
+
+    /// The lockfile is parsed once and answers every selection, and each answer
+    /// -- success or refusal, wording included -- is the one the one-shot
+    /// reader gives. A refusal found while scanning is ordered by line: a key
+    /// that repeats before an unreadable key reports the repeat, any other key
+    /// reports the unreadable line.
+    #[test]
+    fn pnpm_lock_index_answers_every_selection_as_the_one_shot_reader_does() {
+        let lock = real_lockfile("finds-team.pnpm-lock.yaml");
+        let index = PnpmLockIndex::parse(lock.as_bytes()).unwrap();
+        for (name, version) in [
+            ("@tanstack/solid-router", "2.0.0-rc.8"),
+            ("pnpm", "12.5.1"),
+            ("missing", "1.0.0"),
+        ] {
+            let locator = format!("{name}@{version}");
+            assert_eq!(
+                index.select(&locator, name, version),
+                select_pnpm(&lock, name, version),
+                "{locator}"
+            );
+        }
+        assert!(index.select("a@1.0.0", "b", "1.0.0").is_err());
+
+        let entry = format!("    resolution: {{integrity: {PNPM_INTEGRITY}}}\n");
+        let lock = pnpm_lock(&format!(
+            "  a@1.0.0:\n{entry}  a@1.0.0:\n{entry}  b@1.0.0:\n{entry}  \"bad:\n{entry}  c@1.0.0:\n{entry}"
+        ));
+        let index = PnpmLockIndex::parse(lock.as_bytes()).unwrap();
+        for (name, expected) in [
+            ("a", "repeats packages key a@1.0.0"),
+            ("b", "unreadable packages key on line 14"),
+            ("c", "unreadable packages key on line 14"),
+        ] {
+            let locator = format!("{name}@1.0.0");
+            let error = index.select(&locator, name, "1.0.0").unwrap_err();
+            assert!(format!("{error}").contains(expected), "{name}: {error}");
+            assert_eq!(
+                Err(error),
+                select_pnpm(&lock, name, "1.0.0"),
+                "the index and the one-shot reader refuse {name} alike"
+            );
+        }
     }
 
     const ROUTER_INTEGRITY: &str = "sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA==";

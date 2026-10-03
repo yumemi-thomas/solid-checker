@@ -5633,6 +5633,14 @@ impl Dialect for Solid2 {
     /// `execution: "deferred"` for every package export that forwards a
     /// callback through `flush`, promising the callback has not run when the
     /// export returns — which the runtime contradicts.
+    /// `onCleanup(fn)` only registers `fn` on the current owner, or returns it
+    /// when there is none (`@solidjs/signals@2.0.0-rc.9` `dist/dev.js:2174`
+    /// and `cleanup`, `dist/dev-shared.js:2855`; `dist/prod/signals.js:57`).
+    /// It never calls `fn` during the call.
+    fn callback_never_invoked_during_call(&self, primitive: Primitive, slot: usize) -> bool {
+        primitive == Primitive::OnCleanup && slot == 0
+    }
+
     fn callback_executions(&self, primitive: Primitive) -> &'static [(usize, Execution)] {
         match primitive {
             Primitive::CreateMemo
@@ -6502,6 +6510,11 @@ mod tests {
             Some(Execution::Deferred)
         );
         assert_eq!(word(Primitive::OnCleanup, 0, 1), Some(Execution::Deferred));
+        // Deferred is an attribution; only onCleanup is also proven never to
+        // run its callback during the call.
+        assert!(two.callback_never_invoked_during_call(Primitive::OnCleanup, 0));
+        assert!(!two.callback_never_invoked_during_call(Primitive::OnSettled, 0));
+        assert!(!two.callback_never_invoked_during_call(Primitive::CreateEffect, 1));
 
         // Silence is an answer contract emission must keep as "unknown".
         assert_eq!(word(Primitive::Children, 0, 1), None);

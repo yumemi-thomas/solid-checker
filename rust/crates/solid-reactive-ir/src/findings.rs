@@ -598,6 +598,7 @@ mod tests {
 
     fn read(missing_jsx_census: bool) -> ReactiveRead {
         ReactiveRead {
+            package_internal: false,
             kind: "accessor".into(),
             accessor: "count".into(),
             location: location(20),

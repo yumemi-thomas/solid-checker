@@ -3613,6 +3613,35 @@ pub(crate) fn installed_package_integrity(
     Ok(found)
 }
 
+type PnpmLockParse = Result<
+    crate::contract_certification::PnpmLockIndex,
+    crate::contract_certification::ArtifactSnapshotError,
+>;
+
+/// The parsed form of a pnpm lockfile, memoized by its exact bytes.
+///
+/// The key is the file content, not its path or mtime, so a lockfile rewritten
+/// between runs of a long-lived process can never be answered from the old
+/// parse. A refused lockfile is memoized too: it refuses every selection alike.
+fn pnpm_lock_index(data: &[u8]) -> std::sync::Arc<PnpmLockParse> {
+    type Entry = (Vec<u8>, std::sync::Arc<PnpmLockParse>);
+    static CACHE: std::sync::Mutex<Vec<Entry>> = std::sync::Mutex::new(Vec::new());
+    if let Ok(cache) = CACHE.lock()
+        && let Some((_, index)) = cache.iter().find(|(bytes, _)| bytes == data)
+    {
+        return std::sync::Arc::clone(index);
+    }
+    let index = std::sync::Arc::new(crate::contract_certification::PnpmLockIndex::parse(data));
+    if let Ok(mut cache) = CACHE.lock() {
+        // A process certifies a handful of projects; bound the memo anyway.
+        if cache.len() >= 8 {
+            cache.remove(0);
+        }
+        cache.push((data.to_vec(), std::sync::Arc::clone(&index)));
+    }
+    index
+}
+
 /// The pnpm and Yarn-classic arm of the search above.
 ///
 /// Separate from the ancestor walk because neither lockfile is keyed by install
@@ -3646,12 +3675,16 @@ fn manifest_keyed_lockfile_integrity(
         return Ok(None);
     };
     type Reader = fn(&[u8], String, &str, &str) -> Option<String>;
+    // One project asks this once per installed package, so the lockfile is
+    // parsed once per distinct byte content rather than once per call.
     let pnpm: Reader = |data, locator, name, version| {
-        crate::contract_certification::PublishedGraphLockSelection::from_pnpm_lock(
-            data, locator, name, version,
-        )
-        .ok()
-        .map(|selection| selection.integrity().to_owned())
+        pnpm_lock_index(data)
+            .as_ref()
+            .as_ref()
+            .ok()?
+            .select(locator, name, version)
+            .ok()
+            .map(|selection| selection.integrity().to_owned())
     };
     let yarn: Reader = |data, locator, name, version| {
         crate::contract_certification::PublishedGraphLockSelection::from_yarn_lock(
