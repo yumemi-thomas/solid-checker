@@ -559,6 +559,24 @@ fn no_direct_mutation(
             }
         };
         let props = !context.accessors.contains_key(symbol);
+        // `const { program } = props` binds the *value* of one property, not
+        // the props container: `program.x = y` writes to whatever object the
+        // caller passed (a plain mutable one as often as not), so it is not a
+        // write to a readonly proxy. The binding shape is the fact -- a
+        // whole-object alias (`const p = props`) keeps the container proof.
+        if props
+            && file.ast.bindings.iter().any(|binding| {
+                binding.shape == solid_facts::ast::BindingShape::Object
+                    && binding.object_slots.iter().any(|slot| {
+                        context
+                            .entities
+                            .get(&location(file.path.shared(), slot.local.span))
+                            == Some(symbol)
+                    })
+            })
+        {
+            continue;
+        }
         let name = name.as_str();
         let through_member = root != assignment.target;
         let kind = context.source_kinds.get(symbol).copied();

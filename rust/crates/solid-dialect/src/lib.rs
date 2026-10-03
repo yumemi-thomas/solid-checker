@@ -2543,6 +2543,32 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether a read of a pending async value inside this primitive's tracked
+    /// computation is a *render* of that value, so that a missing async
+    /// boundary above it is the read's own defect.
+    ///
+    /// Only a render effect reports the missing boundary: a memo, a user
+    /// effect's compute or a derived signal that reads a pending value just
+    /// propagates the pending state to whichever node finally consumes it, and
+    /// the boundary question belongs to that consumer. Default `false`: a
+    /// dialect that has not said which of its primitives render claims no
+    /// boundary defect for a read in a computation.
+    fn computation_read_is_render(&self, _primitive: Primitive) -> bool {
+        false
+    }
+
+    /// Whether this primitive mounts a component tree at a DOM root, taking
+    /// the root component (or a function returning it) as its first argument.
+    ///
+    /// The mount call is the end of every render chain: a component rendered
+    /// there has no other parent, which is what lets an analysis prove the
+    /// chain above a read contains no boundary instead of merely not seeing
+    /// one. Default `false`: a dialect that names no mount primitive proves no
+    /// chain complete.
+    fn mounts_component_tree(&self, _primitive: Primitive) -> bool {
+        false
+    }
+
     /// Which parameters of a control-flow component's children callback are
     /// reactive accessors rather than plain values.
     ///
@@ -3770,6 +3796,8 @@ mod tests {
         assert_eq!(silent.context_provider_member(), None);
         assert!(!silent.static_event_values_are_attributes());
         assert!(!silent.false_attribute_value_removes_attribute());
+        assert!(!silent.computation_read_is_render(Primitive::CreateRenderEffect));
+        assert!(!silent.mounts_component_tree(Primitive::Render));
         assert!(!silent.direct_jsx_return_is_component());
         assert!(!silent.component_name_may_be_component("Button"));
         // No tracking runtime: inheriting 2.0's `@solidjs/signals` would gate

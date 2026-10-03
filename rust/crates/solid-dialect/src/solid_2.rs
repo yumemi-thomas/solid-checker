@@ -6010,6 +6010,23 @@ impl Dialect for Solid2 {
         true
     }
 
+    /// Source: `@solidjs/signals@2.0.0-rc.9` `enforceLoadingBoundary`, probed
+    /// in dev: `ASYNC_OUTSIDE_LOADING_BOUNDARY` is emitted for a *render
+    /// effect* whose read is pending with no `Loading` ancestor during the
+    /// synchronous `render()` window, and never for a memo or a user effect's
+    /// compute. `createRenderEffect` is the one user-callable render effect;
+    /// compiled JSX positions are classified from compiler facts instead.
+    fn computation_read_is_render(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::CreateRenderEffect
+    }
+
+    /// Source: `@solidjs/web@2.0.0-rc.9` exports `render(code, element)` and
+    /// `hydrate(fn, node)`, whose first argument is the root of the mounted
+    /// tree and which have no other caller.
+    fn mounts_component_tree(&self, primitive: Primitive) -> bool {
+        matches!(primitive, Primitive::Render | Primitive::Hydrate)
+    }
+
     /// Source: `solid-reactive-ir/src/directives.rs` `is_created_primitive`.
     /// 2.0 renamed `mergeProps` to `merge`. `omit` and `pick`, the
     /// `splitProps` replacements, are deliberately absent for the same reason

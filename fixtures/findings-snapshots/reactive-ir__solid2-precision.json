@@ -14,7 +14,7 @@
     {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
       "start": 1469,
@@ -24,7 +24,7 @@
     {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
       "start": 1915,
@@ -34,7 +34,7 @@
     {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
       "start": 2447,
@@ -54,7 +54,7 @@
     {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
       "start": 2863,
@@ -74,7 +74,7 @@
     {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
       "start": 3473,
@@ -84,7 +84,7 @@
     {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
       "start": 3813,

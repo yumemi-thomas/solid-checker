@@ -225,6 +225,31 @@ pub(crate) const OWNER_CONTEXT_PROVEN_UNOWNED: u8 = 16;
 /// names that reason instead of a nullable `runWithOwner` owner.
 pub(crate) const OWNER_CONTEXT_LATER_RUN_UNOWNED: u8 = 32;
 
+/// Whether a node's unowned context is *only* the open-world assumption an
+/// exported non-component entry seeds ([`owner_node`]), carried to this node
+/// along call edges.
+///
+/// The seed sets [`OWNER_CONTEXT_UNOWNED`] without [`OWNER_CONTEXT_PROVEN_UNOWNED`]
+/// -- "an unseen caller may supply no owner" -- and `Preserve` edges forward
+/// the bit unchanged, so a private helper called only from exported functions
+/// inherits it. Every other source of the unowned bit sets a companion bit (a
+/// proven unowned edge sets the proof, a conditional edge sets owned, a
+/// first-run edge sets later-run), so the bare bit names the open world and
+/// nothing else. A requirement under it is a caller obligation exactly like
+/// the same call written inside the exported function itself, and is no more a
+/// proven violation one call-edge away.
+const fn open_world_unowned_only(context: u8, node: &OwnerNode) -> bool {
+    !node.component
+        && !node.component_uncertain
+        && context
+            & (OWNER_CONTEXT_OWNED
+                | OWNER_CONTEXT_UNOWNED
+                | OWNER_CONTEXT_PROVEN_UNOWNED
+                | OWNER_CONTEXT_LATER_RUN_UNOWNED
+                | OWNER_CONTEXT_LEAF)
+            == OWNER_CONTEXT_UNOWNED
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum OwnerEdgeKind {
     Preserve,
@@ -986,10 +1011,11 @@ pub(crate) fn find_missing_owners(
                         == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
                 let caller_uncertain = !proven_unowned
                     && owner_index.is_some_and(|index| {
-                        nodes[index].exported
+                        (nodes[index].exported
                             && contexts[index] & OWNER_CONTEXT_UNOWNED != 0
                             && !nodes[index].component
-                            && !nodes[index].component_uncertain
+                            && !nodes[index].component_uncertain)
+                            || open_world_unowned_only(context, &nodes[index])
                     });
                 let uncertain = runtime_uncertain
                     || conditional_owner
@@ -1510,10 +1536,11 @@ pub(crate) fn find_missing_owners_incremental(
             let caller_uncertain = candidate.allow_uncertain
                 && !proven_unowned
                 && owner_index.is_some_and(|index| {
-                    nodes[index].exported
+                    (nodes[index].exported
                         && contexts[index] & OWNER_CONTEXT_UNOWNED != 0
                         && !nodes[index].component
-                        && !nodes[index].component_uncertain
+                        && !nodes[index].component_uncertain)
+                        || open_world_unowned_only(context, &nodes[index])
                 });
             let cleanup_return_uncertain = candidate.operation == "settled-cleanup"
                 && candidate
@@ -2063,17 +2090,44 @@ pub(crate) fn containing_leaf_owner(
         })
 }
 
-pub(crate) fn read_is_under_loading(
+/// Whether a `Loading` boundary above a render position is proven, proven
+/// absent, or cannot be resolved from the analyzed project.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum LoadingCover {
+    /// A boundary encloses the position, directly or through the call sites
+    /// that render the function containing it.
+    Covered,
+    /// Every call-site chain was followed to a mount root (a `render` or
+    /// `hydrate` argument) and none passed through a boundary.
+    Uncovered,
+    /// A chain ends at a function nothing in the project renders -- an
+    /// exported component, a route handed to a router, a lazy page -- so the
+    /// boundary above it is decided by code the analysis cannot see. Missing
+    /// is not absent.
+    Unresolved,
+}
+
+pub(crate) fn read_loading_cover(
     lookup: &SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     span: Span,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-) -> bool {
+) -> LoadingCover {
+    loading_cover_at(lookup, file, span, symbol_names, &mut HashSet::new())
+}
+
+fn loading_cover_at(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    span: Span,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    visited: &mut HashSet<(String, Span)>,
+) -> LoadingCover {
     let entities = lookup.entities();
     if file.ast.jsx_containing(span).any(|element| {
         jsx_element_is_loading(file, element, entities, symbol_names, lookup.dialect)
     }) {
-        return true;
+        return LoadingCover::Covered;
     }
     if file.ast.jsx_containing(span).any(|element| {
         jsx_target_function(lookup, file, element).is_some_and(|(target_file, target)| {
@@ -2088,21 +2142,133 @@ pub(crate) fn read_is_under_loading(
             })
         })
     }) {
-        return true;
+        return LoadingCover::Covered;
     }
-    let Some(owner) = containing_ast_function(&file.ast, span) else {
-        return false;
-    };
-    // For call sites whose target matched (file, owner), the "wrapper" the
-    // second branch resolves is the owner itself, so the caller scan
-    // distributes into: a Loading-wrapped call site exists, or any call site
-    // exists and the owner's own body renders a Loading element.
-    let call_sites = lookup.jsx_call_site_loading(file.path.as_str(), owner.span);
-    call_sites.loading_wrapped
-        || (call_sites.any
-            && file.ast.jsx_within(owner.body).any(|candidate| {
+    // Walk outward from the innermost function. A closure nothing in the
+    // project calls (a `<For>` row callback, a render prop) is part of the
+    // function around it; the first function the project does render or call
+    // is the one whose call sites decide.
+    let mut enclosing = file.ast.functions_body_containing(span).collect::<Vec<_>>();
+    enclosing.sort_by_key(|function| function.body.end - function.body.start);
+    for function in enclosing {
+        if !visited.insert((file.path.as_str().to_owned(), function.span)) {
+            // Already being resolved on this chain: it adds no information.
+            return LoadingCover::Uncovered;
+        }
+        let call_sites = lookup.function_call_sites(file.path.as_str(), function.span);
+        if !call_sites.is_empty() {
+            if file.ast.jsx_within(function.body).any(|candidate| {
                 jsx_element_is_loading(file, candidate, entities, symbol_names, lookup.dialect)
-            }))
+            }) {
+                return LoadingCover::Covered;
+            }
+            let mut result = LoadingCover::Uncovered;
+            for (caller_file, callee) in call_sites {
+                match loading_cover_at(lookup, caller_file, callee, symbol_names, visited) {
+                    LoadingCover::Covered => return LoadingCover::Covered,
+                    LoadingCover::Unresolved => result = LoadingCover::Unresolved,
+                    LoadingCover::Uncovered => {}
+                }
+            }
+            return result;
+        }
+        if function_is_mount_root(lookup, file, function) {
+            return LoadingCover::Uncovered;
+        }
+    }
+    LoadingCover::Unresolved
+}
+
+/// Whether `function` is what a `render`/`hydrate` call mounts: the function
+/// literal passed as its first argument, or a function it names.
+fn function_is_mount_root(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    file.ast.calls.iter().any(|call| {
+        lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| lookup.dialect.mounts_component_tree(primitive))
+            && call.arguments.first().is_some_and(|argument| {
+                let argument = file.ast.peel_ts_sugar_span(argument.span);
+                argument == function.span
+                    || lookup
+                        .function_called_at(file.path.as_str(), argument)
+                        .is_some_and(|(target_file, target)| {
+                            target_file.path == file.path && target.span == function.span
+                        })
+            })
+    })
+}
+
+/// The role a pending async read plays for the missing-boundary claim: a
+/// tracked read inside a non-render computation (a memo, a user effect's
+/// compute, a derived signal) is not a render of the value, so it is not
+/// [`ExecutionRole::TrackedJsx`] for that claim. The pending state flows on to
+/// whichever render effect consumes the computation, and that consumer is the
+/// one whose boundary matters.
+pub(crate) fn async_read_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    role: crate::ExecutionRole,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> crate::ExecutionRole {
+    if role != crate::ExecutionRole::TrackedJsx {
+        return role;
+    }
+    // A function that is a JSX attribute's value (an event handler, a callback
+    // prop) runs when something calls it, not while the JSX renders. Nothing
+    // proves a read inside it is rendered, so it is not a render read. A
+    // `children` attribute is the element's own children and keeps its role.
+    if file.ast.functions_body_containing(span).any(|function| {
+        file.ast.jsx_containing(function.span).any(|element| {
+            element.attributes.iter().any(|attribute| {
+                attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
+                    && attribute
+                        .expression
+                        .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == function.span)
+                    && file
+                        .source
+                        .get(attribute.name.start as usize..attribute.name.end as usize)
+                        != Some("children")
+            })
+        })
+    }) {
+        return crate::ExecutionRole::Unknown;
+    }
+    let dialect = lookup.dialect;
+    let in_computation = file.ast.arguments_containing(span).any(|(call, index)| {
+        let argument = &call.arguments[index];
+        matches!(
+            argument.value,
+            solid_facts::ast::ArgumentValueKind::Identifier
+                | solid_facts::ast::ArgumentValueKind::Function
+                | solid_facts::ast::ArgumentValueKind::AsyncFunction
+        ) && call_primitive_name(file, call, entities, symbol_names, dialect)
+            .as_ref()
+            .and_then(PrimitiveName::primitive)
+            .is_some_and(|primitive| {
+                callback_execution_at_call(file, call, primitive, index, lookup).is_some()
+                    && dialect
+                        .callback_semantics_at(primitive, index, call.arguments.len())
+                        .tracks_reads
+                    && !dialect.computation_read_is_render(primitive)
+            })
+            // A JSX region written inside the computation is a render again.
+            && !file
+                .compiler
+                .tracked_regions
+                .iter()
+                .any(|region| argument.span.contains(region.span) && region.span.contains(span))
+    });
+    if in_computation {
+        crate::ExecutionRole::Unknown
+    } else {
+        role
+    }
 }
 
 pub(crate) fn jsx_element_is_loading(
@@ -2133,21 +2299,27 @@ pub(crate) fn computation_is_async(
     file: &solid_facts::FileFacts,
     argument: Span,
 ) -> bool {
+    // The computation is the argument's own function. An async function that
+    // is merely nested inside it (`createMemo(() => async () => ...)`, an async
+    // IIFE) is a value the computation returns or runs, not the computation:
+    // the memo's result is a function and can never be pending.
+    let argument = file.ast.peel_ts_sugar_span(argument);
     if lookup
         .typescript_file(file.path.as_str())
         .is_some_and(|typescript_file| {
             typescript_file.async_functions.iter().any(|function| {
                 function.can_return_async
-                    && u64::from(argument.start) <= function.expression.start_byte
-                    && function.expression.end_byte <= u64::from(argument.end)
+                    && u64::from(argument.start) == function.expression.start_byte
+                    && function.expression.end_byte == u64::from(argument.end)
             })
         })
     {
         return true;
     }
     file.ast
-        .functions_within(argument)
-        .max_by_key(|function| function.span.end - function.span.start)
+        .functions
+        .iter()
+        .find(|function| function.span == argument)
         .is_some_and(|function| function.r#async)
 }
 
@@ -2173,10 +2345,12 @@ pub(crate) fn computation_is_async_with_contracts(
     if contracted_async_at(argument) {
         return true;
     }
+    let argument = file.ast.peel_ts_sugar_span(argument);
     let Some(function) = file
         .ast
-        .functions_within(argument)
-        .max_by_key(|function| function.span.end - function.span.start)
+        .functions
+        .iter()
+        .find(|function| function.span == argument)
     else {
         return false;
     };

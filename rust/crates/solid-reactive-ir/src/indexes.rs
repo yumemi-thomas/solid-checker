@@ -16,7 +16,7 @@ use typefacts::{
 };
 
 use super::{SymbolId, SymbolName};
-use crate::owners::{function_binding_name, jsx_element_is_loading};
+use crate::owners::function_binding_name;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum ComponentStatus {
@@ -256,12 +256,11 @@ enum SymbolFunction {
     Aborted,
 }
 
-/// Whether any JSX call site renders a function, and whether one of those
-/// call sites is wrapped in a Loading boundary in its caller file.
+/// Whether any JSX call site renders a function. Boundary placement above a
+/// render is resolved transitively by `owners::read_loading_cover`.
 #[derive(Clone, Copy, Default)]
 pub(super) struct CallSiteLoading {
     pub(super) any: bool,
-    pub(super) loading_wrapped: bool,
 }
 
 #[derive(Clone)]
@@ -2725,24 +2724,11 @@ impl<'a> SemanticLookup<'a> {
     fn jsx_call_sites(&self) -> &HashMap<(&'a str, Span), CallSiteLoading> {
         self.jsx_call_sites.get_or_init(|| {
             let mut map = HashMap::<(&'a str, Span), CallSiteLoading>::new();
-            for (_, caller_file, element, target_file, target) in self.jsx_rendered_functions() {
+            for (_, _, _, target_file, target) in self.jsx_rendered_functions() {
                 let entry = map
                     .entry((target_file.path.as_str(), target.span))
                     .or_default();
                 entry.any = true;
-                if !entry.loading_wrapped {
-                    entry.loading_wrapped = caller_file.ast.jsx_elements.iter().any(|boundary| {
-                        boundary.span.contains(element.span)
-                            && boundary.span != element.span
-                            && jsx_element_is_loading(
-                                caller_file,
-                                boundary,
-                                self.entities,
-                                self.symbol_names,
-                                self.dialect,
-                            )
-                    });
-                }
             }
             map
         })

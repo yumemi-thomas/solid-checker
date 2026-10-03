@@ -1182,6 +1182,17 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             if read.server_rendering_unresolved {
                 finding.kind = "uncertifiable".into();
             }
+            // A missing boundary is proven only for a function whose every
+            // render chain was followed to a mount root. Where a chain ends at
+            // a function the project never renders, the boundary above it may
+            // be written elsewhere (a router root layout, a lazy page).
+            if read.mount_unresolved && matches!(finding.id.as_str(), "SC5003" | "SC5005") {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "the component rendering this read is never traced to a render or hydrate root in this project, so whether a Loading boundary is above it (for example in a router layout or around a lazy route) cannot be proven; if none is: {}",
+                    finding.message
+                );
+            }
         }
         FindingSeed::PackageContractIssue(_) => {
             finding.analysis_context = "package contract completeness".into();
@@ -1617,6 +1628,7 @@ mod tests {
                 host_callback_timing: false,
                 callee_callback_timing: false,
                 invocation_context_unproven: false,
+                mount_unresolved: false,
             }],
             ..Program::default()
         };
@@ -1659,6 +1671,7 @@ mod tests {
                 host_callback_timing: false,
                 callee_callback_timing: false,
                 invocation_context_unproven: false,
+                mount_unresolved: false,
             }],
             ..Program::default()
         };
@@ -1711,6 +1724,7 @@ mod tests {
                 host_callback_timing: false,
                 callee_callback_timing: false,
                 invocation_context_unproven: false,
+                mount_unresolved: false,
             }],
             ..Program::default()
         };

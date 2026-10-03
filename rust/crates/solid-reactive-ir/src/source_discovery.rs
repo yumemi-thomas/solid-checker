@@ -1423,6 +1423,53 @@ pub(crate) struct StageContext<'a> {
     pub(crate) runtime: &'a crate::RuntimeEnvironment,
 }
 
+/// The spans of the function expressions that are `element`'s children value:
+/// a `{...}` child expression container holding exactly one function (after
+/// parentheses and type wrappers), or a `children={...}` attribute value.
+/// Anything else lexically inside the element -- an attribute handler, a ref
+/// callback, a nested element's own callbacks -- is not the children callback.
+fn jsx_children_function_spans(
+    file: &FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+) -> Vec<solid_facts::core::Span> {
+    let mut candidates = Vec::new();
+    for child in &element.children {
+        let Some(text) = file.source_text(*child) else {
+            continue;
+        };
+        let Some(inner) = text
+            .strip_prefix('{')
+            .and_then(|rest| rest.strip_suffix('}'))
+        else {
+            continue;
+        };
+        let (Ok(leading), Ok(trailing)) = (
+            u32::try_from(inner.len() - inner.trim_start().len()),
+            u32::try_from(inner.len() - inner.trim_end().len()),
+        ) else {
+            continue;
+        };
+        let start = child.start + 1 + leading;
+        let end = child.end - 1 - trailing;
+        if start < end {
+            candidates.push(solid_facts::core::Span::new(start, end));
+        }
+    }
+    for attribute in &element.attributes {
+        if attribute.namespace.is_none()
+            && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
+            && file.source_text(attribute.name) == Some("children")
+            && let Some(expression) = attribute.expression
+        {
+            candidates.push(expression);
+        }
+    }
+    candidates
+        .into_iter()
+        .map(|candidate| file.ast.peel_ts_sugar_span(candidate))
+        .collect()
+}
+
 /// Classifies a non-literal `keyed` attribute value.
 ///
 /// Only a *proven function* selects the custom-key overload statically: an
@@ -1887,14 +1934,19 @@ pub(crate) fn discover_sources(
             if parameter_indices.is_empty() {
                 continue;
             }
-            for function in file.ast.functions.iter().filter(|function| {
-                element.span.contains(function.span)
-                    && !file.ast.functions.iter().any(|outer| {
-                        outer.span != function.span
-                            && element.span.contains(outer.span)
-                            && outer.span.contains(function.span)
-                    })
-            }) {
+            // The accessor parameters belong to the function that IS this
+            // element's children value -- the sole `{...}` child expression
+            // or a `children={...}` attribute -- and to no other function that
+            // happens to sit lexically inside the element (a `<For>` row
+            // callback, an event handler, or a ref callback are plain-value
+            // callbacks of their own).
+            let children_functions = jsx_children_function_spans(file, element);
+            for function in file
+                .ast
+                .functions
+                .iter()
+                .filter(|function| children_functions.contains(&function.span))
+            {
                 for index in parameter_indices {
                     let Some(parameter) = function
                         .parameters

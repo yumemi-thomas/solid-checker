@@ -577,11 +577,16 @@ fn tracked_async_computation_context(
     ctx.facts.files.iter().find_map(|file| {
         file.ast.calls.iter().find_map(|candidate| {
             let argument = candidate.arguments.first()?;
+            // The async function must BE the tracked callback. One merely
+            // nested in the argument -- an async IIFE, or an async closure the
+            // computation returns -- is not suspended by the primitive, and
+            // its reads are not the computation's reads.
             let lexical = *file.path.as_str() == *function.expression.path
-                && argument.span.contains(Span::new(
-                    u32::try_from(function.expression.start_byte).ok()?,
-                    u32::try_from(function.expression.end_byte).ok()?,
-                ));
+                && file.ast.peel_ts_sugar_span(argument.span)
+                    == Span::new(
+                        u32::try_from(function.expression.start_byte).ok()?,
+                        u32::try_from(function.expression.end_byte).ok()?,
+                    );
             let semantic = ctx
                 .entities
                 .get(&location(file.path.shared(), argument.span))

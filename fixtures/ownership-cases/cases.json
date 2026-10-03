@@ -1126,7 +1126,7 @@
    "source": {
     "extension": ".tsx",
     "prelude": "",
-    "text": "import { createMemo } from \"solid-js\";\n\nconst feed = createMemo(async () => ({ name: \"Dorothy\" }));\n\nexport function Bare() {\n  return <div>{feed().name}</div>;\n}\n"
+    "text": "import { createMemo } from \"solid-js\";\nimport { render } from \"@solidjs/web\";\n\nconst feed = createMemo(async () => ({ name: \"Dorothy\" }));\n\nexport function Bare() {\n  return <div>{feed().name}</div>;\n}\n\n// Mounted from a render root with no Loading above it: the missing boundary\n// is proven only for a component whose render chain reaches a mount root.\nrender(() => <Bare />, document.body);\n"
    },
    "ruleOptions": {},
    "presets": [],

@@ -543,6 +543,23 @@ fn function_forbidden_operations(
         if nested {
             continue;
         }
+        // After an `await` that every run of the helper reaches first, the
+        // call executes from a promise continuation: the leaf scope that
+        // invoked the helper is long gone and no owner exists at all. That is
+        // a different claim (an ownerless operation, `missing-owner`'s), not a
+        // forbidden call in the leaf scope.
+        if helper_file
+            .ast
+            .unconditional_awaits
+            .iter()
+            .any(|await_span| {
+                await_span.end <= inner.span.start
+                    && containing_ast_function(&helper_file.ast, *await_span)
+                        .is_some_and(|function| function.span == helper.span)
+            })
+        {
+            continue;
+        }
         let primitive = call_primitive_name(helper_file, inner, entities, symbol_names, dialect);
         let Some(primitive) = primitive else {
             complete &= helper_forbidden_operations(

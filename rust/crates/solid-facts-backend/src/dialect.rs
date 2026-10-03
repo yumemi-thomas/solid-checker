@@ -1129,6 +1129,7 @@ mod tests {
                 host_callback_timing: false,
                 callee_callback_timing: false,
                 invocation_context_unproven: false,
+                mount_unresolved: false,
             }],
             static_defects: defect_kinds
                 .into_iter()

@@ -68,6 +68,50 @@ callback or a helper reached only from one (P7 below): `setCanvasRef` and
   in `execution_role.rs`, and must keep the 6 real findings where the helper is
   also called from an effect apply.
 
+## Owner and boundary false-positive patterns (2026-10-03)
+
+Measured on 48 projects (38 applications, rc.9): most `uncalled-accessor`,
+`no-direct-mutation` and `async-outside-loading-boundary` findings were false.
+Removed, each with a `fp-owner-*` fixture checked against the real rc.9 typings
+(`tsc --noEmit` clean):
+
+- **Show/Match children callback (P-A).** Source discovery registered the first
+  parameter of every outermost function inside a control-flow element as an
+  accessor, so `<For>` items, event arguments and `ref` elements under `<Show>`
+  were flagged. Only the element's own children function (sole `{...}` child or
+  `children={...}`) is an accessor now.
+- **Destructured named prop (P-C).** `const { program } = props` binds a value;
+  a write through it is no longer a `no-direct-mutation` on the props proxy.
+  Whole-object aliases keep the proof.
+- **Render vs computation (P-D).** A pending async read inside a memo, a user
+  effect's compute or a derived signal is not a render
+  (`Dialect::computation_read_is_render`); only `createRenderEffect` and JSX are.
+- **Mount context (P-E).** The `<Loading>` lookup follows call sites
+  transitively and out through enclosing closures. A chain ending at a function
+  nothing renders (exported component, router page) is uncertifiable
+  (`AsyncRead::mount_unresolved`); a chain followed to a `render`/`hydrate` root
+  without a boundary stays a proven violation (`Dialect::mounts_component_tree`).
+  Approximation: any one covered call site covers the function.
+  The uncertifiable message now says the mount was not traced and states the
+  consequence conditionally. Open: server renderers (`renderToStream`,
+  `renderToString`) are not modelled as mount roots, so SC5005 on a component
+  of a visibly server-rendering project (`ssr-client-boundary`) is now
+  uncertifiable too; three other fixtures with no `render` root moved the same
+  way (`async-boundary`, `rendering-csr-selected`, `solid2-precision`).
+- **Callback-prop closure (P-M).** A read inside a function that is a JSX
+  attribute's value (an event handler or callback prop, not `children`) runs
+  when something calls it, so `owners::async_read_role` gives it no render
+  role (readingroom `authors/[id].tsx:425`; `fp-owner-loading-cover`).
+- **Async value, not computation (P-F, P-L).** `computation_is_async` and
+  `tracked_async_computation_context` compare against the computation's own
+  function, not any async function nested in the argument.
+- **Open-world helper (P-B).** The unowned context an exported entry seeds is
+  recognised after propagation to private helpers, so their `onCleanup`/effect
+  is uncertifiable like the exported function's own. Settled-gate decisions are
+  unchanged.
+- **Post-await cleanup in a leaf helper (P-K).** The helper walk stops at the
+  first unconditional `await`; `missing-owner` owns that operation.
+
 ## Existing-application feedback precision fixes (2026-10-03)
 
 The fifteen reviewed overclaims are corrected in the unchanged applications.

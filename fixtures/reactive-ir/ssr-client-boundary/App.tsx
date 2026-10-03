@@ -31,8 +31,11 @@ export function GoodSeededPanel() {
   return <div>{seededPanel.width}</div>;
 }
 
-// This visible server entry proves the violation. Without it (see the
-// ssr-client-boundary-csr fixture), SC5005 is uncertifiable rather than safe.
+// This visible server entry proves the application server-renders. Without
+// it (see the ssr-client-boundary-csr fixture), SC5005 is uncertifiable rather
+// than safe. It is also uncertifiable here: no render chain is traced from a
+// mount root to BadWidget, and server renderers are not modelled as mount
+// roots, so the missing boundary above it is not proven.
 export const server = { render: renderToStream };
 
 declare function computeWidth(): number;

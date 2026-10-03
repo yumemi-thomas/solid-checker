@@ -577,7 +577,11 @@ fn ssr_client_hole_distinguishes_proven_and_unresolved_server_rendering() {
     };
     let holes = findings_for_rule(&findings, "async-outside-loading-boundary");
     assert_eq!(holes.len(), 1, "{findings:#?}");
-    assert_eq!(holes[0]["kind"], "violation", "{holes:#?}");
+    // The visible server entry proves the application server-renders, but no
+    // render chain is traced from a mount root to `BadWidget` (server
+    // renderers are not modelled as mount roots), so the missing boundary
+    // above it is not proven: uncertifiable, never a violation.
+    assert_eq!(holes[0]["kind"], "uncertifiable", "{holes:#?}");
     // The server throw is unconditional, so the rule mirrors it as an error.
     assert_eq!(holes[0]["severity"], "error", "{holes:#?}");
     assert!(

@@ -6,10 +6,10 @@ use crate::cache::{
     LocalAccessSymbolState, SourceDiscoveryTypeScriptDelta, same_compiler_semantics,
 };
 use crate::owners::{
-    analysis_context, containing_leaf_owner, counts_as_strict_read_root, enclosing_render_function,
-    inside_known_value_function_argument, inside_non_component_function,
-    inside_unclassified_callback, read_is_under_loading, solid_accessor_declaration,
-    typed_accessor_descriptor_at,
+    LoadingCover, analysis_context, async_read_role, containing_leaf_owner,
+    counts_as_strict_read_root, enclosing_render_function, inside_known_value_function_argument,
+    inside_non_component_function, inside_unclassified_callback, read_loading_cover,
+    solid_accessor_declaration, typed_accessor_descriptor_at,
 };
 use crate::pipeline::parallel_file_chunk_results;
 use crate::source_discovery::{AsyncSourceOptions, PropUse, PropsReactivityIndex};
@@ -574,6 +574,22 @@ impl LocalAccessContext<'_, '_> {
                     && !pending_accessor_probe(file, call.callee, self.lookup)
                 {
                     let async_execution = async_execution_role(file, call.callee, execution);
+                    let async_execution = if async_options.ssr_client_bare
+                        || async_options.server_rendering_unresolved
+                    {
+                        async_execution
+                    } else {
+                        async_read_role(
+                            file,
+                            call.callee,
+                            async_execution,
+                            self.entities,
+                            self.symbol_names,
+                            self.lookup,
+                        )
+                    };
+                    let cover =
+                        read_loading_cover(self.lookup, file, call.callee, self.symbol_names);
                     result.async_reads.push(Arc::new(AsyncRead {
                         accessor: format!("{name}()").into(),
                         location: location(file.path.shared(), call.span),
@@ -587,12 +603,8 @@ impl LocalAccessContext<'_, '_> {
                             self.lookup,
                         )
                         .map(Into::into),
-                        under_loading: read_is_under_loading(
-                            self.lookup,
-                            file,
-                            call.callee,
-                            self.symbol_names,
-                        ),
+                        under_loading: cover == LoadingCover::Covered,
+                        mount_unresolved: cover == LoadingCover::Unresolved,
                         async_provenance,
                         declared_loading: async_options.declared_loading,
                         options_opaque: async_options.opaque,
@@ -1026,6 +1038,21 @@ impl LocalAccessContext<'_, '_> {
                     || member_options.server_rendering_unresolved)
             {
                 let async_execution = async_execution_role(file, member.span, execution);
+                let async_execution = if member_options.ssr_client_bare
+                    || member_options.server_rendering_unresolved
+                {
+                    async_execution
+                } else {
+                    async_read_role(
+                        file,
+                        member.span,
+                        async_execution,
+                        self.entities,
+                        self.symbol_names,
+                        self.lookup,
+                    )
+                };
+                let cover = read_loading_cover(self.lookup, file, member.span, self.symbol_names);
                 result.async_reads.push(Arc::new(AsyncRead {
                     accessor: format!(
                         "{name}.{}",
@@ -1043,12 +1070,8 @@ impl LocalAccessContext<'_, '_> {
                         self.lookup,
                     )
                     .map(Into::into),
-                    under_loading: read_is_under_loading(
-                        self.lookup,
-                        file,
-                        member.span,
-                        self.symbol_names,
-                    ),
+                    under_loading: cover == LoadingCover::Covered,
+                    mount_unresolved: cover == LoadingCover::Unresolved,
                     async_provenance: member_async,
                     declared_loading: member_options.declared_loading,
                     options_opaque: member_options.opaque,
@@ -1167,6 +1190,7 @@ impl LocalAccessContext<'_, '_> {
                 continue;
             }
             let execution = ExecutionRole::TrackedJsx;
+            let cover = read_loading_cover(self.lookup, file, element.name.span, self.symbol_names);
             result.async_reads.push(Arc::new(AsyncRead {
                 accessor: format!(
                     "<{}>",
@@ -1187,12 +1211,8 @@ impl LocalAccessContext<'_, '_> {
                     self.lookup,
                 )
                 .map(Into::into),
-                under_loading: read_is_under_loading(
-                    self.lookup,
-                    file,
-                    element.name.span,
-                    self.symbol_names,
-                ),
+                under_loading: cover == LoadingCover::Covered,
+                mount_unresolved: cover == LoadingCover::Unresolved,
                 async_provenance: true,
                 declared_loading: false,
                 options_opaque: false,

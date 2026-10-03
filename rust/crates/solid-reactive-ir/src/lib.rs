@@ -1095,6 +1095,13 @@ pub struct AsyncRead {
     /// callback executes during that component's strict-read window.
     #[serde(default, skip_serializing_if = "is_false")]
     pub invocation_context_unproven: bool,
+    /// The read is rendered by a function whose callers are not all in the
+    /// analyzed project (an exported component, a route handed to a router, a
+    /// lazy page): no `Loading` boundary was found above it, but the boundary
+    /// that decides it may be written where the analysis cannot see. The
+    /// missing-boundary findings are uncertifiable then, not proven.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub mount_unresolved: bool,
 }
 
 fn default_async_provenance() -> bool {

@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-owner-leaf-helper-after-await/App.tsx",
+      "start": 349,
+      "end": 358,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-owner-leaf-helper-after-await/App.tsx",
+      "start": 668,
+      "end": 677,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-owner-leaf-helper-after-await/App.tsx",
+      "start": 781,
+      "end": 799,
+      "fixes": 0
+    }
+  ]
+}
