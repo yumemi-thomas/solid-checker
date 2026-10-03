@@ -43,6 +43,7 @@ use crate::cache::{
 use crate::execution_role::{
     callee_callback_timing, control_flow_execution_role, direct_callback_contains,
     host_callback_timing, missing_jsx_census, named_callback_execution_role,
+    runs_outside_owner_call,
 };
 use crate::indexes::ComponentStatus;
 use crate::owners::{
@@ -420,6 +421,7 @@ fn discover_typed_accessors(
         };
         if read_escapes_synchronous_extent(file, call.callee, entities, symbol_names, dialect)
             || runs_in_retained_value_literal(file, call.callee, &nodes[owner])
+            || runs_outside_owner_call(file, call.callee, nodes[owner].body, lookup)
             || enclosing_render_function(file, call.callee, lookup)
         {
             continue;
@@ -1651,10 +1653,13 @@ fn discover_interprocedural_graph(
         }
         // A call written in a closure the owner only builds into its result
         // is not made when the owner is called, so its target's reads do not
-        // propagate to the owner (`runs_in_retained_value_literal`).
+        // propagate to the owner (`runs_in_retained_value_literal`). A call in
+        // the owner's own tracked JSX region or component property getter runs
+        // outside the owner's call (`runs_outside_owner_call`).
         if !ambiguous_dispatch
             && !contracts.reads.contains_key(symbol)
             && !runs_in_retained_value_literal(file, call.span, &nodes[owner])
+            && !runs_outside_owner_call(file, call.span, nodes[owner].body, lookup)
         {
             let returned_target = call
                 .direct_callee
@@ -6052,6 +6057,7 @@ fn direct_reference_contributions(
             symbol_names,
             lookup.dialect,
         ) || runs_in_retained_value_literal(file, reference_span, &nodes[owner])
+            || runs_outside_owner_call(file, reference_span, nodes[owner].body, lookup)
         {
             continue;
         }

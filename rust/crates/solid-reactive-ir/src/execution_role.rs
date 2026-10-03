@@ -723,6 +723,42 @@ fn attribute_function_within(
     })
 }
 
+/// Whether `span`, written in the function whose body is `owner_body`, runs
+/// outside that function's own call according to the compiler:
+///
+/// - in a tracked region of the same function, an attribute or child expression
+///   the compiler lowers into a tracked effect, so its reads are subscribed
+///   when the region runs. A function that is an attribute value inside the
+///   region (a handler, a callback prop) or an argument not proven to run
+///   inline is not the region's tracking pass;
+/// - in a component property the compiler lowers to a getter, which runs when
+///   the consuming component reads the property, never while this function
+///   builds the JSX. A consumer that reads it untracked is reported there.
+pub(crate) fn runs_outside_owner_call(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    owner_body: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use solid_facts::compiler::{CompilerExecutionDisposition, CompilerOperationKind};
+    file.compiler.tracked_regions.iter().any(|region| {
+        owner_body.contains(region.span)
+            && region.span.contains(span)
+            && !attribute_function_within(file, region.span, span, lookup)
+    }) || file
+        .compiler
+        .semantic_model
+        .operations
+        .iter()
+        .any(|operation| {
+            operation.kind == CompilerOperationKind::ComponentProperty
+                && operation.execution.disposition
+                    == CompilerExecutionDisposition::ComponentPropertyGetter
+                && owner_body.contains(operation.span)
+                && operation.span.contains(span)
+        })
+}
+
 /// Whether the function written at `function` is the value of a JSX attribute.
 fn jsx_attribute_value_function(file: &solid_facts::FileFacts, function: Span) -> bool {
     file.ast.jsx_containing(function).any(|element| {
