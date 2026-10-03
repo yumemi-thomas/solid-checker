@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { createReadCollector } from "../scripts/feedback-read-runtime.mjs";
 import { selectAssertionFeedback } from "../scripts/feedback-assertion-selector.mjs";
-import { executeFeedbackScenario, loadFeedbackConfiguration, mergeFeedbackServerConfiguration, validateFeedbackScenario } from "../scripts/feedback-browser.mjs";
+import { executeFeedbackScenario, loadFeedbackConfiguration, loadSuppliedResponses, mergeFeedbackServerConfiguration, validateFeedbackScenario } from "../scripts/feedback-browser.mjs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { instrumentFeedbackReads } from "../scripts/feedback-native-hook.mjs";
 
@@ -114,3 +117,42 @@ for (const steps of [[], [{ action: "evaluate", selector: "body" }],
     assert.throws(() => validateFeedbackScenario({ schemaVersion: 1, steps }));
   });
 }
+
+const click = [{ action: "click", selector: "button" }];
+test("supplied responses bind one exact URL to a digest-pinned body", () => {
+  const directory = mkdtempSync(join(tmpdir(), "solid-feedback-responses-"));
+  try {
+    writeFileSync(join(directory, "articles.json"), "[]");
+    const scenario = validateFeedbackScenario({ schemaVersion: 1, steps: click,
+      responses: [{ url: "https://api.example.test/articles?user=a", body: "articles.json" }] });
+    const responses = loadSuppliedResponses(scenario, join(directory, "scenario.json"));
+    const row = responses.get("https://api.example.test/articles?user=a");
+    assert.equal(row.status, 200); assert.equal(row.contentType, "application/json"); assert.equal(row.body.toString(), "[]");
+    assert.equal(row.pin.sha256, "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945");
+    assert.equal(responses.size, 1);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+for (const responses of [{}, [{ url: "/relative", body: "a.json" }], [{ url: "https://Example.test/a", body: "a.json" }],
+  [{ url: "ftp://example.test/a", body: "a.json" }], [{ url: "https://example.test/a" }],
+  [{ url: "https://example.test/a", body: "a.json", status: 99 }],
+  [1, 2].map(() => ({ url: "https://example.test/a", body: "a.json" }))]) {
+  test(`scenario refuses inexact or incomplete supplied responses: ${JSON.stringify(responses)}`, () => {
+    assert.throws(() => validateFeedbackScenario({ schemaVersion: 1, steps: click, responses }));
+  });
+}
+
+test("records from every loaded document survive a full page load, and a silent document is counted lost", async () => {
+  const { mergeDocumentStates } = await import("../scripts/feedback-browser.mjs");
+  const state = (reads, nodeId, entered) => ({ events: [{ kind: "untracked-read", nodeId }], diagnostics: [{ code: reads }],
+    stats: { reads, observerQueries: 1, retained: 1, dropped: 0, bytes: 10, complete: false },
+    scopes: { rows: [{ kind: "operation", path: "/a.ts", span: { start: 1, end: 2 }, entered, returned: entered, threw: 0 }], dropped: 0 } });
+  const merged = mergeDocumentStates([{ phase: "start", id: "a" }, { phase: "end", id: "a", state: state(5, 1, 2) },
+    { phase: "start", id: "b" }], { id: "b", state: state(3, 1, 1) });
+  assert.deepEqual(merged.documents, { loaded: 2, reported: 2, lost: 0 });
+  assert.deepEqual(merged.events.map(event => [event.document, event.nodeId]), [[0, 1], [1, 1]]);
+  assert.equal(merged.stats.reads, 8); assert.equal(merged.stats.complete, false); assert.equal(merged.diagnostics.length, 2);
+  assert.deepEqual(merged.scopes.rows.map(row => [row.entered, row.returned, row.threw]), [[3, 3, 0]]);
+  const silent = mergeDocumentStates([{ phase: "start", id: "a" }, { phase: "start", id: "b" }], { id: "b", state: state(3, 1, 1) });
+  assert.deepEqual(silent.documents, { loaded: 2, reported: 1, lost: 1 }); assert.equal(silent.events[0].document, 1);
+  assert.deepEqual(mergeDocumentStates([], null).documents, { loaded: 0, reported: 0, lost: 0 });
+});

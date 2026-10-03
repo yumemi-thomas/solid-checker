@@ -27,7 +27,28 @@ export function validateFeedbackScenario(scenario) {
       assert(typeof step.id === "string" && step.id && !ids.has(step.id), "Assertion needs a unique ID"); ids.add(step.id);
     }
   }
+  const responses = scenario.responses ?? [], urls = new Set();
+  assert(Array.isArray(responses) && responses.length <= 64, "Scenario responses need an array of at most 64 entries");
+  for (const response of responses) {
+    let url; try { url = new URL(response.url); } catch { assert.fail("A supplied response needs an absolute URL"); }
+    assert(["http:", "https:"].includes(url.protocol) && url.href === response.url, "A supplied response needs an exact, normalized http(s) URL");
+    assert(!urls.has(url.href), "Supplied response URLs must be unique"); urls.add(url.href);
+    assert(typeof response.body === "string" && response.body, "A supplied response needs a body file");
+    assert(response.status === undefined || (Number.isInteger(response.status) && response.status >= 200 && response.status <= 599), "Unsupported response status");
+    assert(response.contentType === undefined || typeof response.contentType === "string", "contentType must be a string");
+  }
   return scenario;
+}
+
+// Responses for other origins are scenario inputs, never observed network
+// behaviour. They match one exact URL, their bodies are pinned by digest, and
+// any other cross-origin request stays blocked.
+export function loadSuppliedResponses(scenario, scenarioPath) {
+  return new Map((scenario.responses ?? []).map(response => {
+    const path = realpathSync(resolve(dirname(scenarioPath), response.body)), body = readFileSync(path);
+    return [response.url, { url: response.url, status: response.status ?? 200, contentType: response.contentType ?? "application/json",
+      body, pin: { path, sha256: hash(body) }, served: 0 }];
+  }));
 }
 
 async function toolingAt(root) {
@@ -117,13 +138,22 @@ export function feedbackReadPlugin({ snapshot, runtimeInputs, coverage }) {
     resolveId(id) { if (id === publicId) return virtual; },
     load(id) {
       if (id !== virtual) return;
+      // Each document reports its start and, when unloaded, its state: a full
+      // page load would otherwise discard everything recorded before it.
+      // Chromium delivers a binding call from beforeunload but not pagehide.
+      // Reads during unload itself are not reported.
       return `import {reads} from ${JSON.stringify("/@fs" + runtimePath)};
         import * as Solid from 'solid-js';
         globalThis.__solidCheckerDiagnostics=[];
+        globalThis.__solidCheckerDocument=crypto.randomUUID();
         Solid.OBSERVE?.diagnostics?.subscribe(event=>{
           const rows=globalThis.__solidCheckerDiagnostics;
           if(rows.length<256)rows.push({code:event.code,kind:event.kind,severity:event.severity});
-        });`;
+        });
+        globalThis.__solidCheckerFlush?.(JSON.stringify({phase:'start',id:globalThis.__solidCheckerDocument}));
+        addEventListener('beforeunload',()=>globalThis.__solidCheckerFlush?.(JSON.stringify({phase:'end',
+          id:globalThis.__solidCheckerDocument,state:{events:reads.events,stats:reads.stats,scopes:reads.scopes,
+          diagnostics:globalThis.__solidCheckerDiagnostics}})));`;
     },
     transformIndexHtml() { return [{ tag: "script", attrs: { type: "module", src: "/@id/" + publicId }, injectTo: "head-prepend" }]; },
     transform(code, id) {
@@ -154,7 +184,34 @@ export function feedbackReadPlugin({ snapshot, runtimeInputs, coverage }) {
   };
 }
 
-async function collectProject(project, scenario, tools, browser) {
+// Combines the collector states of every document the scenario loaded, in
+// load order. Events keep their document index; counts are summed. A document
+// that started but never reported its state is counted as lost.
+export function mergeDocumentStates(messages, final) {
+  const started = messages.filter(row => row.phase === "start").map(row => row.id);
+  const ended = new Map(messages.filter(row => row.phase === "end").map(row => [row.id, row.state]));
+  const states = started.map(id => id === final?.id ? final.state : ended.get(id) ?? null);
+  if (final && !started.includes(final.id)) states.push(final.state);
+  const present = states.filter(Boolean);
+  const stats = { reads: 0, observerQueries: 0, retained: 0, dropped: 0, bytes: 0, complete: false };
+  const scopes = new Map();
+  let scopesDropped = 0;
+  for (const state of present) {
+    for (const key of ["reads", "observerQueries", "retained", "dropped", "bytes"]) stats[key] += state.stats?.[key] ?? 0;
+    scopesDropped += state.scopes?.dropped ?? 0;
+    for (const row of state.scopes?.rows ?? []) {
+      const id = `${row.kind}:${row.path}:${row.span.start}:${row.span.end}`, previous = scopes.get(id);
+      if (!previous) { scopes.set(id, { ...row }); continue; }
+      for (const key of ["entered", "returned", "threw"]) if (key in row) previous[key] = (previous[key] ?? 0) + row[key];
+    }
+  }
+  return { events: states.flatMap((state, document) => (state?.events ?? []).map(event => ({ ...event, document }))),
+    stats, scopes: { rows: [...scopes.values()], dropped: scopesDropped },
+    diagnostics: present.flatMap(state => state.diagnostics ?? []),
+    documents: { loaded: states.length, reported: present.length, lost: states.length - present.length } };
+}
+
+async function collectProject(project, scenario, tools, browser, responses = new Map()) {
   const snapshot = feedbackSnapshot(project), projectRoot = dirname(snapshot.manifest.project);
   const nativeFeedback = inspectDevelopmentFeedback(project, { feedbackFacts: true, snapshot });
   assert(Array.isArray(nativeFeedback.analysis.feedbackFacts), "Native checker does not expose development models");
@@ -205,9 +262,24 @@ async function collectProject(project, scenario, tools, browser) {
     await context.route("**/*", route => {
       const url = new URL(route.request().url());
       if (url.origin === origin) return route.continue();
+      const supplied = responses.get(url.href);
+      if (supplied && route.request().method() === "GET") {
+        supplied.served++;
+        return route.fulfill({ status: supplied.status, contentType: supplied.contentType, body: supplied.body,
+          headers: { "access-control-allow-origin": origin } });
+      }
       blockedRequests.push(url.href); return route.abort();
     });
-    const page = await context.newPage();
+    const page = await context.newPage(), documentMessages = [];
+    // A raw CDP binding: Playwright's exposed bindings drop calls from a
+    // document that is already unloading, which is exactly the flush needed.
+    const cdp = await context.newCDPSession(page);
+    cdp.on("Runtime.bindingCalled", ({ name, payload }) => {
+      if (name !== "__solidCheckerFlush") return;
+      try { documentMessages.push(JSON.parse(payload)); } catch { documentMessages.push({ phase: "malformed" }); }
+    });
+    await cdp.send("Runtime.enable");
+    await cdp.send("Runtime.addBinding", { name: "__solidCheckerFlush" });
     page.on("pageerror", error => pageErrors.push({ message: error.message, stack: error.stack }));
     page.on("console", message => {
       if (!["error", "warning"].includes(message.type())) return;
@@ -216,9 +288,11 @@ async function collectProject(project, scenario, tools, browser) {
     });
     await page.goto(new URL(server.config.base, origin).href, { waitUntil: "domcontentloaded" });
     const { assertions, checkpoints, failure } = await executeFeedbackScenario(page, scenario);
-    const raw = await page.evaluate(() => ({ events: globalThis.__solidCheckerReads?.events ?? [],
-      stats: globalThis.__solidCheckerReads?.stats ?? null, scopes: globalThis.__solidCheckerReads?.scopes ?? { rows: [], dropped: 0 },
-      diagnostics: globalThis.__solidCheckerDiagnostics ?? [] }));
+    const final = await page.evaluate(() => globalThis.__solidCheckerDocument ? { id: globalThis.__solidCheckerDocument,
+      state: { events: globalThis.__solidCheckerReads?.events ?? [], stats: globalThis.__solidCheckerReads?.stats ?? null,
+        scopes: globalThis.__solidCheckerReads?.scopes ?? { rows: [], dropped: 0 }, diagnostics: globalThis.__solidCheckerDiagnostics ?? [] } } : null);
+    const raw = mergeDocumentStates(documentMessages, final);
+    coverage.documents = raw.documents;
     const capture = captureTemplate(snapshot), maps = new Map();
     const attribute = createFrameAttributor({ origin, root, sourceFiles, collectorPaths: [realpathSync(runtimePath)],
       originalPositionFor: tools.originalPositionFor,
@@ -252,7 +326,7 @@ async function collectProject(project, scenario, tools, browser) {
     for (const [index, event] of raw.events.entries()) {
       const located = coverage.nativeReader ? await locate(event.frames, event.stackTruncated ?? null) :
         { unmapped: { attribution: "no-reviewed-reader", reason: "The reviewed native reader was not instrumented", frames: event.frames } };
-      if (!located.site) { unmapped.push({ kind: event.kind ?? "untracked-read", nodeId: event.nodeId, ...located.unmapped }); continue; }
+      if (!located.site) { unmapped.push({ kind: event.kind ?? "untracked-read", nodeId: event.nodeId, document: event.document, ...located.unmapped }); continue; }
       const site = located.site;
       authoredEvents.push({ ...event, site });
       capture.events.push({ id: `read-${index}`, kind: event.kind ?? "untracked-read", message: event.kind === "observer-query" ?
@@ -285,9 +359,12 @@ async function collectProject(project, scenario, tools, browser) {
     const feedback = inspectDevelopmentFeedback(project, { capture, snapshot, analyze: () => ({ status: nativeFeedback.nativeExitCode,
       stdout: JSON.stringify(nativeFeedback.analysis) }) });
     const automatic = selectReadFeedback(authoredEvents, [...models.values()], { typingErrors: snapshot.typingErrors, dropped: raw.stats?.dropped ?? 0 });
+    if (raw.documents.lost) automatic.open?.push({ reason: "A loaded document unloaded without reporting its records", lost: raw.documents.lost });
     return { feedback, capture, assertions: snapshot.typingErrors ? [] : assertions,
       automatic,
       coverage, stats: raw.stats, diagnostics: raw.diagnostics, checkpoints, unmapped, blockedRequests,
+      suppliedResponses: [...responses.values()].map(row => ({ url: row.url, status: row.status, contentType: row.contentType,
+        body: row.pin, served: row.served, channel: "scenario-input" })),
       pageErrors, consoleDiagnostics, consoleDiagnosticsDropped, failure,
       configuration: configuration.configuration, typingErrors: snapshot.typingErrors };
   } finally { await context?.close(); await server.close(); rmSync(cache, { recursive: true, force: true }); }
@@ -296,18 +373,21 @@ async function collectProject(project, scenario, tools, browser) {
 export async function runBrowserFeedback({ project, scenarioPath, browserPath, toolingRoot, comparisonProject }) {
   const scenarioPin = { path: realpathSync(resolve(scenarioPath)), sha256: hash(readFileSync(scenarioPath)) };
   const scenario = validateFeedbackScenario(JSON.parse(readFileSync(scenarioPin.path, "utf8")));
+  const responses = loadSuppliedResponses(scenario, scenarioPin.path);
   const tools = await toolingAt(resolve(toolingRoot ?? dirname(resolve(project))));
   tools.root = realpathSync(resolve(toolingRoot ?? dirname(resolve(project))));
   const browserPin = { path: realpathSync(resolve(browserPath)), sha256: hash(readFileSync(browserPath)) };
   const browser = await tools.chromium.launch({ executablePath: browserPin.path, headless: true, timeout: 15000 });
   try {
-    const original = await collectProject(project, scenario, tools, browser);
-    const comparison = comparisonProject ? await collectProject(comparisonProject, scenario, tools, browser) : null;
+    const fresh = () => new Map([...responses].map(([url, row]) => [url, { ...row, served: 0 }]));
+    const original = await collectProject(project, scenario, tools, browser, fresh());
+    const comparison = comparisonProject ? await collectProject(comparisonProject, scenario, tools, browser, fresh()) : null;
     for (const run of [original, comparison].filter(Boolean)) {
       validateFeedbackInputs(run.capture.manifest);
       for (const pin of run.capture.runtimeInputs) assert.equal(hash(readFileSync(pin.path)), pin.sha256, `Runtime input changed: ${pin.path}`);
     }
     assert.equal(hash(readFileSync(scenarioPin.path)), scenarioPin.sha256, "Scenario changed during execution");
+    for (const { pin } of responses.values()) assert.equal(hash(readFileSync(pin.path)), pin.sha256, `Supplied response changed: ${pin.path}`);
     assert.equal(hash(readFileSync(browserPin.path)), browserPin.sha256, "Browser changed during execution");
     const selection = selectAssertionFeedback(original.assertions, comparison?.assertions ?? []);
     return { ...original.feedback, coverage: { ...original.feedback.coverage, runtime: "executed-browser", nativeReadCollection: original.coverage },

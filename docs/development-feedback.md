@@ -157,8 +157,9 @@ configuration owns its compiler plugins, aliases, public assets and root; its
 configuration files and imported dependencies are recorded as runtime inputs.
 Without one, the collector supplies the Solid plugin. Dependency optimization
 is disabled so the reviewed native reader passes through the capture hook.
-SSR and external network requests need separate adapters. Other origins are
-blocked in this run; config loading executes the application's existing config.
+SSR needs a separate adapter. Requests to other origins are blocked unless the
+scenario supplies a response for that exact URL (below); config loading executes
+the application's existing config.
 
 A scenario supplies explicit interactions and optional assertions. It never derives
 expected values from a proposed change:
@@ -174,6 +175,24 @@ expected values from a proposed change:
   ]
 }
 ```
+
+A scenario can also supply responses for other origins, so pages that fetch
+external data run offline and deterministically:
+
+```json
+"responses": [
+  { "url": "https://api.example.test/articles?user=a", "body": "articles.json",
+    "status": 200, "contentType": "application/json" }
+]
+```
+
+Each entry matches one exact, normalized `http(s)` URL for `GET`; `body` is a
+file path relative to the scenario, pinned by digest and rechecked after the
+run. `status` defaults to 200 and `contentType` to `application/json`. A
+response is a scenario input, not observed network behaviour:
+`execution.suppliedResponses` lists each URL, its body pin and how often it was
+served (`channel: "scenario-input"`). Every other cross-origin request stays
+blocked and is listed in `execution.blockedRequests`.
 
 `wait-for-text` and `wait-for-selector` establish readiness; `assert-text`
 records the current value without waiting for the expected answer. A failing
@@ -199,8 +218,14 @@ Source maps locate reads and queries in configured original source.
 It covers reads that reach this shared reader, including calls from installed
 packages. Store-specific serving paths, owner-present reads, unexecuted paths,
 missing source frames and other runtime artifacts remain open. The collector
-retains at most 256 records and 1 MiB of event data; it reports dropped records
-and always labels coverage incomplete. A different runtime profile refuses
+retains at most 256 records and 1 MiB of event data per document; it reports
+dropped records and always labels coverage incomplete. A full page load (an
+anchor the router does not intercept, a reload) starts a new document, so each
+document reports its records from `beforeunload` over a CDP binding, and the
+report merges them in load order (`document` on each record).
+`execution.coverage.documents` counts documents `loaded`, `reported` and
+`lost`; a lost document also appears under `automatic.open`. Reads during
+unload itself are not reported. A different runtime profile refuses
 instrumentation. The RC.13 **analysis compiler** does not expand this runtime
 profile to RC.13.
 
@@ -235,6 +260,29 @@ On the unchanged helge-dev replay, all six retained records are
 reading through the scheduler. None of the three derived-origin candidates (in
 `Blog.tsx` and `Article.tsx`, pages the scenario never visits) was entered;
 9 of 32 result operations were.
+
+The evaluation runner's scenario
+(`benchmarks/reviewed-package-models/development/evaluate-existing-applications.mjs`)
+now also visits Blog and opens an article. It supplies synthetic dev.to
+responses, including a blacklisted id that the application filters out. The
+article link carries `target="_self"`, which the router does not intercept,
+so opening it is a full page load. Before per-document reporting, that load
+silently discarded every Blog record. Now:
+
+- all six assertions pass, with no page errors, console diagnostics or blocked
+  requests;
+- both documents report, and all three derived-origin candidates are entered,
+  along with 26 of 32 result operations;
+- the run records 1,288 reads and 380 observer queries, and retains 18 records
+  with none dropped.
+
+Sixteen of those records are `package-frames-only`: eight router computations,
+and eight reads internal to `@solidjs/signals` with no other package frame. The
+other two map to the top-level `render()` call in `index.tsx` and carry no
+derived-origin lineage, so they stay open. No automatic note is emitted. The
+candidates read their reactive inputs before `await` or inside tracked memos,
+so the quiet result is consistent with the source. That is one application's
+three candidates, not a precision rate.
 
 ### Measure a supplied comparison
 

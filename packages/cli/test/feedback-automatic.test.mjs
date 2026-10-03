@@ -106,3 +106,6 @@ test("method models join by exact body span and preserve receiver and method nam
   const receiver = new Function("__scDevelopmentRuntime", code + "\nreturn receiver;")(createReadCollector());
   assert.equal(receiver.get(), receiver); assert.equal(receiver.get.name, "get");
 });
+test("equal node identities from different documents are distinct reads", () => {
+  assert.equal(selectReadFeedback([event, { ...event, document: 1 }], [model]).notes.length, 2);
+});

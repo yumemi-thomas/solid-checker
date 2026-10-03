@@ -41,7 +41,8 @@ export function selectReadFeedback(events, models, { typingErrors = 0, dropped =
       site.location.startByte < last.span.start || site.location.endByte > last.span.end || last.kind === "allocation") {
       open.push({ origin, nodeId: event.nodeId, reason: "Observed authored site is outside the final modeled operation" }); continue;
     }
-    const identity = `${origin.path}:${origin.span.start}:${event.nodeId}`;
+    // Node identities are per document; a full page load starts a new one.
+    const identity = `${origin.path}:${origin.span.start}:${event.document ?? 0}:${event.nodeId}`;
     if (seen.has(identity)) continue; seen.add(identity);
     if (event.kind === "observer-query") {
       queries.push({ kind: "observer-query-outside-tracking", severity: "info", channel: "executed-development",

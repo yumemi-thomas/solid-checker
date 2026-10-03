@@ -88,12 +88,34 @@ const scenario = { schemaVersion: 1, steps: [
   { action: "click", selector: '.innerContainer .buttons a[href="/about"]' },
   { action: "wait-for-text", selector: "main h1", text: "About" },
   { action: "assert-text", id: "about-heading", selector: "main h1", text: "About" },
+  // Blog and Article load from dev.to. The collector blocks other origins, so
+  // these steps run against supplied, digest-pinned responses (below).
+  { action: "click", selector: '.innerContainer .buttons a[href="/blog"]' },
+  { action: "wait-for-selector", selector: '.articles .article:has(a[href="/blog/101"]) h2' },
+  { action: "assert-text", id: "blog-first-article", selector: '.articles .article:has(a[href="/blog/101"]) h2', text: "Supplied article one" },
+  { action: "click", selector: '.articles .article a[href="/blog/101"]' },
+  { action: "wait-for-text", selector: ".articleContainer .title a:not(.icon)", text: "Supplied article one" },
+  { action: "assert-text", id: "article-title", selector: ".articleContainer .title a:not(.icon)", text: "Supplied article one" },
   { action: "click", selector: '.innerContainer .buttons a[href="/"]' },
   { action: "wait-for-text", selector: "main h1", text: "Helge Falch" },
   { action: "click", selector: '.icons [role="button"]' },
   { action: "wait-for-selector", selector: ".modal" },
   { action: "assert-text", id: "contact-address", selector: ".modal p", text: "helge.falch@gmail.com" },
+], responses: [
+  { url: "https://dev.to/api/articles?username=helgelol", body: "helge-dev.articles.json" },
+  { url: "https://dev.to/api/articles/101", body: "helge-dev.article-101.json" }
 ] };
+// Synthetic scenario inputs, not recorded dev.to data. The blacklisted id is
+// included so the application's own filter has something to remove.
+const suppliedBodies = {
+  "helge-dev.articles.json": [
+    { id: 101, title: "Supplied article one", description: "Scenario input", tags: "solid", category: "", link: "" },
+    { id: 422939, title: "Blacklisted article", description: "Filtered by the application", tags: "", category: "", link: "" },
+    { title: "External article", description: "", tags: "", category: "web", link: "https://example.test/post" }
+  ],
+  "helge-dev.article-101.json": { title: "Supplied article one", url: "https://example.test/post-101", body_html: "<p>Body</p>" }
+};
+for (const [name, body] of Object.entries(suppliedBodies)) writeFileSync(join(output, name), JSON.stringify(body, null, 2) + "\n");
 const scenarioPath = join(output, "helge-dev.scenario.json");
 writeFileSync(scenarioPath, JSON.stringify(scenario, null, 2) + "\n");
 for (const selected of selectedApplications) {
