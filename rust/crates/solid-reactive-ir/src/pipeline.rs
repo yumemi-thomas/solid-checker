@@ -36,6 +36,7 @@ use typefacts::Location;
 /// of its signature rather than ambient mutation of a shared function body.
 #[derive(Default)]
 pub(crate) struct ProgramDraft {
+    pub(crate) development_feedback: Vec<crate::development_feedback::DevelopmentFile>,
     pub(crate) reads: Vec<ReactiveRead>,
     pub(crate) writes: Vec<ReactiveWrite>,
     pub(crate) action_invocations: Vec<ActionInvocation>,
@@ -141,6 +142,7 @@ impl ProgramDraft {
         self.contract_generation_obligations
             .sort_by(|left, right| location_order(&left.location, &right.location));
         Program {
+            development_feedback: self.development_feedback,
             reads: self.reads,
             writes: self.writes,
             actions: self.action_invocations,
@@ -393,6 +395,11 @@ fn build_with_accepted_contract_inputs_measured_incremental(
     // Source discovery does not inspect missing exports, and the static prepass
     // owns them after the two independent index passes complete.
     let mut draft = ProgramDraft {
+        development_feedback: if rule_options.development_feedback {
+            crate::development_feedback::models(facts, semantic_lookup, dialect)
+        } else {
+            Vec::new()
+        },
         static_defects: missing_contract_exports,
         contract_binding: resolved_contracts.counts,
         ..ProgramDraft::default()

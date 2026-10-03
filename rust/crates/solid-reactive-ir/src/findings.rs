@@ -385,7 +385,7 @@ pub fn strict_read_message(read: &ReactiveRead) -> String {
             format!(" through {}", read.via)
         };
         return format!(
-            "{} {:?} is read{through} in a callback written in {context} and passed to a function that is not proven to invoke it during the call; that function may invoke it then, later from a closure it returns or keeps, or never, so whether this read runs untracked in {context} cannot be proven either way",
+            "{} {:?} is read{through} in a callback written in {context} and passed to a consumer that is not proven to invoke it during the call or component rendering; that consumer may invoke it then, later from a closure it returns or keeps, or never, so whether this read runs untracked in {context} cannot be proven either way",
             reactive_value_label(&read.kind),
             read.accessor,
         );
@@ -437,7 +437,7 @@ fn untracked_evidence_sentence(read: &ReactiveRead, subject: &str) -> String {
         )
     } else if read.callee_callback_timing {
         format!(
-            "{subject} sits in a callback passed to a function whose body is not proven to invoke it during the call, so no fact places its execution inside or after the component body's strict-read window"
+            "{subject} sits in a callback passed to a consumer that is not proven to invoke it during the call or component rendering, so no fact places its execution inside or after the component body's strict-read window"
         )
     } else {
         format!("{subject} is outside every compiler-tracked JSX region and deferred callback")

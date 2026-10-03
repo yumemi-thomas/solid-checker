@@ -4,7 +4,11 @@ mod cleanup;
 pub mod contract_semantics;
 mod contracts;
 mod creates_walk;
+mod development_feedback;
 mod directives;
+pub use development_feedback::{
+    DevelopmentFile, DevelopmentFunction, DevelopmentOperation, ResultRelevance,
+};
 mod effect_api;
 mod execution_role;
 mod findings;
@@ -355,8 +359,8 @@ pub struct ReactiveRead {
     /// worded separately for that reason.
     #[serde(default, skip_serializing_if = "is_false")]
     pub host_callback_timing: bool,
-    /// The read sits in a function literal handed to a project function that
-    /// is not proven to invoke it during the call
+    /// The read sits in a function literal handed to a project function or
+    /// through a JSX prop whose consumer is not proven to invoke it during rendering
     /// (`execution_role::callee_callback_timing`): the literal is written in
     /// the component body but runs wherever the callee runs it -- during the
     /// call, from a closure the callee returns or stores, or never -- and the
@@ -1081,6 +1085,16 @@ pub struct AsyncRead {
     /// obligation rather than a proven throw.
     #[serde(default, skip_serializing_if = "is_false")]
     pub host_callback_timing: bool,
+    /// The read's callback is handed to a callee whose invocation is not
+    /// proven on the current stack ([`ReactiveRead::callee_callback_timing`]).
+    /// The callee may defer the read or handle pending values, so SC5001 is
+    /// an open obligation rather than a proven pending-read exception.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub callee_callback_timing: bool,
+    /// Lexical nesting in a component does not prove this stored or returned
+    /// callback executes during that component's strict-read window.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub invocation_context_unproven: bool,
 }
 
 fn default_async_provenance() -> bool {
@@ -1900,6 +1914,8 @@ fn empty_contract_exports() -> &'static BTreeMap<String, ContractExport> {
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Program {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub development_feedback: Vec<development_feedback::DevelopmentFile>,
     pub reads: Vec<ReactiveRead>,
     pub writes: Vec<ReactiveWrite>,
     pub actions: Vec<ActionInvocation>,

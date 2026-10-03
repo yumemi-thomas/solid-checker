@@ -1,0 +1,853 @@
+{
+  "authority": false,
+  "certification": false,
+  "summary": {
+    "cases": 41,
+    "targets": 21,
+    "targetFailuresAndGuidance": 21,
+    "controls": 20,
+    "quietControls": 20
+  },
+  "scope": "Executed authored primary-value assertions and supplied comparisons; read observations remain informational; no held-out or universal accuracy claim",
+  "implementation": [
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/packages/cli/scripts/feedback-browser.mjs",
+      "sha256": "sha256:0fb0ac89067670d38023dc736b58214efa88732e129f63915e11e3abdadd6964"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/packages/cli/scripts/feedback-native-hook.mjs",
+      "sha256": "sha256:86e17421419df3de30f61e2321cd6d9d88094997c7c348d35f07bcc920ac1995"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/packages/cli/scripts/feedback-read-runtime.mjs",
+      "sha256": "sha256:78803df8db85e40811f3006309d31ed097aadb74d4bb1476209cd3a05008e6f9"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/packages/cli/scripts/feedback-assertion-selector.mjs",
+      "sha256": "sha256:502b1b6bc371d2dcc7683ed87245dcf2cca698ed3fc951c14e74cef332382bcf"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/packages/cli/scripts/development-feedback.mjs",
+      "sha256": "sha256:f625db540246b9d699e6a400eec588f06d65e66beb550bf4fb6dbc26b70d4c36"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/packages/cli/bin/solid-checker.mjs",
+      "sha256": "sha256:0d3938b1c7515abb4d4612354a2c6f45dd3d0087b1eaabf43b3acd1170537575"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/packages/cli/bin/launcher.mjs",
+      "sha256": "sha256:dc78b1fd8eb1deeec2ae13bd18022ee23c684d8cdf2766294eed41f3eec2114b"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/target/debug/solid-checker-rust",
+      "sha256": "sha256:43ad6afa27cffa624f90121551db60989953a8a663f82c99d5b3c3e0111605df"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts",
+      "sha256": "sha256:ad06b3d0d4b6057283ceaaf8edd9f0913c775f421842429aa13c0dd33757c545"
+    }
+  ],
+  "checks": [
+    {
+      "path": "rust/target/development-live-cli-unit.log",
+      "sha256": "sha256:aed480e5f77c9f8043d5e9250e63438895709ccf2b5ccb4987507da18d942eba"
+    },
+    {
+      "path": "rust/target/development-live-cli-universal.log",
+      "sha256": "sha256:03feb4adf282cc86d63d36d6b187458847a8476b8eb59baab0e0cebc63889dd7"
+    },
+    {
+      "path": "rust/target/development-live-cli-audit.json",
+      "sha256": "sha256:cd0959861f00247b00b05f0e75af1faad949f74e421e082bcd6a22904d132692"
+    },
+    {
+      "path": "rust/target/development-live-cli-boundaries-v1/without-comparison.json",
+      "sha256": "sha256:ef60d8f694c08f1f3519d30ee2c5ec0cc641c9a43ce55005d4a0030f201495ab"
+    },
+    {
+      "path": "rust/target/development-live-cli-boundaries-v1/published-typing-exclusion.json",
+      "sha256": "sha256:db7d26a795879b3eb7a897be10e8b544e59c73bccefaf87fbd295f7963719a09"
+    },
+    {
+      "path": "rust/target/development-live-cli-boundaries-v1/native-pending-exception.json",
+      "sha256": "sha256:167af067a3bccd2241d725d7339d58da0264429dbb854a8cec66950c8b0db0c1"
+    },
+    {
+      "path": "rust/target/development-live-cli-boundaries-v2/native-pending-exception.json",
+      "sha256": "sha256:07fa65a55096279808ae9f7aa680af590fa042b27712762c66ece611838617cb"
+    }
+  ],
+  "packages": [
+    {
+      "name": "@solid-primitives/queue",
+      "version": "1.0.0-next.3"
+    },
+    {
+      "name": "@solid-primitives/map",
+      "version": "1.0.0-next.2"
+    },
+    {
+      "name": "@solid-primitives/controlled-signal",
+      "version": "1.0.0-next.3"
+    }
+  ],
+  "runtime": "@solidjs/signals@2.0.0-rc.9",
+  "analysisCompiler": "local RC.13 candidate",
+  "cliTests": 313,
+  "universalChecks": "passed",
+  "fullVerify": "not rerun; adapter-only slice, previous native candidate verification unchanged",
+  "boundaries": {
+    "withoutComparison": "failed assertion; no comparison guidance",
+    "publishedTypingError": "TS error count 1; extra observations/assertions/guidance suppressed",
+    "nativeStrictRead": "mapped PENDING_ASYNC_UNTRACKED_READ runtime exception",
+    "plainHandlerContrast": "no runtime exception; existing native SC5001 overclaim retained as unresolved"
+  },
+  "remaining": [
+    "automatic package source inference and warning selector",
+    "automatic comparison planning",
+    "editor/watch integration",
+    "other native runtime profiles",
+    "store-specific paths and owner-present reads",
+    "native plain-handler strict-window precision"
+  ],
+  "cases": [
+    {
+      "id": "async-body-return-serial-adopted-child-object-deferred",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "async-body-return-serial-reaction-read-deferred",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-named-allocation-open",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "9"
+      ],
+      "after": [
+        "9"
+      ],
+      "expected": [
+        "9"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-identity-control-open",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "1"
+      ]
+    },
+    {
+      "id": "async-body-return-concurrent-adopted-child-object-deferred",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "async-body-return-concurrent-reaction-read-deferred",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-named-allocation-open",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "9"
+      ],
+      "after": [
+        "9"
+      ],
+      "expected": [
+        "9"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-identity-control-open",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "1"
+      ]
+    },
+    {
+      "id": "async-body-return-serial-promise-object-deferred",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "async-body-return-serial-thenable-read-before-return-deferred",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "async-body-return-serial-function-object-deferred",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "async-body-return-serial-awaited-child-object-deferred",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "async-body-return-serial-constant-object-deferred",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "9"
+      ],
+      "after": [
+        "9"
+      ],
+      "expected": [
+        "9"
+      ]
+    },
+    {
+      "id": "async-body-return-serial-caught-rejected-promise-deferred",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "9"
+      ],
+      "after": [
+        "9"
+      ],
+      "expected": [
+        "9"
+      ]
+    },
+    {
+      "id": "async-body-return-serial-caught-throwing-then-getter-deferred",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "9"
+      ],
+      "after": [
+        "9"
+      ],
+      "expected": [
+        "9"
+      ]
+    },
+    {
+      "id": "async-body-return-concurrent-promise-object-deferred",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "async-body-return-concurrent-thenable-read-before-return-deferred",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "async-body-return-concurrent-function-object-deferred",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "async-body-return-concurrent-awaited-child-object-deferred",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "async-body-return-concurrent-constant-object-deferred",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "9"
+      ],
+      "after": [
+        "9"
+      ],
+      "expected": [
+        "9"
+      ]
+    },
+    {
+      "id": "async-body-return-concurrent-caught-rejected-promise-deferred",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "9"
+      ],
+      "after": [
+        "9"
+      ],
+      "expected": [
+        "9"
+      ]
+    },
+    {
+      "id": "async-body-return-concurrent-caught-throwing-then-getter-deferred",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "9"
+      ],
+      "after": [
+        "9"
+      ],
+      "expected": [
+        "9"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-returned-read",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-returned-branch",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-identity-result",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-discarded-read",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "9"
+      ],
+      "after": [
+        "9"
+      ],
+      "expected": [
+        "9"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-equal-branches",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "9"
+      ],
+      "after": [
+        "9"
+      ],
+      "expected": [
+        "9"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-finally-replaces",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "9"
+      ],
+      "after": [
+        "9"
+      ],
+      "expected": [
+        "9"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-equal-catch",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "9"
+      ],
+      "after": [
+        "9"
+      ],
+      "expected": [
+        "9"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-returned-read",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-returned-branch",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-identity-result",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-discarded-read",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "9"
+      ],
+      "after": [
+        "9"
+      ],
+      "expected": [
+        "9"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-equal-branches",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "9"
+      ],
+      "after": [
+        "9"
+      ],
+      "expected": [
+        "9"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-finally-replaces",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "9"
+      ],
+      "after": [
+        "9"
+      ],
+      "expected": [
+        "9"
+      ]
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-equal-catch",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "9"
+      ],
+      "after": [
+        "9"
+      ],
+      "expected": [
+        "9"
+      ]
+    },
+    {
+      "id": "namespace-map-stale",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 2,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "namespace-map-tracked",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 2,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "2"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "reexport-controlled-signal-stale",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "reexport-controlled-signal-tracked",
+      "role": "control",
+      "assertionFailures": 0,
+      "guidance": 0,
+      "readObservations": 2,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "2"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    },
+    {
+      "id": "delayed-controlled-signal-stale",
+      "role": "target",
+      "assertionFailures": 1,
+      "guidance": 1,
+      "readObservations": 4,
+      "nativeViolations": 0,
+      "typingErrors": 0,
+      "before": [
+        "1"
+      ],
+      "after": [
+        "2"
+      ],
+      "expected": [
+        "2"
+      ]
+    }
+  ]
+}

@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-void-child-divergence-solid-2/App.tsx",
-      "start": 2497,
-      "end": 2506,
+      "start": 2312,
+      "end": 2321,
       "fixes": 0,
       "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
       "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. For one-time setup with teardown, use onSettled with a returned cleanup in a component."

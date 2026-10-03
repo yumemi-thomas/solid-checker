@@ -26,8 +26,8 @@ use std::{
 use crate::execution_role::{
     RootBodyGuard, allowed_callback_spans, async_execution_role, callee_callback_timing,
     control_flow_execution_role, host_callback_timing, missing_jsx_census,
-    named_callback_execution_role, read_analysis_context, semantic_execution_role,
-    semantic_write_execution_role,
+    named_callback_execution_role, nested_literal_runs_during_body, pending_accessor_probe,
+    read_analysis_context, semantic_execution_role, semantic_write_execution_role,
 };
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
@@ -568,9 +568,10 @@ impl LocalAccessContext<'_, '_> {
                 }
                 let async_provenance = self.async_sources.contains(symbol);
                 let async_options = self.effective_async_options(symbol);
-                if async_provenance
+                if (async_provenance
                     || async_options.ssr_client_bare
-                    || async_options.server_rendering_unresolved
+                    || async_options.server_rendering_unresolved)
+                    && !pending_accessor_probe(file, call.callee, self.lookup)
                 {
                     let async_execution = async_execution_role(file, call.callee, execution);
                     result.async_reads.push(Arc::new(AsyncRead {
@@ -603,6 +604,21 @@ impl LocalAccessContext<'_, '_> {
                             async_execution,
                             self.lookup,
                         ),
+                        callee_callback_timing: callee_callback_timing(
+                            file,
+                            call.callee,
+                            async_execution,
+                            self.lookup,
+                        ),
+                        invocation_context_unproven: async_execution
+                            == ExecutionRole::UntrackedRendering
+                            && !nested_literal_runs_during_body(
+                                file,
+                                call.callee,
+                                self.entities,
+                                self.symbol_names,
+                                self.lookup,
+                            ),
                     }));
                 }
             }
@@ -1044,6 +1060,21 @@ impl LocalAccessContext<'_, '_> {
                         async_execution,
                         self.lookup,
                     ),
+                    callee_callback_timing: callee_callback_timing(
+                        file,
+                        member.span,
+                        async_execution,
+                        self.lookup,
+                    ),
+                    invocation_context_unproven: async_execution
+                        == ExecutionRole::UntrackedRendering
+                        && !nested_literal_runs_during_body(
+                            file,
+                            member.span,
+                            self.entities,
+                            self.symbol_names,
+                            self.lookup,
+                        ),
                 }));
             }
         }
@@ -1168,6 +1199,8 @@ impl LocalAccessContext<'_, '_> {
                 ssr_client_hole: false,
                 server_rendering_unresolved: false,
                 host_callback_timing: false,
+                callee_callback_timing: false,
+                invocation_context_unproven: false,
             }));
         }
         result

@@ -1172,6 +1172,13 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             if read.host_callback_timing && finding.id == "SC5001" {
                 finding.kind = "uncertifiable".into();
             }
+            // Lexical placement cannot prove an unknown callee runs the
+            // callback in this window or leaves pending values unhandled.
+            if (read.callee_callback_timing || read.invocation_context_unproven)
+                && finding.id == "SC5001"
+            {
+                finding.kind = "uncertifiable".into();
+            }
             if read.server_rendering_unresolved {
                 finding.kind = "uncertifiable".into();
             }
@@ -1608,6 +1615,8 @@ mod tests {
                 ssr_client_hole: false,
                 server_rendering_unresolved: false,
                 host_callback_timing: false,
+                callee_callback_timing: false,
+                invocation_context_unproven: false,
             }],
             ..Program::default()
         };
@@ -1648,6 +1657,8 @@ mod tests {
                 ssr_client_hole: false,
                 server_rendering_unresolved: false,
                 host_callback_timing: false,
+                callee_callback_timing: false,
+                invocation_context_unproven: false,
             }],
             ..Program::default()
         };
@@ -1698,6 +1709,8 @@ mod tests {
                 ssr_client_hole: false,
                 server_rendering_unresolved: false,
                 host_callback_timing: false,
+                callee_callback_timing: false,
+                invocation_context_unproven: false,
             }],
             ..Program::default()
         };

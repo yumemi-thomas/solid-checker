@@ -36,4 +36,20 @@ declare module "solid-js" {
     unobserved?: () => void;
   }
   export function createSignal<T>(value: Exclude<T, Function>, options?: SignalOptions<T>): Signal<T>;
+  // rc.9 signals.d.ts: the overload without a required loadingValue. These
+  // cases pass no options; the omitted overload cannot affect their claims.
+  export type NoInfer<T extends any> = [T][T extends any ? 0 : never];
+  export type ComputeFunction<Prev, Next extends Prev = Prev> = (v: Prev) => PromiseLike<Next> | AsyncIterable<Next> | Next;
+  export interface MemoOptions<T> {
+    id?: string;
+    name?: string;
+    transparent?: boolean;
+    equals?: false | ((prev: T, next: T) => boolean);
+    unobserved?: () => void;
+    lazy?: boolean;
+    sync?: boolean;
+    loadingValue?: T;
+  }
+  export function createMemo<T>(compute: ComputeFunction<undefined | NoInfer<T>, T>, options?: MemoOptions<T>): SourceAccessor<T>;
+  export function isPending(fn: () => any): boolean;
 }

@@ -352,6 +352,23 @@
    }
   },
   {
+   "id": "no-direct-mutation/nested-props-value/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "export function Child(props: { state: { count: number } }) {\n  return <button onClick={() => { props.state.count++; }}>{props.state.count}</button>;\n}\nexport function Wrapped(props: { state: { count: number } }) {\n  return <button onClick={() => { (props.state as { count: number }).count = 2; }}>{props.state.count}</button>;\n}\nexport function App() {\n  const state = { count: 0 };\n  return <div><Child state={state} /><Wrapped state={state} /></div>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [{ "rule": "no-direct-mutation" }]
+   },
+   "note": "Solid 2 props container behavior is shallow. Its nested value can be a plain mutable object or an application-owned writable proxy; a root props fact does not prove a dropped nested write. This product-owned control follows the unchanged invoicer application whose proxy delegates writes to setStore. The existing positive store case still proves nested readonly store writes. Published typings accept these writes."
+  },
+  {
    "id": "reactive-write-in-owned-scope/positive/001",
    "dialect": "solid-v2",
    "source": {

@@ -1127,6 +1127,8 @@ mod tests {
                 ssr_client_hole: false,
                 server_rendering_unresolved: false,
                 host_callback_timing: false,
+                callee_callback_timing: false,
+                invocation_context_unproven: false,
             }],
             static_defects: defect_kinds
                 .into_iter()

@@ -1,0 +1,323 @@
+{
+  "authority": false,
+  "certification": false,
+  "completedAt": "2026-10-03T03:25:11.435Z",
+  "version": "2.0.0-rc.13",
+  "identity": {
+    "upstreamRevision": "5efaf260becb32293f2bcb4d32f8be72be6de674",
+    "implementationRevision": "c04c48779812d3d87166da3741c625748458c62f",
+    "distributionRevision": "3ad4bbec37ae30f325a803cdb4271a71c86a2a2d",
+    "semanticTraceVersion": 3,
+    "compilerFactsProtocol": 2
+  },
+  "sourceManifestSha256": "sha256:35f4874f646f9482d0549fdf052f0d37bd02ec47b5c024d5732b6d9796423a9a",
+  "sourceComparison": {
+    "summary": {
+      "sources": 365,
+      "profiles": 9,
+      "comparisons": 3285,
+      "upstreamMatches": 3285,
+      "traceComparisons": 2555,
+      "unsupportedFactRefusals": 730
+    },
+    "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/compiler-rc13-comparison-final-v2",
+    "resultsSha256": "75b97773d55616c049671690eb85d8f635ee1de2ebd1b8ea4a2ff2fa50cc9ec6",
+    "requestsSha256": "9962189c0b81160019f2c9c064f274e3ea0ef14e42f545d0db1ba61f04ced689",
+    "upstreamSha256": "df34acb7ea15b8df16f36d757a6e9600c873294036dbc30cec71168375674fb2",
+    "forkSha256": "11ba4aed51e943c07fa7d68e28a1e165a1fec1ee252c971aed30908e1112b92e"
+  },
+  "publishedComparison": {
+    "summary": {
+      "comparisons": 3285,
+      "outputAndDiagnosticMatches": 3285
+    },
+    "native": {
+      "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/compiler-rc13-release-v1/node_modules/@solidjs/compiler-darwin-arm64/compiler.darwin-arm64.node",
+      "sha256": "bbcd7f4c17135b273b4877976170762ab282a2d84581ac6a6aa13e3314fb5d78"
+    },
+    "resultsSha256": "96a107ef48d8204242c7d58d2126a81c45b9d99db02033628c180ec41a3bcc14"
+  },
+  "release": {
+    "collectedAt": "2026-10-03T03:03:12.887Z",
+    "packages": [
+      {
+        "name": "solid-js",
+        "version": "2.0.0-rc.13",
+        "published": "2026-09-30T06:09:52.156Z",
+        "tags": {
+          "beta": "1.10.0-beta.0",
+          "latest": "1.9.15",
+          "next": "2.0.0-rc.13"
+        },
+        "gitHead": "5efaf260becb32293f2bcb4d32f8be72be6de674",
+        "dist": {
+          "shasum": "dab58df9435bb422e3a991674b88fc6992e74955",
+          "tarball": "https://registry.npmjs.org/solid-js/-/solid-js-2.0.0-rc.13.tgz",
+          "fileCount": 34,
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ==",
+          "signatures": [
+            {
+              "sig": "MEYCIQDAZ5X0ml3UZGPy50gS0CLVTb60hCHHEJs5WE61K7GT+QIhAK8DZMkT2QWE/48LS6/pp9rDGXTpBLEEyDN2mzCFSkr9",
+              "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+            },
+            {
+              "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+              "sig": "MEUCIQC3ac0msx6D2baNqI8H71pEHp9cq3UMVLfI3JURGniSCwIgIFSQeKoH1xio6B/NEFxJOTFHcU8E80fY+prUiw4AUiM="
+            }
+          ],
+          "attestations": {
+            "url": "https://registry.npmjs.org/-/npm/v1/attestations/solid-js@2.0.0-rc.13",
+            "provenance": {
+              "predicateType": "https://slsa.dev/provenance/v1"
+            }
+          },
+          "unpackedSize": 619256
+        }
+      },
+      {
+        "name": "@solidjs/compiler",
+        "version": "2.0.0-rc.13",
+        "published": "2026-09-30T06:10:09.170Z",
+        "tags": {
+          "latest": "2.0.0-rc.2",
+          "next": "2.0.0-rc.13"
+        },
+        "gitHead": "5efaf260becb32293f2bcb4d32f8be72be6de674",
+        "dist": {
+          "shasum": "d25b80bc812a5034927d1636ea33068493f20501",
+          "tarball": "https://registry.npmjs.org/@solidjs/compiler/-/compiler-2.0.0-rc.13.tgz",
+          "fileCount": 4,
+          "integrity": "sha512-OveR/xhLKo8MTJO/53jgjHuBW54c6/a9B/jiSjDrBeQ3JSbODUxQ8t58WBSlHaxyowPd27TwhVkLo3zeT1YqMQ==",
+          "signatures": [
+            {
+              "sig": "MEYCIQCJvFrYpuNw58HKGD1ME03ZbQ54SRAzQ/HVg0qmRLAoXQIhAOFI7l8r8UyUoqbDavJB0y5zsGt/IR1vWELJ6uZkRNkX",
+              "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+            },
+            {
+              "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+              "sig": "MEYCIQCIBDIDx9ACJime8NjpwmeB7k8hgYOA5OG8vXRUUXqDDQIhAJ+bz+YBIvC+cdz2T780mmWHPPNa/NhbXyUEbwekS68X"
+            }
+          ],
+          "attestations": {
+            "url": "https://registry.npmjs.org/-/npm/v1/attestations/@solidjs%2fcompiler@2.0.0-rc.13",
+            "provenance": {
+              "predicateType": "https://slsa.dev/provenance/v1"
+            }
+          },
+          "unpackedSize": 46130
+        },
+        "artifact": {
+          "archive": "/Users/thomas/Documents/Github/solid-checker/rust/target/compiler-rc13-release-v1/compiler.tgz",
+          "sha256": "7fca6f6d5cc191f687eabcb2d6cd9c2d5e3b010202de16bcd431eb0df982052a",
+          "root": "/Users/thomas/Documents/Github/solid-checker/rust/target/compiler-rc13-release-v1/node_modules/@solidjs/compiler"
+        }
+      },
+      {
+        "name": "@solidjs/web",
+        "version": "2.0.0-rc.13",
+        "published": "2026-09-30T06:10:58.187Z",
+        "tags": {
+          "latest": "2.0.0-rc.0",
+          "next": "2.0.0-rc.13"
+        },
+        "gitHead": "5efaf260becb32293f2bcb4d32f8be72be6de674",
+        "dist": {
+          "shasum": "2859d797294d7ca1ab09e82157f567699be37e58",
+          "tarball": "https://registry.npmjs.org/@solidjs/web/-/web-2.0.0-rc.13.tgz",
+          "fileCount": 75,
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ==",
+          "signatures": [
+            {
+              "sig": "MEUCIA+jrhjMk/66i44GpagAnwyfHdfY6qlf6oZ51C88HEW6AiEA/i6PCmheARl4Kj0rqU03yU30pwAHvc61CTn4vzQ8eoM=",
+              "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+            },
+            {
+              "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+              "sig": "MEUCIEgQwME2OlYbaco0c+EoeStdQXgaXVQPcsbrSXf9+629AiEA146qEt5v9skrBEKz5J95D5s/knc0GFVDWr0IF48vTnU="
+            }
+          ],
+          "attestations": {
+            "url": "https://registry.npmjs.org/-/npm/v1/attestations/@solidjs%2fweb@2.0.0-rc.13",
+            "provenance": {
+              "predicateType": "https://slsa.dev/provenance/v1"
+            }
+          },
+          "unpackedSize": 2217402
+        }
+      },
+      {
+        "name": "@solidjs/signals",
+        "version": "2.0.0-rc.13",
+        "published": "2026-09-30T06:10:57.363Z",
+        "tags": {
+          "latest": "2.0.0-rc.0",
+          "next": "2.0.0-rc.13"
+        },
+        "gitHead": "5efaf260becb32293f2bcb4d32f8be72be6de674",
+        "dist": {
+          "shasum": "0a796fe2281c8523bbe67879cd14435af5cb7e19",
+          "tarball": "https://registry.npmjs.org/@solidjs/signals/-/signals-2.0.0-rc.13.tgz",
+          "fileCount": 119,
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ==",
+          "signatures": [
+            {
+              "sig": "MEYCIQDFzGXj6nZIcTWsUos67bbAbqWcPex+RKNVkmeSla76zgIhAJ1kICLlEka72wUMTp8EwR+vaS6Voqj3G89qu5eVVjr4",
+              "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+            },
+            {
+              "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+              "sig": "MEUCIDHkY5wSl4N32QBs/8iwsm1XTKGa2rO0xWW4GEZ790jgAiEAzHiFEE/Jc7BBLjpH5Lk8H5FgAVGbWfgGGUqfZGVd81E="
+            }
+          ],
+          "attestations": {
+            "url": "https://registry.npmjs.org/-/npm/v1/attestations/@solidjs%2fsignals@2.0.0-rc.13",
+            "provenance": {
+              "predicateType": "https://slsa.dev/provenance/v1"
+            }
+          },
+          "unpackedSize": 2894640
+        }
+      },
+      {
+        "name": "@solidjs/compiler-darwin-arm64",
+        "version": "2.0.0-rc.13",
+        "published": "2026-09-30T06:09:35.357Z",
+        "tags": {
+          "latest": "2.0.0-rc.2",
+          "next": "2.0.0-rc.13"
+        },
+        "gitHead": "5efaf260becb32293f2bcb4d32f8be72be6de674",
+        "dist": {
+          "shasum": "fc10464b2ddbd6b3551649b17419e9df74b4cd7e",
+          "tarball": "https://registry.npmjs.org/@solidjs/compiler-darwin-arm64/-/compiler-darwin-arm64-2.0.0-rc.13.tgz",
+          "fileCount": 3,
+          "integrity": "sha512-uG3Sa/2jNZNxoKkcHjHw3KZEEuwDrRAk9aqUU2qqJZl9GDLLI0HVW7i/Lvq9b17f5yN+fNTdNyojO8rLgHnQuQ==",
+          "signatures": [
+            {
+              "sig": "MEQCIAedeWfepJs44E5O1gehRhPsq+Pwt8n05b0fo4c+rUERAiAO+54X6pSKn3LgtB9TgVKo3GQEZMl7fY5QbQ/E3iQyIw==",
+              "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+            },
+            {
+              "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+              "sig": "MEUCIQCPCOmDqfaGx0jXtmenmWhr6jOdvYgV9FLY1JGfsfKFMQIgTC/AZeDbxT23mb6FMMgtQS+qJsL97wF3dUs3sPckmc0="
+            }
+          ],
+          "attestations": {
+            "url": "https://registry.npmjs.org/-/npm/v1/attestations/@solidjs%2fcompiler-darwin-arm64@2.0.0-rc.13",
+            "provenance": {
+              "predicateType": "https://slsa.dev/provenance/v1"
+            }
+          },
+          "unpackedSize": 6744717
+        },
+        "artifact": {
+          "archive": "/Users/thomas/Documents/Github/solid-checker/rust/target/compiler-rc13-release-v1/native.tgz",
+          "sha256": "bab940d6ed9b3a7b7ab272cfa99b7b6f69ec5e16ee0b2338d678cf3948bf1015",
+          "root": "/Users/thomas/Documents/Github/solid-checker/rust/target/compiler-rc13-release-v1/node_modules/@solidjs/compiler-darwin-arm64"
+        }
+      }
+    ],
+    "revision": "5efaf260becb32293f2bcb4d32f8be72be6de674",
+    "version": "2.0.0-rc.13"
+  },
+  "checks": {
+    "rustCore": {
+      "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/compiler-rc13-no-default-v3.log",
+      "sha256": "7ebc7f5123fe238e22f7b7221b5d3bded86c0caa3263bda7024dbc69974ececc"
+    },
+    "rustDefault": {
+      "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/compiler-rc13-default-v2.log",
+      "sha256": "f923feca2b5b292c3e59f345495bfa6e02d2269f68bc81efa5099703a523d406"
+    },
+    "rustTsrx": {
+      "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/compiler-rc13-tsrx.log",
+      "sha256": "9597b363821821b2a4669393b4e5068800a29bbea9e238db5185aec284bfda52"
+    },
+    "adapter": {
+      "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/compiler-rc13-adapter.log",
+      "sha256": "1325e857201241725833290ca7908d6e0eb9cbc7bfc6b5c71a8dcb765bcda3db"
+    },
+    "javascript": {
+      "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/compiler-rc13-js-final.log",
+      "sha256": "65bf33b13b74d485d0ee756dbd07fbb02f2e1b9adcde5a96867c5b1d66e1e28d"
+    },
+    "candidateClippy": {
+      "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/compiler-rc13-clippy-scoped.log",
+      "sha256": "df7348df02835b8de426e3cb15457d44b460754c11b03cd88df09877596ec8ac"
+    },
+    "checkerUniversalFmtClippy": {
+      "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/compiler-rc13-checker-verify-fast.log",
+      "sha256": "0d7978e086b98fec583b078f0cddc18eb7ee0e978091acef33f052ec4c193fc0"
+    }
+  },
+  "inputs": [
+    {
+      "path": "compare.mjs",
+      "sha256": "7090a3d62fdf2236f91b4535c2580c453434d1dd80186b22dd1deef91f1a2969"
+    },
+    {
+      "path": "compare.test.mjs",
+      "sha256": "8270fe13e48c04b84d02deda9fac0814d966c5907acd974c2d59dc4b37570d87"
+    },
+    {
+      "path": "compare-installed.mjs",
+      "sha256": "cd4491733b05f2d2ec45effe94916d90f073f76ee3aa6f52fdde1c0120f9f8b7"
+    },
+    {
+      "path": "capture-release.mjs",
+      "sha256": "7b4103bfdbb25502427148012f598a46fa40346e7a3e26db13116ddbffdfc7ea"
+    },
+    {
+      "path": "verify-candidate.mjs",
+      "sha256": "49fed7932eab27ee534b41f104872503ba83a2de4164ca0560a6b167d256d4b9"
+    },
+    {
+      "path": "probe/Cargo.toml",
+      "sha256": "e1d56c108d8c509ae7557ea45ac3a0604e08f207bc344748d95c6829c5bfa13c"
+    },
+    {
+      "path": "probe/Cargo.lock",
+      "sha256": "f759426c61f8cf97d76744901677e541180af9891ee7c087cf6699474efa5484"
+    },
+    {
+      "path": "probe/src/main.rs",
+      "sha256": "d842299c8dd1a60b41ba0b2de760bf3c4bd419119dabfd8b8e1d6fdeb3fa4d2d"
+    },
+    {
+      "path": "probe-upstream/Cargo.toml",
+      "sha256": "0b4113153f341e1f8ade290926202c48895d09c2c1eeba9aef7900fc5eb67181"
+    },
+    {
+      "path": "probe-upstream/Cargo.lock",
+      "sha256": "544508929e662a697d7d9ce9c965f2cb62f2964771d42c31921478bc2a11e6c2"
+    },
+    {
+      "path": "adapter/Cargo.toml",
+      "sha256": "0879c4b4ed05d6548196bc45fb09853d6f7e105c960cdec3f1ce4f5be0566157"
+    },
+    {
+      "path": "adapter/Cargo.lock",
+      "sha256": "57ca438f5abfab809bfdbd5d7b2bfa7af9cfeb9e7d8ffe9738bb1ffa0ff12ba1"
+    },
+    {
+      "path": "adapter/src/lib.rs",
+      "sha256": "867f85bc4162efb3b5b68a521741fc87b0f6a032077d67f84fced06c26d93910"
+    },
+    {
+      "path": "semantic-facts.patch",
+      "sha256": "e1e1e5290da709f3b15c089b1d58bd33c46751c7d2dd1c33018edb4e9e75849c"
+    },
+    {
+      "path": "candidate.bundle",
+      "sha256": "fc477e8f1a35cffd8f23429dc30b873f7c6c1bc2002f5a765dbb1edd61c30bec"
+    }
+  ],
+  "productionPinChanged": false,
+  "limits": [
+    "No production checker pin migration or full verification.",
+    "Universal/Dynamic, authored TSRX and bypassed files refuse facts.",
+    "Generated operation enumeration remains partial.",
+    "Published native comparison covers darwin-arm64 only.",
+    "Output equality does not establish runtime package compatibility or warning precision."
+  ]
+}

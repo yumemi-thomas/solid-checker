@@ -4782,6 +4782,13 @@ static NEGATIVE_AUTHORITY: DialectNegativeAuthority = DialectNegativeAuthority {
 };
 
 impl Dialect for Solid2 {
+    // rc.9 dev-shared.js core read() explicitly excludes pendingCheckActive
+    // from the strict pending-read safeguard; verdict.isPending supplies it.
+    // Store proxy traps have a different guard, so this is accessor-only.
+    fn callback_handles_pending_accessor_read(&self, primitive: Primitive, index: usize) -> bool {
+        primitive == Primitive::IsPending && index == 0
+    }
+
     fn version(&self) -> Version {
         Version::V2
     }

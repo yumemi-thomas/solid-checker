@@ -369,6 +369,37 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
 }
 
 fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
+    if read.invocation_context_unproven {
+        return FindingWording::new(
+            Rule::PendingAsyncUnsuspendableRead.metadata(),
+            format!("async accessor {:?} is read in a stored or nested callback whose invocation during the component's strict-read window is unproven; this does not establish that the read throws", read.accessor),
+            "Establish when the callback runs and how pending values are handled. Use a tracking scope when the result needs suspension and retry.".to_owned(),
+        );
+    }
+    if read.callee_callback_timing {
+        let mut metadata = Rule::PendingAsyncUnsuspendableRead.metadata();
+        if read.leaf_owner.is_some() {
+            metadata.severity = "warning";
+        }
+        return FindingWording::new(
+            metadata,
+            format!(
+                "async accessor {:?} is read in a callback whose callee's invocation context and pending handling are unproven; this does not establish that the read throws",
+                read.accessor
+            ),
+            "Inspect when the callee invokes this callback and whether it handles pending values. Read async values in a tracking scope when the callback needs suspension and retry.".to_owned(),
+        )
+        .with_evidence(vec![
+            EvidenceStep {
+                message: "the source's computation is async; the callback's callee does not prove an unhandled pending read".to_owned(),
+                location: Some(read.declaration.clone()),
+            },
+            EvidenceStep {
+                message: "callback invocation remains an open obligation".to_owned(),
+                location: Some(read.location.clone()),
+            },
+        ]);
+    }
     // Declared first paint (probed against rc.0): a loadingValue /
     // seedLoadingValue node is born committed, so its *first flight* cannot
     // throw anywhere — but once the first real answer lands, a pending

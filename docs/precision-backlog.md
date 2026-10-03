@@ -1,5 +1,1487 @@
 # Precision backlog
 
+## Existing-application feedback precision fixes (2026-10-03)
+
+The fifteen reviewed overclaims are corrected in the unchanged applications.
+Fourteen SC2003 claims on `props.state` writes are removed: a shallow props
+container fact does not establish the behavior of its nested mutable value.
+The SC1001 `Hamburger` click-callback read now preserves invocation uncertainty
+instead of claiming execution during rendering. Direct props writes, known
+store writes and eager component-body reads retain their own proofs. A wrapped
+nested value is also silent; transparent wrappers around the actual props
+container remain supported.
+
+The two completed applications now emit four native findings instead of
+nineteen. Two SC5003 loading-context warnings remain unvalidated; two SC8015
+findings are preferences. Both configurations pass their installed published
+`tsc` checks, and the new fixture passes real RC.9 typings. No new active
+application defect is confirmed.
+
+The reusable client collector loads the application's Vite configuration,
+preserves its aliases/assets/compiler plugins, and orders source capture before
+compiler transforms. Four real application scenario assertions pass without
+an application overlay. Readiness failures retain earlier evidence and browser
+console diagnostics. All six retained read records still lack authored source
+mappings: incomplete coverage, not automatic-warning accuracy.
+
+A fresh test-assisted replay reproduces the existing opt-in hydration failure
+and a passing native control. Its independent audit binds 22 runtime frames to
+exact served bytes and package sources. Package causality, static dispatch and
+repair safety remain open. The larger application's prior 120-second analysis
+timeout and server-entry adapter remain open too. See the
+[implementation, artifacts and checks](package-contract-v2/phase22/2026-10-03-feedback-precision-and-application-config.md)
+and the [initial review](package-contract-v2/phase22/2026-10-03-existing-application-cli-evaluation.md).
+
+## Native models and automatic executed-read feedback (2026-10-03)
+
+The ordinary button-handler SC5001 overclaim now preserves an explicit
+invocation-context hole. A callback stored by assignment inside a component
+does not prove execution during its strict-read window. The focused fixture
+contains three open pending reads and four proven reads, plus a retained-local
+negative control. All new cases pass the real published RC.9 declarations.
+
+`feedback run` now requests optional native models bound to exact source bytes,
+primitive identities and function/call spans. Runtime function tokens carry
+derived origins across await continuations and nested callbacks. Automatic
+selection uses native return-expression, exact const-reference and distinct
+numeric branch candidates; competing return paths and discarded reads remain
+open. Late callbacks also need a native allocation path related to the
+parent's result. Exact method-body joins prevent a discarded method read from
+inheriting its caller's return path. A mapped site must belong to the final
+modeled operation. No expected value or comparison code enters automatic selection. These
+are conditional warnings, not proven stale results, Promise settlement or
+package contract authority. Object identity intent remains undecidable from
+the shared code alone. See [usage and limits](development-feedback.md).
+
+The collector also records native observer queries on modeled result paths.
+They are informational: an observer check returning null does not prove a
+reactive read or a skipped subscription. This exposes the installed map's
+observer shortcut while preserving the distinction from an executed read.
+Plain deferred callbacks no longer need an `async` declaration for read guidance.
+
+The final automatic replay produces warnings on 18 of 21 targets and an
+informational observer-query hint on one more; two object-identity targets stay
+open. All 20 controls receive no automatic guidance. Six fresh lineage cases
+and four runtime/typing boundaries pass. The final CLI suite has 330 tests;
+IR has 301, and fresh coverage compares 142 fixtures and 746 findings. See the
+[implementation and validation report](package-contract-v2/phase22/2026-10-03-native-automatic-feedback-implementation.md).
+
+## Live development feedback and assertion selection (2026-10-03)
+
+`feedback run` now executes a controlled Vite application in Chromium, collects
+byte-reviewed RC.9 native read events, maps browser frames to configured
+original source, and measures explicit application assertions. A supplied
+comparison checkout can run the same scenario. The experiment's assertion
+selection boundary is now implemented in the CLI: a failing original assertion
+that passes in the comparison gets informational debugging guidance; passing
+original assertions remain quiet. A broken control assertion stays open.
+This does not establish read causality, repair safety, or general package
+behavior. The automatic source-warning selector and comparison planner remain
+unported. Nineteen new focused tests and the full 313-test CLI suite pass.
+See [live use and limits](development-feedback.md).
+
+Fresh executions through the actual command reproduce 21/21 target assertions
+with measured comparison guidance and 20/20 quiet controls across queue, map
+and controlled-signal packages. The selector receives explicit expectations
+and supplied comparisons; this is not automatic warning accuracy. A native
+pending-read exception maps to source, and a real queue typing error suppresses
+extra feedback. A plain `button.onclick` contrast also exposes an unresolved
+SC5001 strict-window overclaim: it receives a proven native finding without
+the exception observed in the corresponding `createComponent` strict context.
+No native classification is changed by this adapter slice. See the
+[live implementation report](package-contract-v2/phase22/2026-10-03-live-feedback-detector-implementation.md).
+
+## First development-feedback implementation (2026-10-03)
+
+The CLI now runs native analysis and admits input-bound development captures.
+Proven findings, native gaps and recorded observations have separate fields;
+untracked reads stay informational because reactive intent remains open.
+TypeScript errors suppress additional capture guidance. Eighteen focused tests
+cover capture admission, stale inputs, event grouping and native result/status
+preservation. Browser collection was added in the subsequent slice above;
+package source inference remains unported.
+
+Eight real published-typing applications expose a lost uncertainty fact in
+SC5001: unknown pending-handler callbacks were classified as proven throws.
+AsyncRead now preserves callee callback timing, and native isPending accessor
+probes suppress the strict pending-read guard. The fixture distinguishes two
+open callbacks, four proven reads, namespace/native probes and shadowing;
+all new cases pass the published rc.9 types. Reanalysis changes eight claimed
+violations into native gaps, with zero typing errors and eight informational
+observations. This is not an improvement to the historical warning selector's
+target/control accuracy. See [development feedback](development-feedback.md).
+
+The RC.13 candidate passes whole-checker verification in a local integration
+checkout. Production compiler Git pins and the runtime package audit remain
+unchanged. The obsolete keygen fixture case now lives in a separate rejection
+regression against both the candidate and the actual published RC.13 compiler.
+
+## Published RC.13 compiler-facts candidate (2026-10-03)
+
+An isolated semantic compiler fork now incorporates published `2.0.0-rc.13`
+at upstream `5efaf260becb32293f2bcb4d32f8be72be6de674`. Recording reconciles
+DOM spread key discards, deferred SSR tails and conditional server component
+claims; effective configuration binds the new hoisting/source-name options.
+The source/output audit passes 3,285 comparisons against untouched upstream
+and the published native artifact. Rust feature tests, 5,938 JavaScript tests
+and 13 isolated checker-adapter tests pass. The corpus reader now uses actual
+cooked JavaScript literals; the replacement baseline is independently generated.
+
+Production pins and historical experiments have not migrated. Full process,
+coverage/ownership, contract and verification gates remain required before
+adoption. Universal/Dynamic, authored TSRX and bypassed fact collection refuse;
+generated-operation enumeration remains partial. This preparation does not
+change the prior feedback experiment's precision or noisy controls. See the
+[RC.13 report](package-contract-v2/phase22/2026-10-03-rc13-compiler-facts-rebase.md).
+
+## Research development loop and browser breadth (2026-10-03)
+
+The mutable development profile adds explicit application pending probes,
+bounded page-load retries and synchronous projection transactions. Final focused
+browser time falls from 16.51 s to 10.18 s on Chromium. Offline replay rebuilds
+ten final-stage source programs and reuses each for a working selector; stale
+inputs and revisions refuse reuse. Historical code and artifacts stay sealed.
+
+Both Chromium and Lightpanda pass independent audits for 63 derived cases and
+93 stages across queue, map and controlled-signal packages: 39/39 target hints,
+eight noisy controls among 49, five typing exclusions and 54 refused nonempty
+retired batches. Values, feedback, source facts and mapped frames match in all
+93 stages; three raw native-read counter differences remain visible. Sampled
+Lightpanda browser RSS is much lower; Chromium remains the final validator.
+
+These are development and compatibility improvements, not new certification,
+fresh challenges or improved automatic precision. Pending/rejected adoption,
+accepted identity behavior, effects, intent and general package coverage remain
+open. All guidance remains informational with false authority. See
+[active development and browser breadth](package-contract-v2/phase22/2026-10-03-active-development-replay-readiness-and-browser-breadth.md).
+
+## Late callback lineage and assertion-selected feedback (2026-10-03)
+
+Research runtime V12 and transform V10 retain normal-body parent lineage for
+late children and record exact lexical callback entries. Final projector V28
+also filters unescaped named constant own fields with independent binding/data
+audits. All four previously missed queue targets now receive validated hints.
+Original automatic results improve to 24/24 targets and 8/34 noisy controls;
+fresh renamed/optional-getter cases yield 8/8 targets and 2/4 noisy controls.
+
+Explicit primary assertions plus 58 measured source captures select 32/32 target
+notes and no actionable notes on 38 controls. This is a test-assisted result on
+correlated authored cases, not automatic zero-noise accuracy. Source-identical
+target/control pairs with opposite expectations prove that an extra intent
+premise is necessary. Four control replays remain open, including two whose
+previously passing primary assertions break. Task counts change in 56/58 replays.
+
+All 118 focused checks, independent source/browser/capture/assertion audits,
+130 plain comparisons and three altered-report refusals pass. Actual published
+typing passes 256 valid files; two TS2345/TS2769 controls receive no extra
+feedback. Universal fast checks pass; full production gates remain deferred for
+research. No production finding, snapshot, contract, compiler pin or certified
+behavior changes; all guidance remains informational with false authority.
+
+Automatic hints remain noisy for caught adoption/getter failures, pending
+Promises, accepted identity behavior and fresh constant reactions. Settlement,
+callback result flow, mutation, effects, other assertions, unexecuted paths and
+accuracy across other packages remain open. See [late callback lineage and
+assertion feedback](package-contract-v2/phase22/2026-10-03-late-callback-lineage-and-zero-noise-assertion-feedback.md).
+
+## Returned field relevance and warning accuracy (2026-10-03)
+
+The research selector now combines exact normal-body constant own-field facts
+with exact local memo-result consumption. It filters field-value guidance while
+preserving raw read observations, effects and intent as open. Direct field reads
+qualify; result/accessor escapes, identity uses, aliases, computed/optional access,
+writes, named allocations, unknown control flow and Promise adoption stay open.
+
+Across 40 adapted and 18 fresh authored queue consumers, noisy controls fall
+from 22/34 to 10/34. All 20 previously detected targets retain hints; four of 24
+targets remain missed. Both visible execution-counter controls become quiet.
+The first selection policy was frozen before the fresh cases; a later malformed-
+evidence refusal guard is separately validated without changing normal selection.
+These correlated authored cases do not estimate real-application warning accuracy.
+
+Ninety-two focused checks, independent source/consumer/behavior audits, 60 final
+plain comparisons and real CLI typing pass. All 116 valid source files are clean;
+two typing-boundary controls produce TS2345/TS2769 and receive zero extra notes.
+Universal fast checks pass; full production gates remain deferred for research.
+No production finding, snapshot, bundled contract, compiler pin or certified
+behavior changes. All feedback remains informational with false authority.
+
+Adopted-child and Promise-reaction targets remain missed. Caught adoption/getter
+failures, pending Promises, named objects and identity controls retain noisy hints.
+Promise settlement, mutation, effects, developer intent and accuracy across other
+packages remain open. See [returned field relevance and warning accuracy](package-contract-v2/phase22/2026-10-03-returned-field-relevance-and-warning-accuracy.md).
+
+## Compiler binding fixes and installed output evidence (2026-10-03)
+
+Research binding V3 fixes the valid `For` overload through TypeScript's exact
+resolved signature and analyzes the 22 published JSX source paths in a separate
+bounded implementation program. Unchecked declared function overload families
+are located as sets with no selected overload. The same old facts improve from
+84 to 103 component bindings and 101 to 139 expression contexts; all 32 excluded
+matching package runs enter analysis and no component declaration remains
+unresolved. These are declaration/context recoveries, not new findings.
+
+The cached newer fact-only compiler revision 16f0988 adds one matching output:
+54 of 96 match RC.9, with 104 bindings and 141 contexts. Forty-two output drifts
+remain refused. A review syntax comparison classifies 19 as static getter-key
+emission differences and 23 as other syntax differences; it admits no bindings.
+The production compiler pin remains unchanged. Generated enumeration is partial.
+
+The actual installed RC.9 compiler's maps preserve all 96 output bytes and exact
+source content. A strict full endpoint-map trial recovers zero witnesses. A
+narrower expression-copy trial recovers 380 emitted-getter source links with
+990 exact identifier/literal mappings, including 320 on drifting-fork runs.
+Identical text and parsed structure plus exact start/atom mappings are required;
+end mappings, lexical binding, tracking, owner and runtime invocation stay open.
+There are 103 unmatched getters. No callback scheduling or defect claim follows.
+
+Twenty focused Node checks, 14 adapter tests, eight modified-report refusals,
+source/binding audits and repeated actual native compilation pass. Valid source
+passes real published typing. Universal fast checks pass; full production gates
+are deferred for research-only changes. Earlier noisy async controls, warning
+precision, causal diagnosis, repair and general package coverage remain open.
+See [compiler binding fixes and installed output evidence](package-contract-v2/phase22/2026-10-03-compiler-binding-fixes-and-installed-output-evidence.md).
+
+## Compiler facts and package source contexts (2026-10-03)
+
+The existing dialect adapter collects normalized, output-neutral compiler facts
+for 96 DOM/SSR requests over 48 unchanged real bundle paths, representing 37
+distinct source contents and 22 published Kobalte source paths. The model has
+1,069 source and 1,090 generated operations; generated enumeration stays partial.
+Twenty requests have no compiler-controlled operations. These are context counts,
+not new defects or package behavior coverage.
+
+The installed RC.9 compiler matches 53 outputs and differs in 43. Exact JSX and
+TypeScript declaration joins in the matching subset yield 84 bindings, including
+28 Kobalte bindings across 18 source uses, with 101 exact expression contexts.
+The 43 drifting outputs, 32 matching runs outside the configured type programs
+and one non-unique component declaration stay open. Callback invocation, runtime
+provider, whole-build identity, causal diagnosis and repair are unproved.
+
+The paired artifact audit and four modified-report refusals pass. Compiler
+identity, standalone Rust checks and fast workspace checks pass; production
+behavior remains unchanged. This strengthens the context layer of a combined
+feedback system without a per-package behavioral contract. See
+[compiler facts and package source contexts](package-contract-v2/phase22/2026-10-03-compiler-facts-and-package-source-contexts.md).
+
+## Existing package hydration failure and source feedback (2026-10-03)
+
+The retained application's unused Kobalte candidate passes its configured real
+TypeScript project but fails the original production hydration prerequisite and
+clean-console assertion. The native control passes the same selected test and
+CSP. Neither test is skipped. Original application/test/dependency bytes remain
+unchanged. This reproduces an already documented candidate compatibility failure;
+it does not establish a new defect in active application code.
+
+Independent browser observations bind hidden maps to byte-identical served
+client code and exact source content. All 22 captured client diagnostic frames
+map to Solid runtime artifacts; causal package responsibility and exact export
+dispatch remain open. CSP messages remain document observations outside the
+client map. The paired audit emits one informational note for the failed test
+and none for the native control, without a behavioral contract or source repair.
+
+This strengthens evidence for test-assisted debugging across package artifacts.
+Unexecuted interactions, general warning precision, active-app defects, indirect
+dispatch, repair safety, startup cost and total memory bounds remain open.
+Production behavior and prior research modules are unchanged. See
+[existing package hydration failure and source feedback](package-contract-v2/phase22/2026-10-03-existing-package-hydration-failure-and-source-feedback.md).
+
+## Bounded runtime evidence and session scalability (2026-10-03)
+
+Research native runtime V11 and callback runtime V6 bound owned strong journals
+by record count and accounted UTF-8 bytes. The event/deduplication history is
+limited to 256 records and 4 MiB; metadata, refusal and guard caches have separate
+limits. Recent duplicate identities and original execution behavior are retained.
+Projector V21 validates the ledger and reports discarded observations, refusal
+history and refused guard identities as open coverage. Cache eviction alone does
+not revoke issued evidence; completeness remains false.
+
+Two 640-update browser populations each preserve UI values and 641 task calls
+per queue mode against plain runs. A preserved unbounded comparison shows
+73–76% less serialized evidence retained. The final profile retains 170/152
+events and explicitly counts 471/489 evictions. An eight-case adapted replay
+preserves six raw target hints and two noisy controls; precision is not improved
+by this retention change. All 823 tests, four actual published-typing CLI checks
+and independent source/behavior/retention/comparison audits pass.
+
+The bound is on owned journal accounting, not total heap, active scopes, source
+programs or server logs. Long real-app sessions, positive application defects,
+startup cost, execution breadth, result relevance and safe repair remain open.
+Production behavior is unchanged. See
+[bounded runtime evidence and session scalability](package-contract-v2/phase22/2026-10-03-bounded-runtime-evidence-and-session-scalability.md).
+
+## Existing application assertions and confidence (2026-10-03)
+
+The retained `finds-team/frontend` application passes 24 existing assertions
+across eight UI/Relay test files under its original configuration in isolated
+copies. Independent audit validates raw counts, exact test selection and input
+bytes; original application/dependency inputs remain unchanged. Only the copied
+route tree is regenerated by the application's configuration. These are plain
+baselines, not new feedback detections or quiet controls. No genuine failing
+package-use case is found in this group.
+
+The UI assertions cover server output and native dialog/select fallbacks,
+not Kobalte or browser-owned virtualizer setup. Relay assertions cover real
+runtime behavior with the application's mocked transport. The preceding ten
+conditional replay suggestions support cautious optimism about test debugging;
+general warning precision, safe repairs, real-app positive defects, execution
+breadth and runtime cost remain open. Production behavior is unchanged. See
+[existing application assertions and confidence](package-contract-v2/phase22/2026-10-03-existing-application-assertions-and-confidence.md).
+
+## Capture replays and feedback from failing tests (2026-10-03)
+
+An exact source planner proposes getter capture in isolated replay copies,
+leaving timing, function identity, side effects and repair safety open. It
+follows exact callback/factory/helper parameter bindings and one stable
+primitive getter alias initialized directly in the memo compute. Ambiguous,
+shadowed, written, nested, generic, object and optional-parameter getter
+shapes remain refused. Native models and production behavior do not change.
+
+Unconstrained replays validate 20 proposals: ten make an authored failing
+primary-value assertion pass and ten leave an already-correct result unchanged.
+Task counts change in 18 proposals. Two fresh visible-counter controls change
+their screen from one execution to two while their task result stays correct;
+UI change alone cannot support a defect claim or safe automatic repair.
+
+Conditional assertion feedback emits ten informational notes and stays quiet
+on 22 controls in the two authored populations. Four getter targets remain
+outside the proposal profile and four earlier targets lack an observed witness.
+The policy was designed after examining these cases, so this is not held-out
+warning precision. All 734 tests, 28 actual published-typing CLI checks and
+independent browser/source/decision audits pass. Real failing application
+tests, broader assertions, source/dispatch coverage, effect preservation,
+startup cost and long-session memory bounds remain open. See
+[capture replays and feedback from failing tests](package-contract-v2/phase22/2026-10-03-capture-replays-and-test-assisted-feedback.md).
+
+## Async body returns and warning precision (2026-10-03)
+
+Research runtime V10/plugin V24 admit explicit object/function async body
+returns with a weaker evidence grade. Promise settlement and result flow stay
+unproved; no thenable inspection, Promise reaction or owner restoration is
+added. Projectors validate the grade against each helper's observed return kind.
+Throws, implicit completion, failed registrations and budget overflow remain
+closed. Earlier profiles are immutable; production behavior is unchanged.
+
+The prior queue set improves from 14/18 to 18/18 target hints with 24/26 quiet
+controls unchanged. Ordinary helpers improve from 11/15 to 12/15 with 19/19
+quiet controls. Fresh cases expose a tradeoff: 0/12 becomes 8/12 target hints,
+but 20/20 quiet controls becomes 12/20. Constants, caught adoption failures and
+pending Promises produce unwanted conditional hints. Whole-result relevance
+and settled value/error flow remain necessary before promoting these to warnings.
+
+Independent audits validate 114 distinct plain comparisons plus the fresh
+previous-profile comparison. All 703 tests and 32 actual published-typing CLI
+checks pass. Two projector checks each reject 31 malformed records and retired
+revisions. Remaining misses include late adopted children, Promise reactions
+and async generators. Source discovery, storage shapes, real-app defect
+coverage, startup cost and long-session retention remain open. See
+[async body returns and warning precision](package-contract-v2/phase22/2026-10-03-async-body-returns-and-warning-precision.md).
+
+## Real application execution and source admission (2026-10-03)
+
+The retained `helge-dev` client runs unchanged under a reviewed development
+profile. Independent audit validates 39 matching UI states, two offline sample
+responses and three document loads. Two candidate scopes enter; neither yields
+an observation or hint. No positive real-app defect is established. Entry
+counters distinguish this narrow quiet control from unexecuted candidate paths.
+
+Eight analysable configurations contain 819 configured source files; five are
+typing clean, three remain closed for their real errors, and one additional
+configuration lacks `@solidjs/web`. The clean source has 2,620 external-declared
+call references outside recognizable test paths and typings owners, plus 177
+external JSX references. None of 78 candidate spans directly matches such an
+external call. Local/indirect flows remain possible. Exact declaration ownership
+is recorded separately from unresolved runtime binding; these are source-demand
+counts, not execution, defect or coverage rates. Source discovery stays partial.
+
+The first tested screen takes about 4.05 seconds observed versus 0.90 plain in
+one cold concurrent trial. Cost, execution-family breadth and real-app precision
+remain practical gaps. Short quiet repeats retain six metadata records and no
+events; global runtime buffers remain unbounded and positive-session growth is
+untested. The older async queue set retains 14/18 hints and 24/26 quiet controls.
+
+All 682 prototype tests, independent application/reference audits, five actual
+`tsc --noEmit` checks and fast handoff checks pass. Historical profiles remain
+immutable; no production artifact changes. Nonprimitive/adopted completion,
+whole result/error flow, general storage/source integration, genuine real-app
+defects and long-session scalability remain open. Output stays informational.
+See [real application execution and feedback admission](package-contract-v2/phase22/2026-10-03-real-application-execution-and-feedback-admission.md).
+
+## Coherent loading and distinct evidence budgets (2026-10-03)
+
+The research plugin preserves issued revisions for watcher events whose
+complete recorded input manifest remains valid. Genuine source/configuration
+or included-file changes still retire evidence. A forced replay of the late
+configuration event improves from 0/3 to 3/3 target hints, with four quiet
+controls. A constant control recovers its observation and whole-result proof.
+
+Pending reads now coalesce by native identity, context, frames and completed
+lineage before the 64-distinct-record scope budget. Repeated 70/200-read and
+child-helper targets improve from 6/14 to 12/14 in the corrected registered
+queue challenge. Both 65-source cases remain refused. Two constant-result
+controls become noisy after their budget refusals disappear; quiet controls
+move from 20/20 to 18/20. The first challenge exercised a directly returned
+reader candidate instead of continuation budgeting. Its 14/14 hints and 16/20
+quiet controls are retained separately, including caught-error noises.
+
+The previous async callback set improves from 12/18 to 14/18 targets, retaining
+24/26 quiet controls. Continuations improve from 10/15 to 11/15, retaining
+19/19 quiet controls. All 157 current plain comparisons, four typing exclusions,
+674 prototype tests, 17 real `tsc --noEmit` checks and fast handoff checks pass.
+Historical modules remain frozen. No production artifact changes.
+
+The demonstrated unchanged-input loading race is closed. Concurrent serving,
+stateful HMR, whole package result/error flow, nonprimitive/adopted completion,
+distinct-budget refusal, general source/storage coverage, real-app precision
+and unbounded global evidence buffers remain open. Output stays informational,
+with no certification authority. See [loading coherence and evidence budgets](package-contract-v2/phase22/2026-10-03-semantic-update-coherence-and-distinct-evidence-budgets.md).
+
+## Async callback slots across suspension (2026-10-03)
+
+Registered async callbacks now capture lexical attribution tokens at their
+exact function entry. Temporary scopes cover admitted operations rather than
+the suspended Promise. Every helper in the chain needs an explicit primitive
+normal return; the chain must end at the registered callback, with the original
+registration call returning normally. Failed registrations revoke buffered
+reads. Owner restoration and extra Promise reactions remain absent.
+
+The earlier queue population improves from 8/10 to 10/10 target hints, retaining
+10/12 quiet controls. A fresh 46-case population gives 12/18 targets and 24/26
+quiet controls. Timers, microtasks, named callbacks, awaited children, finally
+and awaited primitive values work; object/adopted results and repeated-read
+budget exhaustion are the six misses. Two constant-result controls remain
+noisy. The earlier 102 package/result/continuation variants retain their scores.
+All 171 plain comparisons and nine real typing exclusions pass independent
+audits. The complete prototype passes 606 tests, 27 malformed-provenance refusal
+checks and fast handoff checks. Historical profiles stay frozen.
+
+One quiet constant-result replay loses its trace because helper and consumer
+issued generations differ despite identical input hashes. It remains quiet by
+refusal; initial module-loading revision coherence is open. Aggregate scores
+alone would conceal this integration gap.
+
+Normal async body completion, distinct-evidence budgeting, constant consumer
+result flow, other storage forms, source enrollment, long-session cost and
+real-app coverage remain open. These are conditional informational hints, not
+certified violations. No production finding or contract artifact changes.
+See [async callback slots and suspension feedback](package-contract-v2/phase22/2026-10-03-async-callback-slots-and-suspension-feedback.md).
+
+## Callback slot identity and queued-task feedback (2026-10-03)
+
+A shared research mechanism matches an actual function stored in a fresh
+ordinary source data slot to its later source callback entry. The original
+member call remains unchanged. Exact allocation/parameter facts, readonly
+receiver dispatch, mapped frames, current revisions and explicit normal
+synchronous completion are required. No owner restoration or Promise reaction
+is added; a returned Promise is not treated as fulfilled.
+
+Both previous queued-task misses close: the 26-case cross-file replay improves
+from 7/10 to 9/10 targets, with 12/14 quiet controls unchanged. A fresh 23-case
+queue population has 8/10 targets and 10/12 quiet controls. All eight synchronous
+callback targets work, including Promise/object returns; two async callbacks
+remain missed and two discarded-read constant controls remain noisy. The
+earlier 76 result-flow/continuation cases retain their scores. All 125 plain
+comparisons preserve tested behavior and seven typing exclusions remain silent.
+
+The prototype passes 553 tests, independent source/typing/frame audits, 19
+malformed-provenance refusals, a retired revision check and fast handoff gates.
+An audit span collision is repaired in a new validator version; the frozen
+detector remains unchanged. Async callback continuations, arbitrary storage,
+consumer result flow, sync-only installed-source enrollment, complete discovery,
+large-app cost and intent remain open. These are informational hints, not
+certified violations. No production contract or finding artifact changes.
+
+See [callback slot identity and queue feedback](package-contract-v2/phase22/2026-10-03-callback-slot-identity-and-queue-feedback.md).
+
+## Installed async package source and discovery boundaries (2026-10-03)
+
+The research session keeps published typing diagnostics in their original
+program and adds exact installed ES module async bodies in a separate source
+view. Both views belong to one issued observation revision. No per-package
+behavior rule, declaration stub or certification authority is added.
+
+Cross-file retry callbacks improve from 1/10 to 7/10 target hints. Inline
+callbacks were already 10/10. Each new 26-case population has 12/14 quiet
+controls; discarded-read callback results introduce two noises while terminal
+rejection noise disappears. Object results and both queued-task variants remain
+missed. The earlier 76 result-flow/continuation variants retain their scores.
+All 128 plain comparisons preserve tested behavior, contexts and native
+diagnostics; eight actual typing exclusions remain silent.
+
+Discovery based on all typing dependencies exhausts budgets in eight real
+configurations. The refined profile seeds runtime imports in served application
+source, follows parsed module imports and keeps admitted modules when budgets
+leave others open. It enrolls 49 async bodies across 14/15 retained packages and
+partial source in 7/8 analysable real configurations, including 4/5 typing-clean
+ones. All eight still reach a discovery boundary. Three have existing typing
+errors; another configuration lacks the native web artifact. These are loader
+preflights, not runtime coverage or real-app defect results.
+
+Broad replay initially exhausts the default heap; explicit collection alone
+fails too. Retiring closed analysis sessions and releasing the last program
+reference completes the replays below 352 MB collected heap. Evidence still
+grows; large-app latency, long session memory and complete discovery remain
+open. The prototype passes 519 tests, independent browser/preflight audits and
+fast handoff checks. Constant flow across declaration/source boundaries,
+task attribution, nonprimitive/implicit completion, generators, CommonJS,
+mixed transforms, prebundling, installed-dependency updates and intent remain
+open. Feedback stays informational. No production artifact changes.
+
+See [installed async package source and typing boundaries](package-contract-v2/phase22/2026-10-03-installed-async-package-source-and-typing-boundaries.md).
+
+## Async constant fulfilled-value precision (2026-10-03)
+
+The research projector suppresses an admitted async-helper hint only when an
+exact stable source binding has a bounded constant primitive fulfilled-value
+proof, matches an actual entered helper, and is the whole callback return.
+Structured outcomes cover branches, catch and finally overrides; unknown value
+expressions/control flow, mutable bindings and budget exhaustion stay open.
+Original observations and source models are retained. Effects, rejection flow,
+dependency registration and intent are not certified.
+
+The adapted 123-stage/helper replay retains 45/50 targets and improves quiet
+controls from 57/60 to 60/60, removing all three earlier async constant noises.
+A fresh 40-case source challenge gives 8/9 targets and 25/29 quiet controls.
+All 163 plain comparisons preserve tested behavior/native diagnostics and
+fifteen real-typing exclusions stay silent. Independent audits cover 88
+observations, 26 suppressions and 108 rejected old batches. The prototype passes
+491 tests and fast handoff checks. A JavaScript check config receives `noEmit`
+after an initial `TS5055` harness failure; challenge source and the frozen proof
+are unchanged, and failed reports remain available.
+
+The new miss is `invoke(read).then(() => raw)`: receiver-call enrollment records
+no candidate/event before suppression, while the output demonstrably stays
+stale. The five earlier continuation misses remain. Four fresh controls stay
+noisy for a constant identifier, a loop, a synchronous wrapper over an async
+method and a constant array result. External package bodies, general flow/intent,
+real apps, stateful HMR and larger-project cost remain open. No production rule,
+contract, manifest, compiler lowering or finding snapshot changes.
+See [async constant results and completion proofs](package-contract-v2/phase22/2026-10-03-async-constant-results-and-completion-proofs.md).
+
+## Source async helper continuation feedback (2026-10-02)
+
+Research instrumentation carries per-invocation observation provenance through
+an admitted source async helper without restoring Solid ownership/tracking or
+adding Promise reactions. Exact current helper/operation declarations, entry
+frames, native read/shortcut frames and explicit primitive normal completion
+are required. Throws, nonprimitive/implicit completion and exhausted pending
+budgets leave feedback open. This proves execution provenance, not result flow
+or intent; hints remain informational with no certification authority.
+
+All five earlier delayed-read revisions now receive hints. The adapted 77-stage
+replay gives 30/30 targets and 35/36 quiet controls. A fresh 36-consumer challenge
+gives 10/15 targets and 17/19 quiet controls. A final safety check exposes invalid
+rewriting of a property assignment; selector V2 preserves assignment/update/
+delete/tag references. Fourteen focused checks and ten fresh browser helper
+variants verify this refinement, giving 5/5 targets and 5/5 quiet controls.
+The earlier 113 stages emit identical transforms under the refined selector.
+
+Combined results are 45/50 target stages/helper variants, 57/60 quiet controls
+and thirteen silent real-typing exclusions. All 123 plain comparisons preserve
+tested behavior and native diagnostics. Independent audits cover 54 observations,
+five suppressions and 108 rejected old batches. The prototype passes 432 tests
+and fast handoff checks. Earlier immutable modules and artifacts are preserved;
+no production rule, contract, manifest or finding snapshot changes.
+
+Five valid targets remain missed: adopted child Promises, nested synchronous
+reactions, object results, async generators and the 64-ticket budget. Three
+async constant-result controls remain noisy. External package async bodies,
+general result/intent flow, stateful HMR, real-app precision and larger-project
+cost remain open. These results do not establish universal package coverage.
+See [async helper continuations and completion limits](package-contract-v2/phase22/2026-10-02-async-helper-continuations-and-completion-limits.md).
+
+## Source revisions and live reload feedback (2026-10-02)
+
+The research session issues a revision over recorded TypeScript source,
+declaration, configuration and resolution inputs. The transform embeds it in
+read sites; the collector separates revisions; projection refuses retired or
+unissued evidence before applying source models. A stable consumer alias can
+otherwise receive a new constant-result suppression for an old execution.
+Direct imported declarations already carry their helper source hash.
+
+Actual Vite reloads expose cached consumer transforms retaining old revisions.
+The refined plugin invalidates those transforms when an analysis input or
+included-file listing changes; unrelated startup files keep valid evidence.
+The adapted 42-stage challenge reaches 15/15 targets and 21/21 quiet controls.
+A fresh 35-stage challenge gives 10/15 targets and 15/15 quiet controls. Its five
+misses are revisions of one helper reading after await. Stages repeat eleven
+authored consumers and are not independent application defects.
+
+All 77 plain comparisons preserve behavior and native deliveries; eleven real
+typing exclusions remain silent. Independent revision/frame audits cover 30
+observations, five suppressions and 90 rejected old batches. There are 66
+automatic full reloads. The prototype passes 397 tests and fast handoff checks.
+No production rule, contract, manifest or finding snapshot changes. Stateful
+HMR, late continuations, concurrent serving, runtime buffer cost, native-store
+reloads and real-app integration remain open. Feedback stays informational.
+See [source revisions and live reload feedback](package-contract-v2/phase22/2026-10-02-source-revisions-and-live-reload-feedback.md).
+
+## Constant callback results and dependency registration (2026-10-02)
+
+The research projector suppresses an observed hint when an exact stable source
+binding returns the same primitive on normal completion and the call is the
+whole callback result. Source writes, direct eval, async/generator bodies,
+ordinary members and unknown returns leave this value evidence open. Original
+observations are retained. Dependency-registration calls inside larger results
+continue to receive informational hints; side effects and arbitrary timing
+are not certified.
+
+Applying the new filter to the unchanged 117 earlier consumers removes five
+noisy hints, retains all 36 earlier detections, and improves quiet controls
+from 59/66 to 64/66. Those are adapted replays, not fresh validation. A 34-case
+challenge authored after the new projector was frozen catches 11/11 targets
+and leaves 19/20 controls quiet. Combined results are 47/55 targets, 83/86
+quiet working controls and ten silent real-typing exclusions.
+
+All fresh plain comparisons preserve behavior and native deliveries; earlier
+comparisons remain unchanged. Independent audits cover 63 observations and
+all 13 suppressions. The prototype passes 375 tests and fast handoff checks.
+Missing retained package inputs were restored from authenticated cached
+publication bytes, preserving existing files. No production rule, contract,
+manifest or finding snapshot changes. Deferred/async/optional/computed paths
+remain misses; two member-dispatch controls and an async constant helper remain
+noisy. Automatic source-closure freshness during editor updates or HMR is open.
+See [constant callback results and dependency registration](package-contract-v2/phase22/2026-10-02-constant-callback-results-and-registration-precision.md).
+
+## Argument calls and result consumption (2026-10-02)
+
+The research profile admits nonoptional argument-bearing calls through exact
+declarations and records original argument/spread spans. A whole-call scope
+preserves receiver lookup, evaluation order and exceptions. Immediate await/
+yield arguments and exact built-in direct eval remain open; explicit native
+untrack keeps snapshot intent. Direct eval's non-strict scope reproducer is
+not counted as a Solid ES-module regression; strict results agree.
+
+The unchanged 69-case replay improves from 20/26 to 22/26 targets with the same
+35/39 quiet controls. A fresh 43-case argument challenge gives 12/16 targets
+and 22/24 quiet controls. Five later native-reader cases give 2/2 targets and
+2/3 quiet controls under the same frozen detector. Ignored arguments and
+discarded callback results receive hints despite deliberately constant results,
+including an actual native read. Feedback remains informational intent-open;
+argument/result flow and arbitrary callback timing are not certified.
+
+All 66 working controls behave correctly and seven typing exclusions stay
+silent. Deferred callbacks, suspending arguments, computed/optional calls and
+earlier native-store/profile gaps remain open. All 117 plain comparisons
+preserve behavior and native deliveries; 43 hints have independent audits.
+The prototype passes 344 tests and fast handoff checks. No production rule,
+contract, manifest or finding snapshot changes. See [argument calls and result consumption limits](package-contract-v2/phase22/2026-10-02-argument-calls-and-result-consumption-limits.md).
+
+## Signal accessor use and remaining result flow (2026-10-02)
+
+Shortcut enrollment now requires an exact getter call, constant alias,
+object transfer or tuple index-0 call linked to the local source factory.
+Explicit rebindings/member writes and unused/setter-only paths are excluded.
+The native owner probe augments an existing import without reordering module
+dependencies. Source facts still do not prove alternate execution or result
+flow, and hints remain informational `intent-open`.
+
+The unchanged 40-case replay retains 13/16 targets and improves quiet controls
+from 19/22 to 20/22 by removing unused-signal noise. A source-authored 29-case
+challenge gives 7/10 targets and 15/17 quiet controls. Stored-but-unread and
+read-but-discarded getters retain deliberately constant results with hints.
+Direct argument calls, computed members and async continuations remain misses;
+origins outside the admitted factory and arbitrary member dispatch stay open.
+
+All 39 working controls behave correctly. Four typing exclusions stay silent;
+the real Solid overload diagnostic is TS2769, recorded from the published
+types rather than the initial expected TS2345. All 69 plain comparisons
+preserve behavior and native deliveries, and 24 hints have independent audits.
+The prototype passes 314 tests. No production rule, contract, manifest or
+finding snapshot changes. See [signal accessor use and remaining result flow](package-contract-v2/phase22/2026-10-02-signal-accessor-use-and-remaining-result-flow.md).
+
+## Package observer shortcuts and evidence strength (2026-10-02)
+
+Source enrollment of exact observer imports, immediate return guards and
+later signal calls adds a separate informational shortcut channel during
+admitted consumer expressions. Successful branch/consumer frames and published
+declaration pins are required; native reads, counterfactual execution and
+returned-value flow are not inferred. Explicit/wrapped `untrack` stays quiet.
+
+The unchanged 38-case store replay improves from 8/15 to 10/15 target hints,
+with the same 20/21 quiet new-hint controls. An initial prebundled profile
+loaded no shortcut models; the retained corrected profile loads original
+package files. A 40-case challenge gives 13/16 target hints and 19/22 quiet
+controls, including 3/3 targets and 3/3 controls authored after the final
+profile was sealed. Five published packages share the source pattern.
+
+Two debugging wrappers and a local unused-signal counterexample remain noisy.
+The latter proves factory co-occurrence is insufficient to establish result
+reactivity. Argument-bearing calls, external callback bodies and async helper
+continuations remain misses. Absent/computed/optional/then store paths retain
+the earlier gaps. All 43 working controls behave correctly; four real typing
+exclusions stay silent. All 78 plain comparisons preserve behavior and native
+deliveries; 27 hints have independent witness audits. The prototype passes
+285 tests. No production rule, contract, manifest or finding snapshot changes.
+See [package observer shortcuts and evidence strength](package-contract-v2/phase22/2026-10-02-package-observer-shortcuts-and-evidence-strength.md).
+
+## Native store targets and package shortcuts (2026-10-02)
+
+The research V7 profile adds exact native store target/Proxy provenance and
+successful own-data serving observations during declared consumer property
+expressions. It preserves actual identities and values. Hints remain
+informational `intent-open`; static dispatch, result flow and intent stay open.
+
+The unchanged 31-case replay improves from 8/12 to 9/12 target hints by catching
+store-backed history, with the same 15/17 quiet controls. A fresh 38-case
+challenge detects 8/15 targets and leaves 20/21 controls without new hints.
+An existing auxiliary memo warning gives 19/21 quiet combined controls. All
+38 working controls across both populations behave correctly. Three intentional
+debugging wrappers remain noisy. Real typings exclude four inputs silently.
+
+Map trigger caches and media static stores bypass native reads when no
+observer exists; absent keys bypass the observed native serving branch.
+Computed/optional keys, explicit `then`, async helper continuations, callback
+bodies declared elsewhere, symbols, inherited methods and ownerful untracked
+reads remain open. A consumer-created callback passed to an external helper
+is covered because its read expression is instrumented at its declaration.
+
+All 69 plain comparisons preserve behavior and native deliveries; 20 hints
+have independent witness audits. The prototype passes 262 tests and the fast
+handoff gates. No production rule, contract, manifest or finding snapshot
+changes. See [native store targets and package shortcuts](package-contract-v2/phase22/2026-10-02-native-store-targets-and-package-shortcuts.md).
+
+## Native read scopes and hidden wrapper reads (2026-10-02)
+
+The research V6 profile observes exact native node reads during admitted
+consumer calls, preserving getter identity and receiver binding. Native
+`untrack` entry/exit records synchronous snapshot intent through wrappers.
+Exact current declaration, memo, constructor and reader-frame witnesses are
+required; hints remain informational `intent-open` with open static dispatch.
+
+The earlier 34-case replay improves from 11/15 to 14/15 target hints, with
+14/15 quiet new-hint controls. The original inspection noise and pagination
+initialization warning remain. After freezing, 31 fresh cases give 8/12 target
+hints and 15/17 quiet controls; all controls work. Hidden debugging reads in
+two constant-returning wrappers remain noisy. Store-backed history, an async
+wrapper, a computed member and a callback declared elsewhere retain stale
+results without hints. Unknown argument flow and ownerful untracked reads
+also remain outside the claim.
+
+Independent audits cover all 25 hints, and 65-case plain comparisons preserve
+behavior and native deliveries. Six real typing exclusions are silent; focused
+compiler runs confirm the new typing boundary. Five real package artifacts
+are exercised without a getter-specific contract. Native stores/fast reads,
+async attribution, real-app precision and development cost remain open.
+No production rule, contract, manifest or finding snapshot changes. See
+[native read scopes and hidden wrapper reads](package-contract-v2/phase22/2026-10-02-native-read-scopes-and-hidden-wrapper-reads.md).
+
+## Native accessor identity across packages (2026-10-02)
+
+A research hook records the original native accessor function object at its
+creation site, preserving identity and properties. Runtime membership then
+recognizes imports, mutable aliases and getters returned by package primitives
+without a behavioral contract per wrapper. Exact source, declaration and
+mapped native creation/read witnesses remain required. New feedback is
+informational `intent-open`; external callback/result flow stays open.
+
+The browser population gives 11/15 stale-result target hints and 14/15 quiet
+working controls in the identity channel. The remaining inspection hint is
+intent noise. A separate pagination initialization warning occurs in both
+plain and instrumented runs, giving 13/15 quiet controls across all feedback.
+Four real typing exclusions stay silent. All 34 consumer comparisons preserve
+behavior and native deliveries; 12 hints have independent witness audits.
+Wrappers, bound copies, member calls and unknown argument flow retain stale
+results without hints. Only executed paths and one exact rc.9 artifact are
+covered; real-app precision and stack-capture cost remain unmeasured.
+
+No production rule, contract, manifest or finding snapshot changes. See
+[native accessor identity and package getters](package-contract-v2/phase22/2026-10-02-native-accessor-identity-and-package-getters.md).
+
+## Real project loading and feedback cost (2026-10-02)
+
+An inventory of 986 configured sources in eight retained real projects finds
+seven native callback-read candidates, all ordinary synchronous array callbacks.
+Two belong to a type-invalid project and stay excluded; five in Sefer and
+Expenses remain eligible for observation. No new real-app async defect is
+claimed. A ninth historical rc.9 project lacks installed @solidjs/web and is
+refused.
+
+Project-aware TypeScript loading preserves aliases and ambient declarations,
+correcting 11 false per-file exclusions among 28 sampled files. Changed sources,
+alias targets, declarations, inherited configurations and previously missing
+imports invalidate the program. Referenced projects and consumers outside the
+configured scope remain explicitly unsupported. A necessary syntax gate skips
+461/473 eligible TSX files, preserves all five valid candidates, and requires
+four initial programs. The measured aggregate transform cost is 8.26 seconds.
+
+A full portfolio-app replay preserves 41 copied source/asset files and nine
+interaction steps. The optimized profile skips all 13 loaded TSX files. Both
+app comparisons preserve a native router performance advisory that lacks an
+app location; it is not counted as proven misuse. Original-six regressions keep
+3/3 target hints and 3/3 quiet controls, with independent witness audits.
+One app and authored regressions do not establish real-app precision or latency.
+Earlier async misses, inspection noise and broader package-getter gaps remain.
+No production rule, contract, manifest or finding snapshot changes. See
+[real project loading and feedback cost](package-contract-v2/phase22/2026-10-02-real-project-loading-and-feedback-cost.md).
+
+## Observed async reads and limits of value flow (2026-10-02)
+
+An exact native-accessor observation prototype makes the two previously silent
+RxJS and Neverthrow async dependency losses visible as informational intent
+hints. The six original consumers give 3/3 targets and 3/3 quiet controls.
+First-challenge V1 gives 6/11 targets and 17/18 quiet controls; object/array
+returns, immutable aliases and discarded-result suppression lift its adapted
+V2 replay to 10/11 and 18/18. No proven violation is inferred from an untracked
+read alone.
+
+After sealing V2, 27 further consumers give 5/8 targets and 16/17 quiet,
+working controls. Unknown argument flow through Lodash and Promise.resolve,
+plus a mutable accessor alias, remain misses. A referenced inspection result
+still produces an unwanted hint. All five published typing-error inputs across
+the two additional populations are excluded before execution and receive no
+feedback. Twenty read witnesses have an independent source/type/context audit.
+Parity checks preserve behavior on the original six and first 32 consumers.
+
+The first two import-based seals omit a literal-loaded browser module and keep
+their conservative false completeness flag. The further population's complete
+earlier seal passes. Cross-file accessors, package-returned accessors, owner
+restoration, arbitrary value flow, hot-reload integration and real-app precision
+remain open. No production rule, contract, manifest or finding snapshot changed.
+See [observed async reads](package-contract-v2/phase22/2026-10-02-observed-async-reads-and-return-flow-limits.md).
+
+## General package callbacks and silent async reads (2026-10-02)
+
+Ninety additional consumer records cover seven general-purpose packages.
+After repairing CommonJS loading, shared runtime feedback matches 21/21
+initial targets with 26/26 quiet, working controls. A versioned collector
+preserves distinct consumer caller paths and counts repeated occurrences;
+an independent fifty-consumer parity replay changes only two collapsed
+multicaller records. Forty-four mapped runtime diagnostic witnesses resolve
+to exact native operations or exact signal setter bindings.
+
+Thirty-eight fresh records give 13/16 runtime targets and 18/20 quiet controls.
+Original-source native analysis adds the Zod visible-await case, making
+14/16. RxJS delayed reads and Neverthrow ResultAsync reads remain stale and
+silent in both channels. They are demonstrated misses, not certification.
+Two purported untrack controls are runtime-invalid in installed rc.9 and
+remain in the original score. Separate runWithOwner(null) correction probes
+are quiet and work. Five real typing errors are excluded before execution.
+
+The fresh profile is covered by the collector seal plus authenticated earlier
+seals for two literal-loaded support modules. The original import-only seal's
+conservative false flag and all adapted/failed observations remain preserved.
+No production contract, rule or finding snapshot changes.
+
+See [general callbacks and silent async reads](package-contract-v2/phase22/2026-10-02-general-package-callbacks-and-silent-async-reads.md).
+
+## Stable members, deeper paths and source revisions (2026-10-02)
+
+Exact own-member declarations and receiver mutation/escape checks close the
+previous member-call miss. Iterative traversal of the finite local helper
+graph closes the previous five-helper miss. The earlier caller and return-path
+populations now match 10/10 and 6/6 targets with 32/32 quiet controls.
+
+After sealing v12, thirty-four new consumers give 10/12 targets and 20/20
+quiet controls. Nested inline object literals and child aliases lift the
+adapted v13 replay to 11/12. After sealing v13, twenty further consumers give
+5/6 targets and 12/12 quiet controls. Escaped receivers and borrowed child
+objects remain demonstrated misses. Method replacement, replacement through
+aliases, child-object replacement and child escape controls remain quiet.
+
+Consumer source digests now gate every observed getter channel. A real-browser
+observation evaluated against a virtual changed source revision exposes an
+earlier stale hint; the new version refuses it while retaining the valid
+target hint. Missing digests are refused by default; older observations need
+explicit authenticated offline replay. Full hot-reload integration is open.
+
+Four real TS2345, TS2339 and TS2540 cases are excluded before execution and
+receive no checker feedback. Snapshot additions remain informational intent
+questions. The original eighteen-target result, failed pagination control and
+two older noisy intentional-snapshot controls are preserved. Cross-file,
+asynchronous, branching, getter/setter and unknown returned-call paths remain
+open. No production rule, contract, public manifest or finding snapshot changed.
+See the [stable-member and source-revision report](package-contract-v2/phase22/2026-10-02-stable-members-deep-paths-and-source-revisions.md).
+
+## Observed callers and short local return paths (2026-10-02)
+
+Recording distinct mapped caller stacks closes the earlier multiple-caller and
+escaped-helper misses: the unchanged sixteen-row helper population moves from
+4/6 to 6/6 targets with 10/10 quiet controls. Package closures, consumer bytes,
+native feedback and displayed behavior match the previous browser run.
+
+Thirty new consumers authored after sealing v10 give 5/10 target feedback and
+18/18 quiet controls. Exact immutable aliases, ordinary parameters, transparent
+wrappers and recorded local return chains lift the adapted v11 replay to 9/10.
+Member dispatch remains a demonstrated miss. After sealing v11, twenty-two
+further consumers give 5/6 targets and 14/14 quiet controls; the five-helper
+target exceeds the four-helper bound and stays in the denominator.
+
+New local-path hints bind actual caller/return frames to exact symbols and
+source digests. Unknown returned calls, discarded arguments, deferred reads,
+mutable aliases, asynchronous and cross-file helpers remain open. Published
+TS2630, TS2339 and TS2345 inputs are excluded before execution and receive no
+checker feedback. This adds no rule for a defect TypeScript already reports.
+
+The original 18/18 target result persists, including four informational hints;
+its pagination control still fails. The older twenty-nine-row population keeps
+two noisy intentional-snapshot controls. Source observations do not establish
+intent or universal package behavior. Live source/build invalidation and real
+app review remain untested integration work. No production rule, package
+contract or finding snapshot changed. See the
+[caller and return-path report](package-contract-v2/phase22/2026-10-02-observed-callers-and-local-return-paths.md).
+
+## Package feedback through expressions and local returns (2026-10-02)
+
+The original heldout result remains 18/18 target feedback, with twenty quiet
+controls and the existing pagination behavior failure. A broader observed
+value-flow adapter closes computed property reads and follows arithmetic,
+conditionals, arrays, object fields and template substitutions. Exact native
+`untrack` aliases preserve explicit snapshot intent. Discarded reads and
+unknown argument flow stay open.
+
+A detector sealed before thirty new consumers matches 9/10 targets with 18/18
+quiet controls. A local-helper extension reaches 10/10 on the adapted replay.
+It follows one exact same-file, zero-argument property return and one visible
+setup caller. A discarded-argument falsifier forces returned paths containing
+unknown calls to stay open. TS7053 and TS2540 cases use published types and
+remain silent.
+
+After sealing that extension, sixteen further consumers give 4/6 matching
+targets and 10/10 quiet controls. Multiple callers and escaped helpers remain
+demonstrated misses. Actual mapped caller frames would be needed to extend
+the current nearest-frame observation safely. Async, branching, parameterized
+and cross-file helper paths remain open.
+
+Broader observation also makes a formerly refused intentional prototype-read
+control noisy. The older twenty-nine-row population now has two intentional
+snapshot hints among seventeen controls, versus one previously. Both passing
+controls stay in the score. These are informational intent questions, never
+certified violations. See the
+[expression and local-helper report](package-contract-v2/phase22/2026-10-02-expression-and-local-helper-feedback.md).
+No production rule, package contract or finding snapshot changed.
+
+## Snapshot feedback and fresh transfers (2026-10-02)
+
+The unchanged eighteen-target heldout population now receives matching
+feedback on 18/18 patterns. The four additions are informational class/getter
+snapshot candidates with undeclared liveness intent. Twenty original controls
+stay quiet; the existing pagination package defect still fails one control.
+The score is 37/38 executed consumers and 17/18 pairs, with the two real-typing
+exclusions retained. No source or label edit improves the original score.
+
+Exact computed-member declarations and authenticated executed tracking guards
+broaden the source channels. A detector sealed before 29 additional consumers
+matches 8/10 targets with 16/17 quiet controls. An adapted version adds observed
+dynamic-call and multi-field-destructure hints for 10/10; its static dispatch
+remains open. The noisy control deliberately keeps a snapshot without an
+intent marker, and stays in the results. Two TS2540 assignments remain silent.
+
+After sealing the adapted version, nine further consumers give 2/3 matching
+targets and 6/6 quiet controls. A computed property snapshot,
+`position['x']`, remains a demonstrated miss. Default/rest binding shapes,
+unknown callback phases, unexecuted paths, mutable static dispatch, server
+behavior, CommonJS guard loading and other rule families remain open.
+
+Authenticated reuse reduces the original research replay to five seconds;
+this is not measured cold analysis or editor latency. The prototype gains no
+certification authority. See the
+[snapshot and challenge report](package-contract-v2/phase22/2026-10-02-snapshot-feedback-and-fresh-challenges.md).
+No production rule, contract or finding snapshot changed.
+
+## Package feedback on a heldout population (2026-10-02)
+
+The frozen combined prototype matches 14 of 18 new target patterns across
+twelve packages outside its successful forty-five-consumer matrix. All twenty
+authored controls receive no feedback; nineteen behave correctly. The remaining
+pagination control exposes an installed-package cache defect, reproduced by
+two package probes and distinguished from a working native memo. It remains
+in the score: 33/38 executed consumers and 13/18 passing pairs. Two real-typing
+errors, TS2339 and TS2345, are excluded before execution and receive no checker
+feedback. No detector or consumer was rewritten to improve these numbers.
+
+Four stale collection/getter targets remain misses: direct and computed
+`ReactiveMap.get`, `ReactiveSet.size`, and `createMousePosition().x`. The existing
+class extractor records source candidates for the direct map and set forms,
+but the combined adapter does not display them. Computed member dispatch remains
+uncertifiable; mouse getter construction exceeds the admitted object/spread
+model. Class candidates carry an intent limitation and cannot be promoted to
+proven violations merely by displaying them.
+
+Runtime diagnostics transfer through seven package callback forms; source
+assumptions catch three additional accessor coercions. Original native analysis
+also catches the async retry read, despite the package source adapter refusing
+that helper. Package-internal stale-slice behavior receives no feedback and
+requires a separate behavioral specification to make a checker claim.
+
+Detector inputs were frozen before authoring and 846 actual declarations before
+execution. Some packages appeared in earlier surveys, so this is held out of
+the combined matrix, not a random or fully blind ecosystem benchmark.
+See the [heldout report](package-contract-v2/phase22/2026-10-02-heldout-package-feedback.md).
+No production analyzer, contract, snapshot or public manifest changed.
+
+## Package feedback callback-phase refinement (2026-10-02)
+
+The revised combined study handles 45/45 type-valid consumers: matching
+feedback on 21 target patterns and silence on 24 controls. Exactly one source
+edit expresses existing snapshot intent with real `untrack`; every other
+consumer, role and expected claim is preserved. The readonly TS2540 input
+remains excluded with no checker feedback. Counts retain source candidates,
+preferences, advisories and explicit lifetime expectations.
+
+Generic installed-source callback tracing closes the earlier async miss. The
+package forwards its callback into native memo compute; combining that phase
+with its accessor-return premise lets the existing native rule find the read
+after awaiting. Exact callback-clone provenance maps the source-assumption
+warning to the original read. The control stays quiet. The same premise also
+adds source warnings for the existing write, `resolve` and `until` targets.
+
+Two additional alias/namespace targets are diagnosed, and four conditional,
+nested-await and explicit-snapshot controls stay quiet. A named async callback
+passed as an identifier still misses: the adapter/lowerer supports inline
+callbacks only. That miss remains explicit outside the revised forty-five.
+The unchanged implicit snapshot also still warns, so the original unedited
+corpus remains 44/45 after the async improvement. Intent was not inferred from
+an expected test result or used as a hidden detector suppression.
+
+Host, symbol, conflicting callback contexts and generated-operation provenance
+remain required facts. Source warnings remain assumptions, not certified
+violations. Server/SSR, directives, richer callback shapes and unexercised rule
+families remain open. See the
+[refinement report](package-contract-v2/phase22/2026-10-02-package-feedback-refinement.md).
+No production analyzer rule, contract or finding snapshot changed.
+
+## Combined package feedback system (2026-10-02)
+
+An independent combined adapter gives feedback on 20 of 21 authored consumer
+patterns without certifying their whole packages. It combines original-code
+compiler findings, labeled source assumptions/candidates, native runtime
+diagnostics, exceptions and explicit application resource lifetimes. The main
+study has 46 records: 45 execute against real published types and TS2540 owns
+the remaining readonly assignment, which receives no checker feedback. Of
+24 valid controls, 23 are quiet. Counts include a preference, a loading advisory
+and source information; they do not mean twenty proven defects.
+
+Exact operand-symbol joins reuse accessor premises for `uncalled-accessor` and
+`prefer-for`. The same accessor projection transfers to an exact namespace
+import from the timer package. Computed dispatch remains a static gap. A
+co-located surrogate missing-owner warning is removed when the leaf-owner
+finding establishes a present but restricted owner; raw native observations
+remain unchanged.
+
+An intentional reducer snapshot retains strict-read warnings; explicit
+`untrack` makes the same intended output quiet. An async package memo read
+after awaiting stays stale and receives no automatic feedback. Its paired
+control updates, but the source extractor lacks the callback phase needed to
+project a static claim safely. Application output expectations reveal the miss.
+
+Four additional transfer observations retain package-construction strict reads
+and a polling-effect write at `timer/dist/index.js:126`. Two mount failures also
+cause disposer-flow harness failures and cannot count as valid controls. The
+published `ownedWrite: true` option permits the package's write; its valid
+accessor control is then quiet, while the wrong function interpolation keeps
+its source warning. Package/application attribution and exception grouping
+remain product work.
+
+The current 31-identity inventory has consumers for fifteen rule concepts;
+full coverage is unproven even there. Server/SSR, directives, component rules,
+richer callback phases and unexecuted runtime paths remain open. See the
+[combined feedback report](package-contract-v2/phase22/2026-10-02-combined-package-feedback-system.md).
+No production analyzer rule, contract or finding snapshot changed.
+
+## CommonJS surfaces, binary inputs and timing (2026-10-02)
+
+An exact imported-value selector admits 135 Lodash members, nine fflate APIs
+and Nano ID's custom random generator against their real published types. The
+surface/typing distinction accounts for the earlier Lodash export-scan miss;
+runtime and separate declaration-package bytes are both pinned. Shared binary
+seeds include size-aware byte callbacks without casts or name-based trust.
+One Lodash rest-argument candidate is refused by TS2769 and gains no checker rule.
+
+There are 52 mapped callback write-error pairs with clean controls, of which
+44 have immediate package callers and eight are direct application invocations
+of returned callbacks. All 44 package examples pass explicit permitted-write
+controls. Delayed-only debounce/throttle controls allow the same default signal
+writes without an owner. A member-name or callback-type prohibition would
+therefore be imprecise. Source extraction retains no static context assumptions.
+
+Awaiting fflate delivery closes an eager-cancellation gap: all nine callbacks
+execute with permitted unowned writes. Five initial byte domains still produce
+errors as callback values while the exception channel stays quiet. Matching
+package producers supply valid data, and all five decoder flows restore exact
+payloads in both read and write twins. The format relation table is explicitly
+package-specific; return function types and arbitrary bytes cannot supply it.
+
+All 420 browser records pass actual published typing. The combined adaptive
+sample reaches 231 exported names across 69 packages, counting aliases and
+excluding direct application callback calls from package evidence. Most-package
+and most-misuse coverage remains unproven. Generic shared invariant feedback
+scales to these methods; lazy/class/provider protocols, complex domains, static
+branch proofs, callback error handling and broader runtime contexts remain open.
+See the [surface and timing report](package-contract-v2/phase22/2026-10-02-commonjs-surfaces-binary-inputs-and-timing.md).
+No production rule, contract or finding snapshot changed.
+
+## Cross-package callbacks and validation flows (2026-10-02)
+
+The same published-type generator admits 262 callback APIs across ten packages
+from a declared 22-package population with seventeen usable cached roots.
+Construction and returned zero-argument calls provide eight valid write-error
+pairs, but three are direct application calls of returned callbacks. Five have
+package callers. A shared public validation flow adds seventeen package-invoked
+pairs across Valibot and Zod, all with clean controls. All seventeen permit the
+same writes with the native signal's explicit owned-write option.
+
+Immediate caller identity also refines the earlier 116-example sample: 99
+package callers, sixteen native Solid callers and one direct application caller.
+Exact served input files supply identity where source maps are absent; opaque
+bundle names and missing frames remain unknown. Excluding the four direct
+application examples from package behavior evidence leaves 187 exported names
+across 67 sampled packages when combined with construction ownership. This
+cross-sample count does not establish most-import or complete misuse coverage.
+
+All 600 new browser observations pass published typing. Initial controls still
+include ten provider/fragment environment failures and 74 invalid Zod option
+combinations permitted by the real signature. The 253 uninvoked callback APIs,
+including RxJS operators, remain unverified under the construction flow.
+CommonJS member surfaces, binary witnesses, richer returned protocols and
+broader contexts remain open. The source walker retains no context assumptions
+for this wider population. See the
+[cross-package report](package-contract-v2/phase22/2026-10-02-cross-package-callbacks-and-validation-flows.md).
+No production analyzer, contract or finding snapshot changed.
+
+## Callback contexts and broader misuse feedback (2026-10-02)
+
+Published-type generation admits 259 callback-bearing APIs across 77 packages
+among all 97 retained roots. Frozen browser studies establish 116 callback write
+errors across 47 packages with clean read-only controls and diagnostics mapped
+to the exact injected application setter. All executed consumers pass published
+typing. Together with construction ownership witnesses, useful feedback is
+observed for 166 exported API names across 61 sampled packages. Aliases count as
+names; this is neither distinct-defect counting nor coverage of most misuses.
+
+Six caller-context controls permit the identical writes imperatively; one keeps
+a separate cleanup warning. Twelve further controls across nine packages permit
+them with the native signal's explicit `ownedWrite: true` option. Static write
+claims need exact callback execution, caller ownership and target configuration.
+A missing public observer does not establish permission to write.
+
+Bounded source contexts explain only eighteen confirmed pairs; shared runtime
+diagnostics provide the other ninety-eight. Ten APIs have module-load failures,
+nine mapped write examples lack clean controls, and 114 invoked APIs never call
+their generated callback in the sampled read flow. Thirty candidates lack a
+type-valid witness, and animation's root declarations do not resolve. Those
+outcomes stay unverified. SSR, hydration, delayed paths, richer domains, other
+package ecosystems and intent-dependent behavior remain open. See the
+[callback study](package-contract-v2/phase22/2026-10-02-callback-contexts-and-misuse-breadth.md)
+for exact scope and controls. No production rule, accepted contract or finding
+snapshot changed.
+
+## Argument witnesses and GC precision (2026-10-02)
+
+Published types admit shared generated inputs for 67 of the 74 previously
+unexercised ownership-premised exports. Frozen browser studies establish valid
+unowned/owned pairs for sixty of them across twenty-nine packages. Together
+with the earlier zero-argument sample, that is 77 primitives across 37 packages
+for construction ownership. All executed specimens pass real published typing;
+other misuse families and most-package coverage remain unproven.
+
+Four date exports have dependency execution errors in otherwise typed calls;
+two keyed exports cannot load a cached dependency, and an SSE control lacks a
+valid local endpoint. Seven other exports exceed bounded type synthesis. Those
+fourteen exports remain unverified. One valid timer control keeps a core advisory.
+The static batches keep source warnings conditional and refuse declaration
+redirects to different physical artifacts; focused installations confirm the
+missing static cases without weakening that boundary.
+
+Native GC proves the previous lifetime monitor could report a listener after
+its target disappeared. Weak endpoint references now retire those registrations;
+missing weak reachability stays an explicit gap. Automatic lifetime feedback
+retains fourteen targets and thirteen clean lifetime controls. Observer delivery
+is awaited before disposal to keep browser scheduling out of the behavior
+comparison. See the [argument and GC report](package-contract-v2/phase22/2026-10-02-argument-witnesses-and-gc-precision.md)
+for exact failures, experiment boundaries and validation. No production contract
+or finding changed.
+
+## Automatic ownership breadth and awaited members (2026-10-02)
+
+An awaited-member bridge closes the remaining measured event-lifetime miss:
+fourteen targets across six packages are detected, thirteen lifetime controls
+retain their behavior, and the cached app retains the same core advisory. The
+bridge preserves member receivers and property evaluation order. Private/super
+members with awaited operands and awaited constructor arguments remain open.
+
+A fresh source catalog records 91 browser ownership premises across 42 packages.
+Published declarations select seventeen zero-argument calls across twelve
+packages. Every unowned browser call warns and every owned twin is clean. The
+static prototype initially misses four because an opaque tuple return discards
+an independent ownership premise. A partial zero-argument owner slice closes
+those four while retaining the return gap; its warnings remain assumptions.
+All seventeen static controls actively apply their ownership premise and remain
+clean. One synthetic 34-call project preserves that result with 0.852-second
+modeled analysis and 0.526-second preparation, excluding initial authentication.
+
+Seventy-four argument-bearing exports remain unexercised. Source presence is
+not misuse coverage; runtime paths and primitive construction defaults do not
+establish every API behavior. See the [ownership and member report](package-contract-v2/phase22/2026-10-02-automatic-ownership-breadth-and-member-calls.md)
+for source selection, typing checks, frozen runtime evidence, timing scope and
+remaining limits. No accepted package contract or production finding changed.
+
+## Automatic event lifetimes and native await (2026-10-02)
+
+A follow-up removes per-handler scope annotations under an explicit project
+policy. Exact renderer JSX declarations admit DOM handlers; their actual owners
+supply disposal boundaries. Native async operation capture, value-callee binding
+and opt-in Promise delivery detect thirteen of fourteen authored targets across
+six published packages. Thirteen controls receive no new lifetime warning. Their
+recorded behavior, three scheduling controls and original core feedback are
+preserved. Nine event expressions in the cached app are instrumented and its
+existing flow completes without a new lifetime warning.
+
+The generator rewrite detects all fourteen targets but breaks a valid
+Promise-subclass control with `_self$ is not defined`; it is rejected. Native
+member calls with awaited operands retain a measured miss. Optional chains,
+direct eval, async generators, dependency-native async bodies, custom component
+event forwarding and arbitrary callback delivery remain open. Setup/effect
+lifetimes, shared-resource transfer, multiple realms and development integration
+are not established. The owner check depends on the audited private rc.9 ABI.
+All warnings are conditional on declared lifetime intent and have no
+certification authority. See the [automatic lifetime report](package-contract-v2/phase22/2026-10-02-automatic-event-lifetimes-and-native-await.md)
+for the 110 final browser executions, frozen inputs, rejected approach and exact
+remaining limits.
+
+## Explicit lifetimes and shared resource feedback (2026-10-02)
+
+A browser resource monitor with an explicit component lifetime expectation
+detects eleven of twelve authored targets across seven published packages. All
+33 consumers pass strict published typing; twenty-one controls receive no new
+lifetime warning. The monitor neither supplies cleanup nor restores a Solid
+owner. Its conditional warning has no package-contract or certification
+authority. Normal cancellation, completed work, intentional background tasks
+and unrelated concurrent work retain their measured behavior.
+
+In that original profile, an unannotated continuation after `await` remains a miss. Explicit continuation
+scoping detects pending work and work started after disposal. Once and signal
+listeners and coerced cancellation remain explicit gaps. Resource kinds outside
+native timers, frames, listeners and the three tested observer APIs are
+unobserved. Shared resources,
+cross-owner transfer, multiple realms, default integration and HMR/SSR remain
+open. A source inventory finds 154 exact DOM declaration references in 37 of 97
+package roots; this is source reach, not misuse coverage. Three missing root
+entries remain refused.
+
+The RAF test exposed repeated warnings and lost app frames in a recurring loop;
+causal registration propagation now retains the original restart location and
+delivers one lifetime warning. Its valid control also retains an existing core
+`STRICT_READ_UNTRACKED` startup warning, kept separate from the new lifetime
+channel. See the [lifetime report](package-contract-v2/phase22/2026-10-02-explicit-lifetimes-and-shared-resource-feedback.md)
+for the 128 browser executions, measured registration cost and remaining limits.
+
+## Getter paths and optimized feedback (2026-10-02)
+
+Two new static/derived-store assignments pass published typing and throw a
+getter-only TypeError in the browser. Their original assignment locations are
+retained. Bounds and size assignments instead report published TS2540 and are
+excluded before execution. Valid setter, writable plain-result and descriptor-
+replacement controls remain clean; no duplicate TypeScript rule is added.
+
+A bounded finite-key source extension adds four broad-corpus explanations with
+exact signal/memo producer paths. Its intentional snapshot control receives the
+same informational note, so no automatic defect warning or accepted contract is
+created. Unknown seed aliases, mouse spreads, proxies, reflected descriptors,
+unresolved branches and budget limits remain open. Only two of 530 source-
+resolved function exports expose these paths with all arguments unresolved;
+concrete consumer inputs matter substantially.
+
+Optimizing the public core, web and attribution entries together attaches the
+engine to the actual app runtime. Sixty optimized import graphs and live probes
+confirm this for twelve channel and 48 rc.9 broad executions. All five channel
+targets remain detected, and the broad result remains 15/24 with 26 quiet controls.
+The rc.4 query pair has no attribution capability. One dialog error has two
+transport records instead of one; delivery parity remains explicitly failed.
+Default plugin installation, the absent official diagnostics bridge, HMR,
+SSR/hydration and non-Vite integration remain unmeasured. See the
+[getter and optimization report](package-contract-v2/phase22/2026-10-02-getter-paths-and-optimized-feedback.md).
+
+## Class source footprints and deferred reads (2026-10-02)
+
+An isolated exact-symbol source pass adds informational feedback for class
+methods and getters reached through stable private fields. Twenty new consumers
+produce 40 fresh browser executions, all passing real published typings with
+finite behavior parity. Six of nine introduced stale-display cases receive
+source notes. Computed dispatch, setup-time iterator consumption and an escaping
+instance remain open. Generator creation is kept separate from its later reads.
+
+An intentional snapshot has identical app bytes to a failing target and receives
+the same note. A second counterexample checks an observer and returns a constant:
+the footprint is not proof of output reactivity. No proven violation, automatic
+misuse warning or accepted contract is added. Explicit `untrack` sampling stays
+quiet in this bounded source path, but an intent-aware runtime policy remains
+unimplemented.
+
+The earlier broader corpus gains two source notes and no control notes. Its
+4/23 static and 15/24 direct runtime detection counts remain unchanged. The
+97-root inventory finds five relevant class exports in only Map, Set and Trigger;
+rich object returns, dynamic getters, callback phase and asynchronous lifetime
+remain major gaps. See the [class source report](package-contract-v2/phase22/2026-10-02-class-source-feedback-and-deferred-reads.md).
+
+## Automatic channels and intent limits (2026-10-02)
+
+The experimental observer now tests dropped settled cleanup and unowned
+boundaries, plus advisory effect cycles and unstable memo outputs. Five targets
+are detected with seven quiet channel controls. One async store-setter candidate
+is excluded before execution because the real published typing reports TS2345:
+`Promise<void>` is not assignable to `void | { count: number; }`. No duplicate
+checker rule is added. Runtime observations retain no certification authority.
+
+Vite prebundling initially split the optional attribution engine's state from
+the app core. Live capability probes caught the inactive engine; an explicit
+unbundled profile observes its real graph. A bounded settled-branch trace also
+recovers the original registration of a late autofocus cleanup error. Namespace
+dispatch, arbitrary promises, other runtime versions and default optimized
+production integration remain open.
+
+Two pairs use identical app bytes, actions and actual observations with opposite
+desired snapshot/background lifetimes. Source and runtime facts cannot identify
+that undeclared intent. Guard notes remain informational; project intent policies
+are a possible next experiment, not implemented or proven violations.
+
+An exact-call inventory finds core calls in 88 of 97 retained primitives packages;
+this is potential hook reach, not package coverage. A 50-case broader replay
+preserves observed values and unique exception messages, with no new control
+findings. Playwright error delivery counts change in two dialog failures; six
+focused trials show one window error event with one or two transport records.
+Full delivery parity remains unproven and is recorded explicitly.
+
+See the [automatic feedback report](package-contract-v2/phase22/2026-10-02-automatic-feedback-and-intent-limits.md).
+
+The retained Vite plugin already has an app-owned `@solidjs/diagnostics` bridge
+integration and session endpoint. Its publisher implementation was inspected;
+the bridge artifact is absent from checked retained roots, so integration and
+coverage are unmeasured. Reuse should be evaluated before replacing its transport.
+
+## Broader misuse and guard tracing experiment (2026-10-01)
+
+Status: **experimental; production rules, public schema and accepted tier
+unchanged**. Fifty paired browser consumers cover 24 authored targets and 26
+controls across 18 directly exercised packages, including two copied-app
+mutations. All pass real published consumer typings. Runtime diagnostics and
+exceptions identify 15 targets; explicit behavioral expectations combined with
+that feedback expose all 24. No control has a direct runtime finding, exception
+or failed expectation. This is not an independent population precision estimate.
+
+Generic instrumentation of exact imported Solid owner/observer guards explains
+eight additional quiet failures without per-package rules. The same observations
+appear in two valid intentional snapshot/background controls. They remain
+informational observations, never proven violations or automatic misuse warnings.
+All 50 traced executions preserve observed values and diagnostic/exception codes.
+
+The frozen static path detects only four of 23 eligible targets across 96 fresh
+native analyses. The rc.4 query pair is refused; its update test still exposes
+the stale value. Rich object/class returns, callback phase, component contexts
+and asynchronous lifetime remain major coverage gaps. The broader denominator
+shows why the earlier small supported-pattern holdout was insufficient.
+
+Two app controls already have native findings, excluded from introduced-defect
+counts. An `opened()` read in a `NavBar.tsx` event callback receives
+`strict-read-untracked` despite the exercised control menu flow succeeding with
+quiet runtime feedback: investigate possible callback-phase misclassification.
+The existing `articles()` loading-boundary claim in `Blog.tsx` remains unjudged
+because that path was not executed. The dialog trigger exception also lacks a
+consumer stack frame; dependency frames are retained without invented attribution.
+
+See the [broader experiment](package-contract-v2/phase22/2026-10-01-broad-misuse-and-guard-tracing.md)
+for the complete defect table, paired precision limits and evidence paths.
+
+## Browser, context and cost experiments (2026-10-01)
+
+The isolated prototypes now execute 32 browser scenarios, including an adapted
+cached portfolio app's navigation, modal and disposal flows, dialog focus and
+disposal, and a local query/refetch against its actual older runtime. Thirteen
+semantic observations map to original source. Router context exceptions bypass
+the diagnostic channel; capability detection is required on the rc.4 query
+runtime, which remains refused by the rc.9 static model audit.
+
+A frozen consumer holdout adds six detected targets and ten quiet controls
+across five packages. Actual browser execution agrees with the 16 observations;
+two TypeScript-rejected consumers are excluded before checker analysis. This is
+not a blinded precision estimate. A `ReactiveMap` challenge stays stale despite
+quiet execution, published typing success and no source premise: native analysis
+keeps its package behavior uncertifiable. Behavioral update expectations can
+expose this gap without claiming every snapshot is a defect.
+
+One-consumer warm preparation has a 33.5 ms median, while native analysis still
+takes 1.4–1.5 seconds. Ten body edits reuse the model; changing the argument
+profile adds one extraction. Simulated changes to runtime bytes, declarations
+and version refuse old inputs. Whole-closure validation of 56 retained models
+takes a 982 ms median, exposing a second editor cost. No real release upgrade,
+language server or production rule is implemented by this experiment.
+
+See the [browser and cost report](package-contract-v2/phase22/2026-10-01-browser-contexts-precision-and-cost.md)
+for measured limits, evidence and verification.
+
+## Installed models and live diagnostics (2026-10-01)
+
+Status: **experimental; production analyzer, public schema and accepted tier
+unchanged**. The next prototype derives models from installed dependency bytes,
+specializes closed call arguments, retains later tuple accessor positions and
+summarizes stable local wrappers with one synchronous return. It follows
+Solid's transitive dependency path for pnpm installations. Eleven focused
+target observations pass, with no warnings on 30 negative/unsupported controls;
+five earlier tuple targets and 13 controls also pass. Both copies of all 59
+static observations pass real published typings. Historical native outputs are
+reused only for identical generated source and checked analyzer inputs.
+
+A package-independent observer captures live Solid semantic diagnostics with
+consumer stack locations. Seven published-code samples confirm timer ownership,
+pagination reads and a memo callback write. Pagination emits an internal setup
+read diagnostic even for the tracked caller twin; it is retained as an observed
+package issue, not recategorized as caller misuse. Live coverage extends only
+to executed paths and needs the same runtime diagnostic channel instance.
+
+The revised source scan yields 151 exports across 56 packages in 3.24 seconds.
+The installed-app audit admits 17 package/project models across eight apps,
+but produces no premises for their used root exports. Another 642 cached sites
+use unsupported subpaths and 860 refuse on inputs. Broad app coverage remains
+open; removing catalog pins alone does not solve callback/component semantics.
+See the [further experiment](package-contract-v2/phase22/2026-10-01-installed-models-and-live-feedback.md).
+
+## Automatic source model follow-up (2026-10-01)
+
+Status: **experimental; production analyzer and accepted tier unchanged**.
+The bounded source pass examines 97 retained packages in 3.26 seconds and
+extracts candidate premises for 151 exports across 55 packages. Automatic
+models detect 26/35 selected browser misuse observations across 13 packages,
+with no warnings on 105 negative or unsupported controls. These outputs rely
+on source assumptions and carry no certification authority. Fifteen focused
+tests, 160 follow-up static observations with real consumer typings, replay
+against unchanged exercised premises, four runtime samples and the cached-app
+demand audit pass.
+
+The first reviewed model's media owner requirement was wrong: cleanup is
+conditional in browser development mode. Both media owner premises are removed
+and models.json is regenerated. Twenty affected observations pass corrected
+expectations. The old 30/30 headline included one mislabeled target; the
+corrected set has 29. The existing media and createIsMounted ledger expectations
+remain separate corrections. Full-application analysis, richer tuple members,
+wrappers, callback timing, loops and additional runtime versions remain open.
+The app audit shows primitives account for 292/1,850 package-use sites and zero
+sites match the experimental catalog's complete input pins. See the
+[source model follow-up](package-contract-v2/phase22/2026-10-01-source-model-followup.md).
+
+## Reviewed package model experiment (2026-10-01)
+
+Status: **experimental, measured; no production behavior or accepted-tier
+change**. The original source-reviewed premises for 19 exports across eight pinned primitives
+packages produced model warnings for 30/30 originally labeled browser misuse observations,
+with none across 98 negative observations. The same baseline has two matching
+diagnostics: one violation and one uncertifiable result. All 128 observations
+pass consumer typing and analysis-copy typing against real published rc.9
+declarations. Four focused adapter tests, final saved-result replay, two
+independent runtime controls, universal source checks and `make verify-fast`
+pass. Full release verification and application sweeps are deferred.
+
+The follow-up above corrects one original media ownership premise and target
+label; this historical count does not establish that all 30 were defects.
+
+These warnings explicitly rely on reviewed assumptions and carry no
+certification authority. Full applications, automatic authoring, arbitrary
+wrapper returns, mutable bindings, richer returned values, asynchronous
+behavior and additional versions remain unmeasured or unsupported. Source
+review and a runtime sample also find no owner requirement for the existing
+`createIsMounted` module-scope ledger case; its expectation remains a separate
+correction. See the
+[measured experiment](package-contract-v2/phase22/2026-10-01-reviewed-model-experiment.md).
+
 ## Fresh fixed structural return proof (2026-09-30)
 
 Status: **implemented, source verified, tier authenticated and checkpoint

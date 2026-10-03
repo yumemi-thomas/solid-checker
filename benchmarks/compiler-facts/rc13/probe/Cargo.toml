@@ -1,0 +1,15 @@
+[package]
+name = "compiler-rc13-fork-probe"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[features]
+trace = []
+
+[dependencies]
+solidjs-compiler = { path = "../../../../rust/target/compiler-rc13-rebase/packages/compiler", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

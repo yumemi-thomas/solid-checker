@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import {test} from 'node:test';
+import {mkdtempSync,mkdirSync,symlinkSync,writeFileSync} from 'node:fs';
+import {join,resolve} from 'node:path';
+import {ts} from './lower.mjs';
+import {hash} from './catalog.mjs';
+import {projectReadSession} from './project-read-session-v2.mjs';
+import {nativeReadSites} from './native-read-sites-v4.mjs';
+import {asyncConstantWholeCallbackResult} from './async-constant-result-v1.mjs';
+import {auditAsyncConstant} from './async-constant-audit-v1.mjs';
+function input(body){const root=resolve(mkdtempSync('rust/target/async-constant-audit-unit-'));mkdirSync(join(root,'src'));symlinkSync(resolve('rust/target/app-import-metric/apps/helge-dev/node_modules'),join(root,'node_modules'),'dir');
+  const path=join(root,'src/main.tsx'),code=`import {createMemo,createSignal} from 'solid-js';export async function read(get:()=>number){await Promise.resolve();${body}}function App(){const [get]=createSignal(1,{ownedWrite:true});return createMemo(()=>Promise.resolve().then(()=>read(get)));}`;writeFileSync(path,code);const state=projectReadSession(root).get(path,code);assert.deepEqual(state.errors,[]);const sites=nativeReadSites(state.program,state.source).sites;assert.equal(sites.length,1);const model=asyncConstantWholeCallbackResult(state.program,state.source,sites[0]);return {...state,site:sites[0],model};}
+function note(row,model=row.model){return {witness:row.site,asyncContinuation:{chain:[{helper:{function:model.function}}]}};}
+for(const[name,body]of[
+  ['discarded read','get();return 9;'],['finally override','try{return get();}finally{return 9;}'],['catch agreement','try{get();return 9;}catch{return 9;}'],['normal finally','try{get();return 9;}finally{get();}'],['unknown loop override','try{while(get())return get();}finally{return 9;}'],['conditional final agreement','try{get();return 9;}finally{if(get())return 9;}'],['undefined fallthrough','if(get())return;'],['nested function','const nested=()=>get();nested();return 9;'],['nested finally','try{try{return get();}finally{return 10;}}finally{return 9;}'],
+])test('independent outcomes validate '+name,()=>{const row=input(body);assert(row.model);const checked=auditAsyncConstant(row.program,row.source,row.model,note(row));assert.deepEqual(checked.constant,row.model.constant);});
+test('independent outcomes reject a forged constant for an unknown read result',()=>{const row=input('return get();');assert.equal(row.model,null);const fn=row.source.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name.text==='read'),span=node=>({path:node.getSourceFile().fileName,start:node.getStart(),end:node.end,sha256:hash(node.getSourceFile().text)});const model={kind:'source-async-primitive-constant-fulfillment',scope:'normal-fulfilled-value-only',authority:false,certification:false,function:span(fn),bindings:[{...span(fn),kind:'unwritten-function-declaration'}],negativeInputs:row.program.getSourceFiles().filter(file=>!file.isDeclarationFile).map(file=>({path:file.fileName,sha256:hash(file.text)})),constant:{kind:'number',value:'9'},certificate:[]};assert.throws(()=>auditAsyncConstant(row.program,row.source,model,note(row,model)));});
+test('a changed claimed constant is rejected independently',()=>{const row=input('get();return 9;'),model={...row.model,constant:{kind:'number',value:'10'}};assert.throws(()=>auditAsyncConstant(row.program,row.source,model,note(row,model)));});
+test('the actual entered helper must match the constant source function',()=>{const row=input('get();return 9;'),observation=note(row);observation.asyncContinuation.chain[0].helper.function={...row.model.function,start:0};assert.throws(()=>auditAsyncConstant(row.program,row.source,row.model,observation));});
+test('a stale source hash cannot acquire a current constant proof',()=>{const row=input('get();return 9;'),model={...row.model,function:{...row.model.function,sha256:'sha256:retired'}};assert.throws(()=>auditAsyncConstant(row.program,row.source,model,note(row,model)));});
+test('certificate spans must name actual source nodes',()=>{const row=input('get();return 9;'),model=structuredClone(row.model);model.certificate[0].node.start++;assert.throws(()=>auditAsyncConstant(row.program,row.source,model,note(row,model)));});

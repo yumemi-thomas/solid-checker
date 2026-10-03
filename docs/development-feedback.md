@@ -1,0 +1,217 @@
+# Development feedback
+
+`solid-checker feedback` is the first implementation boundary for the package
+feedback experiment. It runs the native checker on the original application,
+then admits optional recorded application observations against those exact
+inputs. Package certification is not required to show an independent compiler
+finding or a recorded runtime failure. Unknown package behavior stays
+uncertifiable in native analysis.
+
+## Use from this checkout
+
+```sh
+export SOLID_CHECKER_NATIVE_BIN="$PWD/rust/target/debug/solid-checker-rust"
+export SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts"
+node packages/cli/bin/solid-checker.mjs feedback --project /absolute/path/tsconfig.json
+node packages/cli/bin/solid-checker.mjs feedback manifest --project /absolute/path/tsconfig.json > capture.json
+node packages/cli/bin/solid-checker.mjs feedback --project /absolute/path/tsconfig.json --capture capture.json
+```
+
+Build the main checkout with `make build-checker-debug` first. To use the
+locally integrated RC.13 build, set
+`SOLID_CHECKER_NATIVE_BIN` to
+`rust/target/local-rc13-checker/rust/target/debug/solid-checker-rust` and
+`SOLID_TYPEFACTS_BIN` to this checkout's `bin/solid-typefacts`, both as absolute
+paths. The compiler candidate has not been published. Production Git pins
+remain on their prior compiler revision. The integration patch and restoration
+instructions are in `benchmarks/compiler-facts/rc13/`.
+
+The manifest command works without a native binary. Project references require
+explicit project sessions and currently refuse. TypeScript checks the installed
+package declarations; it supplies no behavioral package inference here. When
+the input has TypeScript errors, additional capture guidance is suppressed.
+Existing native findings retain their own classification.
+
+## Capture format
+
+Keep the generated `project`, `inputId`, `manifest`, `authority: false` and
+`certification: false`. Fill `runtimeInputs` with canonical absolute file paths
+and SHA-256 digests (`sha256:…`) of the executed runtime bytes. Fill `events`
+with unique IDs and exact original-source locations:
+
+```json
+{
+  "id": "read-1",
+  "kind": "untracked-read",
+  "message": "Recorded read while tracking was off",
+  "tracking": "untracked",
+  "runtimeInput": "/absolute/path/instrumented-runtime.mjs",
+  "sourceSha256": "sha256:…",
+  "location": {
+    "path": "/absolute/path/src/App.tsx",
+    "startByte": 120,
+    "endByte": 128
+  }
+}
+```
+
+`runtime-exception` and `assertion-failure` are also admitted, with a message,
+source digest and location. They do not require a tracking state. Locations
+must belong to a source file in the configured project and use valid UTF-8
+byte boundaries. This is a supplied-record interface: digests detect changed
+inputs, but do not authenticate that an event occurred. Collectors and callers
+remain responsible for the observation's truth and original-source mapping.
+
+The report preserves native `analysis.findings`. Top-level `findings` contains
+proven violations; `gaps` contains uncertifiable native results, and
+`observations` contains recorded runtime events.
+Repeated equivalent observations retain all event IDs and an occurrence count.
+Untracked reads and observer queries have severity `info` and
+`reactiveIntent: "open"`. Recorded
+exceptions/assertion failures have severity `error` in their own channel. No
+observation becomes a static violation or a package contract. The exit status
+preserves native analysis status; supplied observations do not fail CI.
+
+Inputs are checked before and after native analysis. Changed source, resolved
+declarations, directory listings, missing resolution candidates or recorded
+runtime bytes refuse a stale report. This boundary does not yet provide an
+atomic shared Type Facts/runtime session or bind browser conditions.
+
+## Run an application
+
+The command now includes a live browser collector and the experiment's
+automatic read/result guidance and assertion-assisted selection:
+
+```sh
+node packages/cli/bin/solid-checker.mjs feedback run \
+  --project /absolute/path/app/tsconfig.json \
+  --scenario /absolute/path/scenario.json \
+  --browser /absolute/path/chromium
+```
+
+The application needs a client `index.html` entry at its Vite root.
+The collector uses installed Vite, `@solidjs/vite-plugin`, Playwright and
+`@jridgewell/trace-mapping` from that directory. `--tooling /absolute/path/tools`
+can select a separate existing tooling installation. The command starts a
+local server and executes the application in Chromium. An existing Vite
+configuration owns its compiler plugins, aliases, public assets and root; its
+configuration files and imported dependencies are recorded as runtime inputs.
+Without one, the collector supplies the Solid plugin. Dependency optimization
+is disabled so the reviewed native reader passes through the capture hook.
+SSR and external network requests need separate adapters. Other origins are
+blocked in this run; config loading executes the application's existing config.
+
+A scenario supplies explicit interactions and optional assertions. It never derives
+expected values from a proposed change:
+
+```json
+{
+  "schemaVersion": 1,
+  "steps": [
+    { "action": "wait-for-text", "selector": "#value", "text": "1" },
+    { "action": "click", "selector": "#update" },
+    { "action": "wait-for-selector", "selector": "[data-ready=true]" },
+    { "action": "assert-text", "id": "updated-value", "selector": "#value", "text": "2" }
+  ]
+}
+```
+
+`wait-for-text` and `wait-for-selector` establish readiness; `assert-text`
+records the current value without waiting for the expected answer. A failing
+assertion appears as an error under `assertionFailures`, with its selector,
+expected value and measured value. Read observations are separate information.
+Runtime exceptions are mapped to original source where possible; unmapped
+failures remain visible in `execution.unmapped` and `execution.pageErrors`.
+Browser console warnings and errors are retained in `execution.consoleDiagnostics`
+with their original browser locations; these are not inferred causal findings.
+If a readiness step times out, `execution.failure` identifies the step and
+selector. Earlier assertions, browser errors and read evidence remain in the
+result, and later interactions stop. Unmapped reads retain their runtime
+frames for inspection without claiming authored source attribution.
+Native findings keep their original proof classification.
+
+The read hook is tied to the reviewed `@solidjs/signals@2.0.0-rc.9`
+`dev-shared.js` digest. It records normal native reads without an observer or
+owner, suppresses explicit native `untrack`, and leaves thrown reads to runtime
+error collection. It also records a native `getObserver` query that returns
+null on a modeled result path. Queries by the collector itself are excluded.
+Source maps locate reads and queries in configured original source.
+It covers reads that reach this shared reader, including calls from installed
+packages. Store-specific serving paths, owner-present reads, unexecuted paths,
+missing source frames and other runtime artifacts remain open. The collector
+retains at most 256 records and 1 MiB of event data; it reports dropped records
+and always labels coverage incomplete. A different runtime profile refuses
+instrumentation. The RC.13 **analysis compiler** does not expand this runtime
+profile to RC.13.
+
+### Measure a supplied comparison
+
+Add `--compare-project /absolute/path/comparison/tsconfig.json` to execute the
+same scenario against a separate application checkout. Neither source tree is
+edited. The selector gives an informational debugging note only when an
+original assertion fails and its matching assertion passes in the comparison.
+Passing original assertions stay quiet. A comparison that breaks one is
+reported under `guidance.open`. Missing comparisons and comparisons that still
+fail also stay open. TypeScript errors suppress assertions and guidance for
+that input, using installed published declarations.
+
+This ports the decision boundary from `replay-assertion-feedback-v1.mjs` in the
+experiment. The message describes the measured supplied comparison. It does
+not claim that a read caused the failure, that the comparison is a safe repair,
+or that unrelated assertions and side effects pass. Source proposals are not
+generated automatically. `observations`, `assertions` and `guidance` remain
+distinct; the exit status continues to preserve the original native result.
+
+### Automatic guidance without assertions or comparison code
+
+`automatic.notes` now contains conditional warnings from executed reads and
+native source models, plus informational observer-query notes. A scenario can
+contain just readiness steps and clicks;
+no assertion or comparison application is required.
+
+The native `--feedback-facts` request emits source digests, exact function and
+call spans, and derived origins resolved by the normal Type Facts lookup and
+dialect interface. It selects bounded candidate result paths: a call in a
+returned expression, an exact const initialization referenced by the returned
+value, or a read controlling distinct numeric field results. Multiple competing
+return paths remain open. These facts are absent from ordinary diagnostic output.
+
+The adapter instruments only those exact spans. Function tokens keep an origin
+across native `await` continuations and nested callbacks. A callback invoked
+later must also have a native allocation path related to its parent's result;
+lexical nesting alone is insufficient. Synchronous operation
+scopes restore the previous caller even when a call throws. Runtime values and
+function identities remain intact. TypeScript parses and prints syntax; it
+does not infer package behavior. Methods join through exact body spans when
+the parsers use different function spans. Receiver behavior and callable names
+are preserved. Generator bodies, calls with suspending arguments, direct `eval`
+and unmatched spans have no instrumentation of their own.
+
+Selection joins mapped executed reads to current native models. It receives no
+expected result, benchmark label or comparison code. The observed authored
+site must belong to the final modeled operation. A retained callback lineage
+with candidate result relationships can produce a warning: **if** this derived
+result should follow the value, capture that value while tracking and pass it
+to the async work. The warning does not prove stale output, Promise adoption,
+settlement, or repair safety. Intentional snapshots and object identity can
+need application expectations. Discarded reads and competing returns remain
+visible under `automatic.open`; incomplete collection cannot establish safety.
+
+An observer query alone produces an informational note, because it does not
+prove a reactive read or a skipped subscription. This surfaces APIs such as
+the installed map's trigger cache, which returns early when no observer exists
+and consequently emits no native read. Plain deferred callbacks can receive
+read guidance without being declared `async`. Query information is suppressed
+when the same derived origin already has an observed-read warning.
+
+The native analysis and published typing check run once per project capture.
+Their retained inputs are validated again after execution, including negative
+resolution candidates and directory listings. This avoids repeating unchanged
+type checks without weakening stale-input refusal.
+
+## Remaining implementation
+
+Editor/watch integration, automatic comparison planning, wider result-flow
+models, package ownership tracing and additional runtime profiles remain work.
+The native models above implement a bounded slice of the experiment's automatic
+read selector. They do not implement its complete behavioral model chain.

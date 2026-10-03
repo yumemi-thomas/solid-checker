@@ -44,7 +44,41 @@ with `render(() => createComponent(...))`:
 Remaining approximations: a literal stored in a local array or object
 (`const arr = [() => n()]`, `const obj = { f: () => n() }`) is not an argument
 and keeps its lexical role; writes in such literals keep theirs too (the flag is
-a read hole), and so do pending async reads (`SC5001`).
+a read hole).
+
+`Props.tsx` also pins callback-valued JSX props. Creating an inline callback,
+including a transparent TypeScript wrapper, does not prove invocation while
+rendering: its SC1001 result is uncertifiable. The eager snapshot control reads
+in the component body and remains a violation. A direct write to the props
+container remains SC2003; writes to a nested mutable value, including a wrapped
+value, are silent because shallow props readonly behavior proves nothing about
+the nested object. All these cases pass TypeScript 5.9.3 against the published
+RC.9 core/signals/web declarations with strict/noEmit and JSX runtime types.
+
+`Async.tsx` pins the same invocation uncertainty for pending reads (`SC5001`):
+an unknown member's pending handler and a deferred cross-file callback are
+uncertifiable. A component-body read and callbacks invoked by the exact
+cross-file/namespace helper remain violations. Native `isPending`, including a
+namespace import, has no pending-read error; a shadowed local function with
+the same name remains a violation. Subscription rules retain their own facts.
+The pending-read wording must identify the unproven callback context and must
+not assert a runtime exception. The added memo overload and probe signature
+come from the published rc.9 declarations; these cases pass no memo options.
+The new async cases and cross-file helpers pass TypeScript 5.9.3 with the real
+audited `solid-js`, signals and web rc.9 installs (`strict`, `noEmit`,
+`skipLibCheck`, and the published JSX runtime declarations): zero errors.
+
+An assignment of a pending-reading callback to an object member now carries
+an explicit invocation-context hole. Its lexical placement in a component
+does not prove execution during the strict-read window. A retained local
+callback is a negative control with no proven pending exception. This fixes
+the ordinary button-handler overclaim found by live browser execution;
+the pending exception from an explicitly created component remains observable.
+
+With `--feedback-facts`, native development models identify the exact memo
+callback through direct and namespace imports and bind every file to its
+source digest. `Feedback.ts` checks that a parameter named `createMemo` supplies
+no derived origin. These models are instrumentation inputs, not findings.
 
 **Stub.** `solid-js.d.ts` holds `createSignal` verbatim from the rc.9 typings,
 as its header lists. `App.tsx` and `helpers.ts` type-check cleanly against the

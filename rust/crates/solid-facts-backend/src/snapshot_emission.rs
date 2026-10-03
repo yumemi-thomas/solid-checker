@@ -206,6 +206,7 @@ mod tests {
 
     fn snapshot(status: &str) -> Snapshot {
         Snapshot {
+            feedback_facts: Vec::new(),
             status: status.into(),
             findings: Vec::new(),
             package_summaries: Vec::new(),

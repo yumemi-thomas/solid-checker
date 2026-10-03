@@ -12,6 +12,37 @@ bun add --dev solid-checker
 
 Then run `solid-checker --certify`.
 
+## Development feedback
+
+The experimental feedback command combines native findings with recorded
+application observations:
+
+```sh
+solid-checker feedback --project tsconfig.json
+solid-checker feedback manifest --project tsconfig.json > capture.json
+solid-checker feedback --project tsconfig.json --capture capture.json
+solid-checker feedback run --project tsconfig.json --scenario scenario.json --browser /absolute/path/chromium
+```
+
+The manifest starts an input-bound capture. A collector fills its `events` and
+`runtimeInputs` before the final command. Source, configuration, resolution and
+runtime changes refuse stale captures. Native findings keep their original
+violation/uncertifiable classification; recorded untracked reads are information
+because snapshot intent is open. Runtime exceptions and failed application
+assertions can be supplied as separate observations. `feedback run` now collects
+live native read observations and conditional automatic warnings from native
+source models. Scenarios can contain interactions without assertions or
+comparison code. Discarded reads, competing returns and unresolved result
+relevance stay open. The automatic notes do not prove stale output or intent.
+The command also executes supplied browser assertions. Add
+`--compare-project /absolute/path/comparison/tsconfig.json` to measure the same
+assertions in a separate checkout: failed assertions that pass there receive
+informational debugging guidance; passing originals stay quiet. The collector
+uses a reviewed RC.9 native-reader profile. Automatic source proposals and
+package behavior inference remain unavailable.
+
+See [the capture format and current limits](../../docs/development-feedback.md).
+
 Library maintainers can generate an unaccepted stable-v1 proposal from one
 exact installed package without writing semantic JSON:
 

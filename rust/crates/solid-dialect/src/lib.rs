@@ -1981,6 +1981,14 @@ pub trait Dialect: Sync {
     /// and stop reporting reads inside it.
     fn runs_callback_deferred(&self, primitive: Primitive) -> bool;
 
+    /// Whether this callback suppresses the strict pending-accessor safeguard.
+    /// Ordinary NotReadyError can still propagate as graph suspension. This
+    /// says nothing about store proxy reads or subscription: their runtime
+    /// paths can differ.
+    fn callback_handles_pending_accessor_read(&self, _primitive: Primitive, _index: usize) -> bool {
+        false
+    }
+
     /// Whether this primitive clears tracking around a callback it nonetheless
     /// runs **before its own call returns**.
     ///

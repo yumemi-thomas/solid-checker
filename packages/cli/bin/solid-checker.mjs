@@ -2,7 +2,15 @@
 
 import { launch, runNative } from "./launcher.mjs";
 
-if (process.argv[2] === "contract") {
+if (process.argv[2] === "feedback") {
+  try {
+    const { developmentFeedback } = await import("../scripts/development-feedback.mjs");
+    await developmentFeedback(process.argv.slice(3));
+  } catch (error) {
+    console.error(`solid-checker: ${error instanceof Error ? error.message : error}`);
+    process.exitCode = 2;
+  }
+} else if (process.argv[2] === "contract") {
   try {
     const { generatePackageContract, packageContractHelp } = await import(
       "../scripts/generate-package-contract.mjs"

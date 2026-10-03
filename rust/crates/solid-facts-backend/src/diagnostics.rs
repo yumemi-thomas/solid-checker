@@ -20,6 +20,8 @@ use crate::{BackendError, SemanticDemandOptions, SourceFile};
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub feedback_facts: Vec<solid_reactive_ir::DevelopmentFile>,
     pub status: String,
     pub findings: Vec<SnapshotFinding>,
     pub package_summaries: Vec<PackageSummary>,
@@ -128,6 +130,7 @@ pub struct RequestedRuleEnablement<'a> {
     pub presets: &'a [String],
     pub rules: &'a [String],
     pub runtime: RuntimeEnvironment,
+    pub feedback_facts: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -217,6 +220,7 @@ impl DiagnosticSession {
             .validate()
             .map_err(BackendError::Contract)?;
         rule_options.runtime = enablement.runtime;
+        rule_options.development_feedback = enablement.feedback_facts;
         // Scoped to this generation's facts: a gap about named exports is due
         // only where the project reaches one (`release_scope`), so the answer
         // moves with the sources as well as the install.
@@ -259,12 +263,13 @@ impl DiagnosticSession {
             findings.push(unaudited_release_finding(notice));
         }
         let metrics = analysis_metrics(facts, &program, contracts);
-        let snapshot = snapshot_with_package_summaries(
+        let mut snapshot = snapshot_with_package_summaries(
             sources,
             accepted_package_summaries(facts, contracts),
             metrics,
             findings,
         );
+        snapshot.feedback_facts = program.development_feedback.clone();
         let analysis = Arc::new(DiagnosticAnalysis { program, snapshot });
         self.retained = Some(RetainedDiagnostic {
             identity,
@@ -573,6 +578,7 @@ pub fn unsupported_runtime_snapshot(
         ),
     };
     Snapshot {
+        feedback_facts: Vec::new(),
         status: "uncertifiable".into(),
         findings: vec![SnapshotFinding {
             id: dialect::UNSUPPORTED_RUNTIME_CODE.into(),
@@ -680,6 +686,7 @@ fn snapshot_with_package_summaries(
         })
         .collect();
     Snapshot {
+        feedback_facts: Vec::new(),
         status: status.into(),
         findings,
         package_summaries,
@@ -4480,6 +4487,7 @@ mod tests {
                     presets: &["preferences".into()],
                     rules: &[],
                     runtime: RuntimeEnvironment::default(),
+                    feedback_facts: false,
                 },
             )
             .unwrap();
@@ -4493,6 +4501,7 @@ mod tests {
                     presets: &["preferences".into(), "preferences".into()],
                     rules: &[],
                     runtime: RuntimeEnvironment::default(),
+                    feedback_facts: false,
                 },
             )
             .unwrap();
@@ -4506,6 +4515,7 @@ mod tests {
                     presets: &[],
                     rules: &["prefer-show".into()],
                     runtime: RuntimeEnvironment::default(),
+                    feedback_facts: false,
                 },
             )
             .unwrap();

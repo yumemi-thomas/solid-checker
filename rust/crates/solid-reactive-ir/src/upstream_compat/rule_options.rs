@@ -45,6 +45,9 @@ pub struct RuleOptions {
     /// catalog options lets the shared pipeline thread one immutable selector
     /// through every proof stage without making dialect code guess globals.
     pub runtime: RuntimeEnvironment,
+    /// Optional source models for development instrumentation; included in
+    /// cache identity and never inferred from project rule configuration.
+    pub development_feedback: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

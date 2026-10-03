@@ -665,7 +665,7 @@ fn semantic_write_execution_role_within(
 /// prove, and with none it is unclassified, which reports nothing
 /// (`docs/rules/reactive-write-in-owned-scope.md`: an unproven write position
 /// is never a violation).
-fn nested_literal_runs_during_body(
+pub(super) fn nested_literal_runs_during_body(
     file: &solid_facts::FileFacts,
     span: Span,
     entities: &EntitySymbols,
@@ -1168,7 +1168,19 @@ fn callee_callback_timing_within(
             })
             .min_by_key(|(call, _)| call.span.end - call.span.start)
         else {
-            return false;
+            // Constructing a callback-valued JSX prop does not invoke it.
+            // Its consumer may forward it to a DOM event, retain it, invoke
+            // it during rendering, or never call it. The lexical component
+            // context proves none of those invocation times. Require the
+            // literal itself as the prop value: an IIFE inside that value
+            // still executes while the value is evaluated.
+            return file.ast.jsx_elements.iter().any(|element| {
+                element.attributes.iter().any(|attribute| {
+                    attribute
+                        .expression
+                        .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == literal.span)
+                })
+            });
         };
         if lookup.primitive_at_call(file, call.span).is_some() {
             return false;
@@ -2226,6 +2238,23 @@ pub(super) fn async_execution_role(
     } else {
         execution
     }
+}
+
+pub(super) fn pending_accessor_probe(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast.arguments_containing(span).any(|(call, index)| {
+        direct_callback_contains(file, call.arguments[index].span, span)
+            && lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    lookup
+                        .dialect
+                        .callback_handles_pending_accessor_read(primitive, index)
+                })
+    })
 }
 
 pub(super) fn allowed_callback_spans(

@@ -651,6 +651,7 @@ fn answer(
             presets: &check.presets,
             rules: &check.enable_rules,
             runtime: check.runtime.clone(),
+            feedback_facts: false,
         },
     )?;
     state
@@ -714,6 +715,7 @@ fn answer(
                 presets: &check.presets,
                 rules: &check.enable_rules,
                 runtime: check.runtime.clone(),
+                feedback_facts: false,
             },
         )?
         .0;

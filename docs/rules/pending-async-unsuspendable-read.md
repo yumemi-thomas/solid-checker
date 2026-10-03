@@ -28,6 +28,25 @@ body's strict-read window it throws `PENDING_ASYNC_UNTRACKED_READ` in dev, and
 invoked later it throws a plain `NotReadyError` (probed on rc.3 and rc.9), and
 the checker does not prove which.
 
+A callback stored by assignment inside a component also has an open invocation
+context. Lexical nesting alone does not prove it runs during the component's
+strict-read window. These reads are uncertifiable; their wording does not
+assert a runtime exception. Retained local callbacks remain negative controls.
+
+The same uncertainty applies when a project or unknown external helper receives
+the callback. Unless its exact body or an accepted contract proves invocation
+during the call, the checker cannot prove the callback runs in the lexical
+scope or leaves pending values unhandled. Such results are uncertifiable and
+their wording identifies the open callback context. Exact cross-file and
+namespace helpers that invoke the parameter directly retain the violation.
+
+Native `isPending(() => accessor())` suppresses the strict pending-accessor
+safeguard, so it has no `SC5001` error. This exemption resolves the exact
+primitive and its direct callback: shadowed functions do not inherit it.
+Subscription findings retain their own facts, and an ordinary `NotReadyError`
+may still propagate as graph suspension. Store proxy reads follow a different
+runtime path and do not inherit this accessor exemption.
+
 ## Examples
 
 Incorrect:

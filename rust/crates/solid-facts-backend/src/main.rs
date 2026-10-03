@@ -64,6 +64,8 @@ struct Request {
     #[serde(default)]
     certify: bool,
     #[serde(default)]
+    feedback_facts: bool,
+    #[serde(default)]
     check_contracts: bool,
     /// Whether the contracts compiled into this checker may be applied to this
     /// project. On by default: a project that installed the exact artifact one
@@ -3509,6 +3511,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         presets: &request.presets,
         rules: &request.enable_rules,
         runtime: request.runtime.clone(),
+        feedback_facts: request.feedback_facts,
     };
     let mut semantic_demand_options = if diagnostics {
         semantic_demand_options_for_enablement(
@@ -4203,6 +4206,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut enable_rules = Vec::new();
     let mut format = "default".to_owned();
     let mut certify = false;
+    let mut feedback_facts = false;
     let mut check_contracts = false;
     let mut bundled_contracts = true;
     let mut validate_contract_paths = Vec::new();
@@ -4459,6 +4463,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             }
             "--format" => format = args.next().ok_or("--format needs a value")?,
             "--certify" => certify = true,
+            "--feedback-facts" => feedback_facts = true,
             "--check-contracts" => check_contracts = true,
             "--no-bundled-contracts" => bundled_contracts = false,
             "--serve" => serve = true,
@@ -4647,6 +4652,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         enable_rules,
         format,
         certify,
+        feedback_facts,
         check_contracts,
         bundled_contracts,
         validate_contract_paths,

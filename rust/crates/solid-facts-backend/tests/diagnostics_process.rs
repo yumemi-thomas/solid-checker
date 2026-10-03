@@ -425,6 +425,152 @@ fn declared_first_paint_and_opaque_options_split_the_async_rules() {
 }
 
 #[test]
+fn props_container_and_callback_creation_do_not_prove_nested_behavior() {
+    let Some(findings) = diagnostic_fixture("callee-callback-timing") else {
+        return;
+    };
+    let props = findings
+        .iter()
+        .filter(|finding| {
+            finding["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/Props.tsx"))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let reads = findings_for_rule(&props, "strict-read-untracked");
+    assert_eq!(reads.len(), 3, "{props:#?}");
+    for line in [10, 15] {
+        let read = reads
+            .iter()
+            .find(|read| read["primaryLocation"]["line"] == line)
+            .expect("callback prop read");
+        assert_eq!(read["kind"], "uncertifiable", "{read:#?}");
+        assert!(read["message"].as_str().unwrap().contains("not proven"));
+    }
+    let eager = reads
+        .iter()
+        .find(|read| read["primaryLocation"]["line"] == 21)
+        .expect("eager component-body read");
+    assert_eq!(eager["kind"], "violation", "{eager:#?}");
+    let mutations = findings_for_rule(&props, "no-direct-mutation");
+    assert_eq!(mutations.len(), 1, "{props:#?}");
+    assert_eq!(mutations[0]["primaryLocation"]["line"], 36);
+    assert_eq!(mutations[0]["kind"], "violation");
+}
+
+#[test]
+fn pending_callback_reads_preserve_callee_invocation_uncertainty() {
+    let Some(findings) = diagnostic_fixture("callee-callback-timing") else {
+        return;
+    };
+    let pending = findings_for_rule(&findings, "pending-async-unsuspendable-read");
+    assert_eq!(pending.len(), 7, "{pending:#?}");
+    assert_eq!(
+        pending
+            .iter()
+            .filter(|finding| finding["kind"] == "violation")
+            .count(),
+        4,
+        "{pending:#?}"
+    );
+    let open = pending
+        .iter()
+        .filter(|finding| finding["kind"] == "uncertifiable")
+        .collect::<Vec<_>>();
+    assert_eq!(open.len(), 3, "{pending:#?}");
+    assert!(
+        open.iter().all(|finding| {
+            finding["message"].as_str().is_some_and(|message| {
+                (message.contains("pending handling are unproven")
+                    || message.contains("strict-read window is unproven"))
+                    && !message.contains("throws PENDING_ASYNC_UNTRACKED_READ")
+            })
+        }),
+        "{open:#?}"
+    );
+}
+
+#[test]
+fn development_models_bind_exact_sources_and_primitive_symbols() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let fixture = root.join("fixtures/reactive-ir/callee-callback-timing");
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", typefacts)
+        .args(["--format", "json", "--feedback-facts", "--project"])
+        .arg(fixture.join("tsconfig.json"))
+        .output()
+        .expect("run development model analysis");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let snapshot: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let models = snapshot["feedbackFacts"]
+        .as_array()
+        .expect("requested source models");
+    let source = models
+        .iter()
+        .find(|model| model["path"].as_str().unwrap().ends_with("/Async.tsx"))
+        .unwrap();
+    let text = std::fs::read_to_string(fixture.join("Async.tsx")).unwrap();
+    assert_eq!(
+        source["sourceSha256"],
+        solid_facts::core::SourceHash::of(&text).to_string()
+    );
+    let origins = source["functions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|function| !function["derivedOrigin"].is_null())
+        .collect::<Vec<_>>();
+    assert_eq!(origins.len(), 8, "{origins:#?}");
+    for function in origins {
+        let origin = &function["derivedOrigin"];
+        let call = &text
+            [origin["start"].as_u64().unwrap() as usize..origin["end"].as_u64().unwrap() as usize];
+        assert!(
+            call.starts_with("createMemo(") || call.starts_with("Solid.createMemo("),
+            "{call}"
+        );
+        assert_eq!(function["asynchronous"], true);
+    }
+    let shadowed = models
+        .iter()
+        .find(|model| model["path"].as_str().unwrap().ends_with("/Feedback.ts"))
+        .unwrap();
+    assert!(
+        shadowed["functions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|function| function["derivedOrigin"].is_null())
+    );
+    let text = std::fs::read_to_string(fixture.join("Feedback.ts")).unwrap();
+    for (name, expected) in [("discarded", "open"), ("used", "return-expression")] {
+        let child = shadowed["functions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|function| {
+                let parent = &function["parent"];
+                parent["start"]
+                    .as_u64()
+                    .zip(parent["end"].as_u64())
+                    .is_some_and(|(start, end)| {
+                        text[start as usize..end as usize].starts_with(&format!("function {name}("))
+                    })
+            })
+            .unwrap();
+        assert_eq!(child["allocationRelevance"], expected);
+    }
+}
+
+#[test]
 fn ssr_client_hole_distinguishes_proven_and_unresolved_server_rendering() {
     let Some(findings) = diagnostic_fixture("ssr-client-boundary") else {
         return;

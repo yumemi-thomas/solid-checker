@@ -547,9 +547,8 @@ fn no_direct_mutation(
         let Some(symbol) = source_symbol_at(context, file, root) else {
             continue;
         };
-        // Proven accessors and proven props roots are both readonly through
-        // members; `prop_sources` covers the props objects the accessor map
-        // does not.
+        // `prop_sources` proves the props container, not the mutability of
+        // values supplied through it. Store sources have their own proof.
         let (name, _) = match context.accessors.get(symbol) {
             Some(source) => source,
             None => {
@@ -602,6 +601,29 @@ fn no_direct_mutation(
         if props && !through_member {
             continue;
         }
+        // Props are shallow: `props.state.count = 1` may write through an
+        // application-owned mutable proxy or a plain object. Only a write to
+        // the props container's own property is proven dropped here. Keep
+        // transparent wrappers, but never infer the nested value's behavior
+        // from the root's readonly behavior.
+        if props
+            && (!file
+                .ast
+                .identifiers
+                .iter()
+                .any(|identifier| identifier.span == file.ast.peel_ts_sugar_span(root))
+                || !file
+                    .ast
+                    .members
+                    .iter()
+                    .find(|member| member.span == file.ast.peel_ts_sugar_span(assignment.target))
+                    .is_some_and(|member| {
+                        file.ast.peel_ts_sugar_span(member.object)
+                            == file.ast.peel_ts_sugar_span(root)
+                    }))
+        {
+            continue;
+        }
         let target = if through_member {
             if props {
                 DirectMutationTarget::Props
@@ -616,7 +638,7 @@ fn no_direct_mutation(
         // A write to the root record's *own* property is TS2540 where the
         // dialect's store type is `Readonly` at that level -- 2.0 -- so it is
         // TypeScript's, not this rule's. The readonly-ness is shallow, so a
-        // nested record and a props object both stay here; 1.x's store type is
+        // nested store record and a direct props property stay here; 1.x's store type is
         // mutable throughout, and its rule is unaffected.
         //
         // The root must be a bare identifier. `(state as { count: number }).count
