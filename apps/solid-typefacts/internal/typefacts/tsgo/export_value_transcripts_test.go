@@ -1277,6 +1277,35 @@ void make;
 	}
 }
 
+// ADR 0182: a plain `const x = f()` binding traces to the call's whole result
+// under the same premises as an array slot; a reassigned binding still does
+// not.
+func TestReturnValueSourcesTraceAPlainConstCallBinding(t *testing.T) {
+	source := `import { createSignal } from "solid-js";
+export function make(flag: boolean) {
+  const whole = createSignal(1);
+  let reassigned = createSignal(2);
+  if (flag) { reassigned = createSignal(3); }
+  return [whole, reassigned];
+}
+void make;
+`
+	implementation := exportImplementationForSolidMake(t, source)
+	flow := implementation.ControlFlow
+	if flow == nil || len(flow.Returns) != 1 {
+		t.Fatalf("control flow = %#v, want one return site", flow)
+	}
+	sources := flow.Returns[0].Sources
+	if len(sources) != 1 {
+		t.Fatalf("return sources = %#v, want only the const binding", sources)
+	}
+	got := sources[0]
+	if len(got.Path) != 1 || got.Path[0].Index == nil || *got.Path[0].Index != 0 ||
+		got.TargetName != "createSignal" || len(got.TargetPath) != 0 {
+		t.Fatalf("const binding source = %#v, want slot 0 tracing the whole createSignal result", got)
+	}
+}
+
 func exportImplementationForSolidMake(
 	t *testing.T,
 	source string,

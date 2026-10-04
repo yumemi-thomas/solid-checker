@@ -1,5 +1,20 @@
 # Precision backlog
 
+## A `const` call binding traces to its call (2026-10-05)
+
+ADR 0182. The producer traces a returned identifier bound once by `const x =
+call()`, never reassigned, to that call's whole result, as it already did for
+an array slot.
+
+- **Gained:** one ledger violation (73 -> 74 of 123), runtime-detected, no
+  twin flagged: `createPagination`. No checkpoint row changed and no claim
+  was lost.
+- **Still open:**
+  - a structural return whose synthesized veto has no sample completing
+    normally in the probe environment (`createClipboard`,
+    `createOrientation`);
+  - object or nested destructuring bindings stay untraced.
+
 ## A shorthand property is a structural member (2026-10-05)
 
 ADR 0181. A returned object written with shorthand properties (`{ value }`) is

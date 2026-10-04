@@ -1269,6 +1269,35 @@ func (p *project) returnValueSourcesLocked(expression *ast.Node) []typefacts.Imp
 			return
 		}
 		declaration := symbol.Declarations[0]
+		// ADR 0182: the same premises over a plain binding, `const x = f()`:
+		// one declaration, never an assignment target, an identifier name, a
+		// call initializer, and a reference after the declaration in the same
+		// file. The value is the call's whole result, so no target path.
+		if ast.IsVariableDeclaration(declaration) {
+			variable := declaration.AsVariableDeclaration()
+			if variable.Name() == nil || !ast.IsIdentifier(variable.Name()) || variable.Initializer == nil ||
+				!ast.IsCallExpression(variable.Initializer) || p.symbolIsAssignedLocked(symbol, declaration) {
+				return
+			}
+			reference := nodeLocation(node)
+			if declared := nodeLocation(declaration); reference.Path != declared.Path ||
+				reference.StartByte < declared.EndByte {
+				return
+			}
+			target, name, module, _ := p.implementationCallTargetLocked(variable.Initializer.Expression())
+			if target == "" {
+				return
+			}
+			sources = append(sources, typefacts.ImplementationValueSource{
+				Path: append([]typefacts.PathSegment(nil), path...), Kind: typefacts.ImplementationValueCallResult,
+				Target: target, TargetName: name, TargetModule: module,
+				ArgumentsPrimitiveSyntax:    p.argumentsPrimitiveSyntaxLocked(variable.Initializer),
+				ArgumentsNonSpreadSyntax:    p.argumentsNonSpreadSyntaxLocked(variable.Initializer),
+				ArgumentsNotFunctionSyntax:  p.argumentsNotFunctionSyntaxLocked(variable.Initializer),
+				ArgumentsPlainOptionsSyntax: p.argumentsPlainOptionsSyntaxLocked(variable.Initializer),
+			})
+			return
+		}
 		if !ast.IsBindingElement(declaration) || declaration.Parent == nil ||
 			!ast.IsArrayBindingPattern(declaration.Parent) ||
 			p.symbolIsAssignedLocked(symbol, declaration) {
