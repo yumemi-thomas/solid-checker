@@ -1,4 +1,4 @@
-import { createMemo, createEffect } from "solid-js";
+import { createMemo, createEffect, createRoot, onSettled } from "solid-js";
 
 // ADR 0183: a caller's function handed, unconditionally, to an eager owned
 // computation the export's own body creates runs during every call as that
@@ -42,5 +42,22 @@ export function deriveWrappedAsync(fn) {
   createMemo(async () => {
     await null;
     return fn();
+  });
+}
+
+// The memo is created inside a root body, which `createRoot` runs during the
+// call: `fn` still runs under the memo, on every call.
+export function deriveInRoot(fn) {
+  return createRoot(dispose => {
+    createMemo(fn);
+    return dispose;
+  });
+}
+
+// `onSettled` runs its callback after the call: the memo's owner is stated,
+// but not a lower bound or a run during the call.
+export function deriveWhenSettled(fn) {
+  onSettled(() => {
+    createMemo(fn);
   });
 }

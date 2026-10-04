@@ -674,6 +674,29 @@ pub fn unambiguous_eager_owned_computation_slot(
     !answers.is_empty() && answers.into_iter().all(|answer| answer)
 }
 
+/// ADR 0183: whether every dialect that canonically exports `name` states the
+/// callback at `argument` runs during the call, synchronously and inline
+/// ([`Dialect::runs_callback_synchronously`] for the primitive, and an
+/// [`Execution::Inline`] row at this slot): `createRoot`'s body, `untrack`'s
+/// function, `runWithOwner`'s function.
+#[must_use]
+pub fn unambiguous_synchronous_callback_slot(
+    name: &str,
+    argument: usize,
+    argument_count: usize,
+) -> bool {
+    let answers = DIALECTS
+        .iter()
+        .copied()
+        .filter_map(|dialect| {
+            let primitive = dialect.primitive(name)?;
+            (dialect.name_of(primitive) == Some(name))
+                .then(|| dialect.synchronous_callback_slot(primitive, argument, argument_count))
+        })
+        .collect::<Vec<_>>();
+    !answers.is_empty() && answers.into_iter().all(|answer| answer)
+}
+
 /// ADR 0180: whether every dialect that canonically exports `name` states its
 /// inert read ignores the options argument
 /// ([`Dialect::inert_read_ignores_options`]).
@@ -2048,6 +2071,23 @@ pub trait Dialect: Sync {
     /// primitive the dialect models no callback for answers `false` — absence
     /// of a row is not evidence of synchrony. `the_synchronous_clearing_set_*`
     /// pins the resulting set per dialect.
+    /// ADR 0183: whether the callback at `argument` of a call with
+    /// `argument_count` arguments runs during the call, synchronously and
+    /// inline: the primitive [runs its callback synchronously](Self::runs_callback_synchronously)
+    /// and this slot's row is [`Execution::Inline`].
+    fn synchronous_callback_slot(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> bool {
+        self.runs_callback_synchronously(primitive)
+            && self
+                .callback_semantics_at(primitive, argument, argument_count)
+                .execution
+                == Some(Execution::Inline)
+    }
+
     fn runs_callback_synchronously(&self, primitive: Primitive) -> bool {
         let rows = self.callback_executions(primitive);
         self.runs_callback_deferred(primitive)
@@ -3610,6 +3650,13 @@ mod tests {
             vec!["createRevealOrder", "createRoot", "runWithOwner", "untrack"]
         );
         assert!(!two.runs_callback_synchronously(Primitive::Flush));
+        // ADR 0183: the slot form names each of them at its callback slot only.
+        assert!(unambiguous_synchronous_callback_slot("createRoot", 0, 1));
+        assert!(unambiguous_synchronous_callback_slot("untrack", 0, 1));
+        assert!(unambiguous_synchronous_callback_slot("runWithOwner", 1, 2));
+        assert!(!unambiguous_synchronous_callback_slot("runWithOwner", 0, 2));
+        assert!(!unambiguous_synchronous_callback_slot("flush", 0, 1));
+        assert!(!unambiguous_synchronous_callback_slot("createMemo", 0, 1));
 
         // The two halves of `runs_callback_deferred` stay separable: a
         // genuinely later callback is never synchronous, and a primitive the

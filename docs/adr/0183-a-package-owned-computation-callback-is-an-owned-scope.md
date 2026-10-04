@@ -106,12 +106,12 @@ The following stay unreported:
   three fixtures above, plus the new one. The 38-app sweep is unchanged
   (264 violations, `ADDED 0` in node and browser mode), because the tier
   still matches no installed environment there.
-- `until` stays missed: its memo is created inside `createRoot`, which is an
-  enclosing callback position. `capitalize` stays missed too. It is
+- At first `until` stayed missed: its memo is created inside `createRoot`, which
+  is an enclosing callback position. `capitalize` stayed missed too. It is
   `createMemo(() => … string() …)`: the caller's function is called inside a
   compute the package writes itself (the fixture's `deriveWrapped`), so the
-  chain has an enclosing wrapper and no owner is stated. Composing an owned
-  computation through that wrapper is the next step for this rule.
+  chain had an enclosing wrapper and no owner was stated. The amendment below
+  covers both.
 
 ## Amendment: the wrapped form (2026-10-05)
 
@@ -139,9 +139,28 @@ the same.
   admits.
 - **Cover.** An expression-bodied arrow (`fn => createMemo(…)`) is read as its
   one expression statement.
+- **Synchronous enclosures.** `until` creates its memo inside a root body:
+  `createRoot(dispose => { const memo = createMemo(condition); … })`. A slot
+  that runs its literal during the call (`createRoot`'s body, `untrack`'s or
+  `runWithOwner`'s function: `Dialect::synchronous_callback_slot`) does not
+  change whose compute the callback is.
+  - The generator accepts an eager slot reached through such literals, each
+    the slot's whole argument (`synchronous_enclosure`). `min: 1` needs every
+    level's call to cover its body.
+  - The census walks the same chain from producer facts
+    (`synchronously_enclosed_in_body`): each link's `enclosingCallable` is the
+    one callable a synchronous slot's `argumentCallables` carries, in a
+    `solid-js` call, and the floor admits every link.
+  - `onSettled`, an effect function and `flush` are not synchronous slots.
 
 Evidence:
 
+- Census test
+  `an_owned_computation_inside_a_root_body_is_reached_through_the_synchronous_slot`:
+  `createRoot` and `untrack` are accepted; `onSettled`, `createEffect` and
+  `flush` are refused.
+- Dialect test `the_synchronous_clearing_set_is_the_inline_half_of_the_deferred_set`
+  pins `unambiguous_synchronous_callback_slot` per slot.
 - Census test
   `a_wrapped_owned_computation_callback_is_an_unconditional_call_in_the_slot_literal`.
   A conditional call and a literal the slot does not carry by identity are
@@ -150,12 +169,19 @@ Evidence:
 - Corpus:
   - `owned-computation-callbacks` adds `deriveArrow` (owned, `min: 1`), plus
     `deriveWrappedMaybe` and `deriveWrappedAsync` (no owner). `deriveWrapped`
-    becomes owned with `min: 1`.
+    becomes owned with `min: 1`. `deriveInRoot` is owned with `min: 1`;
+    `deriveWhenSettled` has no owner. The stub gains `createMemo`,
+    `createRoot` and `onSettled`, verbatim from rc.9: an import naming an
+    undeclared export leaves every name in that declaration unresolved, which
+    withdrew every row of the fixture.
   - Rows gain the owner in `callback-deferred-untracked-chain`,
     `callback-untracked-wrapper`, `multi-role-callback-parameter` and
     `implementation-census-memo-accessors`. Each is a parameter called
     unconditionally inside an effect or memo compute the export writes.
 - Browser tier regenerated with `--carry`:
-  - the misuse ledger goes from 77 to 78: `capitalize`, runtime-detected;
+  - the misuse ledger goes from 77 to 78 with the wrapped form
+    (`capitalize`), then to 79 with synchronous enclosures (`until`), both
+    runtime-detected;
   - no correct twin is flagged, and no checkpoint row changes status;
-  - the only tier difference is `capitalize`'s created owner.
+  - the tier differences are those two exports' created owners and nothing
+    else. The 38-app sweep is unchanged.

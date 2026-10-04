@@ -207,9 +207,14 @@ impl CertificationPlanningTransaction {
             .iter()
             .map(|source| source.claimed_package_name().to_owned())
             .collect::<std::collections::BTreeSet<_>>();
-        let authenticated = dependencies::retain_authenticated_source_packages(self, sources);
-        plan.certification_sources =
-            type_facts::retain_collision_free_source_packages(&plan, authenticated);
+        let (authenticated, mut reasons) =
+            dependencies::retain_authenticated_source_packages_with_reasons(self, sources);
+        let (retained_sources, collisions) =
+            type_facts::retain_collision_free_source_packages_with_reasons(&plan, authenticated);
+        plan.certification_sources = retained_sources;
+        for (name, reason) in collisions {
+            reasons.entry(name).or_insert(reason);
+        }
         // A source dropped here is a package the witness program then cannot
         // resolve, so the environment the census admits is not the one the
         // closure reaches. The certified package's own name is not an
@@ -227,9 +232,23 @@ impl CertificationPlanningTransaction {
             .map(String::as_str)
             .collect::<Vec<_>>();
         if !dropped.is_empty() {
+            // Each name with the reason it was dropped, so a refused admission
+            // says which step refused it and why, not only which package.
+            let reasons = dropped
+                .iter()
+                .map(|name| {
+                    format!(
+                        "{name}: {}",
+                        reasons
+                            .get(*name)
+                            .map_or("dropped without a recorded reason", String::as_str)
+                    )
+                })
+                .collect::<Vec<_>>();
             plan.mark_dependency_environment_not_acquired(format!(
-                "declaration source package(s) {} did not authenticate against their lock selection",
-                dropped.join(", ")
+                "declaration source package(s) {} did not authenticate against their lock selection ({})",
+                dropped.join(", "),
+                reasons.join("; ")
             ));
         }
         Ok(plan)

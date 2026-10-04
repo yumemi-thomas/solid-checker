@@ -3861,11 +3861,23 @@ pub(super) fn verify_certification_source_packages(
 /// Published-graph nodes deliberately do not use this. There a node's canonical
 /// identity binds its `source_dependencies_root`, so a source that will not
 /// authenticate must refuse the node outright.
+#[cfg(test)]
 pub(super) fn retain_authenticated_source_packages(
     transaction: &mut CertificationPlanningTransaction,
     requests: Vec<PublishedGraphSourceRequest>,
 ) -> Vec<VerifiedGraphSourcePackage> {
-    let mut withheld = BTreeSet::new();
+    retain_authenticated_source_packages_with_reasons(transaction, requests).0
+}
+
+/// [`retain_authenticated_source_packages`], also naming why each withheld
+/// package was withheld: the planning error of the request that failed, by
+/// claimed package name. A name withheld only because a sibling request under
+/// it failed carries that sibling's reason.
+pub(super) fn retain_authenticated_source_packages_with_reasons(
+    transaction: &mut CertificationPlanningTransaction,
+    requests: Vec<PublishedGraphSourceRequest>,
+) -> (Vec<VerifiedGraphSourcePackage>, BTreeMap<String, String>) {
+    let mut withheld = BTreeMap::<String, String>::new();
     let mut sources = Vec::with_capacity(requests.len());
     for request in requests {
         let claimed = [
@@ -3874,13 +3886,17 @@ pub(super) fn retain_authenticated_source_packages(
         ];
         match plan_graph_source_package(transaction, request) {
             Ok(source) => sources.push(source),
-            Err(_) => withheld.extend(claimed),
+            Err(error) => {
+                for name in claimed {
+                    withheld.entry(name).or_insert_with(|| error.to_string());
+                }
+            }
         }
     }
-    sources.retain(|source| !withheld.contains(source.snapshot.package_name()));
+    sources.retain(|source| !withheld.contains_key(source.snapshot.package_name()));
     sources.sort_by(|left, right| left.identity.cmp(&right.identity));
     sources.dedup_by(|left, right| left.identity == right.identity);
-    sources
+    (sources, withheld)
 }
 
 /// The package name an installed root occupies, which is the directory name

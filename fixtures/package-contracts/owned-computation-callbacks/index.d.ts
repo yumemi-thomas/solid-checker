@@ -5,3 +5,5 @@ export declare function deriveWrapped(fn: () => unknown): void;
 export declare const deriveArrow: (fn: () => unknown) => () => unknown;
 export declare function deriveWrappedMaybe(flag: boolean, fn: () => unknown): void;
 export declare function deriveWrappedAsync(fn: () => unknown): void;
+export declare function deriveInRoot(fn: () => unknown): () => void;
+export declare function deriveWhenSettled(fn: () => unknown): void;

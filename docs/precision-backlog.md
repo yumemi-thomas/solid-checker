@@ -7,15 +7,20 @@ as `createEffect`'s compute is stated as tracked, during the call, under a
 created owner, with `min: 1`. A signal write directly in that callback is
 `SC2001`.
 
-- **Gained:** four ledger violations (74 -> 78 of 123), each
-  runtime-detected, with no twin flagged: `resolveFirst`,
-  `createDerivedStaticStore` and `createBodyCursor`, then `capitalize`
-  through the amendment's wrapped form (`createMemo(() => fn())`). No
-  checkpoint row changed, and no claim was lost.
+- **Gained:** five ledger violations (74 -> 79 of 123), each
+  runtime-detected, with no twin flagged:
+  - `resolveFirst`, `createDerivedStaticStore` and `createBodyCursor`;
+  - `capitalize`, through the amendment's wrapped form
+    (`createMemo(() => fn())`);
+  - `until`, through synchronous enclosures (`createRoot(() =>
+    createMemo(fn))`).
+
+  No checkpoint row changed, and no claim was lost.
 - **Still open:**
   - a wrapped call that is conditional in its compute, or a compute nested
     one level deeper;
-  - a memo created inside `createRoot` (`until`);
+  - a wrapped form inside a synchronous enclosure (only the direct slot walks
+    the enclosure);
   - a callback passed by name, a write in a function nested in a JSX
     attribute's function, and a memo or effect called with options.
 

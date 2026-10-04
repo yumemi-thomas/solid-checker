@@ -1080,16 +1080,29 @@ fn union_of_certification_sources(
 /// name. Keeping one of the colliding copies would be substitution, and a
 /// half-materialized name is exactly what makes a hoisted copy answer for a
 /// missing nested one.
+#[cfg(test)]
 pub(super) fn retain_collision_free_source_packages(
     plan: &CertificationPlan,
     sources: Vec<super::dependencies::VerifiedGraphSourcePackage>,
 ) -> Vec<super::dependencies::VerifiedGraphSourcePackage> {
+    retain_collision_free_source_packages_with_reasons(plan, sources).0
+}
+
+/// [`retain_collision_free_source_packages`], also naming why each withheld
+/// package was withheld.
+pub(super) fn retain_collision_free_source_packages_with_reasons(
+    plan: &CertificationPlan,
+    sources: Vec<super::dependencies::VerifiedGraphSourcePackage>,
+) -> (
+    Vec<super::dependencies::VerifiedGraphSourcePackage>,
+    std::collections::BTreeMap<String, String>,
+) {
     let owner_marker = format!(
         "/node_modules/{}/",
         plan.snapshot.package_name().replace('\\', "/")
     );
     let mut seen = std::collections::BTreeMap::<String, usize>::new();
-    let mut withheld = std::collections::BTreeSet::new();
+    let mut withheld = std::collections::BTreeMap::<String, String>::new();
     for source in &sources {
         let marker = private_project_package_marker(
             plan,
@@ -1097,16 +1110,23 @@ pub(super) fn retain_collision_free_source_packages(
             source.snapshot.package_name(),
         );
         if marker == owner_marker {
-            withheld.insert(source.snapshot.package_name().to_owned());
+            withheld
+                .entry(source.snapshot.package_name().to_owned())
+                .or_insert_with(|| "occupies the certified package's own root".to_owned());
         }
         if seen.insert(marker, 0).is_some() {
-            withheld.insert(source.snapshot.package_name().to_owned());
+            withheld
+                .entry(source.snapshot.package_name().to_owned())
+                .or_insert_with(|| {
+                    "another authenticated source occupies the same installed root".to_owned()
+                });
         }
     }
-    sources
+    let sources = sources
         .into_iter()
-        .filter(|source| !withheld.contains(source.snapshot.package_name()))
-        .collect()
+        .filter(|source| !withheld.contains_key(source.snapshot.package_name()))
+        .collect();
+    (sources, withheld)
 }
 
 fn preflight_export_value_plans(
@@ -6101,10 +6121,9 @@ fn require_owned_computation_callback(
 ) -> Result<(), TypeFactsCertificationError> {
     for call in &implementation.calls {
         if !is_call_expression(call)
-            || call.captured
             || call.target.is_empty()
             || call.target_module.as_ref() != "solid-js"
-            || !floor.admits_call(call)
+            || !synchronously_enclosed_in_body(implementation, call, floor)
         {
             continue;
         }
@@ -6193,6 +6212,52 @@ fn require_owned_computation_callback(
     Err(open(&format!(
         "{OWNED_COMPUTATION_UNPROVEN_MARKER}callback is not the exact argument of an eager owned computation the export's own body creates"
     )))
+}
+
+/// ADR 0183: whether `call` runs in the export's own body, directly or inside
+/// function literals that synchronous dialect slots (`createRoot`'s body,
+/// `untrack`'s function) run during their call, every link admitted by
+/// `floor`. Each enclosing literal must be, by identity, the one callable such
+/// a slot's argument carries in a `solid-js` call. Under the strict floor every
+/// link is `unconditional` in its own flow owner, which also makes each
+/// literal a plain synchronous function.
+fn synchronously_enclosed_in_body(
+    implementation: &typefacts::ExportImplementationTranscript,
+    call: &typefacts::ImplementationCall,
+    floor: ReachabilityFloor,
+) -> bool {
+    let mut current = call;
+    for _ in 0..8 {
+        if !floor.admits_call(current) {
+            return false;
+        }
+        let Some(literal) = current.enclosing_callable.as_ref() else {
+            return !current.captured;
+        };
+        let Some(outer) = implementation.calls.iter().find(|outer| {
+            is_call_expression(outer)
+                && !outer.target.is_empty()
+                && outer.target_module.as_ref() == "solid-js"
+                && (0..outer.argument_parameters.len()).any(|argument| {
+                    outer
+                        .argument_callables
+                        .iter()
+                        .filter(|callable| callable.argument == argument)
+                        .map(|callable| callable.locations.as_slice())
+                        .collect::<Vec<_>>()
+                        == [std::slice::from_ref(literal)]
+                        && solid_dialect::unambiguous_synchronous_callback_slot(
+                            &outer.target_name,
+                            argument,
+                            outer.argument_parameters.len(),
+                        )
+                })
+        }) else {
+            return false;
+        };
+        current = outer;
+    }
+    false
 }
 
 /// ADR 0183: an `invoke` whose owner the operation creates states exactly the
@@ -23032,6 +23097,70 @@ mod tests {
                 &mut Vec::new(),
             )
             .expect_err(label);
+        }
+    }
+
+    // ADR 0183: an eager slot inside literals synchronous slots run during the
+    // call (`createRoot(() => createMemo(fn))`) is reached from the body; a
+    // literal any other slot carries is not.
+    #[test]
+    fn an_owned_computation_inside_a_root_body_is_reached_through_the_synchronous_slot() {
+        let literal = json!({"path": "/project/index.js", "startByte": 20, "endByte": 70});
+        let transcript = |outer: &str| {
+            serde_json::from_value::<typefacts::ExportImplementationTranscript>(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "calls": [
+                    {
+                        "location": {"path": "/project/index.js", "startByte": 10, "endByte": 72},
+                        "reach": "reachable",
+                        "unconditional": true,
+                        "kind": "call",
+                        "target": format!("symbol:{outer}"),
+                        "targetName": outer,
+                        "targetModule": "solid-js",
+                        "argumentParameters": [null],
+                        "argumentCallables": [{"argument": 0, "locations": [literal]}]
+                    },
+                    {
+                        "location": {"path": "/project/index.js", "startByte": 30, "endByte": 44},
+                        "reach": "reachable",
+                        "unconditional": true,
+                        "kind": "call",
+                        "captured": true,
+                        "enclosingCallable": literal,
+                        "target": "symbol:createMemo",
+                        "targetName": "createMemo",
+                        "targetModule": "solid-js",
+                        "argumentParameters": [{"parameterIndex": 0}]
+                    }
+                ]
+            }))
+            .unwrap()
+        };
+        let open = |reason: &str| TypeFactsCertificationError::UnsupportedDemand {
+            demand: "owned-computation".into(),
+            reason: reason.into(),
+        };
+        let first = parameter_source_at(0, &[]);
+        for outer in ["createRoot", "untrack"] {
+            require_owned_computation_callback(
+                &transcript(outer),
+                &first,
+                ReachabilityFloor::Reachable,
+                &open,
+                &mut Vec::new(),
+            )
+            .unwrap_or_else(|error| panic!("{outer}: {error}"));
+        }
+        for outer in ["onSettled", "createEffect", "flush"] {
+            require_owned_computation_callback(
+                &transcript(outer),
+                &first,
+                ReachabilityFloor::MayExecute,
+                &open,
+                &mut Vec::new(),
+            )
+            .expect_err(outer);
         }
     }
 

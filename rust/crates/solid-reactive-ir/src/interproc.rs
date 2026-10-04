@@ -2360,20 +2360,38 @@ fn discover_interprocedural_graph(
                             wrappers.extend(chain.wrappers);
                             Some((compose_callback_chain(&wrappers), wrappers))
                         });
-                // ADR 0183: with no enclosing callback position -- no chain, or
-                // one whose only wrapper is this slot's own -- the slot's owner
-                // answer is the row's. Only an eager owned-computation slot
-                // states one.
-                let eager_owned = composed
+                // ADR 0183: only an eager owned-computation slot states an owner
+                // for the row. With no enclosing callback position -- no chain,
+                // or one whose only wrapper is this slot's own -- the slot's
+                // answer is the row's; inside literals that synchronous slots
+                // (`createRoot`, `untrack`) run during the call, it is too. The
+                // inner `bool` is whether every level covers its body, which is
+                // what the row's `min: 1` rests on.
+                let enclosure: Option<bool> = if !primitive.is_some_and(|slot| {
+                    lookup.dialect.eager_owned_computation_slot(
+                        slot,
+                        argument_index,
+                        call.arguments.len(),
+                    )
+                }) {
+                    None
+                } else if composed
                     .as_ref()
                     .is_none_or(|(_, wrappers)| wrappers.len() == 1)
-                    && primitive.is_some_and(|slot| {
-                        lookup.dialect.eager_owned_computation_slot(
-                            slot,
-                            argument_index,
-                            call.arguments.len(),
-                        )
-                    });
+                {
+                    Some(
+                        solid_facts::ast::completion_call_cover(
+                            std::path::Path::new(file.path.as_str()),
+                            &file.source,
+                            nodes[callback_owner].body,
+                            &[call.span],
+                            &[],
+                        ) == Some(true),
+                    )
+                } else {
+                    synchronous_enclosure(file, call.span, &nodes[callback_owner], lookup)
+                };
+                let eager_owned = enclosure.is_some();
                 // The wrappers, not just their composed word: `tracked` is an
                 // attribution word with no schedule column, and the schedule is
                 // the dialect's to state for each wrapper the callback sits
@@ -2419,15 +2437,7 @@ fn discover_interprocedural_graph(
                     // The lower bound is proposed only where the call covers
                     // every normal completion of the owner's own body; the
                     // census proves both again from the producer's facts.
-                    if owned
-                        && solid_facts::ast::completion_call_cover(
-                            std::path::Path::new(file.path.as_str()),
-                            &file.source,
-                            nodes[callback_owner].body,
-                            &[call.span],
-                            &[],
-                        ) == Some(true)
-                    {
+                    if owned && enclosure == Some(true) {
                         contribution
                             .guaranteed_callback_parameters
                             .push((nodes[callback_owner].span, parameter));
@@ -3314,6 +3324,52 @@ fn package_rows_clear(rows: &[&ContractCallback], execution: &str) -> bool {
         && rows
             .iter()
             .all(|callback| callback.execution == execution && callback.clears_tracking)
+}
+
+/// ADR 0183: whether the call at `span` is reached from `owner`'s own body
+/// only through function literals that synchronous dialect slots run during
+/// their call (`createRoot(() => createMemo(fn))`,
+/// [`solid_dialect::Dialect::synchronous_callback_slot`]), each written as that
+/// slot's whole argument. `Some(covered)` when it is, `covered` being whether
+/// every level's call covers the normal completions of the body it sits in;
+/// `None` for any other enclosure.
+fn synchronous_enclosure(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    owner: &SummaryNode,
+    lookup: &SemanticLookup<'_>,
+) -> Option<bool> {
+    let cover = |body: Span, call: Span| {
+        solid_facts::ast::completion_call_cover(
+            std::path::Path::new(file.path.as_str()),
+            &file.source,
+            body,
+            &[call],
+            &[],
+        ) == Some(true)
+    };
+    let mut span = span;
+    let mut covered = true;
+    for _ in 0..8 {
+        let literal = crate::owners::containing_ast_function(&file.ast, span)?;
+        if literal.body == owner.body {
+            return Some(covered && cover(owner.body, span));
+        }
+        let (outer, index) = file.ast.arguments_containing(span).find(|(outer, index)| {
+            let argument = &outer.arguments[*index];
+            !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == literal.span
+        })?;
+        let primitive = lookup.primitive_at_call(file, outer.span)?;
+        if !lookup
+            .dialect
+            .synchronous_callback_slot(primitive, index, outer.arguments.len())
+        {
+            return None;
+        }
+        covered = covered && cover(literal.body, span);
+        span = outer.span;
+    }
+    None
 }
 
 /// ADR 0183: the eager owned-computation call (`createMemo(fn)`,

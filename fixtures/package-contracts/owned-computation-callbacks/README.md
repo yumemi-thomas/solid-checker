@@ -9,7 +9,10 @@ whole argument. The generator publishes that
 owner, and `min: 1` where the call covers every normal completion; the census
 proves both from the producer's facts or withdraws them.
 
-The `solid-js` stub is `owner-call-cover`'s.
+The `solid-js` stub is `owner-call-cover`'s, extended with `createMemo`,
+`createRoot` and `onSettled` verbatim from rc.9 (see its header). Every name
+imported here must be declared: an import naming an undeclared export leaves
+every name of that declaration unresolved.
 
 - `derive`: created owner, `min: 1`.
 - `deriveMaybe`: created owner, `min: 0` (the call is conditional).
@@ -22,3 +25,7 @@ The `solid-js` stub is `owner-call-cover`'s.
   conditional).
 - `deriveWrappedAsync`: no owner claim. The compute is async, so the call runs
   after an `await`, with no owner.
+- `deriveInRoot`: created owner, `min: 1`. The memo is created in a root body
+  `createRoot` runs during the call, and both calls cover their bodies.
+- `deriveWhenSettled`: no owner claim. `onSettled` runs its callback after
+  the call, which is not a synchronous slot.
