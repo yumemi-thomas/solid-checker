@@ -1155,6 +1155,59 @@ fn a_creates_closure_waits_for_every_owner_requirement_to_be_published() {
     );
 }
 
+/// ADR 0174: an open owner-requirement list publishes the guaranteed items
+/// proven beside it, each as an item with `min: 1`, and never closes
+/// `creates` -- even where the walk cleared the export. The list says another
+/// item may exist, and a closed `creates` would tell a consumer there is none.
+#[test]
+fn an_open_owner_requirement_list_publishes_its_items_and_keeps_creates_open() {
+    let summary = ContractExport {
+        kind: "function".into(),
+        creates_walk_clean: true,
+        owner_requirements: ContractClaim::Open,
+        open_owner_requirements: vec![
+            solid_reactive_ir::ContractOwnerRequirement {
+                operation: solid_reactive_ir::OwnerRequirementOperation::Effect,
+                guaranteed: true,
+            },
+            solid_reactive_ir::ContractOwnerRequirement {
+                operation: solid_reactive_ir::OwnerRequirementOperation::Cleanup,
+                guaranteed: true,
+            },
+        ],
+        ..ContractExport::default()
+    };
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(summary),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    assert!(export.claim_state(ClaimDomain::Creates).is_open());
+    assert!(!normalized.closure_candidates.iter().any(|candidate| {
+        candidate.path
+            == SemanticClaimPath::Domain(solid_reactive_ir::contract_semantics::ClaimPath::Call(
+                ClaimDomain::Creates,
+            ))
+    }));
+    for (domain, kind) in [
+        (ClaimDomain::Computations, OperationKind::Compute),
+        (ClaimDomain::Cleanups, OperationKind::Cleanup),
+    ] {
+        let claim = export.operation_claim(domain).unwrap();
+        assert!(
+            !claim.is_closed(),
+            "{domain:?} states items, never a closure"
+        );
+        let [id] = claim.items() else {
+            panic!("{domain:?} carries exactly the one guaranteed item");
+        };
+        let operation = export.operation(&id.0).unwrap();
+        assert_eq!(operation.kind, kind);
+        assert_eq!(operation.cardinality.min, Some(1));
+    }
+}
+
 /// `semantic-model.md` § creates' mechanical separator, asserted over the
 /// generator's own output rather than trusted: a `create` operation names what
 /// it registered. The generator now emits no `create` at all, which is the

@@ -175,6 +175,10 @@ fixtures/upstream-parity/.staging/
 # kind.
 !fixtures/package-contracts/unresolved-contract-export-attribution/node_modules/
 !fixtures/package-contracts/unresolved-contract-export-attribution/node_modules/**
+# ADR 0174: the same partial dependency contract, which opens every claim
+# domain of the exports beside a proven owner requirement.
+!fixtures/package-contracts/open-owner-requirements/node_modules/
+!fixtures/package-contracts/open-owner-requirements/node_modules/**
 # Attribution-soundness fixtures. Each needs the solid-js stub for dialect
 # selection; uncaptured-source-return additionally needs the partial
 # `uncharted-helpers` contract, which is what makes its callee uncontracted.

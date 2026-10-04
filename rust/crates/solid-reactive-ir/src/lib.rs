@@ -1204,6 +1204,14 @@ pub struct ContractExport {
     /// callback-domain closure never strengthens a possible invocation.
     pub inline_accessor_invocations: BTreeMap<usize, bool>,
     pub owner_requirements: ContractClaim<Vec<ContractOwnerRequirement>>,
+    /// ADR 0174: the guaranteed owner requirements still proven while
+    /// [`Self::owner_requirements`] is `Open`. Opening a list says another item
+    /// may exist; it does not disprove one this export's own body makes on
+    /// every normal completion. The generator publishes them as items, and the
+    /// list stays incomplete, so `creates` stays open. Empty whenever the claim
+    /// is `Known`, which carries its own items. Generation only: never decoded
+    /// from or encoded into a package-contract document.
+    pub open_owner_requirements: Vec<ContractOwnerRequirement>,
     pub async_behavior: ContractClaim<String>,
     /// Wire-independent open domains retained when normalized partial
     /// knowledge is projected into the existing analysis indexes. This field

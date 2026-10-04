@@ -1092,8 +1092,11 @@ fn normalize_export(
         // withhold. The scope decision refuses the whole derivation, and the
         // audits for these exact bytes state the domains themselves.
         _ if !scope.publishes_bootstrapped_reactive_domains() => None,
-        ContractClaim::Open => None,
-        ContractClaim::Known(requirements) => Some(requirements.as_slice()),
+        // ADR 0174: an open list still publishes the guaranteed items proven
+        // beside it. They are items, never a closure: see
+        // `requirements_published` below.
+        ContractClaim::Open => Some((summary.open_owner_requirements.as_slice(), false)),
+        ContractClaim::Known(requirements) => Some((requirements.as_slice(), true)),
     };
     let mut requirement_cleanups = Vec::new();
     let mut requirement_computations = Vec::new();
@@ -1101,9 +1104,11 @@ fn normalize_export(
     // owner census decided, and each requirement it found was published. A
     // consumer reads a closed `creates` as "no owner requirement beyond the
     // published items" (`project_owner_requirements`), so `creates` may close
-    // only where that reading is true; see the `creates` gate below.
-    let mut requirements_published = owner_requirements.is_some();
-    for (index, requirement) in owner_requirements.unwrap_or_default().iter().enumerate() {
+    // only where that reading is true; see the `creates` gate below. An open
+    // list's items are published, but the list is not complete, so it never
+    // counts as published.
+    let (owner_requirements, mut requirements_published) = owner_requirements.unwrap_or_default();
+    for (index, requirement) in owner_requirements.iter().enumerate() {
         let id = OperationId(format!("{prefix}owner-requirement-{index}"));
         match owner_requirement_operation(&id, requirement) {
             Ok(operation) => {

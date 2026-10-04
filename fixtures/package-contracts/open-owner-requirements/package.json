@@ -1,0 +1,17 @@
+{
+  "name": "open-owner-requirements",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "partial-contract-package": "1.0.0"
+  },
+  "peerDependencies": {
+    "solid-js": "^2.0.0-rc.9"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  }
+}

@@ -310,7 +310,11 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // hand-stated document, its consumer half.
       // 175 adds fixed-structural-return-consumer's hand-stated document,
       // ADR 0172's mutation and whole-parameter projection controls.
-      stableMainDocuments: 175,
+      //
+      // 177 adds open-owner-requirements' main document, ADR 0174's pin that
+      // an open owner-requirement list keeps its guaranteed items, and its
+      // copy of partial-contract-package's partial contract.
+      stableMainDocuments: 177,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
@@ -320,6 +324,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       checkedCorpusShortcuts: 0,
       callerProofIssuancePaths: 0,
       automaticCertificationWorkflows: 1,
+      // 22 with open-owner-requirements, whose catalog is its sibling
+      // unresolved-contract-export-attribution's, byte for byte: the refused
+      // policy-1 receipt is what opens every claim domain there (ADR 0174).
+      //
       // 22 with package-repeated-open-claim, whose catalog is deliberately
       // `obsolete-policy1` like its sibling's: the collapse is about how
       // repeated obligations are reported, not about which gate raised them.
@@ -328,7 +336,7 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // the Solid 1.x retirement deleted (ADR 0110). Like the main-document
       // count above, this enumerates checked-in files rather than measuring an
       // analysis answer.
-      obsoletePolicy1Catalogs: 21,
+      obsoletePolicy1Catalogs: 22,
       proofVersion: 2,
       receiptVersion: 2,
       policyStatus: "active",

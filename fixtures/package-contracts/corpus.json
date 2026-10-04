@@ -84,6 +84,7 @@
     "observer-and-string",
     "opaque-callback-chain",
     "open-dynamic-import-attribution",
+    "open-owner-requirements",
     "parameter-member-forwarded",
     "parameter-member-read",
     "parameter-member-read-path",

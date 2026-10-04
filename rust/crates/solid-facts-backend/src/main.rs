@@ -4946,7 +4946,13 @@ fn mark_summary_claims_unknown(
         marked = true;
     }
     if domains.owner_requirements {
-        summary.owner_requirements = unknown_contract_claim();
+        // ADR 0174: the obligation leaves the list incomplete; it does not
+        // disprove an item the export's own body makes on every call.
+        if let solid_reactive_ir::ContractClaim::Known(requirements) =
+            std::mem::replace(&mut summary.owner_requirements, unknown_contract_claim())
+        {
+            retain_open_owner_requirements(&mut summary.open_owner_requirements, &requirements);
+        }
         marked = true;
     }
     if domains.async_behavior {
@@ -4954,6 +4960,47 @@ fn mark_summary_claims_unknown(
         marked = true;
     }
     marked
+}
+
+/// ADR 0174: adds the guaranteed items of `requirements` to an open list's
+/// retained items. A possible (`guaranteed: false`) item is dropped: under an
+/// open list it would only add a proof obligation the open list already
+/// leaves.
+fn retain_open_owner_requirements(
+    retained: &mut Vec<solid_reactive_ir::ContractOwnerRequirement>,
+    requirements: &[solid_reactive_ir::ContractOwnerRequirement],
+) {
+    for requirement in requirements
+        .iter()
+        .filter(|requirement| requirement.guaranteed)
+    {
+        insert_owner_requirement(retained, requirement.operation, true);
+    }
+}
+
+/// Adds one requirement to a list, one item per operation, keeping the
+/// strongest lower bound and the stable operation order.
+fn insert_owner_requirement(
+    requirements: &mut Vec<solid_reactive_ir::ContractOwnerRequirement>,
+    operation: solid_reactive_ir::OwnerRequirementOperation,
+    guaranteed: bool,
+) {
+    match requirements
+        .iter_mut()
+        .find(|existing| existing.operation == operation)
+    {
+        Some(existing) => existing.guaranteed |= guaranteed,
+        None => requirements.push(solid_reactive_ir::ContractOwnerRequirement {
+            operation,
+            guaranteed,
+        }),
+    }
+    requirements.sort_by_key(|requirement| match requirement.operation {
+        solid_reactive_ir::OwnerRequirementOperation::Effect => 0,
+        solid_reactive_ir::OwnerRequirementOperation::Cleanup => 1,
+        solid_reactive_ir::OwnerRequirementOperation::Boundary => 2,
+        solid_reactive_ir::OwnerRequirementOperation::SettledCleanup => 3,
+    });
 }
 
 fn unknown_contract_claim<T>() -> solid_reactive_ir::ContractClaim<T> {
@@ -9618,28 +9665,26 @@ fn attach_generated_owner_requirements(
         .unwrap_or_default();
     let Some(owner_requirements) = summary.owner_requirements.known_mut() else {
         // An inherited/re-exported unknown remains unknown. Adding the local
-        // positive rows would not prove that the list is complete.
+        // positive rows would not prove that the list is complete, but it
+        // does not disprove them either (ADR 0174): a guaranteed row is kept
+        // beside the open list.
+        if summary.kind == "function" {
+            for operation in operations
+                .iter()
+                .filter(|operation| guaranteed.contains(*operation))
+            {
+                insert_owner_requirement(&mut summary.open_owner_requirements, *operation, true);
+            }
+        }
         return summary;
     };
     for operation in operations {
-        let is_guaranteed = guaranteed.contains(operation);
-        match owner_requirements
-            .iter_mut()
-            .find(|existing| existing.operation == *operation)
-        {
-            Some(existing) => existing.guaranteed |= is_guaranteed,
-            None => owner_requirements.push(solid_reactive_ir::ContractOwnerRequirement {
-                operation: *operation,
-                guaranteed: is_guaranteed,
-            }),
-        }
+        insert_owner_requirement(
+            owner_requirements,
+            *operation,
+            guaranteed.contains(operation),
+        );
     }
-    owner_requirements.sort_by_key(|requirement| match requirement.operation {
-        solid_reactive_ir::OwnerRequirementOperation::Effect => 0,
-        solid_reactive_ir::OwnerRequirementOperation::Cleanup => 1,
-        solid_reactive_ir::OwnerRequirementOperation::Boundary => 2,
-        solid_reactive_ir::OwnerRequirementOperation::SettledCleanup => 3,
-    });
     summary
 }
 
@@ -10041,10 +10086,34 @@ fn unify_runtime_alias_summaries(
     }
     for names in names_by_identity.values().filter(|names| names.len() > 1) {
         let mut merged = solid_reactive_ir::ContractExport::default();
+        // ADR 0174: every name is the same runtime function, so a requirement
+        // proven under one is proven for all of them. The union is complete
+        // only where every name's list is.
+        let mut owner_requirements_open = false;
+        let mut owner_requirements = Vec::new();
         for name in names {
             let Some(summary) = exports.get(name) else {
                 continue;
             };
+            match &summary.owner_requirements {
+                solid_reactive_ir::ContractClaim::Known(requirements) => {
+                    for requirement in requirements {
+                        insert_owner_requirement(
+                            &mut owner_requirements,
+                            requirement.operation,
+                            requirement.guaranteed,
+                        );
+                    }
+                }
+                solid_reactive_ir::ContractClaim::Open => owner_requirements_open = true,
+            }
+            for requirement in &summary.open_owner_requirements {
+                insert_owner_requirement(
+                    &mut owner_requirements,
+                    requirement.operation,
+                    requirement.guaranteed,
+                );
+            }
             if summary.kind == "function" {
                 merged.kind = "function".into();
             } else if merged.kind.is_empty() {
@@ -10103,6 +10172,15 @@ fn unify_runtime_alias_summaries(
                 _ => {}
             }
         }
+        if owner_requirements_open {
+            merged.owner_requirements = solid_reactive_ir::ContractClaim::Open;
+            retain_open_owner_requirements(
+                &mut merged.open_owner_requirements,
+                &owner_requirements,
+            );
+        } else {
+            merged.owner_requirements = solid_reactive_ir::ContractClaim::Known(owner_requirements);
+        }
         if let Some(callbacks) = merged.callbacks.known_mut() {
             callbacks.sort_by_key(|callback| (callback.parameter, callback.execution.clone()));
         }
@@ -10117,6 +10195,138 @@ fn unify_runtime_alias_summaries(
         }
         for name in names {
             exports.insert(name.clone(), merged.clone());
+        }
+    }
+}
+
+#[cfg(test)]
+mod open_owner_requirement_tests {
+    use std::collections::{BTreeMap, HashMap};
+
+    use solid_reactive_ir::{
+        ContractClaim, ContractExport, ContractOwnerRequirement, OwnerRequirementOperation,
+    };
+
+    use super::{
+        UnresolvedClaimDomains, mark_summary_claims_unknown, unify_runtime_alias_summaries,
+    };
+
+    fn requirement(
+        operation: OwnerRequirementOperation,
+        guaranteed: bool,
+    ) -> ContractOwnerRequirement {
+        ContractOwnerRequirement {
+            operation,
+            guaranteed,
+        }
+    }
+
+    fn function(
+        owner_requirements: ContractClaim<Vec<ContractOwnerRequirement>>,
+    ) -> ContractExport {
+        ContractExport {
+            kind: "function".into(),
+            owner_requirements,
+            ..ContractExport::default()
+        }
+    }
+
+    fn entity(runtime_identity: &str) -> typefacts::EntityFact {
+        serde_json::from_value(serde_json::json!({
+            "location": { "path": "index.js", "startByte": 0, "endByte": 1 },
+            "runtimeIdentity": runtime_identity,
+        }))
+        .expect("an entity with only a location and a runtime identity")
+    }
+
+    // ADR 0174: opening the list keeps what the export's body does on every
+    // call, and drops what it only may do.
+    #[test]
+    fn opening_the_list_keeps_its_guaranteed_items() {
+        let mut summary = function(ContractClaim::Known(vec![
+            requirement(OwnerRequirementOperation::Effect, false),
+            requirement(OwnerRequirementOperation::Cleanup, true),
+        ]));
+        assert!(mark_summary_claims_unknown(
+            &mut summary,
+            UnresolvedClaimDomains::all()
+        ));
+        assert!(summary.owner_requirements.is_open());
+        assert_eq!(
+            summary.open_owner_requirements,
+            vec![requirement(OwnerRequirementOperation::Cleanup, true)]
+        );
+    }
+
+    // Before ADR 0174 the merge rebuilt every alias from an empty summary, and
+    // `Known(vec![])` is a list that says there is nothing.
+    #[test]
+    fn aliases_of_one_function_carry_the_union_of_their_lists() {
+        let identity = entity("module#registerCleanup");
+        let entities = HashMap::from([
+            ("registerCleanup".to_owned(), &identity),
+            ("addCleanup".to_owned(), &identity),
+        ]);
+        let mut exports = BTreeMap::from([
+            (
+                "registerCleanup".to_owned(),
+                function(ContractClaim::Known(vec![requirement(
+                    OwnerRequirementOperation::Cleanup,
+                    true,
+                )])),
+            ),
+            (
+                "addCleanup".to_owned(),
+                function(ContractClaim::Known(vec![requirement(
+                    OwnerRequirementOperation::Effect,
+                    false,
+                )])),
+            ),
+        ]);
+        unify_runtime_alias_summaries(&entities, &mut exports);
+        for summary in exports.values() {
+            assert_eq!(
+                summary.owner_requirements,
+                ContractClaim::Known(vec![
+                    requirement(OwnerRequirementOperation::Effect, false),
+                    requirement(OwnerRequirementOperation::Cleanup, true),
+                ])
+            );
+            assert!(summary.open_owner_requirements.is_empty());
+        }
+    }
+
+    // One open name opens the merged list; the guaranteed items of every name
+    // stay beside it.
+    #[test]
+    fn one_open_alias_opens_the_merged_list_and_keeps_the_guaranteed_items() {
+        let identity = entity("module#registerCleanup");
+        let entities = HashMap::from([
+            ("registerCleanup".to_owned(), &identity),
+            ("addCleanup".to_owned(), &identity),
+        ]);
+        let mut open = function(ContractClaim::Open);
+        open.open_owner_requirements = vec![requirement(OwnerRequirementOperation::Effect, true)];
+        let mut exports = BTreeMap::from([
+            (
+                "registerCleanup".to_owned(),
+                function(ContractClaim::Known(vec![
+                    requirement(OwnerRequirementOperation::Cleanup, true),
+                    requirement(OwnerRequirementOperation::Boundary, false),
+                ])),
+            ),
+            ("addCleanup".to_owned(), open),
+        ]);
+        unify_runtime_alias_summaries(&entities, &mut exports);
+        for summary in exports.values() {
+            assert!(summary.owner_requirements.is_open());
+            assert_eq!(
+                summary.open_owner_requirements,
+                vec![
+                    requirement(OwnerRequirementOperation::Effect, true),
+                    requirement(OwnerRequirementOperation::Cleanup, true),
+                ]
+            );
         }
     }
 }
