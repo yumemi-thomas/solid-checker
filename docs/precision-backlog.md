@@ -1,5 +1,22 @@
 # Precision backlog
 
+## A package registration inside a leaf owner is forbidden (2026-10-05)
+
+ADR 0179. A call inside `createTrackedEffect` or an owner-backed `onSettled`
+to a package export whose accepted contract states a cleanup or a computation
+on the caller's owner, at the call and on every call, is a proven
+`leaf-owner-forbidden-call` violation.
+
+- **Gained:** two ledger violations (66 -> 68 of 123), each runtime-detected,
+  no twin flagged: `createEventListener` and `createResizeObserver` inside
+  `createTrackedEffect`.
+- **Still open:**
+  - `createTimer` inside a leaf: its cleanup is `min: 0` (the cleanup/effect
+    disjunction);
+  - a may-register or silent export inside a leaf keeps the
+    unresolved-callback obligation, though the contract decides the silent
+    one.
+
 ## An open returns claim keeps its described return (2026-10-04)
 
 ADR 0178. An unresolved call that opens `returns` no longer discards the

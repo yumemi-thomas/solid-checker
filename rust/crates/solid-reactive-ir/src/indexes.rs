@@ -659,6 +659,17 @@ impl<'a> SemanticLookup<'a> {
             .map(Vec::as_slice)
     }
 
+    /// ADR 0179: see [`super::ContractExport::leaf_forbidden_operations`].
+    pub(super) fn contract_leaf_forbidden_operations(
+        &self,
+        symbol: &str,
+    ) -> Option<&[super::OwnerRequirementOperation]> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .map(|binding| binding.summary.leaf_forbidden_operations.as_slice())
+    }
+
     pub(super) fn has_contract_binding(&self, symbol: &SymbolId) -> bool {
         self.resolved_contracts.by_symbol.contains_key(symbol)
     }

@@ -164,6 +164,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     .to_owned();
                 for kind in kinds {
                     operations.push(LeafOwnerOperation {
+                        through_contract: false,
                         kind,
                         owner: owner.to_string(),
                         location: location(file.path.shared(), callback_span),
@@ -177,6 +178,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     continue;
                 }
                 operations.push(LeafOwnerOperation {
+                    through_contract: false,
                     kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
                     owner: owner.to_string(),
                     location: location(file.path.shared(), callback_span),
@@ -203,6 +205,7 @@ pub(super) fn leaf_owner_operations_for_file(
             }
             let callback_span = file.ast.peel_ts_sugar_span(region);
             operations.push(LeafOwnerOperation {
+                through_contract: false,
                 kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
                 owner: owner.to_string(),
                 location: location(file.path.shared(), callback_span),
@@ -228,6 +231,37 @@ pub(super) fn leaf_owner_operations_for_file(
             let primitive =
                 call_primitive_name(callback_file, call, entities, symbol_names, dialect);
             let Some(primitive) = primitive else {
+                // ADR 0179: a package export whose accepted contract states a
+                // registration on its caller's owner, at the call and on every
+                // call, performs it here -- inside the leaf scope.
+                if let Some(registrations) = lookup
+                    .callee_symbol(callback_file, call.callee)
+                    .and_then(|symbol| lookup.contract_leaf_forbidden_operations(symbol))
+                    .filter(|registrations| !registrations.is_empty())
+                {
+                    let via = callback_file
+                        .source_text(call.callee)
+                        .unwrap_or_default()
+                        .to_owned();
+                    for registration in registrations {
+                        operations.push(LeafOwnerOperation {
+                            through_contract: true,
+                            kind: match registration {
+                                crate::OwnerRequirementOperation::Cleanup => {
+                                    crate::LeafOwnerOperationKind::Cleanup
+                                }
+                                _ => crate::LeafOwnerOperationKind::Primitive(via.clone()),
+                            },
+                            owner: owner.to_string(),
+                            location: location(callback_file.path.shared(), call.callee),
+                            fix: None,
+                            call_site_gate: call_site_gate.clone(),
+                            uncertain: false,
+                            via: Some(via.clone()),
+                        });
+                    }
+                    continue;
+                }
                 // Not a primitive: an exactly-resolved in-project helper
                 // called here runs its synchronous extent in this leaf
                 // scope, so a forbidden operation inside it executes here.
@@ -250,6 +284,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     .to_owned();
                 for kind in kinds {
                     operations.push(LeafOwnerOperation {
+                        through_contract: false,
                         kind,
                         owner: owner.to_string(),
                         location: location(callback_file.path.shared(), call.callee),
@@ -261,6 +296,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 }
                 if !complete {
                     operations.push(LeafOwnerOperation {
+                        through_contract: false,
                         kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
                         owner: owner.to_string(),
                         location: location(callback_file.path.shared(), call.callee),
@@ -288,6 +324,7 @@ pub(super) fn leaf_owner_operations_for_file(
             .then(|| terminal_cleanup_fix(callback_file, leaf_callback.span, call))
             .flatten();
             operations.push(LeafOwnerOperation {
+                through_contract: false,
                 kind,
                 owner: owner.to_string(),
                 location: location(callback_file.path.shared(), call.callee),

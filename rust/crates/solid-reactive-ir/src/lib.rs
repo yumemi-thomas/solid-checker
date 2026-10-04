@@ -470,6 +470,10 @@ pub struct Fix {
 pub struct LeafOwnerOperation {
     pub kind: LeafOwnerOperationKind,
     pub owner: String,
+    /// ADR 0179: the operation is a registration a package export's accepted
+    /// contract states it makes on every call; [`Self::via`] names the export.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub through_contract: bool,
     pub location: Location,
     pub fix: Option<Fix>,
     /// When set, this leaf owner only materializes if the owner call at this
@@ -1227,6 +1231,12 @@ pub struct ContractExport {
     /// `Known`, which carries its own return. Generation only: never decoded
     /// from or encoded into a package-contract document.
     pub open_return: Option<ContractReturn>,
+    /// ADR 0179: the owner registrations this export makes on its caller's
+    /// owner, at the call and on the same stack, on every call: unguarded,
+    /// `ambient-at-call`, call-scoped, `min >= 1`. Inside a leaf owner each is
+    /// a forbidden operation the runtime throws on. Projected from an accepted
+    /// document only; empty for a local summary.
+    pub leaf_forbidden_operations: Vec<OwnerRequirementOperation>,
     pub async_behavior: ContractClaim<String>,
     /// Wire-independent open domains retained when normalized partial
     /// knowledge is projected into the existing analysis indexes. This field

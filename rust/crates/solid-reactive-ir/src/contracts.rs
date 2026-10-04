@@ -200,6 +200,7 @@ pub fn project_export_semantics(
         owner_requirements,
         open_owner_requirements: Vec::new(),
         open_return: None,
+        leaf_forbidden_operations: project_leaf_forbidden_operations(export),
         async_behavior,
         open_claims,
         creates_closed_empty,
@@ -848,6 +849,61 @@ fn project_owner_requirements(
     }
 }
 
+/// ADR 0179: the owner registrations an accepted export makes on its
+/// caller's owner on every call, synchronously at the call: each operation in
+/// `creates`, `cleanups` or `computations` that imposes an owner requirement
+/// ([`Operation::imposes_owner_requirement`]), takes the owner current at the
+/// call (`ambient-at-call`), is unguarded, is triggered by and runs at the
+/// call on the same stack, and is counted per call with `min >= 1`.
+///
+/// Stricter than [`project_owner_requirements`]' `guaranteed`, which answers
+/// the missing-owner question and reads the count alone: a leaf owner forbids
+/// a registration *while it is current*, so the registration must happen in
+/// the call's own synchronous extent, against the owner the caller has.
+fn project_leaf_forbidden_operations(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> Vec<OwnerRequirementOperation> {
+    use crate::contract_semantics::{CardinalityScope, Event, OwnerSource, Schedule, Trigger};
+    let mut operations = Vec::new();
+    for domain in [
+        ClaimDomain::Creates,
+        ClaimDomain::Cleanups,
+        ClaimDomain::Computations,
+    ] {
+        let Some(claim) = export.operation_claim(domain) else {
+            continue;
+        };
+        for operation in claim
+            .items()
+            .iter()
+            .filter_map(|id| export.operation(&id.0))
+        {
+            if !(operation.imposes_owner_requirement()
+                && operation.owner.source == OwnerSource::AmbientAtCall
+                && operation.guard.is_none()
+                && operation.trigger == Some(Trigger::Event(Event::Call))
+                && operation.at == Some(Event::Call)
+                && operation.schedule == Some(Schedule::SameStack)
+                && operation.cardinality.scope == Some(CardinalityScope::Call)
+                && operation.cardinality.min.is_some_and(|min| min >= 1))
+            {
+                continue;
+            }
+            let kind = match operation.kind {
+                OperationKind::Cleanup | OperationKind::Dispose => {
+                    OwnerRequirementOperation::Cleanup
+                }
+                _ => OwnerRequirementOperation::Effect,
+            };
+            if !operations.contains(&kind) {
+                operations.push(kind);
+            }
+        }
+    }
+    operations.sort_by_key(|operation| format!("{operation:?}"));
+    operations
+}
+
 /// Which published operation imposes an owner obligation on the *caller*.
 ///
 /// The four shapes here are the ones a consumer can actually meet today: the
@@ -976,6 +1032,66 @@ mod owner_requirement_projection_tests {
             disposals: KnowledgeSet::Unknown,
             computations: KnowledgeSet::Unknown,
         }
+    }
+
+    /// ADR 0179: only an unguarded, `ambient-at-call`, synchronous,
+    /// call-scoped registration counted `min >= 1` is leaf-forbidden.
+    #[test]
+    fn a_leaf_forbidden_registration_is_one_made_at_the_call_on_every_call() {
+        let requiring = |id: &str, kind: OperationKind, min: u32| {
+            let mut operation = operation(id, kind, &[]);
+            operation.owner = OwnerRelation {
+                source: OwnerSource::AmbientAtCall,
+                requirements: OwnerRequirements {
+                    owner: Requirement::Required,
+                    ..OwnerRelation::default().requirements
+                },
+                ..OwnerRelation::default()
+            };
+            operation.cardinality.min = Some(min);
+            operation
+        };
+        let project = |operations: Vec<Operation>| {
+            let mut claims = claims();
+            claims.cleanups = KnowledgeSet::Partial(
+                operations
+                    .iter()
+                    .filter(|operation| operation.kind == OperationKind::Cleanup)
+                    .map(|operation| operation.id.clone())
+                    .collect(),
+            );
+            claims.computations = KnowledgeSet::Partial(
+                operations
+                    .iter()
+                    .filter(|operation| operation.kind == OperationKind::Compute)
+                    .map(|operation| operation.id.clone())
+                    .collect(),
+            );
+            super::project_leaf_forbidden_operations(&export(claims, operations, Vec::new()))
+        };
+        assert_eq!(
+            project(vec![
+                requiring("cleanup", OperationKind::Cleanup, 1),
+                requiring("compute", OperationKind::Compute, 1),
+            ]),
+            vec![
+                OwnerRequirementOperation::Cleanup,
+                OwnerRequirementOperation::Effect
+            ]
+        );
+        assert!(
+            project(vec![requiring("cleanup", OperationKind::Cleanup, 0)]).is_empty(),
+            "a registration that may not happen"
+        );
+        let mut later = requiring("cleanup", OperationKind::Cleanup, 1);
+        later.owner.source = OwnerSource::AmbientAtExecution;
+        assert!(project(vec![later]).is_empty(), "the owner current later");
+        let mut deferred = requiring("cleanup", OperationKind::Cleanup, 1);
+        deferred.schedule = Some(Schedule::Queued);
+        assert!(
+            project(vec![deferred]).is_empty(),
+            "not on the call's stack"
+        );
     }
 
     #[test]
@@ -3363,6 +3479,7 @@ fn contract_export_function(
         owner_requirements: Vec::new().into(),
         open_owner_requirements: Vec::new(),
         open_return: None,
+        leaf_forbidden_operations: Vec::new(),
         inline_accessor_invocations: BTreeMap::new(),
         returns: returns.into(),
         async_behavior: if node.r#async {

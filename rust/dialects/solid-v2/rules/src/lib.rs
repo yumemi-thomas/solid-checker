@@ -282,7 +282,64 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
     ])
 }
 
+/// ADR 0179: the wording for a registration a package export's accepted
+/// contract states it makes on its caller's owner on every call. It names the
+/// export and what the contract states, and not a runtime code: which
+/// forbidden-scope error the runtime raises first depends on the export's
+/// internals, of which the contract states only the guaranteed registration.
+fn leaf_contract_registration_wording(
+    operation: &solid_reactive_ir::LeafOwnerOperation,
+    export: &str,
+) -> FindingWording {
+    let registration = match operation.kind {
+        LeafOwnerOperationKind::Cleanup => "a cleanup",
+        _ => "a reactive computation",
+    };
+    let mut message = format!(
+        "{export}() registers {registration} on its caller's owner on every call, and it is called inside {}, a leaf owner that forbids it; Solid throws here in dev",
+        operation.owner
+    );
+    let hint = format!(
+        "Call {export}() in the component body (or another owning scope) instead of inside {}.",
+        operation.owner
+    );
+    let mut evidence = vec![
+        EvidenceStep {
+            message: format!(
+                "the accepted contract for {export} states {registration} on the caller's owner, at the call, on every call"
+            ),
+            location: Some(operation.location.clone()),
+        },
+        EvidenceStep {
+            message: format!(
+                "the call is in the synchronous extent of the {} callback",
+                operation.owner
+            ),
+            location: Some(operation.location.clone()),
+        },
+    ];
+    if operation.uncertain {
+        message.push_str(
+            "; solid-checker cannot prove this call runs under a live children-capable owner (out-of-band the callback is a plain queued function and this does not throw), so the finding is a proof obligation",
+        );
+        evidence.push(EvidenceStep {
+            message: format!(
+                "the {} call site's owner context cannot be proven (exported helper or conditional owner)",
+                operation.owner
+            ),
+            location: operation.call_site_gate.clone(),
+        });
+    }
+    FindingWording::new(Rule::LeafOwnerForbiddenCall.metadata(), message, hint)
+        .with_evidence(evidence)
+}
+
 fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> FindingWording {
+    if operation.through_contract
+        && let Some(export) = &operation.via
+    {
+        return leaf_contract_registration_wording(operation, export);
+    }
     let (rule, mut message, hint) = match &operation.kind {
         LeafOwnerOperationKind::Cleanup => (
             Rule::LeafOwnerForbiddenCall,
