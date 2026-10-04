@@ -1,5 +1,20 @@
 # Precision backlog
 
+## The tier carries what the app corpus installs (2026-10-05)
+
+ADR 0186. The catalogs from in-place certification of the 38 apps are bundled
+into the compiled-in tier, keyed by the exact dependency environment each was
+proven in.
+
+- **Gained:** the plain 38-app browser sweep finds 10 more true-positive
+  violations (264 -> 273, +10/−1) with no local certification step.
+- **Still open:**
+  - a bundle applies only to an identical install, so any other dependency
+    version or integrity still needs in-place certification. Matching
+    environments that differ only where a contract's claims cannot be
+    affected is the next lever;
+  - node-host environments are not bundled yet.
+
 ## A Bun isolated-store install is selected by name and version (2026-10-05)
 
 ADR 0185. Bun's isolated linker installs a package at
