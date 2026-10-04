@@ -124,8 +124,9 @@ site (`misuse-runtime-ledger.mjs`, `rust/target/misuse-runtime-v3.json`,
     - 5 lose a proven claim: an import obligation marks the export's owner
       requirements `Open`, or the runtime-alias merge rebuilds the export
       without them (`main.rs` `mark_summary_claims_unknown`,
-      `unify_runtime_alias_summaries`). Keeping positive items through both is
-      the proposed next change.
+      `unify_runtime_alias_summaries`). ADR 0174 keeps positive items through
+      both. Four of the five now draw a static violation; see
+      `2026-10-04-open-owner-requirements.md`.
     - 3 need ADR 0173's same-role cover.
     - The rest are argument- or capability-conditional, or a cleanup/effect
       disjunction.

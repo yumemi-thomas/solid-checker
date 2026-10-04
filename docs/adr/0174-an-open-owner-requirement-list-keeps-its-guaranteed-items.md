@@ -1,7 +1,7 @@
 # ADR 0174: an open owner-requirement list keeps its guaranteed items
 
 Date: 2026-10-04. Status: implemented. No contract or Type Facts schema
-change.
+change; the accepted tier is regenerated for the browser host.
 
 ## Context
 
@@ -88,3 +88,12 @@ these two paths.
     open);
   - `an_open_owner_requirement_list_publishes_its_items_and_keeps_creates_open`
     (the emitter, including a clean `creates` walk that must not close).
+- Measurement
+  ([`2026-10-04-open-owner-requirements.md`](../package-contract-v2/phase22/2026-10-04-open-owner-requirements.md)),
+  with the browser tier regenerated:
+  - The ledger's static violations go from 45 to 49 of 123. The four new
+    ones are `createElementSize`, `createRAF`, `createFullscreen` and
+    `createRootPool`, and the runtime detects each of them.
+  - No correct twin is flagged, and the 48-project sweep adds nothing.
+  - `createSwitchTransition` is proposed but withdrawn by the census, the
+    fail-closed outcome.

@@ -1,5 +1,36 @@
 # Precision backlog
 
+## Open owner-requirement lists keep their guaranteed items (2026-10-04)
+
+ADR 0174. Two generation paths dropped a proven `min: 1` owner requirement
+before it reached a package contract:
+
+- an unresolved obligation that opened the export's `ownerRequirements`;
+- the runtime-alias merge, which rebuilt every alias from an empty summary.
+
+Both now keep the item. `creates` stays open, so nothing a consumer reads as
+an absence is closed. Pinned by
+`fixtures/package-contracts/open-owner-requirements` and the
+`open_owner_requirement_tests` unit tests.
+
+- **Gained:** four static `missing-owner` violations on the misuse ledger,
+  each also detected at runtime (45 -> 49 of 123): `createElementSize`,
+  `createRAF`, `createFullscreen`, `createRootPool`. No correct twin is
+  flagged. The 48-project sweep adds and removes nothing, host-free or
+  browser. Details in
+  `docs/package-contract-v2/phase22/2026-10-04-open-owner-requirements.md`.
+- **Open:** `transition-group` `createSwitchTransition`. The proposal now
+  carries its `min: 1` computation, but the census withdraws it by name. The
+  producer does not state its `createRenderEffect` call `unconditional`,
+  although the generator's host-folded syntax walk does.
+- **Deliberately not gained:** the seven `makeEventListener` / `tryOnCleanup`
+  ledger cases. Those registrations tolerate a missing owner, so no
+  guaranteed item reaches the caller, and the runtime is silent on them too.
+  Their ledger expectation is what is wrong.
+- **Still open:** a possible (`min: 0`) item under an open list is not
+  published. The consumer would only turn it into a proof obligation, which
+  the open list already is.
+
 ## Held-out sweep patterns (2026-10-04)
 
 The held-out sweep ran on 81 projects in 40 repositories never used to develop
