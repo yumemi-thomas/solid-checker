@@ -28253,18 +28253,22 @@ mod tests {
             .into_iter()
             .find(|archive| archive.version == "2.0.0-rc.9")
             .unwrap();
-        for (name, version, integrity, manifest) in [
+        // ADR 0175: `solid-js@2.0.0-rc.9`'s own factories are audited for the
+        // row; an older signals release is not.
+        for (name, version, integrity, manifest, audited) in [
             (
                 "@solidjs/signals",
                 "2.0.0-rc.3",
                 SIGNALS_INTEGRITY,
                 audited_rc3_manifest("solidjs-signals"),
+                false,
             ),
             (
                 "solid-js",
                 "2.0.0-rc.9",
                 solid_js_rc9.integrity,
                 audited_phase0_manifest("rc9", "solid-js"),
+                true,
             ),
         ] {
             let other = archive_snapshot(
@@ -28280,10 +28284,19 @@ mod tests {
                 snapshot: &other,
                 dependency: true,
             }];
-            let error =
-                computed_owned_accessor_witness(&source(json!({})), &own, &certified, &other_roots)
+            let witnessed =
+                computed_owned_accessor_witness(&source(json!({})), &own, &certified, &other_roots);
+            if audited {
+                let witness = witnessed.expect("solid-js rc.9's createMemo is audited for the row");
+                assert!(
+                    witness.starts_with("computed-owned-accessor:solid-js@2.0.0-rc.9#"),
+                    "{witness}"
+                );
+            } else {
+                let error = witnessed
                     .expect_err("an audited archive is not an audit of this computed-accessor row");
-            assert!(error.contains("no computed accessor read row"), "{error}");
+                assert!(error.contains("no computed accessor read row"), "{error}");
+            }
         }
         for options in [
             json!({"argumentsPrimitiveSyntax": [false, true],
@@ -28337,10 +28350,72 @@ mod tests {
                 .map(|(kind, _)| kind),
             Ok(DescribedRead::OwnedSignal)
         );
+        // ADR 0175: a first argument grammar cannot rule out as a function may
+        // take `createSignal`'s memo path. The inert row refuses it; the
+        // computed row, which is true of both paths, describes it.
+        let undecided = source(json!({
+            "target": "symbol:createSignal",
+            "targetName": "createSignal",
+            "targetPath": [{"kind": "tuple", "index": 0}],
+            "argumentsPrimitiveSyntax": [false],
+            "argumentsNotFunctionSyntax": [false],
+        }));
+        assert_eq!(
+            owned_returned_accessor_witness(&undecided, &signal_own, &certified, &roots)
+                .map(|(kind, _)| kind),
+            Ok(DescribedRead::OwnedMemo)
+        );
+        // ... with no options, or callback-free ones, and never with options
+        // the grammar cannot clear: the memo path keeps `equals`.
+        let undecided_with = |options: serde_json::Value| {
+            let mut traced = serde_json::to_value(&undecided).unwrap();
+            for (key, value) in options.as_object().unwrap() {
+                traced[key] = value.clone();
+            }
+            serde_json::from_value::<typefacts::ImplementationValueSource>(traced).unwrap()
+        };
+        assert_eq!(
+            owned_returned_accessor_witness(
+                &undecided_with(json!({
+                    "argumentsPrimitiveSyntax": [false, false],
+                    "argumentsNonSpreadSyntax": [true, true],
+                    "argumentsNotFunctionSyntax": [false, true],
+                    "argumentsPlainOptionsSyntax": [false, true],
+                })),
+                &signal_own,
+                &certified,
+                &roots,
+            )
+            .map(|(kind, _)| kind),
+            Ok(DescribedRead::OwnedMemo)
+        );
+        owned_returned_accessor_witness(
+            &undecided_with(json!({
+                "argumentsPrimitiveSyntax": [false, false],
+                "argumentsNonSpreadSyntax": [true, true],
+                "argumentsNotFunctionSyntax": [false, false],
+                "argumentsPlainOptionsSyntax": [false, false],
+            })),
+            &signal_own,
+            &certified,
+            &roots,
+        )
+        .expect_err("an options binding may carry an equals comparator");
+        owned_returned_accessor_witness(
+            &undecided_with(json!({ "argumentsNonSpreadSyntax": [false] })),
+            &signal_own,
+            &certified,
+            &roots,
+        )
+        .expect_err("a spread may displace the computation");
         for (why, traced, transcript, roots, needle) in [
             (
-                "the signal's accessor is the inert row, not this one",
-                signal.clone(),
+                "the setter is no accessor",
+                source(json!({
+                    "target": "symbol:createSignal",
+                    "targetName": "createSignal",
+                    "targetPath": [{"kind": "tuple", "index": 1}],
+                })),
                 signal_own.clone(),
                 vec![root(true)],
                 "no dialect states a computed accessor read",

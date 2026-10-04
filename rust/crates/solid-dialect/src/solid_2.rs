@@ -5517,13 +5517,25 @@ impl Dialect for Solid2 {
     /// `createMemo` is a tracked read whose only possible execution is the
     /// registered computation, the one the creating call already registered
     /// (the dialect's `createMemo` row is that registration), and whose
-    /// executions the creating call's own claims account for. The same slot of
-    /// `createSignal` is a different row, [`Dialect::inert_accessor_read`], and
-    /// the two are never both true.
+    /// executions the creating call's own claims account for.
+    ///
+    /// ADR 0175: `createSignal`'s accessor is in this row too. Its first
+    /// argument decides the path (`typeof first === "function"` takes
+    /// `computed(first, second)` and hands back `accessor(node)`, exactly the
+    /// memo's read; anything else takes `signal` and an inert read), so when
+    /// grammar cannot rule the function out the accessor is *possibly* a
+    /// memo's, and this row's claim -- may re-run the registered computation,
+    /// may throw -- is true of both paths. [`Dialect::inert_accessor_read`] is
+    /// the stronger answer for the same slot and is asked first; this one is
+    /// what remains when its argument condition cannot be discharged. The
+    /// computation the function path registers is `createSignal`'s callback
+    /// position 0 (`callback_positions`), so it is accounted where it is
+    /// registered, as the memo's is.
     fn computed_accessor_read(&self, primitive: Primitive, slot: ResultSlot) -> bool {
         matches!(
             (primitive, slot),
             (Primitive::CreateMemo, ResultSlot::Whole)
+                | (Primitive::CreateSignal, ResultSlot::TupleItem(0))
         )
     }
 
@@ -5533,9 +5545,16 @@ impl Dialect for Solid2 {
         slot: ResultSlot,
         archive: &AuditedArchive,
     ) -> bool {
+        // ADR 0175: `solid-js@2.0.0-rc.9` joins for both rows. Every one of
+        // its six builds hands back an accessor whose read is this row's
+        // (docs/package-contract-v2/audits/2026-10-04-solid-2-rc9-returned-
+        // memo-and-signal-accessors.md): the three client builds return the
+        // signals call's own result on every branch, hydration included, and
+        // the three server builds return a read that re-runs the registered
+        // computation or throws.
         self.computed_accessor_read(primitive, slot)
             && AUDITED_ARCHIVES.iter().any(|audited| {
-                audited.name == "@solidjs/signals"
+                matches!(audited.name, "@solidjs/signals" | "solid-js")
                     && audited.version == "2.0.0-rc.9"
                     && audited == archive
             })

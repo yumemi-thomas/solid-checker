@@ -4,9 +4,9 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "4bc91a11d40b60fbe6785db981ba48c6d1266ae1c099a700f3e8d216e6d71547",
+            "closureSha256": "ef622c809a67a5312eaa03692fe51c1361de7f5a39902d0300493f881050c5a3",
             "path": "./index.js",
-            "sha256": "a82a0c80a82f582481bc99b4d2fde60ab60019276ea7fc074b91af453bd2cfb3"
+            "sha256": "4b1e95d5fa72d32fbdb18298ce6656ec275bae4c4640e9ec5f716e9b73771a1f"
           },
           "declarations": {
             "path": "./index.d.ts",
@@ -15,7 +15,7 @@
           "exports": {
             "createCounter": "summary-be0de89f03ce247f11a8bc8dcd0d1aa862990baf242c69dc177c5d7b89c8b946",
             "createDoubled": "summary-f2884f4e7514051147e5a2db6701773a0c356d35ef123afb76f5d643dcc2e06d",
-            "createFrom": "summary-be0de89f03ce247f11a8bc8dcd0d1aa862990baf242c69dc177c5d7b89c8b946",
+            "createFrom": "summary-945a25c507d2730a048044e7b83db761172c51443a8ddb42ec3191e7f30af08f",
             "createReader": "summary-be0de89f03ce247f11a8bc8dcd0d1aa862990baf242c69dc177c5d7b89c8b946"
           },
           "resolution": {
@@ -40,6 +40,54 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
+    "summary-945a25c507d2730a048044e7b83db761172c51443a8ddb42ec3191e7f30af08f": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "returns"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "described-callable",
+              "reads": [
+                "owned-memo"
+              ],
+              "returns": [
+                "read-value"
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
     "summary-be0de89f03ce247f11a8bc8dcd0d1aa862990baf242c69dc177c5d7b89c8b946": {
       "call": {
         "callbacks": [],

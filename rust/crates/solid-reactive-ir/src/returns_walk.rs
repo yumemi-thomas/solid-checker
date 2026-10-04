@@ -358,11 +358,12 @@ pub fn reading_callable_returns(
     file: &FileFacts,
     function: &FunctionFact,
 ) -> Option<Vec<crate::contract_semantics::DescribedCall>> {
-    reading_callable_returns_in(&file.ast, function)
+    reading_callable_returns_in(&file.ast, &file.source, function)
 }
 
 fn reading_callable_returns_in(
     ast: &AstFacts,
+    source: &str,
     function: &FunctionFact,
 ) -> Option<Vec<crate::contract_semantics::DescribedCall>> {
     use crate::contract_semantics::{DescribedCall, DescribedRead, ValueShape};
@@ -396,7 +397,7 @@ fn reading_callable_returns_in(
         values += 1;
         if identifier {
             calls.insert(DescribedCall {
-                reads: vec![DescribedRead::OwnedSignal],
+                reads: vec![returned_identifier_read(ast, source, function, span)],
                 returns: vec![ValueShape::ReadValue],
                 callbacks: Vec::new(),
             });
@@ -444,6 +445,95 @@ fn reading_callable_returns_in(
         });
     }
     Some(calls.into_iter().collect())
+}
+
+/// ADR 0175: which read a returned identifier proposes, from the one binding
+/// of that spelling in the function's own body. `const [x] = call(first, …)`
+/// with `first` present and not proven non-callable by grammar can take `createSignal`'s
+/// function path, so its accessor is possibly a memo's: `owned-memo`. A whole
+/// call result `const x = call(…)` is a memo's shape: `owned-memo`. Anything
+/// else -- no binding, two bindings of the spelling, a non-call initializer,
+/// a proven non-callable first argument -- keeps ADR 0146's `owned-signal`.
+///
+/// A spelling proposes and nothing more: the census decides the read from the
+/// producer's trace of the returned value and the creating call's own
+/// argument facts, and withdraws a proposal that names the other read.
+fn returned_identifier_read(
+    ast: &AstFacts,
+    source: &str,
+    function: &FunctionFact,
+    span: solid_facts::core::Span,
+) -> crate::contract_semantics::DescribedRead {
+    use crate::contract_semantics::DescribedRead;
+    use solid_facts::ast::BindingShape;
+    let text = |span: solid_facts::core::Span| source.get(span.start as usize..span.end as usize);
+    let Some(name) = text(span) else {
+        return DescribedRead::OwnedSignal;
+    };
+    let body = function.body;
+    let own = |at: solid_facts::core::Span| {
+        at.start >= body.start
+            && at.end <= body.end
+            && !ast.functions.iter().any(|other| {
+                other.span != function.span
+                    && other.span.start >= body.start
+                    && other.span.end <= body.end
+                    && other.span.start <= at.start
+                    && at.end <= other.span.end
+            })
+    };
+    let mut bindings = ast.bindings.iter().filter(|binding| {
+        own(binding.declaration)
+            && binding
+                .names
+                .iter()
+                .any(|named| text(named.span) == Some(name))
+    });
+    let (Some(binding), None) = (bindings.next(), bindings.next()) else {
+        return DescribedRead::OwnedSignal;
+    };
+    let Some(call) = binding
+        .call_initializer
+        .and_then(|initializer| ast.calls.iter().find(|call| call.span == initializer))
+    else {
+        return DescribedRead::OwnedSignal;
+    };
+    match binding.shape {
+        BindingShape::Identifier => DescribedRead::OwnedMemo,
+        BindingShape::Array
+            if binding
+                .array_slots
+                .first()
+                .and_then(Option::as_ref)
+                .is_some_and(|slot| text(slot.span) == Some(name)) =>
+        {
+            // A unary operator never evaluates to a function (`void` gives
+            // `undefined`, the rest a number, boolean, bigint or string), and
+            // the census's producer states `void 0` primitive by grammar, so
+            // the signal's read stays the proposal for it.
+            let unary = |first: &solid_facts::ast::ArgumentFact| {
+                text(first.value_span.unwrap_or(first.span)).is_some_and(|written| {
+                    let written = written.trim_start_matches('(').trim_start();
+                    ["void", "typeof"].iter().any(|keyword| {
+                        written.strip_prefix(keyword).is_some_and(|rest| {
+                            rest.starts_with(|c: char| !c.is_alphanumeric() && c != '_' && c != '$')
+                        })
+                    }) || written.starts_with(['-', '+', '!', '~'])
+                })
+            };
+            // No argument at all is `createSignal()`'s undefined value: the
+            // signal path, and the census discharges the inert row for it.
+            let inert = call.arguments.first().is_none_or(|first| {
+                !first.spread && (first.runtime_value_kind.is_proven_noncallable() || unary(first))
+            });
+            if inert {
+                DescribedRead::OwnedSignal
+            } else {
+                DescribedRead::OwnedMemo
+            }
+        }
+        _ => DescribedRead::OwnedSignal,
+    }
 }
 
 /// Whether a return's own syntax hands back an object on every run.
@@ -1147,7 +1237,7 @@ mod tests {
                 .min_by_key(|function| (function.span.start, std::cmp::Reverse(function.span.end)))
                 .expect("the source declares a function")
                 .clone();
-            super::reading_callable_returns_in(&facts, &function)
+            super::reading_callable_returns_in(&facts, source, &function)
         };
         let reading = |returns: Vec<ValueShape>| DescribedCall {
             reads: vec![DescribedRead::OwnedSignal],
@@ -1180,6 +1270,66 @@ mod tests {
             "function f() { return g(); }",
         ] {
             assert_eq!(outer(source), None, "{source}");
+        }
+        // ADR 0175: a returned identifier proposes the read its own binding
+        // makes possible. A first argument grammar cannot rule out as a
+        // function may take `createSignal`'s memo path; a whole call result is
+        // a memo's shape; anything unresolved keeps the signal's read.
+        let identifier = |read: DescribedRead| {
+            Some(vec![DescribedCall {
+                reads: vec![read],
+                returns: vec![ValueShape::ReadValue],
+                callbacks: Vec::new(),
+            }])
+        };
+        for (source, read) in [
+            (
+                "function f(x) { const [s] = createSignal(x); return s; }",
+                DescribedRead::OwnedMemo,
+            ),
+            (
+                "function f(x) { const [s] = createSignal(x(), { ownedWrite: true }); return s; }",
+                DescribedRead::OwnedMemo,
+            ),
+            (
+                "function f() { const m = createMemo(() => 1); return m; }",
+                DescribedRead::OwnedMemo,
+            ),
+            (
+                "function f() { const [s] = createSignal([]); return s; }",
+                DescribedRead::OwnedSignal,
+            ),
+            (
+                "function f() { const [s] = createSignal(void 0); return s; }",
+                DescribedRead::OwnedSignal,
+            ),
+            (
+                "function f() { const [s] = createSignal(); return s; }",
+                DescribedRead::OwnedSignal,
+            ),
+            (
+                "function f(x) { const [s] = createSignal(-x); return s; }",
+                DescribedRead::OwnedSignal,
+            ),
+            (
+                "function f(x) { const [s] = createSignal(voidish); return s; }",
+                DescribedRead::OwnedMemo,
+            ),
+            (
+                "function f(x) { const [, s] = createSignal(x); return s; }",
+                DescribedRead::OwnedSignal,
+            ),
+            ("function f(s) { return s; }", DescribedRead::OwnedSignal),
+            (
+                "function f(x) { const [s] = createSignal(x); { const [s] = createSignal(0); } return s; }",
+                DescribedRead::OwnedSignal,
+            ),
+            (
+                "function f(x) { const g = () => { const [s] = createSignal(x); return s; }; const [s] = createSignal(0); return s; }",
+                DescribedRead::OwnedSignal,
+            ),
+        ] {
+            assert_eq!(outer(source), identifier(read), "{source}");
         }
     }
 

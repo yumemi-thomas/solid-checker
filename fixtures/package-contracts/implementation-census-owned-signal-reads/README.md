@@ -13,7 +13,7 @@ no census could decide.
 | `createCounter` | `returns: [read-value]` | the returned value traces to `createSignal(0)`'s slot 0 |
 | `createReader` | `returns: [read-value]` | the literal's one call is a read of that accessor, and it hands back what it read |
 | `createDoubled` | `returns: [plain]` | `count() * 2` is a number by grammar |
-| `createFrom` | `returns: [read-value]` | refused: `createSignal(initial)` over the caller's value may be a writable memo |
+| `createFrom` | `reads: [owned-memo]`, `returns: [read-value]` | ADR 0175: `createSignal(initial)` over the caller's value may take the writable-memo path, so the proposal is the computed read, which is true of both paths |
 
 This fixture pins generation only. The `solid-js` stub under `node_modules` is
 there for dialect selection and so the reactive analysis resolves

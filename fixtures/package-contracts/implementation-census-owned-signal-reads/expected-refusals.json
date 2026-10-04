@@ -46,7 +46,7 @@
       "kind": "dialect-silent",
       "package": "solid-js",
       "callee": "createSignal",
-      "location": "<package-root>/index.js:1025:1046",
+      "location": "<package-root>/index.js:1064:1085",
       "declaration": "",
       "shape": "",
       "spelling": ""

@@ -24,8 +24,8 @@ export function createDoubled() {
 }
 
 // The signal is created over the caller's argument, which may be a function
-// (a writable memo, whose read runs it). Proposed the same way; the census
-// refuses the read by name.
+// (a writable memo, whose read may re-run it). ADR 0175: proposed as the
+// computed read, which is true of both paths; the census decides it.
 export function createFrom(initial) {
   const [value] = createSignal(initial);
   return value;

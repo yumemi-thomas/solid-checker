@@ -4368,10 +4368,13 @@ mod tests {
         assert_eq!(unambiguous_options_argument("notADialectName"), None);
     }
 
-    /// ADR 0162: only `createMemo`'s whole result is a computed read, and the
-    /// two rows never overlap -- a memo's read is not inert.
+    /// ADR 0162: `createMemo`'s whole result is a computed read and never an
+    /// inert one -- a memo's read is not inert. ADR 0175: `createSignal`'s
+    /// accessor is in both rows; the inert one is the stronger answer, asked
+    /// first, and the computed one is what a possibly-callable first argument
+    /// leaves. Nothing else is computed.
     #[test]
-    fn only_the_memo_accessor_read_is_computed() {
+    fn only_the_memo_and_signal_accessor_reads_are_computed() {
         assert!(unambiguous_computed_accessor_read(
             "createMemo",
             ResultSlot::Whole
@@ -4380,10 +4383,17 @@ mod tests {
             "createMemo",
             ResultSlot::Whole
         ));
+        assert!(unambiguous_computed_accessor_read(
+            "createSignal",
+            ResultSlot::TupleItem(0)
+        ));
+        assert!(unambiguous_inert_accessor_read(
+            "createSignal",
+            ResultSlot::TupleItem(0)
+        ));
         for (name, slot) in [
             ("createMemo", ResultSlot::TupleItem(0)),
             ("createSignal", ResultSlot::Whole),
-            ("createSignal", ResultSlot::TupleItem(0)),
             ("createSignal", ResultSlot::TupleItem(1)),
             ("createStore", ResultSlot::TupleItem(0)),
             ("createOptimistic", ResultSlot::TupleItem(0)),
@@ -4397,16 +4407,32 @@ mod tests {
     fn the_computed_accessor_read_binds_only_its_audited_archive() {
         for name in ["@solidjs/signals", "solid-js", "@solidjs/web"] {
             for archive in audited_archives(name) {
+                // ADR 0175: the signals archive and `solid-js`' own six builds,
+                // both at rc.9, and nothing else -- not `@solidjs/web`, not an
+                // older release.
+                let audited = matches!(archive.name, "@solidjs/signals" | "solid-js")
+                    && archive.version == "2.0.0-rc.9";
                 assert_eq!(
                     computed_accessor_read_is_audited_for("createMemo", ResultSlot::Whole, archive,),
-                    archive.name == "@solidjs/signals" && archive.version == "2.0.0-rc.9",
+                    audited,
+                    "{}@{}",
+                    archive.name,
+                    archive.version,
+                );
+                assert_eq!(
+                    computed_accessor_read_is_audited_for(
+                        "createSignal",
+                        ResultSlot::TupleItem(0),
+                        archive,
+                    ),
+                    audited,
                     "{}@{}",
                     archive.name,
                     archive.version,
                 );
                 assert!(!computed_accessor_read_is_audited_for(
                     "createSignal",
-                    ResultSlot::TupleItem(0),
+                    ResultSlot::TupleItem(1),
                     archive,
                 ));
                 let changed = AuditedArchive {
