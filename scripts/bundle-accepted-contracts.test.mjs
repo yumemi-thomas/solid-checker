@@ -12,6 +12,8 @@ import { describe, test } from "vitest";
 
 import {
   bundleKey,
+  carriedTier,
+  carryForward,
   claimsOf,
   collectBundles,
   indexDocument,
@@ -394,5 +396,55 @@ describe("ADR 0151: a tier carries what its bundles cite", () => {
       withdrawUncarriedCitations([weaker.entry, media.entry], others).kept.map(entry => entry.packageName),
       ["utils"]
     );
+  });
+});
+
+// `--carry` regenerates part of the tier without the runs that produced the
+// rest: a key a new run certified is replaced, every other bundle is carried
+// byte for byte, and the index it writes back states what the old one did.
+describe("carrying the checked-in tier forward", () => {
+  const environment = [{ name: "solid-js", version: "2.0.0", integrity: "sha512-s" }];
+  const entry = (name, digest, conditions = ["browser", "import"]) => ({
+    packageName: name,
+    packageVersion: "1.0.0",
+    requestedEntrypoint: ".",
+    exportConditions: conditions,
+    document: `objects/${digest}.main.json`,
+    receipt: `objects/${digest}.receipt.json`,
+    bindings: { dependencyEnvironmentRoot: "sha256:env" },
+    dependencyEnvironment: environment
+  });
+  const receipt = JSON.stringify({ payload: { dependencyEnvironmentRoot: "sha256:env" } });
+  const tierOf = entries => {
+    const objects = new Map(entries.flatMap(item => [[item.document, "{}"], [item.receipt, receipt]]));
+    return { text: JSON.stringify(indexDocument(entries, objects)), objects };
+  };
+
+  test("an index reads back as the entries it was written from", () => {
+    const entries = [entry("a", "1"), entry("b", "2")];
+    const { text, objects } = tierOf(entries);
+    const tier = carriedTier(text, member => objects.get(member));
+    assert.deepEqual(tier.ordered, entries);
+    assert.deepEqual(indexDocument(tier.ordered, tier.objects), JSON.parse(text));
+  });
+
+  test("a re-certified key replaces the carried bundle and every other key is carried", () => {
+    const { text, objects } = tierOf([entry("a", "1"), entry("b", "2"), entry("b", "3", ["node", "import"])]);
+    const tier = carriedTier(text, member => objects.get(member));
+    const fresh = entry("b", "4");
+    const merged = new Map([[fresh.document, "{}"], [fresh.receipt, receipt]]);
+    const { ordered, carried } = carryForward([fresh], merged, tier);
+    assert.deepEqual(ordered.map(item => item.document), [
+      "objects/1.main.json",
+      "objects/4.main.json",
+      "objects/3.main.json"
+    ]);
+    assert.deepEqual(carried.map(item => item.packageName), ["a", "b"]);
+    assert.ok(merged.has("objects/1.receipt.json") && !merged.has("objects/2.receipt.json"));
+    assert.equal(new Set(ordered.map(bundleKey)).size, ordered.length);
+  });
+
+  test("an index of another version is refused, not guessed at", () => {
+    assert.throws(() => carriedTier(JSON.stringify({ bundleIndexVersion: 2, bundles: [] }), () => ""), /version/);
   });
 });

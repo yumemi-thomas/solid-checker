@@ -3,6 +3,7 @@
 //
 //   bun scripts/bundle-accepted-contracts.mjs --run <run.json> [--run <run.json> ...]
 //   bun scripts/bundle-accepted-contracts.mjs --catalogs <DIR> --dry-run
+//   bun scripts/bundle-accepted-contracts.mjs --carry --run <run.json> [...]
 //
 // The inputs are the published catalogs `--keep-temp` ecosystem runs left
 // behind. The census run is one of them -- the same artifacts
@@ -58,7 +59,7 @@ function fail(message) {
 
 /** Throws on a malformed command line; `main` turns that into an exit. */
 export function parseArguments(argv) {
-  const options = { runs: [], catalogs: "", dryRun: false, allEntrypoints: false };
+  const options = { runs: [], catalogs: "", dryRun: false, allEntrypoints: false, carry: false };
   const value = (index, message) => {
     const next = argv[index];
     if (next === undefined || next.startsWith("--")) throw new Error(message);
@@ -74,6 +75,8 @@ export function parseArguments(argv) {
       options.dryRun = true;
     } else if (argument === "--all-entrypoints") {
       options.allEntrypoints = true;
+    } else if (argument === "--carry") {
+      options.carry = true;
     } else {
       throw new Error(`unknown argument ${argument}`);
     }
@@ -371,6 +374,12 @@ function main() {
   }
   const collected = collectBundles(results, options);
   const { objects, conflicted, refinements } = collected;
+  let carried = [];
+  if (options.carry) {
+    const tier = carriedTier(readFileSync(INDEX_PATH, "utf8"), member =>
+      readFileSync(join(BUNDLE_ROOT, member), "utf8"));
+    ({ ordered: collected.ordered, carried } = carryForward(collected.ordered, objects, tier));
+  }
   const { kept: ordered, withdrawn } = withdrawUncarriedCitations(collected.ordered, objects);
   let index;
   try {
@@ -396,6 +405,11 @@ function main() {
     );
   }
   const packages = new Set(ordered.map(entry => entry.packageName));
+  if (options.carry) {
+    const fromTier = new Set(carried);
+    const kept = ordered.filter(entry => fromTier.has(entry)).length;
+    console.log(`carried ${kept} bundle(s) from the checked-in tier; ${ordered.length - kept} from the runs`);
+  }
   console.log(`${ordered.length} bundle(s) over ${packages.size} package(s)`);
   for (const entry of ordered) {
     console.log(
@@ -540,6 +554,55 @@ export function collectBundles(results, options = {}) {
       return published;
     });
   return { ordered, objects, conflicted, refinements };
+}
+
+/**
+ * The checked-in tier as `collectBundles` entries, for `--carry`: each index
+ * bundle with the environment its root names restored, and the objects it
+ * names. `readMember` reads one object by its index path.
+ *
+ * Throws for an index this version does not write, or for a bundle whose root
+ * the environments table does not state: carrying either forward would be a
+ * guess about what was proven.
+ */
+export function carriedTier(indexText, readMember) {
+  const index = JSON.parse(indexText);
+  if (index?.bundleIndexVersion !== BUNDLE_INDEX_VERSION) {
+    throw new Error(`--carry reads index version ${BUNDLE_INDEX_VERSION}, not ${index?.bundleIndexVersion}`);
+  }
+  const objects = new Map();
+  const ordered = (index.bundles ?? []).map(bundle => {
+    const { dependencyEnvironmentRoot: root, ...published } = bundle;
+    const dependencyEnvironment = index.environments?.[root];
+    if (!Array.isArray(dependencyEnvironment)) {
+      throw new Error(`${bundle.packageName}@${bundle.packageVersion} names an environment root ${root} the index does not state`);
+    }
+    for (const member of [bundle.document, bundle.receipt]) objects.set(member, readMember(member));
+    return { ...published, bindings: { dependencyEnvironmentRoot: root }, dependencyEnvironment };
+  });
+  return { ordered, objects };
+}
+
+/**
+ * `--carry`: the new runs' bundles plus every carried bundle whose `bundleKey`
+ * no new run certified. A re-certified key is *replaced*, never related to the
+ * carried one: the run is newer evidence about the same bytes in the same
+ * environment, and a changed claim there is the point of regenerating. A
+ * carried bundle stays a certification this build authenticates, because
+ * carrying it changes no byte of it; `withdrawUncarriedCitations` still runs
+ * over the merged set, so one citing a claim the new run replaced is dropped
+ * by name. Adds the carried objects to `objects`.
+ */
+export function carryForward(ordered, objects, tier) {
+  const certified = new Set(ordered.map(bundleKey));
+  const carried = tier.ordered.filter(entry => !certified.has(bundleKey(entry)));
+  for (const entry of carried) {
+    for (const member of [entry.document, entry.receipt]) {
+      if (!objects.has(member)) objects.set(member, tier.objects.get(member));
+    }
+  }
+  const merged = [...ordered, ...carried].sort((left, right) => bundleKey(left).localeCompare(bundleKey(right)));
+  return { ordered: merged, carried };
 }
 
 /**
