@@ -134,20 +134,6 @@
       "declaration": "",
       "shape": "",
       "spelling": ""
-    },
-    {
-      "entrypoint": ".",
-      "conditions": [],
-      "stage": "closure-proposal",
-      "export": "readOnce",
-      "domain": "creates",
-      "kind": "dialect-silent",
-      "package": "solid-js",
-      "callee": "createMemo",
-      "location": "<package-root>/index.js:1579:1607",
-      "declaration": "",
-      "shape": "",
-      "spelling": ""
     }
   ]
 }
