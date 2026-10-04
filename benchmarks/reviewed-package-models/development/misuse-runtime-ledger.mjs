@@ -88,7 +88,7 @@ async function runTwin(entry, twin) {
   const casePath = join(dir, "case.tsx");
   const diagnostics = (report.execution?.diagnostics ?? []).map(row => ({ code: row.code, severity: row.severity,
     site: row.site ? { file: row.site.location.path === casePath ? "case" : row.site.location.path, line: row.site.line, column: row.site.column } : null,
-    operation: row.operation ?? null,
+    operation: row.operation ?? null, siteKind: row.siteKind ?? null,
     attribution: row.attribution ?? null, firstPackage: row.firstPackageFrame?.package?.name ?? null, message: row.message?.slice(0, 160) }));
   // Uncaught exceptions the collector mapped to the case file.
   const exceptions = (report.observations ?? []).filter(row => row.kind === "runtime-exception" && row.location?.path === casePath)
@@ -111,8 +111,12 @@ function verdict(entry, misuse, correct) {
   // operation ran in application code. A strict read performed inside an
   // installed package is the package's behaviour; an owner diagnostic depends
   // on the caller's context wherever the operation runs.
+  // A strict read in package code still belongs to the call site when the
+  // site reads a value the package returned (`position.y`, `now()`), not when
+  // it is the export's own call (`createPolled(...)`).
   const authored = twin => twin.diagnostics.filter(row => row.site?.file === "case"
-    && (row.code !== "STRICT_READ_UNTRACKED" || row.operation?.in === "application"));
+    && (row.code !== "STRICT_READ_UNTRACKED" || row.operation?.in === "application"
+      || (row.operation?.in === "package" && row.siteKind === "value-access")));
   // An uncaught exception at the case file is the runtime refusing the misuse
   // outright; it counts when the correct twin raises none.
   const misuseHit = authored(misuse).some(row => expected.includes(row.code)) || misuse.exceptions.length > 0;
@@ -147,7 +151,8 @@ async function worker() {
     const misuse = await runTwin(entry, "misuse");
     const correct = await runTwin(entry, "correct");
     const packageBehaviour = [...(misuse.diagnostics ?? []), ...(correct.diagnostics ?? [])]
-      .filter(row => row.code === "STRICT_READ_UNTRACKED" && row.operation?.in === "package").map(row => row.operation.package.name);
+      .filter(row => row.code === "STRICT_READ_UNTRACKED" && row.operation?.in === "package" && row.siteKind !== "value-access")
+      .map(row => row.operation.package.name);
     const row = { id: entry.id, package: entry.package, export: entry.export, rule: entry.rule, ledgerKind: entry.kind ?? "violation",
       runtime: verdict(entry, misuse, correct), static: staticVerdict(entry, misuse, correct),
       packageBehaviour: [...new Set(packageBehaviour)], misuse, correct };

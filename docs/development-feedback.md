@@ -291,7 +291,12 @@ emits each diagnostic synchronously at the operation that triggered it
 (`STRICT_READ_UNTRACKED`, `NO_OWNER_CLEANUP`, `NO_OWNER_EFFECT`,
 `REACTIVE_WRITE_IN_OWNED_SCOPE`, `CLEANUP_IN_FORBIDDEN_SCOPE`, …), so the
 stack captured there locates it. `execution.diagnostics` lists each one with
-its code, severity and message. It has a `site` when a frame maps to configured
+its code, severity and message. `operation.in` says which code performed the
+diagnosed operation: `application`, or `package` with the installed package,
+skipping Solid's own runtime frames. `siteKind` says what the authored
+expression at the site is: `package-call` (the export's own call, so a read it
+makes is the package's behaviour) or `value-access` (a value the package
+returned, read by the application). It has a `site` when a frame maps to configured
 source; otherwise it keeps the same `attribution` class and
 `firstPackageFrame` as an unmapped read. These are the runtime's own reports
 (`channel: "runtime-diagnostic"`), not inferences. The collector keeps at most

@@ -149,3 +149,14 @@ test("a diagnosed operation is attributed past Solid's runtime to the code that 
   assert.deepEqual(operationFrame([signals, app]), { in: "application" });
   assert.deepEqual(operationFrame([await attribute(frame(`/@fs${root}/collector.mjs`)), signals]), { in: "unknown" });
 });
+
+test("a diagnosed site is a package export's own call or an access to a value", async () => {
+  const { siteExpressionKind } = await import("../scripts/feedback-attribution.mjs");
+  const text = 'import { createPolled } from "@solid-primitives/timer";\nimport * as T from "@solid-primitives/timer";\nimport { local } from "./local";\nconst now = createPolled(() => 1, 10);\nconst a = now();\nconst b = position.y;\nconst c = T.createPolled(() => 1, 10);\nconst d = local();\n';
+  const at = needle => text.indexOf(needle);
+  assert.equal(siteExpressionKind(text, "/a.tsx", at("createPolled(() =>")), "package-call");
+  assert.equal(siteExpressionKind(text, "/a.tsx", at("now()")), "value-access");
+  assert.equal(siteExpressionKind(text, "/a.tsx", at("y;")), "value-access");
+  assert.equal(siteExpressionKind(text, "/a.tsx", at("T.createPolled") + 2), "package-call");
+  assert.equal(siteExpressionKind(text, "/a.tsx", at("local()")), "value-access");
+});

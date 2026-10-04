@@ -10,7 +10,7 @@ import { instrumentFeedbackReads, sharedReaderSha256 } from "./feedback-native-h
 import { selectAssertionFeedback } from "./feedback-assertion-selector.mjs";
 import { instrumentFeedbackSource } from "./feedback-source-hook.mjs";
 import { selectReadFeedback } from "./feedback-read-selector.mjs";
-import { classifyUnmappedFrames, createFrameAttributor, operationFrame, summarizeCandidateScopes, summarizeUnmapped } from "./feedback-attribution.mjs";
+import { classifyUnmappedFrames, createFrameAttributor, operationFrame, siteExpressionKind, summarizeCandidateScopes, summarizeUnmapped } from "./feedback-attribution.mjs";
 
 const hash = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 const runtimePath = fileURLToPath(new URL("./feedback-read-runtime.mjs", import.meta.url));
@@ -351,6 +351,8 @@ async function collectProject(project, scenario, tools, browser, responses = new
       const located = await locate(row.frames ?? [], row.stackTruncated ?? null);
       diagnostics.push({ code: row.code, kind: row.kind, severity: row.severity, message: row.message, document: row.document,
         channel: "runtime-diagnostic", authority: false, certification: false, operation: operationFrame(located.attributions),
+        ...(located.site ? { siteKind: siteExpressionKind(sourceFiles.get(located.site.location.path).text, located.site.location.path,
+          Buffer.from(sourceFiles.get(located.site.location.path).text).subarray(0, located.site.location.startByte).toString().length) } : {}),
         ...(located.site ? { site: located.site } : { site: null, attribution: located.unmapped.attribution,
           firstPackageFrame: located.unmapped.firstPackageFrame, packages: located.unmapped.packages }) });
     }

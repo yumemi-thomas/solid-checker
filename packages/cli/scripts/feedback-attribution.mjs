@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
+import ts from "typescript";
 import { dirname, join, resolve, sep } from "node:path";
 
 // Runtime frames are attributed to configured original source only through
@@ -156,4 +157,50 @@ export function operationFrame(attributions) {
       : { in: "application" };
   }
   return { in: "unknown" };
+}
+
+// What the authored expression at a diagnosed site is. "package-call": a call
+// whose callee is a binding imported from an installed package, so the
+// operation ran inside that export's own call. "value-access": a property read
+// or a call of anything else, such as a value a package returned and the
+// application reads. "unknown" when no such expression contains the site.
+export function siteExpressionKind(text, path, offset) {
+  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true,
+    /x$/.test(path) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  let node = source;
+  for (let next = node; next;) {
+    node = next;
+    next = node.getChildren(source).find(child => child.getStart(source) <= offset && offset < child.end);
+  }
+  const imported = new Map();
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const specifier = statement.moduleSpecifier.text, bindings = statement.importClause;
+    if (bindings?.name) imported.set(bindings.name.text, specifier);
+    const named = bindings?.namedBindings;
+    if (named && ts.isNamedImports(named)) for (const element of named.elements) imported.set(element.name.text, specifier);
+    if (named && ts.isNamespaceImport(named)) imported.set(named.name.text, specifier);
+  }
+  const fromPackage = name => { const specifier = imported.get(name); return specifier !== undefined && !/^[./]/.test(specifier); };
+  for (let current = node; current && current !== source; current = current.parent) {
+    if (ts.isCallExpression(current)) {
+      let callee = current.expression;
+      while (ts.isParenthesizedExpression(callee) || ts.isNonNullExpression(callee) || ts.isAsExpression(callee)) callee = callee.expression;
+      if (ts.isIdentifier(callee) && fromPackage(callee.text)) return "package-call";
+      if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) && fromPackage(callee.expression.text)
+        && ts.isNamespaceImport(findImportClause(source, callee.expression.text) ?? {})) return "package-call";
+      return "value-access";
+    }
+    if ((ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current))
+      && !(current.parent && ts.isCallExpression(current.parent) && current.parent.expression === current)) return "value-access";
+  }
+  return "unknown";
+}
+
+function findImportClause(source, name) {
+  for (const statement of source.statements) {
+    const named = ts.isImportDeclaration(statement) ? statement.importClause?.namedBindings : null;
+    if (named && ts.isNamespaceImport(named) && named.name.text === name) return named;
+  }
+  return null;
 }
