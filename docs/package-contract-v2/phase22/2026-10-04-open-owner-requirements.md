@@ -162,3 +162,25 @@ New violations, each runtime-detected:
 - `createEventListener` at module scope and in an effect apply;
 - `createScrollPosition`;
 - `createSwitchTransition`.
+
+## Third round: possibly-computed signal accessors (ADR 0175)
+
+The census describes a `createSignal` accessor whose first argument grammar
+cannot classify as `owned-memo`, and `solid-js@2.0.0-rc.9`'s own factories are
+audited for that row. The browser checkpoint was re-certified (92 of 97) and
+bundled with `--carry`: 39 exports gain an `owned-memo` `returns` claim, and
+none loses one.
+
+| Ledger | Round 2 | Round 3 |
+| --- | ---: | ---: |
+| Static violation | 53 | 60 |
+| Static uncertifiable | 10 | 10 |
+| No static finding | 60 | 53 |
+| Correct twins with a static violation | 0 | 0 |
+
+New violations, each `STRICT_READ_UNTRACKED` at runtime:
+
+- `createTween`, `createPointerPosition`, `createWSState`, `createReducedMotion`;
+- `resolveFirst`;
+- `signal-builders` `capitalize` and `ceil`.
+

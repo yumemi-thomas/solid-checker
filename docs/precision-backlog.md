@@ -1,5 +1,24 @@
 # Precision backlog
 
+## A possibly-computed signal accessor is described (2026-10-04)
+
+ADR 0175. A `createSignal` whose first argument grammar cannot classify returns
+an accessor that is either a signal's or a writable memo's. Both reads are the
+computed-accessor row's, so the census now describes it as `owned-memo`. The
+row is also audited for `solid-js@2.0.0-rc.9`'s own factories.
+
+- **Gained:** 39 `returns` claims in the browser tier, and seven ledger
+  violations (53 -> 60 of 123), each runtime-detected, no twin flagged.
+- **Still open:**
+  - an options binding (`createSignal(x, INTERNAL_OPTIONS)`): the memo path
+    keeps `equals`, and the census does not trace values;
+  - accessors composed from another package (`createMediaQuery` ->
+    `createHydratableSignal`), ADR 0157;
+  - `createStore`/`createOptimistic` accessors: no row;
+  - the `domain-exhaustiveness` and structural-leaf refusals (`createDate`,
+    `createReducer`, `createClipboard`, `makePersisted`). These need their own
+    triage.
+
 ## Same-role owner calls cover normal completions (2026-10-04)
 
 ADR 0173 promoted. A function that calls `createEffect` in one arm and
