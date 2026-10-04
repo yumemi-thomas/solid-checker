@@ -24,15 +24,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/007829446860ed972be259c5dee80c831d049efbd936a00e74690bf1ffbcae6a.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/007829446860ed972be259c5dee80c831d049efbd936a00e74690bf1ffbcae6a.receipt.json"
-        ),
-    ),
-    (
         "objects/00bf51cdcee12c236cb602c0888d6afc498faf521b5a2a00cdc5aca69a01c328.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/00bf51cdcee12c236cb602c0888d6afc498faf521b5a2a00cdc5aca69a01c328.main.json"
+        ),
+    ),
+    (
+        "objects/00cb7ebe129a4e2f48c6ddec7d7f4f56e33f03d649508001e4ad2b87b5d46c11.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/00cb7ebe129a4e2f48c6ddec7d7f4f56e33f03d649508001e4ad2b87b5d46c11.receipt.json"
         ),
     ),
     (
@@ -102,6 +102,24 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/01e68b71c1ceddb9701015a2260cbc8cadf2042cf7cc0fb493575beda16223c3.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/01e68b71c1ceddb9701015a2260cbc8cadf2042cf7cc0fb493575beda16223c3.receipt.json"
+        ),
+    ),
+    (
+        "objects/01e6cbb82523679c7ea895b6a3d8bb247c7068887aa00cd42bf296d6800746ea.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/01e6cbb82523679c7ea895b6a3d8bb247c7068887aa00cd42bf296d6800746ea.receipt.json"
+        ),
+    ),
+    (
+        "objects/01e8e538ee49361dfb4f554f98a50bd005c0d642a7acf71b7a718e2b51d1be74.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/01e8e538ee49361dfb4f554f98a50bd005c0d642a7acf71b7a718e2b51d1be74.receipt.json"
+        ),
+    ),
+    (
         "objects/01e9cca182dbdab8c931805b095981b92813aebe2ca7ef5d80aa5255396fd016.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/01e9cca182dbdab8c931805b095981b92813aebe2ca7ef5d80aa5255396fd016.receipt.json"
@@ -120,9 +138,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/026ee7b5dcdf3df38bb2a0a5d5c53fb828fce4adf9ea3719f04e3c1db1f55229.receipt.json",
+        "objects/0271eeecf7822f1a6be71cb046825a292e11ac3ada5e31c3c31b56f95bbbcb5a.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/026ee7b5dcdf3df38bb2a0a5d5c53fb828fce4adf9ea3719f04e3c1db1f55229.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/0271eeecf7822f1a6be71cb046825a292e11ac3ada5e31c3c31b56f95bbbcb5a.receipt.json"
         ),
     ),
     (
@@ -141,6 +159,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/02b4e41e5a56fde8045a3dcb6ef189dd957e303c783baa0fd340b20630ad2143.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/02b4e41e5a56fde8045a3dcb6ef189dd957e303c783baa0fd340b20630ad2143.receipt.json"
+        ),
+    ),
+    (
+        "objects/02e111d1d468070429e93edef8e373de6107897142b24a4f2042a1ee84bd951a.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/02e111d1d468070429e93edef8e373de6107897142b24a4f2042a1ee84bd951a.receipt.json"
         ),
     ),
     (
@@ -348,18 +372,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/066175a58a5be18ea56fc5ec7ee42425b4dec1e834dbd2af1a054b351de9cf7b.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/066175a58a5be18ea56fc5ec7ee42425b4dec1e834dbd2af1a054b351de9cf7b.receipt.json"
-        ),
-    ),
-    (
-        "objects/0663f181bfba69e54af54d344c7edfb77ff5c16155a51a08b76a77878c5e2c3b.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/0663f181bfba69e54af54d344c7edfb77ff5c16155a51a08b76a77878c5e2c3b.receipt.json"
-        ),
-    ),
-    (
         "objects/0668659ae9ad0409ca1a053d335e650876dec1839a1fd0e465430d4c858e96ba.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/0668659ae9ad0409ca1a053d335e650876dec1839a1fd0e465430d4c858e96ba.receipt.json"
@@ -426,6 +438,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/0752f161713be7612d6cdfced0174e55f3ecccc268f991ce439f57edbb805a59.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/0752f161713be7612d6cdfced0174e55f3ecccc268f991ce439f57edbb805a59.receipt.json"
+        ),
+    ),
+    (
         "objects/075c20615c3dfd2d6ad7e35e701573ce27b438c7701857956e93ebefae7a2f0a.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/075c20615c3dfd2d6ad7e35e701573ce27b438c7701857956e93ebefae7a2f0a.receipt.json"
@@ -435,6 +453,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/07a0b2879974ea84170a7f54b0883409b735cb38baeb8511a64022186eb55792.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/07a0b2879974ea84170a7f54b0883409b735cb38baeb8511a64022186eb55792.main.json"
+        ),
+    ),
+    (
+        "objects/07c150e1ee29556ba53bfc00a02eb26a9571e7551bf3767a08035b892a9bec41.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/07c150e1ee29556ba53bfc00a02eb26a9571e7551bf3767a08035b892a9bec41.receipt.json"
         ),
     ),
     (
@@ -498,21 +522,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/08b85225195ad5fa2f25b497f49038b70875f29ea55abf4bde3f1a2bf688f614.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/08b85225195ad5fa2f25b497f49038b70875f29ea55abf4bde3f1a2bf688f614.receipt.json"
-        ),
-    ),
-    (
-        "objects/08c8e06aa3e19f05bb5acdd4d475e380b98d8fe247632663b399eceede1fc53e.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/08c8e06aa3e19f05bb5acdd4d475e380b98d8fe247632663b399eceede1fc53e.receipt.json"
-        ),
-    ),
-    (
         "objects/08e47b5c657774268e9576f0937a257ca2849ca945d1a462aa2de53aef20b72f.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/08e47b5c657774268e9576f0937a257ca2849ca945d1a462aa2de53aef20b72f.receipt.json"
+        ),
+    ),
+    (
+        "objects/0911188d8fa81ff4446e18cbf32a9bc771f76eb155c9e828c74fc4480803f416.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/0911188d8fa81ff4446e18cbf32a9bc771f76eb155c9e828c74fc4480803f416.receipt.json"
         ),
     ),
     (
@@ -636,12 +654,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/0ba674541ceee766a3d9414011822ff935da4109373b5f8b0fe6fe93327f3905.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/0ba674541ceee766a3d9414011822ff935da4109373b5f8b0fe6fe93327f3905.receipt.json"
-        ),
-    ),
-    (
         "objects/0baef41630faacf642dfb20fcf984ab5b601560e266c34391950663524879115.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/0baef41630faacf642dfb20fcf984ab5b601560e266c34391950663524879115.receipt.json"
@@ -657,12 +669,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/0c107f42c6bc4436398d447a22c9dba6f054ef961f80940486f870264b9d5312.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/0c107f42c6bc4436398d447a22c9dba6f054ef961f80940486f870264b9d5312.main.json"
-        ),
-    ),
-    (
-        "objects/0c162063c31fd57d57062f01a949c97ae07c43ad2e179be7574c90c5b929650b.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/0c162063c31fd57d57062f01a949c97ae07c43ad2e179be7574c90c5b929650b.receipt.json"
         ),
     ),
     (
@@ -690,9 +696,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/0c94e8c79bab79d849fc501857e4c967c394588291609caa8770ada619f270ae.receipt.json",
+        "objects/0cfdfc9ef0ace258ee48bd5e0cf9af0defc23fe157b7cf55b2dfc3b23d828138.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/0c94e8c79bab79d849fc501857e4c967c394588291609caa8770ada619f270ae.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/0cfdfc9ef0ace258ee48bd5e0cf9af0defc23fe157b7cf55b2dfc3b23d828138.receipt.json"
         ),
     ),
     (
@@ -717,6 +723,18 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/0d27eb92144f370ec8e7e8fc4650fd08e35ad2a35bce82a76a3f8d46afd264b4.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/0d27eb92144f370ec8e7e8fc4650fd08e35ad2a35bce82a76a3f8d46afd264b4.main.json"
+        ),
+    ),
+    (
+        "objects/0d29c98e5bedcc91c9646b9eca6345a2391afbe2f38dd6006335914083575618.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/0d29c98e5bedcc91c9646b9eca6345a2391afbe2f38dd6006335914083575618.receipt.json"
+        ),
+    ),
+    (
+        "objects/0d4276d382f2791891d0e538caef1fecd360c117987be881ccc8fbd03c953179.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/0d4276d382f2791891d0e538caef1fecd360c117987be881ccc8fbd03c953179.receipt.json"
         ),
     ),
     (
@@ -750,9 +768,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/0d9a475377aa047cf73242884c4ce95819806a668f5c4dc789961d3943acbfa8.receipt.json",
+        "objects/0ddf4ad66fd58c5b92403688234dd5a973df5fbc3a4f29bb56cc1f27787fcffa.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/0d9a475377aa047cf73242884c4ce95819806a668f5c4dc789961d3943acbfa8.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/0ddf4ad66fd58c5b92403688234dd5a973df5fbc3a4f29bb56cc1f27787fcffa.receipt.json"
         ),
     ),
     (
@@ -795,12 +813,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/0ece67c6329bb1f8d94c567a80275d46271b5743b7210ce4b538eff4498f3419.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/0ece67c6329bb1f8d94c567a80275d46271b5743b7210ce4b538eff4498f3419.receipt.json"
-        ),
-    ),
-    (
-        "objects/0ed891bc37d136c63823e7a5f9e45929e13c6a7a859c46b810c96a7eee9b5039.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/0ed891bc37d136c63823e7a5f9e45929e13c6a7a859c46b810c96a7eee9b5039.receipt.json"
         ),
     ),
     (
@@ -852,6 +864,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/0f2e6af8bf37e1929a26441639d1660f43d8d518742f957133e59dfbb2ca9054.main.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/0f2e6af8bf37e1929a26441639d1660f43d8d518742f957133e59dfbb2ca9054.main.json"
+        ),
+    ),
+    (
         "objects/0f315b767261f6c2fc6c54dc717df42b08b14edadcea96d52ea815b9ae5c8b9e.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/0f315b767261f6c2fc6c54dc717df42b08b14edadcea96d52ea815b9ae5c8b9e.main.json"
@@ -864,15 +882,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/0f5d84a4c76531635773f1a49171e79eb5cf899cfbff1134c304a51bf3ea312f.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/0f5d84a4c76531635773f1a49171e79eb5cf899cfbff1134c304a51bf3ea312f.receipt.json"
-        ),
-    ),
-    (
         "objects/0f5ef7d25b9cc2744ff68afda6f6656fce9b3110ee591390fa85fafa7181c725.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/0f5ef7d25b9cc2744ff68afda6f6656fce9b3110ee591390fa85fafa7181c725.main.json"
+        ),
+    ),
+    (
+        "objects/0f7cbfa21a0034804546f246948cf6929b7efe7aa867716a56897e396826696a.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/0f7cbfa21a0034804546f246948cf6929b7efe7aa867716a56897e396826696a.receipt.json"
         ),
     ),
     (
@@ -897,12 +915,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/100670af8a51ddbdeaedd490b515ab49223f45d9e828b7551c19cacf5ddf2725.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/100670af8a51ddbdeaedd490b515ab49223f45d9e828b7551c19cacf5ddf2725.main.json"
-        ),
-    ),
-    (
-        "objects/10c9ed8d4a8c8317051867dc933014b8158b9486d2bebd3ef51e2916e68fdeaf.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/10c9ed8d4a8c8317051867dc933014b8158b9486d2bebd3ef51e2916e68fdeaf.receipt.json"
         ),
     ),
     (
@@ -942,9 +954,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/11d386b83b79f61a437c08fa3678cdd4f32443229c7766024a32a0a02c1f392b.receipt.json",
+        "objects/11bc2a561c774c078a474a095f598adcce7f064ec2d81ee1013a9818769903d1.main.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/11d386b83b79f61a437c08fa3678cdd4f32443229c7766024a32a0a02c1f392b.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/11bc2a561c774c078a474a095f598adcce7f064ec2d81ee1013a9818769903d1.main.json"
         ),
     ),
     (
@@ -963,6 +975,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/120e71a9b139ee0611ccdce099790b6726ad37cb48c89ec089b756eca61e3b40.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/120e71a9b139ee0611ccdce099790b6726ad37cb48c89ec089b756eca61e3b40.receipt.json"
+        ),
+    ),
+    (
+        "objects/124ff9bb69f2702ee14da1da90d4ec5557b8d44e12cc9ce807d8eb9500453fa3.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/124ff9bb69f2702ee14da1da90d4ec5557b8d44e12cc9ce807d8eb9500453fa3.receipt.json"
         ),
     ),
     (
@@ -1032,9 +1050,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/13759f89688eca73a54eb4c9e9064a3c473f13eee8edaf43f52574588c3ba618.receipt.json",
+        "objects/135c2bfb5da8aa13fbfdd84b1b9c1467ed7a5471ea97d62cca304a9424ba7e3c.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/13759f89688eca73a54eb4c9e9064a3c473f13eee8edaf43f52574588c3ba618.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/135c2bfb5da8aa13fbfdd84b1b9c1467ed7a5471ea97d62cca304a9424ba7e3c.receipt.json"
+        ),
+    ),
+    (
+        "objects/137febeea3ec668d955913cec91ff347c47c4949e2cb66bc33e549fa5804b567.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/137febeea3ec668d955913cec91ff347c47c4949e2cb66bc33e549fa5804b567.receipt.json"
         ),
     ),
     (
@@ -1047,12 +1071,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/13e9d53d144150fe7224717122c98d2786a104e9947f0bdc45d863b1bacf54a6.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/13e9d53d144150fe7224717122c98d2786a104e9947f0bdc45d863b1bacf54a6.receipt.json"
-        ),
-    ),
-    (
-        "objects/13ef9cddb525218c7873381acfa13e63981d22fd74d7e004514d0b544e0ee8c4.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/13ef9cddb525218c7873381acfa13e63981d22fd74d7e004514d0b544e0ee8c4.receipt.json"
         ),
     ),
     (
@@ -1092,6 +1110,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/1496f1906b4a77a3d28e884207dad95d5ca13f3ac83109f1e02e2a8a2654db45.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/1496f1906b4a77a3d28e884207dad95d5ca13f3ac83109f1e02e2a8a2654db45.receipt.json"
+        ),
+    ),
+    (
         "objects/15260595e4cdf559514d6d321be8e4b0a41e53ff36efb2272f3779ab7dbef179.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/15260595e4cdf559514d6d321be8e4b0a41e53ff36efb2272f3779ab7dbef179.receipt.json"
@@ -1113,12 +1137,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/153e877fdf811aad9e89303b54e484ebf13da0076e13bf7ab8dd3636d61409a7.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/153e877fdf811aad9e89303b54e484ebf13da0076e13bf7ab8dd3636d61409a7.receipt.json"
-        ),
-    ),
-    (
-        "objects/1548070ddc4974328206e922dfcbb3018a67b3e18a20f34fdbdf9e47d78d5a13.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/1548070ddc4974328206e922dfcbb3018a67b3e18a20f34fdbdf9e47d78d5a13.receipt.json"
         ),
     ),
     (
@@ -1230,6 +1248,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/1777b29e2bf8fd8811a4a583860fea48fc8f0e8375293e74bb231d4ba3db3936.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/1777b29e2bf8fd8811a4a583860fea48fc8f0e8375293e74bb231d4ba3db3936.receipt.json"
+        ),
+    ),
+    (
         "objects/17b9a84dda5c39e9fe56e8fa45badb32d93ef8fb04b0ad2105ffd92fbe6179f8.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/17b9a84dda5c39e9fe56e8fa45badb32d93ef8fb04b0ad2105ffd92fbe6179f8.main.json"
@@ -1248,15 +1272,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/186030cf9622296cf0a80cf601791c6c841dbf054c982aee8aec60416248289a.receipt.json",
+        "objects/184ce0c8aed133c5b386b6b714f8f59f2f908c47e3f8ead338786bb3793817f1.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/186030cf9622296cf0a80cf601791c6c841dbf054c982aee8aec60416248289a.receipt.json"
-        ),
-    ),
-    (
-        "objects/18621c159dbf7ab2d2b4b87b4dac314b53b99e6ff50197fc9fd5bd726a170b4d.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/18621c159dbf7ab2d2b4b87b4dac314b53b99e6ff50197fc9fd5bd726a170b4d.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/184ce0c8aed133c5b386b6b714f8f59f2f908c47e3f8ead338786bb3793817f1.receipt.json"
         ),
     ),
     (
@@ -1290,6 +1308,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/1907330ce4e19aea36d643290131ad5903e7a7998cc497257abfc181f731cd47.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/1907330ce4e19aea36d643290131ad5903e7a7998cc497257abfc181f731cd47.receipt.json"
+        ),
+    ),
+    (
         "objects/192399a14b8bcabdf769200fd6039fdff1d5ffff9ca4d7a31ea82fae2f4ec55a.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/192399a14b8bcabdf769200fd6039fdff1d5ffff9ca4d7a31ea82fae2f4ec55a.receipt.json"
@@ -1320,12 +1344,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/19b29065ad818916e12588727552e353baf7b87324dc1e5e2002c424dca65adf.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/19b29065ad818916e12588727552e353baf7b87324dc1e5e2002c424dca65adf.receipt.json"
-        ),
-    ),
-    (
         "objects/19bc33cb1a95f1b33e97109dd91be92260ecda1ad9e5ef40eb4780d60fe9ea0f.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/19bc33cb1a95f1b33e97109dd91be92260ecda1ad9e5ef40eb4780d60fe9ea0f.receipt.json"
@@ -1335,6 +1353,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/19c95b4bed2558f2ee9aceb436509947ad917457bad507b669b1a649aaf33401.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/19c95b4bed2558f2ee9aceb436509947ad917457bad507b669b1a649aaf33401.main.json"
+        ),
+    ),
+    (
+        "objects/19ee57572a099490b2dc91aa535be28c30727757ee8dbf3a4b4ed83c34a47452.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/19ee57572a099490b2dc91aa535be28c30727757ee8dbf3a4b4ed83c34a47452.receipt.json"
         ),
     ),
     (
@@ -1374,9 +1398,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/1b1c1b0f9d5233e7a7adccda097086dfea54a87d46ba9141048d928ff47c77a5.receipt.json",
+        "objects/1ab7d2f52615ac8923ae19acf4e9143100aec70a2e4fea61038db3f25d762fd6.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/1b1c1b0f9d5233e7a7adccda097086dfea54a87d46ba9141048d928ff47c77a5.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/1ab7d2f52615ac8923ae19acf4e9143100aec70a2e4fea61038db3f25d762fd6.receipt.json"
         ),
     ),
     (
@@ -1404,12 +1428,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/1b62fb72943d7170de3302548bf8cc4b482a42ccef405812e8dd65c7784e1255.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/1b62fb72943d7170de3302548bf8cc4b482a42ccef405812e8dd65c7784e1255.receipt.json"
-        ),
-    ),
-    (
         "objects/1b830fe0012b3c654f4a354d642259194af67b1192ac0c7c5a50257579d4da77.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/1b830fe0012b3c654f4a354d642259194af67b1192ac0c7c5a50257579d4da77.main.json"
@@ -1428,12 +1446,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/1bf5b8aefed3ec3c5562b7f6d3d2445951e5f317fd6d5b76774538d5341f1d9c.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/1bf5b8aefed3ec3c5562b7f6d3d2445951e5f317fd6d5b76774538d5341f1d9c.receipt.json"
-        ),
-    ),
-    (
         "objects/1bf758ec93e6195b8ff25b34a7d81916e54a9266417396a365814606a4bc5ec4.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/1bf758ec93e6195b8ff25b34a7d81916e54a9266417396a365814606a4bc5ec4.main.json"
@@ -1449,12 +1461,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/1c458bb17178d16539eac0446d1e7680ef0a23334ea4fca498808da6c18d6027.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/1c458bb17178d16539eac0446d1e7680ef0a23334ea4fca498808da6c18d6027.receipt.json"
-        ),
-    ),
-    (
-        "objects/1c49d1edef4489e7a7650b73ee840b7ff2dafc2a86facaeac55d80a1f236a2ed.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/1c49d1edef4489e7a7650b73ee840b7ff2dafc2a86facaeac55d80a1f236a2ed.receipt.json"
         ),
     ),
     (
@@ -1548,6 +1554,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/1eaa4302804be8d700b0f45b80544825c91a3f4500552fb4db7d694a13bdd9e1.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/1eaa4302804be8d700b0f45b80544825c91a3f4500552fb4db7d694a13bdd9e1.receipt.json"
+        ),
+    ),
+    (
         "objects/1ede0447860cf4e2fbb56a9f60029d2351e9603e3cb49e2ad304946f3fea10e3.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/1ede0447860cf4e2fbb56a9f60029d2351e9603e3cb49e2ad304946f3fea10e3.receipt.json"
@@ -1602,12 +1614,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/1fef787731e5e9d78446cf11fbf279e2f2dba7e80a4f8b0bf44f573dbb2a8b98.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/1fef787731e5e9d78446cf11fbf279e2f2dba7e80a4f8b0bf44f573dbb2a8b98.receipt.json"
-        ),
-    ),
-    (
         "objects/1ff7c6dc752c6b2eead6549ce5b5c3f6e554ec160ee6fc747c5fc847bf79e56c.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/1ff7c6dc752c6b2eead6549ce5b5c3f6e554ec160ee6fc747c5fc847bf79e56c.receipt.json"
@@ -1635,12 +1641,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/20d0cd182669fe2ff841db6c42a22f3d8baba3d4170e69a3a4562f963e8546d4.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/20d0cd182669fe2ff841db6c42a22f3d8baba3d4170e69a3a4562f963e8546d4.main.json"
-        ),
-    ),
-    (
-        "objects/20e0c0acfd4dbe1f8e5c01c99aa9c9b9515e40e79285c50810e851ad8f9340fd.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/20e0c0acfd4dbe1f8e5c01c99aa9c9b9515e40e79285c50810e851ad8f9340fd.receipt.json"
         ),
     ),
     (
@@ -1686,9 +1686,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/21cbdb7eef7581a69fa1cfee5ce2cd28f52ea7fbf45b1bfff4ef32ad75ac759a.receipt.json",
+        "objects/21e7d8cf970032a6cda7afdf6d83025146e457e4db3f41101c2b9d372cef6b80.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/21cbdb7eef7581a69fa1cfee5ce2cd28f52ea7fbf45b1bfff4ef32ad75ac759a.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/21e7d8cf970032a6cda7afdf6d83025146e457e4db3f41101c2b9d372cef6b80.receipt.json"
         ),
     ),
     (
@@ -1725,6 +1725,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/2263872e83e425fce27f761179bc597485029008f3732598a74cba89e999c102.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/2263872e83e425fce27f761179bc597485029008f3732598a74cba89e999c102.receipt.json"
+        ),
+    ),
+    (
+        "objects/22d53de0dbf38feb3546f3aa63296f7467e514c00a5171255574571ea74805ac.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/22d53de0dbf38feb3546f3aa63296f7467e514c00a5171255574571ea74805ac.receipt.json"
         ),
     ),
     (
@@ -1770,12 +1776,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/23c69e10e9892d013136588be68c3fb44c40c4db8d67a91f94b88bb0e59dd689.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/23c69e10e9892d013136588be68c3fb44c40c4db8d67a91f94b88bb0e59dd689.receipt.json"
-        ),
-    ),
-    (
         "objects/23d09c65121e31e912335dc3c9a87fc28167a7a97fbcdeded25c9bbc535a387c.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/23d09c65121e31e912335dc3c9a87fc28167a7a97fbcdeded25c9bbc535a387c.receipt.json"
@@ -1803,12 +1803,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/244985dab8e2ace0f7661d73efc2ab77d0d8360437494cbd70f7be6982941db2.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/244985dab8e2ace0f7661d73efc2ab77d0d8360437494cbd70f7be6982941db2.receipt.json"
-        ),
-    ),
-    (
-        "objects/244fa457591a366981bc59c86cd5182279738195cf339ef72337e2f7b5db7d53.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/244fa457591a366981bc59c86cd5182279738195cf339ef72337e2f7b5db7d53.receipt.json"
         ),
     ),
     (
@@ -1848,6 +1842,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/25173b4d1d04fb983bd6cf3d46d175c29903226f33cc86dee0c961352e2310d1.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/25173b4d1d04fb983bd6cf3d46d175c29903226f33cc86dee0c961352e2310d1.receipt.json"
+        ),
+    ),
+    (
         "objects/2575f1521a9dee53c66939ba9ee3fe83ff93c91b24257fb95ef4c91fda0f326d.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/2575f1521a9dee53c66939ba9ee3fe83ff93c91b24257fb95ef4c91fda0f326d.main.json"
@@ -1866,6 +1866,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/260a45021d1ce27db2e5717e0983dc2e4abe3725ca88375418b877f689bdcf69.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/260a45021d1ce27db2e5717e0983dc2e4abe3725ca88375418b877f689bdcf69.receipt.json"
+        ),
+    ),
+    (
         "objects/261309e4a455bb358337180a85674d82fb12965374602fe253faa67a7e3890ff.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/261309e4a455bb358337180a85674d82fb12965374602fe253faa67a7e3890ff.receipt.json"
@@ -1881,12 +1887,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/261ba9f44d7d29ebe52982201937e086523d7167e75f53ff861b6ae87410d0c0.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/261ba9f44d7d29ebe52982201937e086523d7167e75f53ff861b6ae87410d0c0.main.json"
-        ),
-    ),
-    (
-        "objects/263764448110f2458e1237c775953eeb2f89ff6a4757e6b1eb4dd162fc520bbb.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/263764448110f2458e1237c775953eeb2f89ff6a4757e6b1eb4dd162fc520bbb.receipt.json"
         ),
     ),
     (
@@ -1935,12 +1935,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/2737e877a6da1acac4e6102f2f112418f8bd9222d22714b4cca28984ce960095.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/2737e877a6da1acac4e6102f2f112418f8bd9222d22714b4cca28984ce960095.main.json"
-        ),
-    ),
-    (
-        "objects/27685f9f950d5c552daa4aebc23474f7aa34595aa6ac86417ee063f77dc6d5c4.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/27685f9f950d5c552daa4aebc23474f7aa34595aa6ac86417ee063f77dc6d5c4.receipt.json"
         ),
     ),
     (
@@ -2016,21 +2010,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/28c40d9c78859802986d834bee21459c4990522997942731fd62ea145b335572.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/28c40d9c78859802986d834bee21459c4990522997942731fd62ea145b335572.receipt.json"
-        ),
-    ),
-    (
         "objects/28d81e906d2dfce28081b47452ef56adb981176e479d553b035db0acead358de.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/28d81e906d2dfce28081b47452ef56adb981176e479d553b035db0acead358de.receipt.json"
-        ),
-    ),
-    (
-        "objects/28d8b2e34d1818a64bc958417b7cdf8ad440fc63bc9b9be257572ab8600f5581.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/28d8b2e34d1818a64bc958417b7cdf8ad440fc63bc9b9be257572ab8600f5581.receipt.json"
         ),
     ),
     (
@@ -2124,6 +2106,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/2b0ca135be972a8f24fcc168d86fe76ca0d73b757cacc408cf023d40deef3a66.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/2b0ca135be972a8f24fcc168d86fe76ca0d73b757cacc408cf023d40deef3a66.receipt.json"
+        ),
+    ),
+    (
         "objects/2b101a10e9024963c51a93859a736fbbd2a6ed0ef9ed2ce05c81924b9ef47806.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/2b101a10e9024963c51a93859a736fbbd2a6ed0ef9ed2ce05c81924b9ef47806.receipt.json"
@@ -2133,12 +2121,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/2b380d1a3af77b2578a7200b9c47a6be23d936b9aeb632e07f096154c4cb25bf.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/2b380d1a3af77b2578a7200b9c47a6be23d936b9aeb632e07f096154c4cb25bf.main.json"
-        ),
-    ),
-    (
-        "objects/2b4b7f81ec33ff07f6785d5b2143a216b28f489e562d8236d3037e70a7a04dba.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/2b4b7f81ec33ff07f6785d5b2143a216b28f489e562d8236d3037e70a7a04dba.receipt.json"
         ),
     ),
     (
@@ -2154,12 +2136,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/2bad650fac877aeef2d6d92ba5c088c4fdddfb2e29966832e94d2878bd97fb7a.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/2bad650fac877aeef2d6d92ba5c088c4fdddfb2e29966832e94d2878bd97fb7a.receipt.json"
-        ),
-    ),
-    (
         "objects/2bb848754230bcc06d8a9a7452385414780047417223be81887a137f87ac87b5.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/2bb848754230bcc06d8a9a7452385414780047417223be81887a137f87ac87b5.receipt.json"
@@ -2169,6 +2145,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/2bef3ac57eb0fc9aa2eb9a6c3bb9685c4593e9b17c63a0b809d436038460a930.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/2bef3ac57eb0fc9aa2eb9a6c3bb9685c4593e9b17c63a0b809d436038460a930.receipt.json"
+        ),
+    ),
+    (
+        "objects/2bffebd97d29f03004a6338d4c3a94e7c97fc469dae20c6ea449fc516232acd7.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/2bffebd97d29f03004a6338d4c3a94e7c97fc469dae20c6ea449fc516232acd7.receipt.json"
         ),
     ),
     (
@@ -2187,12 +2169,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/2c49135e300790baea098f618a3bf1071d517c6860c4a1930589cf70740e326e.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/2c49135e300790baea098f618a3bf1071d517c6860c4a1930589cf70740e326e.receipt.json"
-        ),
-    ),
-    (
-        "objects/2c8dcf98dc5b729f063b5d6088b1038ebc3694dc07d2f5e0286229f173035bb7.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/2c8dcf98dc5b729f063b5d6088b1038ebc3694dc07d2f5e0286229f173035bb7.receipt.json"
         ),
     ),
     (
@@ -2229,12 +2205,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/2cf83f8dcfc497ff0d08f55299f5674822bcbe1dcdac9fadc87fade06f520589.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/2cf83f8dcfc497ff0d08f55299f5674822bcbe1dcdac9fadc87fade06f520589.receipt.json"
-        ),
-    ),
-    (
-        "objects/2d0b93f94f4f68bb7b15dffc9096bbdcb995b80914fac280d3a433555b37276a.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/2d0b93f94f4f68bb7b15dffc9096bbdcb995b80914fac280d3a433555b37276a.receipt.json"
         ),
     ),
     (
@@ -2304,6 +2274,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/2edafaab7420a9c75a34512805c3b1df3f1ff68bf449153e31274e1cf036b3e2.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/2edafaab7420a9c75a34512805c3b1df3f1ff68bf449153e31274e1cf036b3e2.receipt.json"
+        ),
+    ),
+    (
         "objects/2ee300527c4eb07c50163289b04d9ddd0ea628ce89a6de197126a3181eb7ff73.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/2ee300527c4eb07c50163289b04d9ddd0ea628ce89a6de197126a3181eb7ff73.receipt.json"
@@ -2319,6 +2295,18 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/2f14be071c4f7d55bb374ad1d89a98127019476ff3df45798a498e9a352784dc.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/2f14be071c4f7d55bb374ad1d89a98127019476ff3df45798a498e9a352784dc.receipt.json"
+        ),
+    ),
+    (
+        "objects/2f155c107f5912857a6616bedaa0dd22567968c24228d00be2ea7bfea8d5612a.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/2f155c107f5912857a6616bedaa0dd22567968c24228d00be2ea7bfea8d5612a.receipt.json"
+        ),
+    ),
+    (
+        "objects/2f2f847315a0b12e85c806d915c584b50db2f4be002463b2bf67a0b2263abc1d.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/2f2f847315a0b12e85c806d915c584b50db2f4be002463b2bf67a0b2263abc1d.receipt.json"
         ),
     ),
     (
@@ -2358,12 +2346,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/2ff2e4d3d2593e31f317b546983df5fcf5bf4cc82fe0636d38947d79508d8f97.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/2ff2e4d3d2593e31f317b546983df5fcf5bf4cc82fe0636d38947d79508d8f97.receipt.json"
-        ),
-    ),
-    (
         "objects/2ff423f808776418fc343cbfb3ef668c4df58919f3b0ef0cbe50d63b8a8fc867.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/2ff423f808776418fc343cbfb3ef668c4df58919f3b0ef0cbe50d63b8a8fc867.receipt.json"
@@ -2388,9 +2370,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/305f23d49d7da974e3baeb5c52d0ca60bc109138614b72064c5e3313df843c5d.receipt.json",
+        "objects/306e292eff5934484f2f3d622593a0beee784d8f67678624525545caa46e3205.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/305f23d49d7da974e3baeb5c52d0ca60bc109138614b72064c5e3313df843c5d.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/306e292eff5934484f2f3d622593a0beee784d8f67678624525545caa46e3205.receipt.json"
+        ),
+    ),
+    (
+        "objects/30a2af6beb15fae94bca258c39404e57f566eb7d94d38d5edfb9c8b5fa60bfe5.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/30a2af6beb15fae94bca258c39404e57f566eb7d94d38d5edfb9c8b5fa60bfe5.receipt.json"
         ),
     ),
     (
@@ -2442,12 +2430,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/314da4f8f103211be70c6e9b0a3af2387be69e2244b839b0c1b2e23eb6c55ff5.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/314da4f8f103211be70c6e9b0a3af2387be69e2244b839b0c1b2e23eb6c55ff5.receipt.json"
-        ),
-    ),
-    (
         "objects/317fc1486bb08eef9fced59becf63617a0d758fc368cd703b67eb64010c2d4ae.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/317fc1486bb08eef9fced59becf63617a0d758fc368cd703b67eb64010c2d4ae.receipt.json"
@@ -2460,9 +2442,21 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/31a36a2d3673bbe57b9948a69ba62499b0fd793572bd9181891a8a69c7db8d38.receipt.json",
+        "objects/31be6f934bb14cd5af3661a5d2f32bc5883d96987a09b67ea65222f37ee5e190.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/31a36a2d3673bbe57b9948a69ba62499b0fd793572bd9181891a8a69c7db8d38.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/31be6f934bb14cd5af3661a5d2f32bc5883d96987a09b67ea65222f37ee5e190.receipt.json"
+        ),
+    ),
+    (
+        "objects/31dd2c493ad84f30194669eae43f6f68ee2ae069ce8641997670fc106bd0db9d.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/31dd2c493ad84f30194669eae43f6f68ee2ae069ce8641997670fc106bd0db9d.receipt.json"
+        ),
+    ),
+    (
+        "objects/321a84958432995e9bedbe8fec230f191c9a395d5000d26d94989ba3a92a2d2c.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/321a84958432995e9bedbe8fec230f191c9a395d5000d26d94989ba3a92a2d2c.receipt.json"
         ),
     ),
     (
@@ -2478,21 +2472,27 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/32b0927522fea0dc13abfb6e8e02829425a1011c92a2d5a6c924896b1f45987e.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/32b0927522fea0dc13abfb6e8e02829425a1011c92a2d5a6c924896b1f45987e.receipt.json"
+        ),
+    ),
+    (
         "objects/32ba3df8c924291121ea9707a2d4d601f2b15ac6e30a951b409d313f84555417.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/32ba3df8c924291121ea9707a2d4d601f2b15ac6e30a951b409d313f84555417.receipt.json"
         ),
     ),
     (
-        "objects/330c30e8bd63c4ad1128ac54e38a56fda918ea6c4b0bf05232d9bbc36b791494.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/330c30e8bd63c4ad1128ac54e38a56fda918ea6c4b0bf05232d9bbc36b791494.receipt.json"
-        ),
-    ),
-    (
         "objects/331116ad06ebf737944bdd904747c656d6e5cf9e8773df7f8d0ef26a54311743.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/331116ad06ebf737944bdd904747c656d6e5cf9e8773df7f8d0ef26a54311743.receipt.json"
+        ),
+    ),
+    (
+        "objects/33189291d47048daa3e7355ac61debc69e28071b4bc0d0cb944c7208d0e43d6d.main.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/33189291d47048daa3e7355ac61debc69e28071b4bc0d0cb944c7208d0e43d6d.main.json"
         ),
     ),
     (
@@ -2505,12 +2505,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/3354438645ff94f69886685d7e478e22cd8dc7879d3bca3c527b7523658113d5.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/3354438645ff94f69886685d7e478e22cd8dc7879d3bca3c527b7523658113d5.receipt.json"
-        ),
-    ),
-    (
-        "objects/3358f79481726a6f52804139f079232ba6187802d848b8666e5277626c9e7644.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/3358f79481726a6f52804139f079232ba6187802d848b8666e5277626c9e7644.receipt.json"
         ),
     ),
     (
@@ -2529,6 +2523,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/33b1ad90f63818665e610a66410db0f723c659fe1c57aae1019cdfefdafe4531.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/33b1ad90f63818665e610a66410db0f723c659fe1c57aae1019cdfefdafe4531.main.json"
+        ),
+    ),
+    (
+        "objects/34421433c087255e7461350f54134a528119e5fca821f4e6b959fe7214488f38.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/34421433c087255e7461350f54134a528119e5fca821f4e6b959fe7214488f38.receipt.json"
         ),
     ),
     (
@@ -2580,6 +2580,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/3564b343b32ccdec3ec6378928732e13c773761c3b361a7cb7d6df8937d8fb4f.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/3564b343b32ccdec3ec6378928732e13c773761c3b361a7cb7d6df8937d8fb4f.receipt.json"
+        ),
+    ),
+    (
         "objects/3570126561950b4050147abe24ee5991f4e5830c6afae1488ea2c86e54a57428.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/3570126561950b4050147abe24ee5991f4e5830c6afae1488ea2c86e54a57428.receipt.json"
@@ -2589,12 +2595,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/357a1ff777d2ff513a98ea325cfd9e74e9ee3e9baac6cf200a5d2618025a8f9e.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/357a1ff777d2ff513a98ea325cfd9e74e9ee3e9baac6cf200a5d2618025a8f9e.main.json"
-        ),
-    ),
-    (
-        "objects/357e003b59f7f44c574eb71457368a690fa629f8d8b75ccba6be9ee83c020514.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/357e003b59f7f44c574eb71457368a690fa629f8d8b75ccba6be9ee83c020514.receipt.json"
         ),
     ),
     (
@@ -2610,15 +2610,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/36019065899c80536c3be537f50187dbdc77c1342f65f00931c6cba356083963.main.json",
+        "objects/3585a110f841bde0a763810c58014a243cb6276b27438e51e6c951ecd3782e6d.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/36019065899c80536c3be537f50187dbdc77c1342f65f00931c6cba356083963.main.json"
+            "../../../../../pkg/contracts/accepted/objects/3585a110f841bde0a763810c58014a243cb6276b27438e51e6c951ecd3782e6d.receipt.json"
         ),
     ),
     (
-        "objects/363b9785b94aec35312186388156fed26315cbd38eadce286da59cbda0b5d5b3.receipt.json",
+        "objects/36019065899c80536c3be537f50187dbdc77c1342f65f00931c6cba356083963.main.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/363b9785b94aec35312186388156fed26315cbd38eadce286da59cbda0b5d5b3.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/36019065899c80536c3be537f50187dbdc77c1342f65f00931c6cba356083963.main.json"
         ),
     ),
     (
@@ -2631,6 +2631,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/367c20aea56b81d45e92e541eb19429b72619d4614671b4b161ae877dfb4880b.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/367c20aea56b81d45e92e541eb19429b72619d4614671b4b161ae877dfb4880b.receipt.json"
+        ),
+    ),
+    (
+        "objects/367e2b9d927fa7aea2c7bec7b04ce9d5a82185578887104c2a5b49853527d934.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/367e2b9d927fa7aea2c7bec7b04ce9d5a82185578887104c2a5b49853527d934.receipt.json"
         ),
     ),
     (
@@ -2676,6 +2682,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/3732f71af585409c8acd681311cd1b13ef9b1788b3aae0223df56bd909de3ce8.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/3732f71af585409c8acd681311cd1b13ef9b1788b3aae0223df56bd909de3ce8.receipt.json"
+        ),
+    ),
+    (
         "objects/3753674a6f136c6969cb7f5aad479d060f2cb2f34dc77c226d6289c25fe337f4.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/3753674a6f136c6969cb7f5aad479d060f2cb2f34dc77c226d6289c25fe337f4.main.json"
@@ -2712,9 +2724,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/37e2ded0cbbe5b184cb238355d876daf51b6cd79f047a3ab5299fd576c5de7e6.receipt.json",
+        "objects/38658cf037a0277c1cf9db30109dff2300e4f44d4eda549b83c255a2fc2d2de1.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/37e2ded0cbbe5b184cb238355d876daf51b6cd79f047a3ab5299fd576c5de7e6.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/38658cf037a0277c1cf9db30109dff2300e4f44d4eda549b83c255a2fc2d2de1.receipt.json"
         ),
     ),
     (
@@ -2727,6 +2739,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/3879ffc6487fcc87decc5735c5592e6b6e3215f4d57882fc10e069c2a65eeeb4.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/3879ffc6487fcc87decc5735c5592e6b6e3215f4d57882fc10e069c2a65eeeb4.receipt.json"
+        ),
+    ),
+    (
+        "objects/38a7ccd2c5c3a673babc8c55cc1f832f1c1de602f2fe5ed60f0af140f4ef801f.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/38a7ccd2c5c3a673babc8c55cc1f832f1c1de602f2fe5ed60f0af140f4ef801f.receipt.json"
         ),
     ),
     (
@@ -2748,12 +2766,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/39045e9fb48dae176c729274909d85f0a36fca2eab6690523fd8bfdd2462a3b7.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/39045e9fb48dae176c729274909d85f0a36fca2eab6690523fd8bfdd2462a3b7.receipt.json"
-        ),
-    ),
-    (
         "objects/39452e2fee10f0d452d69d99d30a103e261121fbd03c3fb5f44cfa6df2a3b676.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/39452e2fee10f0d452d69d99d30a103e261121fbd03c3fb5f44cfa6df2a3b676.receipt.json"
@@ -2769,6 +2781,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/3956e6905fff871ffcfd604cf35bdf6f19257ea4ca68e60abd70bacea62ea20a.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/3956e6905fff871ffcfd604cf35bdf6f19257ea4ca68e60abd70bacea62ea20a.receipt.json"
+        ),
+    ),
+    (
+        "objects/395c2183dacf424ce4680b679d98a6027643cd1f5f491858d5dccc4530968a01.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/395c2183dacf424ce4680b679d98a6027643cd1f5f491858d5dccc4530968a01.receipt.json"
         ),
     ),
     (
@@ -2805,12 +2823,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/3ae3143a773cf0db806a11b8b9d44aa858944ec08f78eab7450c7d806ee03cb8.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/3ae3143a773cf0db806a11b8b9d44aa858944ec08f78eab7450c7d806ee03cb8.receipt.json"
-        ),
-    ),
-    (
-        "objects/3b288831b43ec7278c4ee41c3ad166fda61ec00c1d5cb9b52437c174d130cee3.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/3b288831b43ec7278c4ee41c3ad166fda61ec00c1d5cb9b52437c174d130cee3.receipt.json"
         ),
     ),
     (
@@ -2862,6 +2874,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/3c28b6140ae331e95cabf41be1a83ecc4612a9761260882ea32686a585bc9705.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/3c28b6140ae331e95cabf41be1a83ecc4612a9761260882ea32686a585bc9705.receipt.json"
+        ),
+    ),
+    (
         "objects/3c28dd3a394b637631c1078afc5c43aaa7295ba0035fbb1cc2fa896845b708e4.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/3c28dd3a394b637631c1078afc5c43aaa7295ba0035fbb1cc2fa896845b708e4.main.json"
@@ -2889,6 +2907,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/3c5afc8cb933dd5b6011a0698e40544acfb5476c4fc3c622e4e5d1cc9382a6b1.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/3c5afc8cb933dd5b6011a0698e40544acfb5476c4fc3c622e4e5d1cc9382a6b1.main.json"
+        ),
+    ),
+    (
+        "objects/3c5ee8e17a6d20e1d6130b26dd8380695e38903530f9e8f7dae3db98e6fb2a27.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/3c5ee8e17a6d20e1d6130b26dd8380695e38903530f9e8f7dae3db98e6fb2a27.receipt.json"
         ),
     ),
     (
@@ -2940,6 +2964,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/3db03eded48f8c0c9ca0ad5dafe70da3f31a45d2b2c01191606b35822e557b45.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/3db03eded48f8c0c9ca0ad5dafe70da3f31a45d2b2c01191606b35822e557b45.receipt.json"
+        ),
+    ),
+    (
         "objects/3db9ceeae2014dacec4fd58b2136af0d928ef7eececf76e570f815c1d9bd3f0e.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/3db9ceeae2014dacec4fd58b2136af0d928ef7eececf76e570f815c1d9bd3f0e.receipt.json"
@@ -2949,6 +2979,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/3dbc38ee2f00b081efb4aa34050eeb3584dab1e8052c4e9b3ab5f9a22d1a03ed.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/3dbc38ee2f00b081efb4aa34050eeb3584dab1e8052c4e9b3ab5f9a22d1a03ed.receipt.json"
+        ),
+    ),
+    (
+        "objects/3dcc7177beb3ee733668390da025fee988f4928228e30f0ab3cf9eb6ba5293cb.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/3dcc7177beb3ee733668390da025fee988f4928228e30f0ab3cf9eb6ba5293cb.receipt.json"
         ),
     ),
     (
@@ -3000,6 +3036,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/3ee1d06bd99eec1a1bb343ba3683c68e3c8c029bff342df839403c5c687f8294.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/3ee1d06bd99eec1a1bb343ba3683c68e3c8c029bff342df839403c5c687f8294.receipt.json"
+        ),
+    ),
+    (
         "objects/3ee4b3f3d9cb2fb72c423b182339fc4055581b7fcbc8d16ca3e04153a20641d8.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/3ee4b3f3d9cb2fb72c423b182339fc4055581b7fcbc8d16ca3e04153a20641d8.receipt.json"
@@ -3042,6 +3084,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/3f5009defdb68b431f07ad0bbaae25d607a37ffc66a4462310d59413126b62d3.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/3f5009defdb68b431f07ad0bbaae25d607a37ffc66a4462310d59413126b62d3.receipt.json"
+        ),
+    ),
+    (
         "objects/3f5b1945abf1a8944ed0306a44fccc5df40befe70432050b839fe0b44340684a.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/3f5b1945abf1a8944ed0306a44fccc5df40befe70432050b839fe0b44340684a.receipt.json"
@@ -3063,12 +3111,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/3fa1cb9d7849b81a56b47c141e2e2e56665973eacbd10b500d1a1f7683378c21.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/3fa1cb9d7849b81a56b47c141e2e2e56665973eacbd10b500d1a1f7683378c21.main.json"
-        ),
-    ),
-    (
-        "objects/3fa3dee32f4908704b96523624eb639ad9083377f856e0c8564a6e351d3504e5.main.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/3fa3dee32f4908704b96523624eb639ad9083377f856e0c8564a6e351d3504e5.main.json"
         ),
     ),
     (
@@ -3120,6 +3162,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/40d06e15dae295d80ef2da9a290acd57da2efb7cc32eeec45ee7fb7ede6d7b71.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/40d06e15dae295d80ef2da9a290acd57da2efb7cc32eeec45ee7fb7ede6d7b71.receipt.json"
+        ),
+    ),
+    (
         "objects/410dc153d23c32089b156f622db3995114129242ca3ef03b0ab86b8b25219aef.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/410dc153d23c32089b156f622db3995114129242ca3ef03b0ab86b8b25219aef.main.json"
@@ -3129,6 +3177,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/4140db47387aceb0e621a89a9a1a01531f4f36bac942c29175183aeea957fccc.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/4140db47387aceb0e621a89a9a1a01531f4f36bac942c29175183aeea957fccc.receipt.json"
+        ),
+    ),
+    (
+        "objects/41b444deb95b61913229c9dad72dfa5de4383c3007619a5e4277f13a6abffa39.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/41b444deb95b61913229c9dad72dfa5de4383c3007619a5e4277f13a6abffa39.receipt.json"
         ),
     ),
     (
@@ -3180,9 +3234,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/42f606a9be6f21b803cf6428cde1005bb1f6c7e3a5bf0a88d90a2160f78b1d4e.receipt.json",
+        "objects/42db7fa7553c64cb110024ef05715ae0f425fb475ffb37bf9cc84ff25fd56c2a.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/42f606a9be6f21b803cf6428cde1005bb1f6c7e3a5bf0a88d90a2160f78b1d4e.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/42db7fa7553c64cb110024ef05715ae0f425fb475ffb37bf9cc84ff25fd56c2a.receipt.json"
         ),
     ),
     (
@@ -3213,12 +3267,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/4345432176692be9a5a93fc8d8ff2c6111d4496fe73ef5b039975a2e020b3998.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/4345432176692be9a5a93fc8d8ff2c6111d4496fe73ef5b039975a2e020b3998.receipt.json"
-        ),
-    ),
-    (
-        "objects/435a3ba8a214a26530321b4b0d83d82376cda44b283e85e60e6c5b0395ddde32.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/435a3ba8a214a26530321b4b0d83d82376cda44b283e85e60e6c5b0395ddde32.receipt.json"
         ),
     ),
     (
@@ -3312,6 +3360,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/44b9b96a007093fe5754f6cee78bf77cf6774f65a581075e1973c7052eba7d88.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/44b9b96a007093fe5754f6cee78bf77cf6774f65a581075e1973c7052eba7d88.receipt.json"
+        ),
+    ),
+    (
         "objects/44e040d3b7dfca087256eec65d512632c11b31146ab3937526a9ba9dab3cda50.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/44e040d3b7dfca087256eec65d512632c11b31146ab3937526a9ba9dab3cda50.receipt.json"
@@ -3336,6 +3390,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/451eafdf32b18033171d7b8d60d2daa769cc4ef1e99bb0f116ce065179892d26.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/451eafdf32b18033171d7b8d60d2daa769cc4ef1e99bb0f116ce065179892d26.receipt.json"
+        ),
+    ),
+    (
         "objects/45210cb53b0260154a1c166cfe5dacd2624e07742250c50da85bdcbf53e404ac.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/45210cb53b0260154a1c166cfe5dacd2624e07742250c50da85bdcbf53e404ac.receipt.json"
@@ -3348,15 +3408,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/459aa4371079d423402c8d585d9f981683cb55422b682d20878bfe056f90509c.receipt.json",
+        "objects/4570c6f8b43b9b7ca28b7336181066a092a93378ef075e39d773bf576b4b9f6b.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/459aa4371079d423402c8d585d9f981683cb55422b682d20878bfe056f90509c.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/4570c6f8b43b9b7ca28b7336181066a092a93378ef075e39d773bf576b4b9f6b.receipt.json"
         ),
     ),
     (
-        "objects/459ea79b38e3e08b86b8aa8e5db1fbe5969e8ee7f23ef19e391d53b234d524ba.receipt.json",
+        "objects/459aa4371079d423402c8d585d9f981683cb55422b682d20878bfe056f90509c.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/459ea79b38e3e08b86b8aa8e5db1fbe5969e8ee7f23ef19e391d53b234d524ba.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/459aa4371079d423402c8d585d9f981683cb55422b682d20878bfe056f90509c.receipt.json"
         ),
     ),
     (
@@ -3381,6 +3441,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/46cdd594a4a57780305169f03fced1804d4f0251c571376dcaa6fa57b0536467.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/46cdd594a4a57780305169f03fced1804d4f0251c571376dcaa6fa57b0536467.main.json"
+        ),
+    ),
+    (
+        "objects/46d3b0669c6fadf2c213423a3e9260f2f6383fdb68623e4e5fc79a13a8ebe1bb.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/46d3b0669c6fadf2c213423a3e9260f2f6383fdb68623e4e5fc79a13a8ebe1bb.receipt.json"
         ),
     ),
     (
@@ -3411,6 +3477,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/476af4d3669c03beec9c3ae739ad12e4c0c0fc9de3748608df081e0510874a81.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/476af4d3669c03beec9c3ae739ad12e4c0c0fc9de3748608df081e0510874a81.main.json"
+        ),
+    ),
+    (
+        "objects/478287328c280784d57c5b6e110d03fff5a0c6e46117ee751423f74d3606cc84.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/478287328c280784d57c5b6e110d03fff5a0c6e46117ee751423f74d3606cc84.receipt.json"
         ),
     ),
     (
@@ -3456,6 +3528,18 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/480b3149d102b11756ef62c3037da9f0388f1f9a7c5853c90bf36f51c1014a47.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/480b3149d102b11756ef62c3037da9f0388f1f9a7c5853c90bf36f51c1014a47.receipt.json"
+        ),
+    ),
+    (
+        "objects/48281e6bbd7ae9a465fac3b5c97f4de29134a17239c84d5d68f2d14cf93be1f7.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/48281e6bbd7ae9a465fac3b5c97f4de29134a17239c84d5d68f2d14cf93be1f7.receipt.json"
+        ),
+    ),
+    (
         "objects/484ab3b6edd8eb05e44dd360778a6731256edb1d3a0cb3e2203c9ea44d17cb35.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/484ab3b6edd8eb05e44dd360778a6731256edb1d3a0cb3e2203c9ea44d17cb35.receipt.json"
@@ -3486,6 +3570,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/48e1648394e7f3f5b8ff036e48dbea4c66d3d852468fe4808e1579c9f82dd08a.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/48e1648394e7f3f5b8ff036e48dbea4c66d3d852468fe4808e1579c9f82dd08a.receipt.json"
+        ),
+    ),
+    (
         "objects/48f84ed8b5c5f3b26f4f427e9d8a479c731b2028e7df7fb7eff8ab991bbae7f3.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/48f84ed8b5c5f3b26f4f427e9d8a479c731b2028e7df7fb7eff8ab991bbae7f3.main.json"
@@ -3510,12 +3600,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/493b12c68dddf200981bac0bd23b00f1f006c41bcb87cc5542255d0b87fe9c85.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/493b12c68dddf200981bac0bd23b00f1f006c41bcb87cc5542255d0b87fe9c85.receipt.json"
-        ),
-    ),
-    (
         "objects/4950f9f77e11b77f8beff889454e85a53880c2b797ceb856f3d032060e151d63.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/4950f9f77e11b77f8beff889454e85a53880c2b797ceb856f3d032060e151d63.receipt.json"
@@ -3537,12 +3621,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/49c657a9f0f6314f6d116d6de23d675ff367fb8ca3d8291d98b27bc2181c8ded.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/49c657a9f0f6314f6d116d6de23d675ff367fb8ca3d8291d98b27bc2181c8ded.main.json"
-        ),
-    ),
-    (
-        "objects/49dc989ddeb92a0a786701aa8d19ff8a443f7f5693496d08e9e006ab47b58da8.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/49dc989ddeb92a0a786701aa8d19ff8a443f7f5693496d08e9e006ab47b58da8.receipt.json"
         ),
     ),
     (
@@ -3582,18 +3660,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/4afeca48fca6cbe3e1dfd4d1dca3715311b831c1737f68797735ced29f6a4cde.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/4afeca48fca6cbe3e1dfd4d1dca3715311b831c1737f68797735ced29f6a4cde.receipt.json"
-        ),
-    ),
-    (
-        "objects/4b2a04731126a98fb2b2c41ea4a126f18c1c7d5f976d996209f4dbe27df3be3e.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/4b2a04731126a98fb2b2c41ea4a126f18c1c7d5f976d996209f4dbe27df3be3e.receipt.json"
-        ),
-    ),
-    (
         "objects/4b330445e4e2201b7066f20ea62c1564a15ab6fafc1a2edd7e91a8e711168268.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/4b330445e4e2201b7066f20ea62c1564a15ab6fafc1a2edd7e91a8e711168268.main.json"
@@ -3612,6 +3678,18 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/4b9c43139e7f8e123f512cf06aabede2deede6f641f39d69a32d0c1e417b6ca1.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/4b9c43139e7f8e123f512cf06aabede2deede6f641f39d69a32d0c1e417b6ca1.receipt.json"
+        ),
+    ),
+    (
+        "objects/4c047545923ee89e101af6a331a137a8cd3c8e619cf35e6945773b2690599f42.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/4c047545923ee89e101af6a331a137a8cd3c8e619cf35e6945773b2690599f42.receipt.json"
+        ),
+    ),
+    (
         "objects/4c33841d39a4a0e60eedd0258d421757b16c6790868bc61bbb16471a84dc7618.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/4c33841d39a4a0e60eedd0258d421757b16c6790868bc61bbb16471a84dc7618.receipt.json"
@@ -3621,6 +3699,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/4c47713e44db296b2bd7c791caf0b3e1ff1782073de5561c95f8b9d7926b19e3.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/4c47713e44db296b2bd7c791caf0b3e1ff1782073de5561c95f8b9d7926b19e3.receipt.json"
+        ),
+    ),
+    (
+        "objects/4c4886960d892afcad865458d5023c9f5c23e63c0d6cf6746ec8c1a622183de3.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/4c4886960d892afcad865458d5023c9f5c23e63c0d6cf6746ec8c1a622183de3.receipt.json"
         ),
     ),
     (
@@ -3636,21 +3720,33 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/4c69bc16ea44ff69bf809976c3fdf48ac22f528bb36eece74ce2424090d9e31a.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/4c69bc16ea44ff69bf809976c3fdf48ac22f528bb36eece74ce2424090d9e31a.receipt.json"
-        ),
-    ),
-    (
         "objects/4c83a6ab84388bcc9de74ffe83e513ecb6edc37447928aef809021d6ddb55684.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/4c83a6ab84388bcc9de74ffe83e513ecb6edc37447928aef809021d6ddb55684.receipt.json"
         ),
     ),
     (
-        "objects/4cbf9e978b26c7c225cde1d33305c2853ea3e2b6130655857313a824992c8dac.receipt.json",
+        "objects/4cd527f02a42eabc5f521adde63dea2eabed0ea3adbfe0a54d5ac8532cd05dfa.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/4cbf9e978b26c7c225cde1d33305c2853ea3e2b6130655857313a824992c8dac.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/4cd527f02a42eabc5f521adde63dea2eabed0ea3adbfe0a54d5ac8532cd05dfa.receipt.json"
+        ),
+    ),
+    (
+        "objects/4cde7b161f9c37c13beb14e67d16e3ceb161cc765463546befa0f7cb1f214827.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/4cde7b161f9c37c13beb14e67d16e3ceb161cc765463546befa0f7cb1f214827.receipt.json"
+        ),
+    ),
+    (
+        "objects/4d107b8b614a35e518aff7aaa42d847ee5676c1944bec9aa08ba931e14a49327.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/4d107b8b614a35e518aff7aaa42d847ee5676c1944bec9aa08ba931e14a49327.receipt.json"
+        ),
+    ),
+    (
+        "objects/4d77e405443ec0ead6b60db9d974e8db8b5ca2bf7f18ce01f0fb1805c0b21e31.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/4d77e405443ec0ead6b60db9d974e8db8b5ca2bf7f18ce01f0fb1805c0b21e31.receipt.json"
         ),
     ),
     (
@@ -3666,12 +3762,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/4dc19250c3117db1cfa8e32f421f10aca1fe55822ba7a6207cf61f82c88aeacf.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/4dc19250c3117db1cfa8e32f421f10aca1fe55822ba7a6207cf61f82c88aeacf.receipt.json"
-        ),
-    ),
-    (
         "objects/4dd0caf1294e6a80b31b8b81b4f19d6a2c5726146fcaf5d8b19d0124fc686b7d.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/4dd0caf1294e6a80b31b8b81b4f19d6a2c5726146fcaf5d8b19d0124fc686b7d.receipt.json"
@@ -3681,12 +3771,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/4de4c3011f6f49614acb8bb08a94dfc4422b9517971b8bd4eaed0c8fbc40a6be.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/4de4c3011f6f49614acb8bb08a94dfc4422b9517971b8bd4eaed0c8fbc40a6be.main.json"
-        ),
-    ),
-    (
-        "objects/4e345fa3656f2193f6abb57e08896b87fb32e55bf66ccd05a193ff607edb5736.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/4e345fa3656f2193f6abb57e08896b87fb32e55bf66ccd05a193ff607edb5736.receipt.json"
         ),
     ),
     (
@@ -3744,15 +3828,21 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/4f785c351981d74aeed844748fda030e60e070ab3f988c4ac9094f20f9e93b1c.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/4f785c351981d74aeed844748fda030e60e070ab3f988c4ac9094f20f9e93b1c.receipt.json"
+        ),
+    ),
+    (
         "objects/4f982e032a32a3267dc58a735602b8a74303003335995e292f50a93bd9b4222c.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/4f982e032a32a3267dc58a735602b8a74303003335995e292f50a93bd9b4222c.receipt.json"
         ),
     ),
     (
-        "objects/4fbae911c005f644f26b7aad4e3d501aa87c3750333d3c345e79b6e6fd74a663.receipt.json",
+        "objects/4fb8127f769dc1a96a784fc4f71f58ff33832d4824771f331be0074924ef8900.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/4fbae911c005f644f26b7aad4e3d501aa87c3750333d3c345e79b6e6fd74a663.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/4fb8127f769dc1a96a784fc4f71f58ff33832d4824771f331be0074924ef8900.receipt.json"
         ),
     ),
     (
@@ -3783,6 +3873,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/50467411d5cc77f94ee9dfa24fe6e4dd45ef394586eff589cd54eaa2fcb6c024.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/50467411d5cc77f94ee9dfa24fe6e4dd45ef394586eff589cd54eaa2fcb6c024.receipt.json"
+        ),
+    ),
+    (
+        "objects/504c6cf368297c03f00146bba03539cffb1b68714e8b351b00cda7aa0934a6c5.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/504c6cf368297c03f00146bba03539cffb1b68714e8b351b00cda7aa0934a6c5.receipt.json"
         ),
     ),
     (
@@ -3834,12 +3930,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/5190d19f9c09c885d696025eba22bef4fbae2d16c913dae3231f952bdf0f6c1c.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/5190d19f9c09c885d696025eba22bef4fbae2d16c913dae3231f952bdf0f6c1c.receipt.json"
-        ),
-    ),
-    (
         "objects/519810130fd42aeb11c422b64b71052e15eec1e76a89756ae472b827aea6a35f.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/519810130fd42aeb11c422b64b71052e15eec1e76a89756ae472b827aea6a35f.receipt.json"
@@ -3870,21 +3960,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/527e4dbe1d272606aebca76d727a8dd342e416354c705ce3c33da4dd31096a23.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/527e4dbe1d272606aebca76d727a8dd342e416354c705ce3c33da4dd31096a23.receipt.json"
-        ),
-    ),
-    (
         "objects/52897a5d52e7e6ca5a9a825c1da316b4d7f1c50f4aca1912cf33a80a0a93b3b9.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/52897a5d52e7e6ca5a9a825c1da316b4d7f1c50f4aca1912cf33a80a0a93b3b9.receipt.json"
-        ),
-    ),
-    (
-        "objects/52a9e2867191521427e7360e70da6e0ddbff4af5d1039202f94409843682015c.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/52a9e2867191521427e7360e70da6e0ddbff4af5d1039202f94409843682015c.receipt.json"
         ),
     ),
     (
@@ -3924,6 +4002,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/5369ab2b92beeffd22a7fb6c2c89c1a1cf9d66be8b3a4a417db6f6c4fa62bdb3.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/5369ab2b92beeffd22a7fb6c2c89c1a1cf9d66be8b3a4a417db6f6c4fa62bdb3.receipt.json"
+        ),
+    ),
+    (
         "objects/5370063564ef849730a539e6acac4a2806ed3f29436976983305b536e666795e.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/5370063564ef849730a539e6acac4a2806ed3f29436976983305b536e666795e.receipt.json"
@@ -3954,9 +4038,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/54092bb15152e28748f234a685efb3e2a031361a66ec67b8293d2d6d0a3b7767.receipt.json",
+        "objects/544d82eff9806f646adaee6265d698c57747e4fe4439bd1da58c48ac2d4798c5.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/54092bb15152e28748f234a685efb3e2a031361a66ec67b8293d2d6d0a3b7767.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/544d82eff9806f646adaee6265d698c57747e4fe4439bd1da58c48ac2d4798c5.receipt.json"
         ),
     ),
     (
@@ -3969,6 +4053,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/54bf62bac9f7493a5a893cff8ef7d2ed488f7b902dba4a55df4623993c49bbb5.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/54bf62bac9f7493a5a893cff8ef7d2ed488f7b902dba4a55df4623993c49bbb5.receipt.json"
+        ),
+    ),
+    (
+        "objects/54d1c687e998081cfc66360fbc34017389bf5daebba47a24cf0a56ecbf78c921.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/54d1c687e998081cfc66360fbc34017389bf5daebba47a24cf0a56ecbf78c921.receipt.json"
         ),
     ),
     (
@@ -3987,6 +4077,18 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/5545eb8be24675d84ff08d8d99fb0258a5669eb2e56dcf10712d1d1224eee36e.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/5545eb8be24675d84ff08d8d99fb0258a5669eb2e56dcf10712d1d1224eee36e.receipt.json"
+        ),
+    ),
+    (
+        "objects/5565470dc7fd5210f6e57e60e43ae1cde867c3a2c5c37fb3cfa868e4b2500441.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/5565470dc7fd5210f6e57e60e43ae1cde867c3a2c5c37fb3cfa868e4b2500441.receipt.json"
+        ),
+    ),
+    (
+        "objects/556f7f31976c2208306416f7cb65dea5aa2f8c0165700233e3cd95a698a6c6ca.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/556f7f31976c2208306416f7cb65dea5aa2f8c0165700233e3cd95a698a6c6ca.receipt.json"
         ),
     ),
     (
@@ -4020,12 +4122,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/56125575c370f3fc2a4032202ad14f34b0a02f23c43223477336d3df4614fe50.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/56125575c370f3fc2a4032202ad14f34b0a02f23c43223477336d3df4614fe50.receipt.json"
-        ),
-    ),
-    (
         "objects/561c8b21ca3ee90661e4f0e8557088616f681a425de621061a1f3006690bd968.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/561c8b21ca3ee90661e4f0e8557088616f681a425de621061a1f3006690bd968.receipt.json"
@@ -4038,27 +4134,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/5631b1033414246adaab54235ff33ada23f8b6055b2cfd16dcaee828780e07c3.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/5631b1033414246adaab54235ff33ada23f8b6055b2cfd16dcaee828780e07c3.receipt.json"
-        ),
-    ),
-    (
         "objects/563a2d6d98c0269118d99c94d91ffdccc0e6573f2160317d9b46b99acca350d3.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/563a2d6d98c0269118d99c94d91ffdccc0e6573f2160317d9b46b99acca350d3.receipt.json"
-        ),
-    ),
-    (
-        "objects/5661ab4bf5942dfbddddc8dad4026fde132cb69242e06b38756780dc2008df7f.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/5661ab4bf5942dfbddddc8dad4026fde132cb69242e06b38756780dc2008df7f.receipt.json"
-        ),
-    ),
-    (
-        "objects/566d251d3e8e34d4cf360911cdca4c571e73b760b6befda4df691b3f5ef48b38.main.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/566d251d3e8e34d4cf360911cdca4c571e73b760b6befda4df691b3f5ef48b38.main.json"
         ),
     ),
     (
@@ -4086,9 +4164,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/571337770f23e4c0bf4d7629c459dac0ea9583d6a91babf95615fe98c1cc95e9.receipt.json",
+        "objects/57166465a7b7b3e7c03467d849cb4c0e52245cce11901d8b3a94e34bf2744252.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/571337770f23e4c0bf4d7629c459dac0ea9583d6a91babf95615fe98c1cc95e9.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/57166465a7b7b3e7c03467d849cb4c0e52245cce11901d8b3a94e34bf2744252.receipt.json"
         ),
     ),
     (
@@ -4146,6 +4224,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/5809fe58e554d4b65d5ff9e6b445f939c4fe3835272dda82c0b2fa6c9ccf4441.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/5809fe58e554d4b65d5ff9e6b445f939c4fe3835272dda82c0b2fa6c9ccf4441.receipt.json"
+        ),
+    ),
+    (
         "objects/580d679189b7cb7085fd8b6c4400d85c76f3ad0950b837700ca1bf5356708ef2.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/580d679189b7cb7085fd8b6c4400d85c76f3ad0950b837700ca1bf5356708ef2.receipt.json"
@@ -4176,12 +4260,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/58e1559c5ad74bb18be1868f944ec1e91c9d5fcd40826712164596fcb3f2a268.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/58e1559c5ad74bb18be1868f944ec1e91c9d5fcd40826712164596fcb3f2a268.receipt.json"
-        ),
-    ),
-    (
         "objects/58e2ae243e3a62d5327f690ac4803e58c06837724a55b720265b5c5f355e136e.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/58e2ae243e3a62d5327f690ac4803e58c06837724a55b720265b5c5f355e136e.receipt.json"
@@ -4191,12 +4269,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/58f6c45d6761d9b4e1e1ba52f27dd005bb65239a280c0b90b986f526a3525fd0.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/58f6c45d6761d9b4e1e1ba52f27dd005bb65239a280c0b90b986f526a3525fd0.receipt.json"
-        ),
-    ),
-    (
-        "objects/58f6edefae5126cb1784ccf160c41a71c068a5352ea71899ef0e5371ccc697ab.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/58f6edefae5126cb1784ccf160c41a71c068a5352ea71899ef0e5371ccc697ab.receipt.json"
         ),
     ),
     (
@@ -4224,9 +4296,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/597a82da46031a0efb3af7eb96722505376846784e34360410ffb70905cd6fe8.receipt.json",
+        "objects/5983ae3368b65695942b61594fa3249dd1313b956371773c1c188a2dd78977c0.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/597a82da46031a0efb3af7eb96722505376846784e34360410ffb70905cd6fe8.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/5983ae3368b65695942b61594fa3249dd1313b956371773c1c188a2dd78977c0.receipt.json"
         ),
     ),
     (
@@ -4242,21 +4314,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/59d96019e18802e20c83fe42a7c9abf52404f177ea753e0311ddf4501cc06806.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/59d96019e18802e20c83fe42a7c9abf52404f177ea753e0311ddf4501cc06806.receipt.json"
-        ),
-    ),
-    (
         "objects/59e65f1b6a14438f28cc3e0856f91292c2ea33bcd0795b9e84e069e84e802cf6.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/59e65f1b6a14438f28cc3e0856f91292c2ea33bcd0795b9e84e069e84e802cf6.main.json"
-        ),
-    ),
-    (
-        "objects/59efdf3b032e1c17b508e7821df0530727e283ada9952cf3ff00df947fe450df.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/59efdf3b032e1c17b508e7821df0530727e283ada9952cf3ff00df947fe450df.receipt.json"
         ),
     ),
     (
@@ -4320,12 +4380,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/5b0fb1c0853bfb236c283ba20a013659cacbe2cc18f3fa9700d38da1cb71952f.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/5b0fb1c0853bfb236c283ba20a013659cacbe2cc18f3fa9700d38da1cb71952f.receipt.json"
-        ),
-    ),
-    (
         "objects/5b1ed1b8f14551ad64f9b5c8b8df5bb797bd98fad9202e175f06619a2f957ba4.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/5b1ed1b8f14551ad64f9b5c8b8df5bb797bd98fad9202e175f06619a2f957ba4.receipt.json"
@@ -4341,12 +4395,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/5b445128e34d5d6a4815c42e96136d939ecf36ebbd2594f9c968aa23bcd7a22d.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/5b445128e34d5d6a4815c42e96136d939ecf36ebbd2594f9c968aa23bcd7a22d.main.json"
-        ),
-    ),
-    (
-        "objects/5b4b496d1010d6dbf36cf7501d80108d163fb7290f03a2514154629818879fad.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/5b4b496d1010d6dbf36cf7501d80108d163fb7290f03a2514154629818879fad.receipt.json"
         ),
     ),
     (
@@ -4383,18 +4431,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/5beb6ae9ab14b6f7246a6cb7a015fdc91156a744ced5b4b509f43cddf3fd0e83.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/5beb6ae9ab14b6f7246a6cb7a015fdc91156a744ced5b4b509f43cddf3fd0e83.receipt.json"
-        ),
-    ),
-    (
-        "objects/5c780a438e79f78682385b4b7cb0e3eb58fa3770d811baf8680f2fbc7e26cfc7.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/5c780a438e79f78682385b4b7cb0e3eb58fa3770d811baf8680f2fbc7e26cfc7.receipt.json"
-        ),
-    ),
-    (
-        "objects/5c90e9dc905f05d4aba986be743d980214f035f08391b56779fc11d76d9c08e8.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/5c90e9dc905f05d4aba986be743d980214f035f08391b56779fc11d76d9c08e8.receipt.json"
         ),
     ),
     (
@@ -4443,12 +4479,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/5d7e93c688d3987134b5dd8dddf813cb75669ab8fec92953d61cfd0d1c1a913b.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/5d7e93c688d3987134b5dd8dddf813cb75669ab8fec92953d61cfd0d1c1a913b.receipt.json"
-        ),
-    ),
-    (
-        "objects/5d9b492769e6777ded2722bce0adc2f010c8cdb9e2035b47d90bb75f08ef4b96.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/5d9b492769e6777ded2722bce0adc2f010c8cdb9e2035b47d90bb75f08ef4b96.receipt.json"
         ),
     ),
     (
@@ -4524,9 +4554,21 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/5ee35b42fcaa8d251284000bd7ce87b38e04d569b4cfc1e0ea2b94207fbfc826.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/5ee35b42fcaa8d251284000bd7ce87b38e04d569b4cfc1e0ea2b94207fbfc826.receipt.json"
+        ),
+    ),
+    (
         "objects/5efa64975981eed131b2bf793ea3dae548cbd2a680e236664b6a58e2c430fc05.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/5efa64975981eed131b2bf793ea3dae548cbd2a680e236664b6a58e2c430fc05.main.json"
+        ),
+    ),
+    (
+        "objects/5f07cc5c8792168e64b1ec5644b11aed3051065fadf9072140b9c02d508d7022.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/5f07cc5c8792168e64b1ec5644b11aed3051065fadf9072140b9c02d508d7022.receipt.json"
         ),
     ),
     (
@@ -4563,6 +4605,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/5ff5830a0722b8fd7667c46cb3649af975407f319497806cecb0f654df3fcb41.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/5ff5830a0722b8fd7667c46cb3649af975407f319497806cecb0f654df3fcb41.receipt.json"
+        ),
+    ),
+    (
+        "objects/6031c8070b405792e91dc5b72a93e66cfc356cf1e5108fc525cfa417c4b1d314.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/6031c8070b405792e91dc5b72a93e66cfc356cf1e5108fc525cfa417c4b1d314.receipt.json"
         ),
     ),
     (
@@ -4614,6 +4662,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/611f7de63c2c7dd2bf09d6fa35b8bfb6fcf9cc6ef7e3d0f71be7679f1130b39d.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/611f7de63c2c7dd2bf09d6fa35b8bfb6fcf9cc6ef7e3d0f71be7679f1130b39d.receipt.json"
+        ),
+    ),
+    (
         "objects/6120cd4311213ccbd3d97caec5031cdc7d61546b4032a6a885a658614574e32c.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/6120cd4311213ccbd3d97caec5031cdc7d61546b4032a6a885a658614574e32c.receipt.json"
@@ -4638,15 +4692,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/61b0e30ff696a0e01ecaa190a21228bec16cf08dcc4866e5948fc1c611394f2e.receipt.json",
+        "objects/61ad4eedf249dfd63c78342897e1baa5e2201ee163476be8e638a98e10821404.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/61b0e30ff696a0e01ecaa190a21228bec16cf08dcc4866e5948fc1c611394f2e.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/61ad4eedf249dfd63c78342897e1baa5e2201ee163476be8e638a98e10821404.receipt.json"
         ),
     ),
     (
-        "objects/61ea07286922ccbf90543db4a9b9b8e27143265c63382d4037a11c45db70ede1.receipt.json",
+        "objects/61b0e30ff696a0e01ecaa190a21228bec16cf08dcc4866e5948fc1c611394f2e.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/61ea07286922ccbf90543db4a9b9b8e27143265c63382d4037a11c45db70ede1.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/61b0e30ff696a0e01ecaa190a21228bec16cf08dcc4866e5948fc1c611394f2e.receipt.json"
         ),
     ),
     (
@@ -4659,6 +4713,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/6205be2b56d4e72d210fc99bb771141fd2cbbe2c4191ec5d98a4a41f9cb07ba0.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/6205be2b56d4e72d210fc99bb771141fd2cbbe2c4191ec5d98a4a41f9cb07ba0.receipt.json"
+        ),
+    ),
+    (
+        "objects/625c79048cec5391403f51dc4c2ed7dd1b34e7e6de347c505aa959b584c6acf0.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/625c79048cec5391403f51dc4c2ed7dd1b34e7e6de347c505aa959b584c6acf0.receipt.json"
         ),
     ),
     (
@@ -4722,6 +4782,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/638d84678f1423e6aa263ba1176de5d80ec2d5e4d3743c1bba6ca9717a2c8c5b.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/638d84678f1423e6aa263ba1176de5d80ec2d5e4d3743c1bba6ca9717a2c8c5b.receipt.json"
+        ),
+    ),
+    (
         "objects/63ea4186061a833b0578a788b4165c060b59e4a0674c46d79af0214433fcec10.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/63ea4186061a833b0578a788b4165c060b59e4a0674c46d79af0214433fcec10.receipt.json"
@@ -4743,6 +4809,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/643f4a67798e2a6b58acf866118a743a7afb67d21b0695046caed426e6b08bc4.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/643f4a67798e2a6b58acf866118a743a7afb67d21b0695046caed426e6b08bc4.receipt.json"
+        ),
+    ),
+    (
+        "objects/645fde304e5c0d12b7ef96b37e35b6a2702be5163e6c2175e93b6ce907e41291.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/645fde304e5c0d12b7ef96b37e35b6a2702be5163e6c2175e93b6ce907e41291.receipt.json"
         ),
     ),
     (
@@ -4824,6 +4896,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/6618465b8c1de03800e16159425fc3481185467a21458c3c3e0116440d055b7c.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/6618465b8c1de03800e16159425fc3481185467a21458c3c3e0116440d055b7c.receipt.json"
+        ),
+    ),
+    (
         "objects/6637b24f4c33b79dfb95df001ec91b41a9d45b4250b8d9b849c0b922d7887021.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/6637b24f4c33b79dfb95df001ec91b41a9d45b4250b8d9b849c0b922d7887021.receipt.json"
@@ -4839,6 +4917,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/66a942f73a05653fcf694fd57b5480e3f47c93cd4780548e26151a50c5be3e28.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/66a942f73a05653fcf694fd57b5480e3f47c93cd4780548e26151a50c5be3e28.receipt.json"
+        ),
+    ),
+    (
+        "objects/66e920374af7aa03fd66d9be5517e5e66ddfbf95a3bb0785a80b4aeaa80fe063.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/66e920374af7aa03fd66d9be5517e5e66ddfbf95a3bb0785a80b4aeaa80fe063.receipt.json"
         ),
     ),
     (
@@ -4860,12 +4944,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/6782f1fff4144e811c7aaf71eb5822ecf2a1f0abc62de283860920aa322de9e2.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/6782f1fff4144e811c7aaf71eb5822ecf2a1f0abc62de283860920aa322de9e2.receipt.json"
-        ),
-    ),
-    (
         "objects/67848d7b6e3fb97fa345f58c50e0ee2e3ca6838dfa7d5c71388d345a16d93f77.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/67848d7b6e3fb97fa345f58c50e0ee2e3ca6838dfa7d5c71388d345a16d93f77.receipt.json"
@@ -4881,12 +4959,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/67a9ef2ef1f8037e3dd62049dc4aca2752d1786e85af6ac15dc2b9248f53c8d4.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/67a9ef2ef1f8037e3dd62049dc4aca2752d1786e85af6ac15dc2b9248f53c8d4.receipt.json"
-        ),
-    ),
-    (
-        "objects/67f485dccb404383a6e7df470f1ff2c3dfafc130bf34b9b2141da521d94a052b.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/67f485dccb404383a6e7df470f1ff2c3dfafc130bf34b9b2141da521d94a052b.receipt.json"
         ),
     ),
     (
@@ -4929,12 +5001,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/68b19adaf1f88865e210532684ea5d7f541e55455d051f2974568301e0c54627.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/68b19adaf1f88865e210532684ea5d7f541e55455d051f2974568301e0c54627.main.json"
-        ),
-    ),
-    (
-        "objects/68fa7d277b0f932e2a45007773ed827824d57d210addb69730d73b1f898eeb02.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/68fa7d277b0f932e2a45007773ed827824d57d210addb69730d73b1f898eeb02.receipt.json"
         ),
     ),
     (
@@ -4992,15 +5058,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/69f9f670f2563ddab9b86fa0b220215a656289ebd9ec21879a80753d340b0143.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/69f9f670f2563ddab9b86fa0b220215a656289ebd9ec21879a80753d340b0143.receipt.json"
-        ),
-    ),
-    (
         "objects/6a0fba721136c06a859de2646ebddabee3ea4e24dd1ab8baedb5827ae34cd0f6.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/6a0fba721136c06a859de2646ebddabee3ea4e24dd1ab8baedb5827ae34cd0f6.receipt.json"
+        ),
+    ),
+    (
+        "objects/6a288011a2e7acb97f8d9f0d27c5c3f3da6f1a8994b482330d17c957a6062735.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/6a288011a2e7acb97f8d9f0d27c5c3f3da6f1a8994b482330d17c957a6062735.receipt.json"
         ),
     ),
     (
@@ -5067,12 +5133,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/6b769bd3867f3757e0cfec5ac8cc879a14247758349f7ebae0d63f1f7a9cc570.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/6b769bd3867f3757e0cfec5ac8cc879a14247758349f7ebae0d63f1f7a9cc570.main.json"
-        ),
-    ),
-    (
-        "objects/6b7fc939bc42f71d96e1b3c87b5f3da9318de5957e8589c73c1b33231b2caeb7.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/6b7fc939bc42f71d96e1b3c87b5f3da9318de5957e8589c73c1b33231b2caeb7.receipt.json"
         ),
     ),
     (
@@ -5208,12 +5268,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/6e71e87a7286433fa1e563e72fcf6f055e41310a62a756a6816f7fbf6b6461a7.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/6e71e87a7286433fa1e563e72fcf6f055e41310a62a756a6816f7fbf6b6461a7.receipt.json"
-        ),
-    ),
-    (
         "objects/6ecfad5facffca9e595bf5c391e795f073a9e1997f9b7b79c39991643c9fec6d.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/6ecfad5facffca9e595bf5c391e795f073a9e1997f9b7b79c39991643c9fec6d.main.json"
@@ -5241,12 +5295,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/6f882f14843470423ad6c9ebd599b9f7677d8e511b8d46e411cec260eb22c7f9.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/6f882f14843470423ad6c9ebd599b9f7677d8e511b8d46e411cec260eb22c7f9.main.json"
-        ),
-    ),
-    (
-        "objects/6f95e90e4e3d8f14a8bf816876496a1bb6b81970bc3a180295508faac8f9fc68.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/6f95e90e4e3d8f14a8bf816876496a1bb6b81970bc3a180295508faac8f9fc68.receipt.json"
         ),
     ),
     (
@@ -5298,9 +5346,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/71931841a273c8be9ecf8b85315aa52b20953b6158698836d8fb32e7e46b9a2b.receipt.json",
+        "objects/71b6b654f540db193443ca9a5e2f880a43c574ffba60ad46f19a1833ea20bdd0.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/71931841a273c8be9ecf8b85315aa52b20953b6158698836d8fb32e7e46b9a2b.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/71b6b654f540db193443ca9a5e2f880a43c574ffba60ad46f19a1833ea20bdd0.receipt.json"
         ),
     ),
     (
@@ -5352,12 +5400,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/7266ae8781f0136c8031b365a8cb934029005700807a359ae0a02eaa507cfd8b.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/7266ae8781f0136c8031b365a8cb934029005700807a359ae0a02eaa507cfd8b.receipt.json"
-        ),
-    ),
-    (
         "objects/72a23a4c4f910f4e342b6095564c8594ee16e0db9837893e89c31f1dcf1a9b1d.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/72a23a4c4f910f4e342b6095564c8594ee16e0db9837893e89c31f1dcf1a9b1d.main.json"
@@ -5373,6 +5415,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/72bdd3ad7cee8419472c4bdf7aae0ecc294f24432f3e9836c2938840627a79d1.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/72bdd3ad7cee8419472c4bdf7aae0ecc294f24432f3e9836c2938840627a79d1.receipt.json"
+        ),
+    ),
+    (
+        "objects/72cfca6cdc12ac5e0972feacb83a11b6b96a1f585f949ea4c66fb452732b56b5.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/72cfca6cdc12ac5e0972feacb83a11b6b96a1f585f949ea4c66fb452732b56b5.receipt.json"
         ),
     ),
     (
@@ -5394,9 +5442,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/739c4a8fc798b81ea47523cdbf432c7a9c609c438f48f30b35cbfe4e989da544.receipt.json",
+        "objects/736d33be6f6aa8d36b71b88f44729284910cb5dd257d4fd3fe04a070cfdfe0c8.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/739c4a8fc798b81ea47523cdbf432c7a9c609c438f48f30b35cbfe4e989da544.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/736d33be6f6aa8d36b71b88f44729284910cb5dd257d4fd3fe04a070cfdfe0c8.receipt.json"
         ),
     ),
     (
@@ -5418,15 +5466,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/73fb38ddf934d415eaf06108a897c78a573547d971aa0691a47d6e743af13b6b.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/73fb38ddf934d415eaf06108a897c78a573547d971aa0691a47d6e743af13b6b.receipt.json"
-        ),
-    ),
-    (
         "objects/740a541cc245e4964e670673685f1cfc0e9054c92752cd11659c60a1437ed280.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/740a541cc245e4964e670673685f1cfc0e9054c92752cd11659c60a1437ed280.main.json"
+        ),
+    ),
+    (
+        "objects/740f1e2b404fe2908b1ec108e2fbdb0f8c13c7ae85104fe3e4f2b48f68a72cf3.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/740f1e2b404fe2908b1ec108e2fbdb0f8c13c7ae85104fe3e4f2b48f68a72cf3.receipt.json"
         ),
     ),
     (
@@ -5439,6 +5487,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/743d12ec5bfd9a0f244b278538cf15c735e7d735723022f5c3deec447533acc0.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/743d12ec5bfd9a0f244b278538cf15c735e7d735723022f5c3deec447533acc0.receipt.json"
+        ),
+    ),
+    (
+        "objects/747311b9d2ac8d0ddc586e2cd7be17c6d4a7c2b3167ec774c04c2628d203ccad.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/747311b9d2ac8d0ddc586e2cd7be17c6d4a7c2b3167ec774c04c2628d203ccad.receipt.json"
         ),
     ),
     (
@@ -5592,12 +5646,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/7753316a62d825e167a07c3001c13d5b8f4832a8a9458fab9f7629754c3fe38d.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/7753316a62d825e167a07c3001c13d5b8f4832a8a9458fab9f7629754c3fe38d.receipt.json"
-        ),
-    ),
-    (
         "objects/7761b672c1216a8a9064504379d2f14fdad8e2f473667628dfce61522895f98c.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/7761b672c1216a8a9064504379d2f14fdad8e2f473667628dfce61522895f98c.main.json"
@@ -5628,12 +5676,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/7811b04e9b9422c8be8c41b06dbde89cf825eecc27b4a55e139cdded972c64cf.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/7811b04e9b9422c8be8c41b06dbde89cf825eecc27b4a55e139cdded972c64cf.receipt.json"
-        ),
-    ),
-    (
         "objects/78149cff306c258da0fabbc1217dabd7fe87b27850833485e65c1b205133b91a.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/78149cff306c258da0fabbc1217dabd7fe87b27850833485e65c1b205133b91a.receipt.json"
@@ -5658,9 +5700,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/78d33aea318df85c0a9c122a66955ec07b37b115c82b3c13702e5059bc1f07b1.receipt.json",
+        "objects/79103d3f35176e337ee5ef5a173b85adc53cc34b1b33166768c65a351e17305e.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/78d33aea318df85c0a9c122a66955ec07b37b115c82b3c13702e5059bc1f07b1.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/79103d3f35176e337ee5ef5a173b85adc53cc34b1b33166768c65a351e17305e.receipt.json"
         ),
     ),
     (
@@ -5676,12 +5718,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/793588a35cb971e96c082fe6400920260980faa53b2f079d3449bfc49406ed36.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/793588a35cb971e96c082fe6400920260980faa53b2f079d3449bfc49406ed36.receipt.json"
-        ),
-    ),
-    (
         "objects/794d857be1dc1524c6435bc1428c414571daf0920629feee6227ecf3bfc01eb3.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/794d857be1dc1524c6435bc1428c414571daf0920629feee6227ecf3bfc01eb3.receipt.json"
@@ -5691,6 +5727,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/795f614386613620a7760a38435c39f954289ac9f7d60d6139bf35535aeebc7f.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/795f614386613620a7760a38435c39f954289ac9f7d60d6139bf35535aeebc7f.receipt.json"
+        ),
+    ),
+    (
+        "objects/79610ac03cb43e174a62afb6f9ee625c04bad8aa747467b006746de36a4c66d8.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/79610ac03cb43e174a62afb6f9ee625c04bad8aa747467b006746de36a4c66d8.receipt.json"
         ),
     ),
     (
@@ -5709,12 +5751,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/7a037b05005631dd2f0145a86b825da30d7b85d26e7ad873ef62834d789963a8.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/7a037b05005631dd2f0145a86b825da30d7b85d26e7ad873ef62834d789963a8.receipt.json"
-        ),
-    ),
-    (
-        "objects/7a0cc8dc466e6b9c55850ec74da8903d1482c90cb6eff59915115904b7005300.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/7a0cc8dc466e6b9c55850ec74da8903d1482c90cb6eff59915115904b7005300.receipt.json"
         ),
     ),
     (
@@ -5814,21 +5850,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/7be91dfd131ac22905ffeb5797523269169125be8c3d5c3d0fc15b172a960139.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/7be91dfd131ac22905ffeb5797523269169125be8c3d5c3d0fc15b172a960139.receipt.json"
-        ),
-    ),
-    (
         "objects/7be976cd0dfd3e7297a187f4b0b500c445778c06b53144ba4f48fda6fb998f0f.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/7be976cd0dfd3e7297a187f4b0b500c445778c06b53144ba4f48fda6fb998f0f.main.json"
-        ),
-    ),
-    (
-        "objects/7c06f57e14d97e342c91c55efd79876dea89ca34dae24d7ac88585970817a3d2.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/7c06f57e14d97e342c91c55efd79876dea89ca34dae24d7ac88585970817a3d2.receipt.json"
         ),
     ),
     (
@@ -5838,9 +5862,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/7c0d7040d2a9f5ac14f2817e6be14f762486ad26b702eb47e80b67784734c155.receipt.json",
+        "objects/7c183315a20cf7815b62bc1c95c5a98c4bb8778f5b295e30d1e9601254a0be6a.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/7c0d7040d2a9f5ac14f2817e6be14f762486ad26b702eb47e80b67784734c155.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/7c183315a20cf7815b62bc1c95c5a98c4bb8778f5b295e30d1e9601254a0be6a.receipt.json"
         ),
     ),
     (
@@ -5859,12 +5883,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/7cc56cb8d51ea33814eca47a38d71856e0c91cef18451892d2f946e6c7c1566d.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/7cc56cb8d51ea33814eca47a38d71856e0c91cef18451892d2f946e6c7c1566d.receipt.json"
-        ),
-    ),
-    (
-        "objects/7cdef599be377a2c7bb312bfec84b1e646bb4ae6e0831579aa75264d6f22f2e6.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/7cdef599be377a2c7bb312bfec84b1e646bb4ae6e0831579aa75264d6f22f2e6.receipt.json"
         ),
     ),
     (
@@ -5916,15 +5934,21 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/7d9ce1b2568cc63b7dcafc33738399cd2aaeb1041dc6d4140d1fd3ee94bb25b6.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/7d9ce1b2568cc63b7dcafc33738399cd2aaeb1041dc6d4140d1fd3ee94bb25b6.receipt.json"
-        ),
-    ),
-    (
         "objects/7dbfec6a341633b2671169cb32f2a058d4d29dd1e511d5f9eeaff452a4394e7d.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/7dbfec6a341633b2671169cb32f2a058d4d29dd1e511d5f9eeaff452a4394e7d.receipt.json"
+        ),
+    ),
+    (
+        "objects/7dd7363cbb142b198eeefd4ff948df5f694c1de8755bec66b25b54a6cbdf8eba.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/7dd7363cbb142b198eeefd4ff948df5f694c1de8755bec66b25b54a6cbdf8eba.receipt.json"
+        ),
+    ),
+    (
+        "objects/7ddbbb2acbe9581e3254589435c6ad4341c65797a01ea1deeb3e643de011e724.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/7ddbbb2acbe9581e3254589435c6ad4341c65797a01ea1deeb3e643de011e724.receipt.json"
         ),
     ),
     (
@@ -5976,12 +6000,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/7e824a103bb770f0097131d0a218677a6edf70adbdac7101dc9f191f03f6271c.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/7e824a103bb770f0097131d0a218677a6edf70adbdac7101dc9f191f03f6271c.receipt.json"
-        ),
-    ),
-    (
         "objects/7eb9be9dfba4e50cec377f4f73dfa064a0b5398c0e8e572710cf7e5a905155dc.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/7eb9be9dfba4e50cec377f4f73dfa064a0b5398c0e8e572710cf7e5a905155dc.receipt.json"
@@ -6021,6 +6039,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/7f421e54b1df79f2ffc80e0807efb90d4e62fc8a68fe9e934df3ca00ee1f8706.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/7f421e54b1df79f2ffc80e0807efb90d4e62fc8a68fe9e934df3ca00ee1f8706.main.json"
+        ),
+    ),
+    (
+        "objects/7f6eca71119fccf94fcfdfd753f5a4f0f997c83283bc85423e2ef444c31d5e7a.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/7f6eca71119fccf94fcfdfd753f5a4f0f997c83283bc85423e2ef444c31d5e7a.receipt.json"
         ),
     ),
     (
@@ -6072,9 +6096,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/8075443b878ab82b5ab2a7b87a3e504884f5818d2f2f563d3a6ee26b9d3feccf.receipt.json",
+        "objects/807d1d105873a5fbbb4b77e6c5f69e66f12c8186d87a0e5658fb0221cb8f3491.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/8075443b878ab82b5ab2a7b87a3e504884f5818d2f2f563d3a6ee26b9d3feccf.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/807d1d105873a5fbbb4b77e6c5f69e66f12c8186d87a0e5658fb0221cb8f3491.receipt.json"
         ),
     ),
     (
@@ -6102,12 +6126,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/814b6a792b9d45ba4ef2114e8ecf7459b88a63feb489429a3e55626f026ad22d.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/814b6a792b9d45ba4ef2114e8ecf7459b88a63feb489429a3e55626f026ad22d.receipt.json"
-        ),
-    ),
-    (
         "objects/81a7566b353c41043ac7c32d96737bcac91f756c5f1cf033466743bdb0017090.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/81a7566b353c41043ac7c32d96737bcac91f756c5f1cf033466743bdb0017090.receipt.json"
@@ -6117,6 +6135,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/81d3da71ac4bdbe8382d65c21b145e172837e8619748b17d4aee6ac23b9c3e1c.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/81d3da71ac4bdbe8382d65c21b145e172837e8619748b17d4aee6ac23b9c3e1c.main.json"
+        ),
+    ),
+    (
+        "objects/81d6695baa570d566d4700d7fad892f857bbce31ea76abbcea33bf202c064e4a.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/81d6695baa570d566d4700d7fad892f857bbce31ea76abbcea33bf202c064e4a.receipt.json"
         ),
     ),
     (
@@ -6168,6 +6192,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/8270c7b319cccbe201e6a7a779ef637f41ca327e85c85a21f3c4b71eb75355a0.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/8270c7b319cccbe201e6a7a779ef637f41ca327e85c85a21f3c4b71eb75355a0.receipt.json"
+        ),
+    ),
+    (
         "objects/8298a5d46c8245e1a0ef4b8d7ec0e8899ba6ffd8030a2ea4235672316a7983c9.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/8298a5d46c8245e1a0ef4b8d7ec0e8899ba6ffd8030a2ea4235672316a7983c9.main.json"
@@ -6177,6 +6207,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/82b862626cab836080940342ed61cae3809fa9848701babd82482a897084e561.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/82b862626cab836080940342ed61cae3809fa9848701babd82482a897084e561.receipt.json"
+        ),
+    ),
+    (
+        "objects/82bcca4fa212765314d9480384b51e5e709b0862f8707359143e04f36763e488.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/82bcca4fa212765314d9480384b51e5e709b0862f8707359143e04f36763e488.receipt.json"
         ),
     ),
     (
@@ -6222,21 +6258,27 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/839ce29cabba7ba4735bcf8c72c40b36e4ea961fd0b740e907f2d600f950f21d.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/839ce29cabba7ba4735bcf8c72c40b36e4ea961fd0b740e907f2d600f950f21d.receipt.json"
+        ),
+    ),
+    (
         "objects/83b3839ff1e4875742c169b94dae9eb23ff545c359382cf5591ea4f24b2eb41d.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/83b3839ff1e4875742c169b94dae9eb23ff545c359382cf5591ea4f24b2eb41d.receipt.json"
         ),
     ),
     (
-        "objects/83df098e108b17ca74fc7446bee776afde859dc08c2fe5101ac16e84344ec2cd.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/83df098e108b17ca74fc7446bee776afde859dc08c2fe5101ac16e84344ec2cd.receipt.json"
-        ),
-    ),
-    (
         "objects/84005fd77f70f3a2fd7f7790398709c9a8f13c3504052ae6b583f11f9377848c.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/84005fd77f70f3a2fd7f7790398709c9a8f13c3504052ae6b583f11f9377848c.receipt.json"
+        ),
+    ),
+    (
+        "objects/84100287ab57d6201f5b96bca152cbc0b4203d8ca1ea18286609227ba6629504.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/84100287ab57d6201f5b96bca152cbc0b4203d8ca1ea18286609227ba6629504.receipt.json"
         ),
     ),
     (
@@ -6276,6 +6318,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/848baddf875744b18becd27c0bb202d6327442860298786fec41d17c9fb342ac.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/848baddf875744b18becd27c0bb202d6327442860298786fec41d17c9fb342ac.receipt.json"
+        ),
+    ),
+    (
         "objects/84a5fefcb11c1cb7b7b6b2d3902c616ec40ec2ce69503352f67b85ab48fad166.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/84a5fefcb11c1cb7b7b6b2d3902c616ec40ec2ce69503352f67b85ab48fad166.receipt.json"
@@ -6306,15 +6354,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/85fffe9c23d286762ddddf5f3ba2e4342a7d88cfb0b2f2685e7065c1b662f05a.receipt.json",
+        "objects/85eb17a1a20ccf6f6147e1d8c784eac652b1ef6cc66b5e93e72382f0bbcd7f98.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/85fffe9c23d286762ddddf5f3ba2e4342a7d88cfb0b2f2685e7065c1b662f05a.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/85eb17a1a20ccf6f6147e1d8c784eac652b1ef6cc66b5e93e72382f0bbcd7f98.receipt.json"
         ),
     ),
     (
-        "objects/860479abd150ee5ac52ecb8257e73d23413cfe4a5211cbe70c486e419d0ecb17.receipt.json",
+        "objects/85fffe9c23d286762ddddf5f3ba2e4342a7d88cfb0b2f2685e7065c1b662f05a.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/860479abd150ee5ac52ecb8257e73d23413cfe4a5211cbe70c486e419d0ecb17.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/85fffe9c23d286762ddddf5f3ba2e4342a7d88cfb0b2f2685e7065c1b662f05a.receipt.json"
         ),
     ),
     (
@@ -6342,27 +6390,21 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/873d7bc4c8870bd697a02162c1407010e0b652cd183f2b0054a09b28e5fe2608.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/873d7bc4c8870bd697a02162c1407010e0b652cd183f2b0054a09b28e5fe2608.receipt.json"
+        ),
+    ),
+    (
         "objects/87426ccf93f96f6f97746252183ad1376d30fc24bbf32924b90bb609990748aa.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/87426ccf93f96f6f97746252183ad1376d30fc24bbf32924b90bb609990748aa.main.json"
         ),
     ),
     (
-        "objects/875a591ccdeb045021952c66986c8719ac33db54024b12cde80625617f1633bf.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/875a591ccdeb045021952c66986c8719ac33db54024b12cde80625617f1633bf.receipt.json"
-        ),
-    ),
-    (
         "objects/876dc238c31579acfb71a5a9319077c74dadb624d198004e5f4f9ae6a3869e12.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/876dc238c31579acfb71a5a9319077c74dadb624d198004e5f4f9ae6a3869e12.receipt.json"
-        ),
-    ),
-    (
-        "objects/878382561e8e1bded9b717bc7ab070952f88e4b3d7d9abd050aba635479a4e60.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/878382561e8e1bded9b717bc7ab070952f88e4b3d7d9abd050aba635479a4e60.receipt.json"
         ),
     ),
     (
@@ -6414,21 +6456,33 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/881d423f834de1dff4aa216df5aac8a125f2d2628350873856c3e108d3a30c0c.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/881d423f834de1dff4aa216df5aac8a125f2d2628350873856c3e108d3a30c0c.receipt.json"
+        ),
+    ),
+    (
         "objects/883cc92df7938029e4a624455f987f31fddad9d84fed323a7357e2cd0614b671.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/883cc92df7938029e4a624455f987f31fddad9d84fed323a7357e2cd0614b671.main.json"
         ),
     ),
     (
-        "objects/8875130e5be463d7fdfcd283485379524d1edc78d4010c3e957635ae474920e4.main.json",
+        "objects/883d453d416228dbf52fde3bbb9660174fce9b737345ed5eb83018b417961e58.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/8875130e5be463d7fdfcd283485379524d1edc78d4010c3e957635ae474920e4.main.json"
+            "../../../../../pkg/contracts/accepted/objects/883d453d416228dbf52fde3bbb9660174fce9b737345ed5eb83018b417961e58.receipt.json"
         ),
     ),
     (
-        "objects/888fde964d79d3e236867120346b8afbbdd704839c8c919d19e741fcb8773425.receipt.json",
+        "objects/885c86680ffcb0c5c4d87d52a9a9948ea4f75943613d58f685510719bced5a2e.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/888fde964d79d3e236867120346b8afbbdd704839c8c919d19e741fcb8773425.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/885c86680ffcb0c5c4d87d52a9a9948ea4f75943613d58f685510719bced5a2e.receipt.json"
+        ),
+    ),
+    (
+        "objects/8875130e5be463d7fdfcd283485379524d1edc78d4010c3e957635ae474920e4.main.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/8875130e5be463d7fdfcd283485379524d1edc78d4010c3e957635ae474920e4.main.json"
         ),
     ),
     (
@@ -6522,9 +6576,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/8a0b5e196e6d89e6d0b902a2724f520267914aebada7082355a86b23c777a18b.receipt.json",
+        "objects/89f846185baa699c3f836e0d4be5bd3b39853c66b2068c7d4c676b3141d41608.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/8a0b5e196e6d89e6d0b902a2724f520267914aebada7082355a86b23c777a18b.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/89f846185baa699c3f836e0d4be5bd3b39853c66b2068c7d4c676b3141d41608.receipt.json"
         ),
     ),
     (
@@ -6609,12 +6663,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/8ba8e7803e26fe12ce8103819d8c99771895067a0f30a9d52077702cc7e3cac5.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/8ba8e7803e26fe12ce8103819d8c99771895067a0f30a9d52077702cc7e3cac5.receipt.json"
-        ),
-    ),
-    (
-        "objects/8bc976ccae41cae610ee6c4dbbed94e86e1b7ab190bccd01d87992e8352686c6.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/8bc976ccae41cae610ee6c4dbbed94e86e1b7ab190bccd01d87992e8352686c6.receipt.json"
         ),
     ),
     (
@@ -6750,12 +6798,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/8e9a00e5a11cde50fcf438298f5fb4796b580fe122be4927b8a1ea165b2d76a0.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/8e9a00e5a11cde50fcf438298f5fb4796b580fe122be4927b8a1ea165b2d76a0.receipt.json"
-        ),
-    ),
-    (
         "objects/8ebb72c1b83920871d9949fdd814de57efdc680af77e2bfabfbfe0fd99f85554.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/8ebb72c1b83920871d9949fdd814de57efdc680af77e2bfabfbfe0fd99f85554.receipt.json"
@@ -6810,12 +6852,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/8f9287668145a8c0662daff5126a71c03160d3a00bf251d31aa2d85eb160dec8.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/8f9287668145a8c0662daff5126a71c03160d3a00bf251d31aa2d85eb160dec8.receipt.json"
-        ),
-    ),
-    (
         "objects/8fc459abb7d9f53ae8051a92dbbdfbabc382abb3a6c5dd0b9c54fc12a78f0a6d.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/8fc459abb7d9f53ae8051a92dbbdfbabc382abb3a6c5dd0b9c54fc12a78f0a6d.receipt.json"
@@ -6831,6 +6867,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/8fda102f177ff2e9d6e9ea61d63ec4189b99486530cad08b8090e6d6da769fab.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/8fda102f177ff2e9d6e9ea61d63ec4189b99486530cad08b8090e6d6da769fab.receipt.json"
+        ),
+    ),
+    (
+        "objects/8fe7f51ce92e1d42978c0d6b1c30339f740bd41ad77f94145b3ab0fec97fc1ec.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/8fe7f51ce92e1d42978c0d6b1c30339f740bd41ad77f94145b3ab0fec97fc1ec.receipt.json"
         ),
     ),
     (
@@ -6876,6 +6918,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/909d3193de0eee6f73d28f5f150a1138dbd0782e82854d8f91f5fc6b7ec4c1b4.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/909d3193de0eee6f73d28f5f150a1138dbd0782e82854d8f91f5fc6b7ec4c1b4.receipt.json"
+        ),
+    ),
+    (
         "objects/90f882e7a07ec3ea6cfcb8ee329a54d6797bace98a0b0f3593bba3f3f218be79.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/90f882e7a07ec3ea6cfcb8ee329a54d6797bace98a0b0f3593bba3f3f218be79.receipt.json"
@@ -6912,6 +6960,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/91c62e7aad74f74d2dc3a60ef549406af674f8727f936aa4d188089a9aeae939.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/91c62e7aad74f74d2dc3a60ef549406af674f8727f936aa4d188089a9aeae939.receipt.json"
+        ),
+    ),
+    (
         "objects/91e075abde0676ccf3788b16f3b24e69b76eb89d77e95dec2efbcb7089deca04.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/91e075abde0676ccf3788b16f3b24e69b76eb89d77e95dec2efbcb7089deca04.receipt.json"
@@ -6930,15 +6984,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/9215497e10e909db15ba858bf4df24e9da32d2a598a1e9a2b24287b630b97c21.receipt.json",
+        "objects/9237afa8f656deee0503674a21a9a2cef6f9a9fedff5f73005289dd68087ae13.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/9215497e10e909db15ba858bf4df24e9da32d2a598a1e9a2b24287b630b97c21.receipt.json"
-        ),
-    ),
-    (
-        "objects/9256eea905663b9b72a965702814d753a7b08cea4cebcf60f1ef35f9a9a7300f.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/9256eea905663b9b72a965702814d753a7b08cea4cebcf60f1ef35f9a9a7300f.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/9237afa8f656deee0503674a21a9a2cef6f9a9fedff5f73005289dd68087ae13.receipt.json"
         ),
     ),
     (
@@ -6978,15 +7026,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/930a4d4b69edf987ad1b150d12e15f9a0e3643a9258ad554c1bfb9c963804351.receipt.json",
+        "objects/93093766967122685344b5bf4618c22922c241fb1a6877af02e2fe72a88f3edd.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/930a4d4b69edf987ad1b150d12e15f9a0e3643a9258ad554c1bfb9c963804351.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/93093766967122685344b5bf4618c22922c241fb1a6877af02e2fe72a88f3edd.receipt.json"
         ),
     ),
     (
-        "objects/9326f1dc60d7930ae14a5a69b4a9010ffbef09ffbed789dbd73e04f58518c32a.receipt.json",
+        "objects/930a4d4b69edf987ad1b150d12e15f9a0e3643a9258ad554c1bfb9c963804351.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/9326f1dc60d7930ae14a5a69b4a9010ffbef09ffbed789dbd73e04f58518c32a.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/930a4d4b69edf987ad1b150d12e15f9a0e3643a9258ad554c1bfb9c963804351.receipt.json"
         ),
     ),
     (
@@ -6999,6 +7047,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/935565efb3ea7384c77302c97004abc5211bef9fba894143e085b14224b1d515.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/935565efb3ea7384c77302c97004abc5211bef9fba894143e085b14224b1d515.receipt.json"
+        ),
+    ),
+    (
+        "objects/93a5920db668133c576e62e36ece87a048a5c1f4901200d395720a14d9d7e7ee.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/93a5920db668133c576e62e36ece87a048a5c1f4901200d395720a14d9d7e7ee.receipt.json"
         ),
     ),
     (
@@ -7020,12 +7074,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/9425c97b052db12442c376be4409f70d15ea77694ffc1ddb29b6bf881cae819b.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/9425c97b052db12442c376be4409f70d15ea77694ffc1ddb29b6bf881cae819b.receipt.json"
-        ),
-    ),
-    (
         "objects/9498d4921db32932ab5a1669d12093605cbd7565f368d4ac31b474ea2c9de357.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/9498d4921db32932ab5a1669d12093605cbd7565f368d4ac31b474ea2c9de357.receipt.json"
@@ -7038,15 +7086,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/94c29c816bd9a54c43e05d88a1a764d0a394f2264ec30139dd306a02915716ed.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/94c29c816bd9a54c43e05d88a1a764d0a394f2264ec30139dd306a02915716ed.receipt.json"
-        ),
-    ),
-    (
         "objects/94c35a76487a2a0abbbd69e91d6f43753cb1cb9e9f66e92fd7322577ee451af1.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/94c35a76487a2a0abbbd69e91d6f43753cb1cb9e9f66e92fd7322577ee451af1.main.json"
+        ),
+    ),
+    (
+        "objects/94e9ccf4b478f33d8aa50628adff97f5a73232eecbfb886bb4d37182b2ba0e8b.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/94e9ccf4b478f33d8aa50628adff97f5a73232eecbfb886bb4d37182b2ba0e8b.receipt.json"
         ),
     ),
     (
@@ -7059,6 +7107,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/94eecbad0278530f8b814ab20c437c35bb22fa898440d1fbae75bdaa1a73d8a4.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/94eecbad0278530f8b814ab20c437c35bb22fa898440d1fbae75bdaa1a73d8a4.receipt.json"
+        ),
+    ),
+    (
+        "objects/94feba2c078132428472d268f92e3fa880439ca5abfd400935317ef32c7ce634.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/94feba2c078132428472d268f92e3fa880439ca5abfd400935317ef32c7ce634.receipt.json"
         ),
     ),
     (
@@ -7134,18 +7188,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/95e5f22ef91faaf91bbe7d3a02cbe7371e10e12f85b1b944ff8e225f907c611a.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/95e5f22ef91faaf91bbe7d3a02cbe7371e10e12f85b1b944ff8e225f907c611a.receipt.json"
-        ),
-    ),
-    (
-        "objects/96235b45d62232a4c37abc17e3979e6c87a4a53eabfa5efbc707dcd5025169b0.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/96235b45d62232a4c37abc17e3979e6c87a4a53eabfa5efbc707dcd5025169b0.receipt.json"
-        ),
-    ),
-    (
         "objects/9626042187fc5838281e1989aaf6bc13a9016bbb2c43337b323cea8d72b961b5.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/9626042187fc5838281e1989aaf6bc13a9016bbb2c43337b323cea8d72b961b5.main.json"
@@ -7155,12 +7197,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/96269cc36b7d12fd9d06ded93dc3e839bc8842a7827b2c4310925c828af1c7fe.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/96269cc36b7d12fd9d06ded93dc3e839bc8842a7827b2c4310925c828af1c7fe.main.json"
-        ),
-    ),
-    (
-        "objects/9661877b544b8308a46e5d4a998bccc720027b901867214dd8e15ac518563764.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/9661877b544b8308a46e5d4a998bccc720027b901867214dd8e15ac518563764.receipt.json"
         ),
     ),
     (
@@ -7194,12 +7230,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/9728560fd38bf46c70ba7947091a4d7c1ed7bee666ab63a3e389ab3a0790df21.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/9728560fd38bf46c70ba7947091a4d7c1ed7bee666ab63a3e389ab3a0790df21.receipt.json"
-        ),
-    ),
-    (
         "objects/972e7d9a8f623eed6fffee9ea080f746427048453b39c92f532b1cc16ed8c8b9.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/972e7d9a8f623eed6fffee9ea080f746427048453b39c92f532b1cc16ed8c8b9.receipt.json"
@@ -7218,15 +7248,21 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/977c93fbeb8d8d33767f24540ffbd23455dee1171e320c8c9a220a97d9b5282c.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/977c93fbeb8d8d33767f24540ffbd23455dee1171e320c8c9a220a97d9b5282c.receipt.json"
+        ),
+    ),
+    (
         "objects/9788006e8eb2d8eb5bdb5f897e2df4f27ce170f6db09a42899ed69db223b03c6.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/9788006e8eb2d8eb5bdb5f897e2df4f27ce170f6db09a42899ed69db223b03c6.receipt.json"
         ),
     ),
     (
-        "objects/982ee076816bb8809c06eb8861fff5f2ad9167edb36d6f8294e1b46bfff8dc8a.receipt.json",
+        "objects/9832c763832b99f853341d138d8c911519802e80acabb9241e7fbe310e249fd3.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/982ee076816bb8809c06eb8861fff5f2ad9167edb36d6f8294e1b46bfff8dc8a.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/9832c763832b99f853341d138d8c911519802e80acabb9241e7fbe310e249fd3.receipt.json"
         ),
     ),
     (
@@ -7266,9 +7302,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/98b229efe60c84800cf3136ae88a36154f0c0d4e013d0f6e77a3bcd653b7e039.receipt.json",
+        "objects/98b03dd0dd9bdbec186c56b6f3eea4c08adafbc0eefd9d016c034d95a46f75a4.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/98b229efe60c84800cf3136ae88a36154f0c0d4e013d0f6e77a3bcd653b7e039.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/98b03dd0dd9bdbec186c56b6f3eea4c08adafbc0eefd9d016c034d95a46f75a4.receipt.json"
         ),
     ),
     (
@@ -7287,6 +7323,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/991e9ddf7186d325afab0259cdfb02cf426e647601eaaee4b779c2cb747028e6.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/991e9ddf7186d325afab0259cdfb02cf426e647601eaaee4b779c2cb747028e6.main.json"
+        ),
+    ),
+    (
+        "objects/992a031dedb6b598cb27bac0dd2e090059ea91b633cde63c3ba661ea708eaa98.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/992a031dedb6b598cb27bac0dd2e090059ea91b633cde63c3ba661ea708eaa98.receipt.json"
         ),
     ),
     (
@@ -7344,12 +7386,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/9a5919169221d23fed6a897dc87e9b875ab1f9bca716ae314c3e277f898ca320.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/9a5919169221d23fed6a897dc87e9b875ab1f9bca716ae314c3e277f898ca320.receipt.json"
-        ),
-    ),
-    (
         "objects/9aa5b416b408d0d299fb813a69282baaed22e77bc91f2d74333d702a97754f21.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/9aa5b416b408d0d299fb813a69282baaed22e77bc91f2d74333d702a97754f21.receipt.json"
@@ -7359,6 +7395,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/9ade15958e9725b23a0062c0a9beaceb54aecc7d41ddad1384ff78c36ecfeb75.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/9ade15958e9725b23a0062c0a9beaceb54aecc7d41ddad1384ff78c36ecfeb75.receipt.json"
+        ),
+    ),
+    (
+        "objects/9affe934d5f5f6ca1f89d9c75db96f656b435788a2220a8855789fe79dce8e84.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/9affe934d5f5f6ca1f89d9c75db96f656b435788a2220a8855789fe79dce8e84.receipt.json"
         ),
     ),
     (
@@ -7422,21 +7464,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/9be29fa3c4d1685c6f7f1aba88285812f93b559802e5043d9e74c9b9f8358efd.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/9be29fa3c4d1685c6f7f1aba88285812f93b559802e5043d9e74c9b9f8358efd.receipt.json"
-        ),
-    ),
-    (
         "objects/9bf02b5ee181af67ba4783342327dbaf53a450197fb51b6681f87b9e35648954.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/9bf02b5ee181af67ba4783342327dbaf53a450197fb51b6681f87b9e35648954.receipt.json"
-        ),
-    ),
-    (
-        "objects/9c3681e1fdd47fbbe10bf0aa90f911e228c64542ce96e6faedae681581f0a6fd.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/9c3681e1fdd47fbbe10bf0aa90f911e228c64542ce96e6faedae681581f0a6fd.receipt.json"
         ),
     ),
     (
@@ -7449,12 +7479,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/9c8c9b9fa2fd18ba9a38862e2ff3c3caa1d7e4f9cd8d42a11590589300fbc559.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/9c8c9b9fa2fd18ba9a38862e2ff3c3caa1d7e4f9cd8d42a11590589300fbc559.receipt.json"
-        ),
-    ),
-    (
-        "objects/9c929b63286e74b1f2f4036519a397f302cbd6993e46dfccc70a14c3bed099c0.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/9c929b63286e74b1f2f4036519a397f302cbd6993e46dfccc70a14c3bed099c0.receipt.json"
         ),
     ),
     (
@@ -7479,12 +7503,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/9d233e39a14c966728918e157b2e3346995984876eac7449e31848845239a1cd.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/9d233e39a14c966728918e157b2e3346995984876eac7449e31848845239a1cd.receipt.json"
-        ),
-    ),
-    (
-        "objects/9d3cba1687c01e330f361d74c7b9c26ff04bec6b538d77e8963b84197bb71fdf.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/9d3cba1687c01e330f361d74c7b9c26ff04bec6b538d77e8963b84197bb71fdf.receipt.json"
         ),
     ),
     (
@@ -7572,6 +7590,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/9f33cdb20b4c87b028294a13ee09d9acee0eda2cf9d43f7dff3697dfcd7643e2.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/9f33cdb20b4c87b028294a13ee09d9acee0eda2cf9d43f7dff3697dfcd7643e2.receipt.json"
+        ),
+    ),
+    (
         "objects/9f37a4605200da77c8f81b2d9ff8d99600cd4f73eb5abdf5e7713ff3448d25e5.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/9f37a4605200da77c8f81b2d9ff8d99600cd4f73eb5abdf5e7713ff3448d25e5.receipt.json"
@@ -7602,15 +7626,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/a0567a2c6119abb453d3cd64a4ab3e3f0aae56ffd922a4ddccf629ba669427c7.receipt.json",
+        "objects/a046968c86d6e6d73610006e8b93355f8f24a004db24a552bf085d6f92a53b78.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/a0567a2c6119abb453d3cd64a4ab3e3f0aae56ffd922a4ddccf629ba669427c7.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/a046968c86d6e6d73610006e8b93355f8f24a004db24a552bf085d6f92a53b78.receipt.json"
         ),
     ),
     (
-        "objects/a0aa97c707a6c6b1f283d34224dbe36fad4c897e7e557ad164ef981c38e0352c.receipt.json",
+        "objects/a078c686b07700336a952fb021a94d00c65d70365ea1882e0b0aba1d8842352c.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/a0aa97c707a6c6b1f283d34224dbe36fad4c897e7e557ad164ef981c38e0352c.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/a078c686b07700336a952fb021a94d00c65d70365ea1882e0b0aba1d8842352c.receipt.json"
         ),
     ),
     (
@@ -7620,9 +7644,21 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/a0cad166b1a6cb22638eb936edf3e0df19158f5d94ff1398bde068c7a8e50025.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/a0cad166b1a6cb22638eb936edf3e0df19158f5d94ff1398bde068c7a8e50025.receipt.json"
+        ),
+    ),
+    (
         "objects/a0cbb80046fd9a894348b6cc2acae720719f8280341c6c0aecdfdaf83278394d.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/a0cbb80046fd9a894348b6cc2acae720719f8280341c6c0aecdfdaf83278394d.main.json"
+        ),
+    ),
+    (
+        "objects/a0d41fbc84fd30dd15667fe7076809ec6d2e565e6057b46e51e8e5c4d44379aa.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/a0d41fbc84fd30dd15667fe7076809ec6d2e565e6057b46e51e8e5c4d44379aa.receipt.json"
         ),
     ),
     (
@@ -7647,12 +7683,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/a10841dda9b680c0ace2e4e6e81ff3c4cb5469fcedfa0890020bea825b2ccfaf.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/a10841dda9b680c0ace2e4e6e81ff3c4cb5469fcedfa0890020bea825b2ccfaf.receipt.json"
-        ),
-    ),
-    (
-        "objects/a1451e83115e07f76f403b0eec1e5b936f983c1379b1c4c4c491c2e36f0c6328.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/a1451e83115e07f76f403b0eec1e5b936f983c1379b1c4c4c491c2e36f0c6328.receipt.json"
         ),
     ),
     (
@@ -7701,6 +7731,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/a1ba0493b059667ae2b72b66c817002a20e8c2c39b1c2ecb3e7d9adeaa9230e7.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/a1ba0493b059667ae2b72b66c817002a20e8c2c39b1c2ecb3e7d9adeaa9230e7.receipt.json"
+        ),
+    ),
+    (
+        "objects/a1e33fe01a4d94236d44b93c2d0875d654a22d3a44dea17ef58e31523092ae8c.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/a1e33fe01a4d94236d44b93c2d0875d654a22d3a44dea17ef58e31523092ae8c.receipt.json"
         ),
     ),
     (
@@ -7806,12 +7842,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/a3f66b7d50f6d7080c3e400d865246e137993091d256ad01fd6c763b0f1ec00b.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/a3f66b7d50f6d7080c3e400d865246e137993091d256ad01fd6c763b0f1ec00b.receipt.json"
-        ),
-    ),
-    (
         "objects/a3fc99c2ff5e61f65f09b67df32058705cb4eea2296a521aca836d548348b3c0.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/a3fc99c2ff5e61f65f09b67df32058705cb4eea2296a521aca836d548348b3c0.receipt.json"
@@ -7833,12 +7863,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/a44dba142c2c91bb90204dd40f3c5092835ec2c6310ec12909f23d79ea8d22a7.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/a44dba142c2c91bb90204dd40f3c5092835ec2c6310ec12909f23d79ea8d22a7.receipt.json"
-        ),
-    ),
-    (
-        "objects/a48e6e204f7d8fe1a0f36abb6ad7a5da4ce1d8a80c1e5b037191783a61e8e8f9.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/a48e6e204f7d8fe1a0f36abb6ad7a5da4ce1d8a80c1e5b037191783a61e8e8f9.receipt.json"
         ),
     ),
     (
@@ -7878,6 +7902,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/a597a7f79ba8500693d02feb66fbbd34ef7b6c7734c07b85b10bd989fb2daed6.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/a597a7f79ba8500693d02feb66fbbd34ef7b6c7734c07b85b10bd989fb2daed6.receipt.json"
+        ),
+    ),
+    (
         "objects/a5a3702d5c96259612128996b6a8e49c5399789b55345221ed391e4bc65c052c.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/a5a3702d5c96259612128996b6a8e49c5399789b55345221ed391e4bc65c052c.main.json"
@@ -7902,15 +7932,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/a6063c77fd137dbd45b148a1efadd9aff73e117d4f47b2206c398e428861a71c.main.json",
+        "objects/a5c9a229304200683897adbeeb8e7176cd32f29d9f9ff125b6fe59cca873ff1a.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/a6063c77fd137dbd45b148a1efadd9aff73e117d4f47b2206c398e428861a71c.main.json"
+            "../../../../../pkg/contracts/accepted/objects/a5c9a229304200683897adbeeb8e7176cd32f29d9f9ff125b6fe59cca873ff1a.receipt.json"
         ),
     ),
     (
-        "objects/a64b29d4bb23a97958d288b18134c7dfa096fd8f4a950fee388570ef87905cd7.receipt.json",
+        "objects/a6063c77fd137dbd45b148a1efadd9aff73e117d4f47b2206c398e428861a71c.main.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/a64b29d4bb23a97958d288b18134c7dfa096fd8f4a950fee388570ef87905cd7.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/a6063c77fd137dbd45b148a1efadd9aff73e117d4f47b2206c398e428861a71c.main.json"
         ),
     ),
     (
@@ -8010,6 +8040,18 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/a8ed949fe1d4ec32cd490d991277069ca0a017b171001fa0f5e54daf18728674.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/a8ed949fe1d4ec32cd490d991277069ca0a017b171001fa0f5e54daf18728674.receipt.json"
+        ),
+    ),
+    (
+        "objects/a8fdb553432eaa336144f8a8b37511f95616c7becb1c681953b63cb0d9148191.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/a8fdb553432eaa336144f8a8b37511f95616c7becb1c681953b63cb0d9148191.receipt.json"
+        ),
+    ),
+    (
         "objects/a94d52313680c2cf5301aabf5d0abe3039bf0ebae9ac34fc5231db026a71a13b.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/a94d52313680c2cf5301aabf5d0abe3039bf0ebae9ac34fc5231db026a71a13b.main.json"
@@ -8046,27 +8088,21 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/aa31f5fcf6973a0e142dbee562efb21a703f44c6ba1424a8504b78ebe37c1c1f.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/aa31f5fcf6973a0e142dbee562efb21a703f44c6ba1424a8504b78ebe37c1c1f.receipt.json"
+        ),
+    ),
+    (
         "objects/aa4c8567a85c634a811933537c329ee91d678a07f6de6286786708339fac13bc.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/aa4c8567a85c634a811933537c329ee91d678a07f6de6286786708339fac13bc.main.json"
         ),
     ),
     (
-        "objects/aa4c8b9dfe9b696ab3bb29877928104fe3c82a7b5a64da750bf71bcb96af01b4.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/aa4c8b9dfe9b696ab3bb29877928104fe3c82a7b5a64da750bf71bcb96af01b4.receipt.json"
-        ),
-    ),
-    (
         "objects/aabf183d5c8aa6632577dd780b8fcc0eef516293de4e598e285efc7ce3f5aa3d.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/aabf183d5c8aa6632577dd780b8fcc0eef516293de4e598e285efc7ce3f5aa3d.main.json"
-        ),
-    ),
-    (
-        "objects/aac538292ee8ded49f686ff0097f81b62ad178a876af432939fea907a3356f2f.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/aac538292ee8ded49f686ff0097f81b62ad178a876af432939fea907a3356f2f.receipt.json"
         ),
     ),
     (
@@ -8091,12 +8127,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/ab58d47dc56512f7b9da3a7c88abd899e8e9bedbc5f7db6989f134085d49982d.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/ab58d47dc56512f7b9da3a7c88abd899e8e9bedbc5f7db6989f134085d49982d.receipt.json"
-        ),
-    ),
-    (
-        "objects/abe71fb73e0fb5b55f5be69f5700f4ff80ac2bcdeb44b7cd841a4f1bde109c42.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/abe71fb73e0fb5b55f5be69f5700f4ff80ac2bcdeb44b7cd841a4f1bde109c42.receipt.json"
         ),
     ),
     (
@@ -8142,15 +8172,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/ad2c1bc833238e55c63c4250164ece0c016bc17201adbaf12a063b58a2b06e20.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/ad2c1bc833238e55c63c4250164ece0c016bc17201adbaf12a063b58a2b06e20.receipt.json"
-        ),
-    ),
-    (
         "objects/ad4ce1ad87f8ca54b163286e8899b361c54cca101b661d0209411d56c6f18225.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/ad4ce1ad87f8ca54b163286e8899b361c54cca101b661d0209411d56c6f18225.receipt.json"
+        ),
+    ),
+    (
+        "objects/ad4e45cfd798d8790c982396c9e9475ce3a567624ecea8fc3739c6c2b8b94f1b.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/ad4e45cfd798d8790c982396c9e9475ce3a567624ecea8fc3739c6c2b8b94f1b.receipt.json"
         ),
     ),
     (
@@ -8202,12 +8232,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/adf6c96ef9d454446492ee9996b7fdd4f8a0d2a07342bfe43964d4eb91eca5d3.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/adf6c96ef9d454446492ee9996b7fdd4f8a0d2a07342bfe43964d4eb91eca5d3.receipt.json"
-        ),
-    ),
-    (
         "objects/ae2651963aaf8553179c9e895e176704cff15ca35745bd955b6cbccd2bcceb58.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/ae2651963aaf8553179c9e895e176704cff15ca35745bd955b6cbccd2bcceb58.main.json"
@@ -8238,12 +8262,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/ae768cad80b3e9f3263fada8f5ef5a4aade79d5b5971533bcc3e13052bcd5f4e.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/ae768cad80b3e9f3263fada8f5ef5a4aade79d5b5971533bcc3e13052bcd5f4e.receipt.json"
-        ),
-    ),
-    (
         "objects/aeb093f38adb6a97bd23a2578efd37dfbb33b3b355fc6380dc4e23d71cdea5b7.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/aeb093f38adb6a97bd23a2578efd37dfbb33b3b355fc6380dc4e23d71cdea5b7.main.json"
@@ -8256,9 +8274,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/aee977ea3b9575eb007ad3ff1355993ab21cf5cd53ac1a1233caf27efe589a84.main.json",
+        "objects/af13f5b6a439b3070e1538bf202d7bc20167b4c135d3cda6dab1b81a378d2276.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/aee977ea3b9575eb007ad3ff1355993ab21cf5cd53ac1a1233caf27efe589a84.main.json"
+            "../../../../../pkg/contracts/accepted/objects/af13f5b6a439b3070e1538bf202d7bc20167b4c135d3cda6dab1b81a378d2276.receipt.json"
         ),
     ),
     (
@@ -8286,15 +8304,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/afaac02d86905bbdf274526dd84cb1f4a259df0907f9dadbf63c7ae32d486b8b.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/afaac02d86905bbdf274526dd84cb1f4a259df0907f9dadbf63c7ae32d486b8b.receipt.json"
-        ),
-    ),
-    (
         "objects/afc6fbbdb2f591047177cfde5e222fa3af967920cb2d18d93f935b89cb8bbb49.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/afc6fbbdb2f591047177cfde5e222fa3af967920cb2d18d93f935b89cb8bbb49.receipt.json"
+        ),
+    ),
+    (
+        "objects/afdf363b8f7c8c0948d47f971bb43c179b08737e651603a9c1c663741f0391c4.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/afdf363b8f7c8c0948d47f971bb43c179b08737e651603a9c1c663741f0391c4.receipt.json"
         ),
     ),
     (
@@ -8304,27 +8322,21 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/aff6dfe632d1978e3ddd6edfe9b8f649791253867cb5d0f9fbd1ddd3e4f9e24d.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/aff6dfe632d1978e3ddd6edfe9b8f649791253867cb5d0f9fbd1ddd3e4f9e24d.receipt.json"
-        ),
-    ),
-    (
         "objects/aff79348c30393c1253948dc41db47676ce4b983e611bffb260810a2c36ec304.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/aff79348c30393c1253948dc41db47676ce4b983e611bffb260810a2c36ec304.main.json"
         ),
     ),
     (
-        "objects/aff80985c83c25bb2cfc4a2fdf396f645a0d32b0207d76fdd21a6b103e7b5d26.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/aff80985c83c25bb2cfc4a2fdf396f645a0d32b0207d76fdd21a6b103e7b5d26.receipt.json"
-        ),
-    ),
-    (
         "objects/affca92bfbf7a99367fc8c5f28bd04e2fd03b4f1f252595d2a00c2eaa646ad50.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/affca92bfbf7a99367fc8c5f28bd04e2fd03b4f1f252595d2a00c2eaa646ad50.receipt.json"
+        ),
+    ),
+    (
+        "objects/afffa2cbd275918c4285d1fb3422928749b9bb9268a995d78c708512b9ca42d0.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/afffa2cbd275918c4285d1fb3422928749b9bb9268a995d78c708512b9ca42d0.receipt.json"
         ),
     ),
     (
@@ -8520,6 +8532,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/b50a88641319e3b4ed43a47a214189e6a3aa1d2933568287d828d7b6d94422a7.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/b50a88641319e3b4ed43a47a214189e6a3aa1d2933568287d828d7b6d94422a7.receipt.json"
+        ),
+    ),
+    (
         "objects/b516224752ce2c9705a2272df0b1643f3bafe8c5b710cc8fba024afebc04c394.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/b516224752ce2c9705a2272df0b1643f3bafe8c5b710cc8fba024afebc04c394.receipt.json"
@@ -8538,9 +8556,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/b57458bc541a56dc3ede76b3508f438b15822b2a55ca3f6e794ebc2b05f116e5.receipt.json",
+        "objects/b5834ee18683975c708e3547a6501df531d1f46fc14c9e1b448319b40edfb943.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/b57458bc541a56dc3ede76b3508f438b15822b2a55ca3f6e794ebc2b05f116e5.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/b5834ee18683975c708e3547a6501df531d1f46fc14c9e1b448319b40edfb943.receipt.json"
+        ),
+    ),
+    (
+        "objects/b5b1c9bb011eb137233fa3343d1bc8c97de7737485faeb1df5ed444f2e115266.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/b5b1c9bb011eb137233fa3343d1bc8c97de7737485faeb1df5ed444f2e115266.receipt.json"
         ),
     ),
     (
@@ -8610,12 +8634,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/b717aef91f1464ad16d613445ba200afac4ffd654aad132a5fd2e42dc99c9914.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/b717aef91f1464ad16d613445ba200afac4ffd654aad132a5fd2e42dc99c9914.receipt.json"
-        ),
-    ),
-    (
         "objects/b765ba5467192fdac6b89ae3aecb5e328886a1b4e7b0211db0b06bf112429e40.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/b765ba5467192fdac6b89ae3aecb5e328886a1b4e7b0211db0b06bf112429e40.receipt.json"
@@ -8646,18 +8664,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/b8253918d80415fa643442d07e87c06c31fa01b987856a8dac34db7f676beb41.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/b8253918d80415fa643442d07e87c06c31fa01b987856a8dac34db7f676beb41.receipt.json"
-        ),
-    ),
-    (
-        "objects/b8346ff58f3c067dba682a8fa1d5929772245dab0acd4ce051ae4900d735df47.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/b8346ff58f3c067dba682a8fa1d5929772245dab0acd4ce051ae4900d735df47.receipt.json"
-        ),
-    ),
-    (
         "objects/b869f1401e5c3c91ffba8a99ee73f99a68c77b91ba26a3d59e4e101ad4444bc0.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/b869f1401e5c3c91ffba8a99ee73f99a68c77b91ba26a3d59e4e101ad4444bc0.receipt.json"
@@ -8676,6 +8682,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/b8c95fc81d82bdfaa53acf243626e629c2f1e053a75c818597f2cb2aa2b745b5.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/b8c95fc81d82bdfaa53acf243626e629c2f1e053a75c818597f2cb2aa2b745b5.receipt.json"
+        ),
+    ),
+    (
         "objects/b8cc485ce02bbc5c2bd9e527360e56185bcb533057404a32837ee128e72f4b6d.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/b8cc485ce02bbc5c2bd9e527360e56185bcb533057404a32837ee128e72f4b6d.main.json"
@@ -8688,6 +8700,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/b8ecdd53d224d69080dcb1bbfb961ec6361861806011c1141dbdd6dbe081537a.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/b8ecdd53d224d69080dcb1bbfb961ec6361861806011c1141dbdd6dbe081537a.receipt.json"
+        ),
+    ),
+    (
         "objects/b8fe8d2fcb5b3d1e9b80493f3fc9709b713560b538114b984f1719ef32abcf87.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/b8fe8d2fcb5b3d1e9b80493f3fc9709b713560b538114b984f1719ef32abcf87.receipt.json"
@@ -8697,12 +8715,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/b9072c4a18e0c33f45a73e0930eb228ab832ed8a4ab3569d7bc9d6dc141e92eb.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/b9072c4a18e0c33f45a73e0930eb228ab832ed8a4ab3569d7bc9d6dc141e92eb.receipt.json"
-        ),
-    ),
-    (
-        "objects/b90c7621392d85bc1a49a3e321f144f259bbc18e083d316b6307ad1969fa11ee.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/b90c7621392d85bc1a49a3e321f144f259bbc18e083d316b6307ad1969fa11ee.receipt.json"
         ),
     ),
     (
@@ -8814,6 +8826,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/bb75c45f06be9539a3efda73a088a84dc5e8253b6b58d9abd5af7389197da4eb.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/bb75c45f06be9539a3efda73a088a84dc5e8253b6b58d9abd5af7389197da4eb.receipt.json"
+        ),
+    ),
+    (
         "objects/bbbf74dace7b85150de47254d6f016d846b49d650e52ac32ecb7902b4f4c047d.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/bbbf74dace7b85150de47254d6f016d846b49d650e52ac32ecb7902b4f4c047d.receipt.json"
@@ -8913,6 +8931,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/be223ba547829960b6f40ec0bc75a73bb2c82bcadf778f6c6cc50a9bd0bcc990.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/be223ba547829960b6f40ec0bc75a73bb2c82bcadf778f6c6cc50a9bd0bcc990.main.json"
+        ),
+    ),
+    (
+        "objects/be28ef465d8f62b75361a5aab56166124e0f90d10e708ee00b5514b4b9dc49dd.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/be28ef465d8f62b75361a5aab56166124e0f90d10e708ee00b5514b4b9dc49dd.receipt.json"
         ),
     ),
     (
@@ -9060,12 +9084,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/c15a5a339ad481293fb428c40543a5aa18205608512c001f849ecd17facf58ed.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/c15a5a339ad481293fb428c40543a5aa18205608512c001f849ecd17facf58ed.receipt.json"
-        ),
-    ),
-    (
         "objects/c164b0bb7692dcdd63637217b5b0f204f129c9fe0ba6b8f77bdfe094c2ae1d3c.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/c164b0bb7692dcdd63637217b5b0f204f129c9fe0ba6b8f77bdfe094c2ae1d3c.main.json"
@@ -9105,6 +9123,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/c1ee980af8d5c347d0733632e12594472f9237d36a168a0dec8d2a2552ef0a4e.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/c1ee980af8d5c347d0733632e12594472f9237d36a168a0dec8d2a2552ef0a4e.main.json"
+        ),
+    ),
+    (
+        "objects/c22f9677e1a9dae2b8db32ea9d726f69724c478c046d63082654d79cf4976b70.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/c22f9677e1a9dae2b8db32ea9d726f69724c478c046d63082654d79cf4976b70.receipt.json"
         ),
     ),
     (
@@ -9150,15 +9174,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/c33546d4f5d1b9ef0799da95f1e675c3b57aa90422141ac4768fc9bbea720744.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/c33546d4f5d1b9ef0799da95f1e675c3b57aa90422141ac4768fc9bbea720744.receipt.json"
-        ),
-    ),
-    (
         "objects/c37757e892950e133b696b08e35b904f211098714775e5f97f4be2438811ae64.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/c37757e892950e133b696b08e35b904f211098714775e5f97f4be2438811ae64.receipt.json"
+        ),
+    ),
+    (
+        "objects/c38d700a0b83c45b59a5e15c77ee87e1c7acc2c77fd5815af47a4e7a2ed243e9.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/c38d700a0b83c45b59a5e15c77ee87e1c7acc2c77fd5815af47a4e7a2ed243e9.receipt.json"
         ),
     ),
     (
@@ -9219,12 +9243,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/c624004af94f3d535e18169094a70d810bb0fa7aeeb6fc9e264e00caf397f951.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/c624004af94f3d535e18169094a70d810bb0fa7aeeb6fc9e264e00caf397f951.receipt.json"
-        ),
-    ),
-    (
-        "objects/c63a940275979fa18aaa11683043ba459c17fa87ed33be0c20962e72dcc402ad.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/c63a940275979fa18aaa11683043ba459c17fa87ed33be0c20962e72dcc402ad.receipt.json"
         ),
     ),
     (
@@ -9318,6 +9336,18 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/c7c312effe91d1f821661d02910e885682ddee879e5d8bcb9d920547fd2e276c.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/c7c312effe91d1f821661d02910e885682ddee879e5d8bcb9d920547fd2e276c.receipt.json"
+        ),
+    ),
+    (
+        "objects/c7ca183d95c7711555343be645253c06db8fb989719967d578dcc346dfcc4d94.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/c7ca183d95c7711555343be645253c06db8fb989719967d578dcc346dfcc4d94.receipt.json"
+        ),
+    ),
+    (
         "objects/c7e8079e40ad03796d76ab8bbbdd75466bf37f3f878430b396ad44325c79cdcf.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/c7e8079e40ad03796d76ab8bbbdd75466bf37f3f878430b396ad44325c79cdcf.main.json"
@@ -9336,9 +9366,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/c80144324af8096b8d2cc83e57374ffda6d95d17fd72f13dbbcf6d08efa95da0.receipt.json",
+        "objects/c82656b9c2d98a27fc65b8abd88a30455e35ddbc0ea00b80a989205557d5cfae.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/c80144324af8096b8d2cc83e57374ffda6d95d17fd72f13dbbcf6d08efa95da0.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/c82656b9c2d98a27fc65b8abd88a30455e35ddbc0ea00b80a989205557d5cfae.receipt.json"
         ),
     ),
     (
@@ -9390,12 +9420,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/c9d2cb1c6c6ed8959505780b147313624bbe47d59de498dea44f5de85a48b2cd.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/c9d2cb1c6c6ed8959505780b147313624bbe47d59de498dea44f5de85a48b2cd.receipt.json"
-        ),
-    ),
-    (
         "objects/c9d3c6413037dbb024a9269920065bb36672aade724f71fefdbe6ba4c9990c3e.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/c9d3c6413037dbb024a9269920065bb36672aade724f71fefdbe6ba4c9990c3e.main.json"
@@ -9426,12 +9450,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/caa8a009f47f94232097899472ee67979c9cd0468c6db84238d154dcfba2f73a.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/caa8a009f47f94232097899472ee67979c9cd0468c6db84238d154dcfba2f73a.receipt.json"
-        ),
-    ),
-    (
         "objects/cabfdf3c8b7b7966717dc0f691bb95eae1b118c6157c5b5d02e9a5418cb434f4.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/cabfdf3c8b7b7966717dc0f691bb95eae1b118c6157c5b5d02e9a5418cb434f4.receipt.json"
@@ -9441,6 +9459,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/cad81da32fa9d33b5d965fcd9bc959f1025cc3f64bbc285549fc3213dc5ae22c.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/cad81da32fa9d33b5d965fcd9bc959f1025cc3f64bbc285549fc3213dc5ae22c.receipt.json"
+        ),
+    ),
+    (
+        "objects/cb1528a7e25edc3cbb215384ad14cf3df88e240dce0703945eae476cad0fe2d7.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/cb1528a7e25edc3cbb215384ad14cf3df88e240dce0703945eae476cad0fe2d7.receipt.json"
         ),
     ),
     (
@@ -9474,6 +9498,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/cb51a92e398a6aa0d3cadf07d2166385c00e9fe5d2f4a7eea2af0934742a5cee.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/cb51a92e398a6aa0d3cadf07d2166385c00e9fe5d2f4a7eea2af0934742a5cee.receipt.json"
+        ),
+    ),
+    (
         "objects/cb5f7af27d791d29cf0a0e726b47bc94fd316855c6ee000f8719df9fdb5c833b.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/cb5f7af27d791d29cf0a0e726b47bc94fd316855c6ee000f8719df9fdb5c833b.receipt.json"
@@ -9483,6 +9513,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/cb7151aa3ef44155ca62ad9111affa4969b401b8f59b79b9cb29147f4baa70b9.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/cb7151aa3ef44155ca62ad9111affa4969b401b8f59b79b9cb29147f4baa70b9.main.json"
+        ),
+    ),
+    (
+        "objects/cb75515ab0760ffbf2382d465f86dd667a6a319efa52a9ccdc112a7b7627080a.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/cb75515ab0760ffbf2382d465f86dd667a6a319efa52a9ccdc112a7b7627080a.receipt.json"
         ),
     ),
     (
@@ -9504,15 +9540,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/cc49e16ff7ce36305d64105d70b17b074441dc9ddc71bf328d0741a1dfa88580.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/cc49e16ff7ce36305d64105d70b17b074441dc9ddc71bf328d0741a1dfa88580.receipt.json"
-        ),
-    ),
-    (
         "objects/cc53ef588855d2a971e48abcbb9cf9624eeeb992d7e554c877ec414b6170c5e0.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/cc53ef588855d2a971e48abcbb9cf9624eeeb992d7e554c877ec414b6170c5e0.receipt.json"
+        ),
+    ),
+    (
+        "objects/cc5ef93f12d54324af0d7beae7d8ef5b4528d6729412c4fe55c76dc2f3082663.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/cc5ef93f12d54324af0d7beae7d8ef5b4528d6729412c4fe55c76dc2f3082663.receipt.json"
         ),
     ),
     (
@@ -9531,18 +9567,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/cce19ee82856f8e8b244f5256e85fd5e78bd96d32c776493bae9bd81515aecc6.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/cce19ee82856f8e8b244f5256e85fd5e78bd96d32c776493bae9bd81515aecc6.receipt.json"
-        ),
-    ),
-    (
-        "objects/cd0b1c4cc8b9e75bc368edebb4946c3d188d60538ead61e5b9f8b6acce71433e.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/cd0b1c4cc8b9e75bc368edebb4946c3d188d60538ead61e5b9f8b6acce71433e.receipt.json"
-        ),
-    ),
-    (
-        "objects/cd254fd50a752a0031b6e6ea60830ff609a3a4946d41045751060e25bcfbd212.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/cd254fd50a752a0031b6e6ea60830ff609a3a4946d41045751060e25bcfbd212.receipt.json"
         ),
     ),
     (
@@ -9684,6 +9708,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/d0c64c64ea757873c6208fdd1cc26db524341bc5b68ea03bac612832ae2ac259.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/d0c64c64ea757873c6208fdd1cc26db524341bc5b68ea03bac612832ae2ac259.receipt.json"
+        ),
+    ),
+    (
         "objects/d0f38525c7f52e31c6af569da364345f5dca25e37daf00d7f80d57d2ca51609a.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/d0f38525c7f52e31c6af569da364345f5dca25e37daf00d7f80d57d2ca51609a.receipt.json"
@@ -9753,6 +9783,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/d2412cbfd48502971ead37ea1bd853fdeb7728d6233a517bcc7749a61b4bf0d0.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/d2412cbfd48502971ead37ea1bd853fdeb7728d6233a517bcc7749a61b4bf0d0.receipt.json"
+        ),
+    ),
+    (
+        "objects/d260a058ab0c7753fd3e572f5bfbc0052ba4274b4cc1097d2f16f0ea3b889ae9.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/d260a058ab0c7753fd3e572f5bfbc0052ba4274b4cc1097d2f16f0ea3b889ae9.receipt.json"
         ),
     ),
     (
@@ -9828,15 +9864,21 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/d47024f17f3e6281318d0543ae9f7e4d84475229676b1436445519d579b89129.receipt.json",
+        "objects/d43a33ea541690a3d861b0430caeb9c0bf1f5a4d8d4a9f78cc5884ae7cf5ffc9.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/d47024f17f3e6281318d0543ae9f7e4d84475229676b1436445519d579b89129.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/d43a33ea541690a3d861b0430caeb9c0bf1f5a4d8d4a9f78cc5884ae7cf5ffc9.receipt.json"
         ),
     ),
     (
-        "objects/d479da8c128933caa2b46d20c83c167fb5f2914907a220cd29acb231f136c2e5.receipt.json",
+        "objects/d45c1b191dddb5e520057ff5c7b8c17ccbfe604225ad016449bdeef99152ee9d.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/d479da8c128933caa2b46d20c83c167fb5f2914907a220cd29acb231f136c2e5.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/d45c1b191dddb5e520057ff5c7b8c17ccbfe604225ad016449bdeef99152ee9d.receipt.json"
+        ),
+    ),
+    (
+        "objects/d47024f17f3e6281318d0543ae9f7e4d84475229676b1436445519d579b89129.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/d47024f17f3e6281318d0543ae9f7e4d84475229676b1436445519d579b89129.receipt.json"
         ),
     ),
     (
@@ -9852,6 +9894,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/d499c9da59576aa6dfc8fcccb7a83d57ed398d31ca0d82b47f6c82dba9339537.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/d499c9da59576aa6dfc8fcccb7a83d57ed398d31ca0d82b47f6c82dba9339537.receipt.json"
+        ),
+    ),
+    (
         "objects/d4b8588b70ea50e30b76abcc2b7819e6e6efacc1e970e7e7f07e7c1b585970d2.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/d4b8588b70ea50e30b76abcc2b7819e6e6efacc1e970e7e7f07e7c1b585970d2.main.json"
@@ -9864,9 +9912,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/d50c003f293a4dd92f8b1635f458ace22f692cacf23dd30c47f40b1141b04609.receipt.json",
+        "objects/d5098b4d503963b91ee717d767c0511769fa72a81d5372015018cc2e2e829844.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/d50c003f293a4dd92f8b1635f458ace22f692cacf23dd30c47f40b1141b04609.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/d5098b4d503963b91ee717d767c0511769fa72a81d5372015018cc2e2e829844.receipt.json"
         ),
     ),
     (
@@ -9900,27 +9948,27 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/d59ce78745de7d55c86dc4ba3a8f913cfb6e58b1ed90094baf5b984b1dc7d328.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/d59ce78745de7d55c86dc4ba3a8f913cfb6e58b1ed90094baf5b984b1dc7d328.receipt.json"
-        ),
-    ),
-    (
         "objects/d5d8cbba030b81d06aa7402b819e7bb2e966d9778f3c0a47e37c8be184c1e6d2.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/d5d8cbba030b81d06aa7402b819e7bb2e966d9778f3c0a47e37c8be184c1e6d2.receipt.json"
         ),
     ),
     (
-        "objects/d5fa35768f95888abe6025186ff63155992fdf0c7a52f77ca5d8435f799498c0.receipt.json",
+        "objects/d629c34261b6caaf93e7c31263cd3d2d73d3238ec89f8b6b1c3e2089c277042b.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/d5fa35768f95888abe6025186ff63155992fdf0c7a52f77ca5d8435f799498c0.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/d629c34261b6caaf93e7c31263cd3d2d73d3238ec89f8b6b1c3e2089c277042b.receipt.json"
         ),
     ),
     (
         "objects/d637bbd95f1dfff7acdc666e098d0f8f79541e79fb141025b028f92c81369155.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/d637bbd95f1dfff7acdc666e098d0f8f79541e79fb141025b028f92c81369155.main.json"
+        ),
+    ),
+    (
+        "objects/d637bf7dd6cd7b1350e602374a8eecd87871a368e15c9bb56a37f9700975c06f.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/d637bf7dd6cd7b1350e602374a8eecd87871a368e15c9bb56a37f9700975c06f.receipt.json"
         ),
     ),
     (
@@ -10008,12 +10056,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/d8ef89095dd88971326d58a1a372eaf405c2c94fc803a2410a3fc163dc4b71ff.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/d8ef89095dd88971326d58a1a372eaf405c2c94fc803a2410a3fc163dc4b71ff.receipt.json"
-        ),
-    ),
-    (
         "objects/d8f2eff0a41bd37ce1c17b0247f9c6448c5e615e103cc8e1f4e0032925532529.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/d8f2eff0a41bd37ce1c17b0247f9c6448c5e615e103cc8e1f4e0032925532529.receipt.json"
@@ -10041,6 +10083,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/d9931eb570abdd2b26601242c8a2b6d196904ab928e01f99b007df74e1f11a21.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/d9931eb570abdd2b26601242c8a2b6d196904ab928e01f99b007df74e1f11a21.main.json"
+        ),
+    ),
+    (
+        "objects/d995ee281e1a25fe27137e43e0e02e72cf0b13c5805048c0f087815164a6765a.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/d995ee281e1a25fe27137e43e0e02e72cf0b13c5805048c0f087815164a6765a.receipt.json"
         ),
     ),
     (
@@ -10092,12 +10140,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/dac090b38082c3688095fa74f01f22045df742c934175f9b648970b8f5662f21.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/dac090b38082c3688095fa74f01f22045df742c934175f9b648970b8f5662f21.receipt.json"
-        ),
-    ),
-    (
         "objects/daefb4043742a08fa47010a6b872606abfb68f34a5520822be3ddccc05766e81.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/daefb4043742a08fa47010a6b872606abfb68f34a5520822be3ddccc05766e81.receipt.json"
@@ -10119,6 +10161,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/dbe2b872e89bdac860fcd88acffb0179c461a8b973fc6170386191d7e60c0f69.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/dbe2b872e89bdac860fcd88acffb0179c461a8b973fc6170386191d7e60c0f69.main.json"
+        ),
+    ),
+    (
+        "objects/dbe50b6bb7030ae2dbb1cee4508c01d6bfcc18dc9a525c2acf63d28dc2ee014b.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/dbe50b6bb7030ae2dbb1cee4508c01d6bfcc18dc9a525c2acf63d28dc2ee014b.receipt.json"
         ),
     ),
     (
@@ -10248,12 +10296,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/de96cf9be3eb02dfe2283f2f3bb3dbec40851d65df7d439ca512a45c9a6018bf.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/de96cf9be3eb02dfe2283f2f3bb3dbec40851d65df7d439ca512a45c9a6018bf.receipt.json"
-        ),
-    ),
-    (
         "objects/dea933e24ec09da9f3478d2ca4740e8cff5f5ad004e9dd4e7d8e81c1a5a4cac3.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/dea933e24ec09da9f3478d2ca4740e8cff5f5ad004e9dd4e7d8e81c1a5a4cac3.main.json"
@@ -10326,12 +10368,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/e0008e95f4352f6cfb9a7dfed70bc41e38bbfc7f3200229f79c4aeb4a4d4bb7f.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/e0008e95f4352f6cfb9a7dfed70bc41e38bbfc7f3200229f79c4aeb4a4d4bb7f.receipt.json"
-        ),
-    ),
-    (
         "objects/e0197a2fe4b8475e11d592228f87b6e1b710c5b7bd1b6f3f1d9bcc8ca06faa8f.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/e0197a2fe4b8475e11d592228f87b6e1b710c5b7bd1b6f3f1d9bcc8ca06faa8f.receipt.json"
@@ -10353,18 +10389,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/e0373d3733ca875e97abde7a93b1b498bb4f64539138116b4ef0e006322133ce.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/e0373d3733ca875e97abde7a93b1b498bb4f64539138116b4ef0e006322133ce.receipt.json"
-        ),
-    ),
-    (
-        "objects/e0409339cff991a133585a1f138a9a963c3428e4a2f27b942fe08d5079b16136.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/e0409339cff991a133585a1f138a9a963c3428e4a2f27b942fe08d5079b16136.receipt.json"
-        ),
-    ),
-    (
-        "objects/e07351c7ebde4430a6188f2f17b2049b71c41d07117897c6500bb3b3ccfc4381.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/e07351c7ebde4430a6188f2f17b2049b71c41d07117897c6500bb3b3ccfc4381.receipt.json"
         ),
     ),
     (
@@ -10428,12 +10452,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/e2456ac89cf784475801d62b2db0d5ed29dce8a7dae52debff287f2c846c11ce.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/e2456ac89cf784475801d62b2db0d5ed29dce8a7dae52debff287f2c846c11ce.receipt.json"
-        ),
-    ),
-    (
         "objects/e2571e6a5ddf2f9d870157e1ddbc4b33be5973cf57886f4aab38edde0587c896.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/e2571e6a5ddf2f9d870157e1ddbc4b33be5973cf57886f4aab38edde0587c896.receipt.json"
@@ -10476,9 +10494,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/e35fb685f508af3861bcd1aff014ec54b3bc23f2fe850cec707f6d9f3dd72fb2.receipt.json",
+        "objects/e2f877281373f03cbd5ffdca94f29d1a037ff6f1a02c9b3fd93423cf32287b89.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/e35fb685f508af3861bcd1aff014ec54b3bc23f2fe850cec707f6d9f3dd72fb2.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/e2f877281373f03cbd5ffdca94f29d1a037ff6f1a02c9b3fd93423cf32287b89.receipt.json"
+        ),
+    ),
+    (
+        "objects/e370cef82b56bba7f99fb860f40a719d1e2ec5027df4251741c46d9f30524a32.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/e370cef82b56bba7f99fb860f40a719d1e2ec5027df4251741c46d9f30524a32.receipt.json"
         ),
     ),
     (
@@ -10524,6 +10548,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/e409797284c69765ddc7403dcdb721c45396ba011713264142b893113fd6307d.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/e409797284c69765ddc7403dcdb721c45396ba011713264142b893113fd6307d.receipt.json"
+        ),
+    ),
+    (
         "objects/e422b563aa99128c0dcd0cc6a572e7f038eacaf464c54c0fcddd285e257fa3bf.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/e422b563aa99128c0dcd0cc6a572e7f038eacaf464c54c0fcddd285e257fa3bf.main.json"
@@ -10542,15 +10572,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/e46f8a2b5dea431e80020dfc729a16818a509f2b5bbfed005d92ba0e2ca89d31.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/e46f8a2b5dea431e80020dfc729a16818a509f2b5bbfed005d92ba0e2ca89d31.receipt.json"
-        ),
-    ),
-    (
         "objects/e4840723e9bfd9944449a75d747733aecf2792c33c72994fd623fddf8e1232c6.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/e4840723e9bfd9944449a75d747733aecf2792c33c72994fd623fddf8e1232c6.receipt.json"
+        ),
+    ),
+    (
+        "objects/e4a85c171fd2304dc7e96de10ef222912d18777030fc6beb1b744b24ac660ae7.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/e4a85c171fd2304dc7e96de10ef222912d18777030fc6beb1b744b24ac660ae7.receipt.json"
         ),
     ),
     (
@@ -10572,21 +10602,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/e4c81d619a641ebb31cc98b83ac54ee15b8124812b357bb041a7b2de265968a9.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/e4c81d619a641ebb31cc98b83ac54ee15b8124812b357bb041a7b2de265968a9.receipt.json"
-        ),
-    ),
-    (
-        "objects/e4d33f07eb08bf8fee2dc44dbcf3ff0c88156a8b0e34513fa2f7224e7762b137.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/e4d33f07eb08bf8fee2dc44dbcf3ff0c88156a8b0e34513fa2f7224e7762b137.receipt.json"
-        ),
-    ),
-    (
         "objects/e4dcf2de9c6144fc7a6f271ee196544f8341136b483e40fdf6ace9781ae9d60f.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/e4dcf2de9c6144fc7a6f271ee196544f8341136b483e40fdf6ace9781ae9d60f.receipt.json"
+        ),
+    ),
+    (
+        "objects/e4e8ddeba4ca9dc13690ef58b76ae74fa23a9ee78a9b00d8b05d2722f5865024.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/e4e8ddeba4ca9dc13690ef58b76ae74fa23a9ee78a9b00d8b05d2722f5865024.receipt.json"
         ),
     ),
     (
@@ -10614,12 +10638,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/e545699c0ed09734484aa171378d2f3b9d02a50ae5dd4fdb6d6c2d3043d5cd5f.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/e545699c0ed09734484aa171378d2f3b9d02a50ae5dd4fdb6d6c2d3043d5cd5f.receipt.json"
-        ),
-    ),
-    (
         "objects/e545f9c895e7ce8ced2bd87e9b0555ec1af492020d01de826f47f93b04065ded.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/e545f9c895e7ce8ced2bd87e9b0555ec1af492020d01de826f47f93b04065ded.receipt.json"
@@ -10629,12 +10647,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/e55829651316a6605e0897ff02b64adf3b7090142f5c9b81e67aef24bbabacab.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/e55829651316a6605e0897ff02b64adf3b7090142f5c9b81e67aef24bbabacab.receipt.json"
-        ),
-    ),
-    (
-        "objects/e5931ecd212cebc7a48e2cc24a9c680ba57d9edd73fcfa5d7d4b652948388df1.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/e5931ecd212cebc7a48e2cc24a9c680ba57d9edd73fcfa5d7d4b652948388df1.receipt.json"
         ),
     ),
     (
@@ -10659,6 +10671,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/e64138f04c20344f2d13033a7f9ecf72cfbea198a4d7017f520ceac351f42356.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/e64138f04c20344f2d13033a7f9ecf72cfbea198a4d7017f520ceac351f42356.receipt.json"
+        ),
+    ),
+    (
+        "objects/e68c41023134319d0bc9e2d1f52eb5d71d9c2cead8362d4d31fa7dc4913455ea.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/e68c41023134319d0bc9e2d1f52eb5d71d9c2cead8362d4d31fa7dc4913455ea.receipt.json"
         ),
     ),
     (
@@ -10746,27 +10764,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/e89fd3ab2f5394fd7241c23cc90361bae382f0d35b159e5a132bd115f79adb60.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/e89fd3ab2f5394fd7241c23cc90361bae382f0d35b159e5a132bd115f79adb60.receipt.json"
-        ),
-    ),
-    (
         "objects/e8aea5cb4d3c7315f5a6ec3d06b4cc2760147d460be2c2d0890634e73be3e7ee.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/e8aea5cb4d3c7315f5a6ec3d06b4cc2760147d460be2c2d0890634e73be3e7ee.main.json"
-        ),
-    ),
-    (
-        "objects/e8b4e30c6bcbd62efcc99cd0ca0288e3b83a687c0a0b45b37217e1244d647b77.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/e8b4e30c6bcbd62efcc99cd0ca0288e3b83a687c0a0b45b37217e1244d647b77.receipt.json"
-        ),
-    ),
-    (
-        "objects/e8ed4bf15bf915fd8d2c320d0338f1a8df7061d4c05f5dc92d538861089d3e75.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/e8ed4bf15bf915fd8d2c320d0338f1a8df7061d4c05f5dc92d538861089d3e75.receipt.json"
         ),
     ),
     (
@@ -10779,12 +10779,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/e91fabb032dd596531d1682715487968bf42bbb3d4e4e20003ac74186262627a.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/e91fabb032dd596531d1682715487968bf42bbb3d4e4e20003ac74186262627a.receipt.json"
-        ),
-    ),
-    (
-        "objects/e9b037326540d4e283f77f65b0696fdd95fa1b8ee4f72e5cafcdb11dadc8993e.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/e9b037326540d4e283f77f65b0696fdd95fa1b8ee4f72e5cafcdb11dadc8993e.receipt.json"
         ),
     ),
     (
@@ -10842,9 +10836,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/eaa12527235701a28f0f7f4b4fe25cef5e0dc8c221771a943a580db43632a3ce.receipt.json",
+        "objects/ea96db8eac38fe1311f0214e72e1e1af38eb01a5d69e9ae3cc71fcd0168502a4.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/eaa12527235701a28f0f7f4b4fe25cef5e0dc8c221771a943a580db43632a3ce.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/ea96db8eac38fe1311f0214e72e1e1af38eb01a5d69e9ae3cc71fcd0168502a4.receipt.json"
         ),
     ),
     (
@@ -10866,6 +10860,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/eb1cbc3e5fa83cdea4dc47a28ff1db037a87fd734a609e62e3b6c3cdce7c0557.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/eb1cbc3e5fa83cdea4dc47a28ff1db037a87fd734a609e62e3b6c3cdce7c0557.receipt.json"
+        ),
+    ),
+    (
         "objects/eb1d522cd04d7664932f75c350077467d2c7d751da812554a8b8fb7901e371ef.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/eb1d522cd04d7664932f75c350077467d2c7d751da812554a8b8fb7901e371ef.main.json"
@@ -10878,9 +10878,21 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/eb5ba127bf4312caaf99e98977a871efc953f61ac33a07f084cecc1a6930fe15.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/eb5ba127bf4312caaf99e98977a871efc953f61ac33a07f084cecc1a6930fe15.receipt.json"
+        ),
+    ),
+    (
         "objects/eb685209433c2449cebefef371db5968d5749d2cbe34b2c4ece15a465f3882c8.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/eb685209433c2449cebefef371db5968d5749d2cbe34b2c4ece15a465f3882c8.receipt.json"
+        ),
+    ),
+    (
+        "objects/eb7ae5174f0e11fb9525b908c89f991cfb2725018ecf7c76a1b4de2bc49dee62.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/eb7ae5174f0e11fb9525b908c89f991cfb2725018ecf7c76a1b4de2bc49dee62.receipt.json"
         ),
     ),
     (
@@ -10896,21 +10908,27 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/eba78aaff3c6c151c2bc4c85e84ed127f999c6a59baca23e20d84cbd64ae7ead.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/eba78aaff3c6c151c2bc4c85e84ed127f999c6a59baca23e20d84cbd64ae7ead.receipt.json"
-        ),
-    ),
-    (
         "objects/ebd22dc0239505be00facaad0db4f23bb3a465c058de344dda08f1cdb57d417f.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/ebd22dc0239505be00facaad0db4f23bb3a465c058de344dda08f1cdb57d417f.receipt.json"
         ),
     ),
     (
+        "objects/ebe29a0cef4d4b8536b1a08293a55d8d5fb04827cb8f096a3221cb147d277984.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/ebe29a0cef4d4b8536b1a08293a55d8d5fb04827cb8f096a3221cb147d277984.receipt.json"
+        ),
+    ),
+    (
         "objects/ebf267fed68bc1c253480d2ef3c7b9e9c773c9df98edbc7ce8bc39f71539c1f4.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/ebf267fed68bc1c253480d2ef3c7b9e9c773c9df98edbc7ce8bc39f71539c1f4.receipt.json"
+        ),
+    ),
+    (
+        "objects/ec12b8aa936bea984b89e5dcf945fb709dc6fdb7c908de0d3d5593b6e550e1e9.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/ec12b8aa936bea984b89e5dcf945fb709dc6fdb7c908de0d3d5593b6e550e1e9.receipt.json"
         ),
     ),
     (
@@ -10923,6 +10941,18 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/ec206c8b543b0898328afd3acc4a0d64d5b8261e13b47a44d49d0013b8f35b20.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/ec206c8b543b0898328afd3acc4a0d64d5b8261e13b47a44d49d0013b8f35b20.receipt.json"
+        ),
+    ),
+    (
+        "objects/ec3fe6b93b661d7688914bce6316fd84e2210ba141f91cdf761b7cb2588c292a.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/ec3fe6b93b661d7688914bce6316fd84e2210ba141f91cdf761b7cb2588c292a.receipt.json"
+        ),
+    ),
+    (
+        "objects/ec62fd26ea35af7aab4f9ee9a9c642b404d3735a002784b9e8920018c1c5cb84.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/ec62fd26ea35af7aab4f9ee9a9c642b404d3735a002784b9e8920018c1c5cb84.receipt.json"
         ),
     ),
     (
@@ -10944,9 +10974,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/ecbcbeb6701190596aae30125b0e1f3789a347a0c30fa786bf8491a51a6282d7.receipt.json",
+        "objects/ec9b470b3e493c265f3cf4fcf8599ae42d8ecf022db1667655009b452fff83f2.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/ecbcbeb6701190596aae30125b0e1f3789a347a0c30fa786bf8491a51a6282d7.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/ec9b470b3e493c265f3cf4fcf8599ae42d8ecf022db1667655009b452fff83f2.receipt.json"
         ),
     ),
     (
@@ -10959,12 +10989,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/ecef47693e696116126408e740a62ab978030cdf7af8c9b1327122d9ec364a9b.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/ecef47693e696116126408e740a62ab978030cdf7af8c9b1327122d9ec364a9b.main.json"
-        ),
-    ),
-    (
-        "objects/ecf5524caec5e7d85c03cba928b255e5fb7ee3ce9aa6a0959f431cb14c0384b7.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/ecf5524caec5e7d85c03cba928b255e5fb7ee3ce9aa6a0959f431cb14c0384b7.receipt.json"
         ),
     ),
     (
@@ -11022,6 +11046,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/ee7b389d695c22c260a9d566d557f2a1465f0348a53a245dd918d0c734776bb1.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/ee7b389d695c22c260a9d566d557f2a1465f0348a53a245dd918d0c734776bb1.receipt.json"
+        ),
+    ),
+    (
         "objects/ee93057e320657593b1f0c67fe7b0e7eb1473775cb7f9ac92b6f3fa15393b801.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/ee93057e320657593b1f0c67fe7b0e7eb1473775cb7f9ac92b6f3fa15393b801.receipt.json"
@@ -11031,12 +11061,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/ee9e3bff81b9e58549ecd38b7bacb9e0f438933d05787eb628fbfe8c3473f1af.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/ee9e3bff81b9e58549ecd38b7bacb9e0f438933d05787eb628fbfe8c3473f1af.receipt.json"
-        ),
-    ),
-    (
-        "objects/eea22ff8f98713c69e6d3a5ccccc539e353e2eadb4c14549ea4565f63e91ff5e.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/eea22ff8f98713c69e6d3a5ccccc539e353e2eadb4c14549ea4565f63e91ff5e.receipt.json"
         ),
     ),
     (
@@ -11064,6 +11088,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/efa1743c87000c214743b1da46762ef1ae5b0ce41119bb10271eefe0519baf5f.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/efa1743c87000c214743b1da46762ef1ae5b0ce41119bb10271eefe0519baf5f.receipt.json"
+        ),
+    ),
+    (
         "objects/efdd10f6b4f46a0f806c4d02098c22fb321620373f11822a94f5ff3f86dc6814.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/efdd10f6b4f46a0f806c4d02098c22fb321620373f11822a94f5ff3f86dc6814.receipt.json"
@@ -11073,6 +11103,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/efe4e3e7fb8f47d491a586558c76df5e674e87137c4c7318067bf792c000587a.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/efe4e3e7fb8f47d491a586558c76df5e674e87137c4c7318067bf792c000587a.main.json"
+        ),
+    ),
+    (
+        "objects/eff9a2384d565aed0ddeb04aebafac3dee67c3346ed408510a3d3e7e0adcf605.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/eff9a2384d565aed0ddeb04aebafac3dee67c3346ed408510a3d3e7e0adcf605.receipt.json"
         ),
     ),
     (
@@ -11088,9 +11124,21 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/f01e7b2b5bf9a18e9c6a53b458d7485bcb103a1951bd8a7099623360481dca4e.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/f01e7b2b5bf9a18e9c6a53b458d7485bcb103a1951bd8a7099623360481dca4e.receipt.json"
+        ),
+    ),
+    (
         "objects/f0219cd428e9821bb75beeb4e1ce4cd05c08fda1e2a3000152153b63bd8fcd01.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/f0219cd428e9821bb75beeb4e1ce4cd05c08fda1e2a3000152153b63bd8fcd01.receipt.json"
+        ),
+    ),
+    (
+        "objects/f038f05c48c7a23591d27c58a24bc5b131728dc68a17989b12f46c9fbb661c3c.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/f038f05c48c7a23591d27c58a24bc5b131728dc68a17989b12f46c9fbb661c3c.receipt.json"
         ),
     ),
     (
@@ -11136,12 +11184,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/f14198baf00e221b81bacdcd81e67394d2dc9bb94e0cb3dd812f64ad111cc616.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/f14198baf00e221b81bacdcd81e67394d2dc9bb94e0cb3dd812f64ad111cc616.receipt.json"
-        ),
-    ),
-    (
         "objects/f15c7d33cb69405f359b3f37bafc51aa6ceddeb253da5e6345ce3c9cd14aaf23.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/f15c7d33cb69405f359b3f37bafc51aa6ceddeb253da5e6345ce3c9cd14aaf23.receipt.json"
@@ -11154,15 +11196,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/f17953541eee2cc403579f5364e850635c838fc786d6e1cab766bf45a7b66b9c.receipt.json",
+        "objects/f1dbd8533ca3cb79310895e77017ef22f634aac2353a935aa39f9357d93aaa69.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/f17953541eee2cc403579f5364e850635c838fc786d6e1cab766bf45a7b66b9c.receipt.json"
-        ),
-    ),
-    (
-        "objects/f1b46aafb20b8cf984642ba8d0385ffb4c513da1cc64a2dc0c3cd80f0e61d4b2.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/f1b46aafb20b8cf984642ba8d0385ffb4c513da1cc64a2dc0c3cd80f0e61d4b2.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/f1dbd8533ca3cb79310895e77017ef22f634aac2353a935aa39f9357d93aaa69.receipt.json"
         ),
     ),
     (
@@ -11274,12 +11310,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/f47349e4603d3e668dcfb57ab610ab6f9122649fbebc4007e90ef19a3b050d86.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/f47349e4603d3e668dcfb57ab610ab6f9122649fbebc4007e90ef19a3b050d86.receipt.json"
-        ),
-    ),
-    (
         "objects/f47c291f2e016862fa0483572997e1f6dbf4c807a088a3972fc101c7dcaa1d8d.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/f47c291f2e016862fa0483572997e1f6dbf4c807a088a3972fc101c7dcaa1d8d.receipt.json"
@@ -11295,12 +11325,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/f4ab925550dcb464ee58505b64ea1845848bca1ae9b7c6b5361d15c77f9fd35a.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/f4ab925550dcb464ee58505b64ea1845848bca1ae9b7c6b5361d15c77f9fd35a.receipt.json"
-        ),
-    ),
-    (
-        "objects/f4bf0c1bac77ea2a89fef0e7ba17defa6ad9bb2aec171026be2987167ff8a7b2.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/f4bf0c1bac77ea2a89fef0e7ba17defa6ad9bb2aec171026be2987167ff8a7b2.receipt.json"
         ),
     ),
     (
@@ -11454,15 +11478,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/f839754cfedc43fd0c490fb27c66da127e58d1f29befb8d2da908a757b8a26cf.receipt.json",
+        "objects/f837b16fbad5ef75992fcea9c29f5dc036cd582ec6d49d91d46a00920eb26aed.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/f839754cfedc43fd0c490fb27c66da127e58d1f29befb8d2da908a757b8a26cf.receipt.json"
-        ),
-    ),
-    (
-        "objects/f83b297ef30339e1ea7951981bb2e60503af296d2ca24fd75b63100c0f22ebdd.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/f83b297ef30339e1ea7951981bb2e60503af296d2ca24fd75b63100c0f22ebdd.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/f837b16fbad5ef75992fcea9c29f5dc036cd582ec6d49d91d46a00920eb26aed.receipt.json"
         ),
     ),
     (
@@ -11478,9 +11496,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/f8886c1611d8cdb89c04375d52e50f337912a1bbe7a110fdda1f1040ffff5699.receipt.json",
+        "objects/f8895ccee3738898da3d3851e748c1ed6a624e484ce08e63948a597cb83b4b8b.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/f8886c1611d8cdb89c04375d52e50f337912a1bbe7a110fdda1f1040ffff5699.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/f8895ccee3738898da3d3851e748c1ed6a624e484ce08e63948a597cb83b4b8b.receipt.json"
         ),
     ),
     (
@@ -11514,15 +11532,9 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/f8d948c0e5d6a3fbf7a4b752c42bc58123b3212399079792dbc22cb909b38a6f.receipt.json",
+        "objects/f8d26e4e506889d2d944f0d4fecfbc5a59864fc856e03833b5832c79757f2f74.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/f8d948c0e5d6a3fbf7a4b752c42bc58123b3212399079792dbc22cb909b38a6f.receipt.json"
-        ),
-    ),
-    (
-        "objects/f8dc6ba6d2f5e2f13d10ebb96a791126275a30c979f6609b14730c727ca958fb.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/f8dc6ba6d2f5e2f13d10ebb96a791126275a30c979f6609b14730c727ca958fb.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/f8d26e4e506889d2d944f0d4fecfbc5a59864fc856e03833b5832c79757f2f74.receipt.json"
         ),
     ),
     (
@@ -11568,6 +11580,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/f9d02b6751212885e181a10aab8bc5c1e76eb96834ce98e3fc5f02506b04a17b.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/f9d02b6751212885e181a10aab8bc5c1e76eb96834ce98e3fc5f02506b04a17b.receipt.json"
+        ),
+    ),
+    (
         "objects/f9d8b57b8b47bc28b2d16e98e1115dfa4dc08355eab1dc7b2ecdb07715e3441c.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/f9d8b57b8b47bc28b2d16e98e1115dfa4dc08355eab1dc7b2ecdb07715e3441c.main.json"
@@ -11583,12 +11601,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/fa371bef4503dddfc5dcd1db2c7a7c7bea2404e097216633993f29e7f9ac16eb.main.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/fa371bef4503dddfc5dcd1db2c7a7c7bea2404e097216633993f29e7f9ac16eb.main.json"
-        ),
-    ),
-    (
-        "objects/fa6621793af6ba1f3337e49fd5d9bac6518e71681855790aae358c85fd762967.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/fa6621793af6ba1f3337e49fd5d9bac6518e71681855790aae358c85fd762967.receipt.json"
         ),
     ),
     (
@@ -11622,27 +11634,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/fbef3190738f3639c7aee99b45d67d3aecb86915166e90ed502ffbf5503efa0c.receipt.json",
+        "objects/fbdca9b27deac080d3a1d2e9cf4faabe7d3807b11f4412e20b01e882a6399927.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/fbef3190738f3639c7aee99b45d67d3aecb86915166e90ed502ffbf5503efa0c.receipt.json"
-        ),
-    ),
-    (
-        "objects/fc175a96fc30661b87a58cca66c787505d1102b54c354621339e2f1dc36eb484.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/fc175a96fc30661b87a58cca66c787505d1102b54c354621339e2f1dc36eb484.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/fbdca9b27deac080d3a1d2e9cf4faabe7d3807b11f4412e20b01e882a6399927.receipt.json"
         ),
     ),
     (
         "objects/fc558e2660e3e433358e8c62bb2cd1fd3a2a913b91606c89d346749a8077ed54.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/fc558e2660e3e433358e8c62bb2cd1fd3a2a913b91606c89d346749a8077ed54.receipt.json"
-        ),
-    ),
-    (
-        "objects/fcb511bceb31909ed997b8e7637348a49ae61522ff6bdc5d951b5f4837916383.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/fcb511bceb31909ed997b8e7637348a49ae61522ff6bdc5d951b5f4837916383.receipt.json"
         ),
     ),
     (
@@ -11748,15 +11748,21 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/fe3191d57e10248e549233d7fc5470a992357516ac2e7657de29ae234395fb4b.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/fe3191d57e10248e549233d7fc5470a992357516ac2e7657de29ae234395fb4b.receipt.json"
-        ),
-    ),
-    (
         "objects/fe56be8154e9a7d946663982506c0d8f1128f2ad598f03c6c38642d95362d461.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/fe56be8154e9a7d946663982506c0d8f1128f2ad598f03c6c38642d95362d461.receipt.json"
+        ),
+    ),
+    (
+        "objects/fe60194e76ce956c613659ca28a8c70fd079b93a09d5795d1ce906580d853349.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/fe60194e76ce956c613659ca28a8c70fd079b93a09d5795d1ce906580d853349.receipt.json"
+        ),
+    ),
+    (
+        "objects/fe770f2e77a8f822b98968594acfea17edecb409ec1fcf35ef44cf3d431998c0.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/fe770f2e77a8f822b98968594acfea17edecb409ec1fcf35ef44cf3d431998c0.receipt.json"
         ),
     ),
     (
@@ -11766,15 +11772,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/fe96c2538abe74893291fc0dc26ed4004b40a61a63160dd78a4ba11dcd07c333.receipt.json",
+        "objects/fe8f0fe5b50704428795c6c3bf632f14e019e46535ec7b18aeb00ecb1387d6d6.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/fe96c2538abe74893291fc0dc26ed4004b40a61a63160dd78a4ba11dcd07c333.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/fe8f0fe5b50704428795c6c3bf632f14e019e46535ec7b18aeb00ecb1387d6d6.receipt.json"
         ),
     ),
     (
-        "objects/fed07171db322db34d8b8981908fe2981063d2c408fb0abc38bca5348f7d86fb.receipt.json",
+        "objects/fe96c2538abe74893291fc0dc26ed4004b40a61a63160dd78a4ba11dcd07c333.receipt.json",
         include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/fed07171db322db34d8b8981908fe2981063d2c408fb0abc38bca5348f7d86fb.receipt.json"
+            "../../../../../pkg/contracts/accepted/objects/fe96c2538abe74893291fc0dc26ed4004b40a61a63160dd78a4ba11dcd07c333.receipt.json"
         ),
     ),
     (
@@ -11796,27 +11802,21 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/ff36a7407450ec7efc01cd134ed29c70d5986c478f47d5c542dcc82caf86708c.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/ff36a7407450ec7efc01cd134ed29c70d5986c478f47d5c542dcc82caf86708c.receipt.json"
-        ),
-    ),
-    (
         "objects/ff40211415ff2a4bbe731a5319598fa316620f6a5c9be87cf0e1c5cf4a8c1b64.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/ff40211415ff2a4bbe731a5319598fa316620f6a5c9be87cf0e1c5cf4a8c1b64.receipt.json"
         ),
     ),
     (
-        "objects/ff44ef706bc42a6c11398912ca9f26db6e1196d77800c8746b417a114b1a7e4e.receipt.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/accepted/objects/ff44ef706bc42a6c11398912ca9f26db6e1196d77800c8746b417a114b1a7e4e.receipt.json"
-        ),
-    ),
-    (
         "objects/ffd1f7f1740ac6f6741c839da3014f7e3e9421a270b6c5da142a008d283916ec.receipt.json",
         include_bytes!(
             "../../../../../pkg/contracts/accepted/objects/ffd1f7f1740ac6f6741c839da3014f7e3e9421a270b6c5da142a008d283916ec.receipt.json"
+        ),
+    ),
+    (
+        "objects/ffd4d15fcab263d883704bf4812574a15b424cc678a0374b851eb6b1b0c6132f.receipt.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/accepted/objects/ffd4d15fcab263d883704bf4812574a15b424cc678a0374b851eb6b1b0c6132f.receipt.json"
         ),
     ),
     (
