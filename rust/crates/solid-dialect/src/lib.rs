@@ -2161,7 +2161,9 @@ pub trait Dialect: Sync {
     /// runs it: `setTimeout`, `queueMicrotask`, `Promise.then`, an observer
     /// callback and the rest of the analyzer's `FRESH_STACK_SCHEDULERS`, which
     /// invoke the callback from a task or microtask queue on an otherwise
-    /// empty execution-context stack.
+    /// empty execution-context stack. The owner analysis asks it again for
+    /// code after an `await`, which resumes from a promise continuation on the
+    /// same empty stack.
     ///
     /// The host half (the stack is empty) is the analyzer's reviewed fact; this
     /// is the dialect half: what that empty stack means for the owner. A

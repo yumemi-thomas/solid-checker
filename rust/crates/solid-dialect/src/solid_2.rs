@@ -5179,6 +5179,15 @@ impl Dialect for Solid2 {
     /// raises `SETTLED_CLEANUP_UNOWNED` (dev) and the cleanup never runs.
     /// Control: a `createRoot` created in the callback owns its `onCleanup`,
     /// which runs on that root's disposal.
+    ///
+    /// The same answer covers code after an `await` (`owners::AwaitContinuations`):
+    /// it resumes from a promise continuation, on the same empty stack. Probed
+    /// on the published `@solidjs/signals` 2.0.0-rc.0, rc.3, rc.6, rc.8 and
+    /// rc.9 dev builds and the rc.9 prod build, under Node 24: inside a
+    /// `createRoot`, `getOwner()` is non-null before the `await` and `null`
+    /// after it; an `onCleanup` after it raises `NO_OWNER_CLEANUP` (dev) and
+    /// does not run when the root is disposed, while one before it does; a
+    /// `createEffect` after it raises `NO_OWNER_EFFECT` (dev).
     fn fresh_stack_callback_owner(&self) -> Option<CallbackOwner> {
         Some(CallbackOwner::None)
     }

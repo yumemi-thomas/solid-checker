@@ -678,6 +678,8 @@ pub(crate) struct OwnerRequirementStatus {
     pub(crate) conditional_owner: bool,
     pub(crate) later_run_unowned: bool,
     pub(crate) component_uncertain: bool,
+    /// The operation runs after an `await` ([`AwaitContinuations`]).
+    pub(crate) after_await: bool,
     pub(crate) report: bool,
 }
 
@@ -808,6 +810,7 @@ pub(crate) fn find_missing_owners(
     }
     propagate_owner_contexts(&mut contexts, &outgoing);
 
+    let continuations = AwaitContinuations::new(facts, lookup);
     let mut settled_gates = SettledGateDecisions::new();
     for (file_index, file) in facts.files.iter().enumerate() {
         let file_nodes = nodes_by_path
@@ -836,20 +839,39 @@ pub(crate) fn find_missing_owners(
                 file.path.as_str(),
                 call.span,
             );
+            // `onSettled`'s returned cleanup is a different owner question
+            // (whether an unowned settle registers at all), so it keeps the
+            // enclosing context.
+            let after_await = continuations.contains(file.path.as_str(), call.callee.start)
+                && !matches!(
+                    primitive
+                        .and_then(|primitive| lookup.dialect.owner_requirement_role(primitive)),
+                    Some(OwnerRequirementRole::SettledCleanup)
+                );
+            let entry_context = context;
+            let context = if after_await {
+                await_continuation_context(context)
+            } else {
+                context
+            };
             let root_owned = root_owned_span(call.span);
             if !root_owned
                 && let Some(symbol) = lookup.callee_symbol(file, call.callee)
                 && let Some(requirements_for_call) = lookup.contract_owner_requirements(symbol)
             {
-                let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
-                let later_run_unowned =
-                    !proven_unowned && context & OWNER_CONTEXT_LATER_RUN_UNOWNED != 0;
-                let conditional_owner = !proven_unowned
-                    && !later_run_unowned
-                    && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
-                        == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
-                let component_uncertain = context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0;
                 for requirement in requirements_for_call {
+                    let after_await = after_await
+                        && requirement.operation
+                            != crate::OwnerRequirementOperation::SettledCleanup;
+                    let context = if after_await { context } else { entry_context };
+                    let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
+                    let later_run_unowned =
+                        !proven_unowned && context & OWNER_CONTEXT_LATER_RUN_UNOWNED != 0;
+                    let conditional_owner = !proven_unowned
+                        && !later_run_unowned
+                        && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
+                            == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
+                    let component_uncertain = context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0;
                     // ADR 0161: an export that may register without doing so
                     // on every call leaves the unowned call a proof obligation.
                     let registration_uncertain = !requirement.guaranteed;
@@ -876,6 +898,7 @@ pub(crate) fn find_missing_owners(
                             conditional_owner,
                             later_run_unowned,
                             component_uncertain,
+                            after_await,
                             report: context & OWNER_CONTEXT_UNOWNED != 0,
                         },
                         lookup,
@@ -1045,6 +1068,7 @@ pub(crate) fn find_missing_owners(
                         conditional_owner,
                         later_run_unowned,
                         component_uncertain,
+                        after_await,
                         report,
                     },
                     lookup,
@@ -1102,6 +1126,7 @@ pub(crate) fn find_missing_owners(
                     conditional_owner,
                     later_run_unowned,
                     component_uncertain,
+                    after_await: false,
                     report: context & OWNER_CONTEXT_UNOWNED != 0,
                 },
                 lookup,
@@ -1447,6 +1472,7 @@ pub(crate) fn find_missing_owners_incremental(
 
     let requirements_started = Instant::now();
     let mut requirements = Vec::new();
+    let continuations = AwaitContinuations::new(facts, lookup);
     let mut settled_gates = SettledGateDecisions::new();
     let mut seen = HashSet::new();
     for file in &facts.files {
@@ -1461,6 +1487,17 @@ pub(crate) fn find_missing_owners_incremental(
                     .copied()
             });
             let context = owner_index.map_or(OWNER_CONTEXT_UNOWNED, |index| contexts[index]);
+            // As in the batch pass: effects, cleanups and contract calls, never
+            // a JSX boundary or `onSettled`'s returned cleanup.
+            let after_await = (candidate.through_contract
+                || matches!(candidate.operation, "effect" | "cleanup"))
+                && candidate.operation != "settled-cleanup"
+                && continuations.contains(file.path.as_str(), candidate.operation_span.start);
+            let context = if after_await {
+                await_continuation_context(context)
+            } else {
+                context
+            };
             // The batch pass skips these before recording a settled gate too.
             // Every chain span is one of this fragment's own nodes; one that
             // did not resolve would withhold the lexical answer, not grant it.
@@ -1594,6 +1631,7 @@ pub(crate) fn find_missing_owners_incremental(
                     conditional_owner,
                     later_run_unowned,
                     component_uncertain,
+                    after_await,
                     report: context & candidate.report_mask != 0,
                 },
                 lookup,
@@ -1743,6 +1781,60 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
     }
 }
 
+/// Calls that run after an `await` on every path through their async
+/// function's own body, keyed by file and callee start.
+///
+/// The positions are the producer's `calls_after_await` dominance fact (the
+/// same one `reactive-read-after-await` proves reads with): branches, `&&`,
+/// `try`/`catch`, loops and `switch` merge conservatively, and a nested
+/// closure is never scanned, so a callback handed to `runWithOwner` after the
+/// `await` is not one of them. Such a call runs from a promise continuation,
+/// on an otherwise empty stack. Whether an owner is current there is the
+/// dialect's fresh-stack answer, the same one host schedulers get
+/// ([`Dialect::fresh_stack_callback_owner`]): Solid 2.0's owner is a
+/// synchronous dynamic scope, so none is. Empty for a dialect that does not
+/// answer [`solid_dialect::CallbackOwner::None`].
+pub(crate) struct AwaitContinuations<'a> {
+    starts: HashMap<&'a str, HashSet<u64>>,
+}
+
+impl<'a> AwaitContinuations<'a> {
+    pub(crate) fn new(facts: &'a ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
+        let mut starts = HashMap::<&'a str, HashSet<u64>>::new();
+        if lookup.dialect.fresh_stack_callback_owner() == Some(solid_dialect::CallbackOwner::None) {
+            for file in facts.typescript.files() {
+                for function in file.async_functions.iter() {
+                    for call in &function.calls_after_await {
+                        starts
+                            .entry(call.path.as_ref())
+                            .or_default()
+                            .insert(call.start_byte);
+                    }
+                }
+            }
+        }
+        Self { starts }
+    }
+
+    /// Whether the call whose callee starts at `start` runs after an `await`.
+    pub(crate) fn contains(&self, path: &str, start: u32) -> bool {
+        self.starts
+            .get(path)
+            .is_some_and(|starts| starts.contains(&u64::from(start)))
+    }
+}
+
+/// The owner context of an operation that runs after an `await`
+/// ([`AwaitContinuations`]): proven unowned on every run, whatever context
+/// the enclosing function was entered with.
+const fn await_continuation_context(context: u8) -> u8 {
+    (context | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED)
+        & !(OWNER_CONTEXT_OWNED
+            | OWNER_CONTEXT_LEAF
+            | OWNER_CONTEXT_COMPONENT_UNCERTAIN
+            | OWNER_CONTEXT_LATER_RUN_UNOWNED)
+}
+
 pub(crate) fn owner_context_at(
     nodes: &[OwnerNode],
     nodes_by_path: &HashMap<String, Vec<usize>>,
@@ -1854,6 +1946,7 @@ pub(crate) fn push_owner_requirement(
             conditional_owner: status.conditional_owner,
             later_run_unowned: status.later_run_unowned,
             component_uncertain: status.component_uncertain,
+            after_await: status.after_await,
             missing_jsx_census,
             through_contract: status.through_contract,
             report: status.report,

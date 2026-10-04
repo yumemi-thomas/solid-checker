@@ -956,6 +956,12 @@ pub struct OwnerRequirement {
     /// owner contexts.
     #[serde(default, skip_serializing_if = "is_false")]
     pub component_uncertain: bool,
+    /// The operation runs after an `await` on every path through its async
+    /// function's body: a promise continuation on an empty stack, where the
+    /// dialect says no owner is current. Proven unowned whatever context the
+    /// function was entered with.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub after_await: bool,
     /// The operation sits in a source-level JSX region for which the compiler
     /// emitted no execution census. The absence of an owner region is not a
     /// proof that a live operation runs unowned: the compiler may have deleted

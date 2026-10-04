@@ -187,7 +187,10 @@ impl Finding {
             };
         }
         let mut evidence = vec![EvidenceStep {
-            message: if component_uncertain {
+            message: if requirement.after_await {
+                "this call runs after an `await`, from a promise continuation: the owner current before the `await` is not current after it, and no other owner is"
+                    .into()
+            } else if component_uncertain {
                 "component identity is unresolved, so this operation may execute with or without a reactive owner"
                     .into()
             } else if conditional_owner {
@@ -783,6 +786,7 @@ mod tests {
             conditional_owner: false,
             later_run_unowned: false,
             component_uncertain: false,
+            after_await: false,
             missing_jsx_census: false,
             through_contract: false,
             report: true,

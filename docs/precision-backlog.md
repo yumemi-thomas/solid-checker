@@ -1,5 +1,27 @@
 # Precision backlog
 
+## An owner requirement after an `await` is proven unowned (2026-10-04)
+
+ADR 0176. An effect, a cleanup or a contract call with an owner requirement
+that runs after an `await` on every path through its async function's body has
+no owner, whoever called the function. The owner analysis now reads the
+producer's `calls_after_await` fact through the dialect's fresh-stack answer.
+
+- **Gained:** the fixture's three previously silent defects and one previously
+  uncertifiable exported helper are proven violations. No fixture moved, and
+  the 38-app sweep is unchanged (264 -> 264 violations, 0 added), so the rule
+  closes missed defects without yield on this corpus.
+- **Still open:**
+  - `onSettled`'s returned cleanup after an `await` keeps the enclosing
+    context;
+  - an async `createRoot` callback keeps its lexical root answer after the
+    `await`;
+  - a contract call whose requirement is not guaranteed (`createTimer`, the
+    cleanup/effect disjunction) stays uncertifiable;
+  - most of the 88 `missing-owner` sites local certification exposed are
+    hooks called from components, where the caller is not visible. They are
+    not defects, and this rule does not address them.
+
 ## A possibly-computed signal accessor is described (2026-10-04)
 
 ADR 0175. A `createSignal` whose first argument grammar cannot classify returns
