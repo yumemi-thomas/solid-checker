@@ -10,6 +10,7 @@ import {
   createPnpmLockSelectionIndex,
   PublishedGraphAcquisitionRefusal,
   discoverInstalledPublishedGraph,
+  bunIsolatedStoreInstall,
   exactBunLockSelection,
   exactLockSelection,
   lockLocatorForInstalledPackage,
@@ -148,6 +149,61 @@ test("installed Bun locator distinguishes nested copies at the same version", ()
       "/project/node_modules/@corvu/popover/node_modules/@corvu/utils"
     ),
     "@corvu/popover/@corvu/utils"
+  );
+});
+
+// ADR 0185: Bun's isolated linker installs each package once under
+// `node_modules/.bun/<name>@<version>[+<peers>]/node_modules/<name>`. That path
+// names the package and version, not a lock key, so the record is the one all
+// records at that name and version agree on.
+test("an isolated Bun store install selects the record its name and version agree on", () => {
+  const store = "/project/node_modules/.bun/@scope+leaf@2.0.0+8dd5f48cc8d92621/node_modules/@scope/leaf";
+  assert.equal(bunIsolatedStoreInstall("/project/bun.lock", store, "@scope/leaf", "2.0.0"), true);
+  assert.equal(
+    bunIsolatedStoreInstall(
+      "/project/bun.lock",
+      "/project/node_modules/.bun/leaf@2.0.0/node_modules/leaf",
+      "leaf",
+      "2.0.0"
+    ),
+    true
+  );
+  for (const [root, name, version] of [
+    [store, "@scope/leaf", "2.0.1"],
+    [store, "@scope/other", "2.0.0"],
+    ["/project/node_modules/@scope/leaf", "@scope/leaf", "2.0.0"],
+    ["/elsewhere/node_modules/.bun/@scope+leaf@2.0.0/node_modules/@scope/leaf", "@scope/leaf", "2.0.0"]
+  ]) {
+    assert.equal(bunIsolatedStoreInstall("/project/bun.lock", root, name, version), false, root);
+  }
+  const agreeing = createBunLockSelectionIndex(`{
+    "lockfileVersion": 1,
+    "packages": {
+      "app/@scope/leaf": ["@scope/leaf@2.0.0", "", {}, "sha512-leaf"],
+      "@scope/leaf": ["@scope/leaf@2.0.0", "", {}, "sha512-leaf"],
+    },
+  }`);
+  const select = index => exactLockSelection({
+    index,
+    packageManager: "bun",
+    lockfilePath: "/project/bun.lock",
+    packageRoot: store,
+    packageName: "@scope/leaf",
+    packageVersion: "2.0.0"
+  });
+  assert.deepEqual(select(agreeing), { locator: "@scope/leaf", integrity: "sha512-leaf" });
+  const disagreeing = createBunLockSelectionIndex(`{
+    "lockfileVersion": 1,
+    "packages": {
+      "app/@scope/leaf": ["@scope/leaf@2.0.0", "", {}, "sha512-other"],
+      "@scope/leaf": ["@scope/leaf@2.0.0", "", {}, "sha512-leaf"],
+    },
+  }`);
+  assert.throws(
+    () => select(disagreeing),
+    error =>
+      error instanceof PublishedGraphAcquisitionRefusal &&
+      error.kind === "ambiguous-lock-selection"
   );
 });
 

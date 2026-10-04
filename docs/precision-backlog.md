@@ -1,5 +1,21 @@
 # Precision backlog
 
+## A Bun isolated-store install is selected by name and version (2026-10-05)
+
+ADR 0185. Bun's isolated linker installs a package at
+`node_modules/.bun/<name>@<version>[+<peers>]/node_modules/<name>`, which no
+lock key names. Such an install now selects the record its name and version
+agree on, provided every record has an integrity and all integrities are
+equal.
+
+- **Gained:** 38-app local certification goes from 100 to 111 of 180, and the
+  three isolated-store apps from 0 to 11 certified packages. No finding moved.
+- **Still open:**
+  - an install directory holding two lockfiles (`queue-management-ui`: `bun.lock`
+    beside `pnpm-lock.yaml`), refused as undecidable; an explicit lockfile
+    selection would be needed;
+  - npm lockfiles that record no integrity (`ai-memory-ui`).
+
 ## One installed package is one declaration source (2026-10-05)
 
 ADR 0184. In pnpm installs, a package certified in place was refused admission

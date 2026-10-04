@@ -4,7 +4,7 @@
 // inputs. It never creates semantic or receipt authority: Rust independently
 // replays every node and edge before witness acquisition.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { dirname, relative, resolve, sep } from "node:path";
 
 import {
@@ -672,6 +672,88 @@ export function lockLocatorForInstalledPackage({
   );
 }
 
+/**
+ * ADR 0185: whether `packageRoot` (or its real path) is the copy Bun's isolated
+ * linker installs for exactly `packageName@packageVersion`:
+ * `node_modules/.bun/<name, "/" as "+">@<version>[+<peer hash>]/node_modules/<name>`
+ * beside the lockfile. That layout names the package and version and nothing
+ * the lockfile keys on, as pnpm's `.pnpm` store does.
+ */
+export function bunIsolatedStoreInstall(bunLockPath, packageRoot, packageName, packageVersion) {
+  const lockDirectory = dirname(resolve(bunLockPath));
+  const candidates = [resolve(packageRoot)];
+  try {
+    candidates.push(realpathSync(resolve(packageRoot)));
+  } catch {
+    // A root that does not resolve is judged by its written path alone.
+  }
+  const store = `${packageName.replace("/", "+")}@${packageVersion}`;
+  return candidates.some(candidate => {
+    const parts = relative(lockDirectory, candidate).split(sep);
+    return (
+      parts[0] === "node_modules" &&
+      parts[1] === ".bun" &&
+      (parts[2] === store || parts[2]?.startsWith(`${store}+`)) &&
+      parts[3] === "node_modules" &&
+      parts.slice(4).join("/") === packageName
+    );
+  });
+}
+
+/**
+ * ADR 0185: the one lock record an isolated-store install of
+ * `packageName@packageVersion` is. Every record at that name and version must
+ * carry an integrity, and they must all agree: then they all name the same
+ * published bytes, and the record kept is the first by locator, so a certifier
+ * and an admitting consumer select the same one. Records that disagree are
+ * ambiguous, because the store path does not say which copy it holds.
+ */
+export function exactBunLockSelectionAcrossLocators(lockfileOrIndex, packageName, packageVersion) {
+  const exact = `${packageName}@${packageVersion}`;
+  const index = bunLockSelectionIndex(lockfileOrIndex);
+  const records = [...(bunLockSelectionRecords.get(index).get(exact) ?? [])].sort(
+    (left, right) => left.locator.localeCompare(right.locator)
+  );
+  if (records.length === 0) {
+    throw new PublishedGraphAcquisitionRefusal(
+      "missing-lock-selection",
+      `${exact} has 0 exact Bun selections`
+    );
+  }
+  if (records.some(record => typeof record.integrity !== "string")) {
+    throw new PublishedGraphAcquisitionRefusal(
+      "missing-lock-integrity",
+      `${exact} has no exact Bun integrity`
+    );
+  }
+  if (new Set(records.map(record => record.integrity)).size !== 1) {
+    throw new PublishedGraphAcquisitionRefusal(
+      "ambiguous-lock-selection",
+      `${exact} has ${records.length} exact Bun selections with different integrities`
+    );
+  }
+  return Object.freeze({ locator: records[0].locator, integrity: records[0].integrity });
+}
+
+/** One installed package's exact Bun lock record, in either Bun layout. */
+export function bunLockSelectionForInstalledPackage(
+  lockfileOrIndex,
+  bunLockPath,
+  packageRoot,
+  packageName,
+  packageVersion
+) {
+  if (bunIsolatedStoreInstall(bunLockPath, packageRoot, packageName, packageVersion)) {
+    return exactBunLockSelectionAcrossLocators(lockfileOrIndex, packageName, packageVersion);
+  }
+  return exactBunLockSelection(
+    lockfileOrIndex,
+    packageName,
+    packageVersion,
+    bunLockLocatorForInstalledPackage(bunLockPath, packageRoot)
+  );
+}
+
 /** Selects one installed package's exact lock record, for either manager. */
 export function exactLockSelection({
   index,
@@ -681,6 +763,15 @@ export function exactLockSelection({
   packageName,
   packageVersion
 }) {
+  if (packageManager === "bun") {
+    return bunLockSelectionForInstalledPackage(
+      index,
+      lockfilePath,
+      packageRoot,
+      packageName,
+      packageVersion
+    );
+  }
   return exactBunLockSelection(
     index,
     packageName,
@@ -817,11 +908,12 @@ export function discoverInstalledPublishedGraph(
         `${resolved.packageRoot} disagrees with its resolved package identity`
       );
     }
-    const lockSelection = exactBunLockSelection(
+    const lockSelection = bunLockSelectionForInstalledPackage(
       lockIndex,
+      bunLockPath,
+      resolved.packageRoot,
       resolved.packageName,
-      resolved.packageVersion,
-      bunLockLocatorForInstalledPackage(bunLockPath, resolved.packageRoot)
+      resolved.packageVersion
     );
     if (lockSelection.integrity !== request.integrity) {
       throw new PublishedGraphAcquisitionRefusal(
@@ -850,11 +942,12 @@ export function discoverInstalledPublishedGraph(
       const dependencyImporter = resolve(resolved.packageRoot, dependency.source);
       const dependencyRoot = locatePackage(dependencyImporter, dependencyName);
       const dependencyManifest = readManifest(dependencyRoot);
-      const dependencyLock = exactBunLockSelection(
+      const dependencyLock = bunLockSelectionForInstalledPackage(
         lockIndex,
+        bunLockPath,
+        dependencyRoot,
         dependencyManifest.name,
-        dependencyManifest.version,
-        bunLockLocatorForInstalledPackage(bunLockPath, dependencyRoot)
+        dependencyManifest.version
       );
       let child;
       try {
