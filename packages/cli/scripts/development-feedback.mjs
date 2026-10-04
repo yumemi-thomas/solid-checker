@@ -287,7 +287,7 @@ function nativeFailure(project, snapshot, native, context) {
   return new FeedbackNativeError(failure.message, failure);
 }
 
-export function inspectDevelopmentFeedback(project, { capture = null, analyze, feedbackFacts = false, snapshot: retainedSnapshot, nativeTimeoutMs: timeout } = {}) {
+export function inspectDevelopmentFeedback(project, { capture = null, analyze, feedbackFacts = false, snapshot: retainedSnapshot, nativeTimeoutMs: timeout, runtime = null } = {}) {
   const started = performance.now(), snapshot = retainedSnapshot ?? feedbackSnapshot(project);
   assert.equal(snapshot.manifest.project, realpathSync(resolve(project)), "Retained snapshot belongs to another project");
   const admitted = capture ? admitFeedbackCapture(snapshot, capture) : { observations: [], excluded: null };
@@ -300,7 +300,11 @@ export function inspectDevelopmentFeedback(project, { capture = null, analyze, f
       + "is roughly 19x slower than a release build. Point SOLID_CHECKER_NATIVE_BIN or --native-bin at a release binary.");
   }
   const native = analyze ? analyze(snapshot.manifest.project) : runNativeChild([
-    "--project", snapshot.manifest.project, "--format", "json", ...(feedbackFacts ? ["--feedback-facts"] : [])
+    "--project", snapshot.manifest.project, "--format", "json", ...(feedbackFacts ? ["--feedback-facts"] : []),
+    // The runtime the caller executes: `feedback run` serves a client-rendered
+    // development build to Chromium, so package claims are answered for that
+    // runtime rather than for every host.
+    ...(runtime ? ["--runtime-target", runtime.target, "--runtime-build", runtime.build, "--rendering", runtime.rendering] : [])
   ], { timeoutMs });
   const context = { binary, timeoutMs };
   if (native.error || native.signal || ![0, 1].includes(native.status)) throw nativeFailure(snapshot.manifest.project, snapshot, native, context);

@@ -209,7 +209,10 @@ export function mergeDocumentStates(messages, final) {
 
 async function collectProject(project, scenario, tools, browser, responses = new Map()) {
   const snapshot = feedbackSnapshot(project), projectRoot = dirname(snapshot.manifest.project);
-  const nativeFeedback = inspectDevelopmentFeedback(project, { feedbackFacts: true, snapshot });
+  // This run executes the application as a client-rendered development build
+  // in Chromium, which is the runtime the native analysis answers for.
+  const nativeFeedback = inspectDevelopmentFeedback(project, { feedbackFacts: true, snapshot,
+    runtime: { target: "browser", build: "development", rendering: "csr" } });
   assert(Array.isArray(nativeFeedback.analysis.feedbackFacts), "Native checker does not expose development models");
   const models = new Map(nativeFeedback.analysis.feedbackFacts.map(model => [model.path, model]));
   const runtimeInputs = new Map(), coverage = { nativeReader: null, sourceInstrumentation: [], complete: false }, unmapped = [];

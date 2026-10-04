@@ -98,13 +98,47 @@ site (`misuse-runtime-ledger.mjs`, `rust/target/misuse-runtime-v3.json`,
 - **Precision.** Across the 123-case ledger no correct twin draws a violation;
   there were two before this round. Package-internal reads are now
   uncertifiable.
-- **Detection.** 17 misuse twins are proven violations and 37 are
-  uncertifiable. 69 stop at SC9005: the accepted contracts leave
-  `ownerRequirements` (58 cases) or `returns` / `reactiveReads` (40 cases)
-  open for the export.
-- **Next.** No positive owner-requirement claim is proposed for the exports
-  that create an owned computation. A research pass on the smallest sound
-  change is under way.
+- **The runtime target matters.**
+  - The accepted tier already proves positive owner requirements (`min: 1`)
+    for many exports, but only for the **browser** host. Host-free, an
+    `if (isServer) return;` guard makes the registration possible-but-not-sure,
+    so it is uncertifiable.
+  - `feedback run` executes a client-rendered development build in Chromium.
+    It now gives its native analysis exactly that runtime: `--runtime-target
+    browser --runtime-build development --rendering csr`.
+- **Results under that runtime** (`rust/target/misuse-runtime-v4.json`):
+
+  | Static verdict | Cases | Runtime verdict |
+  | --- | ---: | --- |
+  | Proven violation | 45 (37 %; host-free was 17) | 44 detected, 1 harness error |
+  | Uncertifiable | 12 | |
+  | No finding (contract domain open) | 66 | 13 of them runtime-silent too |
+
+  The two channels never disagree on a correct twin.
+- **What blocks the rest.** A read-only pass
+  (`rust/target/owner-claims-research/report.md`) traced it:
+  - `missing-owner` (17 with no finding):
+    - 7 ledger expectations are wrong. Those exports reach only
+      `makeEventListener`'s `tryOnCleanup`, which tolerates no owner, and the
+      runtime agrees: it is silent on them.
+    - 5 lose a proven claim: an import obligation marks the export's owner
+      requirements `Open`, or the runtime-alias merge rebuilds the export
+      without them (`main.rs` `mark_summary_claims_unknown`,
+      `unify_runtime_alias_summaries`). Keeping positive items through both is
+      the proposed next change.
+    - 3 need ADR 0173's same-role cover.
+    - The rest are argument- or capability-conditional, or a cleanup/effect
+      disjunction.
+  - `strict-read-untracked` (41 with no finding): the `returns` and `reads`
+    census walls.
+
+    | Cause | Cases |
+    | --- | ---: |
+    | `returns` never proposed | 10 |
+    | `recursive-value-shape` | 9 |
+    | `callable-path` | 8 |
+    | `domain-exhaustiveness` | 6 |
+    | `reads` premise refusals | several |
 
 ## What this does not show
 
@@ -113,5 +147,6 @@ site (`misuse-runtime-ledger.mjs`, `rust/target/misuse-runtime-v3.json`,
   development-set triage likewise.
 - Uncertifiable counts were not triaged.
 - The runtime channel only sees executed paths.
-- Static package-misuse detection stays limited until contracts state the
-  owner and read domains.
+- Static package-misuse detection reaches 37 % under the browser runtime and
+  stays limited for strict reads until the `returns`/`reads` census walls
+  move.
