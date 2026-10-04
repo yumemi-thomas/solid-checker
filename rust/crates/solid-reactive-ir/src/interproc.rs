@@ -1887,6 +1887,32 @@ fn discover_interprocedural_graph(
                     // sentinel instead.
                     .or_else(|| direct_own_call.then_some("inline")),
             };
+            // ADR 0183: a tracked row whose one wrapper is an eager owned
+            // computation's slot, holding the literal that calls the parameter
+            // on every completion of its own body (`createMemo(() => fn())`),
+            // runs under the owner that computation creates.
+            let owned = runtime_execution.is_none()
+                && execution == Some("tracked")
+                && call.direct_callee
+                && chain
+                    .as_ref()
+                    .is_some_and(|(_, wrappers)| wrappers.len() == 1)
+                && wrapped_owned_computation_call(file, call, lookup).is_some();
+            let guaranteed = owned
+                && wrapped_owned_computation_call(file, call, lookup).is_some_and(|computation| {
+                    solid_facts::ast::completion_call_cover(
+                        std::path::Path::new(file.path.as_str()),
+                        &file.source,
+                        nodes[callback_owner].body,
+                        &[computation.span],
+                        &[],
+                    ) == Some(true)
+                });
+            if guaranteed {
+                contribution
+                    .guaranteed_callback_parameters
+                    .push((nodes[callback_owner].span, parameter));
+            }
             if let Some(execution) = execution {
                 // Recorded only for a binding nothing writes: `cb = other;
                 // cb()` is a call of `cb` by syntax and of `other` by value,
@@ -1942,7 +1968,7 @@ fn discover_interprocedural_graph(
                             symbols.entities,
                             accessors,
                         ),
-                        owner: None,
+                        owner: owned.then(|| "created".into()),
                         protocol: crate::contract_semantics::InvokeProtocol::Call,
                         path: Vec::new(),
                     },
@@ -3288,6 +3314,39 @@ fn package_rows_clear(rows: &[&ContractCallback], execution: &str) -> bool {
         && rows
             .iter()
             .all(|callback| callback.execution == execution && callback.clears_tracking)
+}
+
+/// ADR 0183: the eager owned-computation call (`createMemo(fn)`,
+/// `createEffect(compute, effect)`, by
+/// [`solid_dialect::Dialect::eager_owned_computation_slot`]) whose slot holds,
+/// as its whole argument, the synchronous function literal `call` is written
+/// directly in, when `call` runs on every normal completion of that literal's
+/// body.
+fn wrapped_owned_computation_call<'f>(
+    file: &'f solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'f solid_facts::ast::CallFact> {
+    let literal = crate::owners::containing_ast_function(&file.ast, call.span)?;
+    let (computation, index) =
+        file.ast
+            .arguments_containing(call.span)
+            .find(|(outer, index)| {
+                let argument = &outer.arguments[*index];
+                !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == literal.span
+            })?;
+    let primitive = lookup.primitive_at_call(file, computation.span)?;
+    (lookup
+        .dialect
+        .eager_owned_computation_slot(primitive, index, computation.arguments.len())
+        && solid_facts::ast::completion_call_cover(
+            std::path::Path::new(file.path.as_str()),
+            &file.source,
+            literal.body,
+            &[call.span],
+            &[],
+        ) == Some(true))
+    .then_some(computation)
 }
 
 /// The chain of callback positions between `nested` and the body of the

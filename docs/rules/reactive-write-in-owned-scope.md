@@ -115,7 +115,9 @@ contract says so (ADR 0183). The contract must state that the export runs the
 argument on every call, during the call, tracked, under a children-capable
 owner the call creates. The generator states this only for a parameter the
 export's own body hands, unconditionally, to `createMemo(fn)` or as
-`createEffect(compute, effect)`'s compute. A write written directly in a
+`createEffect(compute, effect)`'s compute. It also states this for a parameter
+the export calls on every completion of a synchronous compute it writes as
+that slot's argument (`createMemo(() => fn())`). A write written directly in a
 function literal at that argument is then reported wherever the export is
 called, as in a `createMemo` compute. Not reported:
 

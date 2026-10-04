@@ -36,3 +36,8 @@ signature is `createEffect(compute, effectFn, options?)` and the
 single-argument form is a deprecated overload returning `never`; the tracked
 invocation site stays in the compute arm and the effect arm references no
 parameter, so every claim in this fixture is the one it made under 1.x.
+
+Since ADR 0183, a parameter called on every completion of a synchronous
+`createEffect` compute (or `createMemo` compute) the export writes is also
+stated under the computation's created owner, with `min: 1` where that
+call covers the export's body.

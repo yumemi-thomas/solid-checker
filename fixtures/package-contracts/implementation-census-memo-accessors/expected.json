@@ -13,14 +13,14 @@
             "sha256": "7abb4c7c6f3bc56f47b0ca1915a14be013cb7f1d1383d9de668a6a4a6eb74e71"
           },
           "exports": {
-            "createBound": "summary-83f8148d2f3d575931f096b8120b6d8d743d76427e33b1baaa5c984cbc3e509a",
+            "createBound": "summary-7f4c6cf5d04650770663e4f563e69907141b1fb435c12690f3b92b4aad9a0344",
             "createDoubled": "summary-a0a49c119277b701bace9b7b64115d336c42981c61b75ecf77a17834d75e0319",
             "createEither": "summary-05692f7142524887216e3ea8e73eaa337cd3b633c50036a860708a88e411c3c9",
             "createGuarded": "summary-4b28296bb4908db56a92235ed0173617e1397f09ed7e1f0c37f061973c742c73",
             "createLabel": "summary-a0a49c119277b701bace9b7b64115d336c42981c61b75ecf77a17834d75e0319",
             "createLive": "summary-a7c8493e3aff5d896cbeb6e0239f4f11055bedfe803117b4479873bf3d0a4bd0",
             "createShadowed": "summary-1cfe32df4f144ef56308d818c0498500ffd93eab2eaa8c7a2b51565bad01d226",
-            "readOnce": "summary-83f8148d2f3d575931f096b8120b6d8d743d76427e33b1baaa5c984cbc3e509a"
+            "readOnce": "summary-154adc9498f2fe96112354567134d95d1a7fbaf6f3cf7974516c98114a8f338f"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -188,6 +188,105 @@
             "lifetime": {
               "kind": "owner",
               "resource": "proposal:implementation-census-memo-accessors:.:fc8fe78a0c56edb59bb97d58618ccbdafa752b1f2b4d027bbb0c2d06ed368265:createEither:operation:callback-1owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-154adc9498f2fe96112354567134d95d1a7fbaf6f3cf7974516c98114a8f338f": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "lifetime": {
+                "kind": "owner",
+                "resource": "proposal:implementation-census-memo-accessors:.:fc8fe78a0c56edb59bb97d58618ccbdafa752b1f2b4d027bbb0c2d06ed368265:readOnce:operation:callback-0owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "proposal:implementation-census-memo-accessors:.:fc8fe78a0c56edb59bb97d58618ccbdafa752b1f2b4d027bbb0c2d06ed368265:readOnce:operation:callback-0owner"
+                  },
+                  "resource": "proposal:implementation-census-memo-accessors:.:fc8fe78a0c56edb59bb97d58618ccbdafa752b1f2b4d027bbb0c2d06ed368265:readOnce:operation:callback-0owner"
+                }
+              ],
+              "requires": "required",
+              "resource": "proposal:implementation-census-memo-accessors:.:fc8fe78a0c56edb59bb97d58618ccbdafa752b1f2b4d027bbb0c2d06ed368265:readOnce:operation:callback-0owner",
+              "source": "created"
+            },
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "plain",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "id": "proposal:implementation-census-memo-accessors:.:fc8fe78a0c56edb59bb97d58618ccbdafa752b1f2b4d027bbb0c2d06ed368265:readOnce:operation:callback-0owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "proposal:implementation-census-memo-accessors:.:fc8fe78a0c56edb59bb97d58618ccbdafa752b1f2b4d027bbb0c2d06ed368265:readOnce:operation:callback-0owner"
             },
             "states": [
               "active",
@@ -417,7 +516,7 @@
       },
       "shape": "callable"
     },
-    "summary-83f8148d2f3d575931f096b8120b6d8d743d76427e33b1baaa5c984cbc3e509a": {
+    "summary-7f4c6cf5d04650770663e4f563e69907141b1fb435c12690f3b92b4aad9a0344": {
       "call": {
         "callbacks": [
           {
@@ -440,11 +539,33 @@
             },
             "count": {
               "max": "many",
-              "min": 0,
+              "min": 1,
               "scope": "call"
             },
             "id": "callback-0",
             "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "lifetime": {
+                "kind": "owner",
+                "resource": "proposal:implementation-census-memo-accessors:.:fc8fe78a0c56edb59bb97d58618ccbdafa752b1f2b4d027bbb0c2d06ed368265:createBound:operation:callback-0owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "proposal:implementation-census-memo-accessors:.:fc8fe78a0c56edb59bb97d58618ccbdafa752b1f2b4d027bbb0c2d06ed368265:createBound:operation:callback-0owner"
+                  },
+                  "resource": "proposal:implementation-census-memo-accessors:.:fc8fe78a0c56edb59bb97d58618ccbdafa752b1f2b4d027bbb0c2d06ed368265:createBound:operation:callback-0owner"
+                }
+              ],
+              "requires": "required",
+              "resource": "proposal:implementation-census-memo-accessors:.:fc8fe78a0c56edb59bb97d58618ccbdafa752b1f2b4d027bbb0c2d06ed368265:createBound:operation:callback-0owner",
+              "source": "created"
+            },
             "tracking": "tracked",
             "trigger": {
               "event": "call"
@@ -474,6 +595,20 @@
           "returns"
         ],
         "reads": [],
+        "resources": [
+          {
+            "id": "proposal:implementation-census-memo-accessors:.:fc8fe78a0c56edb59bb97d58618ccbdafa752b1f2b4d027bbb0c2d06ed368265:createBound:operation:callback-0owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "proposal:implementation-census-memo-accessors:.:fc8fe78a0c56edb59bb97d58618ccbdafa752b1f2b4d027bbb0c2d06ed368265:createBound:operation:callback-0owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
         "returns": [
           "return"
         ]

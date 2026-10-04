@@ -17,9 +17,9 @@
             "inlineAndReturned": "summary-ca619123127e1de07fa2e389652ad6b68b219061c6429d67dce3f8535893d5e3",
             "inlineAndTracked": "summary-4616f25c90dae05cf2e383af13e917d50e6801f64cc43f270f3b0df3c9984a9b",
             "oneInlineSite": "summary-75918baadee290114dfba2286b3994d938a683d95844a8886df5ed6b8537104d",
-            "oneTrackedSite": "summary-4ec3db41117ea7d78c929cb7894fb5ffb37d60f9fe3b2f342738f7c7daf94a66",
-            "twoParameters": "summary-1f98cb91fd518682e67d8811f569a58520892aa9c2c81b076a6733b5730cd641",
-            "twoTrackedSites": "summary-4ec3db41117ea7d78c929cb7894fb5ffb37d60f9fe3b2f342738f7c7daf94a66"
+            "oneTrackedSite": "summary-c4c631925f91ac14b6be49fc153d0a4cb4199ee6918cf56c594a46f75ac02fd0",
+            "twoParameters": "summary-bd27431ddbc72f5dc3e687c282d2541d09e4492b9d01ef741364eb815afe412e",
+            "twoTrackedSites": "summary-82ecc639201a88caa2645e1370d4ff8cf2d0bba6e532d373aa3d00f3837b3f28"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -43,98 +43,6 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-1f98cb91fd518682e67d8811f569a58520892aa9c2c81b076a6733b5730cd641": {
-      "call": {
-        "callbacks": [
-          {
-            "from": {
-              "arg": 0,
-              "path": []
-            },
-            "operation": "callback-0"
-          },
-          {
-            "from": {
-              "arg": 1,
-              "path": []
-            },
-            "operation": "callback-1"
-          }
-        ],
-        "closed": [
-          "reads",
-          "returns"
-        ],
-        "computations": [
-          "owner-requirement-0"
-        ],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "callback-0",
-            "kind": "invoke",
-            "tracking": "ambient-at-execution",
-            "trigger": {
-              "event": "call"
-            }
-          },
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "callback-1",
-            "kind": "invoke",
-            "tracking": "tracked",
-            "trigger": {
-              "event": "call"
-            }
-          },
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 1,
-              "scope": "call"
-            },
-            "id": "owner-requirement-0",
-            "kind": "compute",
-            "owner": {
-              "requires": "required",
-              "requiresChildren": "required",
-              "source": "ambient-at-call"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "reads",
-          "returns"
-        ],
-        "reads": [],
-        "returns": []
-      },
-      "shape": "callable"
-    },
     "summary-4616f25c90dae05cf2e383af13e917d50e6801f64cc43f270f3b0df3c9984a9b": {
       "call": {
         "closed": [
@@ -145,74 +53,6 @@
           "owner-requirement-0"
         ],
         "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 1,
-              "scope": "call"
-            },
-            "id": "owner-requirement-0",
-            "kind": "compute",
-            "owner": {
-              "requires": "required",
-              "requiresChildren": "required",
-              "source": "ambient-at-call"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "reads",
-          "returns"
-        ],
-        "reads": [],
-        "returns": []
-      },
-      "shape": "callable"
-    },
-    "summary-4ec3db41117ea7d78c929cb7894fb5ffb37d60f9fe3b2f342738f7c7daf94a66": {
-      "call": {
-        "callbacks": [
-          {
-            "from": {
-              "arg": 0,
-              "path": []
-            },
-            "operation": "callback-0"
-          }
-        ],
-        "closed": [
-          "reads",
-          "returns"
-        ],
-        "computations": [
-          "owner-requirement-0"
-        ],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "callback-0",
-            "kind": "invoke",
-            "tracking": "tracked",
-            "trigger": {
-              "event": "call"
-            }
-          },
           {
             "at": {
               "event": "call",
@@ -315,6 +155,342 @@
         "returns": [
           "return"
         ]
+      },
+      "shape": "callable"
+    },
+    "summary-82ecc639201a88caa2645e1370d4ff8cf2d0bba6e532d373aa3d00f3837b3f28": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "computations": [
+          "owner-requirement-0"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "lifetime": {
+                "kind": "owner",
+                "resource": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:twoTrackedSites:operation:callback-0owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:twoTrackedSites:operation:callback-0owner"
+                  },
+                  "resource": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:twoTrackedSites:operation:callback-0owner"
+                }
+              ],
+              "requires": "required",
+              "resource": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:twoTrackedSites:operation:callback-0owner",
+              "source": "created"
+            },
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "compute",
+            "owner": {
+              "requires": "required",
+              "requiresChildren": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "id": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:twoTrackedSites:operation:callback-0owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:twoTrackedSites:operation:callback-0owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-bd27431ddbc72f5dc3e687c282d2541d09e4492b9d01ef741364eb815afe412e": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "callback-1"
+          }
+        ],
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "computations": [
+          "owner-requirement-0"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "callback-1",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "lifetime": {
+                "kind": "owner",
+                "resource": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:twoParameters:operation:callback-1owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:twoParameters:operation:callback-1owner"
+                  },
+                  "resource": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:twoParameters:operation:callback-1owner"
+                }
+              ],
+              "requires": "required",
+              "resource": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:twoParameters:operation:callback-1owner",
+              "source": "created"
+            },
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "compute",
+            "owner": {
+              "requires": "required",
+              "requiresChildren": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "id": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:twoParameters:operation:callback-1owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:twoParameters:operation:callback-1owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-c4c631925f91ac14b6be49fc153d0a4cb4199ee6918cf56c594a46f75ac02fd0": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "computations": [
+          "owner-requirement-0"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "lifetime": {
+                "kind": "owner",
+                "resource": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:oneTrackedSite:operation:callback-0owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:oneTrackedSite:operation:callback-0owner"
+                  },
+                  "resource": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:oneTrackedSite:operation:callback-0owner"
+                }
+              ],
+              "requires": "required",
+              "resource": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:oneTrackedSite:operation:callback-0owner",
+              "source": "created"
+            },
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "compute",
+            "owner": {
+              "requires": "required",
+              "requiresChildren": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "id": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:oneTrackedSite:operation:callback-0owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "proposal:multi-role-callback-parameter:.:f2bda9d665d208a851689fbf11f134327ef1e3732827547b0701f033eb129b12:oneTrackedSite:operation:callback-0owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": []
       },
       "shape": "callable"
     },

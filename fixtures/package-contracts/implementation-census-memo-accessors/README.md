@@ -21,7 +21,11 @@ Since ADR 0183 the callback row of each caller's compute handed to
 `createMemo` also states the memo's created owner. `createLive`'s row
 carries `min: 1`, because its one call covers every completion;
 `createGuarded`'s and `createEither`'s two calls are each conditional, so
-theirs stay `min: 0`.
+theirs stay `min: 0`. A compute the export writes itself counts too:
+`createBound` and `readOnce` call `source()` on every completion of their
+memo's compute, so their rows state the owner. `createBound`'s memo is a whole
+`const` initializer, so it also carries `min: 1`. `readOnce`'s is the callee
+of the returned call, so it does not.
 
 This fixture pins generation only. The `solid-js` stub under `node_modules` is
 there for dialect selection and is not the audited archive, so no certification

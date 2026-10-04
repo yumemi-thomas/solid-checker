@@ -20,7 +20,7 @@
             "memoInsideUntrack": "summary-83f8148d2f3d575931f096b8120b6d8d743d76427e33b1baaa5c984cbc3e509a",
             "memoShape": "summary-8b379b9ccbab66434c5d981d4b80183b871c178ec1e2d6d31de9ee9c3593bc82",
             "mountShape": "summary-9c017cf14f5a4997e2be86c478806c8d87f12c6ec31cfc495df34603ca9ef541",
-            "trackedShape": "summary-4ec3db41117ea7d78c929cb7894fb5ffb37d60f9fe3b2f342738f7c7daf94a66",
+            "trackedShape": "summary-e225bc729e999b19b1ac7e910e394d6fc18eca02a820204ff8f441b451b1aa67",
             "trackedThroughLocalHelper": "summary-4ec3db41117ea7d78c929cb7894fb5ffb37d60f9fe3b2f342738f7c7daf94a66",
             "untrackedThroughLocalUntrack": "summary-9c017cf14f5a4997e2be86c478806c8d87f12c6ec31cfc495df34603ca9ef541"
           },
@@ -491,6 +491,110 @@
           "returns"
         ],
         "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-e225bc729e999b19b1ac7e910e394d6fc18eca02a820204ff8f441b451b1aa67": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "computations": [
+          "owner-requirement-0"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "lifetime": {
+                "kind": "owner",
+                "resource": "proposal:callback-deferred-untracked-chain:.:dc5a1c1756d9cd6792cba10acd850fb025558479763de73e89e7afad3086bcbf:trackedShape:operation:callback-0owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "proposal:callback-deferred-untracked-chain:.:dc5a1c1756d9cd6792cba10acd850fb025558479763de73e89e7afad3086bcbf:trackedShape:operation:callback-0owner"
+                  },
+                  "resource": "proposal:callback-deferred-untracked-chain:.:dc5a1c1756d9cd6792cba10acd850fb025558479763de73e89e7afad3086bcbf:trackedShape:operation:callback-0owner"
+                }
+              ],
+              "requires": "required",
+              "resource": "proposal:callback-deferred-untracked-chain:.:dc5a1c1756d9cd6792cba10acd850fb025558479763de73e89e7afad3086bcbf:trackedShape:operation:callback-0owner",
+              "source": "created"
+            },
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "compute",
+            "owner": {
+              "requires": "required",
+              "requiresChildren": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "id": "proposal:callback-deferred-untracked-chain:.:dc5a1c1756d9cd6792cba10acd850fb025558479763de73e89e7afad3086bcbf:trackedShape:operation:callback-0owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "proposal:callback-deferred-untracked-chain:.:dc5a1c1756d9cd6792cba10acd850fb025558479763de73e89e7afad3086bcbf:trackedShape:operation:callback-0owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
         "returns": []
       },
       "shape": "callable"

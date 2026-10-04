@@ -46,7 +46,9 @@ pub fn completion_call_cover(
             .body
             .as_ref()
             .filter(|value| same(value.span, body)),
-        AstKind::ArrowFunctionExpression(arrow) if !arrow.r#async && !arrow.expression => {
+        // An expression body (`x => a()`) is one expression statement that
+        // runs exactly once and completes the arrow (ADR 0183).
+        AstKind::ArrowFunctionExpression(arrow) if !arrow.r#async => {
             same(arrow.body.span, body).then_some(&arrow.body)
         }
         _ => None,
@@ -266,6 +268,30 @@ mod tests {
         ] {
             assert_eq!(cover(body, &["a()"], &[]), Some(false), "{body}");
         }
+    }
+
+    #[test]
+    fn completion_cover_reads_an_expression_bodied_arrow_as_its_one_statement() {
+        let source = "const f = flag => a();";
+        let call = source.find("a()").unwrap() as u32;
+        let body = Span::new(call, call + 3);
+        assert_eq!(
+            completion_call_cover(Path::new("test.js"), source, body, &[body], &[]),
+            Some(true)
+        );
+        let source = "const f = flag => flag && a();";
+        let call = source.find("a()").unwrap() as u32;
+        let start = source.find("flag &&").unwrap() as u32;
+        assert_eq!(
+            completion_call_cover(
+                Path::new("test.js"),
+                source,
+                Span::new(start, call + 3),
+                &[Span::new(call, call + 3)],
+                &[]
+            ),
+            Some(false)
+        );
     }
 
     #[test]

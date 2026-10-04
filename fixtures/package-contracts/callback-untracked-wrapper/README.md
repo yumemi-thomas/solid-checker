@@ -99,3 +99,8 @@ beside the claims above.
   `onCleanup` do carry rows, which is why only these two decline — so this
   fixture also pins that the difference between them is the table, not the
   wrapper shape.
+
+Since ADR 0183, a parameter called on every completion of a synchronous
+`createEffect` compute (or `createMemo` compute) the export writes is also
+stated under the computation's created owner, with `min: 1` where that
+call covers the export's body.

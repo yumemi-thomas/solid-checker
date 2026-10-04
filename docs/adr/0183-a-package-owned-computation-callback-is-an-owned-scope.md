@@ -51,12 +51,6 @@ runs at all. The misuse ledger has five such runtime-detected cases, each
      (`ExportSemantics::weaken_created_owner`). The tracked row stays, as it
      was certified before this ADR. Withdrawing the whole operation left its
      resource behind, and that refused 21 checkpoint packages outright.
-5. **The completion cover counts a call as a whole initializer or return.**
-   `const x = a()` and `return a()` run `a()` on that path, as `a();` does.
-   Once every live path has run a candidate, the walk stops: later statements,
-   such as a `for…in` loop it does not model, cannot undo the cover. This also
-   serves ADR 0173's owner registrations, on both the generator and the census
-   side.
 4. **The consumer reads a guaranteed slot as a tracked callback.** The
    accepted operation must be tracked, at the call on the same stack,
    unguarded, under a children-capable created owner, with `min >= 1`. A
@@ -64,6 +58,12 @@ runs at all. The misuse ledger has five such runtime-detected cases, each
    callback's role. A write directly in it is `SC2001`, wherever the export
    is called. This holds even when the `callbacks` enumeration is open: the
    claim is per item.
+5. **The completion cover counts a call as a whole initializer or return.**
+   `const x = a()` and `return a()` run `a()` on that path, as `a();` does.
+   Once every live path has run a candidate, the walk stops: later statements,
+   such as a `for…in` loop it does not model, cannot undo the cover. This also
+   serves ADR 0173's owner registrations, on both the generator and the census
+   side.
 
 ## Consequences
 
@@ -71,7 +71,8 @@ The following stay unreported:
 
 - an export that only may run the callback;
 - a created leaf owner (writes are legal there);
-- a callback inside a compute the package writes itself;
+- a callback inside a compute the package writes itself (until the amendment
+  below);
 - a function passed by name;
 - a closure the compute only returns.
 
@@ -111,3 +112,50 @@ The following stay unreported:
   compute the package writes itself (the fixture's `deriveWrapped`), so the
   chain has an enclosing wrapper and no owner is stated. Composing an owned
   computation through that wrapper is the next step for this rule.
+
+## Amendment: the wrapped form (2026-10-05)
+
+`capitalize` is `(string) => createMemo(() => { const s = string(); … })`. The
+caller's function is not the slot's argument; it is called inside the compute
+the package writes, which is the slot's argument. It runs under that memo all
+the same.
+
+- **Generator.** A `tracked` row whose one enclosing wrapper is an eager owned
+  slot gets `owner: created` when:
+  - the slot's whole argument is the synchronous literal the parameter call
+    sits directly in;
+  - the call covers that literal's body (`wrapped_owned_computation_call`).
+
+  `min: 1` follows when the memo call also covers the export's body.
+- **Census.** The parameter call must be stated:
+  - `captured`;
+  - `calleeUnwrittenParameter` = the row's parameter;
+  - `unconditional`, which the producer states only for a plain synchronous
+    flow owner. So an async compute, whose call after an `await` runs with no
+    owner, is refused without a new fact.
+
+  Its `enclosingCallable` must be, by identity, the one callable the eager
+  slot's `argumentCallables` carries, in a direct `solid-js` call the floor
+  admits.
+- **Cover.** An expression-bodied arrow (`fn => createMemo(…)`) is read as its
+  one expression statement.
+
+Evidence:
+
+- Census test
+  `a_wrapped_owned_computation_callback_is_an_unconditional_call_in_the_slot_literal`.
+  A conditional call and a literal the slot does not carry by identity are
+  refused.
+- Cover test `completion_cover_reads_an_expression_bodied_arrow_as_its_one_statement`.
+- Corpus:
+  - `owned-computation-callbacks` adds `deriveArrow` (owned, `min: 1`), plus
+    `deriveWrappedMaybe` and `deriveWrappedAsync` (no owner). `deriveWrapped`
+    becomes owned with `min: 1`.
+  - Rows gain the owner in `callback-deferred-untracked-chain`,
+    `callback-untracked-wrapper`, `multi-role-callback-parameter` and
+    `implementation-census-memo-accessors`. Each is a parameter called
+    unconditionally inside an effect or memo compute the export writes.
+- Browser tier regenerated with `--carry`:
+  - the misuse ledger goes from 77 to 78: `capitalize`, runtime-detected;
+  - no correct twin is flagged, and no checkpoint row changes status;
+  - the only tier difference is `capitalize`'s created owner.

@@ -6130,6 +6130,66 @@ fn require_owned_computation_callback(
             }
         }
     }
+    // The wrapped form (`createMemo(() => fn())`): a call of the caller's own
+    // unwritten parameter whose innermost callable is, by identity, the one
+    // callable that eager slot's argument carries. `unconditional` is stated
+    // only for a plain synchronous flow owner, so it proves both that the
+    // literal is no async function and that the call runs on every
+    // completion of it.
+    if let ValueSource::Parameter { index, path } = source
+        && path.is_empty()
+    {
+        for invocation in &implementation.calls {
+            let Some(literal) = invocation.enclosing_callable.as_ref() else {
+                continue;
+            };
+            if !is_call_expression(invocation)
+                || !invocation.captured
+                || !invocation.unconditional
+                || invocation.callee_unwritten_parameter != Some(usize::from(*index))
+            {
+                continue;
+            }
+            for call in &implementation.calls {
+                if !is_call_expression(call)
+                    || call.captured
+                    || call.target.is_empty()
+                    || call.target_module.as_ref() != "solid-js"
+                    || !floor.admits_call(call)
+                {
+                    continue;
+                }
+                let carries_literal = |argument: usize| {
+                    call.argument_callables
+                        .iter()
+                        .filter(|callable| callable.argument == argument)
+                        .map(|callable| callable.locations.as_slice())
+                        .collect::<Vec<_>>()
+                        == [std::slice::from_ref(literal)]
+                };
+                if let Some(argument) = (0..call.argument_parameters.len()).find(|argument| {
+                    carries_literal(*argument)
+                        && solid_dialect::unambiguous_eager_owned_computation_slot(
+                            &call.target_name,
+                            *argument,
+                            call.argument_parameters.len(),
+                        )
+                }) {
+                    sites.push(format!(
+                        "implementation-owned-computation-wrapped-callback:{}:{}:{}:{}:{}:{}:{}",
+                        call.location.path,
+                        call.location.start_byte,
+                        call.location.end_byte,
+                        call.target_name,
+                        argument,
+                        invocation.location.start_byte,
+                        invocation.location.end_byte
+                    ));
+                    return Ok(());
+                }
+            }
+        }
+    }
     Err(open(&format!(
         "{OWNED_COMPUTATION_UNPROVEN_MARKER}callback is not the exact argument of an eager owned computation the export's own body creates"
     )))
@@ -22890,6 +22950,84 @@ mod tests {
                 &implementation,
                 &first,
                 floor,
+                &open,
+                &mut Vec::new(),
+            )
+            .expect_err(label);
+        }
+    }
+
+    // ADR 0183, wrapped form: `createMemo(() => fn())`. The parameter call's
+    // innermost callable must be, by identity, the one callable the eager
+    // slot carries, and the call must be unconditional in it.
+    #[test]
+    fn a_wrapped_owned_computation_callback_is_an_unconditional_call_in_the_slot_literal() {
+        let literal = json!({"path": "/project/index.js", "startByte": 41, "endByte": 59});
+        let transcript = |unconditional: bool, carried: serde_json::Value| {
+            serde_json::from_value::<typefacts::ExportImplementationTranscript>(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "calls": [
+                    {
+                        "location": {"path": "/project/index.js", "startByte": 30, "endByte": 60},
+                        "reach": "reachable",
+                        "unconditional": true,
+                        "kind": "call",
+                        "target": "symbol:createMemo",
+                        "targetName": "createMemo",
+                        "targetModule": "solid-js",
+                        "argumentParameters": [null],
+                        "argumentCallables": [{"argument": 0, "locations": carried}]
+                    },
+                    {
+                        "location": {"path": "/project/index.js", "startByte": 50, "endByte": 54},
+                        "reach": "reachable",
+                        "unconditional": unconditional,
+                        "kind": "call",
+                        "captured": true,
+                        "enclosingCallable": literal,
+                        "calleeUnwrittenParameter": 0
+                    }
+                ]
+            }))
+            .unwrap()
+        };
+        let open = |reason: &str| TypeFactsCertificationError::UnsupportedDemand {
+            demand: "owned-computation".into(),
+            reason: reason.into(),
+        };
+        let first = parameter_source_at(0, &[]);
+        let mut sites = Vec::new();
+        require_owned_computation_callback(
+            &transcript(true, json!([literal])),
+            &first,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut sites,
+        )
+        .expect("the slot literal calls the parameter on every completion");
+        assert_eq!(
+            sites,
+            vec![
+                "implementation-owned-computation-wrapped-callback:/project/index.js:30:60:createMemo:0:50:54"
+            ]
+        );
+        for (label, implementation) in [
+            (
+                "a conditional call in the literal (or an async literal) proves nothing",
+                transcript(false, json!([literal])),
+            ),
+            (
+                "a literal the slot does not carry by identity",
+                transcript(
+                    true,
+                    json!([{"path": "/project/index.js", "startByte": 41, "endByte": 58}]),
+                ),
+            ),
+        ] {
+            require_owned_computation_callback(
+                &implementation,
+                &first,
+                ReachabilityFloor::MayExecute,
                 &open,
                 &mut Vec::new(),
             )

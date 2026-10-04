@@ -83,3 +83,8 @@ primitive-argument branch. Both are dialect-neutral and outlived the retirement
 unchanged. `untrackedThroughLocalUntrack` and `trackedThroughLocalHelper` are
 the same shape through that seam with a clearing and a non-clearing wrapper; if
 the seam ever lost wrapper identity they would collapse onto one answer.
+
+Since ADR 0183, a parameter called on every completion of a synchronous
+`createEffect` compute (or `createMemo` compute) the export writes is also
+stated under the computation's created owner, with `min: 1` where that
+call covers the export's body.

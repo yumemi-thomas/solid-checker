@@ -4,19 +4,22 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d",
+            "closureSha256": "4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb",
             "path": "./index.js",
-            "sha256": "91ca795a146be345c3f5a0d73160b68048c4fc9c1fee83d41772a65dbbea9158"
+            "sha256": "78321f3036c1a25ddbf12d4353d169537daaf5531993389aaedbd0d192e9616e"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "02899b5f947924c1c38a600aad6c38201f671dd5865e6333977a25522960c508"
+            "sha256": "733438410ee024c5978e9e1c7c90db88898bb05bd3fc226c55a6cdccf66c0978"
           },
           "exports": {
-            "derive": "summary-93fb763192695ec7057d503d365cfd78811190acb2f8d74b443fe6b8a181f54c",
-            "deriveMaybe": "summary-f6cb61a54c5ca7c037d57fa5c39c1a631ca24f45974f1ccb50f276447b7bf602",
-            "deriveWrapped": "summary-ec80f5b986b477d7075065fbf1ae71a26c228081ba16ff62b0be69ec7de3f2d6",
-            "watch": "summary-b9fdbb2d32d9dba82fb2238a54dcedd42f86ef370ec0583d4e979d613a7077a6"
+            "derive": "summary-1aeb6be4ec70ff2042a23539816e0a080e49288a01bab2013388fea7abfb8f73",
+            "deriveArrow": "summary-7ecf925d17e97b72a269a628f2307b7aa71c7d78c0aaf3cd56123d08ad552674",
+            "deriveMaybe": "summary-75cf7f107326b539d3716ba943cb860b325393ce4a7bc5f17915897e710392ac",
+            "deriveWrapped": "summary-73707e578408d69eb08945850aa00ed0db51607460c6ac8aab4a0f66cf6e1422",
+            "deriveWrappedAsync": "summary-ec80f5b986b477d7075065fbf1ae71a26c228081ba16ff62b0be69ec7de3f2d6",
+            "deriveWrappedMaybe": "summary-315552fb192091937ba8f1485ba75b3bfdf3ea3693ab7c02ba3132f2e25bb6f1",
+            "watch": "summary-1152031159fc88bbcb57e838980a0f2f6e618922c17e01ab04a0c2fd23fffeba"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -40,86 +43,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-93fb763192695ec7057d503d365cfd78811190acb2f8d74b443fe6b8a181f54c": {
-      "call": {
-        "callbacks": [
-          {
-            "from": {
-              "arg": 0,
-              "path": []
-            },
-            "operation": "callback-0"
-          }
-        ],
-        "closed": [
-          "reads",
-          "returns"
-        ],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 1,
-              "scope": "call"
-            },
-            "id": "callback-0",
-            "kind": "invoke",
-            "owner": {
-              "children": "allowed",
-              "cleanup": "supported",
-              "lifetime": {
-                "kind": "owner",
-                "resource": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:derive:operation:callback-0owner"
-              },
-              "productions": [
-                {
-                  "children": "allowed",
-                  "cleanup": "supported",
-                  "lifetime": {
-                    "kind": "owner",
-                    "resource": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:derive:operation:callback-0owner"
-                  },
-                  "resource": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:derive:operation:callback-0owner"
-                }
-              ],
-              "requires": "required",
-              "resource": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:derive:operation:callback-0owner",
-              "source": "created"
-            },
-            "tracking": "tracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "reads",
-          "returns"
-        ],
-        "reads": [],
-        "resources": [
-          {
-            "id": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:derive:operation:callback-0owner",
-            "kind": "owner",
-            "lifetime": {
-              "kind": "owner",
-              "resource": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:derive:operation:callback-0owner"
-            },
-            "states": [
-              "active",
-              "disposed"
-            ]
-          }
-        ],
-        "returns": []
-      },
-      "shape": "callable"
-    },
-    "summary-b9fdbb2d32d9dba82fb2238a54dcedd42f86ef370ec0583d4e979d613a7077a6": {
+    "summary-1152031159fc88bbcb57e838980a0f2f6e618922c17e01ab04a0c2fd23fffeba": {
       "call": {
         "callbacks": [
           {
@@ -159,7 +83,7 @@
               "cleanup": "supported",
               "lifetime": {
                 "kind": "owner",
-                "resource": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:watch:operation:callback-0owner"
+                "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:watch:operation:callback-0owner"
               },
               "productions": [
                 {
@@ -167,13 +91,13 @@
                   "cleanup": "supported",
                   "lifetime": {
                     "kind": "owner",
-                    "resource": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:watch:operation:callback-0owner"
+                    "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:watch:operation:callback-0owner"
                   },
-                  "resource": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:watch:operation:callback-0owner"
+                  "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:watch:operation:callback-0owner"
                 }
               ],
               "requires": "required",
-              "resource": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:watch:operation:callback-0owner",
+              "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:watch:operation:callback-0owner",
               "source": "created"
             },
             "tracking": "tracked",
@@ -206,11 +130,11 @@
         "reads": [],
         "resources": [
           {
-            "id": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:watch:operation:callback-0owner",
+            "id": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:watch:operation:callback-0owner",
             "kind": "owner",
             "lifetime": {
               "kind": "owner",
-              "resource": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:watch:operation:callback-0owner"
+              "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:watch:operation:callback-0owner"
             },
             "states": [
               "active",
@@ -219,6 +143,393 @@
           }
         ],
         "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-1aeb6be4ec70ff2042a23539816e0a080e49288a01bab2013388fea7abfb8f73": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "lifetime": {
+                "kind": "owner",
+                "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:derive:operation:callback-0owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:derive:operation:callback-0owner"
+                  },
+                  "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:derive:operation:callback-0owner"
+                }
+              ],
+              "requires": "required",
+              "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:derive:operation:callback-0owner",
+              "source": "created"
+            },
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "id": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:derive:operation:callback-0owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:derive:operation:callback-0owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-315552fb192091937ba8f1485ba75b3bfdf3ea3693ab7c02ba3132f2e25bb6f1": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-73707e578408d69eb08945850aa00ed0db51607460c6ac8aab4a0f66cf6e1422": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "lifetime": {
+                "kind": "owner",
+                "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveWrapped:operation:callback-0owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveWrapped:operation:callback-0owner"
+                  },
+                  "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveWrapped:operation:callback-0owner"
+                }
+              ],
+              "requires": "required",
+              "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveWrapped:operation:callback-0owner",
+              "source": "created"
+            },
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "id": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveWrapped:operation:callback-0owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveWrapped:operation:callback-0owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-75cf7f107326b539d3716ba943cb860b325393ce4a7bc5f17915897e710392ac": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "lifetime": {
+                "kind": "owner",
+                "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveMaybe:operation:callback-0owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveMaybe:operation:callback-0owner"
+                  },
+                  "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveMaybe:operation:callback-0owner"
+                }
+              ],
+              "requires": "required",
+              "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveMaybe:operation:callback-0owner",
+              "source": "created"
+            },
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "id": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveMaybe:operation:callback-0owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveMaybe:operation:callback-0owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-7ecf925d17e97b72a269a628f2307b7aa71c7d78c0aaf3cd56123d08ad552674": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "lifetime": {
+                "kind": "owner",
+                "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveArrow:operation:callback-0owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveArrow:operation:callback-0owner"
+                  },
+                  "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveArrow:operation:callback-0owner"
+                }
+              ],
+              "requires": "required",
+              "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveArrow:operation:callback-0owner",
+              "source": "created"
+            },
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "described-callable",
+              "reads": [
+                "owned-memo"
+              ],
+              "returns": [
+                "read-value"
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "id": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveArrow:operation:callback-0owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "proposal:owned-computation-callbacks:.:4bb9dd2e3e5f9906f6c5ad506750feba2baad239eeeb2712acdb7f38bc500efb:deriveArrow:operation:callback-0owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [
+          "return"
+        ]
       },
       "shape": "callable"
     },
@@ -261,85 +572,6 @@
           "returns"
         ],
         "reads": [],
-        "returns": []
-      },
-      "shape": "callable"
-    },
-    "summary-f6cb61a54c5ca7c037d57fa5c39c1a631ca24f45974f1ccb50f276447b7bf602": {
-      "call": {
-        "callbacks": [
-          {
-            "from": {
-              "arg": 1,
-              "path": []
-            },
-            "operation": "callback-0"
-          }
-        ],
-        "closed": [
-          "reads",
-          "returns"
-        ],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "callback-0",
-            "kind": "invoke",
-            "owner": {
-              "children": "allowed",
-              "cleanup": "supported",
-              "lifetime": {
-                "kind": "owner",
-                "resource": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:deriveMaybe:operation:callback-0owner"
-              },
-              "productions": [
-                {
-                  "children": "allowed",
-                  "cleanup": "supported",
-                  "lifetime": {
-                    "kind": "owner",
-                    "resource": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:deriveMaybe:operation:callback-0owner"
-                  },
-                  "resource": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:deriveMaybe:operation:callback-0owner"
-                }
-              ],
-              "requires": "required",
-              "resource": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:deriveMaybe:operation:callback-0owner",
-              "source": "created"
-            },
-            "tracking": "tracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "reads",
-          "returns"
-        ],
-        "reads": [],
-        "resources": [
-          {
-            "id": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:deriveMaybe:operation:callback-0owner",
-            "kind": "owner",
-            "lifetime": {
-              "kind": "owner",
-              "resource": "proposal:owned-computation-callbacks:.:f4d4b46feace7755ecaebd36648ff7f2d3fdef7dc79bde04b1044ab9dd25d14d:deriveMaybe:operation:callback-0owner"
-            },
-            "states": [
-              "active",
-              "disposed"
-            ]
-          }
-        ],
         "returns": []
       },
       "shape": "callable"

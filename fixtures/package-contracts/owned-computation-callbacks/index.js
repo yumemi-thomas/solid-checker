@@ -18,8 +18,29 @@ export function watch(compute, effect) {
   createEffect(compute, effect);
 }
 
-// `fn` runs inside a compute the export writes itself: an enclosing callback
-// position, so the slot's own owner answer is not the row's.
+// `fn` is called on every completion of a compute the export writes itself,
+// so it runs under that memo too.
 export function deriveWrapped(fn) {
   createMemo(() => fn());
+}
+
+// The same in an expression-bodied arrow, as `capitalize` is written.
+export const deriveArrow = fn => createMemo(() => {
+  const value = fn();
+  return value;
+});
+
+// `fn` is called only when `flag` holds: no owner is stated for it.
+export function deriveWrappedMaybe(flag, fn) {
+  createMemo(() => {
+    if (flag) fn();
+  });
+}
+
+// An async compute calls `fn` after its first await: no owner either.
+export function deriveWrappedAsync(fn) {
+  createMemo(async () => {
+    await null;
+    return fn();
+  });
 }

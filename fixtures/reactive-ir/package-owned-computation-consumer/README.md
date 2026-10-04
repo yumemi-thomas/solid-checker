@@ -22,6 +22,8 @@ guaranteed slot is a claim per item, so it holds anyway.
 
 The contract summaries are the generator's output for
 `fixtures/package-contracts/owned-computation-callbacks`, with the resource
-ids shortened. The manifest bytes are `package-leaf-registration-consumer`'s,
+ids shortened. `deriveWrapped`'s is the generator's output from before the
+wrapped form was composed, which stands here for a tracked row with no owner
+claim. The manifest bytes are `package-leaf-registration-consumer`'s,
 so the closure digest is unchanged. The `solid-js` stub is that fixture's,
 verbatim from rc.9, and `App.tsx` type-checks against it with `tsc --noEmit`.
