@@ -130,3 +130,35 @@ mostly at older pins.
   inputs went with `rust/target`. Their bundles are carried unchanged and
   still authenticate. A full regeneration would also pick up whatever other
   commits since `09e298996` moved, as `timer` did here.
+
+## Second round: ADR 0173's owner-call cover promoted
+
+The cover proof moved from its experiment branch into the main verifier. The
+generator now proposes `min: 1` where same-role alternative calls cover every
+normal completion. The browser checkpoint was re-certified (92 of 97 again) and
+bundled with `--carry`. 201 bundles were replaced; four exports gained a
+guaranteed item, and none lost one:
+
+| Package | Export | Item |
+| --- | --- | --- |
+| `event-listener` | `createEventListener` | computation, `min: 1` (in the checkpoint's environment) |
+| `transition-group` | `createSwitchTransition` | computation, `min: 1` |
+| `scroll` | `createScrollPosition` | computation, `min: 1` |
+| `idle` | `createIdleTimer` | cleanup, `min: 1` |
+
+The census withheld no owner-requirement operation in this run. The previous
+run withheld two, `createSwitchTransition` and `createIdleTimer`, both on the
+strict floor; the cover now proves both.
+
+| Ledger | Round 1 | Round 2 |
+| --- | ---: | ---: |
+| Static violation | 49 | 53 |
+| Static uncertifiable | 12 | 10 |
+| No static finding | 62 | 60 |
+| Correct twins with a static violation | 0 | 0 |
+
+New violations, each runtime-detected:
+
+- `createEventListener` at module scope and in an effect apply;
+- `createScrollPosition`;
+- `createSwitchTransition`.

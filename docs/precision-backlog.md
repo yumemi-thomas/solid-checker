@@ -1,5 +1,22 @@
 # Precision backlog
 
+## Same-role owner calls cover normal completions (2026-10-04)
+
+ADR 0173 promoted. A function that calls `createEffect` in one arm and
+`createRenderEffect` in the other registers a computation on every call. The
+generator now proposes that bound, and the census proves it from the producer's
+facts.
+
+- **Gained:** four ledger violations (49 -> 53 of 123), each runtime-detected,
+  no twin flagged. `createSwitchTransition`, left open below, is one of them.
+- **Still open:**
+  - a cleanup/effect disjunction (`createTimer`, `createPageLeaveBlocker`) has
+    no per-role lower bound;
+  - an owner requirement reached through a dependency's contract is never
+    guaranteed (ADR 0161, "Depth");
+  - capability guards (`createNotification`, `createVibrate`) depend on the
+    runtime environment.
+
 ## Open owner-requirement lists keep their guaranteed items (2026-10-04)
 
 ADR 0174. Two generation paths dropped a proven `min: 1` owner requirement
