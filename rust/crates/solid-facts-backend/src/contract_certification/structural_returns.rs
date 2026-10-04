@@ -646,9 +646,21 @@ pub(super) fn return_sites(
         }
     }
     if !mismatched.is_empty() {
+        // The first member the census could not describe is usually the
+        // reason; name it so the refusal says what to fix.
         return Err(
             weakening_refusal(&claimed, &produced, &mismatched).unwrap_or_else(|| {
-                "literal return does not match the entire claimed structure".into()
+                mismatched
+                    .iter()
+                    .find_map(|(_, gaps)| gaps.members.first())
+                    .map_or_else(
+                        || "literal return does not match the entire claimed structure".into(),
+                        |(_, reason)| {
+                            format!(
+                                "literal return does not match the entire claimed structure: {reason}"
+                            )
+                        },
+                    )
             }),
         );
     }
