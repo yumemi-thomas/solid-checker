@@ -14487,6 +14487,11 @@ fn inert_signal_arguments_discharged(
     source: &typefacts::ImplementationValueSource,
 ) -> Result<(), String> {
     let options = solid_dialect::unambiguous_options_argument(&source.target_name);
+    // ADR 0180: where the dialect states the inert read never consults the
+    // options object, its slot is discharged by position, provided no spread
+    // at or before it can move a function into the first slot.
+    let ignores_options =
+        solid_dialect::unambiguous_inert_read_ignores_options(&source.target_name);
     for (slot, primitive) in source.arguments_primitive_syntax.iter().enumerate() {
         if *primitive {
             continue;
@@ -14495,7 +14500,13 @@ fn inert_signal_arguments_discharged(
             slot == 0 && source.arguments_not_function_syntax.get(slot) == Some(&true);
         let plain_options =
             options == Some(slot) && source.arguments_plain_options_syntax.get(slot) == Some(&true);
-        if !not_function && !plain_options {
+        let positional_options = ignores_options
+            && options == Some(slot)
+            && source.arguments_non_spread_syntax.len() > slot
+            && source.arguments_non_spread_syntax[..=slot]
+                .iter()
+                .all(|plain| *plain);
+        if !not_function && !plain_options && !positional_options {
             return Err(format!(
                 "argument {slot} of the {} call is not a primitive by its grammar, nor a \
                  non-function first argument, nor a plain options literal",
@@ -28065,6 +28076,15 @@ mod tests {
                     "argumentsPlainOptionsSyntax": [false, true],
                 }),
             ),
+            // ADR 0180: the inert read never consults the options object, so
+            // any non-spread options argument is discharged by position.
+            (
+                "a primitive first argument beside an options binding",
+                json!({
+                    "argumentsPrimitiveSyntax": [true, false],
+                    "argumentsNonSpreadSyntax": [true, true],
+                }),
+            ),
         ] {
             assert!(
                 inert_owned_accessor_witness(&source(overrides), &own, &certified, &roots).is_ok(),
@@ -28105,6 +28125,26 @@ mod tests {
                 source(json!({
                     "argumentsPrimitiveSyntax": [false],
                     "argumentsPlainOptionsSyntax": [true],
+                })),
+                own.clone(),
+                vec![root(true)],
+                "not a primitive by its grammar",
+            ),
+            (
+                "ADR 0180: a spread options argument is not discharged by position",
+                source(json!({
+                    "argumentsPrimitiveSyntax": [true, false],
+                    "argumentsNonSpreadSyntax": [true, false],
+                })),
+                own.clone(),
+                vec![root(true)],
+                "not a primitive by its grammar",
+            ),
+            (
+                "ADR 0180: a spread first argument may supply a function",
+                source(json!({
+                    "argumentsPrimitiveSyntax": [false, false],
+                    "argumentsNonSpreadSyntax": [false, true],
                 })),
                 own.clone(),
                 vec![root(true)],

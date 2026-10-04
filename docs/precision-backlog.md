@@ -1,5 +1,22 @@
 # Precision backlog
 
+## A plain signal's read ignores its options (2026-10-05)
+
+ADR 0180. The inert `createSignal` accessor row discharges a non-spread
+options argument by position, because an rc.9 plain signal's read never
+consults its options (`equals` runs on writes, `unobserved` on unlink).
+
+- **Gained:** two ledger violations (68 -> 70 of 123), each runtime-detected,
+  no twin flagged: `createBattery` and `createVideoFrameCallback`. No
+  checkpoint row changed status, and no export lost a returned-accessor claim.
+- **Still open:**
+  - a memo, or a `createSignal` whose first argument may be a function, with
+    an options binding (`createReducer`, `createPolled`, `createTrigger`'s
+    tuple): the memo re-run calls `equals`;
+  - `createFullscreen`;
+  - ADR 0157's premises, parked on `wip/adr0157-rebased` (net zero on the
+    ledger).
+
 ## A package registration inside a leaf owner is forbidden (2026-10-05)
 
 ADR 0179. A call inside `createTrackedEffect` or an owner-backed `onSettled`

@@ -5513,6 +5513,21 @@ impl Dialect for Solid2 {
         )
     }
 
+    /// ADR 0180. Source: `@solidjs/signals@2.0.0-rc.9`, `dist/dev-shared.js`
+    /// `signal` and `read`. `signal(v, options)` copies `options.equals`,
+    /// `options.ownedWrite` and `options.name` onto the node and stores
+    /// `options.unobserved` on its extension, all at creation. `equals` is
+    /// called by the setter and by the commit of a pending write, `unobserved`
+    /// when the node's last subscriber unlinks; `read` consults neither.
+    /// Probed on the rc.9 dev and prod builds under Node 24: a `createSignal(false,
+    /// options)` whose `equals` and `unobserved` record each call was read
+    /// untracked, inside a `createMemo` and inside a `createEffect`, with two
+    /// flushes and no write -- neither callback ran; `unobserved` ran once, when
+    /// the root was disposed and its subscribers unlinked.
+    fn inert_read_ignores_options(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::CreateSignal
+    }
+
     /// ADR 0162. Source: `@solidjs/signals@2.0.0-rc.9`, the audited release
     /// (`dist/prod/signals.js` `createMemo`, `accessor`; `dist/prod/core/core.js`
     /// `computed` and `read`). `createMemo(e, t)` is `accessor(computed(e, t))`

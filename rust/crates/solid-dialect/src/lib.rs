@@ -652,6 +652,23 @@ pub fn unambiguous_inert_accessor_read(name: &str, slot: ResultSlot) -> bool {
     !answers.is_empty() && answers.into_iter().all(|answer| answer)
 }
 
+/// ADR 0180: whether every dialect that canonically exports `name` states its
+/// inert read ignores the options argument
+/// ([`Dialect::inert_read_ignores_options`]).
+#[must_use]
+pub fn unambiguous_inert_read_ignores_options(name: &str) -> bool {
+    let answers = DIALECTS
+        .iter()
+        .copied()
+        .filter_map(|dialect| {
+            let primitive = dialect.primitive(name)?;
+            (dialect.name_of(primitive) == Some(name))
+                .then(|| dialect.inert_read_ignores_options(primitive))
+        })
+        .collect::<Vec<_>>();
+    !answers.is_empty() && answers.into_iter().all(|answer| answer)
+}
+
 /// The argument position every dialect that canonically exports `name` agrees
 /// holds its options object ([`Dialect::options_argument`]), or `None` when one
 /// is silent or they disagree.
@@ -2656,6 +2673,21 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 0180: whether the inert read [`Dialect::inert_accessor_read`]
+    /// states for `primitive` is the same whatever its options argument holds.
+    ///
+    /// The inert row describes what invoking the accessor does. A runtime
+    /// whose read never consults the options object -- its callbacks run on
+    /// the setter and on unlink, which the read claim does not describe --
+    /// answers `true`, and the census then discharges the options slot of a
+    /// non-spread call by position alone. The default `false` keeps the
+    /// original condition: the options argument is an object literal of
+    /// primitives.
+    fn inert_read_ignores_options(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
     /// Whether invoking the accessor at `slot` of what `primitive` returns is a
     /// read of a computation the creating call registered (ADR 0162): it
     /// observes the computation's current value in the invoking caller's
@@ -4375,6 +4407,19 @@ mod tests {
     /// accessor is in both rows; the inert one is the stronger answer, asked
     /// first, and the computed one is what a possibly-callable first argument
     /// leaves. Nothing else is computed.
+    #[test]
+    fn only_a_plain_signal_read_ignores_its_options() {
+        assert!(unambiguous_inert_read_ignores_options("createSignal"));
+        for name in [
+            "createMemo",
+            "createStore",
+            "createOptimistic",
+            "notADialectName",
+        ] {
+            assert!(!unambiguous_inert_read_ignores_options(name), "{name}");
+        }
+    }
+
     #[test]
     fn only_the_memo_and_signal_accessor_reads_are_computed() {
         assert!(unambiguous_computed_accessor_read(
