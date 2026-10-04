@@ -2758,6 +2758,9 @@ fn structural_veto_shape(
     }
     Some(match shape {
         ValueShape::Plain => serde_json::json!({"kind": "primitive"}),
+        // ADR 0177: a member the claim leaves undescribed; any value matches.
+        // It still counts towards the container's exact length or key set.
+        ValueShape::Unknown if depth > 0 => serde_json::json!({"kind": "any"}),
         ValueShape::Parameter { index, path } if path.is_empty() => {
             serde_json::json!({"kind": "parameter", "index": index})
         }
@@ -2821,6 +2824,7 @@ const samples = [
 {tuples}
 ];
 function matchesStructure(value, shape, args) {{
+  if (shape.kind === "any") return true;
   if (shape.kind === "primitive") {{
     return typeof value !== "function" && (typeof value !== "object" || value === null);
   }}

@@ -10,7 +10,7 @@
 #[path = "owner_call_cover.rs"]
 mod owner_call_cover;
 #[path = "structural_returns.rs"]
-mod structural_returns;
+pub(super) mod structural_returns;
 
 use serde::Deserialize;
 use sha2::{Digest as _, Sha256};

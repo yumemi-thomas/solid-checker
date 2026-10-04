@@ -944,6 +944,83 @@ impl ExportSemantics {
         self.withhold_operations_narrowing(seeds, &BTreeSet::new())
     }
 
+    /// ADR 0177: leaves the named members of a bare return's literal tuple or
+    /// object output undescribed (`unknown`), keeping every other member and
+    /// the container's own enumeration.
+    ///
+    /// The weakening the structural census asks for when it can prove the
+    /// container and some members but not the others: `unknown` asserts
+    /// nothing of a member, so the weaker claim is true wherever the stronger
+    /// one was, and the census re-confirms it member for member. Claims at a
+    /// path below a weakened member disappear with it, because they are read
+    /// off the shape. Returns `false`, changing nothing, when the operation is
+    /// not a bare return with such an output or a path does not name one of
+    /// its members.
+    pub fn weaken_return_members(
+        &mut self,
+        operation: &OperationId,
+        members: &[ValuePath],
+    ) -> bool {
+        fn member_mut<'a>(
+            value: &'a mut ValueShape,
+            path: &[ValuePathSegment],
+        ) -> Option<&'a mut ValueShape> {
+            let Some((segment, rest)) = path.split_first() else {
+                return Some(value);
+            };
+            let next = match (value, segment) {
+                (
+                    ValueShape::Tuple(KnowledgeSet::Partial(items) | KnowledgeSet::Complete(items)),
+                    ValuePathSegment::TupleItem(index),
+                ) => items.get_mut(usize::try_from(*index).ok()?)?,
+                (
+                    ValueShape::Object(
+                        KnowledgeSet::Partial(properties) | KnowledgeSet::Complete(properties),
+                    ),
+                    ValuePathSegment::ObjectProperty(name),
+                ) => {
+                    &mut properties
+                        .iter_mut()
+                        .find(|property| property.name == *name)?
+                        .value
+                }
+                _ => return None,
+            };
+            member_mut(next, rest)
+        }
+        let Some(output) = self
+            .call
+            .operations
+            .iter_mut()
+            .find(|candidate| candidate.id == *operation && candidate.is_bare_return())
+            .and_then(|candidate| candidate.output.as_mut())
+        else {
+            return false;
+        };
+        if !matches!(output, ValueShape::Tuple(_) | ValueShape::Object(_)) {
+            return false;
+        }
+        let mut weakened = output.clone();
+        for member in members {
+            if member.0.is_empty()
+                || !member.0.iter().all(|segment| {
+                    matches!(
+                        segment,
+                        ValuePathSegment::TupleItem(_) | ValuePathSegment::ObjectProperty(_)
+                    )
+                })
+            {
+                return false;
+            }
+            let Some(slot) = member_mut(&mut weakened, &member.0) else {
+                return false;
+            };
+            *slot = ValueShape::Unknown;
+        }
+        *output = weakened;
+        true
+    }
+
     /// [`Self::withhold_operations`], except that a seed in `narrowed` which is
     /// a non-call `invoke` (a property read, iteration, coercion or
     /// `hasInstance` of the caller's value) *narrows* `callbacks` instead of

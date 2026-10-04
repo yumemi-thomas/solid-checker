@@ -1213,6 +1213,10 @@ pub(super) fn positive_fact_refusal_withholding(
             };
             let prefix = if reason.contains(PROTOCOL_ITEM_NARROWS) {
                 WITHHELD_OPERATION_NARROWED_PREFIX
+            } else if reason
+                .contains(type_facts::structural_returns::STRUCTURAL_MEMBERS_UNKNOWN_MARKER)
+            {
+                WITHHELD_OPERATION_MEMBERS_UNKNOWN_PREFIX
             } else {
                 WITHHELD_OPERATION_CENSUS_REFUSED_PREFIX
             };
@@ -2047,6 +2051,14 @@ pub const WITHHELD_OPERATION_CENSUS_REFUSED_PREFIX: &str = "operation census ref
 pub const WITHHELD_OPERATION_NARROWED_PREFIX: &str =
     "narrowed out of a closed callbacks enumeration: ";
 
+/// ADR 0177: the prefix of the reason a bare return carries when the
+/// structural census proved its literal container and some members but not
+/// the members it names. Those members are left `unknown` and the operation
+/// is kept; the census re-confirms the weakened structure. The census's own
+/// text follows, and carries the member paths.
+pub const WITHHELD_OPERATION_MEMBERS_UNKNOWN_PREFIX: &str =
+    "structural members weakened to unknown: ";
+
 /// The phrase `type_facts::require_protocol_use` writes, and only it, when the
 /// item it could not witness may narrow instead of opening its domain.
 pub(crate) const PROTOCOL_ITEM_NARROWS: &str = "the declared signature types the parameter primitive-only, so no caller code can run through it";
@@ -2147,11 +2159,57 @@ pub(crate) fn withheld_operation_weakening(
     candidate: &NormalizedContract,
     withheld: &[WithheldOperation],
 ) -> Result<NormalizedContract, RecipeGatingError> {
-    use solid_reactive_ir::contract_semantics::OperationId;
+    use solid_reactive_ir::contract_semantics::{OperationId, ValuePath};
 
     let mut artifact_cases = candidate.artifact_cases().to_vec();
+    // ADR 0177: an operation every record of which only asks to leave named
+    // members of its structural return undescribed is weakened in place.
+    // Anything else -- one other refusal, or a member list that does not name
+    // members of this output -- withdraws it as before.
+    let mut weakened: BTreeSet<(String, String, String)> = BTreeSet::new();
+    let mut members: BTreeMap<(String, String, String), Vec<ValuePath>> = BTreeMap::new();
+    let mut other: BTreeSet<(String, String, String)> = BTreeSet::new();
+    for record in withheld {
+        let key = (
+            record.artifact_case.clone(),
+            record.export.clone(),
+            record.operation.clone(),
+        );
+        match record
+            .reason
+            .strip_prefix(WITHHELD_OPERATION_MEMBERS_UNKNOWN_PREFIX)
+            .and_then(type_facts::structural_returns::withheld_member_paths)
+        {
+            Some(paths) => members.entry(key).or_default().extend(paths),
+            None => {
+                other.insert(key);
+            }
+        }
+    }
+    for (key, paths) in members {
+        if other.contains(&key) {
+            continue;
+        }
+        let (artifact_case, export_name, operation) = &key;
+        if artifact_cases
+            .iter_mut()
+            .find(|case| case.id == *artifact_case)
+            .and_then(|case| case.exports.get_mut(export_name))
+            .is_some_and(|export| {
+                export.weaken_return_members(&OperationId(operation.clone()), &paths)
+            })
+        {
+            weakened.insert(key);
+        }
+    }
     let mut seeds: BTreeMap<(String, String), BTreeSet<OperationId>> = BTreeMap::new();
-    for operation in withheld {
+    for operation in withheld.iter().filter(|record| {
+        !weakened.contains(&(
+            record.artifact_case.clone(),
+            record.export.clone(),
+            record.operation.clone(),
+        ))
+    }) {
         seeds
             .entry((operation.artifact_case.clone(), operation.export.clone()))
             .or_default()
@@ -4678,6 +4736,128 @@ mod tests {
         assert_ne!(
             finalized.bindings().probe_gate_root,
             super::finalization::empty_probe_gate_root(&plan)
+        );
+    }
+
+    /// ADR 0177: a structural return whose container and some members are
+    /// proved keeps them; the member the census cannot describe is left
+    /// `unknown` instead of withdrawing the whole return.
+    #[test]
+    fn an_undescribable_structural_member_is_weakened_and_its_siblings_kept() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("partial-structural-returns");
+        let Some(configuration) =
+            tracer_configuration(scratch.path(), "partial-structural-returns", &[])
+        else {
+            return;
+        };
+        let manifest = br#"{"name":"partial-structural-returns","version":"1.0.0","type":"module","exports":{".":{"types":"./index.d.ts","import":"./index.js"}}}"#;
+        let runtime = b"export function mixed(value) { const other = {}; return [value, other]; }\nexport function opaque() { const value = {}; return [value]; }\n";
+        let declarations = b"export declare function mixed<T>(value: T): [T, {}];\nexport declare function opaque(): [{}];\n";
+        let archive = published_archive_for(
+            "partial-structural-returns",
+            "1.0.0",
+            &[
+                ("package/package.json", manifest),
+                ("package/index.js", runtime),
+                ("package/index.d.ts", declarations),
+            ],
+        );
+        let root = "/project/node_modules/partial-structural-returns";
+        let bindings = ["mixed", "opaque"].map(|name| {
+            (
+                name,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        let plan = plan_with_export_semantics(
+            &archive,
+            "partial-structural-returns",
+            "1.0.0",
+            root,
+            manifest,
+            &bindings,
+            &[],
+            "/project/src/app.ts",
+            &|case, name| {
+                let members = if name == "mixed" {
+                    vec![
+                        ValueShape::Parameter {
+                            index: 0,
+                            path: vec![],
+                        },
+                        ValueShape::Plain,
+                    ]
+                } else {
+                    vec![ValueShape::Plain]
+                };
+                let operation = Operation {
+                    output: Some(ValueShape::Tuple(KnowledgeSet::Complete(members))),
+                    ..test_return_operation(OperationId(format!(
+                        "{}:{name}:operation:return",
+                        case.id
+                    )))
+                };
+                ExportSemantics {
+                    identity: test_export_identity(case, name),
+                    shape: ValueShape::Callable,
+                    stability: StabilityKnowledge::Unknown,
+                    call: CallSemantics::new(
+                        CallClaims {
+                            callbacks: KnowledgeSet::Complete(vec![]),
+                            creates: KnowledgeSet::Complete(vec![]),
+                            returns: KnowledgeSet::Complete(vec![operation.id.clone()]),
+                            ..CallClaims::default()
+                        },
+                        vec![operation],
+                        vec![],
+                        vec![],
+                        GuardPartition::default(),
+                    ),
+                }
+            },
+        );
+        let finalized = tracer_certify(&plan, &pin, &configuration)
+            .expect("an undescribable member must not refuse the package");
+        let accepted = crate::contract_document::decode(finalized.canonical_main())
+            .unwrap()
+            .normalize()
+            .unwrap();
+        let exports = &accepted.artifact_cases()[0].exports;
+        assert!(
+            exports["mixed"].call.operations.iter().any(|op| matches!(
+                &op.output,
+                Some(ValueShape::Tuple(items))
+                    if items.items() == [
+                        ValueShape::Parameter { index: 0, path: vec![] },
+                        ValueShape::Unknown,
+                    ]
+            )),
+            "the parameter member is kept and the other left unknown"
+        );
+        assert!(
+            exports["mixed"]
+                .operation_claim(ClaimDomain::Returns)
+                .is_some_and(|claim| claim.items().len() == 1),
+            "the return operation itself is kept"
+        );
+        assert!(finalized.withheld_operations().iter().any(|record| {
+            record.export == "mixed"
+                && record
+                    .reason
+                    .starts_with(super::WITHHELD_OPERATION_MEMBERS_UNKNOWN_PREFIX)
+        }));
+        // With no described member left, the return is withdrawn as before.
+        assert!(
+            exports["opaque"]
+                .call
+                .operations
+                .iter()
+                .all(|op| op.output.is_none())
         );
     }
 

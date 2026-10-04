@@ -2899,3 +2899,71 @@ fn a_described_callables_callback_items_are_validated_and_hashed_apart() {
         assert!(error.contains(needle), "{needle}: {error}");
     }
 }
+
+/// ADR 0177: weakening names members of a bare return's literal output and
+/// leaves exactly those undescribed; anything else changes nothing.
+#[test]
+fn a_structural_return_member_is_weakened_in_place() {
+    let accessor = || ValueShape::Reactive {
+        role: ReactiveRole::Accessor,
+        resource: None,
+        capabilities: KnowledgeSet::Unknown,
+    };
+    let mut returned = operation("return", OperationKind::Return);
+    returned.owner = OwnerRelation::default();
+    returned.cardinality = Cardinality {
+        scope: Some(CardinalityScope::Call),
+        min: Some(0),
+        max: Some(UpperBound::Many),
+    };
+    returned.output = Some(ValueShape::Tuple(KnowledgeSet::Complete(vec![
+        accessor(),
+        accessor(),
+        ValueShape::Unknown,
+    ])));
+    let mut export = normalized_export(proposal_with(
+        ValueShape::Callable,
+        call(vec![returned], vec![]),
+    ));
+    let id = export.call.operations[0].id.clone();
+    assert!(export.call.operations[0].is_bare_return());
+    let member = |index| ValuePath(vec![ValuePathSegment::TupleItem(index)]);
+
+    assert!(
+        !export.weaken_return_members(&id, &[member(3)]),
+        "no fourth member"
+    );
+    assert!(
+        !export.weaken_return_members(&id, &[ValuePath(vec![])]),
+        "the root is no member"
+    );
+    assert!(
+        !export.weaken_return_members(&OperationId("absent".into()), &[member(1)]),
+        "no such operation"
+    );
+    assert_eq!(
+        export.call.operations[0].output,
+        Some(ValueShape::Tuple(KnowledgeSet::Complete(vec![
+            accessor(),
+            accessor(),
+            ValueShape::Unknown,
+        ]))),
+        "a refused weakening changes nothing"
+    );
+
+    assert!(export.weaken_return_members(&id, &[member(1)]));
+    assert_eq!(
+        export.call.operations[0].output,
+        Some(ValueShape::Tuple(KnowledgeSet::Complete(vec![
+            accessor(),
+            ValueShape::Unknown,
+            ValueShape::Unknown,
+        ])))
+    );
+    assert!(
+        export
+            .operation_claim(ClaimDomain::Returns)
+            .is_some_and(|claim| claim.items().len() == 1),
+        "the return itself is kept"
+    );
+}

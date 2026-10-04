@@ -241,3 +241,5 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/package-contracts/class-creator-caller-creates/node_modules/**
 !fixtures/reactive-ir/fixed-structural-return-consumer/node_modules/
 !fixtures/reactive-ir/fixed-structural-return-consumer/node_modules/**
+!fixtures/reactive-ir/partial-structural-return-consumer/node_modules/
+!fixtures/reactive-ir/partial-structural-return-consumer/node_modules/**

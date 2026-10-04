@@ -704,12 +704,21 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
                 .collect(),
             ..ContractReturn::default()
         }),
-        ValueShape::Tuple(KnowledgeSet::Complete(items)) => Some(ContractReturn {
-            kind: "tuple".into(),
-            elements: items.iter().map(project_return_shape).collect(),
-            ..ContractReturn::default()
-        }),
-        ValueShape::Object(KnowledgeSet::Complete(properties)) => {
+        // ADR 0177: a tuple or object whose member enumeration is not closed
+        // still proves each member it lists, at its position or key; "partial"
+        // only says more members may exist. The projection keeps reactive
+        // leaves, never the enumeration, so a listed member is as good here as
+        // in a closed container, and an unlisted position names no leaf.
+        ValueShape::Tuple(KnowledgeSet::Complete(items) | KnowledgeSet::Partial(items)) => {
+            Some(ContractReturn {
+                kind: "tuple".into(),
+                elements: items.iter().map(project_return_shape).collect(),
+                ..ContractReturn::default()
+            })
+        }
+        ValueShape::Object(
+            KnowledgeSet::Complete(properties) | KnowledgeSet::Partial(properties),
+        ) => {
             let properties = properties
                 .iter()
                 .filter_map(|property| {

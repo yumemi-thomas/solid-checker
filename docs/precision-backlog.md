@@ -1,5 +1,27 @@
 # Precision backlog
 
+## An undescribable structural member is left unknown (2026-10-04)
+
+ADR 0177. A returned tuple or object whose container and some members are
+proved keeps those members. The member the census cannot describe is left
+`unknown` instead of withdrawing the whole return. Consumers read a listed
+member of a container whose enumeration is not closed.
+
+- **Gained:** three ledger violations (60 -> 63 of 123), each runtime-detected,
+  no twin flagged: `createDate`, `createRAF` and its `default` alias. No
+  checkpoint row changed status. The 38-app sweep is unchanged (264 -> 264):
+  the tier's environments match no app install, so real apps gain only
+  through local certification.
+- **Still open:**
+  - "live return has no exhaustive literal structure" (`createEventStack`,
+    `createNotification`, `createOrientation`): the returned value is not a
+    fresh literal;
+  - a memo or signal whose options come from the caller (`createDateNow`,
+    `createReducer`, `createSelection`, `createVideoFrameCallback`,
+    `createBattery`, `createPolled`): needs argument premises (ADR 0157);
+  - two or more claimed alternatives are never weakened;
+  - an accessor returned through another package's function, ADR 0157.
+
 ## An owner requirement after an `await` is proven unowned (2026-10-04)
 
 ADR 0176. An effect, a cleanup or a contract call with an owner requirement

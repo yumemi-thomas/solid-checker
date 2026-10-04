@@ -552,6 +552,40 @@ fn claim_filter_selects_only_one_whole_parameter_return() {
     }
 }
 
+/// ADR 0177: an undescribed member is matched by any value, and still counts
+/// towards the tuple's exact length; the described member is still checked.
+#[test]
+fn the_structural_return_veto_matches_an_undescribed_member_by_anything() {
+    use solid_reactive_ir::contract_semantics::ReactiveRole;
+    let signal = ValueShape::Tuple(KnowledgeSet::complete(vec![
+        ValueShape::Reactive {
+            role: ReactiveRole::Accessor,
+            resource: None,
+            capabilities: KnowledgeSet::Unknown,
+        },
+        ValueShape::Unknown,
+    ]));
+    let signatures = [signature(&[value_fact(json!({"mayBeObject": true}))])];
+    let observation = Observation::StructuralReturns(vec![signal]);
+    for implementation in [
+        "export function subject() { return [() => 1, (value) => value]; }",
+        "export function subject() { return [() => 1, 5]; }",
+        "export function subject() { return [() => 1, undefined]; }",
+    ] {
+        let observed = execute(implementation, observation.clone(), &signatures);
+        assert!(!observed.contradicted(), "{implementation}: {observed:?}");
+        assert!(observed.error.is_none(), "{implementation}: {observed:?}");
+    }
+    for implementation in [
+        "export function subject() { return [1, () => 1]; }",
+        "export function subject() { return [() => 1]; }",
+        "export function subject() { return [() => 1, 2, 3]; }",
+    ] {
+        let observed = execute(implementation, observation.clone(), &signatures);
+        assert!(observed.contradicted(), "{implementation}: {observed:?}");
+    }
+}
+
 #[test]
 fn the_structural_return_veto_checks_all_members_without_invoking_getters() {
     use solid_reactive_ir::contract_semantics::{ObjectProperty, ReactiveRole};
@@ -636,9 +670,21 @@ fn the_structural_return_veto_checks_all_members_without_invoking_getters() {
         ),
         Some(Observation::StructuralReturns(_))
     ));
+    // ADR 0177: an undescribed member is a vetoable claim about the
+    // container's exact length, so a tuple holding one is observed.
+    operation.output = Some(ValueShape::Tuple(KnowledgeSet::complete(vec![
+        ValueShape::Plain,
+        ValueShape::Unknown,
+    ])));
+    assert!(matches!(
+        candidate_observation(
+            "returns",
+            &export_with_returns(claim.clone(), vec![operation.clone()])
+        ),
+        Some(Observation::StructuralReturns(_))
+    ));
     for shape in [
         ValueShape::Tuple(KnowledgeSet::Unknown),
-        ValueShape::Tuple(KnowledgeSet::complete(vec![ValueShape::Unknown])),
         ValueShape::Tuple(KnowledgeSet::complete(vec![ValueShape::Callable])),
         ValueShape::Tuple(KnowledgeSet::complete(vec![ValueShape::Parameter {
             index: 0,
