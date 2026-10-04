@@ -5641,6 +5641,12 @@ impl Dialect for Solid2 {
         primitive == Primitive::OnCleanup && slot == 0
     }
 
+    /// `merge(...sources)` replaces each function source with
+    /// `createMemo(source)` (`@solidjs/signals@2.0.0-rc.9` `dist/dev.js:4290`).
+    fn wraps_function_arguments_in_memo(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::Merge
+    }
+
     fn callback_executions(&self, primitive: Primitive) -> &'static [(usize, Execution)] {
         match primitive {
             Primitive::CreateMemo
@@ -6515,6 +6521,8 @@ mod tests {
         assert!(two.callback_never_invoked_during_call(Primitive::OnCleanup, 0));
         assert!(!two.callback_never_invoked_during_call(Primitive::OnSettled, 0));
         assert!(!two.callback_never_invoked_during_call(Primitive::CreateEffect, 1));
+        assert!(two.wraps_function_arguments_in_memo(Primitive::Merge));
+        assert!(!two.wraps_function_arguments_in_memo(Primitive::Omit));
 
         // Silence is an answer contract emission must keep as "unknown".
         assert_eq!(word(Primitive::Children, 0, 1), None);

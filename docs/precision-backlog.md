@@ -1,5 +1,37 @@
 # Precision backlog
 
+## Held-out sweep patterns (2026-10-04)
+
+The held-out sweep ran on 81 projects in 40 repositories never used to develop
+the rules (`rust/target/heldout/`). Its triage (`rust/target/heldout-triage/`)
+found 20 false positives of 165 violations. Removed, with fixtures
+`fp-exec-await-argument-write` and `rc9-heldout-execution-shapes`. Each
+fixture passes `tsc --noEmit` against its rc.9-faithful stub and the real
+rc.9 install, and keeps a positive control:
+
+- **W1, 11 findings.** `setX(await f())`: a call's arguments are evaluated
+  before the call runs, so an await in the write's own argument list precedes
+  the write (`follows_await_in_async_function`).
+- **H1 and L1, 3 findings.** A primitive's inline callback (`flush`, `latest`)
+  takes its call's role only when the call itself is proven to run during the
+  body (`inline_callback_execution_role` now asks
+  `nested_literal_runs_during_body`). A default-parameter initializer runs
+  only when its function is called.
+- **M1, 1 finding.** `merge()` wraps each function source in `createMemo`
+  (rc.9 `dist/dev.js:4290`; `Dialect::wraps_function_arguments_in_memo`).
+- **D1, 2 findings.** Inside a tracked primitive callback, a listener handed
+  to a call not proven to invoke it there runs later; it now gets no tracked
+  role (`attribute_function_within`, as for tracked JSX regions).
+- **Open: R1, 3 findings.** A component that returns a function child
+  (`(() => {...}) as unknown as JSX.Element`): the parent's `insert()` runs it
+  in a tracked effect, but the lexical component role still applies to the
+  returned arrow.
+- **Checked, not a duplicate.** `missing-effect-function` on rc.1/rc.2
+  installs: those typings keep the deprecated single-argument
+  `createEffect(compute): never` overload, so `tsc` accepts the call. From rc.6
+  it is TS2554, and SC7001 is silent there (pinned in
+  `fixtures/tsc-oracle/rule-cases.json`).
+
 ## Summary-attributed strict reads and component refs (2026-10-04)
 
 A full re-triage of the 366 violations left on the 48-project sweep

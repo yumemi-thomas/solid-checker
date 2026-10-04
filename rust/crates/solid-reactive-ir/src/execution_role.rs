@@ -883,10 +883,21 @@ fn enclosed_by_stored_function(
 /// same function, by position. Only the function's own awaits count: one in a
 /// nested closure suspends that closure.
 fn follows_await_in_async_function(file: &solid_facts::FileFacts, span: Span) -> bool {
+    // A call's arguments are evaluated before the call runs, so an await in
+    // the written call's own argument list (`setX(await load())`) also
+    // precedes it.
+    let arguments = file
+        .ast
+        .calls
+        .iter()
+        .filter(|call| call.callee == span || call.span == span)
+        .map(|call| Span::new(call.callee.end, call.span.end))
+        .min_by_key(|arguments| arguments.end - arguments.start);
     containing_ast_function(&file.ast, span).is_some_and(|function| {
         function.r#async
             && file.ast.awaits.iter().any(|awaited| {
-                awaited.end <= span.start
+                (awaited.end <= span.start
+                    || arguments.is_some_and(|arguments| arguments.contains(*awaited)))
                     && function.body.contains(*awaited)
                     && containing_ast_function(&file.ast, *awaited)
                         .is_some_and(|owner| owner.span == function.span)
@@ -927,6 +938,16 @@ pub(super) fn nested_literal_runs_during_body(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
+    // A default-parameter initializer is outside its function's body but
+    // runs only when that function is called, never where it is declared.
+    if file.ast.functions.iter().any(|function| {
+        function.span.contains(span)
+            && !function.body.contains(span)
+            && span.end <= function.body.start
+            && lookup.function_component_status(file, function) == ComponentStatus::No
+    }) {
+        return false;
+    }
     let mut span = span;
     loop {
         let Some(literal) = containing_ast_function(&file.ast, span) else {
@@ -1116,6 +1137,23 @@ fn semantic_execution_role_within(
     if result_access_callback_contains(file, span, lookup) {
         return ExecutionRole::Unknown;
     }
+    // A function argument the primitive wraps in a memo of its own (2.0's
+    // `merge`) runs inside that computation, not in the caller's body.
+    if file.ast.functions_body_containing(span).any(|function| {
+        file.ast
+            .arguments_containing(function.span)
+            .any(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                    && call_primitive_name(file, call, entities, symbol_names, lookup.dialect)
+                        .as_ref()
+                        .and_then(PrimitiveName::primitive)
+                        .is_some_and(|primitive| {
+                            lookup.dialect.wraps_function_arguments_in_memo(primitive)
+                        })
+            })
+    }) {
+        return ExecutionRole::Unknown;
+    }
     if let Some(role) = context_provider_value_role(file, span, lookup) {
         return role;
     }
@@ -1188,9 +1226,9 @@ fn semantic_execution_role_within(
             };
         }
     }
-    if file.ast.arguments_containing(span).any(|(call, index)| {
+    let mut tracked_callbacks = file.ast.arguments_containing(span).filter(|(call, index)| {
         matches!(
-            call.arguments[index].value,
+            call.arguments[*index].value,
             solid_facts::ast::ArgumentValueKind::Identifier
                 | solid_facts::ast::ArgumentValueKind::Function
                 | solid_facts::ast::ArgumentValueKind::AsyncFunction
@@ -1198,13 +1236,22 @@ fn semantic_execution_role_within(
             .as_ref()
             .and_then(PrimitiveName::primitive)
             .is_some_and(|primitive| {
-                callback_execution_at_call(file, call, primitive, index, lookup).is_some()
+                callback_execution_at_call(file, call, primitive, *index, lookup).is_some()
                     && dialect
-                        .callback_semantics_at(primitive, index, call.arguments.len())
+                        .callback_semantics_at(primitive, *index, call.arguments.len())
                         .tracks_reads
             })
-    }) {
-        return ExecutionRole::TrackedJsx;
+    });
+    if let Some((call, index)) = tracked_callbacks.next() {
+        // As for a tracked JSX region: a function handed on inside the
+        // callback to a call not proven to invoke it there, or written as an
+        // attribute value, runs when something calls it, not in the
+        // callback's tracking pass (`client.subscribe(() => setX(..))`).
+        return if attribute_function_within(file, call.arguments[index].span, span, lookup) {
+            ExecutionRole::Unknown
+        } else {
+            ExecutionRole::TrackedJsx
+        };
     }
     let compiler_role = source_execution_role(file, span, allowed);
     if compiler_role != ExecutionRole::Unknown {
@@ -1891,6 +1938,21 @@ fn inline_callback_execution_role(
                 classifying,
             );
             classifying.remove(&key);
+            // The callback runs where the call runs. The lexical rendering
+            // role of the call is proven only when the call itself runs during
+            // the body; a call written in a nested helper that runs later
+            // (`const isCurrent = id => id === latest(() => draft())`) is not.
+            if role == ExecutionRole::UntrackedRendering
+                && !nested_literal_runs_during_body(
+                    file,
+                    call.span,
+                    lookup.entities(),
+                    lookup.symbol_names(),
+                    lookup,
+                )
+            {
+                return Some(ExecutionRole::Unknown);
+            }
             Some(role)
         })
 }

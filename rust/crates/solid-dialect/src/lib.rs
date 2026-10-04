@@ -2731,6 +2731,13 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether every function-valued argument of `primitive` is wrapped in a
+    /// memo of its own, so code in it runs inside that computation and not in
+    /// the caller's body. Unknown is `false`.
+    fn wraps_function_arguments_in_memo(&self, _primitive: Primitive) -> bool {
+        false
+    }
+
     /// Whether one callback argument describes work performed by a function
     /// returned from the primitive rather than by the primitive call itself.
     ///
