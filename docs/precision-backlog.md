@@ -1,5 +1,23 @@
 # Precision backlog
 
+## An open returns claim keeps its described return (2026-10-04)
+
+ADR 0178. An unresolved call that opens `returns` no longer discards the
+return the export's own body describes. The generator proposes it as an item
+over an open domain, and the census proves it or withdraws it.
+
+- **Gained:** three ledger violations (63 -> 66 of 123), each runtime-detected,
+  no twin flagged: `createKeyHold`, `createConnectivitySignal` and
+  `createMediaQuery`. No checkpoint row changed status. The 38-app sweep is
+  unchanged. Corpus fixture `uncaptured-source-return` now proposes `Held`'s
+  `{ value: accessor }`, and `Derived` keeps nothing.
+- **Still open:**
+  - a return that is another package's call result (`useKeyDownList`,
+    `useCurrentlyHeldKey` through `createSingletonRoot`);
+  - `createActiveElement` and `createPageVisibility` (`createHydratableSignal`
+    without, or with a bound, options argument) still have no claim;
+  - the remaining walls listed under ADR 0177.
+
 ## An undescribable structural member is left unknown (2026-10-04)
 
 ADR 0177. A returned tuple or object whose container and some members are

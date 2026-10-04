@@ -23,7 +23,12 @@ is a certified negative the package cannot support.
 (`return { value }`), and `Steady` neither reads nor hands over anything and
 stays certified.
 
-Because both obligations fire on `Derived` and `Held`, the pinned contract
-shows all five domains unknown. That is what the fixture records: the arm's
+Both obligations fire on `Derived` and `Held`, so both leave all five domains
+unknown. Since ADR 0178 an open `returns` still publishes the return the
+export's own body describes, as an item and never a closure: `Held` proposes
+`{ value: accessor }`, the local signal it created and hands back unchanged
+(the uncontracted `observe` cannot rebind a `const`), and the certifier's
+census proves it or withdraws it. `Derived` describes nothing locally, because
+its value comes back from `observe`, so it keeps nothing. That is what the fixture records: the arm's
 domains cannot be observed in isolation today, so the arm is fail-closed by
 construction rather than by proof. See docs/precision-backlog.md.

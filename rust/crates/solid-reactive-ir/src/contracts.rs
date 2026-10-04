@@ -199,6 +199,7 @@ pub fn project_export_semantics(
             }),
         owner_requirements,
         open_owner_requirements: Vec::new(),
+        open_return: None,
         async_behavior,
         open_claims,
         creates_closed_empty,
@@ -3361,6 +3362,7 @@ fn contract_export_function(
         callbacks,
         owner_requirements: Vec::new().into(),
         open_owner_requirements: Vec::new(),
+        open_return: None,
         inline_accessor_invocations: BTreeMap::new(),
         returns: returns.into(),
         async_behavior: if node.r#async {

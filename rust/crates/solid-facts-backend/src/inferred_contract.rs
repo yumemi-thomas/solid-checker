@@ -932,14 +932,81 @@ fn normalize_export(
             )
         })
     };
+    // The operations of a return the reactive analysis described. ADR 0146:
+    // an accessor whose every value-carrying completion is a literal or an
+    // identifier proposes what invoking it does -- an owned-signal read --
+    // and the census decides whether the signal is one this export created,
+    // inert, and exactly what is read. Anything else proposes its shape.
+    let described_return_operations = |returned: &ContractReturn,
+                                       operations: &mut Vec<Operation>|
+     -> Result<Vec<OperationId>, ContractFailure> {
+        if returned.kind == "accessor"
+            && scope.publishes_bootstrapped_reactive_domains()
+            && summary.kind == "function"
+            && !summary.returns_reading_callables.is_empty()
+            && summary.inherited_from.is_none()
+            && matches!(&summary.async_behavior, ContractClaim::Known(protocol) if protocol.is_empty())
+        {
+            let single = summary.returns_reading_callables.len() == 1;
+            let mut ids = Vec::new();
+            for (index, call) in summary.returns_reading_callables.iter().enumerate() {
+                let id = if single {
+                    OperationId(format!("{prefix}return"))
+                } else {
+                    OperationId(format!("{prefix}return-{index}"))
+                };
+                operations.push(operation(
+                    id.clone(),
+                    OperationKind::Return,
+                    Vec::new(),
+                    Some(ValueShape::DescribedCallable(Box::new(call.clone()))),
+                ));
+                ids.push(id);
+            }
+            return Ok(ids);
+        }
+        let id = OperationId(format!("{prefix}return"));
+        let mut output = return_shape(returned)?;
+        if summary.returns_literal_structures.len() == 1 {
+            output = supplement_structural_proposal(output, &summary.returns_literal_structures[0]);
+        }
+        if let ContractClaim::Known(protocol) = &summary.async_behavior {
+            output = match protocol.as_str() {
+                "promise" => ValueShape::Promise(Box::new(output)),
+                "async-iterable" => ValueShape::AsyncIterable(Box::new(output)),
+                _ => output,
+            };
+        }
+        operations.push(operation(
+            id.clone(),
+            OperationKind::Return,
+            Vec::new(),
+            Some(output),
+        ));
+        Ok(vec![id])
+    };
     let returns = match &summary.returns {
-        ContractClaim::Open => valueless_returns()
-            .or_else(|| container_returns(&mut operations))
-            .or_else(|| alias_return(&mut operations))
-            .or_else(|| described_returns(&mut operations))
-            .or_else(|| literal_returns(&mut operations))
-            .or_else(|| restated_returns(&mut operations))
-            .unwrap_or(KnowledgeSet::Unknown),
+        ContractClaim::Open => {
+            if let Some(empty) = valueless_returns() {
+                empty
+            } else if let Some(returned) = summary.open_return.as_ref().filter(|_| {
+                scope.publishes_bootstrapped_reactive_domains()
+                    && summary.kind == "function"
+                    && summary.inherited_from.is_none()
+            }) {
+                // ADR 0178: the return the export's own body describes, kept
+                // while an unresolved call left the domain open. A positive
+                // item, never a closure; the census proves it or withdraws it.
+                KnowledgeSet::Partial(described_return_operations(returned, &mut operations)?)
+            } else {
+                container_returns(&mut operations)
+                    .or_else(|| alias_return(&mut operations))
+                    .or_else(|| described_returns(&mut operations))
+                    .or_else(|| literal_returns(&mut operations))
+                    .or_else(|| restated_returns(&mut operations))
+                    .unwrap_or(KnowledgeSet::Unknown)
+            }
+        }
         // ADR 0109, before the empty closure and deliberately: a body that
         // returns a props merge *does* yield a value, so the two are mutually
         // exclusive by construction — the valueless-completion walk declines on
@@ -1029,58 +1096,8 @@ fn normalize_export(
                 KnowledgeSet::Unknown
             }
         }
-        // ADR 0146: the reactive analysis described the return as an accessor,
-        // and every value-carrying completion is a literal or an identifier:
-        // propose what invoking it does -- an owned-signal read -- and let the
-        // census decide whether the signal is one this export created, inert,
-        // and exactly what is read.
-        ContractClaim::Known(Some(returned))
-            if returned.kind == "accessor"
-                && scope.publishes_bootstrapped_reactive_domains()
-                && summary.kind == "function"
-                && !summary.returns_reading_callables.is_empty()
-                && summary.inherited_from.is_none()
-                && matches!(&summary.async_behavior, ContractClaim::Known(protocol) if protocol.is_empty()) =>
-        {
-            let single = summary.returns_reading_callables.len() == 1;
-            let mut ids = Vec::new();
-            for (index, call) in summary.returns_reading_callables.iter().enumerate() {
-                let id = if single {
-                    OperationId(format!("{prefix}return"))
-                } else {
-                    OperationId(format!("{prefix}return-{index}"))
-                };
-                operations.push(operation(
-                    id.clone(),
-                    OperationKind::Return,
-                    Vec::new(),
-                    Some(ValueShape::DescribedCallable(Box::new(call.clone()))),
-                ));
-                ids.push(id);
-            }
-            KnowledgeSet::Complete(ids)
-        }
         ContractClaim::Known(Some(returned)) => {
-            let id = OperationId(format!("{prefix}return"));
-            let mut output = return_shape(returned)?;
-            if summary.returns_literal_structures.len() == 1 {
-                output =
-                    supplement_structural_proposal(output, &summary.returns_literal_structures[0]);
-            }
-            if let ContractClaim::Known(protocol) = &summary.async_behavior {
-                output = match protocol.as_str() {
-                    "promise" => ValueShape::Promise(Box::new(output)),
-                    "async-iterable" => ValueShape::AsyncIterable(Box::new(output)),
-                    _ => output,
-                };
-            }
-            operations.push(operation(
-                id.clone(),
-                OperationKind::Return,
-                Vec::new(),
-                Some(output),
-            ));
-            KnowledgeSet::Complete(vec![id])
+            KnowledgeSet::Complete(described_return_operations(returned, &mut operations)?)
         }
     };
 

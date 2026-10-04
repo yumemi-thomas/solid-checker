@@ -1218,6 +1218,15 @@ pub struct ContractExport {
     /// is `Known`, which carries its own items. Generation only: never decoded
     /// from or encoded into a package-contract document.
     pub open_owner_requirements: Vec<ContractOwnerRequirement>,
+    /// ADR 0178: the return this export's own body describes, kept while
+    /// [`Self::returns`] is `Open` because an unresolved call opened it. An
+    /// unknown call can add behavior; it does not replace the value a return
+    /// statement hands back, and the certifier's census proves that value
+    /// from the producer's trace or withdraws it. The generator publishes it
+    /// as a positive item over an open domain. `None` whenever the claim is
+    /// `Known`, which carries its own return. Generation only: never decoded
+    /// from or encoded into a package-contract document.
+    pub open_return: Option<ContractReturn>,
     pub async_behavior: ContractClaim<String>,
     /// Wire-independent open domains retained when normalized partial
     /// knowledge is projected into the existing analysis indexes. This field

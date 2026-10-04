@@ -14,7 +14,7 @@
           },
           "exports": {
             "Derived": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "Held": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Held": "summary-2fc45d622851089b087ed456f74d816348b1190522c2a63ed74b61b03d2e563f",
             "Steady": "summary-087d9d4614ddea5394ecf1448fc439c56fc63ad2b1544b0a640ff6dc2a43ee7d"
           },
           "resolution": {
@@ -71,6 +71,45 @@
         ],
         "returns": [
           "return-structural-0"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-2fc45d622851089b087ed456f74d816348b1190522c2a63ed74b61b03d2e563f": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "object",
+              "properties": [
+                {
+                  "name": "value",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
         ]
       },
       "shape": "callable"

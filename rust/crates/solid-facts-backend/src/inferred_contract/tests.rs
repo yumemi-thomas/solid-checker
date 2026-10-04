@@ -1208,6 +1208,43 @@ fn an_open_owner_requirement_list_publishes_its_items_and_keeps_creates_open() {
     }
 }
 
+/// ADR 0178: an open `returns` publishes the return the export's body
+/// describes as a positive item, and never closes the domain.
+#[test]
+fn an_open_returns_claim_publishes_its_retained_return_as_an_item() {
+    let summary = ContractExport {
+        kind: "function".into(),
+        returns: ContractClaim::Open,
+        open_return: Some(solid_reactive_ir::ContractReturn {
+            kind: "accessor".into(),
+            label: "memo".into(),
+            ..solid_reactive_ir::ContractReturn::default()
+        }),
+        async_behavior: ContractClaim::Known(String::new()),
+        ..ContractExport::default()
+    };
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(summary),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    let claim = export.operation_claim(ClaimDomain::Returns).unwrap();
+    assert!(!claim.is_closed(), "an item, never a closure");
+    let [id] = claim.items() else {
+        panic!("exactly the retained return");
+    };
+    let operation = export.operation(&id.0).unwrap();
+    assert_eq!(operation.kind, OperationKind::Return);
+    assert!(matches!(
+        operation.output,
+        Some(ValueShape::Reactive {
+            role: solid_reactive_ir::contract_semantics::ReactiveRole::Accessor,
+            ..
+        })
+    ));
+}
+
 /// `semantic-model.md` § creates' mechanical separator, asserted over the
 /// generator's own output rather than trusted: a `create` operation names what
 /// it registered. The generator now emits no `create` at all, which is the

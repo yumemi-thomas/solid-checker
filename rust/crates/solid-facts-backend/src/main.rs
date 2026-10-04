@@ -4938,7 +4938,13 @@ fn mark_summary_claims_unknown(
         marked = true;
     }
     if domains.returns {
-        summary.returns = unknown_contract_claim();
+        // ADR 0178: the obligation leaves the domain open; it does not replace
+        // the value the export's own return statement hands back.
+        if let solid_reactive_ir::ContractClaim::Known(Some(returned)) =
+            std::mem::replace(&mut summary.returns, unknown_contract_claim())
+        {
+            summary.open_return = Some(returned);
+        }
         marked = true;
     }
     if domains.callbacks {
@@ -10264,6 +10270,24 @@ fn unify_runtime_alias_summaries(
                 _ => {}
             }
         }
+        // ADR 0178: an open union keeps a return only when every alias states
+        // the same one, described or retained.
+        merged.open_return = None;
+        if merged.returns.is_open() {
+            let mut retained = names
+                .iter()
+                .filter_map(|name| exports.get(name))
+                .map(|summary| match &summary.returns {
+                    solid_reactive_ir::ContractClaim::Known(Some(returned)) => Some(returned),
+                    solid_reactive_ir::ContractClaim::Open => summary.open_return.as_ref(),
+                    solid_reactive_ir::ContractClaim::Known(None) => None,
+                });
+            if let Some(Some(first)) = retained.next()
+                && retained.all(|other| other == Some(first))
+            {
+                merged.open_return = Some(first.clone());
+            }
+        }
         if owner_requirements_open {
             merged.owner_requirements = solid_reactive_ir::ContractClaim::Open;
             retain_open_owner_requirements(
@@ -10348,6 +10372,57 @@ mod open_owner_requirement_tests {
             summary.open_owner_requirements,
             vec![requirement(OwnerRequirementOperation::Cleanup, true)]
         );
+    }
+
+    // ADR 0178: opening `returns` keeps the return the body describes, and an
+    // open alias union keeps it only when every alias states the same one.
+    #[test]
+    fn opening_returns_keeps_the_described_return() {
+        let accessor = solid_reactive_ir::ContractReturn {
+            kind: "accessor".into(),
+            ..solid_reactive_ir::ContractReturn::default()
+        };
+        let mut summary = function(ContractClaim::Known(vec![]));
+        summary.returns = ContractClaim::Known(Some(accessor.clone()));
+        assert!(mark_summary_claims_unknown(
+            &mut summary,
+            UnresolvedClaimDomains::all()
+        ));
+        assert!(summary.returns.is_open());
+        assert_eq!(summary.open_return, Some(accessor.clone()));
+
+        let mut undescribed = function(ContractClaim::Known(vec![]));
+        undescribed.returns = ContractClaim::Known(None);
+        mark_summary_claims_unknown(&mut undescribed, UnresolvedClaimDomains::all());
+        assert_eq!(
+            undescribed.open_return, None,
+            "nothing described, nothing kept"
+        );
+
+        let identity = entity("module#createTicker");
+        let entities = HashMap::from([
+            ("createTicker".to_owned(), &identity),
+            ("default".to_owned(), &identity),
+        ]);
+        let mut known = function(ContractClaim::Known(vec![]));
+        known.returns = ContractClaim::Known(Some(accessor.clone()));
+        let mut exports = BTreeMap::from([
+            ("createTicker".to_owned(), known.clone()),
+            ("default".to_owned(), summary.clone()),
+        ]);
+        unify_runtime_alias_summaries(&entities, &mut exports);
+        for merged in exports.values() {
+            assert!(merged.returns.is_open());
+            assert_eq!(merged.open_return, Some(accessor.clone()));
+        }
+        let mut exports = BTreeMap::from([
+            ("createTicker".to_owned(), undescribed),
+            ("default".to_owned(), summary),
+        ]);
+        unify_runtime_alias_summaries(&entities, &mut exports);
+        for merged in exports.values() {
+            assert_eq!(merged.open_return, None, "the aliases disagree");
+        }
     }
 
     // Before ADR 0174 the merge rebuilt every alias from an empty summary, and
