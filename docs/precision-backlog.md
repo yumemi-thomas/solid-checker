@@ -1,5 +1,26 @@
 # Precision backlog
 
+## A shorthand property is a structural member (2026-10-05)
+
+ADR 0181. A returned object written with shorthand properties (`{ value }`) is
+a literal structure. The producer resolves each shorthand's value symbol, the
+census accepts its one key/value span, and the generator resolves its member
+through the binder.
+
+- **Gained:** three ledger violations (70 -> 73 of 123): `createEventStack`
+  and `createFullscreen`, both runtime-detected, and `createDropzone`, the same
+  mechanism, which the harness could not run (its dev server answered 500 for
+  both twins). No twin flagged, no checkpoint row changed, ten exports gained a
+  returned-accessor claim and none lost one. The corpus proposes shorthand
+  objects in eleven fixtures, all census-decided.
+- **Still open:**
+  - `createOrientation`: its synthesized veto has no sample that completes
+    normally in the probe environment;
+  - `createNotification`: a member mismatch the refusal text does not yet
+    name;
+  - a shorthand with a string key, a default, or a computed key stays
+    refused.
+
 ## A plain signal's read ignores its options (2026-10-05)
 
 ADR 0180. The inert `createSignal` accessor row discharges a non-spread

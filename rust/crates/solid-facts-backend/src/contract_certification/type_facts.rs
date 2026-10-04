@@ -21738,6 +21738,62 @@ mod tests {
     }
 
     #[test]
+    /// ADR 0181: a shorthand property states its key and its value at the
+    /// one identifier span, and is accepted; any other key/value overlap is
+    /// still refused.
+    fn structural_object_returns_accept_a_shorthand_property_at_one_span() {
+        let at = |start, end| json!({"path":"/p/index.js", "startByte":start, "endByte":end});
+        let leaf =
+            |start, end| json!({"location":at(start,end), "kind":"leaf", "primitiveSyntax":true});
+        let tree = |key: serde_json::Value, value: serde_json::Value| {
+            json!({"location":at(15,35), "kind":"object", "complete":true,
+                "properties":[{"name":"x", "key":key, "value":value}]})
+        };
+        let mut op = operation("return", OperationKind::Return, Default::default());
+        op.trigger = Some(solid_reactive_ir::contract_semantics::Trigger::Event(
+            solid_reactive_ir::contract_semantics::Event::Call,
+        ));
+        op.at = Some(solid_reactive_ir::contract_semantics::Event::Call);
+        op.schedule = Some(solid_reactive_ir::contract_semantics::Schedule::SameStack);
+        op.tracking = solid_reactive_ir::contract_semantics::Tracking::Untracked;
+        op.cardinality = per_call_cardinality(Some(0));
+        op.output = Some(ValueShape::Object(KnowledgeSet::Partial(vec![
+            solid_reactive_ir::contract_semantics::ObjectProperty {
+                name: "x".into(),
+                value: ValueShape::Plain,
+            },
+        ])));
+        let mut export = export_semantics(vec![], vec![]);
+        export.call = solid_reactive_ir::contract_semantics::CallSemantics::new(
+            solid_reactive_ir::contract_semantics::CallClaims {
+                returns: KnowledgeSet::Partial(vec![OperationId("return".into())]),
+                ..Default::default()
+            },
+            vec![op],
+            vec![],
+            vec![],
+            solid_reactive_ir::contract_semantics::GuardPartition {
+                cases: KnowledgeSet::Unknown,
+            },
+        );
+        let census = |structure: serde_json::Value| {
+            let implementation = serde_json::from_value(json!({"location":at(2,5), "declaration":{"kind":"function","location":at(0,60)}, "completionForm":"plain",
+            "controlFlow":{"bodyLocation":at(5,60), "endReach":"unreachable", "returns":[{
+                "location":at(10,40), "reach":"reachable", "value":primitive_census_value(json!({"mayBeObject":true}), "nonCallable"),
+                "structure":structure
+            }]}}))
+            .unwrap();
+            structural_returns::return_sites(&export, &implementation, &consumer_snapshot(), &[])
+        };
+        census(tree(at(16, 17), leaf(20, 21))).expect("an ordinary property");
+        census(tree(at(16, 17), leaf(16, 17))).expect("a shorthand property");
+        assert!(
+            census(tree(at(16, 19), leaf(17, 18))).is_err(),
+            "a key that overlaps its value without being it"
+        );
+    }
+
+    #[test]
     fn structural_returns_require_complete_trees_and_every_completion() {
         let at = |start, end| json!({"path":"/p/index.js", "startByte":start, "endByte":end});
         let leaf =

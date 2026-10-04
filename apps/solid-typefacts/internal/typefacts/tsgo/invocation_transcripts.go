@@ -1681,6 +1681,17 @@ func (p *project) returnedParameterIdentityLocked(implementation, expression *as
 // Lexical binding identity survives an await when no code can replace the
 // binding. This is deliberately separate from return identity: an async
 // function still wraps its result even when it returns an unwritten parameter.
+// referenceSymbolLocked answers the symbol an identifier reference reads. At a
+// shorthand property assignment's name (`{ value }`) the checker's symbol at
+// that location is the object literal's property, not the value binding the
+// shorthand reads, which has its own resolution (ADR 0181).
+func (p *project) referenceSymbolLocked(node *ast.Node) *ast.Symbol {
+	if node != nil && node.Parent != nil && ast.IsShorthandPropertyAssignment(node.Parent) && node.Parent.Name() == node {
+		return p.checker.GetShorthandAssignmentValueSymbol(node.Parent)
+	}
+	return p.checker.GetSymbolAtLocation(node)
+}
+
 func (p *project) unwrittenParameterIdentityLocked(implementation, expression *ast.Node) *typefacts.ParameterValueSource {
 	if implementation == nil {
 		return nil
@@ -1705,7 +1716,7 @@ func (p *project) unwrittenParameterIdentityLocked(implementation, expression *a
 	if expression == nil || !ast.IsIdentifier(expression) {
 		return nil
 	}
-	symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(expression))
+	symbol := p.canonicalSymbol(p.referenceSymbolLocked(expression))
 	// A redeclaration initializer replaces the parameter without appearing in
 	// the assignment-target census. Require the witnessed binding itself to
 	// have one declaration before treating it as the caller's original value.

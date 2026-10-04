@@ -13,7 +13,7 @@
             "sha256": "87a566d89b8834846ea929f314e585aecb286fd1c2fed7207d14cfc3cc99115d"
           },
           "exports": {
-            "Direct": "summary-4a4d05785774ba2392511c6285c283de19efcd1330a23d1aa96c0ba888c24e58",
+            "Direct": "summary-1f6cd68e1ece6283cb22f3c0f710d2156df074ee0c17d134eb3041d0bb209da9",
             "inert": "summary-a92036a905be73d15099362eafaa5fec79503e721807be33524d979de89f07d7"
           },
           "resolution": {
@@ -38,7 +38,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-4a4d05785774ba2392511c6285c283de19efcd1330a23d1aa96c0ba888c24e58": {
+    "summary-1f6cd68e1ece6283cb22f3c0f710d2156df074ee0c17d134eb3041d0bb209da9": {
       "call": {
         "callbacks": [
           {
@@ -110,6 +110,9 @@
             "id": "return",
             "kind": "return",
             "output": {
+              "closed": [
+                "properties"
+              ],
               "kind": "object",
               "properties": [
                 {

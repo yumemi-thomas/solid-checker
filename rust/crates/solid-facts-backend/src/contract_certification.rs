@@ -16947,14 +16947,25 @@ export const value = phantom;
     }
 
     /// `call` with every described-callable `return` removed and `returns`
-    /// left unknown, and with no other change.
+    /// left unknown, and with no other change. ADR 0181: a literal structural
+    /// return (now also proposed for a shorthand object) is removed the same
+    /// way; its census is pinned by the structural-return tracers.
     fn without_described_callable_returns(
         call: &solid_reactive_ir::contract_semantics::CallSemantics,
     ) -> solid_reactive_ir::contract_semantics::CallSemantics {
         let described = call
             .operations
             .iter()
-            .filter(|operation| matches!(operation.output, Some(ValueShape::DescribedCallable(_))))
+            .filter(|operation| {
+                matches!(
+                    operation.output,
+                    Some(
+                        ValueShape::DescribedCallable(_)
+                            | ValueShape::Tuple(_)
+                            | ValueShape::Object(_)
+                    )
+                )
+            })
             .map(|operation| operation.id.clone())
             .collect::<Vec<_>>();
         if described.is_empty() {

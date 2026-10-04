@@ -29,6 +29,11 @@ export's own body describes, as an item and never a closure: `Held` proposes
 `{ value: accessor }`, the local signal it created and hands back unchanged
 (the uncontracted `observe` cannot rebind a `const`), and the certifier's
 census proves it or withdraws it. `Derived` describes nothing locally, because
-its value comes back from `observe`, so it keeps nothing. That is what the fixture records: the arm's
+its value comes back from `observe`, so it keeps nothing. Since ADR 0181 its
+shorthand `{ derived }` is proposed as a structural return with a `plain`
+member, the generator's optimistic default. The census proves a plain member
+only from primitive evidence, which `observe`'s result is not, so the member
+is left `unknown` and the return withdrawn: no claim about `derived` is
+certified. That is what the fixture records: the arm's
 domains cannot be observed in isolation today, so the arm is fail-closed by
 construction rather than by proof. See docs/precision-backlog.md.

@@ -43,13 +43,25 @@ func (p *project) returnStructureLocked(implementation, expression *ast.Node) *t
 			result.Kind = "object"
 			names := make(map[string]bool)
 			for _, property := range node.AsObjectLiteralExpression().Properties.Nodes {
-				// Initially ordinary assignments only. Numeric/computed keys and
-				// shorthand defaults need their own exact key/value census.
-				if property == nil || nodeKindName(property) != "PropertyAssignment" {
+				// Ordinary assignments, and (ADR 0181) a shorthand `{ value }`,
+				// which is `{ value: value }`: its key and its value are the one
+				// identifier, whose value symbol the leaf resolves
+				// (referenceSymbolLocked). A shorthand default (`{ value = 1 }`)
+				// is only a destructuring target and stays refused, as do
+				// numeric and computed keys.
+				if property == nil {
+					return nil
+				}
+				shorthand := ast.IsShorthandPropertyAssignment(property)
+				if shorthand {
+					if property.AsShorthandPropertyAssignment().ObjectAssignmentInitializer != nil {
+						return nil
+					}
+				} else if nodeKindName(property) != "PropertyAssignment" {
 					return nil
 				}
 				key := property.Name()
-				if key == nil || !(ast.IsIdentifier(key) || ast.IsStringLiteral(key)) {
+				if key == nil || !(ast.IsIdentifier(key) || (!shorthand && ast.IsStringLiteral(key))) {
 					return nil
 				}
 				name := key.Text()
@@ -57,7 +69,11 @@ func (p *project) returnStructureLocked(implementation, expression *ast.Node) *t
 					return nil
 				}
 				names[name] = true
-				child := visit(property.Initializer(), depth+1)
+				value := key
+				if !shorthand {
+					value = property.Initializer()
+				}
+				child := visit(value, depth+1)
 				if child == nil {
 					return nil
 				}

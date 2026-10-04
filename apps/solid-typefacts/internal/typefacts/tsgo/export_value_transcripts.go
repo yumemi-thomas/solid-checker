@@ -1264,7 +1264,7 @@ func (p *project) returnValueSourcesLocked(expression *ast.Node) []typefacts.Imp
 		//
 		// This can only remove sources, never add one, so it tightens
 		// ReturnSite.Sources at the same time as the argument slots.
-		symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(node))
+		symbol := p.canonicalSymbol(p.referenceSymbolLocked(node))
 		if symbol == nil || len(symbol.Declarations) != 1 {
 			return
 		}

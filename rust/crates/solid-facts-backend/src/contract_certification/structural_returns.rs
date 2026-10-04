@@ -227,10 +227,14 @@ fn shape(
             let mut properties = Vec::new();
             let mut end = node.location.start_byte;
             for property in &node.properties {
+                // ADR 0181: a shorthand `{ value }` states its key and its
+                // value at the one identifier span; any other overlap still
+                // refuses.
+                let shorthand = property.key == property.value.location;
                 if property.name == "__proto__"
                     || !within(&property.key, &node.location)
                     || property.key.start_byte < end
-                    || property.key.end_byte > property.value.location.start_byte
+                    || (!shorthand && property.key.end_byte > property.value.location.start_byte)
                 {
                     return Err(
                         "object key spans overlap, reorder or escape their construction".into(),

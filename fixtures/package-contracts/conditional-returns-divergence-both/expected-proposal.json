@@ -2,7 +2,7 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:81ac2fb40dde0e0bcb260da90b9626ac3d3b7dc9d0895ccde2e2211c9d20d9b8",
+  "semanticDigest": "sha256:b8f0467fe604a8b9ea25b5b998acacc85db614a2d6bdda300408e6f9a2ccfc84",
   "closureCandidates": [
     {
       "claimId": "claim:v1:sha256:31c8ef192590309e750c0bd940ed2d0c901ff59d8d55f5f2389b2791c1196917",
@@ -1905,30 +1905,6 @@
           "kind": "operation-axis",
           "operation": "artifact-case:7d84d6eb07ccd28ecaef8c0108115842486277fa2f8335ec2f7f588db8b5fe56:Steady:operation:return-structural-0",
           "domain": "owner-cleanup-capability"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:d99ab6be171389960abcc85b0c8ea9956da4b08534338c6a29043e94093cc93f",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./node.js",
-        "runtimeDigest": "sha256:d929b2d5c7e32f89aa36523dc13e0feb1fbb58236a64b3f1ec01aaf0e90f4ec0",
-        "declarationsPath": "./node.js",
-        "declarationsDigest": "sha256:d929b2d5c7e32f89aa36523dc13e0feb1fbb58236a64b3f1ec01aaf0e90f4ec0",
-        "closureDigest": "sha256:1e4ab95bb1a45c76a202c2b49fc8c327abf3301b1d556597bf3b9dee6ac04510"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:83dd09f80a82e544b498335818d97e10bd8b11fdf994aff6ca73120b76b94a42",
-        "export": "Show",
-        "path": {
-          "kind": "value",
-          "root": {
-            "kind": "operation-output",
-            "operation": "artifact-case:83dd09f80a82e544b498335818d97e10bd8b11fdf994aff6ca73120b76b94a42:Show:operation:return"
-          },
-          "path": [],
-          "domain": "object-properties"
         }
       }
     },

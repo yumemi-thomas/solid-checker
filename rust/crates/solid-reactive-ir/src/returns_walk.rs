@@ -579,12 +579,32 @@ pub fn literal_structural_returns(
             (!symbol.is_empty()).then_some((symbol, u16::try_from(index).ok()?))
         })
         .collect::<std::collections::HashMap<_, _>>();
+    // ADR 0181: TypeScript answers a shorthand property's span with the
+    // property's symbol, so a member is also resolved through the binder's
+    // own reference table to the parameter's declaration.
+    let parameter_declarations = function
+        .parameters
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| {
+            p.shape == solid_facts::ast::BindingShape::Identifier
+                && p.initializer.is_none()
+                && p.names.len() == 1
+        })
+        .filter_map(|(index, p)| Some((p.names[0].span, u16::try_from(index).ok()?)))
+        .collect::<std::collections::HashMap<_, _>>();
     let member = |span: solid_facts::core::Span| {
         let span = file.ast.peel_ts_sugar_span(span);
         let parameter = symbols
             .get(&(u64::from(span.start), u64::from(span.end)))
             .and_then(|symbol| parameter_symbols.get(symbol))
-            .copied();
+            .copied()
+            .or_else(|| {
+                file.ast
+                    .reference_declaration(span)
+                    .and_then(|declaration| parameter_declarations.get(&declaration))
+                    .copied()
+            });
         parameter.map_or(ValueShape::Plain, |index| ValueShape::Parameter {
             index,
             path: vec![],
@@ -1185,7 +1205,8 @@ mod tests {
             ("function f() { return [, 2]; }", 0),
             ("function f() { return [1, ...tail]; }", 0),
             ("function f() { const a = [1, 2]; return a; }", 0),
-            ("function f(x) { return {x}; }", 0),
+            // ADR 0181: a shorthand is `{ x: x }`, a fixed member.
+            ("function f(x) { return {x}; }", 1),
             ("function f() { return {get x() { return 1; }}; }", 0),
             ("function f() { return {x() { return 1; }}; }", 0),
             ("function f() { return {...other, x: 1}; }", 0),

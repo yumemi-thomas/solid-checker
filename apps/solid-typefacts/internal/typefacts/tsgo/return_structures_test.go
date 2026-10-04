@@ -64,7 +64,8 @@ func TestReturnStructuresAreExhaustiveFreshLiteralCensuses(t *testing.T) {
 		{"escapedDuplicate", "({x: 1, '\\u0078': 2})", ""},
 		{"prototype", "({'__proto__': value})", ""},
 		{"binding", "value", ""},
-		{"shorthand", "({value})", ""},
+		{"shorthand", "({value})", "object"},
+		{"shorthandBeside", "({value, x: 1})", "object"},
 		{"numeric", "({1: value})", ""},
 		{"budget", "[" + strings.Repeat("1,", 129) + "]", ""},
 		{"depth", strings.Repeat("[", 10) + "1" + strings.Repeat("]", 10), ""},
@@ -85,6 +86,13 @@ func TestReturnStructuresAreExhaustiveFreshLiteralCensuses(t *testing.T) {
 			if test.name == "tuple" {
 				if len(got.Items) != 2 || !got.Items[0].PrimitiveSyntax || got.Items[1].Parameter == nil || got.Items[1].Parameter.ParameterIndex != 0 {
 					t.Fatalf("leaf evidence: %#v", got.Items)
+				}
+			}
+			// ADR 0181: a shorthand member's value is the binding it reads, the
+			// caller's parameter here, not the object literal's own property.
+			if test.name == "shorthand" {
+				if len(got.Properties) != 1 || got.Properties[0].Name != "value" || got.Properties[0].Value.Parameter == nil || got.Properties[0].Value.Parameter.ParameterIndex != 0 {
+					t.Fatalf("shorthand leaf evidence: %#v", got.Properties)
 				}
 			}
 			if test.name == "unknownLeaf" && (got.Items[0].PrimitiveSyntax || got.Items[0].Parameter != nil) {

@@ -13,7 +13,7 @@
             "sha256": "d929b2d5c7e32f89aa36523dc13e0feb1fbb58236a64b3f1ec01aaf0e90f4ec0"
           },
           "exports": {
-            "Show": "summary-b5a287d8430b8c7184bd77798a0299a95e33196421c37bbac1d8e286f31dd33d",
+            "Show": "summary-7820d7aed47b715a8c8b62553e3ad077a88ddd136c362ec585aa6c3efd4db313",
             "Steady": "summary-d2937e6efa8a1af96eec8dc02261432fc8fcf419730940836e12c32c17677e98"
           },
           "resolution": {
@@ -32,7 +32,7 @@
             "sha256": "d929b2d5c7e32f89aa36523dc13e0feb1fbb58236a64b3f1ec01aaf0e90f4ec0"
           },
           "exports": {
-            "Show": "summary-b5a287d8430b8c7184bd77798a0299a95e33196421c37bbac1d8e286f31dd33d",
+            "Show": "summary-7820d7aed47b715a8c8b62553e3ad077a88ddd136c362ec585aa6c3efd4db313",
             "Steady": "summary-d2937e6efa8a1af96eec8dc02261432fc8fcf419730940836e12c32c17677e98"
           },
           "resolution": {
@@ -156,7 +156,7 @@
       },
       "shape": "callable"
     },
-    "summary-b5a287d8430b8c7184bd77798a0299a95e33196421c37bbac1d8e286f31dd33d": {
+    "summary-7820d7aed47b715a8c8b62553e3ad077a88ddd136c362ec585aa6c3efd4db313": {
       "call": {
         "callbacks": [
           {
@@ -204,6 +204,9 @@
             "id": "return",
             "kind": "return",
             "output": {
+              "closed": [
+                "properties"
+              ],
               "kind": "object",
               "properties": [
                 {

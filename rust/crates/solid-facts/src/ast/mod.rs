@@ -1907,10 +1907,13 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                     let ObjectPropertyKind::ObjectProperty(property) = property else {
                         return false;
                     };
+                    // ADR 0181: a shorthand `{ value }` is `{ value: value }`;
+                    // its value is the identifier, resolved by the binder.
                     if property.kind != PropertyKind::Init
                         || property.method
-                        || property.shorthand
                         || property.computed
+                        || (property.shorthand
+                            && !matches!(property.value, Expression::Identifier(_)))
                     {
                         return false;
                     }
