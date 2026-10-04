@@ -2967,3 +2967,52 @@ fn a_structural_return_member_is_weakened_in_place() {
         "the return itself is kept"
     );
 }
+
+// ADR 0183: withdrawing a created owner keeps the invoke, resets its owner and
+// lower bound, and drops the owner resource only when nothing else names it.
+#[test]
+fn weakening_a_created_owner_keeps_the_invoke_and_drops_an_unnamed_resource() {
+    let case = artifact_case("case");
+    let created = |id: &str, owner: &str| {
+        let mut invoke = operation(id, OperationKind::Invoke);
+        invoke.owner.source = OwnerSource::Created(ResourceId(owner.into()));
+        invoke.cardinality.min = Some(1);
+        invoke
+    };
+    let mut lone = export(
+        &case,
+        "lone",
+        ValueShape::Plain,
+        call(
+            vec![created("invoke", "owner")],
+            vec![resource("owner", ResourceKind::Owner)],
+        ),
+    );
+    assert!(lone.weaken_created_owner(&OperationId("invoke".into())));
+    let invoke = &lone.call.operations[0];
+    assert_eq!(invoke.owner, OwnerRelation::default());
+    assert_eq!(invoke.cardinality.min, Some(0));
+    assert!(lone.call.resources.is_empty());
+
+    let mut lifetime = operation("read", OperationKind::Read);
+    lifetime.cardinality.scope = Some(CardinalityScope::Resource(ResourceId("owner".into())));
+    let mut shared = export(
+        &case,
+        "shared",
+        ValueShape::Plain,
+        call(
+            vec![created("invoke", "owner"), lifetime],
+            vec![resource("owner", ResourceKind::Owner)],
+        ),
+    );
+    assert!(shared.weaken_created_owner(&OperationId("invoke".into())));
+    assert_eq!(shared.call.resources.len(), 1, "a named resource is kept");
+
+    let mut plain = export(
+        &case,
+        "plain",
+        ValueShape::Plain,
+        call(vec![operation("invoke", OperationKind::Invoke)], vec![]),
+    );
+    assert!(!plain.weaken_created_owner(&OperationId("invoke".into())));
+}

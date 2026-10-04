@@ -1,0 +1,69 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "owned-computation-callbacks",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "derive",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createMemo",
+      "location": "<package-root>/index.js:263:277",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "deriveMaybe",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createMemo",
+      "location": "<package-root>/index.js:429:443",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "deriveWrapped",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createMemo",
+      "location": "<package-root>/index.js:779:801",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "watch",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createEffect",
+      "location": "<package-root>/index.js:567:596",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    }
+  ]
+}

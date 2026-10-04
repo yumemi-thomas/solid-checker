@@ -217,6 +217,7 @@ pub fn project_export_semantics(
         member_alias_spelling: None,
         returns_argument_containers: Vec::new(),
         direct_callback_parameters: BTreeSet::new(),
+        guaranteed_callback_parameters: project_guaranteed_callback_parameters(export),
         direct_accessor_parameters: BTreeSet::new(),
         direct_coerced_parameters: BTreeSet::new(),
         direct_member_callback_parameters: BTreeSet::new(),
@@ -847,6 +848,43 @@ fn project_owner_requirements(
         KnowledgeSet::Unknown if requirements.is_empty() => ContractClaim::Open,
         _ => ContractClaim::Known(requirements),
     }
+}
+
+/// ADR 0183: the parameters an accepted export invokes as an owned
+/// computation on every call: a `callbacks` item from the whole parameter
+/// whose `invoke` operation is tracked, at the call on the same stack, under a
+/// children-capable owner the operation creates, unguarded and counted per call
+/// with `min >= 1`. A created leaf owner (`createTrackedEffect`'s) exempts
+/// writes, so it is not one.
+fn project_guaranteed_callback_parameters(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> BTreeSet<usize> {
+    use crate::contract_semantics::{
+        CapabilityKnowledge, CardinalityScope, Event, Schedule, Trigger,
+    };
+    export
+        .callbacks()
+        .items()
+        .iter()
+        .filter_map(|callback| {
+            let ValueSource::Parameter { index, path } = &callback.from else {
+                return None;
+            };
+            let operation = export.operation(&callback.operation.0)?;
+            (path.is_empty()
+                && operation.kind == OperationKind::Invoke
+                && operation.guard.is_none()
+                && operation.tracking == Tracking::Tracked
+                && operation.trigger == Some(Trigger::Event(Event::Call))
+                && operation.at == Some(Event::Call)
+                && operation.schedule == Some(Schedule::SameStack)
+                && matches!(operation.owner.source, OwnerSource::Created(_))
+                && operation.owner.capabilities.child_owners == CapabilityKnowledge::Allowed
+                && operation.cardinality.scope == Some(CardinalityScope::Call)
+                && operation.cardinality.min.is_some_and(|min| min >= 1))
+            .then_some(usize::from(*index))
+        })
+        .collect()
 }
 
 /// ADR 0179: the owner registrations an accepted export makes on its
@@ -3297,6 +3335,8 @@ pub(super) struct ContractAnalysis<'a> {
     /// Per node, the parameters the node calls itself, directly, in its own
     /// body (ADR 0100) -- see `InterproceduralGraphContribution`.
     pub(super) direct_callback_parameters: &'a [Vec<usize>],
+    /// Per node, ADR 0183's guaranteed owned-computation callback parameters.
+    pub(super) guaranteed_callback_parameters: &'a [Vec<usize>],
     /// Per node, the parameters it reads a property of or coerces directly in
     /// its own body (`interproc::direct_protocol_parameters`).
     pub(super) direct_protocol_parameters:
@@ -3322,6 +3362,7 @@ struct ContractExportNode<'a> {
     structured_return: Option<&'a ContractReturn>,
     callbacks: &'a [ContractCallback],
     direct_callback_parameters: &'a [usize],
+    guaranteed_callback_parameters: &'a [usize],
     direct_protocol_parameters: &'a [(crate::contract_semantics::InvokeProtocol, usize)],
     direct_member_callback_parameters: &'a [(usize, Vec<String>)],
     escaped_parameters: &'a [usize],
@@ -3337,6 +3378,7 @@ impl<'a> ContractExportNode<'a> {
             structured_return: analysis.structured_returns[index].as_ref(),
             callbacks: &analysis.callbacks[index],
             direct_callback_parameters: &analysis.direct_callback_parameters[index],
+            guaranteed_callback_parameters: &analysis.guaranteed_callback_parameters[index],
             direct_protocol_parameters: &analysis.direct_protocol_parameters[index],
             direct_member_callback_parameters: &analysis.direct_member_callback_parameters[index],
             escaped_parameters: &analysis.escaped_parameters[index],
@@ -3356,6 +3398,7 @@ fn contract_export_function(
         structured_return,
         callbacks,
         direct_callback_parameters,
+        guaranteed_callback_parameters,
         direct_protocol_parameters,
         direct_member_callback_parameters,
         escaped_parameters,
@@ -3516,6 +3559,7 @@ fn contract_export_function(
         // the callbacks domain above stayed known -- the generator's filter
         // reads both, and an open domain proposes nothing either way.
         direct_callback_parameters: direct_callback_parameters.iter().copied().collect(),
+        guaranteed_callback_parameters: guaranteed_callback_parameters.iter().copied().collect(),
         direct_member_callback_parameters: direct_member_callback_parameters
             .iter()
             .cloned()

@@ -2334,6 +2334,20 @@ fn discover_interprocedural_graph(
                             wrappers.extend(chain.wrappers);
                             Some((compose_callback_chain(&wrappers), wrappers))
                         });
+                // ADR 0183: with no enclosing callback position -- no chain, or
+                // one whose only wrapper is this slot's own -- the slot's owner
+                // answer is the row's. Only an eager owned-computation slot
+                // states one.
+                let eager_owned = composed
+                    .as_ref()
+                    .is_none_or(|(_, wrappers)| wrappers.len() == 1)
+                    && primitive.is_some_and(|slot| {
+                        lookup.dialect.eager_owned_computation_slot(
+                            slot,
+                            argument_index,
+                            call.arguments.len(),
+                        )
+                    });
                 // The wrappers, not just their composed word: `tracked` is an
                 // attribution word with no schedule column, and the schedule is
                 // the dialect's to state for each wrapper the callback sits
@@ -2375,6 +2389,23 @@ fn discover_interprocedural_graph(
                     }
                 };
                 if let Some((execution, detaches)) = word {
+                    let owned = eager_owned && execution == "tracked";
+                    // The lower bound is proposed only where the call covers
+                    // every normal completion of the owner's own body; the
+                    // census proves both again from the producer's facts.
+                    if owned
+                        && solid_facts::ast::completion_call_cover(
+                            std::path::Path::new(file.path.as_str()),
+                            &file.source,
+                            nodes[callback_owner].body,
+                            &[call.span],
+                            &[],
+                        ) == Some(true)
+                    {
+                        contribution
+                            .guaranteed_callback_parameters
+                            .push((nodes[callback_owner].span, parameter));
+                    }
                     contribution.callbacks.push((
                         nodes[callback_owner].span,
                         ContractCallback {
@@ -2384,7 +2415,7 @@ fn discover_interprocedural_graph(
                                 .then(|| composed_tracked_schedule(&wrappers)),
                             clears_tracking: detaches,
                             arguments: Vec::new(),
-                            owner: None,
+                            owner: owned.then(|| "created".into()),
                             protocol: crate::contract_semantics::InvokeProtocol::Call,
                             path: Vec::new(),
                         },
@@ -5134,6 +5165,7 @@ struct InterproceduralGraphAssembly<'a> {
     edges: &'a mut [Vec<usize>],
     invoked_parameters: &'a mut [Vec<usize>],
     direct_callback_parameters: &'a mut [Vec<usize>],
+    guaranteed_callback_parameters: &'a mut [Vec<usize>],
     direct_protocol_parameters: &'a mut [Vec<(crate::contract_semantics::InvokeProtocol, usize)>],
     direct_member_callback_parameters: &'a mut [Vec<(usize, Vec<String>)>],
     escaped_parameters: &'a mut [Vec<usize>],
@@ -5180,6 +5212,13 @@ impl InterproceduralGraphAssembly<'_> {
                 && !self.direct_callback_parameters[owner].contains(parameter)
             {
                 self.direct_callback_parameters[owner].push(*parameter);
+            }
+        }
+        for (owner, parameter) in &contribution.guaranteed_callback_parameters {
+            if let Some(owner) = node_index(*owner)
+                && !self.guaranteed_callback_parameters[owner].contains(parameter)
+            {
+                self.guaranteed_callback_parameters[owner].push(*parameter);
             }
         }
         for (owner, protocol, parameter) in &contribution.direct_protocol_parameters {
@@ -6277,6 +6316,7 @@ fn interprocedural_reads(
     let mut edges = vec![Vec::<usize>::new(); nodes.len()];
     let mut invoked_parameters = vec![Vec::<usize>::new(); nodes.len()];
     let mut direct_callback_parameters = vec![Vec::<usize>::new(); nodes.len()];
+    let mut guaranteed_callback_parameters = vec![Vec::<usize>::new(); nodes.len()];
     let mut direct_protocol_parameters =
         vec![Vec::<(crate::contract_semantics::InvokeProtocol, usize)>::new(); nodes.len()];
     let mut direct_member_callback_parameters =
@@ -6301,6 +6341,7 @@ fn interprocedural_reads(
             edges: &mut edges,
             invoked_parameters: &mut invoked_parameters,
             direct_callback_parameters: &mut direct_callback_parameters,
+            guaranteed_callback_parameters: &mut guaranteed_callback_parameters,
             direct_protocol_parameters: &mut direct_protocol_parameters,
             direct_member_callback_parameters: &mut direct_member_callback_parameters,
             escaped_parameters: &mut escaped_parameters,
@@ -6778,6 +6819,8 @@ fn interprocedural_reads(
                 && equivalent_callbacks(&callback_summaries[*candidate], &callback_summaries[first])
                 && invoked_parameters[*candidate] == invoked_parameters[first]
                 && direct_callback_parameters[*candidate] == direct_callback_parameters[first]
+                && guaranteed_callback_parameters[*candidate]
+                    == guaranteed_callback_parameters[first]
                 && direct_protocol_parameters[*candidate] == direct_protocol_parameters[first]
                 && direct_member_callback_parameters[*candidate]
                     == direct_member_callback_parameters[first]
@@ -7231,6 +7274,7 @@ fn interprocedural_reads(
         structured_returns: &structured_returns,
         callbacks: &callback_summaries,
         direct_callback_parameters: &direct_callback_parameters,
+        guaranteed_callback_parameters: &guaranteed_callback_parameters,
         direct_protocol_parameters: &direct_protocol_parameters,
         direct_member_callback_parameters: &direct_member_callback_parameters,
         escaped_parameters: &escaped_parameters,

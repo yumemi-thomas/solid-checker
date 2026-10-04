@@ -652,6 +652,28 @@ pub fn unambiguous_inert_accessor_read(name: &str, slot: ResultSlot) -> bool {
     !answers.is_empty() && answers.into_iter().all(|answer| answer)
 }
 
+/// ADR 0183: whether every dialect that canonically exports `name` states the
+/// callback at `argument` of a call with `argument_count` arguments runs
+/// eagerly as the compute of a computation the call creates
+/// ([`Dialect::eager_owned_computation_slot`]).
+#[must_use]
+pub fn unambiguous_eager_owned_computation_slot(
+    name: &str,
+    argument: usize,
+    argument_count: usize,
+) -> bool {
+    let answers = DIALECTS
+        .iter()
+        .copied()
+        .filter_map(|dialect| {
+            let primitive = dialect.primitive(name)?;
+            (dialect.name_of(primitive) == Some(name))
+                .then(|| dialect.eager_owned_computation_slot(primitive, argument, argument_count))
+        })
+        .collect::<Vec<_>>();
+    !answers.is_empty() && answers.into_iter().all(|answer| answer)
+}
+
 /// ADR 0180: whether every dialect that canonically exports `name` states its
 /// inert read ignores the options argument
 /// ([`Dialect::inert_read_ignores_options`]).
@@ -2685,6 +2707,24 @@ pub trait Dialect: Sync {
     /// primitives.
     fn inert_read_ignores_options(&self, primitive: Primitive) -> bool {
         let _ = primitive;
+        false
+    }
+
+    /// ADR 0183: whether a callback written at `argument` of a call of
+    /// `primitive` with `argument_count` arguments runs during that call, at
+    /// least once, as the compute of a computation the call creates -- under
+    /// that computation's own, children-capable owner.
+    ///
+    /// The default `false` states nothing. A dialect answers `true` only where
+    /// the runtime's eagerness is unconditional at that arity: an options
+    /// argument that can defer the first run (`lazy`) must not be present.
+    fn eager_owned_computation_slot(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> bool {
+        let _ = (primitive, argument, argument_count);
         false
     }
 

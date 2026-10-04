@@ -80,6 +80,17 @@ struct Cover {
 }
 
 impl Cover {
+    /// Whether `expression` is, whole, one candidate call. Optional members
+    /// can skip a non-optional outer call too, so callees are restricted to
+    /// identifiers; namespace/member witnesses remain open rather than
+    /// guessing optional-chain semantics.
+    fn candidate(&self, expression: &oxc_ast::ast::Expression<'_>) -> bool {
+        matches!(super::peel_ts_sugar(expression), oxc_ast::ast::Expression::CallExpression(call)
+            if !call.optional
+            && matches!(super::peel_ts_sugar(&call.callee), oxc_ast::ast::Expression::Identifier(_))
+            && self.candidates.contains(&(call.span.start, call.span.end)))
+    }
+
     fn statements(
         &mut self,
         statements: &[Statement<'_>],
@@ -87,7 +98,11 @@ impl Cover {
         depth: usize,
     ) -> Option<u8> {
         for statement in statements {
-            if paths == 0 {
+            // No live path, or every live path has already run a candidate:
+            // what follows cannot change either answer (ADR 0183), so it is
+            // not walked, and syntax this walk does not model there does not
+            // refuse a cover already made.
+            if paths == 0 || paths == 2 {
                 break;
             }
             paths = self.statement(statement, paths, depth)?;
@@ -117,23 +132,32 @@ impl Cover {
                 {
                     return Some(paths);
                 }
-                self.returns |= paths;
+                // `return a()` runs the call before it completes (ADR 0183).
+                let hit = returned
+                    .argument
+                    .as_ref()
+                    .is_some_and(|argument| self.candidate(argument));
+                self.returns |= if hit { 2 } else { paths };
                 Some(0)
             }
             Statement::ThrowStatement(_) => Some(0),
             Statement::ExpressionStatement(expression) => {
-                let expression = super::peel_ts_sugar(&expression.expression);
-                // Optional members can skip a non-optional outer call too.
-                // Restrict to identifier callees; namespace/member witnesses
-                // remain open rather than guessing optional-chain semantics.
-                let hit = matches!(expression, oxc_ast::ast::Expression::CallExpression(call)
-                    if !call.optional
-                    && matches!(super::peel_ts_sugar(&call.callee), oxc_ast::ast::Expression::Identifier(_))
-                    && self.candidates.contains(&(call.span.start, call.span.end)));
+                let hit = self.candidate(&expression.expression);
                 Some(if hit { 2 } else { paths })
             }
-            Statement::VariableDeclaration(_)
-            | Statement::FunctionDeclaration(_)
+            // `const x = a()` runs the call whenever the declaration completes
+            // (ADR 0183). Only a whole initializer counts; a call nested in one
+            // (`const x = flag && a()`) does not.
+            Statement::VariableDeclaration(declaration) => {
+                let hit = declaration.declarations.iter().any(|declarator| {
+                    declarator
+                        .init
+                        .as_ref()
+                        .is_some_and(|init| self.candidate(init))
+                });
+                Some(if hit { 2 } else { paths })
+            }
+            Statement::FunctionDeclaration(_)
             | Statement::ClassDeclaration(_)
             | Statement::EmptyStatement(_) => Some(paths),
             // Catch/finally, loops, switch, labels, with and jumps need their
@@ -211,6 +235,36 @@ mod tests {
             "obj?.a();",
         ] {
             assert_eq!(cover(body, &["a()", "a?.()", "obj?.a()"], &[]), Some(false));
+        }
+    }
+
+    #[test]
+    fn completion_cover_counts_a_whole_initializer_or_returned_call() {
+        assert_eq!(cover("const x = a();", &["a()"], &[]), Some(true));
+        assert_eq!(cover("const y = 1, x = a();", &["a()"], &[]), Some(true));
+        assert_eq!(cover("return a();", &["a()"], &[]), Some(true));
+        assert_eq!(
+            cover("if(flag) return a(); b();", &["a()", "b()"], &[]),
+            Some(true)
+        );
+        assert_eq!(
+            cover("if(flag) return 1; return a();", &["a()"], &[]),
+            Some(false)
+        );
+        assert_eq!(
+            cover("const x = a(); for (const k in x) b(k);", &["a()"], &[]),
+            Some(true)
+        );
+        assert_eq!(
+            cover("for (const k in flag) b(k); const x = a();", &["a()"], &[]),
+            None
+        );
+        for body in [
+            "const x = flag && a();",
+            "const x = () => a();",
+            "return flag ? a() : 0;",
+        ] {
+            assert_eq!(cover(body, &["a()"], &[]), Some(false), "{body}");
         }
     }
 

@@ -1,5 +1,24 @@
 # Precision backlog
 
+## A package's owned-computation callback is an owned scope (2026-10-05)
+
+ADR 0183. A callback a package hands, unconditionally, to `createMemo(fn)` or
+as `createEffect`'s compute is stated as tracked, during the call, under a
+created owner, with `min: 1`. A signal write directly in that callback is
+`SC2001`.
+
+- **Gained:** three ledger violations (74 -> 77 of 123), each
+  runtime-detected, with no twin flagged: `resolveFirst`,
+  `createDerivedStaticStore` and `createBodyCursor`. No checkpoint row
+  changed, and no claim was lost.
+- **Still open:**
+  - a caller's function called inside a compute the package writes
+    (`capitalize`, `createMemo(() => fn())`). The enclosing wrapper is not
+    composed into an owner claim;
+  - a memo created inside `createRoot` (`until`);
+  - a callback passed by name, a write in a function nested in a JSX
+    attribute's function, and a memo or effect called with options.
+
 ## A `const` call binding traces to its call (2026-10-05)
 
 ADR 0182. The producer traces a returned identifier bound once by `const x =

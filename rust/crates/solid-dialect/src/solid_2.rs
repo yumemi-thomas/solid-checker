@@ -5528,6 +5528,36 @@ impl Dialect for Solid2 {
         primitive == Primitive::CreateSignal
     }
 
+    /// ADR 0183. Source: `@solidjs/signals@2.0.0-rc.9`, `dist/dev-shared.js`
+    /// `computed` and `setupComputedNode`: `createMemo(fn, options)` builds a
+    /// computed node and ends with `!options?.lazy && recompute(self, true)`,
+    /// so with no options argument `fn` runs during the call, once, with the
+    /// new node as the current owner. The node is children-capable
+    /// (`CONFIG_CHILDREN_FORBIDDEN` is set only on leaf owners), so a signal
+    /// write there trips `setSignal`'s owned-scope guard. Probed on the rc.9 dev
+    /// and prod builds under Node 24, inside a `createRoot`: a memo with no
+    /// options ran its compute once at creation; one with `{ lazy: true }` did
+    /// not run; a compute that writes a signal raised
+    /// `REACTIVE_WRITE_IN_OWNED_SCOPE` in dev, rethrown when the memo was read
+    /// (prod has no guard). Only the one-argument call is stated: an options
+    /// argument can carry `lazy`.
+    ///
+    /// `createEffect(compute, effect)`'s compute is the same: probed the same
+    /// way, it ran once during the call (the effect function is queued), and a
+    /// write in it is caught and logged by the effect rather than thrown. Only
+    /// the two-argument call is stated, so no options argument is in play.
+    fn eager_owned_computation_slot(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> bool {
+        matches!(
+            (primitive, argument, argument_count),
+            (Primitive::CreateMemo, 0, 1) | (Primitive::CreateEffect, 0, 2)
+        )
+    }
+
     /// ADR 0162. Source: `@solidjs/signals@2.0.0-rc.9`, the audited release
     /// (`dist/prod/signals.js` `createMemo`, `accessor`; `dist/prod/core/core.js`
     /// `computed` and `read`). `createMemo(e, t)` is `accessor(computed(e, t))`

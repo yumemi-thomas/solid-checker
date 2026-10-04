@@ -1021,6 +1021,53 @@ impl ExportSemantics {
         true
     }
 
+    /// ADR 0183: withdraws the created-owner claim of an `invoke` and its
+    /// per-call lower bound, keeping the operation. The owner becomes the
+    /// default (unknown) relation, `min` becomes `0`, and the owner resource is
+    /// removed when nothing else in the export names it.
+    ///
+    /// The weakening the owned-computation census asks for when it cannot
+    /// prove the eager computation around the caller's value: every other
+    /// field of the row (tracking, schedule, inputs) keeps its own evidence,
+    /// which the census re-confirms. Returns `false`, changing nothing, when
+    /// the operation is not an `invoke` under an owner it creates.
+    pub fn weaken_created_owner(&mut self, operation: &OperationId) -> bool {
+        let Some(candidate) = self.call.operations.iter_mut().find(|candidate| {
+            candidate.id == *operation
+                && candidate.kind == OperationKind::Invoke
+                && matches!(candidate.owner.source, OwnerSource::Created(_))
+        }) else {
+            return false;
+        };
+        let OwnerSource::Created(resource) = candidate.owner.source.clone() else {
+            return false;
+        };
+        candidate.owner = OwnerRelation::default();
+        if candidate.cardinality.min.is_some_and(|min| min > 0) {
+            candidate.cardinality.min = Some(0);
+        }
+        // A name is a whole `ResourceId("…")` in the debug rendering, so one
+        // id never matches inside another.
+        let name = format!("{resource:?}");
+        let named = self
+            .call
+            .operations
+            .iter()
+            .any(|operation| format!("{operation:?}").contains(&name))
+            || self
+                .call
+                .resources
+                .iter()
+                .filter(|candidate| candidate.id != resource)
+                .any(|candidate| format!("{candidate:?}").contains(&name));
+        if !named {
+            self.call
+                .resources
+                .retain(|candidate| candidate.id != resource);
+        }
+        true
+    }
+
     /// [`Self::withhold_operations`], except that a seed in `narrowed` which is
     /// a non-call `invoke` (a property read, iteration, coercion or
     /// `hasInstance` of the caller's value) *narrows* `callbacks` instead of

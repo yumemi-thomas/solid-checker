@@ -1202,6 +1202,31 @@ pub(super) fn positive_fact_refusal_withholding(
                 .iter()
                 .find(|demand| demand.id().as_str() == demand_id)?;
             let (artifact_case, export, operation) = match demand.subject() {
+                // ADR 0183: a created owner resource is withdrawn with the
+                // one operation that creates it.
+                ProofDemandSubject::PositiveFact(PositiveFactSubject::Resource {
+                    artifact_case,
+                    export,
+                    resource,
+                    ..
+                }) => {
+                    let semantics = plan
+                        .selected_candidate
+                        .artifact_case(artifact_case)?
+                        .exports
+                        .get(export)?;
+                    let producer = semantics.call.operations.iter().find(|operation| {
+                        operation.owner.source
+                            == solid_reactive_ir::contract_semantics::OwnerSource::Created(
+                                solid_reactive_ir::contract_semantics::ResourceId(resource.clone()),
+                            )
+                    })?;
+                    (
+                        artifact_case.as_str(),
+                        export.as_str(),
+                        producer.id.0.clone(),
+                    )
+                }
                 ProofDemandSubject::PositiveFact(subject) => positive_fact_operation(subject)?,
                 // ADR 0172: an unsupported member enumeration withdraws the
                 // entire return operation. Keeping guessed positive members
@@ -1217,6 +1242,8 @@ pub(super) fn positive_fact_refusal_withholding(
                 .contains(type_facts::structural_returns::STRUCTURAL_MEMBERS_UNKNOWN_MARKER)
             {
                 WITHHELD_OPERATION_MEMBERS_UNKNOWN_PREFIX
+            } else if reason.contains(type_facts::OWNED_COMPUTATION_UNPROVEN_MARKER) {
+                WITHHELD_OPERATION_OWNER_WEAKENED_PREFIX
             } else {
                 WITHHELD_OPERATION_CENSUS_REFUSED_PREFIX
             };
@@ -2059,6 +2086,12 @@ pub const WITHHELD_OPERATION_NARROWED_PREFIX: &str =
 pub const WITHHELD_OPERATION_MEMBERS_UNKNOWN_PREFIX: &str =
     "structural members weakened to unknown: ";
 
+/// ADR 0183: the prefix of the reason an `invoke` carries when the
+/// owned-computation census could not prove the created owner it states (or the
+/// lower bound that rests on it). The owner claim and the bound are withdrawn
+/// and the operation is kept; the census re-confirms what remains.
+pub const WITHHELD_OPERATION_OWNER_WEAKENED_PREFIX: &str = "created owner weakened to unknown: ";
+
 /// The phrase `type_facts::require_protocol_use` writes, and only it, when the
 /// item it could not witness may narrow instead of opening its domain.
 pub(crate) const PROTOCOL_ITEM_NARROWS: &str = "the declared signature types the parameter primitive-only, so no caller code can run through it";
@@ -2198,6 +2231,50 @@ pub(crate) fn withheld_operation_weakening(
             .is_some_and(|export| {
                 export.weaken_return_members(&OperationId(operation.clone()), &paths)
             })
+        {
+            weakened.insert(key);
+        }
+    }
+    // ADR 0183: an operation every record of which only asks to withdraw its
+    // created owner keeps the operation without that claim.
+    let mut owner_only: BTreeSet<(String, String, String)> = BTreeSet::new();
+    for record in withheld {
+        let key = (
+            record.artifact_case.clone(),
+            record.export.clone(),
+            record.operation.clone(),
+        );
+        if record
+            .reason
+            .starts_with(WITHHELD_OPERATION_OWNER_WEAKENED_PREFIX)
+        {
+            owner_only.insert(key);
+        }
+    }
+    for record in withheld {
+        if !record
+            .reason
+            .starts_with(WITHHELD_OPERATION_OWNER_WEAKENED_PREFIX)
+            && !weakened.contains(&(
+                record.artifact_case.clone(),
+                record.export.clone(),
+                record.operation.clone(),
+            ))
+        {
+            owner_only.remove(&(
+                record.artifact_case.clone(),
+                record.export.clone(),
+                record.operation.clone(),
+            ));
+        }
+    }
+    for key in owner_only {
+        let (artifact_case, export_name, operation) = &key;
+        if artifact_cases
+            .iter_mut()
+            .find(|case| case.id == *artifact_case)
+            .and_then(|case| case.exports.get_mut(export_name))
+            .is_some_and(|export| export.weaken_created_owner(&OperationId(operation.clone())))
         {
             weakened.insert(key);
         }

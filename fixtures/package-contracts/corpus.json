@@ -85,6 +85,7 @@
     "opaque-callback-chain",
     "open-dynamic-import-attribution",
     "open-owner-requirements",
+    "owned-computation-callbacks",
     "owner-call-cover",
     "parameter-member-forwarded",
     "parameter-member-read",

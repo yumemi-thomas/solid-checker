@@ -4163,6 +4163,32 @@ fn verify_export_value_family(
                 && operation.cardinality.scope == Some(CardinalityScope::Call)
                 && operation.cardinality.min == Some(1)
                 && operation.cardinality.max == Some(UpperBound::Many);
+            // ADR 0183: an owned-computation callback invoked on every call.
+            // The strict floor its `min: 1` sets makes the operation's own
+            // evidence require the eager computation call to be one the
+            // producer states reachable and unconditional.
+            let invoked_every_call = operation.kind == OperationKind::Invoke
+                && matches!(operation.owner.source, OwnerSource::Created(_))
+                && operation.tracking == solid_reactive_ir::contract_semantics::Tracking::Tracked
+                && operation.schedule
+                    == Some(solid_reactive_ir::contract_semantics::Schedule::SameStack)
+                && operation.cardinality.scope == Some(CardinalityScope::Call)
+                && operation.cardinality.min == Some(1)
+                && operation.cardinality.max == Some(UpperBound::Many);
+            if invoked_every_call {
+                require_operation_evidence(
+                    plan,
+                    export,
+                    operation,
+                    proof,
+                    (implementation, transcript),
+                    transcripts,
+                    &open,
+                    &mut sites,
+                )?;
+                sites.push("operation-cardinality:per-call:1..many:owned-computation".into());
+                return Ok(sites);
+            }
             if registered_every_call {
                 let ordinary = require_operation_evidence(
                     plan,
@@ -4219,7 +4245,21 @@ fn verify_export_value_family(
             sites.push("operation-cardinality:per-call:0..many".into());
         }
         ProofFamily::RecursiveValueShape => {
-            if matches!(
+            if let ProofDemandSubject::PositiveFact(PositiveFactSubject::Resource {
+                resource,
+                ..
+            }) = &proof.subject
+            {
+                let (export, implementation) =
+                    require_export_implementation(plan, proof, transcript, &open)?;
+                require_owned_computation_resource(
+                    export,
+                    resource,
+                    implementation,
+                    &open,
+                    &mut sites,
+                )?;
+            } else if matches!(
                 &proof.subject,
                 ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
                     root: ValueRoot::Export,
@@ -6040,6 +6080,170 @@ fn operation_reachability_floor(
     ReachabilityFloor::Reachable
 }
 
+/// ADR 0183: the phrase every owned-computation refusal carries, and only
+/// those. The certifier reads it to withdraw the created owner and its lower
+/// bound from the operation, keeping the rest of the row, instead of
+/// withdrawing the operation.
+pub(crate) const OWNED_COMPUTATION_UNPROVEN_MARKER: &str = "owned computation unproven: ";
+
+/// ADR 0183: the caller's value at `source` is the argument of an eager owned
+/// computation slot (`createMemo(fn)`, `createEffect(compute, effect)`, by the
+/// dialect's [`solid_dialect::Dialect::eager_owned_computation_slot`]) in a
+/// call the export's own body makes -- direct, not captured, from `solid-js`,
+/// and admitted by `floor`. That callback runs during the call as the compute
+/// of a computation the call creates, under that computation's owner.
+fn require_owned_computation_callback(
+    implementation: &typefacts::ExportImplementationTranscript,
+    source: &ValueSource,
+    floor: ReachabilityFloor,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    for call in &implementation.calls {
+        if !is_call_expression(call)
+            || call.captured
+            || call.target.is_empty()
+            || call.target_module.as_ref() != "solid-js"
+            || !floor.admits_call(call)
+        {
+            continue;
+        }
+        for (argument, actual) in call.argument_parameters.iter().enumerate() {
+            if actual
+                .as_ref()
+                .is_some_and(|actual| parameter_value_source_exact(actual, source))
+                && solid_dialect::unambiguous_eager_owned_computation_slot(
+                    &call.target_name,
+                    argument,
+                    call.argument_parameters.len(),
+                )
+            {
+                sites.push(format!(
+                    "implementation-owned-computation-callback:{}:{}:{}:{}:{}",
+                    call.location.path,
+                    call.location.start_byte,
+                    call.location.end_byte,
+                    call.target_name,
+                    argument
+                ));
+                return Ok(());
+            }
+        }
+    }
+    Err(open(&format!(
+        "{OWNED_COMPUTATION_UNPROVEN_MARKER}callback is not the exact argument of an eager owned computation the export's own body creates"
+    )))
+}
+
+/// ADR 0183: an `invoke` whose owner the operation creates states exactly the
+/// relation the generator publishes for a children-capable computation, is
+/// tracked, at the call, on the same stack, and its callback is an eager owned
+/// computation's argument ([`require_owned_computation_callback`]).
+fn require_owned_computation_operation(
+    operation: &solid_reactive_ir::contract_semantics::Operation,
+    implementation: &typefacts::ExportImplementationTranscript,
+    source: &ValueSource,
+    floor: ReachabilityFloor,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    let OwnerSource::Created(resource) = &operation.owner.source else {
+        return Err(open(&format!(
+            "{OWNED_COMPUTATION_UNPROVEN_MARKER}owned-computation invoke creates no owner"
+        )));
+    };
+    // Field by field: the document does not close an owner's `productions`,
+    // so they read back open with the generator's one item.
+    let expected = crate::inferred_contract::owner_created(resource.clone(), false);
+    if operation.owner.requirements != expected.requirements
+        || operation.owner.capabilities != expected.capabilities
+        || operation.owner.lifetime != expected.lifetime
+        || operation.owner.productions.items() != expected.productions.items()
+        || operation.tracking != solid_reactive_ir::contract_semantics::Tracking::Tracked
+        || operation.schedule != Some(solid_reactive_ir::contract_semantics::Schedule::SameStack)
+        || operation.at != Some(solid_reactive_ir::contract_semantics::Event::Call)
+        || operation.guard.is_some()
+    {
+        return Err(open(&format!(
+            "{OWNED_COMPUTATION_UNPROVEN_MARKER}owned-computation invoke is not a tracked same-stack call under a children-capable created owner"
+        )));
+    }
+    require_owned_computation_callback(implementation, source, floor, open, sites)
+}
+
+/// ADR 0183: an owner resource is the one a single owned-computation `invoke`
+/// creates: the generator's exact owner shape, produced by exactly one
+/// operation, which itself passes [`require_owned_computation_operation`].
+fn require_owned_computation_resource(
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    resource: &str,
+    implementation: &typefacts::ExportImplementationTranscript,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    use solid_reactive_ir::contract_semantics::{
+        Lifetime, ResourceId, ResourceKind, ResourceState,
+    };
+    let id = ResourceId(resource.into());
+    let stated = export
+        .call
+        .resources
+        .iter()
+        .find(|candidate| candidate.id == id)
+        .ok_or_else(|| {
+            open(&format!(
+                "{OWNED_COMPUTATION_UNPROVEN_MARKER}resource is absent from the selected export"
+            ))
+        })?;
+    // The items, not the closure: the document states a resource's closed
+    // domains separately, and the generator's owner closes none of them, so
+    // its states and capabilities read back open. Closing them is a claim
+    // this census does not make.
+    if stated.kind != ResourceKind::Owner
+        || stated.states.is_closed()
+        || stated.states.items() != [ResourceState::OwnerActive, ResourceState::OwnerDisposed]
+        || stated.capabilities.is_closed()
+        || !stated.capabilities.items().is_empty()
+        || stated.lifetime != Some(Lifetime::Owner(id.clone()))
+    {
+        return Err(open(&format!(
+            "{OWNED_COMPUTATION_UNPROVEN_MARKER}owner resource is not the generator's created-owner shape"
+        )));
+    }
+    let producers = export
+        .call
+        .operations
+        .iter()
+        .filter(|operation| operation.owner.source == OwnerSource::Created(id.clone()))
+        .collect::<Vec<_>>();
+    let [operation] = producers.as_slice() else {
+        return Err(open(&format!(
+            "{OWNED_COMPUTATION_UNPROVEN_MARKER}owner resource is not created by exactly one operation"
+        )));
+    };
+    if operation.kind != OperationKind::Invoke {
+        return Err(open(&format!(
+            "{OWNED_COMPUTATION_UNPROVEN_MARKER}owner resource is not created by an invoke"
+        )));
+    }
+    let callback = export
+        .callbacks()
+        .items()
+        .iter()
+        .find(|callback| callback.operation == operation.id)
+        .ok_or_else(|| open(&format!("{OWNED_COMPUTATION_UNPROVEN_MARKER}owner resource's invoke has no exact callback source")))?;
+    require_owned_computation_operation(
+        operation,
+        implementation,
+        &callback.from,
+        operation_reachability_floor(operation),
+        open,
+        sites,
+    )?;
+    sites.push(format!("owned-computation-resource:{resource}"));
+    Ok(())
+}
+
 /// The floor the operation this callback binding invokes sets.
 ///
 /// Fails closed to the strict floor: a callback whose operation the export does
@@ -7490,7 +7694,21 @@ fn require_operation_evidence(
                     sites,
                 )
             } else {
-                require_parameter_flow(implementation, &callback.from, floor, open, sites)
+                require_parameter_flow(implementation, &callback.from, floor, open, sites)?;
+                // ADR 0183: an owner this callback runs under that the
+                // operation creates is the compute of an eager computation
+                // the export's own body creates around the caller's value.
+                if matches!(operation.owner.source, OwnerSource::Created(_)) {
+                    require_owned_computation_operation(
+                        operation,
+                        implementation,
+                        &callback.from,
+                        floor,
+                        open,
+                        sites,
+                    )?;
+                }
+                Ok(())
             }
         }
         OperationKind::Read => {
@@ -22570,6 +22788,180 @@ mod tests {
             &mut Vec::new(),
         )
         .expect_err("a cleanup registrar registers no computation");
+    }
+
+    // ADR 0183: an owned-computation callback is the caller's value as the
+    // exact argument of an eager owned computation slot the export's own body
+    // calls, from `solid-js`, and admitted by the floor.
+    #[test]
+    fn an_owned_computation_callback_is_an_eager_slot_of_a_direct_solid_call() {
+        let transcript = |target: &str,
+                          arguments: serde_json::Value,
+                          unconditional: bool,
+                          module: &str,
+                          captured: bool|
+         -> typefacts::ExportImplementationTranscript {
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "calls": [{
+                    "location": {"path": "/project/index.js", "startByte": 30, "endByte": 60},
+                    "reach": "reachable",
+                    "unconditional": unconditional,
+                    "kind": "call",
+                    "target": format!("symbol:{target}"),
+                    "targetName": target,
+                    "targetModule": module,
+                    "captured": captured,
+                    "argumentParameters": arguments
+                }]
+            }))
+            .unwrap()
+        };
+        let open = |reason: &str| TypeFactsCertificationError::UnsupportedDemand {
+            demand: "owned-computation".into(),
+            reason: reason.into(),
+        };
+        let first = parameter_source_at(0, &[]);
+        let fn_only = json!([{"parameterIndex": 0}]);
+        let fn_then_plain = json!([{"parameterIndex": 0}, null]);
+        let plain_then_fn = json!([null, {"parameterIndex": 0}]);
+
+        let mut sites = Vec::new();
+        require_owned_computation_callback(
+            &transcript("createMemo", fn_only.clone(), true, "solid-js", false),
+            &first,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut sites,
+        )
+        .expect("`createMemo(fn)` runs `fn` eagerly under the memo");
+        assert_eq!(
+            sites,
+            vec!["implementation-owned-computation-callback:/project/index.js:30:60:createMemo:0"]
+        );
+        require_owned_computation_callback(
+            &transcript(
+                "createEffect",
+                fn_then_plain.clone(),
+                true,
+                "solid-js",
+                false,
+            ),
+            &first,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut Vec::new(),
+        )
+        .expect("an effect's compute runs during the call under the effect");
+
+        for (label, implementation, floor) in [
+            (
+                "a memo with options may be lazy",
+                transcript("createMemo", fn_then_plain, true, "solid-js", false),
+                ReachabilityFloor::MayExecute,
+            ),
+            (
+                "an effect function is queued",
+                transcript("createEffect", plain_then_fn, true, "solid-js", false),
+                ReachabilityFloor::MayExecute,
+            ),
+            (
+                "a conditional call is no lower bound",
+                transcript("createMemo", fn_only.clone(), false, "solid-js", false),
+                ReachabilityFloor::Reachable,
+            ),
+            (
+                "another module's `createMemo` is not the primitive",
+                transcript("createMemo", fn_only.clone(), true, "./memo.js", false),
+                ReachabilityFloor::MayExecute,
+            ),
+            (
+                "a captured call runs when its closure does",
+                transcript("createMemo", fn_only.clone(), true, "solid-js", true),
+                ReachabilityFloor::MayExecute,
+            ),
+            (
+                "a leaf computation is not an owned-computation slot",
+                transcript("createTrackedEffect", fn_only, true, "solid-js", false),
+                ReachabilityFloor::MayExecute,
+            ),
+        ] {
+            require_owned_computation_callback(
+                &implementation,
+                &first,
+                floor,
+                &open,
+                &mut Vec::new(),
+            )
+            .expect_err(label);
+        }
+    }
+
+    // ADR 0183: the census reads the generator's owned-computation rows as the
+    // document states them, not as the generator built them -- the document
+    // closes neither the owner's productions nor the resource's states, so
+    // both read back open. Pinned on the corpus fixture's emitted document.
+    #[test]
+    fn an_emitted_owned_computation_row_reads_back_as_the_census_expects() {
+        let contract = crate::contract_document::decode(include_bytes!(
+            "../../../../../fixtures/package-contracts/owned-computation-callbacks/expected.json"
+        ))
+        .unwrap()
+        .normalize()
+        .unwrap();
+        let case = &contract.artifact_cases()[0];
+        let implementation: typefacts::ExportImplementationTranscript =
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "calls": [{
+                    "location": {"path": "/project/index.js", "startByte": 30, "endByte": 60},
+                    "reach": "reachable",
+                    "unconditional": true,
+                    "kind": "call",
+                    "target": "symbol:createMemo",
+                    "targetName": "createMemo",
+                    "targetModule": "solid-js",
+                    "argumentParameters": [{"parameterIndex": 0}]
+                }]
+            }))
+            .unwrap();
+        let open = |reason: &str| TypeFactsCertificationError::UnsupportedDemand {
+            demand: "owned-computation".into(),
+            reason: reason.into(),
+        };
+        let export = case.exports.get("derive").expect("derive");
+        let operation = export
+            .call
+            .operations
+            .iter()
+            .find(|operation| matches!(operation.owner.source, OwnerSource::Created(_)))
+            .expect("derive's callback states a created owner");
+        let OwnerSource::Created(resource) = &operation.owner.source else {
+            unreachable!()
+        };
+        let callback = export
+            .callbacks()
+            .items()
+            .iter()
+            .find(|callback| callback.operation == operation.id)
+            .expect("the row is a callbacks item");
+        require_owned_computation_operation(
+            operation,
+            &implementation,
+            &callback.from,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut Vec::new(),
+        )
+        .expect("the emitted row is the generator's owned-computation row");
+        require_owned_computation_resource(
+            export,
+            &resource.0,
+            &implementation,
+            &open,
+            &mut Vec::new(),
+        )
+        .expect("the emitted resource is the generator's created owner");
     }
 
     #[test]

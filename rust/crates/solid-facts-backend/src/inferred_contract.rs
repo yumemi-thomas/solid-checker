@@ -694,7 +694,21 @@ fn normalize_export(
                 .enumerate()
                 .map(|(index, callback)| {
                     let id = OperationId(format!("{prefix}callback-{index}"));
-                    operations.push(callback_operation(id.clone(), callback, &mut resources)?);
+                    let mut operation = callback_operation(id.clone(), callback, &mut resources)?;
+                    // ADR 0183: a tracked created-owner callback the export's own
+                    // body hands, unconditionally, to an eager owned computation
+                    // runs at least once on every call.
+                    if callback.path.is_empty()
+                        && callback.execution == "tracked"
+                        && callback.owner.as_deref() == Some("created")
+                        && operation.schedule == Some(Schedule::SameStack)
+                        && summary
+                            .guaranteed_callback_parameters
+                            .contains(&callback.parameter)
+                    {
+                        operation.cardinality.min = Some(1);
+                    }
+                    operations.push(operation);
                     Ok(CallbackInvocation {
                         from: ValueSource::Parameter {
                             index: u16::try_from(callback.parameter).map_err(|_| {
@@ -1522,7 +1536,7 @@ fn owner_ambient() -> OwnerRelation {
     }
 }
 
-fn owner_created(resource: ResourceId, leaf: bool) -> OwnerRelation {
+pub(crate) fn owner_created(resource: ResourceId, leaf: bool) -> OwnerRelation {
     let capabilities = OwnerCapabilities {
         child_owners: if leaf {
             CapabilityKnowledge::Forbidden

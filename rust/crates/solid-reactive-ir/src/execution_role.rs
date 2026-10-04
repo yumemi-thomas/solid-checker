@@ -1198,6 +1198,13 @@ fn semantic_execution_role_within(
     }) {
         return ExecutionRole::UntrackedCallback;
     }
+    // Ahead of the allowed regions: an accepted contract that leaves its
+    // `callbacks` enumeration open makes every argument of the call one of
+    // unproven timing, but a slot it states as a guaranteed owned computation
+    // is proven to run during the call whatever else the export does with it.
+    if let Some(role) = contract_owned_computation_callback_role(file, span, lookup) {
+        return role;
+    }
     if allowed.iter().any(|region| region.contains(span)) {
         return ExecutionRole::DeferredCallback;
     }
@@ -1279,6 +1286,44 @@ fn semantic_execution_role_within(
         return ExecutionRole::ModuleInitialization;
     }
     ExecutionRole::Unknown
+}
+
+/// ADR 0183: code directly in a function literal handed, as the whole
+/// argument, to an accepted contract export that states the slot is invoked
+/// on every call, during it, as the tracked compute of an owned computation
+/// the export creates ([`crate::ContractExport::guaranteed_callback_parameters`]).
+///
+/// That compute runs under the computation's own children-capable owner
+/// wherever the export is called, exactly as a `createMemo` compute does, so
+/// the role is the tracked callback's. A function nested in the literal, an
+/// element of an array or object written at the slot, a spread, and a function
+/// passed by name are not answered here. As for a primitive's tracked
+/// callback, a function handed on inside the literal, or written as an
+/// attribute value, is not proven to run in the compute's pass.
+fn contract_owned_computation_callback_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    let literal = containing_ast_function(&file.ast, span)?;
+    let (call, index) = file.ast.arguments_containing(span).find(|(call, index)| {
+        let argument = &call.arguments[*index];
+        !argument.spread
+            && file.ast.peel_ts_sugar_span(argument.span) == literal.span
+            && direct_callback_contains(file, argument.span, span)
+            && lookup.primitive_at_call(file, call.span).is_none()
+            && lookup
+                .callee_symbol(file, call.callee)
+                .and_then(|symbol| lookup.contract_guaranteed_callback_parameters(symbol))
+                .is_some_and(|parameters| parameters.contains(index))
+    })?;
+    Some(
+        if attribute_function_within(file, call.arguments[index].span, span, lookup) {
+            ExecutionRole::Unknown
+        } else {
+            ExecutionRole::TrackedJsx
+        },
+    )
 }
 
 /// [`ExecutionRole::DeferredCallback`] for code in a callback that a reviewed

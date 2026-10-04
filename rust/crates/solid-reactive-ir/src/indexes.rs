@@ -670,6 +670,19 @@ impl<'a> SemanticLookup<'a> {
             .map(|binding| binding.summary.leaf_forbidden_operations.as_slice())
     }
 
+    /// ADR 0183: the parameters an accepted contract states are invoked, on
+    /// every call and during it, as the tracked compute of an owned
+    /// computation the export creates.
+    pub(super) fn contract_guaranteed_callback_parameters(
+        &self,
+        symbol: &str,
+    ) -> Option<&std::collections::BTreeSet<usize>> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .map(|binding| &binding.summary.guaranteed_callback_parameters)
+    }
+
     pub(super) fn has_contract_binding(&self, symbol: &SymbolId) -> bool {
         self.resolved_contracts.by_symbol.contains_key(symbol)
     }

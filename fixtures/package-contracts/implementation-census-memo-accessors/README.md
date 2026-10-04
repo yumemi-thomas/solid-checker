@@ -17,6 +17,12 @@ would have proposed `plain` for the census to refuse.
 | `createBound` | `plain` | the memo is bound and written to (`memo.extra = 1`): not a whole call completion |
 | `readOnce` | `plain` | the completion is the memo's *value*, not the accessor |
 
+Since ADR 0183 the callback row of each caller's compute handed to
+`createMemo` also states the memo's created owner. `createLive`'s row
+carries `min: 1`, because its one call covers every completion;
+`createGuarded`'s and `createEither`'s two calls are each conditional, so
+theirs stay `min: 0`.
+
 This fixture pins generation only. The `solid-js` stub under `node_modules` is
 there for dialect selection and is not the audited archive, so no certification
 here could use it; the census's own premises are pinned on synthesized

@@ -59,7 +59,8 @@ that `callback-slot-derived-store-server` now pins.
   plus one field, so the compute runs during the creating call.
 - `derive` is the positive control. `createMemo`'s argument 0 is the compute in
   every 2.0 overload, unconditionally, so it needs no callability proof and keeps
-  its row.
+  its row. Since ADR 0183 the row also states the memo's created owner and
+  `min: 1`, because the call covers every completion.
 
 ## Dialect selection
 

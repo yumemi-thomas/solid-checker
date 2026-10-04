@@ -110,6 +110,22 @@ write position is never claimed as a violation. The matching read there is
 `strict-read-untracked` uncertifiable
 (`fixtures/reactive-ir/write-in-deferred-callback`).
 
+A package export's callback is a memo or effect compute when its accepted
+contract says so (ADR 0183). The contract must state that the export runs the
+argument on every call, during the call, tracked, under a children-capable
+owner the call creates. The generator states this only for a parameter the
+export's own body hands, unconditionally, to `createMemo(fn)` or as
+`createEffect(compute, effect)`'s compute. A write written directly in a
+function literal at that argument is then reported wherever the export is
+called, as in a `createMemo` compute. Not reported:
+
+- an export that only may run the callback;
+- an export with no owner claim for it;
+- a function passed by name;
+- a closure the compute only returns.
+
+The case is pinned by `fixtures/reactive-ir/package-owned-computation-consumer`.
+
 This is the static counterpart of Solid's dev-mode `REACTIVE_WRITE_IN_OWNED_SCOPE`
 error.
 

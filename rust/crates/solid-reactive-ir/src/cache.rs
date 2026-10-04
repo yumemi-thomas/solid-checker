@@ -219,6 +219,10 @@ pub(crate) struct InterproceduralGraphContribution {
     /// site (ADR 0100). Recorded beside the row rather than in it: the wire
     /// spells this and a primitive's inline position with the same word.
     pub(crate) direct_callback_parameters: Vec<(Span, usize)>,
+    /// ADR 0183: `(owner, parameter)` for a parameter written directly as an
+    /// eager owned-computation slot (`createMemo(fn)`) by a call that covers
+    /// every normal completion of the owner's body. A proposal input only.
+    pub(crate) guaranteed_callback_parameters: Vec<(Span, usize)>,
     /// `(owner, protocol, parameter index)` for a property read (`Get`) or a
     /// coercion (`Coerce`) of a parameter's own value written directly in the
     /// owner's body (item A of ways-to-improve § 3.3): the proposal input the

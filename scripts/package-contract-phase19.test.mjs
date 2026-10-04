@@ -317,7 +317,15 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       //
       // 178 adds owner-call-cover's main document, ADR 0173's pin that
       // alternative calls of one owner role propose a `min: 1` bound.
-      stableMainDocuments: 178,
+      //
+      // 179 adds partial-structural-return-consumer's hand-stated document
+      // (ADR 0177), and 180 package-leaf-registration-consumer's (ADR 0179);
+      // both landed without moving this pin.
+      //
+      // 182 adds owned-computation-callbacks' main document and
+      // package-owned-computation-consumer's hand-stated document, ADR 0183's
+      // generator and consumer pins.
+      stableMainDocuments: 182,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

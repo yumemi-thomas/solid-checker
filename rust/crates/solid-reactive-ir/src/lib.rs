@@ -1357,6 +1357,12 @@ pub struct ContractExport {
     /// can confirm site for site. A proposal input, never evidence: empty is
     /// "do not propose", and a summary no pass reached is empty.
     pub direct_callback_parameters: BTreeSet<usize>,
+    /// ADR 0183: the parameters whose callback row is an owned computation
+    /// (`tracked`, same-stack, owner `created`) invoked on every call. For a
+    /// local summary, the generator's proposal input: such a row publishes
+    /// `min: 1`, and the census proves it. For an accepted export, the rows
+    /// the document states that way. Empty is "no lower bound".
+    pub guaranteed_callback_parameters: BTreeSet<usize>,
     /// The parameters whose own value this export's own body reads a property
     /// of -- `v.length` with `v` the parameter itself, outside any nested
     /// callable, not in write position and not the callee of a call -- which
