@@ -33,6 +33,7 @@ pub const AST_FACTS_SCHEMA: u32 = 47;
 
 mod binding_references;
 mod class_obligation;
+mod completion_call_cover;
 mod component_value_flow;
 mod emission;
 mod host_constants;
@@ -48,6 +49,7 @@ mod unconditional_calls;
 
 pub use binding_references::import_binding_references;
 pub use class_obligation::{ClassObligation, ClassObligationKind, class_obligation};
+pub use completion_call_cover::completion_call_cover;
 pub use component_value_flow::{ComponentPropSite, ComponentValueFlow, component_value_flows};
 pub use host_constants::{
     HostConstantFold, HostConstantImport, HostConstantScope, exported_boolean_constant,

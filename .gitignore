@@ -179,6 +179,9 @@ fixtures/upstream-parity/.staging/
 # domain of the exports beside a proven owner requirement.
 !fixtures/package-contracts/open-owner-requirements/node_modules/
 !fixtures/package-contracts/open-owner-requirements/node_modules/**
+# ADR 0173: an rc.9-faithful effect/cleanup stub for the owner-call cover.
+!fixtures/package-contracts/owner-call-cover/node_modules/
+!fixtures/package-contracts/owner-call-cover/node_modules/**
 # Attribution-soundness fixtures. Each needs the solid-js stub for dialect
 # selection; uncaptured-source-return additionally needs the partial
 # `uncharted-helpers` contract, which is what makes its callee uncontracted.

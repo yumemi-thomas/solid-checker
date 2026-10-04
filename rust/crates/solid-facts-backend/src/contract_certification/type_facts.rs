@@ -7,6 +7,8 @@
 //! manifest, launches that exact path, and accepts evidence only through the
 //! resulting live session token.
 
+#[path = "owner_call_cover.rs"]
+mod owner_call_cover;
 #[path = "structural_returns.rs"]
 mod structural_returns;
 
@@ -4124,7 +4126,7 @@ fn verify_export_value_family(
             let (export, implementation) =
                 require_export_implementation(plan, proof, transcript, &open)?;
             let operation = proof_operation(export, proof)?;
-            require_operation_evidence(
+            let ordinary = require_operation_evidence(
                 plan,
                 export,
                 operation,
@@ -4133,7 +4135,11 @@ fn verify_export_value_family(
                 transcripts,
                 &open,
                 &mut sites,
-            )?;
+            );
+            if let Err(error) = ordinary {
+                owner_call_cover::require(plan, operation, implementation, census, &mut sites)
+                    .map_err(|_| error)?;
+            }
         }
         ProofFamily::OperationCardinality => {
             let (export, implementation) =
@@ -4158,7 +4164,7 @@ fn verify_export_value_family(
                 && operation.cardinality.min == Some(1)
                 && operation.cardinality.max == Some(UpperBound::Many);
             if registered_every_call {
-                require_operation_evidence(
+                let ordinary = require_operation_evidence(
                     plan,
                     export,
                     operation,
@@ -4167,7 +4173,11 @@ fn verify_export_value_family(
                     transcripts,
                     &open,
                     &mut sites,
-                )?;
+                );
+                if let Err(error) = ordinary {
+                    owner_call_cover::require(plan, operation, implementation, census, &mut sites)
+                        .map_err(|_| error)?;
+                }
                 sites.push("operation-cardinality:per-call:1..many".into());
                 return Ok(sites);
             }

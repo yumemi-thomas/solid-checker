@@ -9354,6 +9354,12 @@ fn generated_owner_requirements_by_symbol(
         }
     }
     let mut unconditional_calls = HashMap::<FunctionKey, Vec<solid_facts::core::Span>>::new();
+    // ADR 0173: the calls of one owner role that are not individually
+    // unconditional, by function, for the normal-completion cover below.
+    let mut cover_candidates = BTreeMap::<
+        (FunctionKey, CoverRole),
+        (usize, solid_facts::core::Span, Vec<solid_facts::core::Span>),
+    >::new();
     for requirement in program.missing_owners.iter().filter(|requirement| {
         !requirement.runtime_uncertain
             && !requirement.conditional_owner
@@ -9421,22 +9427,108 @@ fn generated_owner_requirements_by_symbol(
             .unwrap_or_default()
         });
         if !unconditional.contains(&site_call.span) {
+            if let Some(role) = CoverRole::of(requirement.operation) {
+                let file_index = facts
+                    .files
+                    .iter()
+                    .position(|candidate| std::ptr::eq(candidate, file))
+                    .expect("the file was found in this list");
+                let (_, _, candidates) = cover_candidates
+                    .entry((key.clone(), role))
+                    .or_insert_with(|| (file_index, function.body, Vec::new()));
+                if !candidates.contains(&site_call.span) {
+                    candidates.push(site_call.span);
+                }
+            }
             continue;
         }
-        indexed
+        mark_generated_owner_requirement_guaranteed(
+            &mut indexed,
+            &function_symbols,
+            &key,
+            requirement.operation,
+        );
+    }
+    // ADR 0173: alternative calls of one role that together run on every
+    // normal completion -- `if (a) createEffect(...) else
+    // createRenderEffect(...)` -- register on every call although neither is
+    // unconditional on its own. The census proves the same cover from the
+    // producer's facts or withdraws the bound by name. The emission source is
+    // already host-folded (ADR 0166), so a dead guard is `;` here.
+    for ((key, role), (file_index, body, candidates)) in cover_candidates {
+        let operation = role.operation();
+        if indexed
             .guaranteed_by_function
-            .entry(key.clone())
-            .or_default()
-            .insert(requirement.operation);
-        if let Some(Some(symbol)) = function_symbols.get(&key) {
-            indexed
-                .guaranteed_by_symbol
-                .entry(symbol.clone())
-                .or_default()
-                .insert(requirement.operation);
+            .get(&key)
+            .is_some_and(|guaranteed| guaranteed.contains(&operation))
+        {
+            continue;
+        }
+        let file = &facts.files[file_index];
+        if solid_facts::ast::completion_call_cover(
+            Path::new(file.path.as_str()),
+            &file.source,
+            body,
+            &candidates,
+            &[],
+        ) == Some(true)
+        {
+            mark_generated_owner_requirement_guaranteed(
+                &mut indexed,
+                &function_symbols,
+                &key,
+                operation,
+            );
         }
     }
     indexed
+}
+
+/// The owner roles a normal-completion cover may join (ADR 0173). A settled
+/// cleanup is its own role and the census has no cover for it; a boundary is
+/// withheld from publication altogether.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum CoverRole {
+    Effect,
+    Cleanup,
+}
+
+impl CoverRole {
+    const fn of(operation: solid_reactive_ir::OwnerRequirementOperation) -> Option<Self> {
+        match operation {
+            solid_reactive_ir::OwnerRequirementOperation::Effect => Some(Self::Effect),
+            solid_reactive_ir::OwnerRequirementOperation::Cleanup => Some(Self::Cleanup),
+            solid_reactive_ir::OwnerRequirementOperation::Boundary
+            | solid_reactive_ir::OwnerRequirementOperation::SettledCleanup => None,
+        }
+    }
+
+    const fn operation(self) -> solid_reactive_ir::OwnerRequirementOperation {
+        match self {
+            Self::Effect => solid_reactive_ir::OwnerRequirementOperation::Effect,
+            Self::Cleanup => solid_reactive_ir::OwnerRequirementOperation::Cleanup,
+        }
+    }
+}
+
+fn mark_generated_owner_requirement_guaranteed(
+    indexed: &mut GeneratedOwnerRequirements,
+    function_symbols: &HashMap<FunctionKey, Option<String>>,
+    key: &FunctionKey,
+    operation: solid_reactive_ir::OwnerRequirementOperation,
+) {
+    indexed
+        .guaranteed_by_function
+        .entry(key.clone())
+        .or_default()
+        .insert(operation);
+    if let Some(Some(symbol)) = function_symbols.get(key) {
+        indexed
+            .guaranteed_by_symbol
+            .entry(symbol.clone())
+            .or_default()
+            .insert(operation);
+    }
 }
 
 /// The function identity a `default` export's declaration sits in, which is the

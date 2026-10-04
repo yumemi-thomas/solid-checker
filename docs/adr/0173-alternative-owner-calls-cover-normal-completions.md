@@ -1,9 +1,8 @@
 # ADR 0173: alternative owner calls cover normal completions
 
-Date: 2026-10-01. Status: bounded implementation on the separate
-`codex/owner-cover-experiment` branch and published-package experiment;
-main-verifier and accepted-tier promotion deferred. No contract or Type Facts
-schema change. The prototype checkout is `.claude/worktrees/codex-owner-cover-experiment`.
+Date: 2026-10-01. Status: implemented. Promoted to the main verifier and
+generator on 2026-10-04 (see "Promotion" below); the prototype was the separate
+`codex/owner-cover-experiment` branch. No contract or Type Facts schema change.
 
 The existing `min: 1, max: many, scope: call` ownership registration claim needs
 a lower bound. ADR 0159's individual `unconditional` call is sufficient, but
@@ -45,3 +44,42 @@ contract gaps. Node and host-free guaranteed proposals refuse. Ten stronger
 claims across five other published packages all refuse, while six existing
 guaranteed claims survive. The [experiment report](../package-contract-v2/phase22/2026-10-01-owner-cover-experiment.md)
 separates proof feasibility from checkpoint coverage.
+
+## Promotion (2026-10-04)
+
+The certifier half (`owner_call_cover.rs`, `solid_facts::ast::completion_call_cover`)
+is carried over unchanged. One generator change is added. The generator now
+strengthens a possible registration in exactly the shape the census can prove:
+
+- `generated_owner_requirements_by_symbol` collects, per function and role
+  (effect or cleanup; never a settled cleanup or a boundary), the direct
+  dialect-primitive sites that are not individually unconditional;
+- it proposes `min: 1` when `completion_call_cover` covers every normal
+  completion of the function's own body with them.
+
+The emission source is already host-folded (ADR 0166), so a dead server guard
+is `;` there. The census reaches the same verdict from the producer's
+unreachable-return facts.
+
+A proposal the census cannot prove is withdrawn by name. It is not demoted to
+its `min: 0` item, which is the regression the experiment warned about. On the
+browser checkpoint no such withdrawal occurred.
+
+Pinned by:
+
+- `fixtures/package-contracts/owner-call-cover`:
+  - `listen` (two effect constructors, one per arm) proposes `min: 1`;
+  - the missing `else`, mixed roles and an early guard stay `min: 0`;
+- the prototype's syntax and source-binding tests.
+
+Measured with the browser tier regenerated
+([report](../package-contract-v2/phase22/2026-10-04-open-owner-requirements.md)):
+
+- the misuse ledger's static violations go from 49 to 53 of 123:
+  `createEventListener` (module scope and effect apply), `createScrollPosition`
+  and `createSwitchTransition`;
+- each is runtime-detected, and no correct twin is flagged.
+
+The cover is also what certifies `createSwitchTransition`. Its single
+`createRenderEffect` call fails the strict floor, because the producer does not
+state it unconditional, but it covers the function's every normal completion.

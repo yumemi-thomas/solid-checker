@@ -314,7 +314,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // 177 adds open-owner-requirements' main document, ADR 0174's pin that
       // an open owner-requirement list keeps its guaranteed items, and its
       // copy of partial-contract-package's partial contract.
-      stableMainDocuments: 177,
+      //
+      // 178 adds owner-call-cover's main document, ADR 0173's pin that
+      // alternative calls of one owner role propose a `min: 1` bound.
+      stableMainDocuments: 178,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
