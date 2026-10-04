@@ -8,7 +8,9 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -3269,6 +3271,45 @@ test("a name the lock does not select, or the registry will not serve, leaves th
     const unserved = await rootEnvironment(project, ["alpha"]);
     assert.deepEqual(unserved.names, ["alpha"]);
     assert.match(unserved.environmentNotAcquired, /^beta could not be identified .*published archive could not be acquired/);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+// ADR 0184: pnpm links a package at `node_modules/<name>` to its target under
+// `.pnpm/<name>@<version>/node_modules/<name>`, and places that package's own
+// dependencies beside the target only. From the link nothing is installed
+// above, so they are located from the importer's real path, as Node and
+// TypeScript resolve them.
+test("a pnpm-linked source locates its own dependencies beside its target", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-env-pnpm-link-"));
+  try {
+    writeRootSourceInstallWith(project, {
+      "pnpm-lock.yaml":
+        "lockfileVersion: '9.0'\n\npackages:\n\n" +
+        ["alpha", "beta", "gamma"]
+          .map(name => `  ${name}@1.0.0:\n    resolution: {integrity: sha512-${name}}\n`)
+          .join("\n")
+    });
+    const store = join(project, "node_modules/.pnpm/alpha@1.0.0/node_modules");
+    mkdirSync(store, { recursive: true });
+    renameSync(join(project, "node_modules/alpha"), join(store, "alpha"));
+    symlinkSync(join(store, "alpha"), join(project, "node_modules/alpha"), "dir");
+    writeFileSync(
+      join(store, "alpha/types/index.d.ts"),
+      `import type { T as G } from "gamma";\nexport type T = G;\n`
+    );
+    mkdirSync(join(store, "gamma/types"), { recursive: true });
+    mkdirSync(join(store, "gamma/dist"), { recursive: true });
+    writeFileSync(
+      join(store, "gamma/package.json"),
+      `{"name":"gamma","version":"1.0.0","exports":{".":{"types":"./types/index.d.ts","import":"./dist/index.js"}}}\n`
+    );
+    writeFileSync(join(store, "gamma/types/index.d.ts"), "export type T = () => void;\n");
+    writeFileSync(join(store, "gamma/dist/index.js"), "export {};\n");
+    const result = await rootEnvironment(project, ["alpha", "beta", "gamma"]);
+    assert.equal(result.environmentNotAcquired, null);
+    assert.deepEqual(result.names, ["alpha", "beta", "gamma"]);
   } finally {
     rmSync(project, { recursive: true, force: true });
   }

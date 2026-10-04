@@ -1273,14 +1273,37 @@ function createCompilerSourceCollector({
   const locateExternalFrom = (ownerRoot, dependency) => {
     if (nodeBuiltinSpecifier(dependency.specifier)) return null;
     const dependencyName = packageNameOfSpecifier(dependency.specifier);
-    const dependencyImporter = resolve(
+    // ADR 0184: from the importer's written path first, and from its real
+    // path when nothing is installed above the written one. A pnpm link's own
+    // dependencies sit beside its target under `.pnpm/<name>@<version>/
+    // node_modules`, not above the link (`app/node_modules/solid-js` finds no
+    // `@solidjs/signals`); that target is where Node and TypeScript (without
+    // `preserveSymlinks`) resolve them.
+    const writtenImporter = resolve(
       ownerRoot,
       dependency.importerPath ?? dependency.source
     );
-    const dependencyRoot = locateExternalDependencyPackageRoot(
-      dependencyImporter,
-      dependency
-    );
+    let dependencyImporter = writtenImporter;
+    let dependencyRoot;
+    try {
+      dependencyRoot = locateExternalDependencyPackageRoot(writtenImporter, dependency);
+    } catch (error) {
+      let realImporter = writtenImporter;
+      try {
+        realImporter = realpathSync(writtenImporter);
+      } catch {
+        // A missing file keeps its written path, and the first error stands.
+      }
+      if (
+        realImporter === writtenImporter ||
+        !(error instanceof ArtifactResolutionError) ||
+        error.code !== "package-not-found"
+      ) {
+        throw error;
+      }
+      dependencyImporter = realImporter;
+      dependencyRoot = locateExternalDependencyPackageRoot(realImporter, dependency);
+    }
     if (!dependencyRoot) return null;
     const dependencyManifest = JSON.parse(
       readFileSync(join(dependencyRoot, "package.json"), "utf8")

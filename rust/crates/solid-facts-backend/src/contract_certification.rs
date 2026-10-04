@@ -22831,6 +22831,66 @@ export const value = phantom;
         );
     }
 
+    /// One published package reached through two install paths (pnpm's link
+    /// and its `.pnpm` target) is two authenticated identities on one
+    /// private-project root. It is kept once, not withheld as a collision; a
+    /// source with the same name and other bytes still collides.
+    #[test]
+    fn one_source_package_through_two_install_paths_is_kept_once() {
+        let plan = dependency_consumer_plan(false);
+        let declarations = b"export type Callback = () => void;\n";
+        let link = "/project/node_modules/source-types";
+        // Outside the owner's installation root, as pnpm's store target is for
+        // a package whose own root is another `.pnpm` entry: both resolve to
+        // the private project's `node_modules/source-types`.
+        let target = "/store/.pnpm/source-types@3.0.0/node_modules/source-types";
+        let (authenticated, reasons) =
+            super::dependencies::retain_authenticated_source_packages_with_reasons(
+                &mut CertificationPlanningTransaction::new(),
+                vec![
+                    external_declaration_source("3.0.0", declarations, link, None),
+                    external_declaration_source("3.0.0", declarations, target, None),
+                ],
+            );
+        assert!(reasons.is_empty(), "{reasons:?}");
+        assert_eq!(
+            authenticated.len(),
+            2,
+            "two install paths are two identities"
+        );
+        let (kept, withheld) =
+            super::type_facts::retain_collision_free_source_packages_with_reasons(
+                &plan,
+                authenticated,
+            );
+        assert!(withheld.is_empty(), "{withheld:?}");
+        assert_eq!(kept.len(), 1);
+
+        let (authenticated, _) =
+            super::dependencies::retain_authenticated_source_packages_with_reasons(
+                &mut CertificationPlanningTransaction::new(),
+                vec![
+                    external_declaration_source("3.0.0", declarations, link, None),
+                    external_declaration_source(
+                        "3.0.0",
+                        b"export type Callback = () => number;\n",
+                        target,
+                        None,
+                    ),
+                ],
+            );
+        let (kept, withheld) =
+            super::type_facts::retain_collision_free_source_packages_with_reasons(
+                &plan,
+                authenticated,
+            );
+        assert!(kept.is_empty());
+        assert_eq!(
+            withheld.get("source-types").map(String::as_str),
+            Some("another authenticated source occupies the same installed root")
+        );
+    }
+
     /// Two authenticated versions of one dependency name refuse rather than one
     /// being chosen between.
     ///

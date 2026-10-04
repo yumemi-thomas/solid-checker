@@ -1101,9 +1101,25 @@ pub(super) fn retain_collision_free_source_packages_with_reasons(
         "/node_modules/{}/",
         plan.snapshot.package_name().replace('\\', "/")
     );
+    // The same published package reached through two install paths (pnpm's
+    // `node_modules/solid-js` link and its `.pnpm/…` target) is two requests
+    // with two identities, and both land on one private-project root. That is
+    // one package, not a collision: the witness program resolves either to
+    // the same authenticated bytes. It is kept once, carrying every request's
+    // resolution edges. Only sources differing in content collide.
+    let same_package =
+        |left: &super::dependencies::VerifiedGraphSourcePackage,
+         right: &super::dependencies::VerifiedGraphSourcePackage| {
+            left.snapshot.package_name() == right.snapshot.package_name()
+                && left.snapshot.package_version() == right.snapshot.package_version()
+                && left.snapshot.package_integrity() == right.snapshot.package_integrity()
+                && left.snapshot.root() == right.snapshot.root()
+                && left.snapshot.provenance_root() == right.snapshot.provenance_root()
+        };
+    let mut kept = Vec::<super::dependencies::VerifiedGraphSourcePackage>::new();
     let mut seen = std::collections::BTreeMap::<String, usize>::new();
     let mut withheld = std::collections::BTreeMap::<String, String>::new();
-    for source in &sources {
+    for source in sources {
         let marker = private_project_package_marker(
             plan,
             &source.installed_package_root,
@@ -1114,15 +1130,40 @@ pub(super) fn retain_collision_free_source_packages_with_reasons(
                 .entry(source.snapshot.package_name().to_owned())
                 .or_insert_with(|| "occupies the certified package's own root".to_owned());
         }
-        if seen.insert(marker, 0).is_some() {
-            withheld
-                .entry(source.snapshot.package_name().to_owned())
-                .or_insert_with(|| {
-                    "another authenticated source occupies the same installed root".to_owned()
-                });
+        match seen.get(&marker) {
+            Some(&index) if same_package(&kept[index], &source) => {
+                // The copy kept is the canonical one where both are on disk: a
+                // pnpm link resolves its own dependencies from its target's
+                // directory, not from the link's.
+                let canonical = |root: &str| {
+                    std::fs::canonicalize(root).is_ok_and(|path| path == Path::new(root))
+                };
+                let mut source = source;
+                if canonical(&source.installed_package_root)
+                    && !canonical(&kept[index].installed_package_root)
+                {
+                    std::mem::swap(&mut kept[index], &mut source);
+                }
+                for edge in source.resolved_from {
+                    if !kept[index].resolved_from.contains(&edge) {
+                        kept[index].resolved_from.push(edge);
+                    }
+                }
+            }
+            Some(_) => {
+                withheld
+                    .entry(source.snapshot.package_name().to_owned())
+                    .or_insert_with(|| {
+                        "another authenticated source occupies the same installed root".to_owned()
+                    });
+            }
+            None => {
+                seen.insert(marker, kept.len());
+                kept.push(source);
+            }
         }
     }
-    let sources = sources
+    let sources = kept
         .into_iter()
         .filter(|source| !withheld.contains_key(source.snapshot.package_name()))
         .collect();

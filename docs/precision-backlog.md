@@ -1,5 +1,23 @@
 # Precision backlog
 
+## One installed package is one declaration source (2026-10-05)
+
+ADR 0184. In pnpm installs, a package certified in place was refused admission
+for two reasons. One `solid-js` reached through its link and its `.pnpm`
+target counted as two colliding sources, and its own dependencies were looked
+up from the link. Both are fixed, and a refused admission now names each
+dropped source's reason.
+
+- **Gained:** 38-app local certification goes from 90 to 100 of 180. One new
+  true-positive violation (`spotify-desk-thing`, a `useMutation` store member
+  read in an effect apply); the eight earlier ones are kept.
+- **Still open:**
+  - `solid-js/store` not exported by a legacy renderer case;
+  - the `@tsrx/core` environment;
+  - emit refusals;
+  - witness acquisition;
+  - `preserveSymlinks` projects (the collector resolves real paths).
+
 ## A package's owned-computation callback is an owned scope (2026-10-05)
 
 ADR 0183. A callback a package hands, unconditionally, to `createMemo(fn)` or
