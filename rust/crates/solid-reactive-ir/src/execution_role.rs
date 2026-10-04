@@ -311,15 +311,18 @@ fn source_execution_role(
     allowed: &[Span],
 ) -> ExecutionRole {
     execution_role_where(&file.compiler, span, allowed, |callback| {
-        matches!(
-            callback.role,
-            solid_facts::compiler::CallbackRoleKind::Deferred
-                | solid_facts::compiler::CallbackRoleKind::Render
-        ) || file
-            .ast
-            .functions_within(callback.span)
-            .max_by_key(|function| function.span.end - function.span.start)
-            .is_some_and(|function| function.body.contains(span))
+        // A component's `ref` is a prop, not an ownerless ref application.
+        (callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply
+            || crate::owners::ref_application_on_intrinsic(file, callback.span))
+            && (matches!(
+                callback.role,
+                solid_facts::compiler::CallbackRoleKind::Deferred
+                    | solid_facts::compiler::CallbackRoleKind::Render
+            ) || file
+                .ast
+                .functions_within(callback.span)
+                .max_by_key(|function| function.span.end - function.span.start)
+                .is_some_and(|function| function.body.contains(span)))
     })
 }
 

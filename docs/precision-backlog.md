@@ -1,5 +1,37 @@
 # Precision backlog
 
+## Summary-attributed strict reads and component refs (2026-10-04)
+
+A full re-triage of the 366 violations left on the 48-project sweep
+(`rust/target/residual-triage/triage.md`, `verdicts.json`, five repros) found
+80 false positives (21.9%):
+
+- **77 are `strict-read-untracked` findings attributed through another
+  function's interprocedural summary.** The 96 such findings were 73 false (by
+  message shape; 77 by the triage's pattern tags), 16 benign and 0 user-visible
+  defects. The patterns (F2-F10): a helper returning an accessor counted as a
+  read, `merge()` getters, reads in timer/listener/geolocation callbacks,
+  default-parameter initializers, arrows a helper evaluates in an effect
+  compute, plain `untrack`, reads after `await`, lazy component props, and a
+  read placed at the hook call. All 187 direct findings, which include the 5
+  true defects, had no false positive.
+  - A read the summary path attributes to a call (`ReactiveRead::summary_attributed`,
+    set by both interprocedural constructors) is now uncertifiable, with a
+    message that says the helper's read is not proven to run during the call.
+  - A direct read of an accessor a hook or package returned (`count()`) stays
+    a proven violation.
+  - Coverage moved 35 strict-read findings in 17 fixtures from violation to
+    uncertifiable and nothing else.
+  - Reopening a proven path needs the callee-timing facts the triage names,
+    per pattern.
+- **3 come from a `ref` callback on a component** (solid-pixi in app-game). The
+  compiler's ref-application callback role is honoured only on intrinsic
+  elements (`owners::ref_application_on_intrinsic`), in the owner,
+  execution-role and directive-creation stages. A component receives `ref` as
+  a prop and calls it itself. Fixture `fp-owner-component-ref`, whose intrinsic
+  `<input ref>` control stays a proven `missing-owner`. The producer still
+  reports `RefApplication` for component refs; that belongs upstream.
+
 ## Package-internal reads and the onCleanup census row (2026-10-04)
 
 - **A package export reading its own state is not call-site misuse.** The

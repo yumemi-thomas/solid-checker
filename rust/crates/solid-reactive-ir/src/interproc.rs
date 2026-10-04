@@ -5842,6 +5842,7 @@ fn interprocedural_result_reads_for_file(
                     )) {
                         result.push(ReactiveRead {
                             package_internal: false,
+                            summary_attributed: true,
                             kind: "accessor".into(),
                             accessor: read.display.to_string().into(),
                             location: location(file.path.shared(), call.span),
@@ -5918,6 +5919,7 @@ fn interprocedural_result_reads_for_file(
                         file, call.span, execution, lookup,
                     ),
                     package_internal,
+                    summary_attributed: true,
                 });
             }
         }

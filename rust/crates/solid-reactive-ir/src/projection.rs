@@ -1090,6 +1090,16 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             // in this component, but the call site controls nothing about it:
             // the same warning fires for every correct use. It is the
             // package's behaviour, not proven misuse here.
+            // A read attributed through another function's summary: whether
+            // it runs while this call does is not established.
+            if read.summary_attributed && !read.package_internal && finding.kind != "uncertifiable"
+            {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "{}; this read happens inside {}'s body, and nothing proves it runs while this call does rather than later (from a timer, listener, getter, returned accessor or effect), so it is not proven to be read untracked here",
+                    finding.message, read.via
+                );
+            }
             if read.package_internal {
                 finding.kind = "uncertifiable".into();
                 finding.message = format!(

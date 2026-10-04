@@ -197,7 +197,15 @@ pub(crate) fn discover_directive_creations(ctx: &AnalysisContext<'_>, draft: &mu
     for file in &ctx.facts.files {
         for call in &file.ast.calls {
             let role = execution_role(&file.compiler, call.callee, &[]);
+            // A component's `ref` is a prop the component invokes itself, not
+            // an ownerless ref application.
+            let on_component = file.compiler.callback_roles.iter().any(|callback| {
+                callback.role == solid_facts::compiler::CallbackRoleKind::DirectiveApply
+                    && callback.span.contains(call.callee)
+                    && !crate::owners::ref_application_on_intrinsic(file, callback.span)
+            });
             if role == ExecutionRole::DirectiveApply
+                && !on_component
                 && let Some(primitive) =
                     call_primitive_name(file, call, ctx.entities, ctx.symbol_names, ctx.dialect)
                         .filter(|primitive| {
@@ -215,7 +223,9 @@ pub(crate) fn discover_directive_creations(ctx: &AnalysisContext<'_>, draft: &mu
             }
         }
         for callback in &file.compiler.callback_roles {
-            if callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply {
+            if callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply
+                || !crate::owners::ref_application_on_intrinsic(file, callback.span)
+            {
                 continue;
             }
             for call in file

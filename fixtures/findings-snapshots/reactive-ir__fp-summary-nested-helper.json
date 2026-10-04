@@ -4,7 +4,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fp-summary-nested-helper/App.tsx",
       "start": 2564,
@@ -14,7 +14,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fp-summary-nested-helper/App.tsx",
       "start": 2824,
@@ -24,7 +24,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fp-summary-nested-helper/App.tsx",
       "start": 3056,
@@ -34,7 +34,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fp-summary-nested-helper/App.tsx",
       "start": 3297,

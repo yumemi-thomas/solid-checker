@@ -785,7 +785,9 @@ pub(crate) fn find_missing_owners(
                 callback.role,
                 solid_facts::compiler::CallbackRoleKind::EventHandler
                     | solid_facts::compiler::CallbackRoleKind::DirectiveApply
-            ) {
+            ) || (callback.role == solid_facts::compiler::CallbackRoleKind::DirectiveApply
+                && !ref_application_on_intrinsic(file, callback.span))
+            {
                 continue;
             }
             if let Some(index) = owner_callback_index(
@@ -1288,7 +1290,9 @@ pub(crate) fn discover_owner_file(
             callback.role,
             solid_facts::compiler::CallbackRoleKind::EventHandler
                 | solid_facts::compiler::CallbackRoleKind::DirectiveApply
-        ) && let Some(target) = callback_target(callback.span)
+        ) && (callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply
+            || ref_application_on_intrinsic(file, callback.span))
+            && let Some(target) = callback_target(callback.span)
         {
             edges.push(SymbolicOwnerEdge {
                 source: None,
@@ -2198,6 +2202,29 @@ fn function_is_mount_root(
                         .is_some_and(|(target_file, target)| {
                             target_file.path == file.path && target.span == function.span
                         })
+            })
+    })
+}
+
+/// Whether a compiler ref/directive application role at `span` belongs to an
+/// intrinsic element. The runtime applies an intrinsic element's `ref` through
+/// `ref()` with no owner; a component (a capitalized or member tag) receives
+/// `ref` as an ordinary prop and invokes it whenever its own code does, often
+/// in its owned body. By JSX semantics a lowercase, non-member tag is
+/// intrinsic, so a callback written as an attribute value of any other element
+/// is not a proven ownerless application.
+pub(crate) fn ref_application_on_intrinsic(file: &solid_facts::FileFacts, span: Span) -> bool {
+    !file.ast.jsx_elements.iter().any(|element| {
+        let tag = file
+            .source
+            .get(element.name.span.start as usize..element.name.span.end as usize)
+            .unwrap_or_default();
+        let component = tag.contains('.') || tag.starts_with(|c: char| c.is_ascii_uppercase());
+        component
+            && element.attributes.iter().any(|attribute| {
+                attribute
+                    .expression
+                    .is_some_and(|value| file.ast.peel_ts_sugar_span(value).contains(span))
             })
     })
 }

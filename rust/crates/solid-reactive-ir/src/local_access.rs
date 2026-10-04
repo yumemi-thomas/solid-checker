@@ -436,6 +436,7 @@ impl LocalAccessContext<'_, '_> {
                 if reachable && seen.insert(key) {
                     result.reads.push(Arc::new(ReactiveRead {
                         package_internal: false,
+                        summary_attributed: false,
                         kind: returned.kind.into(),
                         accessor: returned.label.into(),
                         location: location(file.path.shared(), call.span),
@@ -535,6 +536,7 @@ impl LocalAccessContext<'_, '_> {
                 let display_name = call.static_callee(&file.source).unwrap_or(name);
                 result.reads.push(Arc::new(ReactiveRead {
                     package_internal: false,
+                    summary_attributed: false,
                     kind: "accessor".into(),
                     accessor: origin
                         .map_or_else(|| display_name.to_string(), |origin| origin.0.to_string())
@@ -656,6 +658,7 @@ impl LocalAccessContext<'_, '_> {
                     );
                 result.reads.push(Arc::new(ReactiveRead {
                     package_internal: false,
+                    summary_attributed: false,
                     kind: "accessor".into(),
                     accessor: display.into(),
                     location: location(file.path.shared(), call.span),
@@ -699,6 +702,7 @@ impl LocalAccessContext<'_, '_> {
                             // The export reading state its contract declares
                             // as its own, not a value this call passes in.
                             package_internal: crate::contract_declared_state(declaration),
+                            summary_attributed: false,
                             kind: kind.clone().into(),
                             accessor: name.clone().into(),
                             location: location(file.path.shared(), call.span),
@@ -757,6 +761,7 @@ impl LocalAccessContext<'_, '_> {
                     if let Some(reactive_symbol) = reactive_symbol {
                         result.reads.push(Arc::new(ReactiveRead {
                             package_internal: false,
+                            summary_attributed: false,
                             kind: "store-path".into(),
                             accessor: file
                                 .source_text(argument.span)
@@ -1006,6 +1011,7 @@ impl LocalAccessContext<'_, '_> {
                 });
             result.reads.push(Arc::new(ReactiveRead {
                 package_internal: false,
+                summary_attributed: false,
                 kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
                     "store-path".into()
                 } else {
@@ -1155,6 +1161,7 @@ impl LocalAccessContext<'_, '_> {
             }
             result.reads.push(Arc::new(ReactiveRead {
                 package_internal: false,
+                summary_attributed: false,
                 kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
                     "store-path".into()
                 } else {
