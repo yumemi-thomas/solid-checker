@@ -1,5 +1,17 @@
 # Precision backlog
 
+## Certifications under one condition set are not ambiguous (2026-10-05)
+
+ADR 0187. Several certifications of one artifact case under one condition
+set, each authenticated in the consumer's tree, used to refuse each other as
+"ambiguous". Now the one that checked the most environment premises is kept.
+
+- **Gained:** delivery. `viviana-ui-web`'s 213 `@tanstack/solid-router` imports
+  are admitted. No violation moved: that contract is partial
+  (`reactiveReads`, `returns` and `ownerRequirements` open).
+- **Still open:** the case kept may close fewer domains than another
+  candidate; choosing the strongest contract needs content-aware selection.
+
 ## The tier carries what the app corpus installs (2026-10-05)
 
 ADR 0186. The catalogs from in-place certification of the 38 apps are bundled

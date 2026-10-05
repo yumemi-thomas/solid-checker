@@ -1564,6 +1564,7 @@ pub(crate) fn admit_by_artifact<'a>(
                 acceptance.runtime_target.to_owned(),
                 acceptance.declaration_target.to_owned(),
                 acceptance.export_conditions.to_vec(),
+                environment.len(),
             ));
     }
     let mut admitted = Vec::new();

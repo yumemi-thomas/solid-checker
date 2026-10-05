@@ -1270,9 +1270,7 @@ pub(crate) fn admissible_cases<'a>(
     if declared.is_empty() {
         return same_hosts;
     }
-    select_declared_case(&same_hosts, declared)
-        .into_iter()
-        .collect()
+    select_declared_cases(&same_hosts, declared)
 }
 
 /// The host-target conditions a condition set names (ADR 0140).
@@ -1285,24 +1283,56 @@ fn host_targets(
         .collect()
 }
 
-fn select_declared_case<'a>(
+/// The most specific applicable case. Two equally specific cases under
+/// *different* condition sets is not something a declaration can resolve, so
+/// that refuses (empty).
+///
+/// Several under the *same* set are not a declaration question (ADR 0187).
+/// Each is a certification of this artifact case whose whole dependency
+/// environment this tree installs, as when several projects certified one
+/// package version in equivalent trees, so each one's claims were proven for
+/// exactly what is installed here, and any of them is sound. They may still
+/// state different claims (certified by different builds, or closing
+/// different domains), so they are not merged. The one kept is the one whose
+/// certification checked the most environment premises against this tree,
+/// then the smallest identity, so every run keeps the same one.
+fn select_declared_cases<'a>(
     reaching: &[&'a AuthenticCase],
     declared: &[String],
-) -> Option<&'a AuthenticCase> {
+) -> Vec<&'a AuthenticCase> {
     let applicable = reaching
         .iter()
+        .copied()
         .filter(|case| case.conditions.iter().all(|it| declared.contains(it)))
         .collect::<Vec<_>>();
-    let best = applicable.iter().map(|case| case.conditions.len()).max()?;
-    let mut most_specific = applicable
+    let Some(best) = applicable.iter().map(|case| case.conditions.len()).max() else {
+        return Vec::new();
+    };
+    let most_specific = applicable
+        .into_iter()
+        .filter(|case| case.conditions.len() == best)
+        .collect::<Vec<_>>();
+    let condition_set = |case: &AuthenticCase| {
+        case.conditions
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeSet<String>>()
+    };
+    if !most_specific
         .iter()
-        .filter(|case| case.conditions.len() == best);
-    match (most_specific.next(), most_specific.next()) {
-        (Some(one), None) => Some(**one),
-        // Two equally specific cases under different condition sets is not
-        // something a declaration can resolve. Refuse.
-        _ => None,
+        .all(|case| condition_set(case) == condition_set(most_specific[0]))
+    {
+        return Vec::new();
     }
+    most_specific
+        .into_iter()
+        .max_by(|left, right| {
+            left.environment_entries
+                .cmp(&right.environment_entries)
+                .then_with(|| right.identity.cmp(&left.identity))
+        })
+        .into_iter()
+        .collect()
 }
 
 /// One acceptance that reproduced its signed artifact root against this
@@ -1315,6 +1345,9 @@ pub(crate) struct AuthenticCase {
     /// entry names none.
     declaration_target: String,
     conditions: Vec<String>,
+    /// How many entries the acceptance's dependency environment states: the
+    /// premises its certification checked against this tree (ADR 0187).
+    environment_entries: usize,
 }
 
 impl AuthenticCase {
@@ -1327,12 +1360,14 @@ impl AuthenticCase {
         runtime_target: String,
         declaration_target: String,
         conditions: Vec<String>,
+        environment_entries: usize,
     ) -> Self {
         Self {
             identity,
             runtime_target,
             declaration_target,
             conditions,
+            environment_entries,
         }
     }
 
@@ -2166,6 +2201,7 @@ mod tests {
             runtime_target: runtime.to_owned(),
             declaration_target: "dist/index.d.ts".to_owned(),
             conditions: conditions.iter().map(|it| (*it).to_owned()).collect(),
+            environment_entries: 0,
         }
     }
 
@@ -2233,6 +2269,30 @@ mod tests {
         // A host whose conditions contain none of a case's is not that case.
         assert_eq!(selected(&cases, &["require"]), None);
         assert_eq!(selected(&cases, &["solid"]), None);
+    }
+
+    /// ADR 0187: several certifications of one artifact case under the same
+    /// condition set are not a declaration ambiguity. Each is an acceptance
+    /// whose whole environment this tree installs (several projects certified
+    /// the same version in equivalent trees), so one is kept: the one that
+    /// checked the most environment premises, then the smallest identity.
+    /// Equally specific cases under different sets still refuse.
+    #[test]
+    fn same_set_certifications_keep_the_most_premised_one() {
+        let premised = |identity: &str, entries: usize| AuthenticCase {
+            environment_entries: entries,
+            ..case(identity, "dist/esm/index.js", &["browser", "import"])
+        };
+        let same = [premised("b", 9), premised("a", 12), premised("c", 12)];
+        assert_eq!(
+            admissible(&same, &["browser", "csr", "development", "import"]),
+            ["a"]
+        );
+        let different = [
+            case("browser-import", "dist/index.js", &["browser", "import"]),
+            case("browser-solid", "dist/index.js", &["browser", "solid"]),
+        ];
+        assert!(admissible(&different, &["browser", "import", "solid"]).is_empty());
     }
 
     /// The linter case. ESLint and Oxlint hosts do not know their export
