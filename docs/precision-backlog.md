@@ -1,5 +1,29 @@
 # Precision backlog
 
+## Reads that run while a component renders (2026-10-06)
+
+ADR 0204. Proven `strict-read-untracked`:
+
+- a read two or more plain calls deep;
+- a top-level helper's default parameter read when the call omits the
+  argument;
+- a literal written as a component's prop when the component calls that prop
+  directly in its own body.
+
+"Directly in a body" now excludes a nested function's parameter list.
+
+- **Fixed:** three ADR 0201 false positives on the rc.13 corpus, each a read
+  in a nested function's default (`CardStack`, `ArrangePage`,
+  `SettingsModal.stories`).
+- **Gained:** four violations on the rc.13 corpus, reviewed in source.
+  Violations stay at 285 (+4, -4).
+- **Still open:**
+  - a summary keeps one origin per read symbol, so a body read can be hidden
+    by a default origin of the same symbol (`abr-viewer` `createWorkspace`,
+    now uncertifiable);
+  - chains through method calls, `await` or function values;
+  - props called only in JSX or a handler, or passed with a spread.
+
 ## A closed program has no unseen helper caller (2026-10-06)
 
 ADR 0203. In a closed program, an exported helper that invokes a member of

@@ -126,6 +126,17 @@ add("hook-reads-accessor-argument", "strict-read-untracked", "createSignal", "A 
     extra_m="\nfunction useSensor(read: () => number) {\n  const start = read();\n  console.log(start);\n}\n",
     extra_c="\nfunction useSensorLive(read: () => number) {\n  createEffect(() => read(), (value) => console.log(value));\n}\n")
 
+# ---- reads that run while a component renders (ADR 0204)
+add("hook-chain-reads-own-signal", "strict-read-untracked", "createSignal", "A hook called in the body calls another hook that reads a signal in its own body.",
+    "  const value = useOuter();\n  return <p>{value}</p>;",
+    "  const value = useOuterLive();\n  return <p>{value()}</p>;",
+    extra_m="\nfunction useInner() {\n  const [n] = createSignal(1);\n  return n();\n}\nfunction useOuter() {\n  return useInner();\n}\n",
+    extra_c="\nfunction useInnerLive() {\n  const [n] = createSignal(1);\n  return () => n();\n}\nfunction useOuterLive() {\n  return useInnerLive();\n}\n")
+add("default-parameter-read", "strict-read-untracked", "createSignal", "A helper called without an argument reads a signal in its default parameter during the call.",
+    "  const text = label();\n  return <p>{text}</p>;",
+    "  return <p>{label()}</p>;",
+    extra_m="\nconst [count] = createSignal(1);\nfunction label(value = count()) {\n  return `n=${value}`;\n}\n")
+
 json.dump({"format": "solid-checker-app-patterns-misuse", "version": 1,
            "note": "Plain-Solid misuse patterns from application code, each with a correct twin. Run through benchmarks/reviewed-package-models/development/misuse-runtime-ledger.mjs --cases; built by build_cases.py.",
            "cases": cases}, open("cases.json", "w"), indent=1)

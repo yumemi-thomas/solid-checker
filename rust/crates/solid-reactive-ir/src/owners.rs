@@ -205,6 +205,23 @@ pub(crate) fn containing_ast_function(
         .min_by_key(|function| function.body.end - function.body.start)
 }
 
+/// Whether `span` is written directly in `function`'s own body: inside the
+/// body, and inside no other function written there -- its body *or its
+/// parameter list*. A nested function's default parameter lies in the outer
+/// body but outside every nested body, so [`containing_ast_function`] alone
+/// names the outer function for it; that code runs only when the nested
+/// function is called (ADR 0204).
+pub(crate) fn written_directly_in(
+    ast: &solid_facts::ast::AstFacts,
+    function: &solid_facts::ast::FunctionFact,
+    span: Span,
+) -> bool {
+    function.body.contains(span)
+        && !ast
+            .functions_within(function.body)
+            .any(|nested| nested.span != function.span && nested.span.contains(span))
+}
+
 pub(crate) const OWNER_CONTEXT_OWNED: u8 = 1;
 pub(crate) const OWNER_CONTEXT_UNOWNED: u8 = 2;
 pub(crate) const OWNER_CONTEXT_LEAF: u8 = 4;

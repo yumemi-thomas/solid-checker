@@ -16,16 +16,17 @@ dev diagnostic its rule implies and the correct twin raises none. Its static
 verdict is the checker's finding for that rule on the misuse twin;
 `false-positive-on-correct` would mean a violation on the correct twin.
 
-Measured 2026-10-05 on rc.13 with ADR 0201 (`docs/precision-backlog.md`):
+Measured 2026-10-06 on rc.13 with ADR 0204 (`docs/precision-backlog.md`):
 
-- Runtime: 29 of 31 misuse twins raise their diagnostic in Chrome.
-- Static, on those 29:
-  - 26 are proven violations under the case's rule;
+- Runtime: 31 of 33 misuse twins raise their diagnostic in Chrome.
+- Static, on those 31:
+  - 29 are proven violations under the case's rule, including
+    `callback-prop-called-in-render` (uncertifiable before ADR 0204) and the
+    two cases ADR 0204 added, `hook-chain-reads-own-signal` and
+    `default-parameter-read`;
   - 2 are proven violations under another rule: `body-read-in-condition` by
     `components-return-once`, and `child-props-destructured` by
-    `no-destructure`;
-  - 1 is uncertifiable: `callback-prop-called-in-render`, a child calling a
-    callback prop in its body.
+    `no-destructure`.
 - No correct twin gets a violation.
 - The 2 runtime-silent cases (`on-settled-read`, `signal-in-tracked-effect`)
   are statically silent too.

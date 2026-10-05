@@ -34,7 +34,17 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/summary-direct-read/App.tsx",
+      "start": 758,
+      "end": 771,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/summary-direct-read/App.tsx",
       "start": 865,

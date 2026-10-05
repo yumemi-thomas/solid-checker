@@ -374,6 +374,30 @@
    "why": "A hook called in the body reads the accessor it receives, in its own body.",
    "misuse": "import { createEffect, createMemo, createSignal, createStore, createTrackedEffect, For, onCleanup, onSettled, Show } from \"solid-js\";\n\nfunction useSensor(read: () => number) {\n  const start = read();\n  console.log(start);\n}\n\nexport default function App() {\n  const [target] = createSignal(1);\n  useSensor(target);\n  return <p>{target()}</p>;\n}\n",
    "correct": "import { createEffect, createMemo, createSignal, createStore, createTrackedEffect, For, onCleanup, onSettled, Show } from \"solid-js\";\n\nfunction useSensorLive(read: () => number) {\n  createEffect(() => read(), (value) => console.log(value));\n}\n\nexport default function App() {\n  const [target] = createSignal(1);\n  useSensorLive(target);\n  return <p>{target()}</p>;\n}\n"
+  },
+  {
+   "id": "hook-chain-reads-own-signal",
+   "package": "solid-js",
+   "version": "2.0.0-rc.13",
+   "entrypoint": ".",
+   "export": "createSignal",
+   "class": "app-pattern",
+   "rule": "strict-read-untracked",
+   "why": "A hook called in the body calls another hook that reads a signal in its own body.",
+   "misuse": "import { createEffect, createMemo, createSignal, createStore, createTrackedEffect, For, onCleanup, onSettled, Show } from \"solid-js\";\n\nfunction useInner() {\n  const [n] = createSignal(1);\n  return n();\n}\nfunction useOuter() {\n  return useInner();\n}\n\nexport default function App() {\n  const value = useOuter();\n  return <p>{value}</p>;\n}\n",
+   "correct": "import { createEffect, createMemo, createSignal, createStore, createTrackedEffect, For, onCleanup, onSettled, Show } from \"solid-js\";\n\nfunction useInnerLive() {\n  const [n] = createSignal(1);\n  return () => n();\n}\nfunction useOuterLive() {\n  return useInnerLive();\n}\n\nexport default function App() {\n  const value = useOuterLive();\n  return <p>{value()}</p>;\n}\n"
+  },
+  {
+   "id": "default-parameter-read",
+   "package": "solid-js",
+   "version": "2.0.0-rc.13",
+   "entrypoint": ".",
+   "export": "createSignal",
+   "class": "app-pattern",
+   "rule": "strict-read-untracked",
+   "why": "A helper called without an argument reads a signal in its default parameter during the call.",
+   "misuse": "import { createEffect, createMemo, createSignal, createStore, createTrackedEffect, For, onCleanup, onSettled, Show } from \"solid-js\";\n\nconst [count] = createSignal(1);\nfunction label(value = count()) {\n  return `n=${value}`;\n}\n\nexport default function App() {\n  const text = label();\n  return <p>{text}</p>;\n}\n",
+   "correct": "import { createEffect, createMemo, createSignal, createStore, createTrackedEffect, For, onCleanup, onSettled, Show } from \"solid-js\";\n\nconst [count] = createSignal(1);\nfunction label(value = count()) {\n  return `n=${value}`;\n}\n\nexport default function App() {\n  return <p>{label()}</p>;\n}\n"
   }
  ]
 }

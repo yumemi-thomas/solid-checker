@@ -20,8 +20,8 @@ Every other attributed read stays uncertifiable (ADR 0185's precision fix,
 | `CallsReadArgument` | `SC1001` violation | `readArgument` calls its accessor argument in its body |
 | `CallsReadLater` | none | the read is in a returned closure, called in JSX |
 | `CallsReadAfterAwait` | `SC1001` uncertifiable | an async helper |
-| `CallsReadDefault` | none | a default-parameter read is not attributed (a missed finding, not a claim) |
-| `CallsReadThroughHelper` | `SC1001` uncertifiable | the read is two calls deep |
+| `CallsReadDefault` | `SC1001` violation | the call omits the argument, so `readDefault`'s default reads `count()` during the call (ADR 0204) |
+| `CallsReadThroughHelper` | `SC1001` violation | `readThroughHelper` calls `readNow` directly in its body, which reads directly in its own (ADR 0204) |
 | `CallsInJsxProp` | none | the prop getter runs where `Show`'s JSX reads it |
 
 Runtime: `fixtures/app-patterns-misuse` cases `body-read-through-local-helper`,

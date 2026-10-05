@@ -37,7 +37,7 @@ listener (`Spreads`, and `OmitSpread` through an `omit` view): rc.13's
 | Case | Finding | Why |
 | --- | --- | --- |
 | `UsesDirect`, `UsesWrapped`, `UsesChained`, `UsesLocal`, `UsesSpreads`, `UsesMerged`, `UsesOmitSpread`, `UsesConfirm`, `UsesAliasSpread`, `NestedInHandler` | none | the literal reaches only an event listener |
-| `UsesCallsDuringRender` | `SC1001` uncertifiable | the component calls the prop while rendering (a true defect, but this proof does not make claims) |
+| `UsesCallsDuringRender` | `SC1001` violation | the component calls the prop in its own body, so the literal runs while it renders (ADR 0204) |
 | `UsesSpreadsToCaller` | `SC1001` uncertifiable | spread onto that same component |
 | `UsesConfirmEagerly` | `SC1001` uncertifiable | `Confirm`'s literal handed to that same component |
 | `NestedOutsideHandler` | `SC1001` uncertifiable | an async helper's callback written in the body |

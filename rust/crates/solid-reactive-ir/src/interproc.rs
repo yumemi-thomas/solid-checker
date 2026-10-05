@@ -6124,6 +6124,58 @@ fn interprocedural_result_reads_for_file(
         .then(|| lookup.function_for_symbol(symbol))
         .flatten()
         .filter(|(_, callee)| !callee.r#async && !callee.generator);
+        // ADR 0204: a default-parameter initializer of a top-level callee runs
+        // during this call exactly when the call omits that argument. An
+        // accessor called directly in it (not in a function it creates) is
+        // read then, as one the body calls is. A helper nested in a rendering
+        // function is decided where its default is written
+        // (`callee_callback_timing`), which sees every call site.
+        if let Some((callee_file, callee)) = direct_callee
+            && crate::owners::containing_ast_function(&callee_file.ast, callee.span).is_none()
+            && !call.arguments.iter().any(|argument| argument.spread)
+        {
+            for parameter in callee.parameters.iter().skip(call.arguments.len()) {
+                let Some(default) = parameter.initializer else {
+                    continue;
+                };
+                for read_call in callee_file.ast.calls.iter().filter(|candidate| {
+                    default.contains(candidate.span)
+                        && !callee_file
+                            .ast
+                            .functions_within(default)
+                            .any(|nested| nested.span.contains(candidate.span))
+                }) {
+                    let Some(accessor) =
+                        entities.get(&location(callee_file.path.shared(), read_call.callee))
+                    else {
+                        continue;
+                    };
+                    if source_kinds.get(accessor.as_str()) != Some(&ReactiveSourceKind::Accessor) {
+                        continue;
+                    }
+                    let Some((display, declaration)) = accessors.get(accessor.as_str()) else {
+                        continue;
+                    };
+                    push_unique_summary_read(
+                        &mut effective,
+                        SummaryRead {
+                            symbol: accessor.clone(),
+                            display: display.clone(),
+                            kind: Some("accessor".into()),
+                            declaration: declaration.clone(),
+                            origin: location(file.path.shared(), call.span),
+                            origin_context: label.clone(),
+                            owner: None,
+                        },
+                    );
+                }
+            }
+        }
+        // ADR 0204: the functions this call enters synchronously, through
+        // calls written directly in each one's own body, outside JSX, each
+        // resolving to one synchronous project function. A read written
+        // directly in any of their bodies runs during this call.
+        let entered = std::cell::OnceCell::new();
         let read_is_direct = |read: &SummaryRead| -> bool {
             let Some((callee_file, callee)) = direct_callee else {
                 return false;
@@ -6135,7 +6187,27 @@ fn interprocedural_result_reads_for_file(
             let owned_here = target.is_some_and(|target| {
                 nodes[target].symbol.is_some() && nodes[target].symbol == read.owner
             });
-            if !owned_here || read.origin.path.as_ref() != callee_file.path.as_str() {
+            let (owner_file, owner) = if owned_here {
+                (callee_file, callee)
+            } else {
+                let Some(owner) = read
+                    .owner
+                    .as_ref()
+                    .and_then(|owner| lookup.function_for_symbol(owner.as_str()))
+                else {
+                    return false;
+                };
+                let entered: &Vec<(String, Span)> =
+                    entered.get_or_init(|| directly_entered_functions(callee_file, callee, lookup));
+                if !entered
+                    .iter()
+                    .any(|(path, span)| path == owner.0.path.as_str() && *span == owner.1.span)
+                {
+                    return false;
+                }
+                owner
+            };
+            if read.origin.path.as_ref() != owner_file.path.as_str() {
                 return false;
             }
             let (Ok(start), Ok(end)) = (
@@ -6145,9 +6217,7 @@ fn interprocedural_result_reads_for_file(
                 return false;
             };
             let origin = Span::new(start, end);
-            callee.body.contains(origin)
-                && crate::owners::containing_ast_function(&callee_file.ast, origin)
-                    .is_some_and(|function| function.span == callee.span)
+            crate::owners::written_directly_in(&owner_file.ast, owner, origin)
         };
         for read in effective {
             let direct = read_is_direct(&read);
@@ -6192,6 +6262,83 @@ fn interprocedural_result_reads_for_file(
         }
     }
     (result, dispatch_obligations, dependencies)
+}
+
+/// ADR 0204: every project function a synchronous call of `function` enters
+/// directly, `function` excluded: through a plain call written in its own body
+/// (not in a nested function, not in a default parameter, not in JSX) whose
+/// callee resolves to one synchronous project function, and so on from each.
+///
+/// A cycle makes the answer empty: whether a recursive call reaches a read
+/// depends on the values it is called with (`readA(2)` may never get to the
+/// branch that reads). The walk is bounded; past the bound it stops, which
+/// only proves less.
+fn directly_entered_functions(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<(String, Span)> {
+    let mut entered = Vec::new();
+    let mut path = vec![(file.path.to_string(), function.span)];
+    if enter_directly_called(file, function, lookup, &mut path, &mut entered) {
+        entered
+    } else {
+        Vec::new()
+    }
+}
+
+/// One step of [`directly_entered_functions`]: false on a cycle.
+fn enter_directly_called(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+    path: &mut Vec<(String, Span)>,
+    entered: &mut Vec<(String, Span)>,
+) -> bool {
+    const MAX_DEPTH: usize = 8;
+    for call in &file.ast.calls {
+        // A plain call: a method call dispatches on its receiver, which a
+        // subclass can override.
+        if !call.direct_callee
+            || !crate::owners::written_directly_in(&file.ast, function, call.span)
+            || file.ast.any_jsx_containing(call.span)
+        {
+            continue;
+        }
+        let candidates = lookup.callee_symbols(file, call.callee);
+        if candidates.len() > 1 {
+            continue;
+        }
+        let Some(symbol) = candidates
+            .first()
+            .map(SymbolId::as_str)
+            .or_else(|| lookup.callee_symbol(file, call.callee))
+        else {
+            continue;
+        };
+        let Some((callee_file, callee)) = lookup.function_for_symbol(symbol) else {
+            continue;
+        };
+        if callee.r#async || callee.generator {
+            continue;
+        }
+        let key = (callee_file.path.to_string(), callee.span);
+        if path.contains(&key) {
+            return false;
+        }
+        if entered.contains(&key) {
+            continue;
+        }
+        entered.push(key.clone());
+        if path.len() < MAX_DEPTH {
+            path.push(key);
+            if !enter_directly_called(callee_file, callee, lookup, path, entered) {
+                return false;
+            }
+            path.pop();
+        }
+    }
+    true
 }
 
 fn cached_reactive_source(

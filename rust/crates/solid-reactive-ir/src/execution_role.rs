@@ -804,6 +804,103 @@ fn forwarded_event_prop_role(
         .then_some(ExecutionRole::EventCallback)
 }
 
+/// ADR 0204: whether a function literal written as a project component's prop
+/// runs while that component renders.
+///
+/// The tag resolves to one project function (`function_called_at`), and the
+/// element has no spread, which could replace the prop. The component's props
+/// parameter is one identifier with no default and is never assigned, and the
+/// component's own body calls `props.<prop>` directly: not in a nested
+/// function, not in JSX (a tracked region or a prop getter), not in a default
+/// parameter. Rendering the element runs the component's body untracked, so
+/// the call there runs the literal in that body's strict-read window.
+///
+/// The call may sit in a branch; like a read written in the body, it is
+/// proven to run whenever that code does. Every other consumer -- one that
+/// forwards the prop, keeps it, or calls it only from a closure -- proves
+/// nothing here.
+fn prop_literal_invoked_during_render(
+    file: &solid_facts::FileFacts,
+    literal: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some((element, prop)) = component_prop_literal(file, literal) else {
+        return false;
+    };
+    if !element.spreads.is_empty()
+        || element
+            .attributes
+            .iter()
+            .filter(|attribute| {
+                attribute.namespace.is_none() && file.source_text(attribute.name) == Some(prop)
+            })
+            .count()
+            != 1
+    {
+        return false;
+    }
+    let Some((component_file, component)) =
+        lookup.function_called_at(file.path.as_str(), element.name.span)
+    else {
+        return false;
+    };
+    component_invokes_prop_in_body(component_file, component, prop, lookup)
+}
+
+/// Whether `component`'s own body calls `props.<prop>` directly; see
+/// [`prop_literal_invoked_during_render`].
+fn component_invokes_prop_in_body(
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+    prop: &str,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if component.r#async || component.generator {
+        return false;
+    }
+    let Some(parameter) = component.parameters.first() else {
+        return false;
+    };
+    if parameter.shape != solid_facts::ast::BindingShape::Identifier
+        || parameter.initializer.is_some()
+    {
+        return false;
+    }
+    let Some(name) = parameter.names.first() else {
+        return false;
+    };
+    let Some(symbol) = lookup.entities().at(file.path.as_str(), name.span) else {
+        return false;
+    };
+    let names_props = |span: Span| {
+        lookup
+            .entities()
+            .at(file.path.as_str(), file.ast.peel_ts_sugar_span(span))
+            == Some(symbol)
+    };
+    // `props = …` or `props.<prop> = …` would make the call run something else.
+    if file.ast.assignments.iter().any(|assignment| {
+        component.span.contains(assignment.target)
+            && (names_props(assignment.target)
+                || file.ast.members.iter().any(|member| {
+                    member.span == file.ast.peel_ts_sugar_span(assignment.target)
+                        && names_props(member.object)
+                        && file.source_text(member.property) == Some(prop)
+                }))
+    }) {
+        return false;
+    }
+    file.ast.calls.iter().any(|call| {
+        crate::owners::written_directly_in(&file.ast, component, call.span)
+            && !file.ast.any_jsx_containing(call.span)
+            && file.ast.members.iter().any(|member| {
+                member.span == file.ast.peel_ts_sugar_span(call.callee)
+                    && names_props(member.object)
+                    && file.source_text(member.property) == Some(prop)
+            })
+    })
+}
+
 /// The project component element and prop name a function literal is
 /// exactly the value of, when it is one.
 fn component_prop_literal(
@@ -2051,7 +2148,9 @@ fn callee_callback_timing_within(
                         .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == literal.span)
                 })
             }) {
-                return true;
+                // ADR 0204: unless the consumer is proven to call it while it
+                // renders.
+                return !prop_literal_invoked_during_render(file, literal.span, lookup);
             }
             // An IIFE runs where it is written, so its timing is its
             // surroundings'.
