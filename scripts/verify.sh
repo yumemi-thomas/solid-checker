@@ -343,6 +343,8 @@ step conformance
 bun scripts/check-bundled-contracts.mjs
 bun scripts/check-contract-pins.mjs
 bun scripts/dialect-manifests.mjs check-composed-contracts
+# ADR 0198: the authored tier is exactly what its specs and probe results build.
+bun scripts/author-contracts.mjs check
 
 step ""
 summarize

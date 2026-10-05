@@ -1,5 +1,31 @@
 # Precision backlog
 
+## Authored contracts recover the TanStack findings on rc.13 (2026-10-05)
+
+ADR 0198. The authored tier ships probe-checked `returns` claims for
+`@tanstack/solid-router@2.0.0-rc.4` (`useSearch` and `useParams` return an
+accessor) and `@tanstack/solid-query@6.0.0-rc.0` (`useMutation` returns a
+store), on the rc.13 Solid runtime. Every other export of those versions is
+open.
+
+- **Gained:** on the relocked rc.13 corpus, violations go from 256 to 266
+  (+10, -0). These are the 10 sites that ADR 0186 delivered and confirmed at
+  runtime on rc.9: nine router reads in `probus-hk` and the `useMutation`
+  store read in `spotify-desk-thing`. On rc.13 the claims behind them are
+  probe-confirmed; the sites themselves were last confirmed at runtime on rc.9.
+- **Uncertifiable:** more imports now carry a contract that leaves claims
+  open. `probus-hk` trades one "no contract" notice for per-export notices,
+  and `compass-ui` (solid-query rc.0) gains them.
+- **Still open:**
+  - **Direct route component bodies.** A route component's body read is not
+    probed. The router renders that body without a strict-read window, so
+    rc.13 emits no runtime warning there, and the probe pairs read in a
+    component rendered through JSX instead.
+  - **Owner requirements.** The certified `useMutation` contract's owner
+    requirements, and the router hooks' callback claims, are not authored.
+  - **Version scope.** Only the two listed package versions on rc.13 are
+    covered.
+
 ## Two versions of one dependency nest as Node resolves them (2026-10-05)
 
 ADR 0188. In pnpm installs, two versions of one dependency collided in the

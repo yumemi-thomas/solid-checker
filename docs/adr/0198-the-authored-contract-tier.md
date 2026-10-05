@@ -69,6 +69,37 @@ document cannot state honestly.
    probes, and fully open (`call: {}`) for every other export. Nothing a
    certification inferred is carried without its own probe.
 
+7. **The tier is built from specs by `scripts/author-contracts.mjs`.**
+   - A spec is `pkg/contracts/authored/specs/<package>@<version>/`: a
+     `spec.json` naming the package version, the Solid runtime (with
+     integrities), and per claimed export the authored `call` and the misuse
+     rule its pair exercises, plus `<export>.misuse.tsx` and
+     `<export>.correct.tsx`.
+   - `probe <chromium> --only <spec> --install <dir>` runs the pairs through
+     the misuse ledger's harness (`solid-checker feedback run`) in an install
+     that holds the package. It first refuses an install whose files do not
+     reproduce every certified case's artifact digest, or whose Solid runtime,
+     resolved from the package's own directory, is another release. Results go
+     to `pkg/contracts/authored/probe-results.json`.
+   - `build` writes the documents, the index and `embedded.rs`. A claim ships
+     only with a `passed` result on the spec's runtime. A document's case
+     carries only identity fields (artifact, declarations, resolution); any
+     other case field is refused rather than carried unprobed. Summary ids are
+     readable (`authored-<export>`, `open-<shape>`), since decoding does not
+     require content-addressed ids for a one-case document.
+   - `check` (in `make verify` and `make contract-conformance`) fails when the
+     written tier is not what `build` writes.
+8. **The development collector reads rc.13.** `feedback run` instruments the
+   shared reader of `@solidjs/signals/dist/dev-shared.js` from a byte-pinned
+   profile. RC.13 gets its own profile beside RC.9's:
+   - `getObserver` is byte-identical;
+   - `read` adds the post-await read check, the derived-override guard, and an
+     earlier strict-read warning;
+   - `untrack` counts its depth.
+
+   None of these changes the parameter, the returns, or the body that the
+   instrumentation wraps.
+
 ## Consequences
 
 - A contract reaches every project that installs the listed version, on the
@@ -82,10 +113,18 @@ document cannot state honestly.
 
 ## Implementation status
 
-- **Slice 1:** the constructor, the tier, admission, precedence and fixtures.
-- **Slice 2:** the authoring script (bundle identity plus authored claims,
-  index and embedding).
-- **Slice 3:** the probe gate.
-- **Slice 4:** the pilot, on `@tanstack/solid-router@2.0.0-rc.4` (`useSearch`,
-  `useParams`) and `@tanstack/solid-query@6.0.0-rc.0` (`useMutation`),
-  measured on the rc.13 corpus.
+- **Slice 1** (a18ffd984): the constructor, the tier, admission, precedence,
+  and fixtures.
+- **Slice 2:** `scripts/author-contracts.mjs build`/`check`, the specs, and
+  the check wired into `make verify`.
+- **Slice 3:** `author-contracts.mjs probe`, plus the rc.13 profile of the
+  development collector.
+- **Slice 4:** the pilot.
+  - Five entries: three solid-query rc.0 cases (`useMutation`) and two router
+    rc.4 cases (`useSearch`, `useParams`).
+  - All three pairs pass on rc.13. The router pairs read in a component
+    rendered through JSX: a route component's own body runs without a
+    strict-read window, and rc.13 does not warn there.
+  - Measured on the rc.13 corpus, after its lockfiles were made to name the
+    rc.13 runtime they hold: violations 256 -> 266 (+10, -0). These are
+    exactly the 10 ADR 0186 sites.

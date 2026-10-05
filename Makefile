@@ -266,6 +266,7 @@ contract-conformance:
 	PROBE_NODE="$(PROBE_NODE)" $(BUN) scripts/check-bundled-contracts.mjs
 	$(BUN) scripts/check-contract-pins.mjs
 	$(BUN) scripts/dialect-manifests.mjs check-composed-contracts
+	$(BUN) scripts/author-contracts.mjs check
 
 # Both targets replay the checked normalized authorities through the ordinary
 # proof-and-receipt bundle issuer. Registry pin verification remains a separate

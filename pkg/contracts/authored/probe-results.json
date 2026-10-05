@@ -1,0 +1,117 @@
+{
+  "format": 1,
+  "results": [
+    {
+      "spec": "@tanstack+solid-query@6.0.0-rc.0",
+      "package": "@tanstack/solid-query",
+      "version": "6.0.0-rc.0",
+      "export": "useMutation",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "src/index.ts",
+        "build/dev.js",
+        "build/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 27
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@tanstack+solid-router@2.0.0-rc.4",
+      "package": "@tanstack/solid-router",
+      "version": "2.0.0-rc.4",
+      "export": "useParams",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/esm/index.js",
+        "dist/source/index.jsx"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 21
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@tanstack+solid-router@2.0.0-rc.4",
+      "package": "@tanstack/solid-router",
+      "version": "2.0.0-rc.4",
+      "export": "useSearch",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/esm/index.js",
+        "dist/source/index.jsx"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 20
+          }
+        }
+      ],
+      "correct": []
+    }
+  ]
+}
