@@ -100,9 +100,10 @@ runtime confirmation of new violations.
 | Step | Uncertifiable results | Change |
 |---|---|---|
 | A1 | ~900 | **Done (ADR 0190).** A primitive receiver dispatches to its built-in prototype. Uncertifiable 10,396 → 8,297, violations unchanged. |
-| A2 | ~820 | First slice done (ADR 0192): built-in calls in a leaf scope resolve, 813 → 766. The rest is methods of bodiless objects, optional calls (a Type Facts producer gap) and incomplete helpers. |
-| A3 | ~620 | Callbacks passed to consumers not proven to invoke them synchronously. First slice done (ADR 0199): a callback prop forwarded only to DOM events runs on dispatch, 106 sites. Next: `useQuery` options callbacks (Track B claims) and helpers that keep or forward a callback. |
-| A4 | ~565 | `missing-owner`: owner nullability (`runWithOwner(getOwner())`, unknown callers). |
+| A2 | ~820 (738 findings on rc.13) | First slice done (ADR 0192): built-in calls in a leaf scope resolve, 813 → 766. The rest is methods of bodiless objects, optional calls (a Type Facts producer gap) and incomplete helpers. |
+| A3 | ~620 | Callbacks passed to consumers not proven to invoke them synchronously. Done: ADR 0199 and its extension (callback props reaching only DOM events, 134 sites), authored `useQuery` options (33), ADR 0200 (wrappers running a literal as a tracked compute, 40). The remainder is mostly package option objects (Track B). |
+| A4 | ~565 (14 uncertifiable on rc.13) | `missing-owner`: owner nullability (`runWithOwner(getOwner())`, unknown callers). On rc.13 all 14 are one `runWithOwner(getOwner())` and need a two-pass owner proof. |
+| A5 | 2,672 findings on rc.13 | Members invoked on caller-supplied values (`.map`, `.preventDefault`, props methods): each caller's argument identity. Diagnosed 2026-10-05; see `docs/precision-backlog.md`. |
 
 ### Track B: authored, probe-checked contracts (ADR 0189)
 

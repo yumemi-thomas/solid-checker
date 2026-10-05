@@ -17,7 +17,17 @@ static member access, a spread, or the props argument of such a view. Every
 - inside the function written as such a handler (`Wrapped`, and `Merged`
   through a `merge` view); or
 - the value of another project component's prop that satisfies the same proof
-  (`Chained`).
+  (`Chained`); or
+- inside a literal written as such a prop (`Confirm`, which hands
+  `() => props.onConfirm?.()` to `Direct`).
+
+A `const` alias of the props or of a view, through a type assertion, is the
+same object under another name (`AliasSpread`).
+
+Code nested anywhere in a literal that runs only on dispatch runs only after
+it: a callback that literal hands to an async helper is clean too
+(`NestedInHandler`), where the same call in the body is not
+(`NestedOutsideHandler`).
 
 A spread onto an intrinsic element carries an `on…` prop to an event
 listener (`Spreads`, and `OmitSpread` through an `omit` view): rc.13's
@@ -26,9 +36,11 @@ listener (`Spreads`, and `OmitSpread` through an `omit` view): rc.13's
 
 | Case | Finding | Why |
 | --- | --- | --- |
-| `UsesDirect`, `UsesWrapped`, `UsesChained`, `UsesLocal`, `UsesSpreads`, `UsesMerged`, `UsesOmitSpread` | none | the literal reaches only an event listener |
+| `UsesDirect`, `UsesWrapped`, `UsesChained`, `UsesLocal`, `UsesSpreads`, `UsesMerged`, `UsesOmitSpread`, `UsesConfirm`, `UsesAliasSpread`, `NestedInHandler` | none | the literal reaches only an event listener |
 | `UsesCallsDuringRender` | `SC1001` uncertifiable | the component calls the prop while rendering (a true defect, but this proof does not make claims) |
 | `UsesSpreadsToCaller` | `SC1001` uncertifiable | spread onto that same component |
+| `UsesConfirmEagerly` | `SC1001` uncertifiable | `Confirm`'s literal handed to that same component |
+| `NestedOutsideHandler` | `SC1001` uncertifiable | an async helper's callback written in the body |
 | `UsesMergeEscapes` | `SC1001` uncertifiable | a `merge` view is handed to a helper |
 | `UsesSpreadsRender` | `SC1001` uncertifiable | a spread prop whose name is not an `on…` name |
 | `UsesKeeps` | `SC1001` uncertifiable | the prop is invoked from a timer |

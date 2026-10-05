@@ -1,5 +1,42 @@
 # Precision backlog
 
+## Wrapped computes, nested handlers, and the A3 remainder (2026-10-05)
+
+ADR 0199 extension and ADR 0200. Code nested in an event-only prop literal,
+a prop invoked inside another event-only prop literal, a `const` alias of
+props, and a literal a project wrapper runs only as a tracked compute are now
+classified like the code they wrap.
+
+- **Gained:** 68 rc.13 corpus sites leave `SC1001` uncertifiable (6,886 to
+  6,816 findings). No violation moved.
+- **Diagnosed, not changed:**
+  - **Leaf-scope dispatch (738 findings).** These are calls in
+    `createTrackedEffect` / `onSettled` bodies whose synchronous extent cannot
+    be resolved:
+    - package methods (three.js, typegpu, ogl, `@webgpu/types`): need
+      contracts;
+    - methods of vendored project classes: need a walk through class bodies;
+    - accessors passed in as parameters;
+    - DOM methods on typed bindings (`el?.focus()`): deliberately
+      unprovable, because a type is only its declaration;
+    - optional calls: the producer states no resolved call;
+    - globals typed by `@types/node` or bun: about 30 findings, need a
+      policy for non-default-library declarations of host globals.
+  - **The rest of the A3 consumer-timing sites (about 400).**
+    - Most are callbacks in option objects of package APIs (TanStack
+      Virtual's `createVirtualizer`, Kobalte components) and need authored
+      contracts.
+    - Compound component tags (`Combobox.Input`) resolve to interface
+      members, not functions.
+  - **Caller-supplied member dispatch (2,672 findings, now A5).** Methods on parameters (`.map`, `.preventDefault`, `.getTime`, props
+    methods) need each caller's argument identity. About 230 sit in event
+    handlers, where they might be dropped, but which other read-based rules
+    (pending async) consume these obligations is still to be checked.
+  - **`missing-owner` (14 uncertifiable).** All are one `runWithOwner(owner,
+    …)` whose `owner` is `getOwner()` at the top of a component body. Proving
+    it non-null needs the owner fixpoint's own result at graph-building time,
+    so it is left for a two-pass change.
+
 ## `useQuery` options run as a tracked compute (2026-10-05)
 
 ADR 0198. The authored tier states, probe-checked, that

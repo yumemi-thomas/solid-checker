@@ -780,8 +780,37 @@ fn forwarded_event_prop_role(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> Option<ExecutionRole> {
-    let literal = containing_ast_function(&file.ast, span)?;
-    let (element, attribute) = file.ast.jsx_containing(literal.span).find_map(|element| {
+    // Any enclosing literal, not only the innermost: whatever runs inside a
+    // literal that runs only on dispatch runs only after it, exactly as code
+    // nested in a handler written on the element does. Nested primitives and
+    // inline callbacks were classified by the arms ahead of this one.
+    file.ast
+        .functions_body_containing(span)
+        .any(|literal| {
+            component_prop_literal(file, literal.span).is_some_and(|(element, prop)| {
+                lookup
+                    .function_called_at(file.path.as_str(), element.name.span)
+                    .is_some_and(|(component_file, component)| {
+                        prop_reaches_only_events(
+                            component_file,
+                            component,
+                            prop,
+                            lookup,
+                            &mut HashSet::new(),
+                        )
+                    })
+            })
+        })
+        .then_some(ExecutionRole::EventCallback)
+}
+
+/// The project component element and prop name a function literal is
+/// exactly the value of, when it is one.
+fn component_prop_literal(
+    file: &solid_facts::FileFacts,
+    literal: Span,
+) -> Option<(&solid_facts::ast::JsxElementFact, &str)> {
+    let (element, attribute) = file.ast.jsx_containing(literal).find_map(|element| {
         element
             .attributes
             .iter()
@@ -790,18 +819,14 @@ fn forwarded_event_prop_role(
                     && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
                     && attribute
                         .expression
-                        .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == literal.span)
+                        .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == literal)
             })
             .map(|attribute| (element, attribute))
     })?;
     if intrinsic_element(file, element) {
         return None;
     }
-    let (component_file, component) =
-        lookup.function_called_at(file.path.as_str(), element.name.span)?;
-    let prop = file.source_text(attribute.name)?;
-    prop_reaches_only_events(component_file, component, prop, lookup, &mut HashSet::new())
-        .then_some(ExecutionRole::EventCallback)
+    Some((element, file.source_text(attribute.name)?))
 }
 
 /// Whether `value` is exactly the value of an attribute of an intrinsic
@@ -929,6 +954,11 @@ fn prop_reaches_only_events(
                 }
             } else if let Some(element) = spread_onto(file, reference) {
                 spread_reaches_only_events(file, element, prop, lookup, visiting)
+            } else if let Some(binding) = const_binding_of(file, reference, lookup) {
+                // `const rest = props`, `const root = view as Props`: the same
+                // object under another name.
+                aliases.push(binding);
+                true
             } else {
                 false
             };
@@ -978,14 +1008,37 @@ fn member_reaches_only_events(
             .is_some_and(|(next, (next_file, next_function))| {
                 prop_reaches_only_events(next_file, next_function, next, lookup, visiting)
             }),
-        None => event_handlers().any(|callback| {
-            intrinsic_attribute_value(file, callback.span)
-                && file
-                    .ast
-                    .functions_within(callback.span)
-                    .max_by_key(|handler| handler.span.end - handler.span.start)
-                    .is_some_and(|handler| handler.body.contains(member))
-        }),
+        None => {
+            if event_handlers().any(|callback| {
+                intrinsic_attribute_value(file, callback.span)
+                    && file
+                        .ast
+                        .functions_within(callback.span)
+                        .max_by_key(|handler| handler.span.end - handler.span.start)
+                        .is_some_and(|handler| handler.body.contains(member))
+            }) {
+                return true;
+            }
+            // Inside a literal written as another project component's prop
+            // that itself reaches only event dispatch.
+            let literals = file
+                .ast
+                .functions_body_containing(member)
+                .map(|literal| literal.span)
+                .collect::<Vec<_>>();
+            for literal in literals {
+                let Some((element, prop)) = component_prop_literal(file, literal) else {
+                    continue;
+                };
+                if let Some((next_file, next_function)) =
+                    lookup.function_called_at(file.path.as_str(), element.name.span)
+                    && prop_reaches_only_events(next_file, next_function, prop, lookup, visiting)
+                {
+                    return true;
+                }
+            }
+            false
+        }
     }
 }
 
@@ -1504,6 +1557,9 @@ fn semantic_execution_role_within(
     if let Some(role) = contract_owned_computation_callback_role(file, span, lookup) {
         return role;
     }
+    if let Some(role) = forwarded_tracked_compute_role(file, span, lookup) {
+        return role;
+    }
     if allowed.iter().any(|region| region.contains(span)) {
         return ExecutionRole::DeferredCallback;
     }
@@ -1590,6 +1646,117 @@ fn semantic_execution_role_within(
         return ExecutionRole::ModuleInitialization;
     }
     ExecutionRole::Unknown
+}
+
+/// ADR 0200: code directly in a function literal handed, as the whole
+/// argument, to a project function that only ever invokes that parameter as
+/// the tracked compute of a computation, takes the tracked role.
+///
+/// The project function `wrapper` must be synchronous, its parameter at the
+/// slot one identifier, and every reference to that parameter a direct call
+/// `p()` written directly in one function literal `compute`. `compute` must be
+/// written directly in `wrapper`'s body, as the whole argument at a slot that
+/// tracks the reads of the callback it runs: an accepted contract's
+/// guaranteed tracked-compute slot (ADR 0183) or a primitive's tracked
+/// callback (`createMemo`'s compute). Then the literal runs only inside that
+/// tracked compute, as it would written there itself. A parameter referenced
+/// any other way can run the literal somewhere else as well, so it proves
+/// nothing.
+fn forwarded_tracked_compute_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    let literal = containing_ast_function(&file.ast, span)?;
+    let (call, index) = file.ast.arguments_containing(span).find(|(call, index)| {
+        let argument = &call.arguments[*index];
+        !argument.spread
+            && file.ast.peel_ts_sugar_span(argument.span) == literal.span
+            && lookup.primitive_at_call(file, call.span).is_none()
+    })?;
+    let (wrapper_file, wrapper) = lookup
+        .callee_symbol(file, call.callee)
+        .and_then(|symbol| lookup.function_for_symbol(symbol))
+        .or_else(|| lookup.function_called_at(file.path.as_str(), call.callee))?;
+    if wrapper.r#async || wrapper.generator {
+        return None;
+    }
+    let parameter = wrapper.parameters.get(index)?;
+    if parameter.shape != solid_facts::ast::BindingShape::Identifier
+        || parameter.initializer.is_some()
+    {
+        return None;
+    }
+    let name = parameter.names.first()?;
+    let symbol = lookup
+        .entities()
+        .at(wrapper_file.path.as_str(), name.span)?;
+    let mut compute: Option<Span> = None;
+    for reference in lookup.symbol_references(symbol.as_str()) {
+        if reference.path.as_ref() != wrapper_file.path.as_str() {
+            return None;
+        }
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            return None;
+        };
+        let reference = Span::new(start, end);
+        if reference == name.span {
+            continue;
+        }
+        // A direct call `p()`, written directly in one function literal.
+        let invoked = wrapper_file
+            .ast
+            .calls
+            .iter()
+            .any(|inner| wrapper_file.ast.peel_ts_sugar_span(inner.callee) == reference);
+        let owner = containing_ast_function(&wrapper_file.ast, reference)?;
+        if !invoked || owner.span == wrapper.span || compute.is_some_and(|seen| seen != owner.span)
+        {
+            return None;
+        }
+        compute = Some(owner.span);
+    }
+    let compute = compute?;
+    // `compute` is the whole argument of a call written directly in the
+    // wrapper's body, at a slot that tracks its callback's reads.
+    let (outer, slot) = wrapper_file
+        .ast
+        .arguments_containing(compute)
+        .find(|(outer, slot)| {
+            let argument = &outer.arguments[*slot];
+            !argument.spread && wrapper_file.ast.peel_ts_sugar_span(argument.span) == compute
+        })?;
+    if containing_ast_function(&wrapper_file.ast, outer.span)
+        .is_none_or(|function| function.span != wrapper.span)
+    {
+        return None;
+    }
+    let tracked = match lookup.primitive_at_call(wrapper_file, outer.span) {
+        Some(primitive) => {
+            callback_execution_at_call(wrapper_file, outer, primitive, slot, lookup).is_some()
+                && lookup
+                    .dialect
+                    .callback_semantics_at(primitive, slot, outer.arguments.len())
+                    .tracks_reads
+        }
+        None => lookup
+            .callee_symbol(wrapper_file, outer.callee)
+            .and_then(|symbol| lookup.contract_guaranteed_callback_parameters(symbol))
+            .is_some_and(|parameters| parameters.contains(&slot)),
+    };
+    if !tracked {
+        return None;
+    }
+    Some(
+        if attribute_function_within(file, call.arguments[index].span, span, lookup) {
+            ExecutionRole::Unknown
+        } else {
+            ExecutionRole::TrackedJsx
+        },
+    )
 }
 
 /// ADR 0183: code directly in a function literal handed, as the whole

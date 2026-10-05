@@ -83,3 +83,27 @@ export function Mixed(props: Props) {
 export function Loop(props: Props): JSX.Element {
   return <Loop onPress={props.onPress} />;
 }
+
+// Invokes its own callback prop inside a literal it hands to a component
+// whose prop reaches only an event.
+export function Confirm(props: { onConfirm?: () => void }) {
+  return <Direct onPress={() => props.onConfirm?.()} label="confirm" />;
+}
+
+// The same, through a component that calls the prop while rendering.
+export function ConfirmEagerly(props: { onConfirm?: () => void }) {
+  return <CallsDuringRender onPress={() => props.onConfirm?.()} label="confirm" />;
+}
+
+// A const alias of an omit view, through a type assertion, spread onto an
+// intrinsic element.
+export function AliasSpread(props: Props) {
+  const rest = omit(props, "label");
+  const root = rest as Props;
+  return <button {...root}>{props.label}</button>;
+}
+
+// An async helper that awaits its callback: nothing proves when it runs.
+export async function run(operation: () => unknown) {
+  await operation();
+}

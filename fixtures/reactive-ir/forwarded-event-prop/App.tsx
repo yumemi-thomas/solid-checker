@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import {
-  CallsDuringRender, Chained, Direct, Keeps, Loop, MergeEscapes, Merged, Mixed, OmitSpread, Spreads,
-  SpreadsRender, SpreadsToCaller, Wrapped,
+  AliasSpread, CallsDuringRender, Chained, Confirm, ConfirmEagerly, Direct, Keeps, Loop, MergeEscapes, Merged, Mixed, OmitSpread, Spreads,
+  SpreadsRender, SpreadsToCaller, Wrapped, run,
 } from "./buttons";
 
 // ---- Clean: the literal reaches only an intrinsic element's event handler,
@@ -35,6 +35,18 @@ export function UsesOmitSpread() {
   const [count] = createSignal(0);
   return <OmitSpread onPress={() => console.log(count())} label="a" />;
 }
+export function UsesConfirm() {
+  const [count] = createSignal(0);
+  return <Confirm onConfirm={() => console.log(count())} />;
+}
+export function UsesAliasSpread() {
+  const [count] = createSignal(0);
+  return <AliasSpread onPress={() => console.log(count())} label="a" />;
+}
+export function NestedInHandler() {
+  const [count] = createSignal(0);
+  return <Direct onPress={() => void run(() => console.log(count()))} label="a" />;
+}
 function LocalDirect(props: { onPress?: (event: unknown) => void }) {
   return <button onClick={props.onPress}>local</button>;
 }
@@ -56,6 +68,15 @@ export function UsesMergeEscapes() {
 export function UsesSpreadsRender() {
   const [count] = createSignal(0);
   return <SpreadsRender render={() => console.log(count())} />;
+}
+export function UsesConfirmEagerly() {
+  const [count] = createSignal(0);
+  return <ConfirmEagerly onConfirm={() => console.log(count())} />;
+}
+export function NestedOutsideHandler() {
+  const [count] = createSignal(0);
+  void run(() => console.log(count()));
+  return <main>a</main>;
 }
 export function UsesKeeps() {
   const [count] = createSignal(0);

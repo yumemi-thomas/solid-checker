@@ -91,3 +91,33 @@ window, and reports no untracked read.
     `Button` (`merge` view, read inside the `<button>` click handler, `omit`
     spread), `AppToolbar`, `ReaderFrame` and `WorkspaceWindowTitlebar` (the
     prop called only inside a `<div>` or `<button>` handler).
+
+## Extension (2026-10-05)
+
+Three widenings, each matching what the compiler's own handler role already
+does:
+
+1. **Any enclosing literal, not only the innermost.** Code nested anywhere in
+   an event-only literal (an updater passed to a setter, a callback passed to
+   an async helper) runs only after dispatch. This is how code nested in a
+   handler written on the element is classified. Nested primitives and inline
+   callbacks are still classified by the arms ahead of this one.
+2. **A prop invoked inside another event-only prop literal.**
+   `<Button onClick={() => props.onConfirm()} />` makes `onConfirm`
+   event-only when `Button`'s `onClick` is.
+3. **A `const` alias of the props or of a view** (`const root = rest as
+   Props`) is the same object under another name.
+
+Accepted limit: a function *stored* by an event-only literal and later called
+during some render would be missed. That is a possible false negative, never a
+false positive, and the same limit applies to a handler written on the
+element.
+
+Evidence:
+
+- Fixture: three new clean cases (`UsesConfirm`, `UsesAliasSpread`,
+  `NestedInHandler`) and two new uncertifiable ones (`UsesConfirmEagerly`,
+  `NestedOutsideHandler`).
+- rc.13 corpus: 28 more sites leave `SC1001` uncertifiable (6,886 to 6,856
+  findings), 17 of them in `ai-memory-ui`'s `workspace-detail.tsx`. No
+  violation moved.
