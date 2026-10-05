@@ -876,11 +876,10 @@ fn incremental_contract_exports_refresh_changed_summaries() {
     let initial_good = initial.contract_exports.get("Good").cloned().unwrap();
 
     let original = fs::read_to_string(&paths[0]).unwrap();
-    let changed = original.replacen(
-        "return <div>{count()}</div>;",
-        "return <div>static</div>;",
-        1,
-    );
+    // A read inside JSX is not a call-time read, so `Good`'s contract only
+    // moves when the edit changes what the call itself does: here, what it
+    // returns.
+    let changed = original.replacen("return <div>{count()}</div>;", "return count;", 1);
     assert_ne!(changed, original);
     let edited = session
         .edit(
