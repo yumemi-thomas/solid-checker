@@ -5,6 +5,7 @@
 compile_error!("solid-facts-backend requires at least one dialect feature");
 
 mod accepted_bundles;
+mod authored_contracts;
 pub use accepted_bundles::{
     AdmissionRefusal, admitted_bundle_artifacts, bundle_admission_refusals,
     compiled_in_accepted_contracts,

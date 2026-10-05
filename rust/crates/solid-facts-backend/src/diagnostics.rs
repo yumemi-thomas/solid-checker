@@ -2243,6 +2243,11 @@ pub fn project_accepted_contracts(
 ) -> Result<AcceptedContractIndex, BackendError> {
     let mut contracts = read_catalogs(catalogs, trust)?;
     if bundled {
+        // ADR 0198: the authored tier sits above the certified one.
+        contracts = contracts.with_fallback(
+            crate::authored_contracts::compiled_in_authored_contracts()
+                .map_err(|error| BackendError::Contract(error.to_string()))?,
+        );
         contracts = contracts.with_fallback(
             crate::accepted_bundles::compiled_in_accepted_contracts()
                 .map_err(|error| BackendError::Contract(error.to_string()))?,
@@ -2272,6 +2277,9 @@ pub fn project_accepted_contracts(
     .agreed(&contracts);
     contracts = project.admit_into(contracts);
     if bundled {
+        let authored =
+            authored_admissions(directory, conditions, facts, &installs)?.agreed(&contracts);
+        contracts = authored.admit_into(contracts);
         let bundles =
             bundled_admissions(directory, conditions, facts, &installs)?.agreed(&contracts);
         contracts = bundles.admit_into(contracts);
@@ -2706,6 +2714,31 @@ pub fn admitted_bundled_artifacts(
 ) -> Result<ArtifactAdmissions, BackendError> {
     let installs = importer_installs(project_directory, facts, None)?;
     bundled_admissions(project_directory, conditions, facts, &installs)
+}
+
+/// The authored tier's admissions (ADR 0198), asked from the same installs as
+/// every other tier.
+fn authored_admissions(
+    project_directory: &Path,
+    conditions: &std::collections::BTreeSet<String>,
+    facts: &solid_facts::ProjectFacts,
+    installs: &ImporterInstalls,
+) -> Result<ArtifactAdmissions, BackendError> {
+    admitted_by_install(
+        project_directory,
+        facts,
+        None,
+        installs,
+        &|installed, bytes, resolved_target, environment| {
+            crate::authored_contracts::admitted_authored_artifacts(
+                conditions,
+                installed,
+                bytes,
+                resolved_target,
+                environment,
+            )
+        },
+    )
 }
 
 /// [`admitted_bundled_artifacts`] over installs already grouped.
