@@ -2708,16 +2708,23 @@ mod tests {
         );
     }
 
-    /// ADR 0190: an argumentless method call through a parameter is a
-    /// parameter-member invocation, and only its resolved declaration says
-    /// whether the member is a primitive wrapper's built-in.
+    /// ADRs 0190 and 0192: only an argumentless method call's resolved
+    /// declaration says whether the member is a standard-library built-in.
+    /// It is demanded through a parameter and directly in a leaf-owner
+    /// callback, and nowhere else: a resolved declaration also enters the
+    /// symbol index.
     #[test]
-    fn an_argumentless_parameter_member_call_is_demanded_its_resolved_call() {
+    fn an_argumentless_method_call_is_demanded_its_resolved_call() {
         let file = test_file_facts(
             "src/words.ts",
-            "const fixed = \"a b\";\n\
+            "import { onSettled } from \"solid-js\";\n\
+             declare const dialog: { focus(): void } | undefined;\n\
+             const fixed = \"a b\";\n\
+             function local() {}\n\
              export function words(message: string) {\n\
                const head = fixed.trim();\n\
+               local();\n\
+               onSettled(() => { dialog?.focus(); });\n\
                void head;\n\
                return message.trim().split(\" \");\n\
              }\n\
@@ -2744,8 +2751,16 @@ mod tests {
         assert!(resolved("message.trim"), "inside a chain");
         assert!(resolved("value?.toLowerCase"), "an optional member call");
         assert!(
+            resolved("dialog?.focus"),
+            "directly in a leaf-owner callback"
+        );
+        assert!(
             !resolved("fixed.trim"),
-            "a root that is no parameter stays as it was"
+            "any other method call stays as it was"
+        );
+        assert!(
+            !resolved("local"),
+            "an argumentless plain call stays as it was"
         );
     }
 

@@ -704,6 +704,33 @@ fn plan_file(
         demands.push(demand(typefacts_location(&path, span)).async_context());
     }
     let primitive_imports = PrimitiveImports::new(dialect, file);
+    // The callbacks a leaf owner (`onSettled`, `createTrackedEffect`) runs,
+    // as the dialect answers per argument. Matched by spelling, so an import
+    // that only shares the name over-demands, which decides nothing.
+    let leaf_callbacks = file
+        .ast
+        .calls
+        .iter()
+        .filter_map(|call| {
+            let primitive = call
+                .static_callee(&file.source)
+                .and_then(|callee| primitive_imports.primitive(callee))?;
+            Some((call, primitive))
+        })
+        .flat_map(|(call, primitive)| {
+            call.arguments
+                .iter()
+                .enumerate()
+                .filter(move |(index, _)| {
+                    dialect
+                        .vocabulary
+                        .callback_semantics_at(primitive, *index, call.arguments.len())
+                        .owner
+                        == Some(solid_dialect::CallbackOwner::Leaf)
+                })
+                .map(|(_, argument)| argument.span)
+        })
+        .collect::<Vec<_>>();
     for call in &file.ast.calls {
         let callee = typefacts_location(&path, call.callee);
         let property = callee_property_location(&file.source, &callee);
@@ -727,11 +754,24 @@ fn plan_file(
             && call
                 .static_callee(&file.source)
                 .is_some_and(|callee| primitive_imports.primitive(callee).is_some());
+        // And two argumentless method calls need their declaration, because
+        // only the resolved call says whether the member is a standard-library
+        // built-in: a helper's parameter-member invocation (`message.trim()`,
+        // ADR 0190), and a call written directly in a leaf-owner callback
+        // (`onSettled(() => dialog?.focus())`, ADR 0192). Not every method
+        // call: a resolved declaration also enters the symbol index, which
+        // moves structural member resolution elsewhere.
+        let argumentless_method = call.arguments.is_empty()
+            && property != callee
+            && (parameter_rooted_member_call(file, call)
+                || leaf_callbacks
+                    .iter()
+                    .any(|region| region.contains(call.span)));
         planned.resolved_call = !call.arguments.is_empty()
             || returned_callees.contains(&call.callee)
             || computed_dispatch
             || argumentless_primitive
-            || parameter_rooted_member_call(file, call);
+            || argumentless_method;
         planned.query_location = Some(property.clone());
         planned.type_descriptor = call.arguments.is_empty();
         // Typed source discovery must distinguish the exact callable value
@@ -754,13 +794,9 @@ fn plan_file(
 /// parameters (`name.trim()` inside `(name: string) => name.trim().split(…)`).
 /// The IR records it as a parameter-member invocation, and only its resolved
 /// declaration says whether the member is a primitive wrapper's built-in
-/// (ADR 0190). A call with arguments is already demanded. The root is matched
-/// by spelling, so a shadowed name over-demands, which costs a fact and
-/// decides nothing.
+/// (ADR 0190). The root is matched by spelling, so a shadowed name
+/// over-demands, which costs a fact and decides nothing.
 fn parameter_rooted_member_call(file: &FileFacts, call: &solid_facts::ast::CallFact) -> bool {
-    if !call.arguments.is_empty() {
-        return false;
-    }
     let callee = file.ast.peel_ts_sugar_span(call.callee);
     let Some(text) = file.source_text(callee) else {
         return false;
