@@ -1274,6 +1274,7 @@ fn admitted_from(
         installed_bytes,
         resolved_target,
         installed_environment,
+        EnvironmentRule::SolidRuntime,
     )
 }
 
@@ -1488,6 +1489,78 @@ pub(crate) struct ArtifactAcceptance<'a> {
     pub(crate) citations: &'a [CitedAcceptance],
 }
 
+/// How much of an acceptance's dependency environment step 3 of
+/// [`admit_by_artifact`] requires this tree to reproduce.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum EnvironmentRule {
+    /// Every entry, exactly (ADR 0123). Project catalogs.
+    Exact,
+    /// The entries naming the Solid runtime foundation
+    /// ([`solid_dialect::primitive_defining_package`]) and the runtime's own
+    /// dependencies; the rest of the tree may differ (ADR 0189, ADR 0191). The compiled-in tier, whose authority is
+    /// repository review rather than the environment it was certified in.
+    SolidRuntime,
+}
+
+/// The part of `environment` step 3 still requires under
+/// [`EnvironmentRule::SolidRuntime`]: the entries naming the Solid runtime
+/// foundation, and every entry a package already in that set looked up -- the
+/// runtime's own dependencies, which are the runtime as much as it is. `None`
+/// for an environment stated without edges, which cannot say which package
+/// read an entry; it keeps the exact rule.
+///
+/// Without the other entries the edges the subset recorded cannot be replayed,
+/// so they are dropped and the subset is checked by the edge-free rule: each
+/// entry must resolve, from the package or from an entry resolved before it,
+/// to exactly the stated identity, and none may be patched.
+fn solid_runtime_entries(
+    environment: &[DependencyEnvironmentEntry],
+) -> Option<Vec<DependencyEnvironmentEntry>> {
+    if !dependency_environment_states_edges(environment) {
+        return None;
+    }
+    let mut kept = environment
+        .iter()
+        .map(|entry| solid_dialect::primitive_defining_package(&entry.name))
+        .collect::<Vec<_>>();
+    loop {
+        let mut grew = false;
+        for (index, entry) in environment.iter().enumerate() {
+            if kept[index] {
+                continue;
+            }
+            let read_by_kept =
+                entry
+                    .resolved_from
+                    .as_ref()
+                    .is_some_and(|edge| match &edge.importer {
+                        EnvironmentImporter::Certified => false,
+                        EnvironmentImporter::Package(importer) => environment
+                            .iter()
+                            .zip(&kept)
+                            .any(|(candidate, kept)| *kept && importer.is(candidate)),
+                    });
+            if read_by_kept {
+                kept[index] = true;
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    Some(
+        environment
+            .iter()
+            .zip(kept)
+            .filter(|(_, kept)| *kept)
+            .map(|(entry, _)| {
+                DependencyEnvironmentEntry::package(&entry.name, &entry.version, &entry.integrity)
+            })
+            .collect(),
+    )
+}
+
 /// The one rule for admitting an acceptance by artifact (ADR 0123), whichever
 /// tier it came from.
 ///
@@ -1510,6 +1583,12 @@ pub(crate) struct ArtifactAcceptance<'a> {
 ///
 /// Anything missing, different or unstatable skips the acceptance, so this
 /// adds acceptances on proof and never removes one.
+///
+/// Step 3 depends on `environment_rule` (ADR 0189):
+/// [`EnvironmentRule::SolidRuntime`] also admits an acceptance whose wider
+/// environment differs, provided its Solid runtime entries are installed as
+/// stated. Where any candidate for a specifier reproduces its whole
+/// environment, only those are kept.
 pub(crate) fn admit_by_artifact<'a>(
     acceptances: impl IntoIterator<Item = ArtifactAcceptance<'a>>,
     conditions: &BTreeSet<String>,
@@ -1517,6 +1596,7 @@ pub(crate) fn admit_by_artifact<'a>(
     installed_bytes: &InstalledArtifactBytes,
     resolved_target: &ResolvedTargetIdentity,
     installed_environment: &InstalledEnvironment,
+    environment_rule: EnvironmentRule,
 ) -> Vec<(String, String)> {
     let declared = declared_conditions(conditions);
     let mut authentic: BTreeMap<String, Vec<AuthenticCase>> = BTreeMap::new();
@@ -1552,20 +1632,29 @@ pub(crate) fn admit_by_artifact<'a>(
             continue;
         }
         // The same artifact, and now the same environment, or it is a
-        // different acceptance this project never reproduced.
-        if !installed_environment(acceptance.specifier, environment) {
+        // different acceptance this project never reproduced -- unless the
+        // rule asks only for the Solid runtime the proof ran on.
+        let exact_environment = installed_environment(acceptance.specifier, environment);
+        if !exact_environment
+            && !(environment_rule == EnvironmentRule::SolidRuntime
+                && solid_runtime_entries(environment)
+                    .is_some_and(|runtime| installed_environment(acceptance.specifier, &runtime)))
+        {
             continue;
         }
         authentic
             .entry(acceptance.specifier.to_owned())
             .or_default()
-            .push(AuthenticCase::from_relative(
-                acceptance.identity.to_owned(),
-                acceptance.runtime_target.to_owned(),
-                acceptance.declaration_target.to_owned(),
-                acceptance.export_conditions.to_vec(),
-                environment.len(),
-            ));
+            .push(
+                AuthenticCase::from_relative(
+                    acceptance.identity.to_owned(),
+                    acceptance.runtime_target.to_owned(),
+                    acceptance.declaration_target.to_owned(),
+                    acceptance.export_conditions.to_vec(),
+                    environment.len(),
+                )
+                .with_exact_environment(exact_environment),
+            );
     }
     let mut admitted = Vec::new();
     for (specifier, cases) in authentic {
@@ -1577,10 +1666,13 @@ pub(crate) fn admit_by_artifact<'a>(
         // TypeScript resolves the *declaration* file, and one `.d.ts` is
         // routinely shared by several export-condition branches. So the
         // resolved file selects a set of candidate cases, not one case.
-        let reaching = cases
+        let mut reaching = cases
             .iter()
             .filter(|case| case.reaches(&target))
             .collect::<Vec<_>>();
+        if reaching.iter().any(|case| case.exact_environment()) {
+            reaching.retain(|case| case.exact_environment());
+        }
         admitted.extend(
             admissible_cases(&reaching, &declared)
                 .into_iter()

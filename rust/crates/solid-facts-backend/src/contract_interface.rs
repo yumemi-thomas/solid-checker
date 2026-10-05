@@ -1049,6 +1049,7 @@ pub fn admitted_project_artifacts(
         installed_bytes,
         resolved_target,
         installed_environment,
+        crate::accepted_bundles::EnvironmentRule::Exact,
     ))
 }
 
@@ -1348,6 +1349,9 @@ pub(crate) struct AuthenticCase {
     /// How many entries the acceptance's dependency environment states: the
     /// premises its certification checked against this tree (ADR 0187).
     environment_entries: usize,
+    /// Whether this tree reproduced the whole environment, rather than only
+    /// its Solid runtime entries (ADR 0189).
+    exact_environment: bool,
 }
 
 impl AuthenticCase {
@@ -1368,7 +1372,18 @@ impl AuthenticCase {
             declaration_target,
             conditions,
             environment_entries,
+            exact_environment: true,
         }
+    }
+
+    #[must_use]
+    pub(crate) fn with_exact_environment(mut self, exact_environment: bool) -> Self {
+        self.exact_environment = exact_environment;
+        self
+    }
+
+    pub(crate) const fn exact_environment(&self) -> bool {
+        self.exact_environment
     }
 
     /// Whether this project's resolved file is one this case was certified
@@ -2202,6 +2217,7 @@ mod tests {
             declaration_target: "dist/index.d.ts".to_owned(),
             conditions: conditions.iter().map(|it| (*it).to_owned()).collect(),
             environment_entries: 0,
+            exact_environment: true,
         }
     }
 

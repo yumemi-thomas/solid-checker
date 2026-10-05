@@ -78,6 +78,11 @@ runtime confirmation of new violations.
 - **B3.** Convert the existing certified contracts into authored entries,
   spot-checked and probe-tested, so the ledger and the 10 package findings
   survive.
+  - First slice done (ADR 0191): the compiled-in tier is admitted on its
+    package bytes and its Solid runtime, not the whole dependency tree. It
+    moved nothing on the corpus. The apps run Solid rc.3, rc.4 and rc.9, so
+    the **Solid release**, not the rest of the tree, limits reach. Authored
+    contracts therefore need a probe run per audited Solid release.
 - **B4.** Pilot on TanStack router and query, `@solidjs/router` and
   `@solidjs/meta` hooks.
   - Exit: the 10 package findings come from authored contracts with the

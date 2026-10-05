@@ -850,6 +850,119 @@ fn floor_and_head_certifications_of_one_artifact_are_two_bundles() {
 /// beside `@solidjs/signals@2.0.0-rc.0` does not get the contract proven
 /// against rc.6, and the one beside rc.6 does -- each gets exactly the
 /// certification of its own environment.
+/// ADR 0191: the compiled-in tier asks a tree to reproduce only the Solid
+/// runtime of an environment and the runtime's own dependencies; a project
+/// catalog still asks for all of it. An environment without edges keeps the
+/// exact rule, and a candidate that reproduces its whole environment is
+/// preferred.
+#[test]
+fn the_tier_needs_only_the_solid_runtime_of_its_environment() {
+    let rc6 = || entry("@solidjs/signals", "2.0.0-rc.6", "sha512-signals-rc6");
+    let helper = |version: &str| entry("helper-lib", version, &format!("sha512-helper-{version}"));
+    let leaf = |version: &str| entry("leaf-dep", version, &format!("sha512-leaf-{version}"));
+    let certified = |helper_version: &str| {
+        let mut environment = vec![
+            rc6().resolved_from(EnvironmentImporter::Certified, "@solidjs/signals"),
+            leaf("1.0.0").resolved_from(rc6().as_importer(), "leaf-dep"),
+            helper(helper_version).resolved_from(EnvironmentImporter::Certified, "helper-lib"),
+        ];
+        environment.sort();
+        environment
+    };
+    let tree =
+        |signals: DependencyEnvironmentEntry, leaf_version: &str, helper_version: &str| Tree {
+            resolves: BTreeMap::from([
+                (("root", "@solidjs/signals"), "signals"),
+                (("root", "helper-lib"), "helper"),
+                (("signals", "leaf-dep"), "leaf"),
+            ]),
+            identities: BTreeMap::from([
+                ("signals", signals),
+                ("leaf", leaf(leaf_version)),
+                ("helper", helper(helper_version)),
+            ]),
+        };
+    let conditions = BTreeSet::from(["import".to_owned()]);
+    let resolved = |_: &str| Some("dist/index.js".to_owned());
+    let installed = |_: &str| {
+        Some((
+            "plain-package".to_owned(),
+            "1.0.0".to_owned(),
+            "sha512-published-integrity".to_owned(),
+        ))
+    };
+    let admit = |bundles: &[LoadedBundle], tree: &Tree, rule: EnvironmentRule| {
+        let environment =
+            |_: &str, environment: &[DependencyEnvironmentEntry]| tree.installs(environment);
+        admit_by_artifact(
+            bundles.iter().map(|bundle| ArtifactAcceptance {
+                specifier: &bundle.specifier,
+                requested_entrypoint: &bundle.requested_entrypoint,
+                export_conditions: &bundle.export_conditions,
+                runtime_target: &bundle.runtime_target,
+                declaration_target: &bundle.declaration_target,
+                acceptance_root: &bundle.acceptance_root,
+                snapshot_root: &bundle.snapshot_root,
+                environment: bundle.environment.as_deref(),
+                identity: &bundle.identity,
+                citations: &bundle.bindings.cited_acceptances,
+            }),
+            &conditions,
+            &installed,
+            &signed_bytes,
+            &resolved,
+            &environment,
+            rule,
+        )
+    };
+
+    let older = [loaded_in(&certified("1.0.0"))];
+    let newer_helper = tree(rc6(), "1.0.0", "1.1.0");
+    assert!(
+        admit(&older, &newer_helper, EnvironmentRule::Exact).is_empty(),
+        "a project catalog needs the whole environment"
+    );
+    assert_eq!(
+        admit(&older, &newer_helper, EnvironmentRule::SolidRuntime),
+        vec![("plain-package".to_owned(), older[0].identity.clone())],
+        "the tier needs only the Solid runtime it was proven on"
+    );
+    let other_runtime = tree(
+        entry("@solidjs/signals", "2.0.0-rc.0", "sha512-signals-rc0"),
+        "1.0.0",
+        "1.0.0",
+    );
+    assert!(
+        admit(&older, &other_runtime, EnvironmentRule::SolidRuntime).is_empty(),
+        "another Solid runtime refuses under either rule"
+    );
+    assert!(
+        admit(
+            &older,
+            &tree(rc6(), "2.0.0", "1.1.0"),
+            EnvironmentRule::SolidRuntime
+        )
+        .is_empty(),
+        "a different dependency of the runtime is a different runtime"
+    );
+
+    let unedged = [loaded_in(&[rc6(), helper("1.0.0")])];
+    assert!(
+        admit(&unedged, &newer_helper, EnvironmentRule::SolidRuntime).is_empty(),
+        "an environment without edges cannot name the runtime's dependencies"
+    );
+
+    let both = [
+        loaded_in(&certified("1.0.0")),
+        loaded_in(&certified("1.1.0")),
+    ];
+    assert_eq!(
+        admit(&both, &newer_helper, EnvironmentRule::SolidRuntime),
+        vec![("plain-package".to_owned(), both[1].identity.clone())],
+        "the candidate whose whole environment is installed is preferred"
+    );
+}
+
 #[test]
 fn a_consumer_tree_gets_only_the_certification_of_its_own_environment() {
     let directory = std::env::temp_dir().join(format!(
@@ -2146,6 +2259,7 @@ fn an_acceptance_citing_a_receipt_the_tier_no_longer_carries_is_withdrawn() {
         &signed_bytes,
         &|_: &str| Some("dist/index.js".to_owned()),
         &any_environment,
+        EnvironmentRule::Exact,
     );
     assert!(admitted.is_empty(), "a withdrawn citation admits nothing");
     // The rule itself: citing nothing is never withdrawn, and citing a
