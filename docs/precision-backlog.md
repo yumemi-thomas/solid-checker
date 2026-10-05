@@ -1,5 +1,16 @@
 # Precision backlog
 
+## A component's owner carried to runWithOwner is not null (2026-10-06)
+
+ADR 0206. `runWithOwner(owner, fn)` runs `fn` under an owner when `owner` is
+a `const` bound to `getOwner()` written directly in a proven component's
+body.
+
+- **Gained:** rc.13 corpus uncertifiable 3,435 to 3,421 (all 14
+  `missing-owner` obligations, in `sefer`); violations unchanged.
+- **Still open:** `getOwner()` in a non-component helper, a `let` binding,
+  and an owner passed through a parameter or property.
+
 ## Coverage gaps group by family and subject (2026-10-06)
 
 ADR 0205. Each analysis-coverage finding states a family and a subject

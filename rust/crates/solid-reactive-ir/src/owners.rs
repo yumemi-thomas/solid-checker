@@ -2691,6 +2691,9 @@ pub(crate) fn run_with_owner_callback_owner(
     if lookup.primitive_at_call(file, owner.span) == Some(Primitive::CreateOwner) {
         return Some(solid_dialect::CallbackOwner::Creates);
     }
+    if component_owner_binding(file, owner.span, lookup) {
+        return Some(solid_dialect::CallbackOwner::Creates);
+    }
 
     if let Some(descriptor) = lookup
         .entity_at(file.path.as_str(), owner.span)
@@ -2714,6 +2717,44 @@ pub(crate) fn run_with_owner_callback_owner(
     }
 
     Some(solid_dialect::CallbackOwner::Conditional)
+}
+
+/// ADR 0206: whether `value` names a `const` bound to `getOwner()` written
+/// directly in a proven component's body.
+///
+/// A proven component's body runs under an owner: the owner graph seeds it
+/// owned (`owner_node`), as its render does. `getOwner()` called directly
+/// there, not in a nested function or a default, therefore returns that
+/// owner, never `null`, and a `const` keeps it. The owner may have been
+/// disposed by the time a later callback hands it to `runWithOwner`; that is
+/// not the null owner this question is about.
+fn component_owner_binding(
+    file: &solid_facts::FileFacts,
+    value: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let value = file.ast.peel_ts_sugar_span(value);
+    let Some((binding_file, binding, _)) = lookup.binding_at_reference(file.path.as_str(), value)
+    else {
+        return false;
+    };
+    let Some(initializer) = binding.call_initializer else {
+        return false;
+    };
+    if !binding.immutable
+        || binding.shape != solid_facts::ast::BindingShape::Identifier
+        || lookup.primitive_at_call(binding_file, initializer) != Some(Primitive::GetOwner)
+    {
+        return false;
+    }
+    let Some(component) = containing_ast_function(&binding_file.ast, initializer) else {
+        return false;
+    };
+    !component.r#async
+        && !component.generator
+        && written_directly_in(&binding_file.ast, component, initializer)
+        && lookup.function_component_status(binding_file, component)
+            == crate::indexes::ComponentStatus::Proven
 }
 
 /// Resolve the primitive whose returned function is the callee of `call`.
