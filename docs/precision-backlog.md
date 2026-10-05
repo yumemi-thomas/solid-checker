@@ -1,5 +1,21 @@
 # Precision backlog
 
+## `useQuery` options run as a tracked compute (2026-10-05)
+
+ADR 0198. The authored tier states, probe-checked, that
+`@tanstack/solid-query` 6.0.0-rc.0 and rc.3 `useQuery` and `useInfiniteQuery`
+invoke their options function during the call, as the tracked compute of a
+memo they create.
+
+- **Gained:** 33 rc.13 corpus `SC1001` callback reads leave uncertifiable. No
+  violation moved.
+- **Still open:**
+  - wrappers that forward the options into the hook (`ai-memory-ui`, 46
+    sites);
+  - writes inside the options function, which the write role does not read
+    from this claim (the probe's misuse twin is not flagged statically: a
+    missed finding, not a false positive).
+
 ## A callback prop forwarded to an event runs on dispatch (2026-10-05)
 
 ADR 0199. A read in a function literal written as a project component's prop

@@ -1,6 +1,6 @@
 {
   "package": "@tanstack/solid-query",
-  "version": "6.0.0-rc.0",
+  "version": "6.0.0-rc.3",
   "solidRuntime": [
     {
       "name": "solid-js",
@@ -20,37 +20,6 @@
   ],
   "pairs": "../_pairs/@tanstack+solid-query",
   "exports": {
-    "useMutation": {
-      "why": "Returns a store of the mutation's state; reading a property untracked is a strict read.",
-      "rule": "strict-read-untracked",
-      "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "store"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "returns": [
-          "return"
-        ]
-      }
-    },
     "useQuery": {
       "why": "Invokes the options function on every call, on the same stack, as the tracked compute of a createMemo it creates.",
       "rule": "reactive-write-in-owned-scope",

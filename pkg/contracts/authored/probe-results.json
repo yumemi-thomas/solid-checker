@@ -1119,6 +1119,52 @@
       "spec": "@tanstack+solid-query@6.0.0-rc.0",
       "package": "@tanstack/solid-query",
       "version": "6.0.0-rc.0",
+      "export": "useInfiniteQuery",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "src/index.ts",
+        "build/dev.js",
+        "build/index.js"
+      ],
+      "rule": "reactive-write-in-owned-scope",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 9,
+            "column": 5
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/spotify-desk-thing/.solid-checker-authored-probes/_tanstack_solid-query_6.0.0-rc.0_useInfiniteQuery/main.tsx",
+            "line": 8,
+            "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@tanstack+solid-query@6.0.0-rc.0",
+      "package": "@tanstack/solid-query",
+      "version": "6.0.0-rc.0",
       "export": "useMutation",
       "solidRuntime": [
         {
@@ -1148,6 +1194,144 @@
             "file": "case",
             "line": 7,
             "column": 27
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@tanstack+solid-query@6.0.0-rc.0",
+      "package": "@tanstack/solid-query",
+      "version": "6.0.0-rc.0",
+      "export": "useQuery",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "src/index.ts",
+        "build/dev.js",
+        "build/index.js"
+      ],
+      "rule": "reactive-write-in-owned-scope",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 9,
+            "column": 5
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/spotify-desk-thing/.solid-checker-authored-probes/_tanstack_solid-query_6.0.0-rc.0_useQuery/main.tsx",
+            "line": 8,
+            "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@tanstack+solid-query@6.0.0-rc.3",
+      "package": "@tanstack/solid-query",
+      "version": "6.0.0-rc.3",
+      "export": "useInfiniteQuery",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "src/index.ts",
+        "build/dev.js",
+        "build/index.js"
+      ],
+      "rule": "reactive-write-in-owned-scope",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 9,
+            "column": 5
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/probus-hk/.solid-checker-authored-probes/_tanstack_solid-query_6.0.0-rc.3_useInfiniteQuery/main.tsx",
+            "line": 8,
+            "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@tanstack+solid-query@6.0.0-rc.3",
+      "package": "@tanstack/solid-query",
+      "version": "6.0.0-rc.3",
+      "export": "useQuery",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "src/index.ts",
+        "build/dev.js",
+        "build/index.js"
+      ],
+      "rule": "reactive-write-in-owned-scope",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 9,
+            "column": 5
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/probus-hk/.solid-checker-authored-probes/_tanstack_solid-query_6.0.0-rc.3_useQuery/main.tsx",
+            "line": 8,
+            "column": 32
           }
         }
       ],

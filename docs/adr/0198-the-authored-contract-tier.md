@@ -154,3 +154,21 @@ document cannot state honestly.
   - Not admitted where the installed integrity is not a stated fact:
     `beacon-web` (binary `bun.lockb`, and a `package-lock.json` without
     integrities) and `error-menu-web` (two Solid versions in one lockfile).
+- **`@tanstack/solid-query` options callbacks:** `useQuery` and
+  `useInfiniteQuery`, on 6.0.0-rc.0 and rc.3.
+  - Claim: argument 0 is invoked on every call, on the same stack, as the
+    tracked compute of an owner the hook creates. Both versions call it
+    inside `createMemo(() => options())`. Owner requirements stay unclaimed.
+  - Each misuse twin writes a signal inside the options function and raises
+    `REACTIVE_WRITE_IN_OWNED_SCOPE`; each correct twin reads one and raises
+    nothing.
+  - A created owner needs a named resource and a positive ownership-production
+    claim. A document that does not decode makes every project fail at load,
+    and `author-contracts.mjs check` does not catch that: only the
+    `the_shipped_index_loads` unit test does. Rebuild and run a project after
+    every tier change.
+  - Measured on the rc.13 corpus: 33 `SC1001` callback reads leave
+    uncertifiable; violations unchanged at 267.
+  - Not cleared: `ai-memory-ui`'s own `useQuery` wrapper (46 sites) invokes
+    the options inside the literal it hands to the real hook. Carrying the
+    tracked role through a project helper is A3's helper step.

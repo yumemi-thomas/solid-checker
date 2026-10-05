@@ -300,8 +300,8 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/107fe960861bf7643949bcc646ce2acd30d19a53aa2c87e7fa883d1a97a48aae.json",
-      "documentDigest": "sha256:107fe960861bf7643949bcc646ce2acd30d19a53aa2c87e7fa883d1a97a48aae"
+      "document": "objects/b858c816c4ce1dc1c757e77bb2786e9a75508186c942c79e6c6fa446a405e15a.json",
+      "documentDigest": "sha256:b858c816c4ce1dc1c757e77bb2786e9a75508186c942c79e6c6fa446a405e15a"
     },
     {
       "packageName": "@tanstack/solid-query",
@@ -334,8 +334,8 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/d5516ac20ba841c40cdda5b44060df22e1ff094d2f38fdaa4e7d2f8aa2b2fd78.json",
-      "documentDigest": "sha256:d5516ac20ba841c40cdda5b44060df22e1ff094d2f38fdaa4e7d2f8aa2b2fd78"
+      "document": "objects/b8abb332eef018c46e6d0edebc6d27434e6aafedbbdb2f3b076b16a06e6af57c.json",
+      "documentDigest": "sha256:b8abb332eef018c46e6d0edebc6d27434e6aafedbbdb2f3b076b16a06e6af57c"
     },
     {
       "packageName": "@tanstack/solid-query",
@@ -367,8 +367,109 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/0e6e5e37d849689951edf7048f4d1b2fedbd07d94966f2b3504e884d9e158030.json",
-      "documentDigest": "sha256:0e6e5e37d849689951edf7048f4d1b2fedbd07d94966f2b3504e884d9e158030"
+      "document": "objects/ae4c6ca802ccb1fe5b1256b2171c285bda0776c9de3c59be1f5c041c4a20a62c.json",
+      "documentDigest": "sha256:ae4c6ca802ccb1fe5b1256b2171c285bda0776c9de3c59be1f5c041c4a20a62c"
+    },
+    {
+      "packageName": "@tanstack/solid-query",
+      "specifier": "@tanstack/solid-query",
+      "packageVersion": "6.0.0-rc.3",
+      "packageIntegrity": "sha512-Wj23dMyRnVmKiYvvyMImZqb3+2Ftxc7FngUfloCAmQE2dpQO/QeqaSHNlpjbG6eoKqazVPe4k1xhxofUU+w/dA==",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "@tanstack/custom-condition",
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "src/index.ts",
+      "declarationTarget": "src/index.ts",
+      "snapshotRoot": "sha256:88646e469d77d68f00556b0c3a9cf08087a25f4377945e3ab93513c199a426db",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/a6a1f27f16eb2529410c0a2204b055ae7c9b425d01dbf42d92e5f91dd1368778.json",
+      "documentDigest": "sha256:a6a1f27f16eb2529410c0a2204b055ae7c9b425d01dbf42d92e5f91dd1368778"
+    },
+    {
+      "packageName": "@tanstack/solid-query",
+      "specifier": "@tanstack/solid-query",
+      "packageVersion": "6.0.0-rc.3",
+      "packageIntegrity": "sha512-Wj23dMyRnVmKiYvvyMImZqb3+2Ftxc7FngUfloCAmQE2dpQO/QeqaSHNlpjbG6eoKqazVPe4k1xhxofUU+w/dA==",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "development",
+        "import"
+      ],
+      "runtimeTarget": "build/dev.js",
+      "declarationTarget": "build/index.d.ts",
+      "snapshotRoot": "sha256:88646e469d77d68f00556b0c3a9cf08087a25f4377945e3ab93513c199a426db",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/04fcab018ad3efdde3cfeb704451520136c26f1f8d42727465756ff63d260029.json",
+      "documentDigest": "sha256:04fcab018ad3efdde3cfeb704451520136c26f1f8d42727465756ff63d260029"
+    },
+    {
+      "packageName": "@tanstack/solid-query",
+      "specifier": "@tanstack/solid-query",
+      "packageVersion": "6.0.0-rc.3",
+      "packageIntegrity": "sha512-Wj23dMyRnVmKiYvvyMImZqb3+2Ftxc7FngUfloCAmQE2dpQO/QeqaSHNlpjbG6eoKqazVPe4k1xhxofUU+w/dA==",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "build/index.js",
+      "declarationTarget": "build/index.d.ts",
+      "snapshotRoot": "sha256:88646e469d77d68f00556b0c3a9cf08087a25f4377945e3ab93513c199a426db",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/5de719809d5395a0aeca1d0d12eac76c347b9675bac9670eb9959afefd53259b.json",
+      "documentDigest": "sha256:5de719809d5395a0aeca1d0d12eac76c347b9675bac9670eb9959afefd53259b"
     },
     {
       "packageName": "@tanstack/solid-router",
