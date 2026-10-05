@@ -2003,7 +2003,7 @@ mod tests {
         // The advice pins all three, and names what it found.
         assert!(
             finding.hint.contains(
-                "pin solid-js, @solidjs/signals and @solidjs/web to 2.0.0-rc.9, the audited release of each"
+                "pin solid-js, @solidjs/signals and @solidjs/web to 2.0.0-rc.13, the audited release of each"
             ) && finding
                 .hint
                 .contains(&format!("this project resolves {found}")),

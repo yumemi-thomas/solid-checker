@@ -1,0 +1,24 @@
+{
+  "name": "@solidjs/signals",
+  "version": "2.0.0-rc.13",
+  "tarball": "https://registry.npmjs.org/@solidjs/signals/-/signals-2.0.0-rc.13.tgz",
+  "gitHead": "5efaf260becb32293f2bcb4d32f8be72be6de674",
+  "registryIntegrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ==",
+  "registryShasum": "0a796fe2281c8523bbe67879cd14435af5cb7e19",
+  "registryFileCount": 119,
+  "registryUnpackedSize": 2894640,
+  "downloaded": {
+    "date": "2026-10-05",
+    "by": "npm pack @solidjs/signals@2.0.0-rc.13",
+    "bytes": 843665,
+    "sha512": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ==",
+    "sha1": "0a796fe2281c8523bbe67879cd14435af5cb7e19",
+    "sha256": "c9fe7d6ab20af16f52807c68d5f9671cccbb778ef33cce0885fa77cb9ed7871a",
+    "extractedFileCount": 119,
+    "extractedTreeEqualsLockfileInstall": true
+  },
+  "lockfileIntegrity": {
+    "source": "rust/target/audit-rc13 npm install, node_modules/.package-lock.json",
+    "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+  }
+}

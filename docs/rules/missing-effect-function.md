@@ -10,7 +10,7 @@ single-callback form.
 Flags the published, deprecated one-argument overload and values that only
 type-check because a TypeScript assertion hid their runtime shape. The
 overload is release-dependent: `@solidjs/signals` rc.0-rc.5 declare
-`createEffect(compute): never`, and rc.6 removed it, so on the audited rc.9 a
+`createEffect(compute): never`, and rc.6 removed it, so on the audited rc.13 a
 one-argument call (or an exact one-element spread) is TS2554 and this rule is
 silent on it — the call resolves to no published signature. Those spellings
 are reported only where the installed release still declares the overload

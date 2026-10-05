@@ -228,6 +228,9 @@ pub(crate) const RELEASE_GATED_NAMES: &[&str] = &["until"];
 /// installed rc.3 trees, rc.6's against the installed rc.6 tree, and rc.9's
 /// against both its installed tree and its registry tarball.
 ///
+/// rc.13 is not listed: no row was read on its bytes (ADR 0194), and an
+/// archive is listed to say which rows answer for it.
+///
 /// `solid-js@2.0.0-rc.3` is listed even though its audited document covers
 /// only ten exports: the archive was read, and "read and found nothing to
 /// deny about `createSignal`" has to be distinguishable from "never looked".
@@ -4804,6 +4807,7 @@ impl Dialect for Solid2 {
     fn modules(&self) -> &'static [&'static str] {
         &[
             "solid-js",
+            "solid-js/internal",
             "solid-js/refresh",
             "@solidjs/web",
             "@solidjs/web/frames",
@@ -6401,6 +6405,8 @@ impl Dialect for Solid2 {
     fn namespace_import_primitives(&self, module: &str) -> &'static [&'static str] {
         if module == "solid-js" {
             NAMESPACE_SOLID_JS
+        } else if module == "solid-js/internal" {
+            NAMESPACE_SOLID_JS_INTERNAL
         } else if module == "@solidjs/web" {
             NAMESPACE_SOLIDJS_WEB
         } else {
@@ -6408,6 +6414,15 @@ impl Dialect for Solid2 {
         }
     }
 }
+
+/// The names a `solid-js/internal` namespace import exposes: the three
+/// boundary primitives `solid-js@2.0.0-rc.13` declares there and no longer at
+/// the root (ADR 0194).
+const NAMESPACE_SOLID_JS_INTERNAL: &[&str] = &[
+    "createErrorBoundary",
+    "createLoadingBoundary",
+    "createRevealOrder",
+];
 
 /// The names a `solid-js` namespace import exposes.
 ///

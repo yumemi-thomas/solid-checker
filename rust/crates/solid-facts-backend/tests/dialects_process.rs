@@ -807,15 +807,25 @@ fn a_reviewed_release_is_analyzed_with_one_notice_beside_the_findings() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
-    // rc.9 is the audited release (ADR 0127): the same project, analyzed, no
-    // notice. `App.tsx` imports `createSignal` alone, so the scoped re-export
-    // gap is not reached (`rc9_re_export_gap_is_due_only_where_a_project_reaches_it`
-    // pins that gap).
-    let (code, audited) = run_checker("unaudited-release-rc9", &[]);
+    // rc.13 is the audited release (ADR 0194): the same project, analyzed, no
+    // notice.
+    let (code, audited) = run_checker("unaudited-release-rc13", &[]);
     let ids = finding_ids(&audited);
     assert!(ids.contains(&"SC1003".to_owned()), "{ids:?}");
     assert!(!ids.contains(&"SC9014".to_owned()), "{ids:?}");
     assert_eq!(code, 0);
+    // rc.9 is now older than it: one notice. `App.tsx` imports `createSignal`
+    // alone, so rc.9's scoped re-export gap is not reached
+    // (`rc9_re_export_gap_is_due_only_where_a_project_reaches_it` pins that
+    // gap).
+    let (_, older) = run_checker("unaudited-release-rc9", &[]);
+    let ids = finding_ids(&older);
+    assert!(ids.contains(&"SC1003".to_owned()), "{ids:?}");
+    assert_eq!(
+        ids.iter().filter(|id| *id == "SC9014").count(),
+        1,
+        "{ids:?}"
+    );
 
     let (code, snapshot) = run_checker("unaudited-release-rc8", &[]);
     let ids = finding_ids(&snapshot);
@@ -841,7 +851,7 @@ fn a_reviewed_release_is_analyzed_with_one_notice_beside_the_findings() {
     assert!(
         hint.contains(
             "docs/package-contract-v2/audits/2026-09-26-solid-2-rc1-rc8-release-review.md"
-        ) && hint.contains("to 2.0.0-rc.9, the audited release of each"),
+        ) && hint.contains("to 2.0.0-rc.13, the audited release of each"),
         "the notice points at the review and the audited release: {hint}"
     );
     let gaps = notice["evidence"]

@@ -1,0 +1,79 @@
+{
+  ".": {
+    "worker": {
+      "development": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.dev.js"
+      },
+      "observe": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.observe.js"
+      },
+      "types": "./types/index.d.ts",
+      "default": "./dist/server.js"
+    },
+    "browser": {
+      "development": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/solid.dev.js"
+      },
+      "observe": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/solid.observe.js"
+      },
+      "types": "./types/index.d.ts",
+      "default": "./dist/solid.js"
+    },
+    "deno": {
+      "development": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.dev.js"
+      },
+      "observe": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.observe.js"
+      },
+      "types": "./types/index.d.ts",
+      "default": "./dist/server.js"
+    },
+    "node": {
+      "development": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.dev.js"
+      },
+      "observe": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.observe.js"
+      },
+      "types": "./types/index.d.ts",
+      "default": "./dist/server.js"
+    },
+    "development": {
+      "types": "./types/index.d.ts",
+      "default": "./dist/solid.dev.js"
+    },
+    "observe": {
+      "types": "./types/index.d.ts",
+      "default": "./dist/solid.observe.js"
+    },
+    "types": "./types/index.d.ts",
+    "default": "./dist/solid.js"
+  },
+  "./refresh": {
+    "development": {
+      "types": "./types/refresh/index.d.ts",
+      "default": "./dist/refresh.dev.js"
+    },
+    "types": "./types/refresh/index.d.ts",
+    "default": "./dist/refresh.js"
+  },
+  "./attribution": {
+    "types": "./types/attribution.d.ts",
+    "default": "./dist/attribution.js"
+  },
+  "./internal": {
+    "types": "./types/internal.d.ts",
+    "default": "./dist/internal.js"
+  },
+  "./package.json": "./package.json"
+}

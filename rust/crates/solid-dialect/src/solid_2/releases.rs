@@ -10,9 +10,9 @@
 //! | --- | --- | --- |
 //! | B1: is a store root's own property `readonly` to TypeScript? | `@solidjs/signals` (`Store<T>`, `dist/types/store/store.d.ts:4`) | the installed `solid-js`, which re-exports `createStore` |
 //! | B4: is `until` an export? | `solid-js` (the root re-export, from rc.5) *and* `@solidjs/signals` (the declaration, from rc.5) | as above |
-//! | B2: does `dynamic(source, { static: true })` select a different runtime? | `@solidjs/web` (`if (options?.static)`, rc.9 only) | the project |
-//! | B3: does `omit`'s lone function argument run as a predicate? | `@solidjs/signals` (rc.9 only) | the installed `solid-js` |
-//! | N3: does the dev store-setter guard reject a root owner? | `@solidjs/signals` (`devGuardStoreSetterWrite`, rc.9 only) | the installed `solid-js` |
+//! | B2: does `dynamic(source, { static: true })` select a different runtime? | `@solidjs/web` (`if (options?.static)`, from rc.9) | the project |
+//! | B3: does `omit`'s lone function argument run as a predicate? | `@solidjs/signals` (from rc.9) | the installed `solid-js` |
+//! | N3: does the dev store-setter guard reject a root owner? | `@solidjs/signals` (`devGuardStoreSetterWrite`, from rc.9) | the installed `solid-js` |
 //! | N4: does `flush` throw `FLUSH_IN_ACTION` inside an action step? | `@solidjs/signals` (`dist/dev-shared.js`, from rc.8) | the installed `solid-js` |
 //! | N5: does an optimistic-store setter meet the owned-scope write guard? | `@solidjs/signals` (`devGuardStoreSetterWrite`, from rc.1) | the installed `solid-js` |
 //!
@@ -36,7 +36,8 @@
 //! | rc.7 | `Mutable` | ignored (`DynamicOptions` is `deferStream` only, and no bundle reads it on the client) | absent | present | exempt | absent | `@solidjs/signals`: no negative row |
 //! | rc.8 | `Mutable` | as rc.7 | absent | present | exempt | present | as rc.7 |
 //! | rc.9 | `Mutable` | `static` selects `staticDynamic(untrack(source))` | present | present | guarded | present | `@solidjs/signals`: negative rows for five creates answers only; `solid-js`: re-exports its declarations do not declare |
-//! | anything else (rc.10+, betas, `2.0.0`, an inexact spelling) | `Readonly` (see below) | not modelled | absent | not modelled | exempt (see below) | not modelled | the release is named as not compared |
+//! | rc.13 | as rc.9 | as rc.9 | as rc.9 | as rc.9 | as rc.9 | as rc.9 | none: audited (the rc.13 review, 2026-10-05). No negative row is carried to its archives (ADR 0194) |
+//! | anything else (rc.10-rc.12, rc.14+, betas, `2.0.0`, an inexact spelling) | `Readonly` (see below) | not modelled | absent | not modelled | exempt (see below) | not modelled | the release is named as not compared |
 //! | not resolved | `Readonly` (see below) | as rc.3 (nothing can import `dynamic`) | absent | not modelled | exempt (see below) | not modelled | named for `@solidjs/signals`; none for `@solidjs/web` |
 //!
 //! N5 is `guarded` on every row but rc.0's, whose optimistic-store setter
@@ -118,9 +119,9 @@ pub(super) const OWNERS: &[ReleaseOwner] = &[
 /// unread owner's consequence, SC9014's pin) is derived from this list, and
 /// [`Solid2::AUDITED`] is tested to be the vocabulary it reviews to.
 pub(super) const AUDITED_INSTALLATION: &[(&str, &str)] = &[
-    (SOLID_JS, "2.0.0-rc.9"),
-    (SIGNALS, "2.0.0-rc.9"),
-    (WEB, "2.0.0-rc.9"),
+    (SOLID_JS, "2.0.0-rc.13"),
+    (SIGNALS, "2.0.0-rc.13"),
+    (WEB, "2.0.0-rc.13"),
 ];
 
 /// The audited release of one owner, from [`AUDITED_INSTALLATION`].
@@ -443,8 +444,20 @@ const RC9_REVIEW: &str =
 const RC1_RC8_REVIEW: &str =
     "docs/package-contract-v2/audits/2026-09-26-solid-2-rc1-rc8-release-review.md";
 
-/// The newest `2.0.0-rc.N` any review read.
-const NEWEST_READ: u8 = 9;
+/// The review of the rc.13 triple. It names no gap, so no table cites it;
+/// only the test that every review exists does (ADR 0194).
+#[cfg(test)]
+const RC13_REVIEW: &str =
+    "docs/package-contract-v2/audits/2026-10-05-solid-2-rc13-vocabulary-review.md";
+
+/// Every `2.0.0-rc.N` some review read. rc.10 and rc.11 were published and
+/// never read; rc.12 was never published.
+const READ_RELEASES: &[u8] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 13];
+
+/// The first release on which the answers rc.9 introduced (B2, B3, N3) hold.
+/// Every read release from it on gives them: the rc.13 review measured each
+/// on rc.13's bytes (§ 0).
+const RC9: u8 = 9;
 
 /// A gap one reviewed release of one owner leaves open.
 struct KnownGap {
@@ -556,7 +569,7 @@ impl<'a> Release<'a> {
                     && (*number == "0" || !number.starts_with('0'))
             })
             .and_then(|number| number.parse::<u8>().ok())
-            .filter(|number| *number <= NEWEST_READ)
+            .filter(|number| READ_RELEASES.contains(number))
             .map_or(Self::Unread(version), Self::Read)
     }
 
@@ -610,21 +623,21 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
         // from, so the answer is never asked; the audited one keeps the
         // vocabulary the language's own.
         dynamic_options: match web {
-            Release::Read(NEWEST_READ) => DynamicOptions::StaticForm,
+            Release::Read(number) if number >= RC9 => DynamicOptions::StaticForm,
             Release::Read(_) | Release::Unresolved => DynamicOptions::Ignored,
             Release::Unread(_) => DynamicOptions::Unread,
         },
         // B3. `omit` is `@solidjs/signals`'s (`solid-js` re-exports it), and
-        // only rc.9's runtime tests `typeof keys[0] === "function"`
+        // rc.9's runtime, and rc.13's, test `typeof keys[0] === "function"`
         // (`dist/dev.js:4380`; the rc.1-rc.8 review § 3.3 finds no earlier
         // release that does). An unread or unresolved signals keeps `false`.
-        omit_predicate_form: matches!(signals, Release::Read(NEWEST_READ)),
+        omit_predicate_form: matches!(signals, Release::Read(number) if number >= RC9),
         // N3. `devGuardStoreSetterWrite` is signals' (`solid-js` re-exports
-        // `createStore`), and rc.9 is the only release whose store setters all
+        // `createStore`), and rc.9 is the first release whose store setters all
         // reject a root (`StoreSetterRootGuard`). Every other answer, unread
         // and unresolved included, keeps the one that reports nothing.
         store_setter_roots: match signals {
-            Release::Read(NEWEST_READ) => StoreSetterRootGuard::Guarded,
+            Release::Read(number) if number >= RC9 => StoreSetterRootGuard::Guarded,
             Release::Read(_) | Release::Unread(_) | Release::Unresolved => {
                 StoreSetterRootGuard::Exempt
             }
@@ -959,6 +972,8 @@ mod tests {
                 true,
                 2,
             ),
+            // rc.9's re-export gap, and the notice that it is older than the
+            // audited rc.13.
             (
                 "2.0.0-rc.9",
                 StoreRootTyping::Mutable,
@@ -967,7 +982,19 @@ mod tests {
                 DynamicOptions::StaticForm,
                 StoreSetterRootGuard::Guarded,
                 true,
-                1,
+                2,
+            ),
+            // The audited release: rc.9's answers (the rc.13 review § 0), no
+            // gap.
+            (
+                "2.0.0-rc.13",
+                StoreRootTyping::Mutable,
+                true,
+                true,
+                DynamicOptions::StaticForm,
+                StoreSetterRootGuard::Guarded,
+                true,
+                0,
             ),
         ];
         for (
@@ -1008,6 +1035,34 @@ mod tests {
             analyzed(&same("2.0.0-rc.9")).0.index(),
             Solid2::AUDITED.index()
         );
+        assert_eq!(
+            analyzed(&same("2.0.0-rc.13")).0.index(),
+            Solid2::AUDITED.index()
+        );
+        // rc.10 and rc.11 were published and never read: the conservative
+        // answers, under the notice.
+        for unread in ["2.0.0-rc.10", "2.0.0-rc.11", "2.0.0-rc.12", "2.0.0-rc.14"] {
+            let vocabulary = analyzed(&same(unread)).0;
+            assert_eq!(
+                (
+                    vocabulary.store_root,
+                    vocabulary.omit_predicate_form,
+                    vocabulary.until,
+                    vocabulary.dynamic_options,
+                    vocabulary.store_setter_roots,
+                    vocabulary.flush_in_action
+                ),
+                (
+                    StoreRootTyping::Readonly,
+                    false,
+                    false,
+                    DynamicOptions::Unread,
+                    StoreSetterRootGuard::Exempt,
+                    false
+                ),
+                "{unread}"
+            );
+        }
         // rc.4-rc.6 name all five patch-channel exports between them.
         let names = analyzed(&same("2.0.0-rc.5"))
             .1
@@ -1361,7 +1416,7 @@ mod tests {
         );
         // Every answer `@solidjs/signals` owns falls back to it, over the
         // newest read `solid-js` and `@solidjs/web`.
-        let rc9 = Release::Read(NEWEST_READ);
+        let rc9 = Release::Read(RC9);
         for signals in [Release::Unresolved, Release::Unread("2.0.0-rc.10")] {
             let vocabulary = vocabulary_for(rc9, signals, rc9);
             assert_eq!(vocabulary.store_root, conservative.store_root);
@@ -1537,11 +1592,16 @@ mod tests {
     #[test]
     fn every_review_names_a_document_that_exists() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        for document in [RC9_REVIEW, RC1_RC8_REVIEW, PRE_BETA_EXPERIMENT.review] {
+        for document in [
+            RC13_REVIEW,
+            RC9_REVIEW,
+            RC1_RC8_REVIEW,
+            PRE_BETA_EXPERIMENT.review,
+        ] {
             assert!(root.join(document).is_file(), "{document} is missing");
         }
         for known in KNOWN_GAPS {
-            assert!(known.from <= known.through && known.through <= NEWEST_READ);
+            assert!(known.from <= known.through && READ_RELEASES.contains(&known.through));
             assert!(OWNERS.iter().any(|owner| owner.package == known.package));
         }
     }

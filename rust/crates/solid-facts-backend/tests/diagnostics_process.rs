@@ -13,8 +13,9 @@ fn write_scope_diagnostics_have_semantic_locations() {
     // while writes and the action inside createTrackedEffect no longer do
     // (children-forbidden leaf scopes are legal write regions). The two store
     // setters directly in the component body count too: the fixture resolves
-    // no solid-js, so it is analyzed as the audited rc.9, whose store setter
-    // guard rejects a root owner (ADR 0127).
+    // no solid-js, so it is analyzed as the audited release, whose store
+    // setter guard rejects a root owner (ADR 0127; rc.13 keeps rc.9's
+    // answer, ADR 0194).
     assert_eq!(
         (
             findings_for_rule(&findings, "reactive-write-in-owned-scope").len(),
@@ -690,10 +691,11 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // tracked scopes throw and the same observer-free ones -- plus the
         // action step rc.9 documents -- stay silent.
         assert_rule_findings(&findings, "until-in-tracked-scope", 4);
-        // rc.9 is the audited release (ADR 0127): no SC9014 notice beside them.
+        // rc.9 is older than the audited rc.13 (ADR 0194): one SC9014 notice
+        // beside them.
         assert_eq!(
             findings_for_rule(&findings, "unaudited-solid-release").len(),
-            0,
+            1,
             "{findings:#?}"
         );
         assert!(
@@ -737,7 +739,7 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
     // step as anywhere else.
     let line = |finding: &serde_json::Value| finding["primaryLocation"]["line"].as_u64();
     for (fixture, lines, notice) in [
-        ("rc9-flush-in-action", &[14_u64, 20, 27, 32, 39, 44][..], 0),
+        ("rc9-flush-in-action", &[14_u64, 20, 27, 32, 39, 44][..], 1),
         ("release-triple-flush-rc8", &[9, 15][..], 1),
         ("release-triple-flush-rc3", &[][..], 1),
     ] {
@@ -759,8 +761,8 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
                 .all(|finding| finding["id"] == "SC2006" && finding["kind"] == "violation"),
             "{fixture}: {findings:#?}"
         );
-        // Beside them only the release notice, which the audited rc.9 triple
-        // does not get and the older ones do (ADR 0127).
+        // Beside them only the release notice, which every one of these
+        // triples gets: all are older than the audited rc.13 (ADR 0194).
         assert_eq!(
             findings_for_rule(&findings, "unaudited-solid-release").len(),
             notice,
@@ -847,11 +849,12 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
             [Some(50), Some(57), Some(62), Some(71)],
             "{findings:#?}"
         );
-        // Seven findings, and no SC9014: rc.9 is the audited release (ADR 0127).
-        assert_eq!(findings.len(), 7, "{findings:#?}");
+        // Seven findings, and the SC9014 notice: rc.9 is older than the
+        // audited rc.13 (ADR 0194).
+        assert_eq!(findings.len(), 8, "{findings:#?}");
         assert_eq!(
             findings_for_rule(&findings, "unaudited-solid-release").len(),
-            0,
+            1,
             "{findings:#?}"
         );
     }
@@ -903,8 +906,8 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
             "{findings:#?}"
         );
         // The exported wrapper's own open callback (its callers may be outside
-        // the project), the control and the eight predicates; rc.9 is the
-        // audited release, so no SC9014 (ADR 0127).
+        // the project), the control and the eight predicates, and the SC9014
+        // notice: rc.9 is older than the audited rc.13 (ADR 0194).
         assert_eq!(
             findings_for_rule(&findings, "package-contract-incomplete")
                 .iter()
@@ -913,10 +916,10 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
             [Some(100)],
             "{findings:#?}"
         );
-        assert_eq!(findings.len(), 10, "{findings:#?}");
+        assert_eq!(findings.len(), 11, "{findings:#?}");
         assert_eq!(
             findings_for_rule(&findings, "unaudited-solid-release").len(),
-            0,
+            1,
             "{findings:#?}"
         );
     }
