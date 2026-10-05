@@ -56,6 +56,40 @@ browser host, release binary.
   - three tsc-oracle cases (95d354d58), which predated the Oct 4 precision
     changes (traced mounts, summary-attributed reads).
 
+## The rc.13 measurement corpus (2026-10-05)
+
+After ADRs 0194–0197 the audited release is rc.13, and no corpus app installed
+it. The rc.13 corpus is a copy-on-write clone of the 38-app corpus
+(`../solid-checker-rc13-corpus/apps`, outside the repository), made by
+`rust/target/defect-sweep/upgrade-rc13.py`:
+
+- every installed Solid 2 runtime copy (113, from rc.0 to rc.9, pnpm and Bun
+  stores included) is replaced with the exact rc.13 tarball contents;
+- lockfiles and every other package are unchanged;
+- 48 of the 49 projects resolve the rc.13 triple (`en-passant` resolves no
+  `solid-js`, as in the original).
+
+Sweep at HEAD (`rc13-browser.json`) against the original corpus at HEAD
+(`head-browser.json`, identical to ADR 0195's):
+
+| | original | rc.13 |
+|---|---|---|
+| violations | 265 | 256 (+1, −10) |
+| uncertifiable | 7,285 | 7,006 (+214, −488) |
+
+- **−10 violations:** the package findings (TanStack router memos in
+  `probus-hk`, the `useMutation` read in `spotify-desk-thing`). Their tier
+  bundles were proven on the apps' old runtimes, so they no longer apply.
+- **+1 violation:** the `combineProps` `overlays()` read in `app-game`, a
+  true positive that ADR 0186's partial bundle had made uncertifiable.
+- **−46 `SC9014` notices:** every app is on the audited release.
+- **Package claims fall back** from "partial" to "no accepted contract", and
+  64 reads at package boundaries become uncertifiable.
+
+So on the latest release, package findings depend on Track B: authored
+contracts, probe-checked on rc.13. The analysis of application code is
+unchanged.
+
 ## Plan
 
 ### Track A: application-code analysis (main track)
