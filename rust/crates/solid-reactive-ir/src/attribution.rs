@@ -117,6 +117,58 @@ pub(crate) fn obligation_reach(
         .collect()
 }
 
+/// Discharges, in a closed program, the obligation an exported helper raises
+/// for invoking a member of its own parameter (ADR 0203).
+///
+/// That obligation stands for callers outside the analyzed files
+/// ([`crate::EXPORTED_PARAMETER_MEMBER_DISPATCH`]). A closed program has none,
+/// so the helper's callers are the ones the project shows -- provided each way
+/// of entering the helper is a call expression the graph resolves to it. Every
+/// such call selects the member's implementation from the argument it passes,
+/// or files its own obligation, exactly as a call of an unexported helper does.
+/// A helper rendered through JSX, handed out as a value, or with no binding to
+/// enumerate keeps the obligation.
+pub(crate) fn discharge_closed_program_export_dispatch(
+    facts: &ProjectFacts,
+    lookup: &SemanticLookup<'_>,
+    entities: &EntitySymbols,
+    aliases: &HashMap<SymbolId, SymbolId>,
+    symbols_by_root: &HashMap<SymbolId, Vec<SymbolId>>,
+    defects: &mut Vec<StaticDefect>,
+) {
+    let exported_dispatch = |defect: &StaticDefect| {
+        defect.analysis_context == crate::EXPORTED_PARAMETER_MEMBER_DISPATCH
+    };
+    if !lookup.program_closed || !defects.iter().any(exported_dispatch) {
+        return;
+    }
+    let graph = CallGraph {
+        files_by_path: facts
+            .files
+            .iter()
+            .map(|file| (file.path.as_str(), file))
+            .collect(),
+        lookup,
+        entities,
+        aliases,
+        symbols_by_root,
+        entered_only_through_calls: RefCell::new(HashMap::new()),
+    };
+    defects.retain(|defect| {
+        if !exported_dispatch(defect) {
+            return true;
+        }
+        let Some(file) = graph.file(defect.location.path.as_ref()) else {
+            return true;
+        };
+        let function = Span::new(
+            u32::try_from(defect.location.start_byte).unwrap_or(u32::MAX),
+            u32::try_from(defect.location.end_byte).unwrap_or(u32::MAX),
+        );
+        !graph.entered_only_through_call_expressions(file.path.as_str(), function)
+    });
+}
+
 /// The functions a reach walk starts from, and whether they are all of them.
 struct ImportBindingUses<'a> {
     functions: Vec<(&'a str, Span, Span)>,
@@ -427,7 +479,36 @@ impl<'a> CallGraph<'a, '_> {
             self.lookup
                 .symbol_references(candidate.as_str())
                 .iter()
-                .all(|reference| self.reference_is_accounted_for(reference, &known_call_sites))
+                .all(|reference| {
+                    self.reference_is_accounted_for(reference, &known_call_sites, true)
+                })
+        })
+    }
+
+    /// Whether every way of entering this function is a call expression, each
+    /// of which the graph resolves to it: no JSX render, no render through a
+    /// dialect renderer or a rendering prop, and no value escape.
+    ///
+    /// Narrower than [`Self::entered_only_through_calls`], for a consumer that
+    /// relies on what a call expression's own site analysis decides (ADR 0203).
+    fn entered_only_through_call_expressions(&self, path: &str, function: Span) -> bool {
+        let Some(aliased) = self.function_symbols(path, function) else {
+            return false;
+        };
+        let known_call_sites = self
+            .lookup
+            .function_call_sites(path, function)
+            .into_iter()
+            .filter(|(caller, callee)| self.lookup.call_by_callee(caller, *callee).is_some())
+            .map(|(caller, callee)| (caller.path.to_string(), callee.start, callee.end))
+            .collect::<HashSet<_>>();
+        aliased.iter().all(|candidate| {
+            self.lookup
+                .symbol_references(candidate.as_str())
+                .iter()
+                .all(|reference| {
+                    self.reference_is_accounted_for(reference, &known_call_sites, false)
+                })
         })
     }
 
@@ -435,6 +516,7 @@ impl<'a> CallGraph<'a, '_> {
         &self,
         reference: &Location,
         known_call_sites: &HashSet<(String, u32, u32)>,
+        through_renders: bool,
     ) -> bool {
         let start = u32::try_from(reference.start_byte).unwrap_or(u32::MAX);
         let end = u32::try_from(reference.end_byte).unwrap_or(u32::MAX);
@@ -450,10 +532,11 @@ impl<'a> CallGraph<'a, '_> {
         // A reference whose value reaches only rendering props is accounted
         // for by the renders it reaches, which `reach_from` walks as its edges
         // (ADR 0138).
-        if self
-            .lookup
-            .prop_render_sites_at(file.path.as_str(), span)
-            .is_some()
+        if through_renders
+            && self
+                .lookup
+                .prop_render_sites_at(file.path.as_str(), span)
+                .is_some()
         {
             return true;
         }

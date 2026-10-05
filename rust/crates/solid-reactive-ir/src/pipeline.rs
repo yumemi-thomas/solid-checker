@@ -564,6 +564,14 @@ fn build_with_accepted_contract_inputs_measured_incremental(
     // after every producer has run and before unresolved obligations are
     // attributed to exported surfaces.
     draft.discard_deleted_static_diagnostics(facts);
+    crate::attribution::discharge_closed_program_export_dispatch(
+        facts,
+        semantic_lookup,
+        entities,
+        aliases,
+        &typescript_indexes.symbols_by_root,
+        &mut draft.static_defects,
+    );
     // Every stage that can file an unresolved obligation has run, so the
     // attribution question is answerable exactly once, over the final defect
     // list, rather than per stage over a partial one.

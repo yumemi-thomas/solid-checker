@@ -7309,7 +7309,10 @@ fn interprocedural_reads(
     // callers outside the analyzed project. Normal project analysis must keep
     // that boundary explicit. Contract emission can discharge this specific
     // obligation because `contract_export_function` serializes the same exact
-    // parameter provenance as a `parameter-member` read.
+    // parameter provenance as a `parameter-member` read. A closed program has
+    // no outside caller, and the pipeline discharges it there for a helper
+    // entered only through call expressions
+    // (`attribution::discharge_closed_program_export_dispatch`, ADR 0203).
     let mut allowed_by_path: HashMap<&str, Vec<Span>> = HashMap::new();
     for node in nodes.iter().filter(|node| node.exported) {
         let Some(&file) = project_indexes.files_by_path.get(node.path.as_str()) else {

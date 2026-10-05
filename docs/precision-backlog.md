@@ -1,5 +1,26 @@
 # Precision backlog
 
+## A closed program has no unseen helper caller (2026-10-06)
+
+ADR 0203. In a closed program, an exported helper that invokes a member of
+its parameter no longer raises `exported-parameter-member-dispatch` at its
+declaration when every reference to it is a call expression the call graph
+resolves. Each call keeps its own site obligation where it cannot select the
+member.
+
+- **Gained:** rc.13 corpus uncertifiable 4,011 to 3,435 (511 distinct sites
+  removed, none added); violations unchanged at 285.
+- **Still open:**
+  - exported helpers rendered through JSX, handed out as values, or class
+    members (about 240 sites);
+  - call-site obligations on object-typed built-ins (`Array.map`,
+    `Date.getTime`, `Element.focus`, about 700 sites): the declaration does
+    not show which value arrives (ADR 0190);
+  - an object-literal property whose value is an arrow, a function
+    expression or a named function has no summary node, so its dispatch
+    diverges (`parameter-member-targets-diverge`, 92 sites); method shorthand
+    resolves.
+
 ## Feedback reports what the user can act on (2026-10-05)
 
 ADR 0202:
