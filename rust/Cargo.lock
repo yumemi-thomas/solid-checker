@@ -1696,7 +1696,7 @@ dependencies = [
 [[package]]
 name = "solidjs-compiler"
 version = "0.0.0"
-source = "git+https://github.com/yumemi-thomas/solid?rev=9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4#9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4"
+source = "git+https://github.com/yumemi-thomas/solid?rev=3ad4bbec37ae30f325a803cdb4271a71c86a2a2d#3ad4bbec37ae30f325a803cdb4271a71c86a2a2d"
 dependencies = [
  "html5ever",
  "htmlize",

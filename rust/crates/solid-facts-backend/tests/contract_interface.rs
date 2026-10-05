@@ -313,11 +313,11 @@ fn compiler_certification_child_binds_the_live_pid_request_and_materialized_outp
         assert_eq!(response["nonce"], nonce);
         assert_eq!(
             response["compilerIdentity"],
-            "solid-v2:trace3:7f4e1135943c1fb01231d1bda707b4a1856a5607"
+            "solid-v2:trace3:c04c48779812d3d87166da3741c625748458c62f"
         );
         assert_eq!(
             response["compilerSourceManifestSha256"],
-            "sha256:613049ba60fa514c662bd9350adb4b0ed9c3031e4f80f2bd1ecb23d56846fde0"
+            "sha256:35f4874f646f9482d0549fdf052f0d37bd02ec47b5c024d5732b6d9796423a9a"
         );
         let map: ExecutionMap = serde_json::from_value(response["executionMap"].clone()).unwrap();
         assert!(map.semantic_model.source_operations_complete);
