@@ -101,7 +101,7 @@ runtime confirmation of new violations.
 |---|---|---|
 | A1 | ~900 | **Done (ADR 0190).** A primitive receiver dispatches to its built-in prototype. Uncertifiable 10,396 → 8,297, violations unchanged. |
 | A2 | ~820 | First slice done (ADR 0192): built-in calls in a leaf scope resolve, 813 → 766. The rest is methods of bodiless objects, optional calls (a Type Facts producer gap) and incomplete helpers. |
-| A3 | ~620 | Callbacks passed to consumers not proven to invoke them synchronously: application-local consumers through interprocedural analysis, package consumers through Track B. |
+| A3 | ~620 | Callbacks passed to consumers not proven to invoke them synchronously. First slice done (ADR 0199): a callback prop forwarded only to DOM events runs on dispatch, 106 sites. Next: `useQuery` options callbacks (Track B claims) and helpers that keep or forward a callback. |
 | A4 | ~565 | `missing-owner`: owner nullability (`runWithOwner(getOwner())`, unknown callers). |
 
 ### Track B: authored, probe-checked contracts (ADR 0189)

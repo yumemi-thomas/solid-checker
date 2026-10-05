@@ -48,7 +48,10 @@ a read hole).
 
 `Props.tsx` also pins callback-valued JSX props. Creating an inline callback,
 including a transparent TypeScript wrapper, does not prove invocation while
-rendering: its SC1001 result is uncertifiable. The eager snapshot control reads
+rendering. Here `Handler` invokes the prop only inside a `<button>` click
+handler, so since ADR 0199 both literals run on event dispatch and report
+nothing; the consumers that leave such a read uncertifiable are pinned in
+`forwarded-event-prop`. The eager snapshot control reads
 in the component body and remains a violation. A direct write to the props
 container remains SC2003; writes to a nested mutable value, including a wrapped
 value, are silent because shallow props readonly behavior proves nothing about

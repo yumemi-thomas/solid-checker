@@ -440,14 +440,18 @@ fn props_container_and_callback_creation_do_not_prove_nested_behavior() {
         .cloned()
         .collect::<Vec<_>>();
     let reads = findings_for_rule(&props, "strict-read-untracked");
-    assert_eq!(reads.len(), 3, "{props:#?}");
+    assert_eq!(reads.len(), 1, "{props:#?}");
+    // ADR 0199: `Handler` invokes the prop only inside a `<button>` click
+    // handler, so both callback-prop literals run on dispatch and report
+    // nothing. The consumers that leave such a read uncertifiable are
+    // pinned by `forwarded-event-prop`.
     for line in [10, 15] {
-        let read = reads
-            .iter()
-            .find(|read| read["primaryLocation"]["line"] == line)
-            .expect("callback prop read");
-        assert_eq!(read["kind"], "uncertifiable", "{read:#?}");
-        assert!(read["message"].as_str().unwrap().contains("not proven"));
+        assert!(
+            !reads
+                .iter()
+                .any(|read| read["primaryLocation"]["line"] == line),
+            "{reads:#?}"
+        );
     }
     let eager = reads
         .iter()

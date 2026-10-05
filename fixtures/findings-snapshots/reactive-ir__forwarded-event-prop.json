@@ -1,0 +1,115 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/App.tsx",
+      "start": 1663,
+      "end": 1670,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/App.tsx",
+      "start": 1817,
+      "end": 1824,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/App.tsx",
+      "start": 1965,
+      "end": 1972,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/App.tsx",
+      "start": 2114,
+      "end": 2121,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/App.tsx",
+      "start": 2238,
+      "end": 2245,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/App.tsx",
+      "start": 2372,
+      "end": 2379,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/App.tsx",
+      "start": 2504,
+      "end": 2511,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-handler-frozen",
+      "code": "SC1007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
+      "start": 421,
+      "end": 434,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
+      "start": 873,
+      "end": 988,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
+      "start": 918,
+      "end": 931,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-handler-frozen",
+      "code": "SC1007",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
+      "start": 2378,
+      "end": 2391,
+      "fixes": 0
+    }
+  ]
+}

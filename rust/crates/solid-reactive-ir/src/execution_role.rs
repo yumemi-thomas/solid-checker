@@ -762,6 +762,305 @@ pub(crate) fn runs_outside_owner_call(
         })
 }
 
+/// ADR 0199: [`ExecutionRole::EventCallback`] for code directly in a function
+/// literal written as a project component's prop, when that component only
+/// ever hands the prop to DOM event dispatch.
+///
+/// Constructing a callback prop runs nothing; the consumer decides when it
+/// runs. Here the consumer is resolved exactly (the tag's symbol is one
+/// project function) and every use it makes of the prop is proven to be an
+/// intrinsic element's event handler ([`prop_reaches_only_events`]). Then the
+/// literal runs, if ever, when the browser dispatches that event, exactly as a
+/// literal written on the element itself does, and takes that literal's role.
+/// Anything less -- an unresolved tag, a consumer that calls the prop, keeps
+/// it, or lets the props object escape -- answers nothing here, and the
+/// literal keeps its unproven timing ([`callee_callback_timing`]).
+fn forwarded_event_prop_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    let literal = containing_ast_function(&file.ast, span)?;
+    let (element, attribute) = file.ast.jsx_containing(literal.span).find_map(|element| {
+        element
+            .attributes
+            .iter()
+            .find(|attribute| {
+                attribute.namespace.is_none()
+                    && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
+                    && attribute
+                        .expression
+                        .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == literal.span)
+            })
+            .map(|attribute| (element, attribute))
+    })?;
+    if intrinsic_element(file, element) {
+        return None;
+    }
+    let (component_file, component) =
+        lookup.function_called_at(file.path.as_str(), element.name.span)?;
+    let prop = file.source_text(attribute.name)?;
+    prop_reaches_only_events(component_file, component, prop, lookup, &mut HashSet::new())
+        .then_some(ExecutionRole::EventCallback)
+}
+
+/// Whether `value` is exactly the value of an attribute of an intrinsic
+/// element.
+fn intrinsic_attribute_value(file: &solid_facts::FileFacts, value: Span) -> bool {
+    let value = file.ast.peel_ts_sugar_span(value);
+    file.ast.jsx_containing(value).any(|element| {
+        intrinsic_element(file, element)
+            && element.attributes.iter().any(|attribute| {
+                attribute
+                    .expression
+                    .is_some_and(|expression| file.ast.peel_ts_sugar_span(expression) == value)
+            })
+    })
+}
+
+/// Whether a JSX element is an intrinsic (DOM) element: a lowercase, undotted
+/// tag, which JSX resolves as an element name rather than a binding.
+fn intrinsic_element(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+) -> bool {
+    element.member_object.is_none()
+        && file
+            .source_text(element.name.span)
+            .and_then(|name| name.chars().next())
+            .is_some_and(|first| first.is_ascii_lowercase())
+}
+
+/// Whether the component `function` uses its prop `prop` only as DOM event
+/// dispatch.
+///
+/// The props parameter is one identifier, and it and every view of it this
+/// proof follows (a `const` bound to a props merge or split the dialect names,
+/// [`solid_dialect::Dialect::merges_props_reactivity`] and
+/// [`solid_dialect::Dialect::splits_props`]) is used only as
+///
+/// - a static member access: `props.<other>` is another prop, and every
+///   `props.<prop>` is exactly the value of an intrinsic element's attribute
+///   the compiler classifies as an event handler
+///   (`<button onClick={props.onPress}>`), inside the function written as such
+///   a handler (`onClick={(event) => props.onPress?.(event)}`), or exactly the
+///   value of another project component's prop that satisfies this proof;
+/// - a spread onto an intrinsic element, when `prop` is an un-namespaced `on…`
+///   name: the runtime's spread assigns such a property as an event listener
+///   (`@solidjs/web` `assignProp`), the one other property it runs, `ref`, is
+///   not an `on…` name;
+/// - a spread onto a project component that satisfies this proof; or
+/// - the props argument of such a merge or split, whose result is spread or
+///   bound to a `const` as above.
+///
+/// Any other use (a call argument, a destructuring, `props[key]`, a returned
+/// or stored props object) could reach the prop any way at all, so it proves
+/// nothing. Neither does a cycle.
+fn prop_reaches_only_events(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    prop: &str,
+    lookup: &SemanticLookup<'_>,
+    visiting: &mut HashSet<(String, Span, String)>,
+) -> bool {
+    if function.r#async || function.generator || function.rest_parameter {
+        return false;
+    }
+    let Some(parameter) = function.parameters.first() else {
+        return false;
+    };
+    if parameter.shape != solid_facts::ast::BindingShape::Identifier
+        || parameter.initializer.is_some()
+    {
+        return false;
+    }
+    let Some(name) = parameter.names.first() else {
+        return false;
+    };
+    let Some(symbol) = lookup.entities().at(file.path.as_str(), name.span) else {
+        return false;
+    };
+    if !visiting.insert((file.path.to_string(), function.span, prop.to_owned())) {
+        return false;
+    }
+    let mut aliases = vec![(symbol.clone(), name.span)];
+    let mut followed = 0;
+    let mut references = 0usize;
+    while let Some((alias, declaration)) = aliases.get(followed).cloned() {
+        followed += 1;
+        for reference in lookup.symbol_references(alias.as_str()) {
+            if reference.path.as_ref() != file.path.as_str() {
+                return false;
+            }
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(reference.start_byte),
+                u32::try_from(reference.end_byte),
+            ) else {
+                return false;
+            };
+            let reference = Span::new(start, end);
+            if reference == declaration {
+                continue;
+            }
+            references += 1;
+            if !function.body.contains(reference) {
+                return false;
+            }
+            let proven = if let Some(member) = file
+                .ast
+                .members
+                .iter()
+                .find(|member| member.object == reference)
+            {
+                file.source_text(member.property) != Some(prop)
+                    || member_reaches_only_events(file, member.span, lookup, visiting)
+            } else if let Some(view) = props_view_call(file, reference, lookup) {
+                match spread_onto(file, view) {
+                    Some(element) => {
+                        spread_reaches_only_events(file, element, prop, lookup, visiting)
+                    }
+                    None => match const_binding_of(file, view, lookup) {
+                        Some(binding) => {
+                            aliases.push(binding);
+                            true
+                        }
+                        None => false,
+                    },
+                }
+            } else if let Some(element) = spread_onto(file, reference) {
+                spread_reaches_only_events(file, element, prop, lookup, visiting)
+            } else {
+                false
+            };
+            if !proven {
+                return false;
+            }
+        }
+    }
+    references > 0
+}
+
+/// Whether one `props.<prop>` member access reaches only event dispatch; see
+/// [`prop_reaches_only_events`].
+fn member_reaches_only_events(
+    file: &solid_facts::FileFacts,
+    member: Span,
+    lookup: &SemanticLookup<'_>,
+    visiting: &mut HashSet<(String, Span, String)>,
+) -> bool {
+    use solid_facts::compiler::CallbackRoleKind;
+    let event_handlers = || {
+        file.compiler
+            .callback_roles
+            .iter()
+            .filter(|callback| callback.role == CallbackRoleKind::EventHandler)
+    };
+    // The value of an attribute on some element, peeled exactly.
+    let attribute_on = file.ast.jsx_containing(member).find_map(|element| {
+        element
+            .attributes
+            .iter()
+            .find(|attribute| {
+                attribute.namespace.is_none()
+                    && attribute
+                        .expression
+                        .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == member)
+            })
+            .map(|attribute| (element, attribute))
+    });
+    match attribute_on {
+        Some((element, _)) if intrinsic_element(file, element) => {
+            event_handlers().any(|callback| callback.span.contains(member))
+        }
+        Some((element, attribute)) => file
+            .source_text(attribute.name)
+            .zip(lookup.function_called_at(file.path.as_str(), element.name.span))
+            .is_some_and(|(next, (next_file, next_function))| {
+                prop_reaches_only_events(next_file, next_function, next, lookup, visiting)
+            }),
+        None => event_handlers().any(|callback| {
+            intrinsic_attribute_value(file, callback.span)
+                && file
+                    .ast
+                    .functions_within(callback.span)
+                    .max_by_key(|handler| handler.span.end - handler.span.start)
+                    .is_some_and(|handler| handler.body.contains(member))
+        }),
+    }
+}
+
+/// The element `value` is spread onto, when `value` is exactly the argument of
+/// a JSX spread attribute.
+fn spread_onto(
+    file: &solid_facts::FileFacts,
+    value: Span,
+) -> Option<&solid_facts::ast::JsxElementFact> {
+    file.ast.jsx_containing(value).find(|element| {
+        element
+            .spreads
+            .iter()
+            .any(|spread| file.ast.peel_ts_sugar_span(spread.argument) == value)
+    })
+}
+
+/// Whether spreading a props object carrying `prop` onto `element` reaches
+/// only event dispatch; see [`prop_reaches_only_events`].
+fn spread_reaches_only_events(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    prop: &str,
+    lookup: &SemanticLookup<'_>,
+    visiting: &mut HashSet<(String, Span, String)>,
+) -> bool {
+    if intrinsic_element(file, element) {
+        return prop.starts_with("on") && !prop.contains(':');
+    }
+    lookup
+        .function_called_at(file.path.as_str(), element.name.span)
+        .is_some_and(|(next_file, next_function)| {
+            prop_reaches_only_events(next_file, next_function, prop, lookup, visiting)
+        })
+}
+
+/// The span of the call `reference` is the props argument of, when that call
+/// is a props merge or split the dialect names: a view whose properties read
+/// through to the props object and invoke none of them.
+fn props_view_call(
+    file: &solid_facts::FileFacts,
+    reference: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let (call, _) = file
+        .ast
+        .arguments_containing(reference)
+        .find(|(call, index)| {
+            let argument = &call.arguments[*index];
+            !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == reference
+        })?;
+    let primitive = lookup.primitive_at_call(file, call.span)?;
+    (lookup.dialect.merges_props_reactivity(primitive) || lookup.dialect.splits_props(primitive))
+        .then_some(call.span)
+}
+
+/// The `const` identifier binding initialized by exactly the expression at
+/// `value`, with its symbol.
+fn const_binding_of(
+    file: &solid_facts::FileFacts,
+    value: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(SymbolId, Span)> {
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding
+                .initializer
+                .is_some_and(|initializer| file.ast.peel_ts_sugar_span(initializer) == value)
+    })?;
+    let name = binding.names.first()?;
+    let symbol = lookup.entities().at(file.path.as_str(), name.span)?;
+    Some((symbol.clone(), name.span))
+}
+
 /// Whether the function written at `function` is the value of a JSX attribute.
 fn jsx_attribute_value_function(file: &solid_facts::FileFacts, function: Span) -> bool {
     file.ast.jsx_containing(function).any(|element| {
@@ -1259,6 +1558,11 @@ fn semantic_execution_role_within(
         } else {
             ExecutionRole::TrackedJsx
         };
+    }
+    // Ahead of the compiler role and the lexical fallbacks, which place a
+    // callback prop's body where the JSX is written.
+    if let Some(role) = forwarded_event_prop_role(file, span, lookup) {
+        return role;
     }
     let compiler_role = source_execution_role(file, span, allowed);
     if compiler_role != ExecutionRole::Unknown {

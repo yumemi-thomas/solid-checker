@@ -1,5 +1,23 @@
 # Precision backlog
 
+## A callback prop forwarded to an event runs on dispatch (2026-10-05)
+
+ADR 0199. A read in a function literal written as a project component's prop
+takes the event role when the component (resolved exactly) only hands that
+prop to DOM event dispatch: an intrinsic event attribute, a function written
+as one, a spread of an `on…` prop onto an intrinsic element, or another
+component that satisfies the same proof, through rc.13's `merge` and `omit`
+views.
+
+- **Gained:** 106 rc.13 corpus sites leave `SC1001` uncertifiable (7,070 to
+  6,901 findings). No violation moved.
+- **Still open:**
+  - the rest of the 634 consumer-timing sites;
+  - package and app wrappers of TanStack `useQuery`, whose options callback
+    needs a `callbacks` claim (Track B);
+  - helpers that keep or forward a callback;
+  - component props a published package declares without source.
+
 ## Authored contracts recover the TanStack findings on rc.13 (2026-10-05)
 
 ADR 0198. The authored tier ships probe-checked `returns` claims for
