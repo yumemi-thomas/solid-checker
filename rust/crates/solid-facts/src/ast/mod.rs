@@ -180,6 +180,13 @@ pub struct AstFacts {
     /// core the after-await member-read check builds on.
     #[serde(default)]
     pub unconditional_awaits: Vec<Span>,
+    /// The call expressions written in their innermost enclosing function's
+    /// straight-line flow, as [`Self::unconditional_awaits`] are, and outside
+    /// any optional chain (`a?.b(c())` evaluates `c()` only when `a` is not
+    /// nullish). Such a call runs on every execution of that function that
+    /// reaches its position.
+    #[serde(default)]
+    pub straight_line_calls: Vec<Span>,
     pub returns: Vec<ReturnFact>,
     pub jsx_elements: Vec<JsxElementFact>,
     /// JSX fragment spans (`<>…</>`). A fragment's children are as tracked
@@ -1337,6 +1344,7 @@ impl AstFacts {
             reference_declarations: Vec::new(),
             awaits: Vec::new(),
             unconditional_awaits: Vec::new(),
+            straight_line_calls: Vec::new(),
             returns: Vec::new(),
             jsx_elements: Vec::new(),
             jsx_fragments: Vec::new(),
@@ -1480,6 +1488,7 @@ struct Collector<'s, 'semantic> {
     reference_declarations: Vec<(Span, Span)>,
     awaits: Vec<Span>,
     unconditional_awaits: Vec<Span>,
+    straight_line_calls: Vec<Span>,
     returns: Vec<ReturnFact>,
     jsx_elements: Vec<JsxElementFact>,
     jsx_fragments: Vec<Span>,
@@ -1517,6 +1526,10 @@ struct Collector<'s, 'semantic> {
     /// The [`Collector::conditional_flow_depth`] at each enclosing function's
     /// entry, innermost last.
     function_flow_depths: Vec<usize>,
+    /// How many optional chains enclose the current node. Kept apart from
+    /// [`Collector::conditional_flow_depth`], whose answer for awaits is
+    /// unchanged; read only for [`AstFacts::straight_line_calls`].
+    optional_chain_depth: usize,
     /// The span of the expression the innermost enclosing `ExpressionStatement`
     /// discards, while that statement's own expression is being walked.
     ///
@@ -1623,6 +1636,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             reference_declarations: Vec::new(),
             awaits: Vec::new(),
             unconditional_awaits: Vec::new(),
+            straight_line_calls: Vec::new(),
             returns: Vec::new(),
             jsx_elements: Vec::new(),
             jsx_fragments: Vec::new(),
@@ -1655,6 +1669,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             method_names: Vec::new(),
             conditional_flow_depth: 0,
             function_flow_depths: Vec::new(),
+            optional_chain_depth: 0,
         }
     }
 
@@ -1677,6 +1692,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.reference_declarations.sort_unstable();
         self.awaits.sort_unstable();
         self.unconditional_awaits.sort_unstable();
+        self.straight_line_calls.sort_unstable();
         self.returns.sort_by_key(|fact| fact.span);
         self.jsx_elements.sort_by_key(|fact| fact.span);
         self.jsx_fragments.sort();
@@ -1725,6 +1741,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             reference_declarations: self.reference_declarations,
             awaits: self.awaits,
             unconditional_awaits: self.unconditional_awaits,
+            straight_line_calls: self.straight_line_calls,
             returns: self.returns,
             jsx_elements: self.jsx_elements,
             jsx_fragments: self.jsx_fragments,
@@ -2387,6 +2404,16 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
+        if self.optional_chain_depth == 0
+            && self.conditional_flow_depth
+                == self
+                    .function_flow_depths
+                    .last()
+                    .copied()
+                    .unwrap_or_default()
+        {
+            self.straight_line_calls.push(span(call.span));
+        }
         if let Expression::Identifier(callee) = &call.callee {
             if self.is_unresolved_named(callee, "require") {
                 let specifier = match call.arguments.as_slice() {
@@ -3116,6 +3143,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         walk::walk_formal_parameter(self, parameter);
     }
 
+    fn visit_chain_expression(&mut self, expression: &oxc_ast::ast::ChainExpression<'a>) {
+        self.optional_chain_depth += 1;
+        walk::walk_chain_expression(self, expression);
+        self.optional_chain_depth -= 1;
+    }
+
     fn visit_conditional_expression(&mut self, expression: &ConditionalExpression<'a>) {
         self.conditional_tests.push(span(expression.test.span()));
         self.conditional_expressions
@@ -3811,6 +3844,44 @@ fn array_literal_elements(expression: &Expression<'_>) -> Option<Box<[Option<Spa
 
 #[cfg(test)]
 mod tests {
+    /// ADR 0195: a straight-line call is one its function runs on every
+    /// execution that reaches it. Every construct that can skip or repeat a
+    /// call, or that moves it into another function, keeps it out.
+    #[test]
+    fn straight_line_calls_exclude_every_conditional_construct() {
+        let source = concat!(
+            "declare function s(): number; declare const o: { f(x: number): void } | undefined;\n",
+            "declare const c: boolean;\n",
+            "async function g() {\n",
+            "  s();\n",
+            "  const v = s();\n",
+            "  if (c) s();\n",
+            "  c ? s() : 0;\n",
+            "  c && s();\n",
+            "  for (const x of [1]) s();\n",
+            "  try { s(); } catch {}\n",
+            "  switch (v) { case 1: s(); }\n",
+            "  o?.f(s());\n",
+            "  const nested = () => s();\n",
+            "  await 0;\n",
+            "  return nested;\n",
+            "}\n",
+        );
+        let facts = super::extract("straight.ts", source).unwrap();
+        let line_of =
+            |span: crate::core::Span| source[..span.start as usize].matches('\n').count() + 1;
+        let lines = facts
+            .straight_line_calls
+            .iter()
+            .filter(|span| source[span.start as usize..span.end as usize] == *"s()")
+            .map(|span| line_of(*span))
+            .collect::<Vec<_>>();
+        // Line 13 is straight-line in the nested arrow's own flow: the fact is
+        // recorded for the innermost function, as `unconditional_awaits` is,
+        // and a consumer attributes each span to it.
+        assert_eq!(lines, [4, 5, 13], "{lines:?}");
+    }
+
     #[test]
     fn structural_binding_slots_require_direct_identifiers() {
         let facts = super::extract("slots.ts", "const [first, {nested}, fallback = 0, ...rest] = make(); const {value: direct, nested: {inner}, optional = 0, [key]: computed} = other(); delete (other as any).value;").unwrap();

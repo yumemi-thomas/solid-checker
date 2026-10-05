@@ -366,6 +366,14 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                 let Some((name, _)) = symbol.and_then(|symbol| ctx.accessors.get(symbol)) else {
                     continue;
                 };
+                // The same source read on every run before the first
+                // suspension is a dependency already (ADR 0195), and rc.13's
+                // own `UNTRACKED_READ_AFTER_AWAIT` stays silent for it.
+                if symbol.is_some_and(|symbol| {
+                    tracked_before_first_suspension(ctx, &files_by_path, function, symbol)
+                }) {
+                    continue;
+                }
                 let display = ast_call
                     .and_then(|(file, candidate)| candidate.static_callee(&file.source))
                     .unwrap_or(name);
@@ -431,6 +439,9 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                         let Some((name, _)) = ctx.accessors.get(symbol) else {
                             continue;
                         };
+                        if tracked_before_first_suspension(ctx, &files_by_path, function, symbol) {
+                            continue;
+                        }
                         let key = (
                             file.path.to_string(),
                             u64::from(callback_call.callee.start),
@@ -534,6 +545,81 @@ fn report_opaque_standard_callback(
 /// own unconditional flow. `None` means the function has no straight-line
 /// await, so no member read can be dominated by one and the rule has nothing
 /// to prove there.
+/// The accessor symbol a call reads through, resolved as
+/// [`reactive_read_after_await`] resolves an after-await call: a member call
+/// by its (non-computed) property, any other call by its callee.
+fn call_accessor_symbol<'s>(
+    ctx: &'s AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> Option<&'s SymbolId> {
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    if let Some(member) = file.ast.members.iter().find(|member| member.span == callee) {
+        return (!file.ast.computed_members.contains(&member.span))
+            .then(|| ctx.entities.at(file.path.as_str(), member.property))
+            .flatten();
+    }
+    ctx.entities.at(file.path.as_str(), call.callee)
+}
+
+/// ADR 0195: whether `symbol` is read, in the async function's own
+/// straight-line flow, before the function's first suspension of any kind (a
+/// conditional await included: a read after one may already run detached).
+/// Such a read runs on every execution, inside the tracking window, so the
+/// source is a dependency of the computation and a later read of it after an
+/// `await` loses nothing. rc.13's dev build agrees: `checkPostAwaitRead` stays
+/// silent for a source already among the computation's dependencies.
+fn tracked_before_first_suspension(
+    ctx: &AnalysisContext<'_>,
+    files_by_path: &std::collections::HashMap<&str, &solid_facts::FileFacts>,
+    function: &typefacts::AsyncFunctionFact,
+    symbol: &SymbolId,
+) -> bool {
+    let Some(file) = files_by_path.get(&*function.expression.path) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (
+        u32::try_from(function.expression.start_byte),
+        u32::try_from(function.expression.end_byte),
+    ) else {
+        return false;
+    };
+    let expression = file.ast.peel_ts_sugar_span(Span::new(start, end));
+    let Some(ast_function) = file
+        .ast
+        .functions
+        .iter()
+        .find(|candidate| candidate.span == expression)
+    else {
+        return false;
+    };
+    let own = |span: Span| {
+        ast_function.body.contains(span)
+            && containing_ast_function(&file.ast, span)
+                .is_some_and(|owner| owner.span == ast_function.span)
+    };
+    let Some(first_suspension) = file
+        .ast
+        .awaits
+        .iter()
+        .chain(&file.ast.implicit_suspensions)
+        .filter(|suspension| own(**suspension))
+        .map(|suspension| suspension.start)
+        .min()
+    else {
+        return false;
+    };
+    file.ast.straight_line_calls.iter().any(|span| {
+        span.end <= first_suspension
+            && own(*span)
+            && file
+                .ast
+                .call_at(*span)
+                .and_then(|call| call_accessor_symbol(ctx, file, call))
+                .is_some_and(|candidate| candidate == symbol)
+    })
+}
+
 fn member_read_site<'f>(
     files_by_path: &std::collections::HashMap<&str, &'f solid_facts::FileFacts>,
     function: &typefacts::AsyncFunctionFact,
