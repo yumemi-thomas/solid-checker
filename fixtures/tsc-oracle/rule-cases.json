@@ -312,8 +312,9 @@
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
-      "why": "SC1006's keystone. `doubled` is an ordinary function and calling it is an ordinary call, so nothing here is a type error. The claim is that every call to it is untracked, so its reads subscribe to nothing and the derivation never updates -- a fact about which scopes track, which the type system does not model.",
-      "code": "import { createSignal } from \"solid-js\";\nexport function Comp() {\n  const [count] = createSignal(0);\n  const doubled = () => count() * 2;\n  doubled();\n  return <div />;\n}\n"
+      "why": "SC1006's keystone. `doubled` is an ordinary function and calling it is an ordinary call, so nothing here is a type error. The claim is that every call to it is untracked, so its reads subscribe to nothing and the derivation never updates -- a fact about which scopes track, which the type system does not model. Since e101c6989 a read attributed through another function's summary is uncertifiable: the summary does not establish that the helper's read runs during the call rather than later, and on 48 real projects 73 of 96 such findings were false. The direct read in case 26 is this rule's proven keystone.",
+      "code": "import { createSignal } from \"solid-js\";\nexport function Comp() {\n  const [count] = createSignal(0);\n  const doubled = () => count() * 2;\n  doubled();\n  return <div />;\n}\n",
+      "checkerKind": "uncertifiable"
     },
     {
       "rule": "no-direct-mutation",
@@ -565,8 +566,17 @@
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
-      "why": "Rendering an async computation's value is type-correct; the claim is that no `<Loading>` boundary encloses the read, which is a tree-position fact.",
-      "code": "import { createMemo } from \"solid-js\";\nconst value = createMemo(async () => 1);\nexport const Case = () => <div>{value()}</div>;\n"
+      "why": "Rendering an async computation's value is type-correct; the claim is that no `<Loading>` boundary encloses the read, which is a tree-position fact. Without a render or hydrate root the component is never traced to a mount, so a Loading boundary in a router layout or around a lazy route cannot be excluded (2122b5af0); the next case adds the mount.",
+      "code": "import { createMemo } from \"solid-js\";\nconst value = createMemo(async () => 1);\nexport const Case = () => <div>{value()}</div>;\n",
+      "checkerKind": "uncertifiable"
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "why": "The traced-mount twin of the case before it: `render` mounts `Case` directly, so no Loading boundary can be above the read. Rendering an async computation's value is type-correct; the claim is a tree-position fact.",
+      "code": "import { createMemo } from \"solid-js\";\nimport { render } from \"@solidjs/web\";\nconst value = createMemo(async () => 1);\nconst Case = () => <div>{value()}</div>;\nrender(() => <Case />, document.body);\n"
     },
     {
       "rule": "no-direct-mutation",
@@ -815,8 +825,8 @@
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
-      "why": "SC5005's keystone. The source option and JSX read are well typed; the finding combines the runtime meaning of ssrSource: client, the absence of a Loading ancestor, and a project-level server-rendering entry.",
-      "code": "import { createMemo } from \"solid-js\";\nimport { renderToString } from \"@solidjs/web\";\nconst width = createMemo(() => 1, { ssrSource: \"client\" });\nexport const Case = () => <div>{width()}</div>;\nvoid renderToString;\n"
+      "why": "SC5005's keystone. The source option and JSX read are well typed; the finding combines the runtime meaning of ssrSource: client, the absence of a Loading ancestor, and a project-level server-rendering entry. `hydrate` mounts `Case` directly, which both traces the mount (2122b5af0) and makes the project server-rendered.",
+      "code": "import { createMemo } from \"solid-js\";\nimport { hydrate, renderToString } from \"@solidjs/web\";\nconst width = createMemo(() => 1, { ssrSource: \"client\" });\nconst Case = () => <div>{width()}</div>;\nhydrate(() => <Case />, document.body);\nvoid renderToString;\n"
     },
     {
       "rule": "async-outside-loading-boundary",

@@ -353,6 +353,13 @@ A full re-triage of the 366 violations left on the 48-project sweep
     uncertifiable and nothing else.
   - Reopening a proven path needs the callee-timing facts the triage names,
     per pattern.
+  - This includes the simplest shape, a local arrow whose body reads directly
+    and that is called synchronously in the same scope
+    (`const doubled = () => count() * 2; doubled();`). The tsc-oracle ledger's
+    SC1006 case for it now declares `checkerKind: "uncertifiable"` (updated
+    2026-10-05; `make verify` had not reached the gate since). Proving that
+    shape again is a candidate for the application-code track of
+    `docs/2026-10-05-package-direction.md`.
 - **3 come from a `ref` callback on a component** (solid-pixi in app-game). The
   compiler's ref-application callback role is honoured only on intrinsic
   elements (`owners::ref_application_on_intrinsic`), in the owner,
