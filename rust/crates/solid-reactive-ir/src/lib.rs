@@ -3916,6 +3916,7 @@ mod tests {
             parameter: 0,
             path: vec!["of".into(), "values".into()],
             in_owner_body: true,
+            primitive_builtin: false,
         }]];
         let direct_view = InterproceduralResultView {
             invoked_parameter_members: &direct_members,

@@ -730,7 +730,8 @@ fn plan_file(
         planned.resolved_call = !call.arguments.is_empty()
             || returned_callees.contains(&call.callee)
             || computed_dispatch
-            || argumentless_primitive;
+            || argumentless_primitive
+            || parameter_rooted_member_call(file, call);
         planned.query_location = Some(property.clone());
         planned.type_descriptor = call.arguments.is_empty();
         // Typed source discovery must distinguish the exact callable value
@@ -747,6 +748,40 @@ fn plan_file(
         }
     }
     Ok(())
+}
+
+/// An argumentless method call through one of an enclosing function's
+/// parameters (`name.trim()` inside `(name: string) => name.trim().split(…)`).
+/// The IR records it as a parameter-member invocation, and only its resolved
+/// declaration says whether the member is a primitive wrapper's built-in
+/// (ADR 0190). A call with arguments is already demanded. The root is matched
+/// by spelling, so a shadowed name over-demands, which costs a fact and
+/// decides nothing.
+fn parameter_rooted_member_call(file: &FileFacts, call: &solid_facts::ast::CallFact) -> bool {
+    if !call.arguments.is_empty() {
+        return false;
+    }
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    let Some(text) = file.source_text(callee) else {
+        return false;
+    };
+    let root_length = text
+        .find(|character: char| {
+            !(character.is_alphanumeric() || character == '_' || character == '$')
+        })
+        .unwrap_or(text.len());
+    let (root, rest) = text.split_at(root_length);
+    if root.is_empty() || !(rest.starts_with('.') || rest.starts_with("?.")) {
+        return false;
+    }
+    file.ast.functions.iter().any(|function| {
+        function.span.contains(call.span)
+            && function
+                .parameters
+                .iter()
+                .flat_map(|parameter| &parameter.names)
+                .any(|name| file.source_text(name.span) == Some(root))
+    })
 }
 
 fn demand(location: typefacts::Location) -> EntityDemand {

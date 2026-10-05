@@ -1,0 +1,75 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/App.tsx",
+      "start": 676,
+      "end": 681,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/App.tsx",
+      "start": 910,
+      "end": 921,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/App.tsx",
+      "start": 910,
+      "end": 921,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/App.tsx",
+      "start": 1605,
+      "end": 1613,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/source.ts",
+      "start": 216,
+      "end": 306,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/source.ts",
+      "start": 539,
+      "end": 655,
+      "fixes": 0
+    },
+    {
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/source.ts",
+      "start": 645,
+      "end": 649,
+      "fixes": 0
+    }
+  ]
+}

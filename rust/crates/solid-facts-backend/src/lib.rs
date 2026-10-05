@@ -2708,6 +2708,47 @@ mod tests {
         );
     }
 
+    /// ADR 0190: an argumentless method call through a parameter is a
+    /// parameter-member invocation, and only its resolved declaration says
+    /// whether the member is a primitive wrapper's built-in.
+    #[test]
+    fn an_argumentless_parameter_member_call_is_demanded_its_resolved_call() {
+        let file = test_file_facts(
+            "src/words.ts",
+            "const fixed = \"a b\";\n\
+             export function words(message: string) {\n\
+               const head = fixed.trim();\n\
+               void head;\n\
+               return message.trim().split(\" \");\n\
+             }\n\
+             export const lower = (value?: string) => value?.toLowerCase().length;",
+        );
+        let demands = semantic_demands(
+            dialect::default_dialect(),
+            std::slice::from_ref(&file),
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
+        let resolved = |spelling: &str| {
+            let call = file
+                .ast
+                .calls
+                .iter()
+                .find(|call| file.source_text(call.callee) == Some(spelling))
+                .expect(spelling);
+            let location = typefacts_location(file.path.as_str(), call.callee);
+            demands
+                .iter()
+                .any(|demand| demand.location == location && demand.resolved_call)
+        };
+        assert!(resolved("message.trim"), "inside a chain");
+        assert!(resolved("value?.toLowerCase"), "an optional member call");
+        assert!(
+            !resolved("fixed.trim"),
+            "a root that is no parameter stays as it was"
+        );
+    }
+
     #[test]
     fn joins_all_three_fact_sources() {
         let source = "export const answer = 42;";

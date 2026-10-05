@@ -215,6 +215,40 @@ pub(crate) struct ParameterMemberInvocation {
     pub(crate) parameter: usize,
     pub(crate) path: Vec<String>,
     pub(crate) in_owner_body: bool,
+    /// Type Facts resolved this member call, validly and to one declaration,
+    /// to a method of a primitive wrapper in the standard library
+    /// (`String.replace`, `Number.toFixed`). Whatever the caller passes, the
+    /// implementation that runs is that built-in (ADR 0190).
+    pub(crate) primitive_builtin: bool,
+}
+
+/// Whether Type Facts resolved `callee`, validly and to exactly one
+/// declaration, to a standard-library method of a primitive wrapper. Methods of
+/// object types (`Date.getTime`, `Array.map`) are excluded: a subclass or a
+/// structurally compatible object can override them.
+fn primitive_builtin_member_call(
+    file: &solid_facts::FileFacts,
+    callee: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    lookup
+        .resolved_callee_call(file, callee)
+        .filter(|resolved| {
+            resolved.validity == ResolvedCallValidity::Valid
+                && resolved.kind == CallKind::Call
+                && resolved.targets.is_none()
+        })
+        .and_then(|resolved| resolved.declaration.as_ref())
+        .is_some_and(|declaration| {
+            declaration.standard_library
+                && declaration
+                    .qualified_name
+                    .rsplit_once('.')
+                    .is_some_and(|(owner, member)| {
+                        !member.is_empty()
+                            && matches!(owner, "String" | "Number" | "Boolean" | "BigInt")
+                    })
+        })
 }
 
 impl FunctionBoundary for SummaryNode {
@@ -1508,12 +1542,14 @@ fn discover_interprocedural_graph(
                 .iter()
                 .position(|candidate| *candidate == receiver)
         {
+            let primitive_builtin = primitive_builtin_member_call(file, call.callee, lookup);
             let entry = (
                 owner_span,
                 ParameterMemberInvocation {
                     parameter,
                     path,
                     in_owner_body,
+                    primitive_builtin,
                 },
             );
             if !contribution.invoked_parameter_members.contains(&entry) {
@@ -1643,6 +1679,7 @@ fn discover_interprocedural_graph(
                             parameter: owner_parameter,
                             path: Vec::new(),
                             in_owner_body,
+                            primitive_builtin: false,
                         },
                     );
                     if !contribution.invoked_parameter_members.contains(&entry) {
@@ -5768,12 +5805,30 @@ fn interprocedural_result_reads_for_file(
             // else -- unresolved, or a conditional over two objects -- proves
             // nothing and contributes no read.
             for ParameterMemberInvocation {
-                parameter, path, ..
+                parameter,
+                path,
+                primitive_builtin,
+                ..
             } in &invoked_parameter_members[target]
             {
+                if *primitive_builtin {
+                    continue;
+                }
                 let Some(argument) = call.arguments.get(*parameter) else {
                     continue;
                 };
+                // A literal argument is a fresh primitive (or RegExp) value,
+                // so every member reached through it is its built-in
+                // prototype's, and no built-in reads reactive state. A
+                // callback the callee hands that built-in (`replace`'s
+                // replacer) is the callee's own call, decided in its body by
+                // the audited standard-library rows of `runtime_semantics`.
+                if !path.is_empty()
+                    && !argument.spread
+                    && argument.runtime_value_kind == solid_facts::ast::RuntimeValueKind::Primitive
+                {
+                    continue;
+                }
                 if path.is_empty() {
                     let argument_location = location(file.path.shared(), argument.span);
                     let argument_symbol = entities.get(&argument_location);
