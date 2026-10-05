@@ -27707,6 +27707,25 @@ do with conditions or resolution.
 None of the four is a defect. Each is a reviewed decision with a measured price,
 and the two cheapest by sites are the two that are not premise work at all.
 
+## rc.13 negative rows, and the one withheld (2026-10-05, ADR 0197)
+
+The 48 rc.9 negative rows were re-read on the rc.13 archives
+(`docs/package-contract-v2/audits/2026-10-05-solid-2-rc13-negative-rows.md`):
+47 granted, 1 withheld.
+
+- **Withheld: `@solidjs/signals@2.0.0-rc.13` `reconcile` `reads`.** Applying
+  `reconcile`'s result to an optimistic store goes through
+  `applyAdopt → optHooks.optimisticView → readerOverride → nodeValue → serve`,
+  an engine read-path call that rc.9's closure did not have, in all three
+  builds. The path is guarded, but no reading established that every
+  application runs under `authoritativeServe()`. Certification on rc.13
+  therefore leaves `reconcile` `reads` open. To grant it, show that the arm
+  is unreachable from a caller's setter, or that it serves only the
+  optimistic node itself (audit § O2).
+- **Owner judgement O1 (accepted 2026-10-05):** rc.13's dev/observe
+  `registerRoot` keeps a module-level `FinalizationRegistry`, which the
+  reading does not count as a `create`.
+
 ## An application is the whole program (2026-10-05, ADR 0193)
 
 The program boundary defaults by the project's nearest `package.json`: a

@@ -1,0 +1,14 @@
+function For(props) {
+  const options = "fallback" in props ? {
+    keyed: props.keyed,
+    fallback: () => props.fallback
+  } : {
+    keyed: props.keyed
+  };
+  const owner = getOwner();
+  let mapped;
+  const create = () => runWithOwner(owner, () => mapArray(() => props.each, props.children, options));
+  if (sharedConfig.hydrating) mapped = create();
+  const list = () => (mapped ?? (mapped = create()))();
+  return list;
+}

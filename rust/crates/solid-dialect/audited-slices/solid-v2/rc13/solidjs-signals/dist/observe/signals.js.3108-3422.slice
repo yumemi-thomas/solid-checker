@@ -1,0 +1,10 @@
+function createSignal(e, t) {
+    if (typeof e === "function") {
+        const r = computed(e, t);
+        r.C &= ~CONFIG_AUTO_DISPOSE;
+        return [ accessor(r), setMemo.bind(null, r) ];
+    }
+    const r = signal(e, t);
+    registerGraph(r, getOwner());
+    return [ accessor(r), setSignal.bind(null, r) ];
+}

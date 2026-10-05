@@ -1,0 +1,41 @@
+function httpHeader(name, value, options) {
+  const event = getRequestEvent();
+  const response = event && event.response;
+  if (response && !response.committed) {
+    const headers = response.headers;
+    const key = name.toLowerCase();
+    const setCookie = key === "set-cookie";
+    let ledgers = headerLedgers.get(response);
+    if (!ledgers) headerLedgers.set(response, ledgers = new Map());
+    let ledger = ledgers.get(key);
+    if (!ledger) {
+      ledger = {
+        base: setCookie ? headers.getSetCookie() : headers.get(name),
+        live: []
+      };
+      ledgers.set(key, ledger);
+    }
+    const declaration = {
+      value,
+      append: !!(options && options.append)
+    };
+    ledger.live.push(declaration);
+    if (declaration.append) headers.append(name, value);else headers.set(name, value);
+    onCleanup(() => {
+      if (response.committed) return;
+      const index = ledger.live.indexOf(declaration);
+      if (index < 0) return;
+      ledger.live.splice(index, 1);
+      headers.delete(name);
+      if (setCookie) {
+        for (const cookie of ledger.base) headers.append(name, cookie);
+      } else if (ledger.base !== null) {
+        headers.set(name, ledger.base);
+      }
+      for (const d of ledger.live) {
+        if (d.append) headers.append(name, d.value);else headers.set(name, d.value);
+      }
+      if (!ledger.live.length) ledgers.delete(key);
+    });
+  }
+}

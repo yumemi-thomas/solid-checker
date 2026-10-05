@@ -1,0 +1,8 @@
+function Repeat(props) {
+  const options = "fallback" in props ? {
+    fallback: () => props.fallback
+  } : {};
+  options.from = () => props.from;
+  options.name = "<Repeat>";
+  return repeat(() => props.count, index => typeof props.children === "function" ? props.children(index) : props.children, options);
+}

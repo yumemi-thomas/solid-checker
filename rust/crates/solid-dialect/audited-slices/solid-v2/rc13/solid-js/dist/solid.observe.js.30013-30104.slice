@@ -1,0 +1,3 @@
+const createSignal = (...args) => {
+  return (_createSignal || createSignal$1)(...args);
+};

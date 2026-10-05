@@ -4544,8 +4544,9 @@ mod tests {
                 // ADR 0175: the signals archive and `solid-js`' own six builds,
                 // both at rc.9, and nothing else -- not `@solidjs/web`, not an
                 // older release.
+                // ADR 0197 adds rc.13, re-read on its own bytes.
                 let audited = matches!(archive.name, "@solidjs/signals" | "solid-js")
-                    && archive.version == "2.0.0-rc.9";
+                    && matches!(archive.version, "2.0.0-rc.9" | "2.0.0-rc.13");
                 assert_eq!(
                     computed_accessor_read_is_audited_for("createMemo", ResultSlot::Whole, archive,),
                     audited,
@@ -5270,7 +5271,7 @@ mod tests {
                 .iter()
                 .map(|archive| archive.version)
                 .collect::<Vec<_>>(),
-            ["2.0.0-rc.3", "2.0.0-rc.6", "2.0.0-rc.9"]
+            ["2.0.0-rc.3", "2.0.0-rc.6", "2.0.0-rc.9", "2.0.0-rc.13"]
         );
         for archive in &signals {
             assert!(archive.integrity.starts_with("sha512-"));
@@ -5293,7 +5294,7 @@ mod tests {
                     .iter()
                     .map(|archive| archive.version)
                     .collect::<Vec<_>>(),
-                ["2.0.0-rc.3", "2.0.0-rc.9"],
+                ["2.0.0-rc.3", "2.0.0-rc.9", "2.0.0-rc.13"],
                 "{name}"
             );
         }

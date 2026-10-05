@@ -80,7 +80,8 @@ PROBE_EXPECT_PINS = $(if $(PROBE_NODE),SOLID_CHECKER_EXPECT_PROBE_PINS=1,)
 ARCHIVES_ROOT = $(CURDIR)/rust/target/audited-archives/solid-v2
 ARCHIVE_ENV = SOLID_CHECKER_RC3_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.3/node_modules" \
   SOLID_CHECKER_RC6_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.6/node_modules" \
-  SOLID_CHECKER_RC9_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.9/node_modules"
+  SOLID_CHECKER_RC9_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.9/node_modules" \
+  SOLID_CHECKER_RC13_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.13/node_modules"
 
 .PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-probe-harness test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit phase19-audit phase20-ledger phase21-ledger compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update accepted-bundles tsc-oracle tsc-oracle-provision audited-archives-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
 

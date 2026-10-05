@@ -54,11 +54,14 @@ test("the checked-in pins load and name the archives the Rust tables audit", () 
   assert.deepEqual(
     solid2.archives.map(archive => `${archive.name}@${archive.version}`).sort(),
     [
+      "@solidjs/signals@2.0.0-rc.13",
       "@solidjs/signals@2.0.0-rc.3",
       "@solidjs/signals@2.0.0-rc.6",
       "@solidjs/signals@2.0.0-rc.9",
+      "@solidjs/web@2.0.0-rc.13",
       "@solidjs/web@2.0.0-rc.3",
       "@solidjs/web@2.0.0-rc.9",
+      "solid-js@2.0.0-rc.13",
       "solid-js@2.0.0-rc.3",
       "solid-js@2.0.0-rc.9"
     ]
@@ -78,7 +81,9 @@ test("the checked-in pins load and name the archives the Rust tables audit", () 
   // `solid-js@2.0.0-rc.9` `createMemo` `creates` scoped to the browser host.
   // Since 2026-09-30 (ADR 0168), seven rc.9 `reads` rows: three every-condition
   // (`getOwner`, `onCleanup`, `solid-js` `useContext`) and four argument-scoped.
-  assert.equal(solid2.negativeRowCount, 118);
+  // Since 2026-10-05 (ADR 0197), the rc.9 rows re-read on the rc.13 archives:
+  // 47 of 48 (`@solidjs/signals` `reconcile` `reads` withheld).
+  assert.equal(solid2.negativeRowCount, 118 + 47);
 });
 
 test("a pin file that parses but pins nothing is refused, not read as full coverage", () => {

@@ -16,7 +16,7 @@ test("verification pins every compilation before checking test targets", () => {
   // The citation test's archive-reading arm reads these roots.
   const archives = verify.indexOf("step archives-provision");
   assert.ok(archives > -1 && tests > archives);
-  assert.ok(verify.indexOf("export SOLID_CHECKER_RC3_ARCHIVE_ROOT SOLID_CHECKER_RC6_ARCHIVE_ROOT SOLID_CHECKER_RC9_ARCHIVE_ROOT") > archives);
+  assert.ok(verify.indexOf("export SOLID_CHECKER_RC3_ARCHIVE_ROOT SOLID_CHECKER_RC6_ARCHIVE_ROOT SOLID_CHECKER_RC9_ARCHIVE_ROOT SOLID_CHECKER_RC13_ARCHIVE_ROOT") > archives);
   assert.ok(verify.indexOf('wait "$tests_pid" || tests_status=$?') < verify.indexOf("step verify-performance"));
 });
 

@@ -1,0 +1,57 @@
+function omit(props, ...keys) {
+  let hidden = keys.length === 1 && typeof keys[0] === "function" ? keys[0] : keys;
+  if (SUPPORTS_PROXY) {
+    // A view over a view folds: one record, both filters, the original
+    // source — so a consumer walks the real object however deep the omits go.
+    // Over a merge() proxy the source is the merge's RECORD (see OmitView):
+    // one record whatever the leaf count, read by function call.
+    let source = props;
+    let kind = SOURCE_PLAIN;
+    if (typeof props === "function") kind = SOURCE_MEMO;
+    else if ($PROXY in props) {
+      kind = SOURCE_PROXY;
+      const r = recordOf(props);
+      if (r instanceof OmitView) {
+        source = r.source;
+        kind = r.kind;
+        hidden = combineHidden(r.hidden, hidden);
+      } else if (r !== undefined) {
+        source = r;
+        kind = SOURCE_MERGE;
+      }
+    }
+    return new Proxy(new OmitView(source, kind, hidden), omitTraps);
+  }
+  const result = {};
+  const propNames = Object.getOwnPropertyNames(props);
+  const isHiddenKey =
+    typeof hidden === "function"
+      ? hidden
+      : hidden.length > 4 && propNames.length > hidden.length
+        ? (
+            blocked => key =>
+              blocked.has(key)
+          )(new Set(hidden))
+        : key => hidden.includes(key);
+  for (const propName of propNames) {
+    if (!isHiddenKey(propName)) {
+      const desc = Object.getOwnPropertyDescriptor(props, propName);
+      if (!desc.get && !desc.set && desc.enumerable && desc.writable && desc.configurable) {
+        result[propName] = desc.value;
+      } else if (desc.get || desc.set) {
+        // An accessor is re-homed with its source as receiver, never copied
+        // as-is: a props getter is only defined for a read THROUGH its own
+        // object (the compiler's server props keep their state on the
+        // instance, so a forwarded descriptor read on the copy throws). Same
+        // rule as merge()'s copy path above.
+        Object.defineProperty(result, propName, {
+          enumerable: desc.enumerable,
+          configurable: true,
+          get: desc.get && desc.get.bind(props),
+          set: desc.set && desc.set.bind(props)
+        });
+      } else Object.defineProperty(result, propName, desc);
+    }
+  }
+  return result;
+}

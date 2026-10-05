@@ -1,0 +1,84 @@
+[prod] 16/16 as stated
+  ok  control: s() in M  -> tracked=true
+  ok  getOwner()  -> tracked=false
+  ok  onCleanup(fn)  -> tracked=false
+  ok  untrack(() => s())  [literal callable]  -> tracked=false
+  ok  untrack(() => 1)  -> tracked=false
+  ok  runWithOwner(owner, () => s())  [literal callable]  -> tracked=false
+  ok  runWithOwner(null, () => 1)  -> tracked=false
+  ok  createSignal(0)  -> tracked=false
+  ok  createSignal(0, { equals: false })  -> tracked=false
+  ok  createSignal(undefined)  -> tracked=false
+  ok  createSignal(() => { inner++; return s(); })  [function form; M itself]  -> tracked=false
+  ok    ... and the function form did run its compute at the call  -> count=1
+  ok  untrack(createdMemoAccessor) [by reference] performed a read of a memo the call created  -> count=1
+  ok  untrack(() => createdMemoAccessor())  [literal: the walk sees the call and refuses it]  -> count=1
+  ok  runWithOwner(owner, createdMemoAccessor) [by reference] performed a read  -> count=1
+  ok  createSignal(createdMemoAccessor) [by reference, function form] performed a read  -> count=1
+[dev] 16/16 as stated
+  ok  control: s() in M  -> tracked=true
+  ok  getOwner()  -> tracked=false
+  ok  onCleanup(fn)  -> tracked=false
+  ok  untrack(() => s())  [literal callable]  -> tracked=false
+  ok  untrack(() => 1)  -> tracked=false
+  ok  runWithOwner(owner, () => s())  [literal callable]  -> tracked=false
+  ok  runWithOwner(null, () => 1)  -> tracked=false
+  ok  createSignal(0)  -> tracked=false
+  ok  createSignal(0, { equals: false })  -> tracked=false
+  ok  createSignal(undefined)  -> tracked=false
+  ok  createSignal(() => { inner++; return s(); })  [function form; M itself]  -> tracked=false
+  ok    ... and the function form did run its compute at the call  -> count=1
+  ok  untrack(createdMemoAccessor) [by reference] performed a read of a memo the call created  -> count=1
+  ok  untrack(() => createdMemoAccessor())  [literal: the walk sees the call and refuses it]  -> count=1
+  ok  runWithOwner(owner, createdMemoAccessor) [by reference] performed a read  -> count=1
+  ok  createSignal(createdMemoAccessor) [by reference, function form] performed a read  -> count=1
+[observe] 16/16 as stated
+  ok  control: s() in M  -> tracked=true
+  ok  getOwner()  -> tracked=false
+  ok  onCleanup(fn)  -> tracked=false
+  ok  untrack(() => s())  [literal callable]  -> tracked=false
+  ok  untrack(() => 1)  -> tracked=false
+  ok  runWithOwner(owner, () => s())  [literal callable]  -> tracked=false
+  ok  runWithOwner(null, () => 1)  -> tracked=false
+  ok  createSignal(0)  -> tracked=false
+  ok  createSignal(0, { equals: false })  -> tracked=false
+  ok  createSignal(undefined)  -> tracked=false
+  ok  createSignal(() => { inner++; return s(); })  [function form; M itself]  -> tracked=false
+  ok    ... and the function form did run its compute at the call  -> count=1
+  ok  untrack(createdMemoAccessor) [by reference] performed a read of a memo the call created  -> count=1
+  ok  untrack(() => createdMemoAccessor())  [literal: the walk sees the call and refuses it]  -> count=1
+  ok  runWithOwner(owner, createdMemoAccessor) [by reference] performed a read  -> count=1
+  ok  createSignal(createdMemoAccessor) [by reference, function form] performed a read  -> count=1
+[client-prod] 7/7 as stated
+  ok  createSignal(5), hydrating=false: M gained a dependency  (false)
+  ok  createSignal(5), hydrating=false: reads back 5 with no gate
+  ok  createSignal(5), hydrating=true: M gained a dependency  (false)
+  ok  createSignal(5), hydrating=true: reads back 5 with no gate
+  ok  createSignal(fn, {ssrSource:"client"}): runs fn at the call when not hydrating, and not when hydrating (the archive read a gate it created)  (plain=1 hydrating=0)
+  ok  useContext(ctx) in M: no dependency
+  ok  useContext(ctx) returns the default  (7)
+[client-dev] 7/7 as stated
+  ok  createSignal(5), hydrating=false: M gained a dependency  (false)
+  ok  createSignal(5), hydrating=false: reads back 5 with no gate
+  ok  createSignal(5), hydrating=true: M gained a dependency  (false)
+  ok  createSignal(5), hydrating=true: reads back 5 with no gate
+  ok  createSignal(fn, {ssrSource:"client"}): runs fn at the call when not hydrating, and not when hydrating (the archive read a gate it created)  (plain=1 hydrating=0)
+  ok  useContext(ctx) in M: no dependency
+  ok  useContext(ctx) returns the default  (7)
+[client-observe] 7/7 as stated
+  ok  createSignal(5), hydrating=false: M gained a dependency  (false)
+  ok  createSignal(5), hydrating=false: reads back 5 with no gate
+  ok  createSignal(5), hydrating=true: M gained a dependency  (false)
+  ok  createSignal(5), hydrating=true: reads back 5 with no gate
+  ok  createSignal(fn, {ssrSource:"client"}): runs fn at the call when not hydrating, and not when hydrating (the archive read a gate it created)  (plain=1 hydrating=0)
+  ok  useContext(ctx) in M: no dependency
+  ok  useContext(ctx) returns the default  (7)
+[server-prod] 2/2 as stated
+  ok  server createSignal(5) reads back 5
+  ok  server useContext(ctx) returns the default  (7)
+[server-dev] 2/2 as stated
+  ok  server createSignal(5) reads back 5
+  ok  server useContext(ctx) returns the default  (7)
+[server-observe] 2/2 as stated
+  ok  server createSignal(5) reads back 5
+  ok  server useContext(ctx) returns the default  (7)

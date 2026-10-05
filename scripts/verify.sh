@@ -199,7 +199,8 @@ archives_root="$PWD/rust/target/audited-archives/solid-v2"
 SOLID_CHECKER_RC3_ARCHIVE_ROOT="$archives_root/2.0.0-rc.3/node_modules"
 SOLID_CHECKER_RC6_ARCHIVE_ROOT="$archives_root/2.0.0-rc.6/node_modules"
 SOLID_CHECKER_RC9_ARCHIVE_ROOT="$archives_root/2.0.0-rc.9/node_modules"
-export SOLID_CHECKER_RC3_ARCHIVE_ROOT SOLID_CHECKER_RC6_ARCHIVE_ROOT SOLID_CHECKER_RC9_ARCHIVE_ROOT
+SOLID_CHECKER_RC13_ARCHIVE_ROOT="$archives_root/2.0.0-rc.13/node_modules"
+export SOLID_CHECKER_RC3_ARCHIVE_ROOT SOLID_CHECKER_RC6_ARCHIVE_ROOT SOLID_CHECKER_RC9_ARCHIVE_ROOT SOLID_CHECKER_RC13_ARCHIVE_ROOT
 
 # The assignments are inside the function rather than prefixed onto the call:
 step go-rust-tests
