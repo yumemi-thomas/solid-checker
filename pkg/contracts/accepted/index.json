@@ -4382,6 +4382,164 @@
         "version": "2.0.0-rc.9"
       }
     ],
+    "sha256:12500b734e2bf5fda58d8b248fe7b1c0b9ce446884fa7997175f9ead944caf4d": [
+      {
+        "integrity": "sha512-o3pqiTgpH5NR2DstiKrt9s/6+0YOFtv+MfvLONwLsS247I+EWMMyTu9BkRcgd35UR5Pa1DM16lI1/5uaIMY6Gw==",
+        "name": "@solidjs/signals",
+        "resolvedFrom": {
+          "importer": {
+            "package": {
+              "integrity": "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g==",
+              "name": "solid-js",
+              "version": "2.0.0-rc.9"
+            }
+          },
+          "specifier": "@solidjs/signals"
+        },
+        "version": "2.0.0-rc.9"
+      },
+      {
+        "integrity": "sha512-pfiWoLDnLc+QYWc7UyLqO+5QrPEf3oTiNmmRC+C+uM6AZ5VH0bZMNPtLM5rJ29LKPiTwQitKV843IQDf/oeyhQ==",
+        "name": "@solidjs/web",
+        "resolvedFrom": {
+          "importer": "certified",
+          "specifier": "@solidjs/web"
+        },
+        "version": "2.0.0-rc.9"
+      },
+      {
+        "integrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
+        "name": "@tanstack/history",
+        "resolvedFrom": {
+          "importer": "certified",
+          "specifier": "@tanstack/history"
+        },
+        "version": "1.162.1"
+      },
+      {
+        "integrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
+        "name": "@tanstack/history",
+        "resolvedFrom": {
+          "importer": {
+            "package": {
+              "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+              "name": "@tanstack/router-core",
+              "version": "1.171.22"
+            }
+          },
+          "specifier": "@tanstack/history"
+        },
+        "version": "1.162.1"
+      },
+      {
+        "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+        "name": "@tanstack/router-core",
+        "resolvedFrom": {
+          "importer": "certified",
+          "specifier": "@tanstack/router-core"
+        },
+        "version": "1.171.22"
+      },
+      {
+        "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+        "name": "csstype",
+        "resolvedFrom": {
+          "importer": {
+            "package": {
+              "integrity": "sha512-pfiWoLDnLc+QYWc7UyLqO+5QrPEf3oTiNmmRC+C+uM6AZ5VH0bZMNPtLM5rJ29LKPiTwQitKV843IQDf/oeyhQ==",
+              "name": "@solidjs/web",
+              "version": "2.0.0-rc.9"
+            }
+          },
+          "specifier": "csstype"
+        },
+        "version": "3.2.3"
+      },
+      {
+        "integrity": "sha512-LErWMNS2RRFdu2RMA5u/PA59/IWs0XsikyEXGQ2/36iEWFrdG0ABmg17E17cikrv76891kOAMq3TkTFXpwAHXw==",
+        "name": "seroval",
+        "resolvedFrom": {
+          "importer": {
+            "package": {
+              "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+              "name": "@tanstack/router-core",
+              "version": "1.171.22"
+            }
+          },
+          "specifier": "seroval"
+        },
+        "version": "1.6.4"
+      },
+      {
+        "integrity": "sha512-LErWMNS2RRFdu2RMA5u/PA59/IWs0XsikyEXGQ2/36iEWFrdG0ABmg17E17cikrv76891kOAMq3TkTFXpwAHXw==",
+        "name": "seroval",
+        "resolvedFrom": {
+          "importer": {
+            "package": {
+              "integrity": "sha512-R0f1U9hmn38+dFMz6b6ab8lwucmw4AtiY7St+JPWudy1dm+Bs3g884nyrsH9Cy6rKpZKLYayXuMda9GZ/fl8JQ==",
+              "name": "seroval-plugins",
+              "version": "1.6.4"
+            }
+          },
+          "specifier": "seroval"
+        },
+        "version": "1.6.4"
+      },
+      {
+        "integrity": "sha512-AeDcLh0yO2SFm9W71essgnSzLV9DI8ZH0x0knXn2DMnUZj728mpLbxjlbB6IqKCmqh8JA3cEqRyGoNkt584JcQ==",
+        "name": "seroval",
+        "resolvedFrom": {
+          "importer": {
+            "package": {
+              "integrity": "sha512-pfiWoLDnLc+QYWc7UyLqO+5QrPEf3oTiNmmRC+C+uM6AZ5VH0bZMNPtLM5rJ29LKPiTwQitKV843IQDf/oeyhQ==",
+              "name": "@solidjs/web",
+              "version": "2.0.0-rc.9"
+            }
+          },
+          "specifier": "seroval"
+        },
+        "version": "1.6.7"
+      },
+      {
+        "integrity": "sha512-R0f1U9hmn38+dFMz6b6ab8lwucmw4AtiY7St+JPWudy1dm+Bs3g884nyrsH9Cy6rKpZKLYayXuMda9GZ/fl8JQ==",
+        "name": "seroval-plugins",
+        "resolvedFrom": {
+          "importer": {
+            "package": {
+              "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+              "name": "@tanstack/router-core",
+              "version": "1.171.22"
+            }
+          },
+          "specifier": "seroval-plugins"
+        },
+        "version": "1.6.4"
+      },
+      {
+        "integrity": "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g==",
+        "name": "solid-js",
+        "resolvedFrom": {
+          "importer": "certified",
+          "specifier": "solid-js"
+        },
+        "version": "2.0.0-rc.9"
+      },
+      {
+        "integrity": "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g==",
+        "name": "solid-js",
+        "resolvedFrom": {
+          "importer": {
+            "package": {
+              "integrity": "sha512-pfiWoLDnLc+QYWc7UyLqO+5QrPEf3oTiNmmRC+C+uM6AZ5VH0bZMNPtLM5rJ29LKPiTwQitKV843IQDf/oeyhQ==",
+              "name": "@solidjs/web",
+              "version": "2.0.0-rc.9"
+            }
+          },
+          "specifier": "solid-js"
+        },
+        "version": "2.0.0-rc.9"
+      }
+    ],
     "sha256:12b33d3543bf6a4070d54209c3d11d58728e069cb4036db25e07dfb41eb1a840": [
       {
         "integrity": "sha512-QGoy8R+8v+9I8mET50wMwu0uawkQvFFcv67S+vKJ8xP5jPrQXdxuNMckUTKUy2shR3rIRpR0oLzss0Vy0oLkPg==",
@@ -7060,6 +7218,53 @@
       {
         "integrity": "sha512-4Nk35ttD3DTDJW4hgw5StsVAPeU6qnDFnULAouw6tQ7oLTV/ICXrWpsXo2EE52eSP2joUMazbVf52mFEcADqRw==",
         "name": "seroval-plugins",
+        "version": "1.6.7"
+      },
+      {
+        "integrity": "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g==",
+        "name": "solid-js",
+        "version": "2.0.0-rc.9"
+      }
+    ],
+    "sha256:212e5c675781dd9fc63f4b17e7a2f46619e109afcf7c4ca232ef3ee85d923be7": [
+      {
+        "integrity": "sha512-o3pqiTgpH5NR2DstiKrt9s/6+0YOFtv+MfvLONwLsS247I+EWMMyTu9BkRcgd35UR5Pa1DM16lI1/5uaIMY6Gw==",
+        "name": "@solidjs/signals",
+        "version": "2.0.0-rc.9"
+      },
+      {
+        "integrity": "sha512-pfiWoLDnLc+QYWc7UyLqO+5QrPEf3oTiNmmRC+C+uM6AZ5VH0bZMNPtLM5rJ29LKPiTwQitKV843IQDf/oeyhQ==",
+        "name": "@solidjs/web",
+        "version": "2.0.0-rc.9"
+      },
+      {
+        "integrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
+        "name": "@tanstack/history",
+        "version": "1.162.1"
+      },
+      {
+        "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+        "name": "@tanstack/router-core",
+        "version": "1.171.22"
+      },
+      {
+        "integrity": "sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA==",
+        "name": "@tanstack/solid-router",
+        "version": "2.0.0-rc.8"
+      },
+      {
+        "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+        "name": "csstype",
+        "version": "3.2.3"
+      },
+      {
+        "integrity": "sha512-LErWMNS2RRFdu2RMA5u/PA59/IWs0XsikyEXGQ2/36iEWFrdG0ABmg17E17cikrv76891kOAMq3TkTFXpwAHXw==",
+        "name": "seroval",
+        "version": "1.6.4"
+      },
+      {
+        "integrity": "sha512-AeDcLh0yO2SFm9W71essgnSzLV9DI8ZH0x0knXn2DMnUZj728mpLbxjlbB6IqKCmqh8JA3cEqRyGoNkt584JcQ==",
+        "name": "seroval",
         "version": "1.6.7"
       },
       {
@@ -16998,6 +17203,48 @@
         "version": "2.0.0-rc.3"
       }
     ],
+    "sha256:4b879e6d75dd117c88d1ab178bacbe42f3e00dd19ab2422b218eba7babe292bd": [
+      {
+        "integrity": "sha512-l7P0g8+2pnNscaIPOGDMhv0boaidGAsvR8QN66JySIWNMvVnuq2ayv7ZnvP+IR00DJC+RqCNnnTG/UCdxf+h8g==",
+        "name": "@solidjs/signals",
+        "version": "2.0.0-rc.4"
+      },
+      {
+        "integrity": "sha512-acM9W0FByf0aJDMG5kMbHr0BLTjvFIg8lxwLwHzsu3ybWSmsP1FiOOs2RHNItve/AiX+MGR9CQBCazmnfPykEA==",
+        "name": "@solidjs/web",
+        "version": "2.0.0-rc.4"
+      },
+      {
+        "integrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
+        "name": "@tanstack/history",
+        "version": "1.162.1"
+      },
+      {
+        "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+        "name": "@tanstack/router-core",
+        "version": "1.171.22"
+      },
+      {
+        "integrity": "sha512-DCHpsdvlWuJ3064od5ScYe4fUaFFaj8z/cqDPggh5CJ2hI/ZjUrCa1GnHbbjWGNk/WKDLfwdwRDPHFKU/dI/ug==",
+        "name": "@tanstack/solid-router",
+        "version": "2.0.0-rc.4"
+      },
+      {
+        "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+        "name": "csstype",
+        "version": "3.2.3"
+      },
+      {
+        "integrity": "sha512-TfxuUjlbBESzUOWdTkTKqvSmav0ABym+itetDXLK6mDz8SmrpdI30aF8RTXE8Bvq+tH/1yIDkvy3W0lfQb1ipQ==",
+        "name": "seroval-plugins",
+        "version": "1.6.2"
+      },
+      {
+        "integrity": "sha512-hSkDmtduesjFtvzjNyqLphrqiSvhSD5+njkPQUR+9YEoR60MMWtuv36SbLL4OucI0Ronof3Jc+AsUp0oWffwMg==",
+        "name": "solid-js",
+        "version": "2.0.0-rc.4"
+      }
+    ],
     "sha256:4c08dc70e0186c34a3d067d4f1cd2deb73a7e5b49f34f59bbf5dcca333c37948": [
       {
         "integrity": "sha512-gstP+WmahO2Ng7OMMVjf9TtsZ1Vx4KMuO4wPwY9mAKFQj4emrdv6iYB4lgmV9HG2vqu9k4YgJbJ6uvXKPxx+6w==",
@@ -19005,6 +19252,48 @@
         "integrity": "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g==",
         "name": "solid-js",
         "version": "2.0.0-rc.9"
+      }
+    ],
+    "sha256:526e0694e2da21f9cb415989badcf5c09a176536f92289ec3b7e1851b5c9063e": [
+      {
+        "integrity": "sha512-l7P0g8+2pnNscaIPOGDMhv0boaidGAsvR8QN66JySIWNMvVnuq2ayv7ZnvP+IR00DJC+RqCNnnTG/UCdxf+h8g==",
+        "name": "@solidjs/signals",
+        "version": "2.0.0-rc.4"
+      },
+      {
+        "integrity": "sha512-acM9W0FByf0aJDMG5kMbHr0BLTjvFIg8lxwLwHzsu3ybWSmsP1FiOOs2RHNItve/AiX+MGR9CQBCazmnfPykEA==",
+        "name": "@solidjs/web",
+        "version": "2.0.0-rc.4"
+      },
+      {
+        "integrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
+        "name": "@tanstack/history",
+        "version": "1.162.1"
+      },
+      {
+        "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+        "name": "@tanstack/router-core",
+        "version": "1.171.22"
+      },
+      {
+        "integrity": "sha512-DCHpsdvlWuJ3064od5ScYe4fUaFFaj8z/cqDPggh5CJ2hI/ZjUrCa1GnHbbjWGNk/WKDLfwdwRDPHFKU/dI/ug==",
+        "name": "@tanstack/solid-router",
+        "version": "2.0.0-rc.4"
+      },
+      {
+        "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+        "name": "csstype",
+        "version": "3.2.3"
+      },
+      {
+        "integrity": "sha512-mPT+SD2TrlB6wvte1KkYOYUkubaTbd6pZ/6Kk3C9nxzrHmCZyhxOO7XGAeL7f+yLKZglzGtM9odUVvg/EhO+vQ==",
+        "name": "seroval",
+        "version": "1.6.2"
+      },
+      {
+        "integrity": "sha512-hSkDmtduesjFtvzjNyqLphrqiSvhSD5+njkPQUR+9YEoR60MMWtuv36SbLL4OucI0Ronof3Jc+AsUp0oWffwMg==",
+        "name": "solid-js",
+        "version": "2.0.0-rc.4"
       }
     ],
     "sha256:528c18c04e0340362f9e52183b76fef1897254c29518ec6b273720cdf4475070": [
@@ -21814,6 +22103,48 @@
           "specifier": "vitefu"
         },
         "version": "1.1.3"
+      }
+    ],
+    "sha256:5d4de9b68d1bed4d56929ec60de3c3aa84bd1d723b3c511dbf91ada24cb11835": [
+      {
+        "integrity": "sha512-l7P0g8+2pnNscaIPOGDMhv0boaidGAsvR8QN66JySIWNMvVnuq2ayv7ZnvP+IR00DJC+RqCNnnTG/UCdxf+h8g==",
+        "name": "@solidjs/signals",
+        "version": "2.0.0-rc.4"
+      },
+      {
+        "integrity": "sha512-acM9W0FByf0aJDMG5kMbHr0BLTjvFIg8lxwLwHzsu3ybWSmsP1FiOOs2RHNItve/AiX+MGR9CQBCazmnfPykEA==",
+        "name": "@solidjs/web",
+        "version": "2.0.0-rc.4"
+      },
+      {
+        "integrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
+        "name": "@tanstack/history",
+        "version": "1.162.1"
+      },
+      {
+        "integrity": "sha512-DCHpsdvlWuJ3064od5ScYe4fUaFFaj8z/cqDPggh5CJ2hI/ZjUrCa1GnHbbjWGNk/WKDLfwdwRDPHFKU/dI/ug==",
+        "name": "@tanstack/solid-router",
+        "version": "2.0.0-rc.4"
+      },
+      {
+        "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+        "name": "csstype",
+        "version": "3.2.3"
+      },
+      {
+        "integrity": "sha512-mPT+SD2TrlB6wvte1KkYOYUkubaTbd6pZ/6Kk3C9nxzrHmCZyhxOO7XGAeL7f+yLKZglzGtM9odUVvg/EhO+vQ==",
+        "name": "seroval",
+        "version": "1.6.2"
+      },
+      {
+        "integrity": "sha512-TfxuUjlbBESzUOWdTkTKqvSmav0ABym+itetDXLK6mDz8SmrpdI30aF8RTXE8Bvq+tH/1yIDkvy3W0lfQb1ipQ==",
+        "name": "seroval-plugins",
+        "version": "1.6.2"
+      },
+      {
+        "integrity": "sha512-hSkDmtduesjFtvzjNyqLphrqiSvhSD5+njkPQUR+9YEoR60MMWtuv36SbLL4OucI0Ronof3Jc+AsUp0oWffwMg==",
+        "name": "solid-js",
+        "version": "2.0.0-rc.4"
       }
     ],
     "sha256:5d6a510257166fe03d56d1f2b86e95e56c3b2a80b4b0ee2b231c0a3396925b9a": [
@@ -26430,6 +26761,53 @@
           },
           "specifier": "solid-js"
         },
+        "version": "2.0.0-rc.9"
+      }
+    ],
+    "sha256:6f03de029f14b065cdc9abfe9d4cdc8a77bea49079ccb6be38ebf950b2d92681": [
+      {
+        "integrity": "sha512-o3pqiTgpH5NR2DstiKrt9s/6+0YOFtv+MfvLONwLsS247I+EWMMyTu9BkRcgd35UR5Pa1DM16lI1/5uaIMY6Gw==",
+        "name": "@solidjs/signals",
+        "version": "2.0.0-rc.9"
+      },
+      {
+        "integrity": "sha512-pfiWoLDnLc+QYWc7UyLqO+5QrPEf3oTiNmmRC+C+uM6AZ5VH0bZMNPtLM5rJ29LKPiTwQitKV843IQDf/oeyhQ==",
+        "name": "@solidjs/web",
+        "version": "2.0.0-rc.9"
+      },
+      {
+        "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+        "name": "@tanstack/router-core",
+        "version": "1.171.22"
+      },
+      {
+        "integrity": "sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA==",
+        "name": "@tanstack/solid-router",
+        "version": "2.0.0-rc.8"
+      },
+      {
+        "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+        "name": "csstype",
+        "version": "3.2.3"
+      },
+      {
+        "integrity": "sha512-LErWMNS2RRFdu2RMA5u/PA59/IWs0XsikyEXGQ2/36iEWFrdG0ABmg17E17cikrv76891kOAMq3TkTFXpwAHXw==",
+        "name": "seroval",
+        "version": "1.6.4"
+      },
+      {
+        "integrity": "sha512-AeDcLh0yO2SFm9W71essgnSzLV9DI8ZH0x0knXn2DMnUZj728mpLbxjlbB6IqKCmqh8JA3cEqRyGoNkt584JcQ==",
+        "name": "seroval",
+        "version": "1.6.7"
+      },
+      {
+        "integrity": "sha512-R0f1U9hmn38+dFMz6b6ab8lwucmw4AtiY7St+JPWudy1dm+Bs3g884nyrsH9Cy6rKpZKLYayXuMda9GZ/fl8JQ==",
+        "name": "seroval-plugins",
+        "version": "1.6.4"
+      },
+      {
+        "integrity": "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g==",
+        "name": "solid-js",
         "version": "2.0.0-rc.9"
       }
     ],
@@ -31945,6 +32323,149 @@
         "version": "2.0.0-rc.1"
       }
     ],
+    "sha256:8d3e8056e61a7ecd98e0e3cf3aa6dbfc4c52f3a158c384ab68d101779d97a4e2": [
+      {
+        "integrity": "sha512-l7P0g8+2pnNscaIPOGDMhv0boaidGAsvR8QN66JySIWNMvVnuq2ayv7ZnvP+IR00DJC+RqCNnnTG/UCdxf+h8g==",
+        "name": "@solidjs/signals",
+        "resolvedFrom": {
+          "importer": {
+            "package": {
+              "integrity": "sha512-hSkDmtduesjFtvzjNyqLphrqiSvhSD5+njkPQUR+9YEoR60MMWtuv36SbLL4OucI0Ronof3Jc+AsUp0oWffwMg==",
+              "name": "solid-js",
+              "version": "2.0.0-rc.4"
+            }
+          },
+          "specifier": "@solidjs/signals"
+        },
+        "version": "2.0.0-rc.4"
+      },
+      {
+        "integrity": "sha512-acM9W0FByf0aJDMG5kMbHr0BLTjvFIg8lxwLwHzsu3ybWSmsP1FiOOs2RHNItve/AiX+MGR9CQBCazmnfPykEA==",
+        "name": "@solidjs/web",
+        "resolvedFrom": {
+          "importer": "certified",
+          "specifier": "@solidjs/web"
+        },
+        "version": "2.0.0-rc.4"
+      },
+      {
+        "integrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
+        "name": "@tanstack/history",
+        "resolvedFrom": {
+          "importer": "certified",
+          "specifier": "@tanstack/history"
+        },
+        "version": "1.162.1"
+      },
+      {
+        "integrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
+        "name": "@tanstack/history",
+        "resolvedFrom": {
+          "importer": {
+            "package": {
+              "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+              "name": "@tanstack/router-core",
+              "version": "1.171.22"
+            }
+          },
+          "specifier": "@tanstack/history"
+        },
+        "version": "1.162.1"
+      },
+      {
+        "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+        "name": "@tanstack/router-core",
+        "resolvedFrom": {
+          "importer": "certified",
+          "specifier": "@tanstack/router-core"
+        },
+        "version": "1.171.22"
+      },
+      {
+        "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+        "name": "csstype",
+        "resolvedFrom": {
+          "importer": {
+            "package": {
+              "integrity": "sha512-acM9W0FByf0aJDMG5kMbHr0BLTjvFIg8lxwLwHzsu3ybWSmsP1FiOOs2RHNItve/AiX+MGR9CQBCazmnfPykEA==",
+              "name": "@solidjs/web",
+              "version": "2.0.0-rc.4"
+            }
+          },
+          "specifier": "csstype"
+        },
+        "version": "3.2.3"
+      },
+      {
+        "integrity": "sha512-mPT+SD2TrlB6wvte1KkYOYUkubaTbd6pZ/6Kk3C9nxzrHmCZyhxOO7XGAeL7f+yLKZglzGtM9odUVvg/EhO+vQ==",
+        "name": "seroval",
+        "resolvedFrom": {
+          "importer": {
+            "package": {
+              "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+              "name": "@tanstack/router-core",
+              "version": "1.171.22"
+            }
+          },
+          "specifier": "seroval"
+        },
+        "version": "1.6.2"
+      },
+      {
+        "integrity": "sha512-mPT+SD2TrlB6wvte1KkYOYUkubaTbd6pZ/6Kk3C9nxzrHmCZyhxOO7XGAeL7f+yLKZglzGtM9odUVvg/EhO+vQ==",
+        "name": "seroval",
+        "resolvedFrom": {
+          "importer": {
+            "package": {
+              "integrity": "sha512-TfxuUjlbBESzUOWdTkTKqvSmav0ABym+itetDXLK6mDz8SmrpdI30aF8RTXE8Bvq+tH/1yIDkvy3W0lfQb1ipQ==",
+              "name": "seroval-plugins",
+              "version": "1.6.2"
+            }
+          },
+          "specifier": "seroval"
+        },
+        "version": "1.6.2"
+      },
+      {
+        "integrity": "sha512-TfxuUjlbBESzUOWdTkTKqvSmav0ABym+itetDXLK6mDz8SmrpdI30aF8RTXE8Bvq+tH/1yIDkvy3W0lfQb1ipQ==",
+        "name": "seroval-plugins",
+        "resolvedFrom": {
+          "importer": {
+            "package": {
+              "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+              "name": "@tanstack/router-core",
+              "version": "1.171.22"
+            }
+          },
+          "specifier": "seroval-plugins"
+        },
+        "version": "1.6.2"
+      },
+      {
+        "integrity": "sha512-hSkDmtduesjFtvzjNyqLphrqiSvhSD5+njkPQUR+9YEoR60MMWtuv36SbLL4OucI0Ronof3Jc+AsUp0oWffwMg==",
+        "name": "solid-js",
+        "resolvedFrom": {
+          "importer": "certified",
+          "specifier": "solid-js"
+        },
+        "version": "2.0.0-rc.4"
+      },
+      {
+        "integrity": "sha512-hSkDmtduesjFtvzjNyqLphrqiSvhSD5+njkPQUR+9YEoR60MMWtuv36SbLL4OucI0Ronof3Jc+AsUp0oWffwMg==",
+        "name": "solid-js",
+        "resolvedFrom": {
+          "importer": {
+            "package": {
+              "integrity": "sha512-acM9W0FByf0aJDMG5kMbHr0BLTjvFIg8lxwLwHzsu3ybWSmsP1FiOOs2RHNItve/AiX+MGR9CQBCazmnfPykEA==",
+              "name": "@solidjs/web",
+              "version": "2.0.0-rc.4"
+            }
+          },
+          "specifier": "solid-js"
+        },
+        "version": "2.0.0-rc.4"
+      }
+    ],
     "sha256:8d9df6ef44e77a5000196e3d17297c8cf00fb1472bb5315bb3b66f820cb46f43": [
       {
         "integrity": "sha512-1OOKH+QHItwDmZNdKCqajhuoL8uSmZMPIyCI6qC+qDSafkH0q3NljEvblBQLskcBBZrq6FIbLs6ct1AYUDKbig==",
@@ -36067,6 +36588,48 @@
         "integrity": "sha512-Z/M8s9ypLBf+6Bl3AAb5upgkYCl73HkpM+UxdUJ5uFGctTwpOQVCM9Gpj3Mjbiaki270HHUfA3Z0Lyn4w+fDtg==",
         "name": "solid-js",
         "version": "2.0.0-rc.6"
+      }
+    ],
+    "sha256:9e6a08d0e074ba8d030892ce2e5093ac90254579fdda954eae2034d2475a2083": [
+      {
+        "integrity": "sha512-l7P0g8+2pnNscaIPOGDMhv0boaidGAsvR8QN66JySIWNMvVnuq2ayv7ZnvP+IR00DJC+RqCNnnTG/UCdxf+h8g==",
+        "name": "@solidjs/signals",
+        "version": "2.0.0-rc.4"
+      },
+      {
+        "integrity": "sha512-acM9W0FByf0aJDMG5kMbHr0BLTjvFIg8lxwLwHzsu3ybWSmsP1FiOOs2RHNItve/AiX+MGR9CQBCazmnfPykEA==",
+        "name": "@solidjs/web",
+        "version": "2.0.0-rc.4"
+      },
+      {
+        "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+        "name": "@tanstack/router-core",
+        "version": "1.171.22"
+      },
+      {
+        "integrity": "sha512-DCHpsdvlWuJ3064od5ScYe4fUaFFaj8z/cqDPggh5CJ2hI/ZjUrCa1GnHbbjWGNk/WKDLfwdwRDPHFKU/dI/ug==",
+        "name": "@tanstack/solid-router",
+        "version": "2.0.0-rc.4"
+      },
+      {
+        "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+        "name": "csstype",
+        "version": "3.2.3"
+      },
+      {
+        "integrity": "sha512-mPT+SD2TrlB6wvte1KkYOYUkubaTbd6pZ/6Kk3C9nxzrHmCZyhxOO7XGAeL7f+yLKZglzGtM9odUVvg/EhO+vQ==",
+        "name": "seroval",
+        "version": "1.6.2"
+      },
+      {
+        "integrity": "sha512-TfxuUjlbBESzUOWdTkTKqvSmav0ABym+itetDXLK6mDz8SmrpdI30aF8RTXE8Bvq+tH/1yIDkvy3W0lfQb1ipQ==",
+        "name": "seroval-plugins",
+        "version": "1.6.2"
+      },
+      {
+        "integrity": "sha512-hSkDmtduesjFtvzjNyqLphrqiSvhSD5+njkPQUR+9YEoR60MMWtuv36SbLL4OucI0Ronof3Jc+AsUp0oWffwMg==",
+        "name": "solid-js",
+        "version": "2.0.0-rc.4"
       }
     ],
     "sha256:9f33dbda04ea9f893f3ab5a81d3d711f7dba57c5b3ce873751e140c6065ffd76": [
@@ -40358,6 +40921,53 @@
         "version": "2.0.0-rc.9"
       }
     ],
+    "sha256:b9390df7e6eabb7b09eddef68ec7563d974deaa2070233b1ab0276eaff92e8dc": [
+      {
+        "integrity": "sha512-o3pqiTgpH5NR2DstiKrt9s/6+0YOFtv+MfvLONwLsS247I+EWMMyTu9BkRcgd35UR5Pa1DM16lI1/5uaIMY6Gw==",
+        "name": "@solidjs/signals",
+        "version": "2.0.0-rc.9"
+      },
+      {
+        "integrity": "sha512-pfiWoLDnLc+QYWc7UyLqO+5QrPEf3oTiNmmRC+C+uM6AZ5VH0bZMNPtLM5rJ29LKPiTwQitKV843IQDf/oeyhQ==",
+        "name": "@solidjs/web",
+        "version": "2.0.0-rc.9"
+      },
+      {
+        "integrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
+        "name": "@tanstack/history",
+        "version": "1.162.1"
+      },
+      {
+        "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+        "name": "@tanstack/router-core",
+        "version": "1.171.22"
+      },
+      {
+        "integrity": "sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA==",
+        "name": "@tanstack/solid-router",
+        "version": "2.0.0-rc.8"
+      },
+      {
+        "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+        "name": "csstype",
+        "version": "3.2.3"
+      },
+      {
+        "integrity": "sha512-AeDcLh0yO2SFm9W71essgnSzLV9DI8ZH0x0knXn2DMnUZj728mpLbxjlbB6IqKCmqh8JA3cEqRyGoNkt584JcQ==",
+        "name": "seroval",
+        "version": "1.6.7"
+      },
+      {
+        "integrity": "sha512-R0f1U9hmn38+dFMz6b6ab8lwucmw4AtiY7St+JPWudy1dm+Bs3g884nyrsH9Cy6rKpZKLYayXuMda9GZ/fl8JQ==",
+        "name": "seroval-plugins",
+        "version": "1.6.4"
+      },
+      {
+        "integrity": "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g==",
+        "name": "solid-js",
+        "version": "2.0.0-rc.9"
+      }
+    ],
     "sha256:b9c52d1830d63b948aa0ab81cf8da8c7cf80c987ac185a623a850492217f4384": [
       {
         "integrity": "sha512-cJxDV4o16FkHNxqABp2GxM1RAeIFn3Psj1+LMAt5oBJ1z+W4ffEmHvajNb78Q7ZwpOlhDiku7vF+N+P7zgQePQ==",
@@ -41917,6 +42527,53 @@
         "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
         "name": "csstype",
         "version": "3.2.3"
+      },
+      {
+        "integrity": "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g==",
+        "name": "solid-js",
+        "version": "2.0.0-rc.9"
+      }
+    ],
+    "sha256:c7f033c701991b146dc23aff111cb84054045914fd75b8bb04c3c1274b0c334b": [
+      {
+        "integrity": "sha512-o3pqiTgpH5NR2DstiKrt9s/6+0YOFtv+MfvLONwLsS247I+EWMMyTu9BkRcgd35UR5Pa1DM16lI1/5uaIMY6Gw==",
+        "name": "@solidjs/signals",
+        "version": "2.0.0-rc.9"
+      },
+      {
+        "integrity": "sha512-pfiWoLDnLc+QYWc7UyLqO+5QrPEf3oTiNmmRC+C+uM6AZ5VH0bZMNPtLM5rJ29LKPiTwQitKV843IQDf/oeyhQ==",
+        "name": "@solidjs/web",
+        "version": "2.0.0-rc.9"
+      },
+      {
+        "integrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
+        "name": "@tanstack/history",
+        "version": "1.162.1"
+      },
+      {
+        "integrity": "sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA==",
+        "name": "@tanstack/solid-router",
+        "version": "2.0.0-rc.8"
+      },
+      {
+        "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+        "name": "csstype",
+        "version": "3.2.3"
+      },
+      {
+        "integrity": "sha512-LErWMNS2RRFdu2RMA5u/PA59/IWs0XsikyEXGQ2/36iEWFrdG0ABmg17E17cikrv76891kOAMq3TkTFXpwAHXw==",
+        "name": "seroval",
+        "version": "1.6.4"
+      },
+      {
+        "integrity": "sha512-AeDcLh0yO2SFm9W71essgnSzLV9DI8ZH0x0knXn2DMnUZj728mpLbxjlbB6IqKCmqh8JA3cEqRyGoNkt584JcQ==",
+        "name": "seroval",
+        "version": "1.6.7"
+      },
+      {
+        "integrity": "sha512-R0f1U9hmn38+dFMz6b6ab8lwucmw4AtiY7St+JPWudy1dm+Bs3g884nyrsH9Cy6rKpZKLYayXuMda9GZ/fl8JQ==",
+        "name": "seroval-plugins",
+        "version": "1.6.4"
       },
       {
         "integrity": "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g==",
@@ -64963,8 +65620,8 @@
     },
     {
       "declarationTarget": "dist/dialog/index.d.ts",
-      "document": "objects/30a4b64f643e384fe487ca9b132184f58c401c5b9f06d330662256f929957524.main.json",
-      "documentDigest": "sha256:30a4b64f643e384fe487ca9b132184f58c401c5b9f06d330662256f929957524",
+      "document": "objects/308e1e27bea5df6bd1cbfb7457cb40a47e30ecf06f96e51d4de145dcf81ba760.main.json",
+      "documentDigest": "sha256:308e1e27bea5df6bd1cbfb7457cb40a47e30ecf06f96e51d4de145dcf81ba760",
       "exportConditions": [
         "browser",
         "import"
@@ -64972,8 +65629,8 @@
       "packageIntegrity": "sha512-XondeC9sn3zMeo/3CxNnV6MAjCLsw/euikAzW1W5R1eyAKki8er2PrsA0ihlVuYsXBZvnHm2HMiAVDdmC4VdHg==",
       "packageName": "@kobalte/core",
       "packageVersion": "2.0.0-alpha.2",
-      "receipt": "objects/fb28fa6a5ef2f7fa10a49db427974e0f028692a137914412db19cfeab8b4a274.receipt.json",
-      "receiptDigest": "sha256:fb28fa6a5ef2f7fa10a49db427974e0f028692a137914412db19cfeab8b4a274",
+      "receipt": "objects/06f2986b3b94f7f93f498f069b6bfa7e0e61f52aed4ba80eb53247efa00f928d.receipt.json",
+      "receiptDigest": "sha256:06f2986b3b94f7f93f498f069b6bfa7e0e61f52aed4ba80eb53247efa00f928d",
       "requestedEntrypoint": "./dialog",
       "runtimeTarget": "dist/dialog/index.js",
       "specifier": "@kobalte/core/dialog",
@@ -65054,8 +65711,8 @@
     },
     {
       "declarationTarget": "dist/dialog/index.d.ts",
-      "document": "objects/810e707fdc5c53becf80cf21de100e6399abb583364bd23922087e47a8fadfe7.main.json",
-      "documentDigest": "sha256:810e707fdc5c53becf80cf21de100e6399abb583364bd23922087e47a8fadfe7",
+      "document": "objects/50da59f82ba96a31fe3e33d6023faaedae834ee171693e877ae3d3c6df4caeab.main.json",
+      "documentDigest": "sha256:50da59f82ba96a31fe3e33d6023faaedae834ee171693e877ae3d3c6df4caeab",
       "exportConditions": [
         "browser",
         "import",
@@ -65064,8 +65721,8 @@
       "packageIntegrity": "sha512-XondeC9sn3zMeo/3CxNnV6MAjCLsw/euikAzW1W5R1eyAKki8er2PrsA0ihlVuYsXBZvnHm2HMiAVDdmC4VdHg==",
       "packageName": "@kobalte/core",
       "packageVersion": "2.0.0-alpha.2",
-      "receipt": "objects/3fd37bd0ed192077f013e283f73a51d148949c009e30f5b8a5d4325958667036.receipt.json",
-      "receiptDigest": "sha256:3fd37bd0ed192077f013e283f73a51d148949c009e30f5b8a5d4325958667036",
+      "receipt": "objects/3fccc318f88aedac19fb7fab8cbb2796834876da6e50ef961384b0132bda206f.receipt.json",
+      "receiptDigest": "sha256:3fccc318f88aedac19fb7fab8cbb2796834876da6e50ef961384b0132bda206f",
       "requestedEntrypoint": "./dialog",
       "runtimeTarget": "dist/dialog/index.jsx",
       "specifier": "@kobalte/core/dialog",
@@ -72149,8 +72806,8 @@
       "packageIntegrity": "sha512-4hTQGn+UnBy3WYjQ60E+/EZ0+oMjeJM9u1hKKAXihHpSiEBhSpQstdFhPci/E9ob37Xx1UUtjKqTDaLFbZL7Lw==",
       "packageName": "@norbert_bodziony/bloub",
       "packageVersion": "0.4.1",
-      "receipt": "objects/820bd42a503a10cb9c7043daebb9d9b7683ca905546ba31c36f97cc844f315f0.receipt.json",
-      "receiptDigest": "sha256:820bd42a503a10cb9c7043daebb9d9b7683ca905546ba31c36f97cc844f315f0",
+      "receipt": "objects/9acaf53d0ac816750e498e1f438999de6bc5bfce51a893987482bdb6ecc67d17.receipt.json",
+      "receiptDigest": "sha256:9acaf53d0ac816750e498e1f438999de6bc5bfce51a893987482bdb6ecc67d17",
       "requestedEntrypoint": ".",
       "runtimeTarget": "dist/package/index.js",
       "specifier": "@norbert_bodziony/bloub",
@@ -88885,6 +89542,24 @@
       "packageIntegrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
       "packageName": "@tanstack/history",
       "packageVersion": "1.162.1",
+      "receipt": "objects/67be58c9804a984f55f888034ed16277ae076917c30cfb897a2137ae9d7e5c94.receipt.json",
+      "receiptDigest": "sha256:67be58c9804a984f55f888034ed16277ae076917c30cfb897a2137ae9d7e5c94",
+      "requestedEntrypoint": ".",
+      "runtimeTarget": "dist/esm/index.js",
+      "specifier": "@tanstack/history",
+      "dependencyEnvironmentRoot": "sha256:9e6a08d0e074ba8d030892ce2e5093ac90254579fdda954eae2034d2475a2083"
+    },
+    {
+      "declarationTarget": "dist/esm/index.d.ts",
+      "document": "objects/1f4709f8fde57e52923e832f7bc9dd676ca207a9cb3697a343718b1afcb21e58.main.json",
+      "documentDigest": "sha256:1f4709f8fde57e52923e832f7bc9dd676ca207a9cb3697a343718b1afcb21e58",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "packageIntegrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
+      "packageName": "@tanstack/history",
+      "packageVersion": "1.162.1",
       "receipt": "objects/0bd8c94d487a56e519a58e3cfa6d9b8e7ad0b1e9cde21c0366b4abdeb37383aa.receipt.json",
       "receiptDigest": "sha256:0bd8c94d487a56e519a58e3cfa6d9b8e7ad0b1e9cde21c0366b4abdeb37383aa",
       "requestedEntrypoint": ".",
@@ -88939,12 +89614,49 @@
       "packageIntegrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
       "packageName": "@tanstack/history",
       "packageVersion": "1.162.1",
-      "receipt": "objects/fd47c738b5779be5aa22d0e4ec2524b114b36c148d74049878572542b754b12c.receipt.json",
-      "receiptDigest": "sha256:fd47c738b5779be5aa22d0e4ec2524b114b36c148d74049878572542b754b12c",
+      "receipt": "objects/b7216f54983caaf50ad62bb43f582db44fea4ef26d26286412fa4516d4094101.receipt.json",
+      "receiptDigest": "sha256:b7216f54983caaf50ad62bb43f582db44fea4ef26d26286412fa4516d4094101",
+      "requestedEntrypoint": ".",
+      "runtimeTarget": "dist/esm/index.js",
+      "specifier": "@tanstack/history",
+      "dependencyEnvironmentRoot": "sha256:6f03de029f14b065cdc9abfe9d4cdc8a77bea49079ccb6be38ebf950b2d92681"
+    },
+    {
+      "declarationTarget": "dist/esm/index.d.ts",
+      "document": "objects/1f4709f8fde57e52923e832f7bc9dd676ca207a9cb3697a343718b1afcb21e58.main.json",
+      "documentDigest": "sha256:1f4709f8fde57e52923e832f7bc9dd676ca207a9cb3697a343718b1afcb21e58",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "packageIntegrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
+      "packageName": "@tanstack/history",
+      "packageVersion": "1.162.1",
+      "receipt": "objects/e9c1b84e81cdce835cfc6bee9253f79c1cf3b0d6429b23c99b89521094c63018.receipt.json",
+      "receiptDigest": "sha256:e9c1b84e81cdce835cfc6bee9253f79c1cf3b0d6429b23c99b89521094c63018",
       "requestedEntrypoint": ".",
       "runtimeTarget": "dist/esm/index.js",
       "specifier": "@tanstack/history",
       "dependencyEnvironmentRoot": "sha256:b5dba136740a75e8dfe601de1590cce94b7d5606d31409f806f3fed34f49a91b"
+    },
+    {
+      "declarationTarget": "dist/esm/index.d.ts",
+      "document": "objects/1f4709f8fde57e52923e832f7bc9dd676ca207a9cb3697a343718b1afcb21e58.main.json",
+      "documentDigest": "sha256:1f4709f8fde57e52923e832f7bc9dd676ca207a9cb3697a343718b1afcb21e58",
+      "exportConditions": [
+        "browser",
+        "import",
+        "solid"
+      ],
+      "packageIntegrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
+      "packageName": "@tanstack/history",
+      "packageVersion": "1.162.1",
+      "receipt": "objects/ff5300654384cd2b1647752512278cd3d42a0629e66d9d380e0ea9a62f4ff5c3.receipt.json",
+      "receiptDigest": "sha256:ff5300654384cd2b1647752512278cd3d42a0629e66d9d380e0ea9a62f4ff5c3",
+      "requestedEntrypoint": ".",
+      "runtimeTarget": "dist/esm/index.js",
+      "specifier": "@tanstack/history",
+      "dependencyEnvironmentRoot": "sha256:9e6a08d0e074ba8d030892ce2e5093ac90254579fdda954eae2034d2475a2083"
     },
     {
       "declarationTarget": "dist/esm/index.d.ts",
@@ -88996,8 +89708,27 @@
       "packageIntegrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
       "packageName": "@tanstack/history",
       "packageVersion": "1.162.1",
-      "receipt": "objects/96b46c8b72904dee437102364b20c9cf3fd9ab28361023728815c37ac7336f16.receipt.json",
-      "receiptDigest": "sha256:96b46c8b72904dee437102364b20c9cf3fd9ab28361023728815c37ac7336f16",
+      "receipt": "objects/448690350c8bf37ed102397e4e32488b30b3b9fc81daa44995bd3c4908704159.receipt.json",
+      "receiptDigest": "sha256:448690350c8bf37ed102397e4e32488b30b3b9fc81daa44995bd3c4908704159",
+      "requestedEntrypoint": ".",
+      "runtimeTarget": "dist/esm/index.js",
+      "specifier": "@tanstack/history",
+      "dependencyEnvironmentRoot": "sha256:6f03de029f14b065cdc9abfe9d4cdc8a77bea49079ccb6be38ebf950b2d92681"
+    },
+    {
+      "declarationTarget": "dist/esm/index.d.ts",
+      "document": "objects/1f4709f8fde57e52923e832f7bc9dd676ca207a9cb3697a343718b1afcb21e58.main.json",
+      "documentDigest": "sha256:1f4709f8fde57e52923e832f7bc9dd676ca207a9cb3697a343718b1afcb21e58",
+      "exportConditions": [
+        "browser",
+        "import",
+        "solid"
+      ],
+      "packageIntegrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
+      "packageName": "@tanstack/history",
+      "packageVersion": "1.162.1",
+      "receipt": "objects/7c77a5e55331bec4811426c31fb51f18da25c89becd6e370338a2a5b7dc937aa.receipt.json",
+      "receiptDigest": "sha256:7c77a5e55331bec4811426c31fb51f18da25c89becd6e370338a2a5b7dc937aa",
       "requestedEntrypoint": ".",
       "runtimeTarget": "dist/esm/index.js",
       "specifier": "@tanstack/history",
@@ -89513,6 +90244,24 @@
     },
     {
       "declarationTarget": "dist/esm/index.d.ts",
+      "document": "objects/269f985d7177de65fa0528c40229a4e07304a8a860ef98c04db10b9fe676d8de.main.json",
+      "documentDigest": "sha256:269f985d7177de65fa0528c40229a4e07304a8a860ef98c04db10b9fe676d8de",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+      "packageName": "@tanstack/router-core",
+      "packageVersion": "1.171.22",
+      "receipt": "objects/f03cede589a3b2f10ba87cf23053666a9e91d29385bee0a5c5cb9c41a92f1f17.receipt.json",
+      "receiptDigest": "sha256:f03cede589a3b2f10ba87cf23053666a9e91d29385bee0a5c5cb9c41a92f1f17",
+      "requestedEntrypoint": ".",
+      "runtimeTarget": "dist/esm/index.js",
+      "specifier": "@tanstack/router-core",
+      "dependencyEnvironmentRoot": "sha256:5d4de9b68d1bed4d56929ec60de3c3aa84bd1d723b3c511dbf91ada24cb11835"
+    },
+    {
+      "declarationTarget": "dist/esm/index.d.ts",
       "document": "objects/634ac815d35b2ac59ad5d1678e3411625e084a25d55cfb747a6ffda6d0a56097.main.json",
       "documentDigest": "sha256:634ac815d35b2ac59ad5d1678e3411625e084a25d55cfb747a6ffda6d0a56097",
       "exportConditions": [
@@ -89567,6 +90316,24 @@
     },
     {
       "declarationTarget": "dist/esm/index.d.ts",
+      "document": "objects/634ac815d35b2ac59ad5d1678e3411625e084a25d55cfb747a6ffda6d0a56097.main.json",
+      "documentDigest": "sha256:634ac815d35b2ac59ad5d1678e3411625e084a25d55cfb747a6ffda6d0a56097",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+      "packageName": "@tanstack/router-core",
+      "packageVersion": "1.171.22",
+      "receipt": "objects/b3995343a614f9a53ff50f9d46680d703c89a50a86e68f6b72a91fc5a5208e4e.receipt.json",
+      "receiptDigest": "sha256:b3995343a614f9a53ff50f9d46680d703c89a50a86e68f6b72a91fc5a5208e4e",
+      "requestedEntrypoint": ".",
+      "runtimeTarget": "dist/esm/index.js",
+      "specifier": "@tanstack/router-core",
+      "dependencyEnvironmentRoot": "sha256:c7f033c701991b146dc23aff111cb84054045914fd75b8bb04c3c1274b0c334b"
+    },
+    {
+      "declarationTarget": "dist/esm/index.d.ts",
       "document": "objects/1b0f2976c3c45f1fb6bbf576ef2295b8b207a167e863c1c35b9a18a0a7a44c92.main.json",
       "documentDigest": "sha256:1b0f2976c3c45f1fb6bbf576ef2295b8b207a167e863c1c35b9a18a0a7a44c92",
       "exportConditions": [
@@ -89576,12 +90343,31 @@
       "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
       "packageName": "@tanstack/router-core",
       "packageVersion": "1.171.22",
-      "receipt": "objects/3933b64f5d0c5ed0a94b08ebd30a717ca5958dbe90868971736b84fad6659d13.receipt.json",
-      "receiptDigest": "sha256:3933b64f5d0c5ed0a94b08ebd30a717ca5958dbe90868971736b84fad6659d13",
+      "receipt": "objects/53dc53cfd68619e23d676519518023a0345f2365e6348aaf3a79938cfb3c6af0.receipt.json",
+      "receiptDigest": "sha256:53dc53cfd68619e23d676519518023a0345f2365e6348aaf3a79938cfb3c6af0",
       "requestedEntrypoint": ".",
       "runtimeTarget": "dist/esm/index.js",
       "specifier": "@tanstack/router-core",
       "dependencyEnvironmentRoot": "sha256:c7f9b57cd22b7e2a2df94ffa229d48a626aee25a3c0369e67e54bb7e662a360d"
+    },
+    {
+      "declarationTarget": "dist/esm/index.d.ts",
+      "document": "objects/269f985d7177de65fa0528c40229a4e07304a8a860ef98c04db10b9fe676d8de.main.json",
+      "documentDigest": "sha256:269f985d7177de65fa0528c40229a4e07304a8a860ef98c04db10b9fe676d8de",
+      "exportConditions": [
+        "browser",
+        "import",
+        "solid"
+      ],
+      "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+      "packageName": "@tanstack/router-core",
+      "packageVersion": "1.171.22",
+      "receipt": "objects/af1ac451ffaead4dbb7aea964261db8ca4f90505425de3a09c4424d27b242309.receipt.json",
+      "receiptDigest": "sha256:af1ac451ffaead4dbb7aea964261db8ca4f90505425de3a09c4424d27b242309",
+      "requestedEntrypoint": ".",
+      "runtimeTarget": "dist/esm/index.js",
+      "specifier": "@tanstack/router-core",
+      "dependencyEnvironmentRoot": "sha256:5d4de9b68d1bed4d56929ec60de3c3aa84bd1d723b3c511dbf91ada24cb11835"
     },
     {
       "declarationTarget": "dist/esm/index.d.ts",
@@ -89623,6 +90409,25 @@
     },
     {
       "declarationTarget": "dist/esm/index.d.ts",
+      "document": "objects/634ac815d35b2ac59ad5d1678e3411625e084a25d55cfb747a6ffda6d0a56097.main.json",
+      "documentDigest": "sha256:634ac815d35b2ac59ad5d1678e3411625e084a25d55cfb747a6ffda6d0a56097",
+      "exportConditions": [
+        "browser",
+        "import",
+        "solid"
+      ],
+      "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+      "packageName": "@tanstack/router-core",
+      "packageVersion": "1.171.22",
+      "receipt": "objects/4c5f967461fa0550f003e0ce5bd4576de091a4883a509a9782d9a05bd368e991.receipt.json",
+      "receiptDigest": "sha256:4c5f967461fa0550f003e0ce5bd4576de091a4883a509a9782d9a05bd368e991",
+      "requestedEntrypoint": ".",
+      "runtimeTarget": "dist/esm/index.js",
+      "specifier": "@tanstack/router-core",
+      "dependencyEnvironmentRoot": "sha256:c7f033c701991b146dc23aff111cb84054045914fd75b8bb04c3c1274b0c334b"
+    },
+    {
+      "declarationTarget": "dist/esm/index.d.ts",
       "document": "objects/1b0f2976c3c45f1fb6bbf576ef2295b8b207a167e863c1c35b9a18a0a7a44c92.main.json",
       "documentDigest": "sha256:1b0f2976c3c45f1fb6bbf576ef2295b8b207a167e863c1c35b9a18a0a7a44c92",
       "exportConditions": [
@@ -89633,12 +90438,30 @@
       "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
       "packageName": "@tanstack/router-core",
       "packageVersion": "1.171.22",
-      "receipt": "objects/4b4ee9aaef9dadb02ae294970ea89d93333def03540abb161dc6c561abc58660.receipt.json",
-      "receiptDigest": "sha256:4b4ee9aaef9dadb02ae294970ea89d93333def03540abb161dc6c561abc58660",
+      "receipt": "objects/5fce9e9a30b36800b0310305486cb85a0b522d2295539d9acb1158da86d1a2c0.receipt.json",
+      "receiptDigest": "sha256:5fce9e9a30b36800b0310305486cb85a0b522d2295539d9acb1158da86d1a2c0",
       "requestedEntrypoint": ".",
       "runtimeTarget": "dist/esm/index.js",
       "specifier": "@tanstack/router-core",
       "dependencyEnvironmentRoot": "sha256:c7f9b57cd22b7e2a2df94ffa229d48a626aee25a3c0369e67e54bb7e662a360d"
+    },
+    {
+      "declarationTarget": "dist/esm/isServer/client.d.ts",
+      "document": "objects/3c28dd3a394b637631c1078afc5c43aaa7295ba0035fbb1cc2fa896845b708e4.main.json",
+      "documentDigest": "sha256:3c28dd3a394b637631c1078afc5c43aaa7295ba0035fbb1cc2fa896845b708e4",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+      "packageName": "@tanstack/router-core",
+      "packageVersion": "1.171.22",
+      "receipt": "objects/654e759349b7bff22816334be7c9851384a5973146fe708f57cc88f19a89c3c4.receipt.json",
+      "receiptDigest": "sha256:654e759349b7bff22816334be7c9851384a5973146fe708f57cc88f19a89c3c4",
+      "requestedEntrypoint": "./isServer",
+      "runtimeTarget": "dist/esm/isServer/client.js",
+      "specifier": "@tanstack/router-core/isServer",
+      "dependencyEnvironmentRoot": "sha256:5d4de9b68d1bed4d56929ec60de3c3aa84bd1d723b3c511dbf91ada24cb11835"
     },
     {
       "declarationTarget": "dist/esm/isServer/client.d.ts",
@@ -89705,12 +90528,49 @@
       "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
       "packageName": "@tanstack/router-core",
       "packageVersion": "1.171.22",
-      "receipt": "objects/aaaeb2860dc64fd39afeea15543b35057b0e297f1619199f3130edffee3b029f.receipt.json",
-      "receiptDigest": "sha256:aaaeb2860dc64fd39afeea15543b35057b0e297f1619199f3130edffee3b029f",
+      "receipt": "objects/73a6c0be418adb6d9d11f9346fa08958fc365d1b49efbb9add3dce57b2e24f54.receipt.json",
+      "receiptDigest": "sha256:73a6c0be418adb6d9d11f9346fa08958fc365d1b49efbb9add3dce57b2e24f54",
+      "requestedEntrypoint": "./isServer",
+      "runtimeTarget": "dist/esm/isServer/client.js",
+      "specifier": "@tanstack/router-core/isServer",
+      "dependencyEnvironmentRoot": "sha256:c7f033c701991b146dc23aff111cb84054045914fd75b8bb04c3c1274b0c334b"
+    },
+    {
+      "declarationTarget": "dist/esm/isServer/client.d.ts",
+      "document": "objects/3c28dd3a394b637631c1078afc5c43aaa7295ba0035fbb1cc2fa896845b708e4.main.json",
+      "documentDigest": "sha256:3c28dd3a394b637631c1078afc5c43aaa7295ba0035fbb1cc2fa896845b708e4",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+      "packageName": "@tanstack/router-core",
+      "packageVersion": "1.171.22",
+      "receipt": "objects/97e338779ae5da390186777e64b3aef07dfaf4073aef43fd536eea6067e4dead.receipt.json",
+      "receiptDigest": "sha256:97e338779ae5da390186777e64b3aef07dfaf4073aef43fd536eea6067e4dead",
       "requestedEntrypoint": "./isServer",
       "runtimeTarget": "dist/esm/isServer/client.js",
       "specifier": "@tanstack/router-core/isServer",
       "dependencyEnvironmentRoot": "sha256:c7f9b57cd22b7e2a2df94ffa229d48a626aee25a3c0369e67e54bb7e662a360d"
+    },
+    {
+      "declarationTarget": "dist/esm/isServer/client.d.ts",
+      "document": "objects/3c28dd3a394b637631c1078afc5c43aaa7295ba0035fbb1cc2fa896845b708e4.main.json",
+      "documentDigest": "sha256:3c28dd3a394b637631c1078afc5c43aaa7295ba0035fbb1cc2fa896845b708e4",
+      "exportConditions": [
+        "browser",
+        "import",
+        "solid"
+      ],
+      "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+      "packageName": "@tanstack/router-core",
+      "packageVersion": "1.171.22",
+      "receipt": "objects/0fd25fc631aef920bdb9dc7102bccb97516a37765ef41461bbbb48e721f3b073.receipt.json",
+      "receiptDigest": "sha256:0fd25fc631aef920bdb9dc7102bccb97516a37765ef41461bbbb48e721f3b073",
+      "requestedEntrypoint": "./isServer",
+      "runtimeTarget": "dist/esm/isServer/client.js",
+      "specifier": "@tanstack/router-core/isServer",
+      "dependencyEnvironmentRoot": "sha256:5d4de9b68d1bed4d56929ec60de3c3aa84bd1d723b3c511dbf91ada24cb11835"
     },
     {
       "declarationTarget": "dist/esm/isServer/client.d.ts",
@@ -89762,12 +90622,49 @@
       "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
       "packageName": "@tanstack/router-core",
       "packageVersion": "1.171.22",
-      "receipt": "objects/cee2efee100631238d1c9f716a26e6bc439f89bb28aecd8708c8cdcc1c4defac.receipt.json",
-      "receiptDigest": "sha256:cee2efee100631238d1c9f716a26e6bc439f89bb28aecd8708c8cdcc1c4defac",
+      "receipt": "objects/ec9eb02964fb19ab12e02541df55afe6df16e78ea38300b268029a4b4f52d54e.receipt.json",
+      "receiptDigest": "sha256:ec9eb02964fb19ab12e02541df55afe6df16e78ea38300b268029a4b4f52d54e",
+      "requestedEntrypoint": "./isServer",
+      "runtimeTarget": "dist/esm/isServer/client.js",
+      "specifier": "@tanstack/router-core/isServer",
+      "dependencyEnvironmentRoot": "sha256:c7f033c701991b146dc23aff111cb84054045914fd75b8bb04c3c1274b0c334b"
+    },
+    {
+      "declarationTarget": "dist/esm/isServer/client.d.ts",
+      "document": "objects/3c28dd3a394b637631c1078afc5c43aaa7295ba0035fbb1cc2fa896845b708e4.main.json",
+      "documentDigest": "sha256:3c28dd3a394b637631c1078afc5c43aaa7295ba0035fbb1cc2fa896845b708e4",
+      "exportConditions": [
+        "browser",
+        "import",
+        "solid"
+      ],
+      "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+      "packageName": "@tanstack/router-core",
+      "packageVersion": "1.171.22",
+      "receipt": "objects/85790d390805b83b6014ce964b666dec8303bb5bff1d9254046f27f9b8bcd3a0.receipt.json",
+      "receiptDigest": "sha256:85790d390805b83b6014ce964b666dec8303bb5bff1d9254046f27f9b8bcd3a0",
       "requestedEntrypoint": "./isServer",
       "runtimeTarget": "dist/esm/isServer/client.js",
       "specifier": "@tanstack/router-core/isServer",
       "dependencyEnvironmentRoot": "sha256:c7f9b57cd22b7e2a2df94ffa229d48a626aee25a3c0369e67e54bb7e662a360d"
+    },
+    {
+      "declarationTarget": "dist/esm/scroll-restoration-script/client.d.ts",
+      "document": "objects/8ffeb30f7c0428e3a33ff32fada0cd76a1cc3d7ff4c82879712412329f5e06ca.main.json",
+      "documentDigest": "sha256:8ffeb30f7c0428e3a33ff32fada0cd76a1cc3d7ff4c82879712412329f5e06ca",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+      "packageName": "@tanstack/router-core",
+      "packageVersion": "1.171.22",
+      "receipt": "objects/e4f33466ea0f295030358e09ad3f3d72501313de7f6fc0636bf99f525e23b523.receipt.json",
+      "receiptDigest": "sha256:e4f33466ea0f295030358e09ad3f3d72501313de7f6fc0636bf99f525e23b523",
+      "requestedEntrypoint": "./scroll-restoration-script",
+      "runtimeTarget": "dist/esm/scroll-restoration-script/client.js",
+      "specifier": "@tanstack/router-core/scroll-restoration-script",
+      "dependencyEnvironmentRoot": "sha256:5d4de9b68d1bed4d56929ec60de3c3aa84bd1d723b3c511dbf91ada24cb11835"
     },
     {
       "declarationTarget": "dist/esm/scroll-restoration-script/client.d.ts",
@@ -89834,12 +90731,49 @@
       "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
       "packageName": "@tanstack/router-core",
       "packageVersion": "1.171.22",
-      "receipt": "objects/6a06be3b6f68ab980c940899868b5d86f5513ad3a69d625649c27712ea1b0c80.receipt.json",
-      "receiptDigest": "sha256:6a06be3b6f68ab980c940899868b5d86f5513ad3a69d625649c27712ea1b0c80",
+      "receipt": "objects/e9f6d282bca7b1c00780bd46ca587792db7291481c138257586ff64509a341b3.receipt.json",
+      "receiptDigest": "sha256:e9f6d282bca7b1c00780bd46ca587792db7291481c138257586ff64509a341b3",
+      "requestedEntrypoint": "./scroll-restoration-script",
+      "runtimeTarget": "dist/esm/scroll-restoration-script/client.js",
+      "specifier": "@tanstack/router-core/scroll-restoration-script",
+      "dependencyEnvironmentRoot": "sha256:c7f033c701991b146dc23aff111cb84054045914fd75b8bb04c3c1274b0c334b"
+    },
+    {
+      "declarationTarget": "dist/esm/scroll-restoration-script/client.d.ts",
+      "document": "objects/8ffeb30f7c0428e3a33ff32fada0cd76a1cc3d7ff4c82879712412329f5e06ca.main.json",
+      "documentDigest": "sha256:8ffeb30f7c0428e3a33ff32fada0cd76a1cc3d7ff4c82879712412329f5e06ca",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+      "packageName": "@tanstack/router-core",
+      "packageVersion": "1.171.22",
+      "receipt": "objects/ea070599896bb530f684f1631ac37ad42bb395fa676edc5ace4dce2b41e1b487.receipt.json",
+      "receiptDigest": "sha256:ea070599896bb530f684f1631ac37ad42bb395fa676edc5ace4dce2b41e1b487",
       "requestedEntrypoint": "./scroll-restoration-script",
       "runtimeTarget": "dist/esm/scroll-restoration-script/client.js",
       "specifier": "@tanstack/router-core/scroll-restoration-script",
       "dependencyEnvironmentRoot": "sha256:c7f9b57cd22b7e2a2df94ffa229d48a626aee25a3c0369e67e54bb7e662a360d"
+    },
+    {
+      "declarationTarget": "dist/esm/scroll-restoration-script/client.d.ts",
+      "document": "objects/8ffeb30f7c0428e3a33ff32fada0cd76a1cc3d7ff4c82879712412329f5e06ca.main.json",
+      "documentDigest": "sha256:8ffeb30f7c0428e3a33ff32fada0cd76a1cc3d7ff4c82879712412329f5e06ca",
+      "exportConditions": [
+        "browser",
+        "import",
+        "solid"
+      ],
+      "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+      "packageName": "@tanstack/router-core",
+      "packageVersion": "1.171.22",
+      "receipt": "objects/35f83374bbb203107221109fe7c83cc9984881b7d49339211f0dd5c198b97672.receipt.json",
+      "receiptDigest": "sha256:35f83374bbb203107221109fe7c83cc9984881b7d49339211f0dd5c198b97672",
+      "requestedEntrypoint": "./scroll-restoration-script",
+      "runtimeTarget": "dist/esm/scroll-restoration-script/client.js",
+      "specifier": "@tanstack/router-core/scroll-restoration-script",
+      "dependencyEnvironmentRoot": "sha256:5d4de9b68d1bed4d56929ec60de3c3aa84bd1d723b3c511dbf91ada24cb11835"
     },
     {
       "declarationTarget": "dist/esm/scroll-restoration-script/client.d.ts",
@@ -89891,8 +90825,27 @@
       "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
       "packageName": "@tanstack/router-core",
       "packageVersion": "1.171.22",
-      "receipt": "objects/cb8a300194a3e1480904e3629e4b3dc7cb9fde83322dc2e93524f6a99145f46f.receipt.json",
-      "receiptDigest": "sha256:cb8a300194a3e1480904e3629e4b3dc7cb9fde83322dc2e93524f6a99145f46f",
+      "receipt": "objects/23db9e4c18b5c27acf2b80c1b612f39be9613909850927bcb9f05448e2aa7815.receipt.json",
+      "receiptDigest": "sha256:23db9e4c18b5c27acf2b80c1b612f39be9613909850927bcb9f05448e2aa7815",
+      "requestedEntrypoint": "./scroll-restoration-script",
+      "runtimeTarget": "dist/esm/scroll-restoration-script/client.js",
+      "specifier": "@tanstack/router-core/scroll-restoration-script",
+      "dependencyEnvironmentRoot": "sha256:c7f033c701991b146dc23aff111cb84054045914fd75b8bb04c3c1274b0c334b"
+    },
+    {
+      "declarationTarget": "dist/esm/scroll-restoration-script/client.d.ts",
+      "document": "objects/8ffeb30f7c0428e3a33ff32fada0cd76a1cc3d7ff4c82879712412329f5e06ca.main.json",
+      "documentDigest": "sha256:8ffeb30f7c0428e3a33ff32fada0cd76a1cc3d7ff4c82879712412329f5e06ca",
+      "exportConditions": [
+        "browser",
+        "import",
+        "solid"
+      ],
+      "packageIntegrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+      "packageName": "@tanstack/router-core",
+      "packageVersion": "1.171.22",
+      "receipt": "objects/cde6b7fdb84f9fd2e676b31f714acbffeeceefc85ff186b706397b23b9b157d5.receipt.json",
+      "receiptDigest": "sha256:cde6b7fdb84f9fd2e676b31f714acbffeeceefc85ff186b706397b23b9b157d5",
       "requestedEntrypoint": "./scroll-restoration-script",
       "runtimeTarget": "dist/esm/scroll-restoration-script/client.js",
       "specifier": "@tanstack/router-core/scroll-restoration-script",
@@ -90293,6 +91246,24 @@
     },
     {
       "declarationTarget": "dist/esm/index.d.ts",
+      "document": "objects/e5310a6d948bd9206c264edea62b26038551ff3d98b0d7060922d11cf7eaa2f0.main.json",
+      "documentDigest": "sha256:e5310a6d948bd9206c264edea62b26038551ff3d98b0d7060922d11cf7eaa2f0",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "packageIntegrity": "sha512-DCHpsdvlWuJ3064od5ScYe4fUaFFaj8z/cqDPggh5CJ2hI/ZjUrCa1GnHbbjWGNk/WKDLfwdwRDPHFKU/dI/ug==",
+      "packageName": "@tanstack/solid-router",
+      "packageVersion": "2.0.0-rc.4",
+      "receipt": "objects/286ed24293057e913b26887cbbe87bd48ec8cc595b554b8bd45b403ce03c8188.receipt.json",
+      "receiptDigest": "sha256:286ed24293057e913b26887cbbe87bd48ec8cc595b554b8bd45b403ce03c8188",
+      "requestedEntrypoint": ".",
+      "runtimeTarget": "dist/esm/index.js",
+      "specifier": "@tanstack/solid-router",
+      "dependencyEnvironmentRoot": "sha256:8d3e8056e61a7ecd98e0e3cf3aa6dbfc4c52f3a158c384ab68d101779d97a4e2"
+    },
+    {
+      "declarationTarget": "dist/esm/index.d.ts",
       "document": "objects/2076fa56a9678aaf509637993bdda158ae464aae7894980902d3f843dd460561.main.json",
       "documentDigest": "sha256:2076fa56a9678aaf509637993bdda158ae464aae7894980902d3f843dd460561",
       "exportConditions": [
@@ -90308,6 +91279,25 @@
       "runtimeTarget": "dist/esm/index.js",
       "specifier": "@tanstack/solid-router",
       "dependencyEnvironmentRoot": "sha256:8a4cc6f4036e580a28cb12bfd58609d60a27c93bea1fe2de819dbd83c9cc6954"
+    },
+    {
+      "declarationTarget": "dist/source/index.d.ts",
+      "document": "objects/d301e06c6faa6336c59bebeaaef05208c5ecfff7ce84bd8fb196b1bd62ed3bd5.main.json",
+      "documentDigest": "sha256:d301e06c6faa6336c59bebeaaef05208c5ecfff7ce84bd8fb196b1bd62ed3bd5",
+      "exportConditions": [
+        "browser",
+        "import",
+        "solid"
+      ],
+      "packageIntegrity": "sha512-DCHpsdvlWuJ3064od5ScYe4fUaFFaj8z/cqDPggh5CJ2hI/ZjUrCa1GnHbbjWGNk/WKDLfwdwRDPHFKU/dI/ug==",
+      "packageName": "@tanstack/solid-router",
+      "packageVersion": "2.0.0-rc.4",
+      "receipt": "objects/8c5d3c69d3abc9194a6ed1e270fe2f5970e24a6d1af25158646e312c622d87e3.receipt.json",
+      "receiptDigest": "sha256:8c5d3c69d3abc9194a6ed1e270fe2f5970e24a6d1af25158646e312c622d87e3",
+      "requestedEntrypoint": ".",
+      "runtimeTarget": "dist/source/index.jsx",
+      "specifier": "@tanstack/solid-router",
+      "dependencyEnvironmentRoot": "sha256:8d3e8056e61a7ecd98e0e3cf3aa6dbfc4c52f3a158c384ab68d101779d97a4e2"
     },
     {
       "declarationTarget": "dist/source/index.d.ts",
@@ -90366,6 +91356,24 @@
     },
     {
       "declarationTarget": "dist/esm/index.d.ts",
+      "document": "objects/e6aa3fa0bb0a0b4a5aa077c61a7f8c3de20b9523bf98e6a996e16e314e87fe70.main.json",
+      "documentDigest": "sha256:e6aa3fa0bb0a0b4a5aa077c61a7f8c3de20b9523bf98e6a996e16e314e87fe70",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "packageIntegrity": "sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA==",
+      "packageName": "@tanstack/solid-router",
+      "packageVersion": "2.0.0-rc.8",
+      "receipt": "objects/d7f79a494b638f3bb2b3662c6e579c86ccebce04b9f0cfdffd46ab0d907e839e.receipt.json",
+      "receiptDigest": "sha256:d7f79a494b638f3bb2b3662c6e579c86ccebce04b9f0cfdffd46ab0d907e839e",
+      "requestedEntrypoint": ".",
+      "runtimeTarget": "dist/esm/index.js",
+      "specifier": "@tanstack/solid-router",
+      "dependencyEnvironmentRoot": "sha256:12500b734e2bf5fda58d8b248fe7b1c0b9ce446884fa7997175f9ead944caf4d"
+    },
+    {
+      "declarationTarget": "dist/esm/index.d.ts",
       "document": "objects/515eb777c73c9759eafd60c2b989a29423903af62eb414090701ae0c5f69e282.main.json",
       "documentDigest": "sha256:515eb777c73c9759eafd60c2b989a29423903af62eb414090701ae0c5f69e282",
       "exportConditions": [
@@ -90375,8 +91383,8 @@
       "packageIntegrity": "sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA==",
       "packageName": "@tanstack/solid-router",
       "packageVersion": "2.0.0-rc.8",
-      "receipt": "objects/8a5d56da825d19fc46a4170ad88d2fc8643268a2d5f3164b29f5d85ad8dd2a2f.receipt.json",
-      "receiptDigest": "sha256:8a5d56da825d19fc46a4170ad88d2fc8643268a2d5f3164b29f5d85ad8dd2a2f",
+      "receipt": "objects/c6da94fd7e7ef0f20375a697781ce8e038470e14a384f0f9f750ccf2ebecf63f.receipt.json",
+      "receiptDigest": "sha256:c6da94fd7e7ef0f20375a697781ce8e038470e14a384f0f9f750ccf2ebecf63f",
       "requestedEntrypoint": ".",
       "runtimeTarget": "dist/esm/index.js",
       "specifier": "@tanstack/solid-router",
@@ -90403,6 +91411,25 @@
     },
     {
       "declarationTarget": "dist/source/index.d.ts",
+      "document": "objects/71e0dae71c8a1166d7f39a227d09f595b1fc0bcffb8e4bee52235995e46937a6.main.json",
+      "documentDigest": "sha256:71e0dae71c8a1166d7f39a227d09f595b1fc0bcffb8e4bee52235995e46937a6",
+      "exportConditions": [
+        "browser",
+        "import",
+        "solid"
+      ],
+      "packageIntegrity": "sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA==",
+      "packageName": "@tanstack/solid-router",
+      "packageVersion": "2.0.0-rc.8",
+      "receipt": "objects/b21370a2a57e0acd2ca8a5f5c126ef05c2187db1e9fa1267a271ff6498df6ea0.receipt.json",
+      "receiptDigest": "sha256:b21370a2a57e0acd2ca8a5f5c126ef05c2187db1e9fa1267a271ff6498df6ea0",
+      "requestedEntrypoint": ".",
+      "runtimeTarget": "dist/source/index.jsx",
+      "specifier": "@tanstack/solid-router",
+      "dependencyEnvironmentRoot": "sha256:12500b734e2bf5fda58d8b248fe7b1c0b9ce446884fa7997175f9ead944caf4d"
+    },
+    {
+      "declarationTarget": "dist/source/index.d.ts",
       "document": "objects/3360bb02fae81e0fa056987648abf024bf22b093541e855acfbf0df1813bd42a.main.json",
       "documentDigest": "sha256:3360bb02fae81e0fa056987648abf024bf22b093541e855acfbf0df1813bd42a",
       "exportConditions": [
@@ -90413,8 +91440,8 @@
       "packageIntegrity": "sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA==",
       "packageName": "@tanstack/solid-router",
       "packageVersion": "2.0.0-rc.8",
-      "receipt": "objects/769a6d61bf98b5536476ab4538f9d0b0351d1a6fa480f2a13b18026d46c6b863.receipt.json",
-      "receiptDigest": "sha256:769a6d61bf98b5536476ab4538f9d0b0351d1a6fa480f2a13b18026d46c6b863",
+      "receipt": "objects/79a7de14135a3b0715a5b36463b955a4ae9c277cd4b93de619e9fd49111d4240.receipt.json",
+      "receiptDigest": "sha256:79a7de14135a3b0715a5b36463b955a4ae9c277cd4b93de619e9fd49111d4240",
       "requestedEntrypoint": ".",
       "runtimeTarget": "dist/source/index.jsx",
       "specifier": "@tanstack/solid-router",
@@ -90542,8 +91569,8 @@
       "packageIntegrity": "sha512-720x0suOH8iqkwox5wbqnsQpnBMdepbHGYWt8Ti5tU6d6Wa72iHyIHQ1dI99jg2Y32vC6twya36AoMkS3F8RCQ==",
       "packageName": "@tanstack/solid-start",
       "packageVersion": "2.0.0-rc.8",
-      "receipt": "objects/2b024dafe846626e7f040ca252ec1f38ebadce5ebf423e28514090b8586eb65f.receipt.json",
-      "receiptDigest": "sha256:2b024dafe846626e7f040ca252ec1f38ebadce5ebf423e28514090b8586eb65f",
+      "receipt": "objects/aedef2200130b6e0d91e2ffb21526284ee799193685c598a48b468cf1c41313f.receipt.json",
+      "receiptDigest": "sha256:aedef2200130b6e0d91e2ffb21526284ee799193685c598a48b468cf1c41313f",
       "requestedEntrypoint": "./server-entry",
       "runtimeTarget": "dist/default-entry/esm/server.js",
       "specifier": "@tanstack/solid-start/server-entry",
@@ -91206,6 +92233,43 @@
     },
     {
       "declarationTarget": "dist/index.d.ts",
+      "document": "objects/760a97a7c2a7b9eadd783d78ec150949cdf35047b7a4ce3109968792c22e3419.main.json",
+      "documentDigest": "sha256:760a97a7c2a7b9eadd783d78ec150949cdf35047b7a4ce3109968792c22e3419",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "packageIntegrity": "sha512-mPT+SD2TrlB6wvte1KkYOYUkubaTbd6pZ/6Kk3C9nxzrHmCZyhxOO7XGAeL7f+yLKZglzGtM9odUVvg/EhO+vQ==",
+      "packageName": "seroval",
+      "packageVersion": "1.6.2",
+      "receipt": "objects/6e3fbef2b7ba7ccaf7aad15584b5c22e0510c5afe117fb93407b0899bd447062.receipt.json",
+      "receiptDigest": "sha256:6e3fbef2b7ba7ccaf7aad15584b5c22e0510c5afe117fb93407b0899bd447062",
+      "requestedEntrypoint": ".",
+      "runtimeTarget": "dist/index.js",
+      "specifier": "seroval",
+      "dependencyEnvironmentRoot": "sha256:4b879e6d75dd117c88d1ab178bacbe42f3e00dd19ab2422b218eba7babe292bd"
+    },
+    {
+      "declarationTarget": "dist/index.d.ts",
+      "document": "objects/760a97a7c2a7b9eadd783d78ec150949cdf35047b7a4ce3109968792c22e3419.main.json",
+      "documentDigest": "sha256:760a97a7c2a7b9eadd783d78ec150949cdf35047b7a4ce3109968792c22e3419",
+      "exportConditions": [
+        "browser",
+        "import",
+        "solid"
+      ],
+      "packageIntegrity": "sha512-mPT+SD2TrlB6wvte1KkYOYUkubaTbd6pZ/6Kk3C9nxzrHmCZyhxOO7XGAeL7f+yLKZglzGtM9odUVvg/EhO+vQ==",
+      "packageName": "seroval",
+      "packageVersion": "1.6.2",
+      "receipt": "objects/9e9f333fd92c3f28628cc7c90f4b305f745c53b90ee66a0eba172e578d722781.receipt.json",
+      "receiptDigest": "sha256:9e9f333fd92c3f28628cc7c90f4b305f745c53b90ee66a0eba172e578d722781",
+      "requestedEntrypoint": ".",
+      "runtimeTarget": "dist/index.js",
+      "specifier": "seroval",
+      "dependencyEnvironmentRoot": "sha256:4b879e6d75dd117c88d1ab178bacbe42f3e00dd19ab2422b218eba7babe292bd"
+    },
+    {
+      "declarationTarget": "dist/index.d.ts",
       "document": "objects/573fc04bc755eaf7523a590c3ed846702a4fdabb7cddef18ac2643b8dcab370e.main.json",
       "documentDigest": "sha256:573fc04bc755eaf7523a590c3ed846702a4fdabb7cddef18ac2643b8dcab370e",
       "exportConditions": [
@@ -91228,6 +92292,24 @@
       "documentDigest": "sha256:573fc04bc755eaf7523a590c3ed846702a4fdabb7cddef18ac2643b8dcab370e",
       "exportConditions": [
         "browser",
+        "import"
+      ],
+      "packageIntegrity": "sha512-LErWMNS2RRFdu2RMA5u/PA59/IWs0XsikyEXGQ2/36iEWFrdG0ABmg17E17cikrv76891kOAMq3TkTFXpwAHXw==",
+      "packageName": "seroval",
+      "packageVersion": "1.6.4",
+      "receipt": "objects/cf498559fabb58be9c6a0be3d2e325d8323ecc99b137a57723058539edc95d75.receipt.json",
+      "receiptDigest": "sha256:cf498559fabb58be9c6a0be3d2e325d8323ecc99b137a57723058539edc95d75",
+      "requestedEntrypoint": ".",
+      "runtimeTarget": "dist/index.js",
+      "specifier": "seroval",
+      "dependencyEnvironmentRoot": "sha256:b9390df7e6eabb7b09eddef68ec7563d974deaa2070233b1ab0276eaff92e8dc"
+    },
+    {
+      "declarationTarget": "dist/index.d.ts",
+      "document": "objects/573fc04bc755eaf7523a590c3ed846702a4fdabb7cddef18ac2643b8dcab370e.main.json",
+      "documentDigest": "sha256:573fc04bc755eaf7523a590c3ed846702a4fdabb7cddef18ac2643b8dcab370e",
+      "exportConditions": [
+        "browser",
         "import",
         "solid"
       ],
@@ -91240,6 +92322,25 @@
       "runtimeTarget": "dist/index.js",
       "specifier": "seroval",
       "dependencyEnvironmentRoot": "sha256:dae53bdc4a43d6aaa35449663e66789c7c33f96f90b7a999f4603683810372c6"
+    },
+    {
+      "declarationTarget": "dist/index.d.ts",
+      "document": "objects/573fc04bc755eaf7523a590c3ed846702a4fdabb7cddef18ac2643b8dcab370e.main.json",
+      "documentDigest": "sha256:573fc04bc755eaf7523a590c3ed846702a4fdabb7cddef18ac2643b8dcab370e",
+      "exportConditions": [
+        "browser",
+        "import",
+        "solid"
+      ],
+      "packageIntegrity": "sha512-LErWMNS2RRFdu2RMA5u/PA59/IWs0XsikyEXGQ2/36iEWFrdG0ABmg17E17cikrv76891kOAMq3TkTFXpwAHXw==",
+      "packageName": "seroval",
+      "packageVersion": "1.6.4",
+      "receipt": "objects/9618ecc4e970192d2726a8705d27edada79ae9fb7432e0f558364bc472b7118b.receipt.json",
+      "receiptDigest": "sha256:9618ecc4e970192d2726a8705d27edada79ae9fb7432e0f558364bc472b7118b",
+      "requestedEntrypoint": ".",
+      "runtimeTarget": "dist/index.js",
+      "specifier": "seroval",
+      "dependencyEnvironmentRoot": "sha256:b9390df7e6eabb7b09eddef68ec7563d974deaa2070233b1ab0276eaff92e8dc"
     },
     {
       "declarationTarget": "dist/index.d.ts",
@@ -91288,8 +92389,8 @@
       "packageIntegrity": "sha512-AeDcLh0yO2SFm9W71essgnSzLV9DI8ZH0x0knXn2DMnUZj728mpLbxjlbB6IqKCmqh8JA3cEqRyGoNkt584JcQ==",
       "packageName": "seroval",
       "packageVersion": "1.6.7",
-      "receipt": "objects/c238e152fd232539df5b102d2d361df11cebcd0cacd9e9ba70f244394a835401.receipt.json",
-      "receiptDigest": "sha256:c238e152fd232539df5b102d2d361df11cebcd0cacd9e9ba70f244394a835401",
+      "receipt": "objects/946a74975c27f1bfbbdb55da683bb477fd01f99abc17e2b7fa94d762b5a86aa3.receipt.json",
+      "receiptDigest": "sha256:946a74975c27f1bfbbdb55da683bb477fd01f99abc17e2b7fa94d762b5a86aa3",
       "requestedEntrypoint": ".",
       "runtimeTarget": "dist/index.js",
       "specifier": "seroval",
@@ -91326,8 +92427,8 @@
       "packageIntegrity": "sha512-AeDcLh0yO2SFm9W71essgnSzLV9DI8ZH0x0knXn2DMnUZj728mpLbxjlbB6IqKCmqh8JA3cEqRyGoNkt584JcQ==",
       "packageName": "seroval",
       "packageVersion": "1.6.7",
-      "receipt": "objects/67c89b0b6333064830f31d9cfca2be7ce9a3b00f44d5b86c1c8a0c232f1c3247.receipt.json",
-      "receiptDigest": "sha256:67c89b0b6333064830f31d9cfca2be7ce9a3b00f44d5b86c1c8a0c232f1c3247",
+      "receipt": "objects/cf22123c5e9d58888b76df074ff044ac6d930744f796ceecf9723fdb9650ffb4.receipt.json",
+      "receiptDigest": "sha256:cf22123c5e9d58888b76df074ff044ac6d930744f796ceecf9723fdb9650ffb4",
       "requestedEntrypoint": ".",
       "runtimeTarget": "dist/index.js",
       "specifier": "seroval",
@@ -92636,6 +93737,43 @@
     },
     {
       "declarationTarget": "dist/web.d.ts",
+      "document": "objects/180cbb59c8a6750dbb1cc46a58f22e09731d42e8d1768b82b6b73aae7ef897be.main.json",
+      "documentDigest": "sha256:180cbb59c8a6750dbb1cc46a58f22e09731d42e8d1768b82b6b73aae7ef897be",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "packageIntegrity": "sha512-TfxuUjlbBESzUOWdTkTKqvSmav0ABym+itetDXLK6mDz8SmrpdI30aF8RTXE8Bvq+tH/1yIDkvy3W0lfQb1ipQ==",
+      "packageName": "seroval-plugins",
+      "packageVersion": "1.6.2",
+      "receipt": "objects/3c90ee723f42e7b89618bd2c87a3bbb782fc69e577d43fc863d1e9117f3ef9b8.receipt.json",
+      "receiptDigest": "sha256:3c90ee723f42e7b89618bd2c87a3bbb782fc69e577d43fc863d1e9117f3ef9b8",
+      "requestedEntrypoint": "./web",
+      "runtimeTarget": "dist/web.js",
+      "specifier": "seroval-plugins/web",
+      "dependencyEnvironmentRoot": "sha256:526e0694e2da21f9cb415989badcf5c09a176536f92289ec3b7e1851b5c9063e"
+    },
+    {
+      "declarationTarget": "dist/web.d.ts",
+      "document": "objects/180cbb59c8a6750dbb1cc46a58f22e09731d42e8d1768b82b6b73aae7ef897be.main.json",
+      "documentDigest": "sha256:180cbb59c8a6750dbb1cc46a58f22e09731d42e8d1768b82b6b73aae7ef897be",
+      "exportConditions": [
+        "browser",
+        "import",
+        "solid"
+      ],
+      "packageIntegrity": "sha512-TfxuUjlbBESzUOWdTkTKqvSmav0ABym+itetDXLK6mDz8SmrpdI30aF8RTXE8Bvq+tH/1yIDkvy3W0lfQb1ipQ==",
+      "packageName": "seroval-plugins",
+      "packageVersion": "1.6.2",
+      "receipt": "objects/a4a57ccc0776572ddf7654fa16f608da7156795aa326c4a768515dd1bdaf4575.receipt.json",
+      "receiptDigest": "sha256:a4a57ccc0776572ddf7654fa16f608da7156795aa326c4a768515dd1bdaf4575",
+      "requestedEntrypoint": "./web",
+      "runtimeTarget": "dist/web.js",
+      "specifier": "seroval-plugins/web",
+      "dependencyEnvironmentRoot": "sha256:526e0694e2da21f9cb415989badcf5c09a176536f92289ec3b7e1851b5c9063e"
+    },
+    {
+      "declarationTarget": "dist/web.d.ts",
       "document": "objects/c8f56d0f36782441e3515b9c52afc7624791b633a5919b9fb1315becaaadc3a6.main.json",
       "documentDigest": "sha256:c8f56d0f36782441e3515b9c52afc7624791b633a5919b9fb1315becaaadc3a6",
       "exportConditions": [
@@ -92658,6 +93796,24 @@
       "documentDigest": "sha256:c8f56d0f36782441e3515b9c52afc7624791b633a5919b9fb1315becaaadc3a6",
       "exportConditions": [
         "browser",
+        "import"
+      ],
+      "packageIntegrity": "sha512-R0f1U9hmn38+dFMz6b6ab8lwucmw4AtiY7St+JPWudy1dm+Bs3g884nyrsH9Cy6rKpZKLYayXuMda9GZ/fl8JQ==",
+      "packageName": "seroval-plugins",
+      "packageVersion": "1.6.4",
+      "receipt": "objects/3f151065d5fa393e1d748373cd1a1def2a8f772d8b54d45907b712e3f372fbe3.receipt.json",
+      "receiptDigest": "sha256:3f151065d5fa393e1d748373cd1a1def2a8f772d8b54d45907b712e3f372fbe3",
+      "requestedEntrypoint": "./web",
+      "runtimeTarget": "dist/web.js",
+      "specifier": "seroval-plugins/web",
+      "dependencyEnvironmentRoot": "sha256:212e5c675781dd9fc63f4b17e7a2f46619e109afcf7c4ca232ef3ee85d923be7"
+    },
+    {
+      "declarationTarget": "dist/web.d.ts",
+      "document": "objects/c8f56d0f36782441e3515b9c52afc7624791b633a5919b9fb1315becaaadc3a6.main.json",
+      "documentDigest": "sha256:c8f56d0f36782441e3515b9c52afc7624791b633a5919b9fb1315becaaadc3a6",
+      "exportConditions": [
+        "browser",
         "import",
         "solid"
       ],
@@ -92670,6 +93826,25 @@
       "runtimeTarget": "dist/web.js",
       "specifier": "seroval-plugins/web",
       "dependencyEnvironmentRoot": "sha256:44a307e0ec3cb3804d347b6b866ea83f6d6a769eec7dcc30692e144b43845526"
+    },
+    {
+      "declarationTarget": "dist/web.d.ts",
+      "document": "objects/c8f56d0f36782441e3515b9c52afc7624791b633a5919b9fb1315becaaadc3a6.main.json",
+      "documentDigest": "sha256:c8f56d0f36782441e3515b9c52afc7624791b633a5919b9fb1315becaaadc3a6",
+      "exportConditions": [
+        "browser",
+        "import",
+        "solid"
+      ],
+      "packageIntegrity": "sha512-R0f1U9hmn38+dFMz6b6ab8lwucmw4AtiY7St+JPWudy1dm+Bs3g884nyrsH9Cy6rKpZKLYayXuMda9GZ/fl8JQ==",
+      "packageName": "seroval-plugins",
+      "packageVersion": "1.6.4",
+      "receipt": "objects/7fcc087c8689cc94b831f1ca95c6cdc769c4a31b676ea42c4ae32624b924ab28.receipt.json",
+      "receiptDigest": "sha256:7fcc087c8689cc94b831f1ca95c6cdc769c4a31b676ea42c4ae32624b924ab28",
+      "requestedEntrypoint": "./web",
+      "runtimeTarget": "dist/web.js",
+      "specifier": "seroval-plugins/web",
+      "dependencyEnvironmentRoot": "sha256:212e5c675781dd9fc63f4b17e7a2f46619e109afcf7c4ca232ef3ee85d923be7"
     },
     {
       "declarationTarget": "dist/web.d.ts",
@@ -92718,8 +93893,8 @@
       "packageIntegrity": "sha512-4Nk35ttD3DTDJW4hgw5StsVAPeU6qnDFnULAouw6tQ7oLTV/ICXrWpsXo2EE52eSP2joUMazbVf52mFEcADqRw==",
       "packageName": "seroval-plugins",
       "packageVersion": "1.6.7",
-      "receipt": "objects/fe91e8302f43936c59bf31a85f0bfc384e599d8d92d8169f13eedcf3e1c8914f.receipt.json",
-      "receiptDigest": "sha256:fe91e8302f43936c59bf31a85f0bfc384e599d8d92d8169f13eedcf3e1c8914f",
+      "receipt": "objects/ae99ad0d6c043d6a6daa3f650a64fc7a2c1d542470a64ac3c6ed6c5a9725d217.receipt.json",
+      "receiptDigest": "sha256:ae99ad0d6c043d6a6daa3f650a64fc7a2c1d542470a64ac3c6ed6c5a9725d217",
       "requestedEntrypoint": "./web",
       "runtimeTarget": "dist/web.js",
       "specifier": "seroval-plugins/web",
@@ -92756,8 +93931,8 @@
       "packageIntegrity": "sha512-4Nk35ttD3DTDJW4hgw5StsVAPeU6qnDFnULAouw6tQ7oLTV/ICXrWpsXo2EE52eSP2joUMazbVf52mFEcADqRw==",
       "packageName": "seroval-plugins",
       "packageVersion": "1.6.7",
-      "receipt": "objects/019454ff9a5e44d8a4b168d80493ee38a63132fbec0835cc09a0be39e933e4a2.receipt.json",
-      "receiptDigest": "sha256:019454ff9a5e44d8a4b168d80493ee38a63132fbec0835cc09a0be39e933e4a2",
+      "receipt": "objects/aca72a684bc1fc0bc966f4ad9486505c507d00314f2b3d8b4295a8992070de56.receipt.json",
+      "receiptDigest": "sha256:aca72a684bc1fc0bc966f4ad9486505c507d00314f2b3d8b4295a8992070de56",
       "requestedEntrypoint": "./web",
       "runtimeTarget": "dist/web.js",
       "specifier": "seroval-plugins/web",
