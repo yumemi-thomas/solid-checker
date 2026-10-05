@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { captureTemplate, feedbackSnapshot, inspectDevelopmentFeedback, validateFeedbackInputs } from "./development-feedback.mjs";
-import { instrumentFeedbackReads, sharedReaderSha256 } from "./feedback-native-hook.mjs";
+import { instrumentFeedbackReads, readerProfiles } from "./feedback-native-hook.mjs";
 import { selectAssertionFeedback } from "./feedback-assertion-selector.mjs";
 import { instrumentFeedbackSource } from "./feedback-source-hook.mjs";
 import { selectReadFeedback } from "./feedback-read-selector.mjs";
@@ -160,11 +160,11 @@ export function feedbackReadPlugin({ snapshot, runtimeInputs, coverage }) {
       if (!existsSync(metadata)) return null;
       const pkg = JSON.parse(readFileSync(metadata, "utf8"));
       if (pkg.name !== "@solidjs/signals") return null;
-      assert.equal(pkg.version, "2.0.0-rc.9", "Native read collector needs a reviewed runtime profile");
+      assert(Object.hasOwn(readerProfiles, pkg.version), "Native read collector needs a reviewed runtime profile");
       assert.equal(readFileSync(path, "utf8"), code, "A previous transform changed the native reader");
       const result = instrumentFeedbackReads(code, path, "/@fs" + runtimePath);
       runtimeInputs.set(realpathSync(metadata), { path: realpathSync(metadata), sha256: hash(readFileSync(metadata)) });
-      coverage.nativeReader = { path: realpathSync(path), sha256: sharedReaderSha256, version: pkg.version };
+      coverage.nativeReader = { path: realpathSync(path), sha256: readerProfiles[pkg.version].sha256, version: pkg.version };
       return result;
     },
     configResolved(config) {
