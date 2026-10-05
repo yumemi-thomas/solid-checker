@@ -6219,8 +6219,16 @@ fn interprocedural_result_reads_for_file(
             let origin = Span::new(start, end);
             crate::owners::written_directly_in(&owner_file.ast, owner, origin)
         };
-        for read in effective {
-            let direct = read_is_direct(&read);
+        // One finding per symbol at this call (`seen` below). A symbol read
+        // both directly and only through a nested default or closure keeps
+        // the direct origin, so the proof is not lost to the order the
+        // summary happened to collect them in.
+        let mut effective = effective
+            .into_iter()
+            .map(|read| (read_is_direct(&read), read))
+            .collect::<Vec<_>>();
+        effective.sort_by_key(|(direct, _)| !*direct);
+        for (direct, read) in effective {
             let accessor = read.display.to_string();
             // A summary read whose symbol is the callee itself is the export's
             // own contracted `reads`, not a value passed in.

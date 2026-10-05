@@ -30,6 +30,14 @@ function useFinisher() {
   return finish;
 }
 
+// Reads `count` in a nested default first and then directly in its body: the
+// body read is what runs during the call.
+function useBoth() {
+  const finish = (value = count()) => value;
+  const now = count();
+  return { finish, now };
+}
+
 // Calls its callback prop in its own body, while it renders.
 function Render(props: { label: () => number }) {
   const text = props.label();
@@ -47,6 +55,7 @@ export function App(rest: { label?: () => number }) {
   const later = deferred();
   const lazy = lazyDefault();
   const finisher = useFinisher();
+  const both = useBoth();
   return (
     <main>
       {viaChain}
@@ -55,6 +64,7 @@ export function App(rest: { label?: () => number }) {
       {String(later)}
       {String(lazy)}
       {String(finisher)}
+      {both.now}
       <Render label={() => count()} />
       <RenderLive label={() => count()} />
       <Render label={() => count()} {...rest} />

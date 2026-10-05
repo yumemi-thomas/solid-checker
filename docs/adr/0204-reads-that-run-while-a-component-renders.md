@@ -87,9 +87,6 @@ Every other shape keeps its previous answer.
 - A conditional call or read inside those bodies is still claimed, as ADR 0201
   already claims a conditional read written in the callee's body. That is a
   may-run read: the dev build warns whenever the branch runs.
-- A summary keeps one origin per read symbol. When that origin is a nested
-  default while another read of the same symbol sits directly in the body,
-  the read stays uncertifiable (`abr-viewer`'s `createWorkspace`, below).
 - Still uncertifiable:
   - a chain through a method call, an `await`, or a function value;
   - a default read through a store path;
@@ -134,13 +131,25 @@ Every other shape keeps its previous answer.
     - `openbot` `SettingsModal.stories.tsx:142`: `providerUpdate(…, snapshot
       = providerRuntimeSnapshot())`.
 
-    These three were false positives. The fourth, `app-game`
-    `abr-viewer/src/App.tsx:36`, is a true read (`createSignal(root())` in
-    `createWorkspace`'s body) whose kept origin was a default. It is now
-    uncertifiable.
+    All four were false positives. The fourth, `app-game`
+    `abr-viewer/src/App.tsx:36`, is `selection`, read only in
+    `remove(ids = selection())`, a method's default. The site keeps its true
+    `root` violation (`createSignal(root())` in `createWorkspace`'s body).
 - **Misuse ledger** (`fixtures/app-patterns-misuse`, two cases added):
   31 of 33 misuse twins raise `STRICT_READ_UNTRACKED` or their rule's
   diagnostic in Chrome on rc.13, and all 31 are proven violations, 29 under
   their own rule. `callback-prop-called-in-render` moves from uncertifiable
   to violation. No correct twin gets a violation.
 - **IR library tests** (304) and targeted clippy pass.
+
+## Amendment (2026-10-06): the direct origin is kept
+
+A call site reports one read per symbol. The rows arrive in the order the
+summary collected them. A symbol read both in a nested default and directly
+in the body kept whichever came first, and stayed uncertifiable when that was
+the default. Direct rows are now considered first, so the proven origin is
+kept.
+
+- Fixture: `render-time-reads` `useBoth()` is a violation.
+- rc.13 corpus: no change (285 violations, 3,421 uncertifiable). No corpus
+  site had this order.

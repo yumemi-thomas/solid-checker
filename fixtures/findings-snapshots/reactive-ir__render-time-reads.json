@@ -7,8 +7,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/render-time-reads/App.tsx",
-      "start": 946,
-      "end": 957,
+      "start": 1185,
+      "end": 1196,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/render-time-reads/App.tsx",
-      "start": 1197,
-      "end": 1204,
+      "start": 1436,
+      "end": 1443,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/render-time-reads/App.tsx",
-      "start": 1224,
-      "end": 1237,
+      "start": 1463,
+      "end": 1476,
       "fixes": 0
     },
     {
@@ -37,8 +37,18 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/render-time-reads/App.tsx",
-      "start": 1529,
-      "end": 1536,
+      "start": 1618,
+      "end": 1627,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-time-reads/App.tsx",
+      "start": 1811,
+      "end": 1818,
       "fixes": 0
     },
     {
@@ -47,8 +57,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/render-time-reads/App.tsx",
-      "start": 1572,
-      "end": 1579,
+      "start": 1854,
+      "end": 1861,
       "fixes": 0
     },
     {
@@ -57,8 +67,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/render-time-reads/App.tsx",
-      "start": 1611,
-      "end": 1618,
+      "start": 1893,
+      "end": 1900,
       "fixes": 0
     }
   ]

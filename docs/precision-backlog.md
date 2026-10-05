@@ -33,15 +33,14 @@ ADR 0204. Proven `strict-read-untracked`:
 
 "Directly in a body" now excludes a nested function's parameter list.
 
-- **Fixed:** three ADR 0201 false positives on the rc.13 corpus, each a read
+- **Fixed:** four ADR 0201 false positives on the rc.13 corpus, each a read
   in a nested function's default (`CardStack`, `ArrangePage`,
-  `SettingsModal.stories`).
+  `SettingsModal.stories`, and `abr-viewer`'s `selection`).
 - **Gained:** four violations on the rc.13 corpus, reviewed in source.
   Violations stay at 285 (+4, -4).
+- **Amendment:** a call site keeps the direct origin of a symbol read both
+  directly and in a nested default (no corpus change).
 - **Still open:**
-  - a summary keeps one origin per read symbol, so a body read can be hidden
-    by a default origin of the same symbol (`abr-viewer` `createWorkspace`,
-    now uncertifiable);
   - chains through method calls, `await` or function values;
   - props called only in JSX or a handler, or passed with a spread.
 
