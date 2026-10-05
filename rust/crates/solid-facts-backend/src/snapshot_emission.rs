@@ -47,7 +47,8 @@ pub(crate) fn emit(
             }
             output
         }
-        "default" => render_default(dialect, project_id, snapshot, elapsed)?,
+        "default" => render_default(dialect, project_id, snapshot, elapsed, true)?,
+        "full" => render_default(dialect, project_id, snapshot, elapsed, false)?,
         format => return Err(format!("unsupported format {format:?}").into()),
     };
     Ok(Emission {
@@ -56,16 +57,155 @@ pub(crate) fn emit(
     })
 }
 
+/// The rules whose uncertifiable findings describe what the analysis could not
+/// see (a package without a contract, a dispatch it could not resolve), not a
+/// claim about code the user wrote. ADR 0202 groups them in the default output.
+const COVERAGE_RULES: &[&str] = &[
+    "package-contract-incomplete",
+    "reactive-dispatch-unresolved",
+    "reactive-source-uncaptured",
+    "unaudited-solid-release",
+];
+
+/// How many coverage groups the default output lists before summarizing.
+const COVERAGE_GROUPS_SHOWN: usize = 20;
+
 fn render_default(
     dialect: &'static Dialect,
     project_id: &str,
     snapshot: &Snapshot,
     elapsed: Duration,
+    tiered: bool,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let project = Path::new(project_id);
     let cwd = project.parent().unwrap_or_else(|| Path::new("."));
+    let mut output = Vec::new();
+    if tiered {
+        // ADR 0202: violations, then uncertifiable findings about the user's
+        // code, then the analysis-coverage gaps grouped by root cause.
+        let coverage = |finding: &&SnapshotFinding| {
+            finding.kind == "uncertifiable" && COVERAGE_RULES.contains(&finding.rule.as_str())
+        };
+        let violations = snapshot
+            .findings
+            .iter()
+            .filter(|finding| finding.kind != "uncertifiable")
+            .collect::<Vec<_>>();
+        let review = snapshot
+            .findings
+            .iter()
+            .filter(|finding| finding.kind == "uncertifiable" && !coverage(finding))
+            .collect::<Vec<_>>();
+        let gaps = snapshot
+            .findings
+            .iter()
+            .filter(coverage)
+            .collect::<Vec<_>>();
+        if !violations.is_empty() {
+            output.extend_from_slice(format!("Violations ({})\n\n", violations.len()).as_bytes());
+            output.extend(render_diagnostics(dialect, cwd, violations)?);
+        }
+        if !review.is_empty() {
+            output.extend_from_slice(
+                format!(
+                    "Needs review ({}): solid-checker could not prove these correct or wrong\n\n",
+                    review.len()
+                )
+                .as_bytes(),
+            );
+            output.extend(render_diagnostics(dialect, cwd, review)?);
+        }
+        if !gaps.is_empty() {
+            output.extend(render_coverage(cwd, &gaps));
+        }
+    } else {
+        output.extend(render_diagnostics(
+            dialect,
+            cwd,
+            snapshot.findings.iter().collect(),
+        )?);
+    }
+    let threads = std::thread::available_parallelism()
+        .map(usize::from)
+        .unwrap_or(1);
+    output.extend_from_slice(
+        format!(
+            "Finished in {}ms on {} files with {} rules using {threads} threads.\n",
+            elapsed.as_millis(),
+            snapshot.metrics.files_analyzed,
+            dialect.rule_count,
+        )
+        .as_bytes(),
+    );
+    Ok(output)
+}
+
+/// The analysis-coverage gaps, one line per root cause: the findings that
+/// share a rule and a message, with how many sites they cover and the first.
+fn render_coverage(cwd: &Path, gaps: &[&SnapshotFinding]) -> Vec<u8> {
+    let mut groups = BTreeMap::<(&str, &str, &str), Vec<&SnapshotFinding>>::new();
+    for finding in gaps {
+        groups
+            .entry((&finding.id, &finding.rule, &finding.message))
+            .or_default()
+            .push(finding);
+    }
+    let mut groups = groups.into_iter().collect::<Vec<_>>();
+    groups.sort_by(|left, right| right.1.len().cmp(&left.1.len()).then(left.0.cmp(&right.0)));
+    let mut output = format!(
+        "Analysis coverage: {} site{} in {} group{} that solid-checker could not analyze; they are not findings about your code (all of them: --format full or json)\n\n",
+        gaps.len(),
+        if gaps.len() == 1 { "" } else { "s" },
+        groups.len(),
+        if groups.len() == 1 { "" } else { "s" },
+    );
+    for ((id, _, message), sites) in groups.iter().take(COVERAGE_GROUPS_SHOWN) {
+        let first = sites
+            .iter()
+            .map(|finding| &finding.primary_location)
+            .min_by(|left, right| {
+                (left.path.as_str(), left.line, left.column).cmp(&(
+                    right.path.as_str(),
+                    right.line,
+                    right.column,
+                ))
+            });
+        let at = first
+            .map(|location| {
+                let path = Path::new(&location.path);
+                let shown = path.strip_prefix(cwd).unwrap_or(path).display().to_string();
+                format!("{shown}:{}:{}", location.line, location.column)
+            })
+            .unwrap_or_default();
+        output.push_str(&format!(
+            "  [{id}] {message}\n      {} site{}, first at {at}\n",
+            sites.len(),
+            if sites.len() == 1 { "" } else { "s" },
+        ));
+    }
+    if groups.len() > COVERAGE_GROUPS_SHOWN {
+        output.push_str(&format!(
+            "  ... and {} more group{}\n",
+            groups.len() - COVERAGE_GROUPS_SHOWN,
+            if groups.len() - COVERAGE_GROUPS_SHOWN == 1 {
+                ""
+            } else {
+                "s"
+            },
+        ));
+    }
+    output.push('\n');
+    output.into_bytes()
+}
+
+/// The graphical rendering of `findings`, grouped by file.
+fn render_diagnostics(
+    dialect: &'static Dialect,
+    cwd: &Path,
+    findings: Vec<&SnapshotFinding>,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut by_path = BTreeMap::<PathBuf, Vec<&SnapshotFinding>>::new();
-    for finding in &snapshot.findings {
+    for finding in findings {
         by_path
             .entry(PathBuf::from(&finding.primary_location.path))
             .or_default()
@@ -123,18 +263,6 @@ fn render_default(
 
     let mut output = Vec::new();
     service.run(&mut output);
-    let threads = std::thread::available_parallelism()
-        .map(usize::from)
-        .unwrap_or(1);
-    output.extend_from_slice(
-        format!(
-            "Finished in {}ms on {} files with {} rules using {threads} threads.\n",
-            elapsed.as_millis(),
-            snapshot.metrics.files_analyzed,
-            dialect.rule_count,
-        )
-        .as_bytes(),
-    );
     Ok(output)
 }
 

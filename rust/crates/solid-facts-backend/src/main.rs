@@ -3970,7 +3970,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 stdout.write_all(&json_output::go_compatible(&report, true)?)?;
                 stdout.write_all(b"\n")?;
             }
-            "text" | "default" => {
+            "text" | "default" | "full" => {
                 for status in &statuses {
                     println!(
                         "{}: {} ({})",
@@ -4750,7 +4750,9 @@ fn print_help() {
          \n\
          Options:\n\
            --project <PATH>             TypeScript project (default: tsconfig.json)\n\
-           --format <default|text|json> Output format (default: default)\n\
+           --format <FORMAT>            default: violations, then findings to review, then\n\
+                                analysis-coverage gaps grouped by cause; full: every\n\
+                                finding in place; text; json (default: default)\n\
            --dialect <ID>               Solid dialect (default: detect from solid-js; fallback: solid-v2)\n\
            --certify                    Exit 1 unless the project is certified\n\
            --check-contracts            Report imported Solid packages whose contract is\n\

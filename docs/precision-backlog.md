@@ -1,5 +1,26 @@
 # Precision backlog
 
+## Feedback reports what the user can act on (2026-10-05)
+
+ADR 0202:
+
+- a closed program no longer reports contract-generation obligations for its
+  own exports;
+- an unresolved dispatch is not reported where its call runs in an event, a
+  deferred callback, tracked JSX or deleted code;
+- the default output lists violations, then findings to review, then the
+  analysis-coverage gaps grouped by root cause (`--format full` keeps the
+  previous rendering).
+
+- **Gained:** rc.13 corpus uncertifiable 6,801 to 4,011 (-41%), violations
+  unchanged.
+- **Still open:**
+  - grouping coverage by package or by helper rather than by exact message;
+  - moving a library's contract-generation obligations to
+    `contract generate`;
+  - the 2,672 caller-supplied dispatches still raised in component bodies,
+    which need argument identity (A5).
+
 ## A helper's read in its own body runs during the call (2026-10-05)
 
 ADR 0201. A summary-attributed strict read is proven again when the callee

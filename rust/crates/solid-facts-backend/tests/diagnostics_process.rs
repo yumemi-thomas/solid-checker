@@ -1078,3 +1078,59 @@ fn control_flow_and_effect_phases_classify_strict_reads() {
         );
     }
 }
+
+/// ADR 0202: the default output lists findings about the user's code in full
+/// and folds the analysis-coverage gaps into one grouped section; a closed
+/// program reports no contract-generation obligation for its own exports.
+#[test]
+fn default_output_groups_coverage_gaps_after_findings_to_review() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let run = |fixture: &str, format: &str| {
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+            .env("SOLID_TYPEFACTS_BIN", &typefacts)
+            .env("SOLID_CHECKER_DAEMON", "0")
+            .args(["--format", format, "--project"])
+            .arg(
+                root.join("fixtures/reactive-ir")
+                    .join(fixture)
+                    .join("tsconfig.json"),
+            )
+            .output()
+            .expect("run the checker");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap()
+    };
+
+    let open = run("feedback-tiers-open", "default");
+    let review = open.find("Needs review (1)").expect("review heading");
+    let coverage = open
+        .find("Analysis coverage: 2 sites in 2 groups")
+        .expect("coverage heading");
+    assert!(review < coverage, "{open}");
+    // A coverage gap is one line with its count and first site, not a frame.
+    assert!(
+        open.contains("[SC9012] ageOf invokes .getTime on a caller-supplied value"),
+        "{open}"
+    );
+    assert!(open.contains("1 site, first at App.tsx:18:21"), "{open}");
+    assert!(!open[coverage..].contains(",-["), "{open}");
+    // `--format full` keeps every finding in place.
+    let full = run("feedback-tiers-open", "full");
+    assert!(!full.contains("Analysis coverage"), "{full}");
+    assert!(full.contains("[SC9005] callback parameter 0"), "{full}");
+
+    // The same source in a closed program: no contract-generation obligation.
+    let closed = run("feedback-tiers", "default");
+    assert!(
+        closed.contains("Analysis coverage: 1 site in 1 group"),
+        "{closed}"
+    );
+    assert!(!closed.contains("SC9005"), "{closed}");
+}

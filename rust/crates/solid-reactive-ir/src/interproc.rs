@@ -5621,6 +5621,7 @@ fn interprocedural_result_reads_for_file(
         if !enclosing_render_function(file, call.span, lookup) {
             continue;
         }
+        let obligations_before = dispatch_obligations.len();
         let callee = location(file.path.shared(), call.callee);
         let label = call
             .static_callee(&file.source)
@@ -5946,14 +5947,31 @@ fn interprocedural_result_reads_for_file(
         // position that runs it. The direct-read path asks the same question
         // (`LocalAccess::discover`), so the two paths agree on which function
         // a read is written in.
+        let execution =
+            semantic_execution_role(file, call.callee, &allowed, entities, symbol_names, lookup);
+        // ADR 0202: an unresolved dispatch decides a claim only where the
+        // reads it hides could be reported. Reads at an event, a deferred
+        // callback, a tracked JSX position or deleted code are reported by no
+        // read rule (strict reads report the untracked roles; the conditional
+        // return and result-access rules ask about a component body and a
+        // predicate), so this call's obligations decide nothing. Asked ahead
+        // of the nested-helper skip below, which keeps obligations a nested
+        // helper's call raises: an event handler is such a helper.
+        if matches!(
+            execution,
+            ExecutionRole::EventCallback
+                | ExecutionRole::DeferredCallback
+                | ExecutionRole::TrackedJsx
+                | ExecutionRole::DiscardedRendering
+        ) {
+            dispatch_obligations.truncate(obligations_before);
+        }
         if (inside_non_component_function(file, call.callee, lookup)
             || runs_in_unproven_stored_literal(file, call.callee, entities, symbol_names, lookup))
             && named_callback_execution_role(file, call.callee, lookup).is_none()
         {
             continue;
         }
-        let execution =
-            semantic_execution_role(file, call.callee, &allowed, entities, symbol_names, lookup);
         let mut context = None::<String>;
         if let Some(callbacks) = contract_callbacks.get(symbol) {
             for callback in callbacks {

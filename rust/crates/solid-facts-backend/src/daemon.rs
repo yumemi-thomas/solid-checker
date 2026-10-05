@@ -124,7 +124,7 @@ pub fn eligible(request: &Request) -> bool {
 }
 
 fn retained_format(format: &str) -> bool {
-    matches!(format, "default" | "json" | "text")
+    matches!(format, "default" | "full" | "json" | "text")
 }
 
 fn resolve_dialect(

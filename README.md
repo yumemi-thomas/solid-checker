@@ -184,7 +184,7 @@ Run `solid-checker --help` for the full list. The options you'll reach for most:
 | --- | --- |
 | `--project <PATH>` | TypeScript project to analyze (default: `tsconfig.json`). |
 | `--dialect solid-v2` | Override automatic Solid major-version detection. Also overrides the unsupported-runtime refusal. |
-| `--format <default\|text\|json>` | Output format. `default` prints framed source excerpts, `text` is compact, `json` is machine-readable. |
+| `--format <default\|full\|text\|json>` | Output format. `default` prints violations, then findings to review, both as framed source excerpts, then the analysis-coverage gaps (packages without contracts, unresolved dispatch) grouped by root cause. `full` frames every finding in place, `text` is compact, `json` is machine-readable. |
 | `--certify` | Exit non-zero unless the project is fully certified. Use this in CI. |
 | `--preset <NAME>` | Enable a catalog preset (repeatable; the compatibility `preferences` preset is currently available). |
 | `--enable-rule <NAME>` | Explicitly enable one rule (repeatable). |

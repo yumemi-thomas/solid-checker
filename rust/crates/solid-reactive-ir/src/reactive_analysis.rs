@@ -280,7 +280,16 @@ pub(crate) fn collect_project<'facts>(
     draft.contract_exports = interprocedural.exports.clone();
     draft.contract_generation_obligations =
         interprocedural.contract_generation_obligations.to_vec();
-    for obligation in interprocedural.contract_generation_obligations.iter() {
+    // ADR 0202: these obligations say a project export's contract could not
+    // state when it runs a callback parameter. They matter to a consumer of
+    // that contract. A closed program (an application, ADR 0193) has none, so
+    // there they stay available to contract generation and are not reported.
+    let report_generation_obligations = !ctx.rule_options.runtime.program_is_closed();
+    for obligation in interprocedural
+        .contract_generation_obligations
+        .iter()
+        .filter(|_| report_generation_obligations)
+    {
         draft.push_defect(crate::StaticDefect {
             kind: crate::StaticDefectKind::UnknownCallbackExecution {
                 package: obligation.package.clone(),
