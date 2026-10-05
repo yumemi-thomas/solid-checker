@@ -1,5 +1,15 @@
 # Precision backlog
 
+## Coverage gaps group by family and subject (2026-10-06)
+
+ADR 0205. Each analysis-coverage finding states a family and a subject
+(`coverageFamily`, `coverageSubject`), and the default output prints one line
+per family with its five most frequent subjects. No finding moves.
+
+- **Gained:** `app-game` shows 815 coverage sites as 5 lines.
+- **Still open:** a leaf-callback gap names its owner primitive, not the call
+  it cannot follow, so its subjects compress only to two.
+
 ## Reads that run while a component renders (2026-10-06)
 
 ADR 0204. Proven `strict-read-untracked`:

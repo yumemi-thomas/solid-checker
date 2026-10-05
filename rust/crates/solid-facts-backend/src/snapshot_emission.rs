@@ -140,26 +140,75 @@ fn render_default(
     Ok(output)
 }
 
-/// The analysis-coverage gaps, one line per root cause: the findings that
-/// share a rule and a message, with how many sites they cover and the first.
+/// How many subjects a coverage family names before summarizing the rest.
+const COVERAGE_SUBJECTS_SHOWN: usize = 5;
+
+/// ADR 0205: the heading of a coverage family, and what its subjects are.
+fn coverage_family_heading(family: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    Some(match family {
+        "package-contract" => (
+            "imports from packages without a complete reactivity contract",
+            "package",
+            "packages",
+        ),
+        "own-export-contract" => (
+            "callbacks this project's exports hand to code with unknown timing",
+            "export",
+            "exports",
+        ),
+        "caller-supplied-member" => (
+            "helpers that call a method on a value their caller supplies",
+            "helper",
+            "helpers",
+        ),
+        "call-target" => (
+            "calls whose runtime target cannot be selected exactly",
+            "call",
+            "calls",
+        ),
+        "undescribed-callee" => (
+            "reactive values passed to functions whose behaviour is not described",
+            "function",
+            "functions",
+        ),
+        "leaf-callback" => (
+            "calls in a leaf owner's callback whose body cannot be followed",
+            "owner",
+            "owners",
+        ),
+        _ => return None,
+    })
+}
+
+fn plural(count: usize, one: &str, many: &str) -> String {
+    format!("{count} {}", if count == 1 { one } else { many })
+}
+
+/// The analysis-coverage gaps, grouped by root cause (ADR 0202, ADR 0205): one
+/// group per coverage family, naming its most frequent subjects, and one per
+/// rule and message for a gap with no family.
 fn render_coverage(cwd: &Path, gaps: &[&SnapshotFinding]) -> Vec<u8> {
     let mut groups = BTreeMap::<(&str, &str, &str), Vec<&SnapshotFinding>>::new();
     for finding in gaps {
-        groups
-            .entry((&finding.id, &finding.rule, &finding.message))
-            .or_default()
-            .push(finding);
+        let key = if coverage_family_heading(&finding.coverage_family).is_some() {
+            (finding.id.as_str(), finding.coverage_family.as_str(), "")
+        } else {
+            (
+                finding.id.as_str(),
+                finding.rule.as_str(),
+                finding.message.as_str(),
+            )
+        };
+        groups.entry(key).or_default().push(finding);
     }
     let mut groups = groups.into_iter().collect::<Vec<_>>();
     groups.sort_by(|left, right| right.1.len().cmp(&left.1.len()).then(left.0.cmp(&right.0)));
     let mut output = format!(
-        "Analysis coverage: {} site{} in {} group{} that solid-checker could not analyze; they are not findings about your code (all of them: --format full or json)\n\n",
-        gaps.len(),
-        if gaps.len() == 1 { "" } else { "s" },
-        groups.len(),
-        if groups.len() == 1 { "" } else { "s" },
+        "Analysis coverage: {} in {} that solid-checker could not analyze; they are not findings about your code (all of them: --format full or json)\n\n",
+        plural(gaps.len(), "site", "sites"),
+        plural(groups.len(), "group", "groups"),
     );
-    for ((id, _, message), sites) in groups.iter().take(COVERAGE_GROUPS_SHOWN) {
+    for ((id, family, message), sites) in groups.iter().take(COVERAGE_GROUPS_SHOWN) {
         let first = sites
             .iter()
             .map(|finding| &finding.primary_location)
@@ -177,21 +226,47 @@ fn render_coverage(cwd: &Path, gaps: &[&SnapshotFinding]) -> Vec<u8> {
                 format!("{shown}:{}:{}", location.line, location.column)
             })
             .unwrap_or_default();
-        output.push_str(&format!(
-            "  [{id}] {message}\n      {} site{}, first at {at}\n",
-            sites.len(),
-            if sites.len() == 1 { "" } else { "s" },
-        ));
+        if let Some((heading, one, many)) = coverage_family_heading(family) {
+            let mut subjects = BTreeMap::<&str, usize>::new();
+            for finding in sites {
+                *subjects
+                    .entry(finding.coverage_subject.as_str())
+                    .or_default() += 1;
+            }
+            let mut subjects = subjects.into_iter().collect::<Vec<_>>();
+            subjects.sort_by(|left, right| right.1.cmp(&left.1).then(left.0.cmp(right.0)));
+            let mut named = subjects
+                .iter()
+                .take(COVERAGE_SUBJECTS_SHOWN)
+                .map(|(subject, count)| format!("{subject} ({count})"))
+                .collect::<Vec<_>>();
+            if subjects.len() > COVERAGE_SUBJECTS_SHOWN {
+                named.push(format!(
+                    "and {} more",
+                    subjects.len() - COVERAGE_SUBJECTS_SHOWN
+                ));
+            }
+            let mut heading = heading.to_owned();
+            if let Some(first) = heading.get_mut(..1) {
+                first.make_ascii_uppercase();
+            }
+            output.push_str(&format!(
+                "  [{id}] {heading}: {} in {}\n      {}\n      first at {at}\n",
+                plural(sites.len(), "site", "sites"),
+                plural(subjects.len(), one, many),
+                named.join(", "),
+            ));
+        } else {
+            output.push_str(&format!(
+                "  [{id}] {message}\n      {}, first at {at}\n",
+                plural(sites.len(), "site", "sites"),
+            ));
+        }
     }
     if groups.len() > COVERAGE_GROUPS_SHOWN {
         output.push_str(&format!(
-            "  ... and {} more group{}\n",
-            groups.len() - COVERAGE_GROUPS_SHOWN,
-            if groups.len() - COVERAGE_GROUPS_SHOWN == 1 {
-                ""
-            } else {
-                "s"
-            },
+            "  ... and {} more\n",
+            plural(groups.len() - COVERAGE_GROUPS_SHOWN, "group", "groups"),
         ));
     }
     output.push('\n');
@@ -489,6 +564,8 @@ mod tests {
             hint: "Keep the props object intact and read props.<name> inside JSX.".into(),
             analysis_context: String::new(),
             subject_kind: "component-props".into(),
+            coverage_family: String::new(),
+            coverage_subject: String::new(),
             primary_location: SourceLocation {
                 path: source_path.to_string_lossy().into_owned(),
                 start_byte: 20,

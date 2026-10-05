@@ -1114,12 +1114,20 @@ fn default_output_groups_coverage_gaps_after_findings_to_review() {
         .find("Analysis coverage: 2 sites in 2 groups")
         .expect("coverage heading");
     assert!(review < coverage, "{open}");
-    // A coverage gap is one line with its count and first site, not a frame.
+    // A coverage gap is grouped by family and subject, with its first site,
+    // not a frame (ADR 0205).
     assert!(
-        open.contains("[SC9012] ageOf invokes .getTime on a caller-supplied value"),
+        open.contains(
+            "[SC9012] Helpers that call a method on a value their caller supplies: 1 site in 1 helper"
+        ),
         "{open}"
     );
-    assert!(open.contains("1 site, first at App.tsx:18:21"), "{open}");
+    assert!(open.contains("      ageOf (1)\n"), "{open}");
+    assert!(open.contains("first at App.tsx:18:21"), "{open}");
+    assert!(
+        open.contains("[SC9005] Callbacks this project's exports hand to code with unknown timing: 1 site in 1 export"),
+        "{open}"
+    );
     assert!(!open[coverage..].contains(",-["), "{open}");
     // `--format full` keeps every finding in place.
     let full = run("feedback-tiers-open", "full");

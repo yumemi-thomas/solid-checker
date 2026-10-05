@@ -42,6 +42,11 @@ pub struct SnapshotFinding {
     pub analysis_context: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub subject_kind: String,
+    /// ADR 0205: the analysis-coverage family and subject this gap groups by.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub coverage_family: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub coverage_subject: String,
     pub primary_location: SourceLocation,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub related_locations: Vec<SourceLocation>,
@@ -592,6 +597,8 @@ pub fn unsupported_runtime_snapshot(
             hint,
             analysis_context: "dialect-detection".into(),
             subject_kind: "project".into(),
+            coverage_family: String::new(),
+            coverage_subject: String::new(),
             primary_location: SourceLocation {
                 path: manifest.clone(),
                 start_byte: 0,
@@ -653,6 +660,8 @@ fn snapshot_with_package_summaries(
             hint: finding.hint,
             analysis_context: finding.analysis_context,
             subject_kind: finding.subject_kind,
+            coverage_family: finding.coverage_family,
+            coverage_subject: finding.coverage_subject,
             primary_location: source_location(&finding.primary_location, sources),
             related_locations: finding
                 .related_locations

@@ -107,6 +107,14 @@ pub struct Finding {
     pub analysis_context: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub subject_kind: String,
+    /// ADR 0205: for an analysis-coverage finding, the kind of gap it is
+    /// (`package-contract`, `caller-supplied-member`, …) and what it is about
+    /// (the package, helper or owner primitive). A reporter groups by these
+    /// instead of by message text. Empty for every other finding.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub coverage_family: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub coverage_subject: String,
     pub primary_location: Location,
     pub related_locations: Vec<Location>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -130,6 +138,8 @@ impl Finding {
             severity: metadata.severity.into(),
             analysis_context: String::new(),
             subject_kind: String::new(),
+            coverage_family: String::new(),
+            coverage_subject: String::new(),
             primary_location,
             related_locations: vec![],
             evidence: vec![],

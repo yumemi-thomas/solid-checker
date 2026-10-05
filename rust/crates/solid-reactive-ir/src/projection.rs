@@ -1225,7 +1225,62 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
         | FindingSeed::DirectiveCreation(_)
         | FindingSeed::OwnerRequirement(_) => {}
     }
+    if let Some((family, subject)) = coverage_group(seed) {
+        finding.coverage_family = family.into();
+        finding.coverage_subject = subject;
+    }
     finding
+}
+
+/// ADR 0205: the coverage family and subject of an analysis-coverage gap, for
+/// a reporter to group by. `None` for every finding that is a claim about the
+/// user's code.
+fn coverage_group(seed: FindingSeed<'_>) -> Option<(&'static str, String)> {
+    match seed {
+        FindingSeed::StaticDefect(defect) => match &defect.kind {
+            StaticDefectKind::PackageContractExportMissing { module, .. }
+            | StaticDefectKind::PackageContractEnvironmentDependent { module, .. } => {
+                Some(("package-contract", package_of_specifier(module).to_owned()))
+            }
+            StaticDefectKind::UnknownCallbackExecution { function, .. } => {
+                Some(("own-export-contract", function.clone()))
+            }
+            StaticDefectKind::ReactiveDispatchUnresolved { callee, .. } => {
+                let context = defect.analysis_context.as_str();
+                Some((
+                    if context.starts_with("parameter-member")
+                        || context.starts_with("contract-parameter-member")
+                        || context == crate::EXPORTED_PARAMETER_MEMBER_DISPATCH
+                    {
+                        "caller-supplied-member"
+                    } else {
+                        "call-target"
+                    },
+                    callee.clone(),
+                ))
+            }
+            StaticDefectKind::ReactiveSourceUncaptured { callee, .. } => {
+                Some(("undescribed-callee", callee.clone()))
+            }
+            _ => None,
+        },
+        FindingSeed::LeafOperation(operation)
+            if operation.kind == crate::LeafOwnerOperationKind::UnresolvedCallback =>
+        {
+            Some(("leaf-callback", operation.owner.clone()))
+        }
+        _ => None,
+    }
+}
+
+/// The package a bare import specifier names: `@scope/name` or `name`, without
+/// a subpath. Anything else is returned unchanged.
+fn package_of_specifier(specifier: &str) -> &str {
+    let segments = if specifier.starts_with('@') { 2 } else { 1 };
+    specifier
+        .match_indices('/')
+        .nth(segments - 1)
+        .map_or(specifier, |(index, _)| &specifier[..index])
 }
 
 fn primary_location(seed: FindingSeed<'_>) -> Location {
@@ -1350,6 +1405,17 @@ mod tests {
             fixes: vec![],
             uncertain: false,
         }
+    }
+
+    #[test]
+    fn a_coverage_subject_names_the_package_not_the_subpath() {
+        assert_eq!(
+            super::package_of_specifier("@scope/name/sub/path"),
+            "@scope/name"
+        );
+        assert_eq!(super::package_of_specifier("@scope/name"), "@scope/name");
+        assert_eq!(super::package_of_specifier("name/sub"), "name");
+        assert_eq!(super::package_of_specifier("name"), "name");
     }
 
     #[test]
