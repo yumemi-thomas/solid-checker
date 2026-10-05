@@ -3022,9 +3022,11 @@ test("root certification names only the declaration-only packages the lockfile s
       assert.equal(source.registryOrigin, "https://registry.npmjs.org");
       assert.ok(existsSync(source.archive), "an emitted source names acquired archive bytes");
       assert.ok(existsSync(source.registryMetadata));
+      // ADR 0188: located from the importer's real path, so reported as one
+      // (`/var` is `/private/var` on macOS).
       assert.equal(
         source.installedPackageRoot,
-        join(project, "node_modules", source.packageName)
+        realpathSync(join(project, "node_modules", source.packageName))
       );
     }
   } finally {

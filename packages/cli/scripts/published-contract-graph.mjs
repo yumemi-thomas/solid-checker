@@ -609,8 +609,22 @@ function bunLockSelectionIndex(lockfileOrIndex) {
   throw new TypeError("exact Bun selection requires lockfile bytes or a Bun lock index");
 }
 
+/**
+ * ADR 0188: a path the filesystem can canonicalize, canonicalized. Lockfile
+ * locators are paths relative to the lockfile's directory, and an installed
+ * root now arrives as a real path; both sides must name the same spelling, or
+ * a macOS temporary directory (`/var` → `/private/var`) yields `../..` keys.
+ */
+function canonicalPath(path) {
+  try {
+    return realpathSync(resolve(path));
+  } catch {
+    return resolve(path);
+  }
+}
+
 export function bunLockLocatorForInstalledPackage(bunLockPath, packageRoot) {
-  const installed = relative(dirname(resolve(bunLockPath)), resolve(packageRoot));
+  const installed = relative(dirname(canonicalPath(bunLockPath)), canonicalPath(packageRoot));
   const parts = installed.split(sep);
   if (parts[0] === ".." || parts[0] !== "node_modules") {
     throw new PublishedGraphAcquisitionRefusal(
@@ -631,7 +645,7 @@ export function bunLockLocatorForInstalledPackage(bunLockPath, packageRoot) {
 /** The npm `packages` key for one installed package: its path relative to the
  * lockfile's directory, which must descend through `node_modules`. */
 export function npmLockLocatorForInstalledPackage(npmLockPath, packageRoot) {
-  const installed = relative(dirname(resolve(npmLockPath)), resolve(packageRoot));
+  const installed = relative(dirname(canonicalPath(npmLockPath)), canonicalPath(packageRoot));
   const locator = installed.split(sep).join("/");
   if (!locator || locator.startsWith("../") || npmLockPathName(locator) === null) {
     throw new PublishedGraphAcquisitionRefusal(

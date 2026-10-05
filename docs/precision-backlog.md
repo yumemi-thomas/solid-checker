@@ -1,5 +1,18 @@
 # Precision backlog
 
+## Two versions of one dependency nest as Node resolves them (2026-10-05)
+
+ADR 0188. In pnpm installs, two versions of one dependency collided in the
+private certification project. A second version is now nested under its
+importer, and dependencies are looked up from real paths, which replaces
+ADR 0184's written-path-first fallback.
+
+- **Gained:** `@tanstack/solid-router` certifies in `sefer` and
+  `spotify-desk-thing`, and those imports carry its contract out of the box.
+  No violation moved: the contract is partial.
+- **Still open:** a colliding source with several importers is not nested;
+  that still refuses.
+
 ## Certifications under one condition set are not ambiguous (2026-10-05)
 
 ADR 0187. Several certifications of one artifact case under one condition

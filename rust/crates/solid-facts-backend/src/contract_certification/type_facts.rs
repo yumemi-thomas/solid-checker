@@ -1718,14 +1718,8 @@ impl PrivateTypeFactsProject {
             package_root.clone(),
         )]);
         let original_package_root = Path::new(&plan.resolved_import.package_root);
-        for dependency in dependencies {
-            let target = private_project_package_target(
-                &root,
-                &package_root,
-                original_package_root,
-                Path::new(&dependency.resolved_import.package_root),
-                dependency.snapshot.package_name(),
-            );
+        let targets = nested_dependency_targets(&root, &package_root, plan, dependencies);
+        for (dependency, target) in dependencies.iter().zip(targets) {
             materialize_snapshot(
                 &dependency.snapshot,
                 &target,
@@ -1738,7 +1732,7 @@ impl PrivateTypeFactsProject {
         // instead of written, one symlink per package. A source whose package
         // directory has another materialized package nested inside it must
         // be written, since nothing may ever be created inside a store entry.
-        let source_targets = sources
+        let mut source_targets = sources
             .iter()
             .map(|source| {
                 private_project_package_target(
@@ -1750,6 +1744,14 @@ impl PrivateTypeFactsProject {
                 )
             })
             .collect::<Vec<_>>();
+        nest_colliding_sources(
+            plan,
+            &package_root,
+            dependencies,
+            &package_roots,
+            sources,
+            &mut source_targets,
+        );
         let all_targets = package_roots
             .values()
             .cloned()
@@ -2006,6 +2008,171 @@ fn closure_runtime_module_paths<'a>(
         .map(|entry| entry.path.trim_start_matches("./"))
         .filter(|path| materialized(path))
         .collect()
+}
+
+/// One package's placement in the private project, as
+/// [`nest_under_importers`] reads it.
+#[derive(Clone, Debug)]
+struct Placement {
+    /// The authenticated snapshot it materializes: equal snapshots may share a
+    /// path, different ones may not.
+    snapshot: String,
+    /// Where it is installed, written and real, for locating it as an importer.
+    installed: Vec<PathBuf>,
+    /// The one installed location that resolved it, when exactly one did.
+    importer: Option<PathBuf>,
+    name: String,
+    target: PathBuf,
+    /// The certified package itself: an owner, never moved.
+    fixed: bool,
+}
+
+/// ADR 0188: nests every placement whose target a *different* snapshot already
+/// holds under the placement that imported it (`<importer>/node_modules/<name>`),
+/// where that importer's resolution finds it first, as Node resolution does.
+///
+/// pnpm keeps each package's real root in its own `.pnpm/<name>@<version>/`
+/// store directory, so two versions of one dependency (`seroval@1.6.4` beside
+/// `seroval@1.6.7`, required by different packages) both fall back to a flat
+/// `node_modules/<name>`. The installed tree never put them there: each importer
+/// resolved its own copy from its own directory. The first holder of a slot
+/// keeps it. A placement with no single recorded importer, an importer that is
+/// not one of the placements, or a nested slot that is also taken keeps its
+/// colliding target, so the byte-identity check refuses exactly as before.
+/// Nothing is placed by name alone, and every copy is still its plan's
+/// authenticated snapshot.
+fn nest_under_importers(placements: &[Placement]) -> Vec<PathBuf> {
+    let mut targets = placements
+        .iter()
+        .map(|placement| placement.target.clone())
+        .collect::<Vec<_>>();
+    // Bounded: each pass nests at least one placement or stops.
+    for _ in 0..placements.len() {
+        let mut changed = false;
+        for index in 0..placements.len() {
+            let placement = &placements[index];
+            if placement.fixed {
+                continue;
+            }
+            let held_earlier = (0..index).any(|other| {
+                targets[other] == targets[index] && placements[other].snapshot != placement.snapshot
+            });
+            if !held_earlier {
+                continue;
+            }
+            let Some(importer) = &placement.importer else {
+                continue;
+            };
+            let Some(owner) = (0..placements.len()).find(|other| {
+                *other != index
+                    && placements[*other].snapshot != placement.snapshot
+                    && placements[*other]
+                        .installed
+                        .iter()
+                        .any(|root| importer.starts_with(root))
+            }) else {
+                continue;
+            };
+            let nested = targets[owner].join("node_modules").join(&placement.name);
+            let taken = (0..placements.len()).any(|other| {
+                other != index
+                    && targets[other] == nested
+                    && placements[other].snapshot != placement.snapshot
+            });
+            if !taken && nested != targets[index] {
+                targets[index] = nested;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    targets
+}
+
+/// A certification plan's [`Placement`] at `target`.
+fn plan_placement(plan: &CertificationPlan, target: PathBuf, fixed: bool) -> Placement {
+    let mut installed = vec![PathBuf::from(&plan.resolved_import.package_root)];
+    if let Some(real) = &plan.resolved_import.package_real_root {
+        installed.push(PathBuf::from(real));
+    }
+    Placement {
+        snapshot: plan.snapshot_root().to_owned(),
+        installed,
+        importer: Some(PathBuf::from(&plan.resolved_import.importer)),
+        name: plan.snapshot.package_name().to_owned(),
+        target,
+        fixed,
+    }
+}
+
+/// Where each dependency plan is materialized: its
+/// [`private_project_package_target`], nested under its importer where a
+/// different snapshot holds that (ADR 0188).
+fn nested_dependency_targets(
+    root: &Path,
+    package_root: &Path,
+    plan: &CertificationPlan,
+    dependencies: &[&CertificationPlan],
+) -> Vec<PathBuf> {
+    let original_package_root = Path::new(&plan.resolved_import.package_root);
+    let placements = std::iter::once(plan_placement(plan, package_root.to_path_buf(), true))
+        .chain(dependencies.iter().map(|dependency| {
+            plan_placement(
+                dependency,
+                private_project_package_target(
+                    root,
+                    package_root,
+                    original_package_root,
+                    Path::new(&dependency.resolved_import.package_root),
+                    dependency.snapshot.package_name(),
+                ),
+                false,
+            )
+        }))
+        .collect::<Vec<_>>();
+    nest_under_importers(&placements).split_off(1)
+}
+
+/// Declaration sources' targets, nested as [`nested_dependency_targets`]'s are,
+/// beside the plans already placed. A source is moved only when it has exactly
+/// one recorded resolution edge: nesting a source several packages import
+/// under one of them would let the others resolve another version's files.
+fn nest_colliding_sources(
+    plan: &CertificationPlan,
+    package_root: &Path,
+    dependencies: &[&CertificationPlan],
+    package_roots: &std::collections::BTreeMap<(String, String), PathBuf>,
+    sources: &[&super::dependencies::VerifiedGraphSourcePackage],
+    source_targets: &mut [PathBuf],
+) {
+    let mut placements = vec![plan_placement(plan, package_root.to_path_buf(), true)];
+    for dependency in dependencies {
+        if let Some(target) = package_roots.get(&private_project_plan_key(dependency)) {
+            placements.push(plan_placement(dependency, target.clone(), true));
+        }
+    }
+    let fixed = placements.len();
+    for (source, target) in sources.iter().zip(source_targets.iter()) {
+        placements.push(Placement {
+            snapshot: source.snapshot.root().to_owned(),
+            installed: vec![PathBuf::from(&source.installed_package_root)],
+            importer: match source.resolved_from.as_slice() {
+                [edge] => Some(PathBuf::from(&edge.importer_package_root)),
+                _ => None,
+            },
+            name: source.snapshot.package_name().to_owned(),
+            target: target.clone(),
+            fixed: false,
+        });
+    }
+    for (slot, nested) in source_targets
+        .iter_mut()
+        .zip(nest_under_importers(&placements).into_iter().skip(fixed))
+    {
+        *slot = nested;
+    }
 }
 
 fn private_project_package_target(
@@ -22954,6 +23121,124 @@ mod tests {
             &mut Vec::new(),
         )
         .expect_err("a cleanup registrar registers no computation");
+    }
+
+    // ADR 0188: two versions of one dependency meeting at a flat private slot
+    // are separated the way Node resolution separates them; anything that
+    // cannot be placed by a recorded importer keeps its colliding target.
+    #[test]
+    fn a_second_version_nests_under_its_importer_and_nothing_else_moves() {
+        let placement = |snapshot: &str,
+                         installed: &str,
+                         importer: Option<&str>,
+                         name: &str,
+                         target: &str,
+                         fixed: bool| {
+            Placement {
+                snapshot: snapshot.into(),
+                installed: vec![PathBuf::from(installed)],
+                importer: importer.map(PathBuf::from),
+                name: name.into(),
+                target: PathBuf::from(target),
+                fixed,
+            }
+        };
+        let store = "/app/node_modules/.pnpm";
+        let root = placement(
+            "router",
+            &format!("{store}/router/node_modules/router"),
+            None,
+            "router",
+            "/p/node_modules/router",
+            true,
+        );
+        let core = placement(
+            "core",
+            &format!("{store}/core/node_modules/core"),
+            Some(&format!("{store}/router/node_modules/router/dist/index.js")),
+            "core",
+            "/p/node_modules/core",
+            false,
+        );
+        let solid = placement(
+            "solid",
+            &format!("{store}/solid/node_modules/solid-js"),
+            Some(&format!("{store}/router/node_modules/router/dist/index.js")),
+            "solid-js",
+            "/p/node_modules/solid-js",
+            false,
+        );
+        let old = placement(
+            "seroval-1.6.4",
+            &format!("{store}/seroval@1.6.4/node_modules/seroval"),
+            Some(&format!(
+                "{store}/solid/node_modules/solid-js/dist/server.js"
+            )),
+            "seroval",
+            "/p/node_modules/seroval",
+            false,
+        );
+        let new = placement(
+            "seroval-1.6.7",
+            &format!("{store}/seroval@1.6.7/node_modules/seroval"),
+            Some(&format!("{store}/core/node_modules/core/dist/ssr.js")),
+            "seroval",
+            "/p/node_modules/seroval",
+            false,
+        );
+        let targets = nest_under_importers(&[
+            root.clone(),
+            core.clone(),
+            solid.clone(),
+            old.clone(),
+            new.clone(),
+        ]);
+        assert_eq!(
+            targets[3],
+            PathBuf::from("/p/node_modules/seroval"),
+            "the first holder keeps the slot"
+        );
+        assert_eq!(
+            targets[4],
+            PathBuf::from("/p/node_modules/core/node_modules/seroval"),
+            "the second version nests under its importer"
+        );
+        assert_eq!(
+            &targets[..3],
+            &[
+                root.target.clone(),
+                core.target.clone(),
+                solid.target.clone()
+            ]
+        );
+
+        // The same snapshot twice is one materialization, not a collision.
+        let twin = Placement {
+            importer: None,
+            ..old.clone()
+        };
+        assert_eq!(
+            nest_under_importers(&[root.clone(), old.clone(), twin])[2],
+            PathBuf::from("/p/node_modules/seroval")
+        );
+
+        // No single importer, or an importer no placement installs: refused as before.
+        let orphan = Placement {
+            importer: None,
+            ..new.clone()
+        };
+        assert_eq!(
+            nest_under_importers(&[root.clone(), old.clone(), orphan])[2],
+            PathBuf::from("/p/node_modules/seroval")
+        );
+        let stranger = Placement {
+            importer: Some(PathBuf::from("/elsewhere/x.js")),
+            ..new.clone()
+        };
+        assert_eq!(
+            nest_under_importers(&[root.clone(), old.clone(), stranger])[2],
+            PathBuf::from("/p/node_modules/seroval")
+        );
     }
 
     // ADR 0183: an owned-computation callback is the caller's value as the

@@ -1273,37 +1273,28 @@ function createCompilerSourceCollector({
   const locateExternalFrom = (ownerRoot, dependency) => {
     if (nodeBuiltinSpecifier(dependency.specifier)) return null;
     const dependencyName = packageNameOfSpecifier(dependency.specifier);
-    // ADR 0184: from the importer's written path first, and from its real
-    // path when nothing is installed above the written one. A pnpm link's own
+    // ADR 0184, amended by ADR 0188: from the importer's real path, as Node
+    // and TypeScript (without `preserveSymlinks`) resolve it. A pnpm link's own
     // dependencies sit beside its target under `.pnpm/<name>@<version>/
-    // node_modules`, not above the link (`app/node_modules/solid-js` finds no
-    // `@solidjs/signals`); that target is where Node and TypeScript (without
-    // `preserveSymlinks`) resolve them.
+    // node_modules`, not above the link: from `app/node_modules/solid-js`
+    // nothing is installed above, and a copy hoisted above a link
+    // (`app/node_modules/seroval`) is not the one the package resolves.
+    // Admission replays these lookups from real paths too, so a lookup from the
+    // written path would certify an environment no install reproduces.
     const writtenImporter = resolve(
       ownerRoot,
       dependency.importerPath ?? dependency.source
     );
     let dependencyImporter = writtenImporter;
-    let dependencyRoot;
     try {
-      dependencyRoot = locateExternalDependencyPackageRoot(writtenImporter, dependency);
-    } catch (error) {
-      let realImporter = writtenImporter;
-      try {
-        realImporter = realpathSync(writtenImporter);
-      } catch {
-        // A missing file keeps its written path, and the first error stands.
-      }
-      if (
-        realImporter === writtenImporter ||
-        !(error instanceof ArtifactResolutionError) ||
-        error.code !== "package-not-found"
-      ) {
-        throw error;
-      }
-      dependencyImporter = realImporter;
-      dependencyRoot = locateExternalDependencyPackageRoot(realImporter, dependency);
+      dependencyImporter = realpathSync(writtenImporter);
+    } catch {
+      // A missing file keeps its written path, and the lookup below reports it.
     }
+    const dependencyRoot = locateExternalDependencyPackageRoot(
+      dependencyImporter,
+      dependency
+    );
     if (!dependencyRoot) return null;
     const dependencyManifest = JSON.parse(
       readFileSync(join(dependencyRoot, "package.json"), "utf8")
