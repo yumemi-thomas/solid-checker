@@ -1,10 +1,10 @@
 {
-  "status": "uncertifiable",
+  "status": "violation",
   "findings": [
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fp-summary-returned-closure/App.tsx",
       "start": 2363,
@@ -24,7 +24,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fp-summary-returned-closure/Remote.tsx",
       "start": 644,

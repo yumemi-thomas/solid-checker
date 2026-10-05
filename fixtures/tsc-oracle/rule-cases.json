@@ -312,9 +312,9 @@
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
-      "why": "SC1006's keystone. `doubled` is an ordinary function and calling it is an ordinary call, so nothing here is a type error. The claim is that every call to it is untracked, so its reads subscribe to nothing and the derivation never updates -- a fact about which scopes track, which the type system does not model. Since e101c6989 a read attributed through another function's summary is uncertifiable: the summary does not establish that the helper's read runs during the call rather than later, and on 48 real projects 73 of 96 such findings were false. The direct read in case 26 is this rule's proven keystone.",
+      "why": "SC1006's keystone. `doubled` is an ordinary function and calling it is an ordinary call, so nothing here is a type error. The claim is that every call to it is untracked, so its reads subscribe to nothing and the derivation never updates -- a fact about which scopes track, which the type system does not model. Since e101c6989 a read attributed through another function's summary is uncertifiable unless it is proven to run during the call (on 48 real projects 73 of 96 such findings were false). ADR 0201 proves this shape again: `doubled` is a synchronous local function whose own body calls `count()`, and the call is a statement in the body, outside any JSX.",
       "code": "import { createSignal } from \"solid-js\";\nexport function Comp() {\n  const [count] = createSignal(0);\n  const doubled = () => count() * 2;\n  doubled();\n  return <div />;\n}\n",
-      "checkerKind": "uncertifiable"
+      "checkerKind": "violation"
     },
     {
       "rule": "no-direct-mutation",

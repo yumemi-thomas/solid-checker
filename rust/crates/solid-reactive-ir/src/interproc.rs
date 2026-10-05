@@ -6092,7 +6092,47 @@ fn interprocedural_result_reads_for_file(
                 }
             }
         }
+        // ADR 0201: which of these reads are proven to run while this call
+        // does. The callee is one synchronous project function, and the call
+        // is a statement-level call outside any JSX (a prop getter runs when
+        // the consumer reads it). A read it discovered in its own body, as a
+        // call written directly there (not in a nested function, not in a
+        // default parameter), runs during the call; so does the accessor
+        // argument the callee's own body calls (`invokes_parameter_during_call`
+        // proved that row). Every other row, a read propagated from a deeper
+        // callee among them, stays attributed.
+        let direct_callee = (ambiguous_candidates.is_none()
+            && !file.ast.any_jsx_containing(call.span))
+        .then(|| lookup.function_for_symbol(symbol))
+        .flatten()
+        .filter(|(_, callee)| !callee.r#async && !callee.generator);
+        let read_is_direct = |read: &SummaryRead| -> bool {
+            let Some((callee_file, callee)) = direct_callee else {
+                return false;
+            };
+            if read.owner.is_none() {
+                return read.kind.as_deref() == Some("accessor")
+                    && read.origin == location(file.path.shared(), call.span);
+            }
+            let owned_here = target.is_some_and(|target| {
+                nodes[target].symbol.is_some() && nodes[target].symbol == read.owner
+            });
+            if !owned_here || read.origin.path.as_ref() != callee_file.path.as_str() {
+                return false;
+            }
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(read.origin.start_byte),
+                u32::try_from(read.origin.end_byte),
+            ) else {
+                return false;
+            };
+            let origin = Span::new(start, end);
+            callee.body.contains(origin)
+                && crate::owners::containing_ast_function(&callee_file.ast, origin)
+                    .is_some_and(|function| function.span == callee.span)
+        };
         for read in effective {
+            let direct = read_is_direct(&read);
             let accessor = read.display.to_string();
             // A summary read whose symbol is the callee itself is the export's
             // own contracted `reads`, not a value passed in.
@@ -6128,7 +6168,7 @@ fn interprocedural_result_reads_for_file(
                         file, call.span, execution, lookup,
                     ),
                     package_internal,
-                    summary_attributed: true,
+                    summary_attributed: !direct,
                 });
             }
         }

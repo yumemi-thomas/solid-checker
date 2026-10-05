@@ -1,10 +1,10 @@
 {
-  "status": "uncertifiable",
+  "status": "violation",
   "findings": [
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/polymorphic/App.tsx",
       "start": 179,
@@ -14,7 +14,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/polymorphic/App.tsx",
       "start": 217,

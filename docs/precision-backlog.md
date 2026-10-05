@@ -1,5 +1,22 @@
 # Precision backlog
 
+## A helper's read in its own body runs during the call (2026-10-05)
+
+ADR 0201. A summary-attributed strict read is proven again when the callee
+is one synchronous project function called outside JSX, and the read is a
+call written directly in its own body (or the accessor argument its body
+calls).
+
+- **Gained:**
+  - On the rc.13 corpus, violations go from 267 to 285 (+18 on 15 sites,
+    -0), all reviewed against runtime-confirmed ledger shapes.
+  - The app-pattern recall ledger has 28 of 29 runtime-detected misuses
+    proven, and no false positive.
+- **Still open:**
+  - two-level helper chains;
+  - callback props the child calls in its body;
+  - default-parameter reads, which are not attributed at all.
+
 ## Wrapped computes, nested handlers, and the A3 remainder (2026-10-05)
 
 ADR 0199 extension and ADR 0200. Code nested in an event-only prop literal,
@@ -459,8 +476,8 @@ A full re-triage of the 366 violations left on the 48-project sweep
     uncertifiable and nothing else.
   - Reopening a proven path needs the callee-timing facts the triage names,
     per pattern.
-  - This includes the simplest shape, a local arrow whose body reads directly
-    and that is called synchronously in the same scope
+  - This included the simplest shape, a local arrow whose body reads directly
+    and that is called synchronously in the same scope (proven again by ADR 0201)
     (`const doubled = () => count() * 2; doubled();`). The tsc-oracle ledger's
     SC1006 case for it now declares `checkerKind: "uncertifiable"` (updated
     2026-10-05; `make verify` had not reached the gate since). Proving that

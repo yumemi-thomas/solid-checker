@@ -1,10 +1,10 @@
 {
-  "status": "uncertifiable",
+  "status": "violation",
   "findings": [
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-member-callbacks-consumer/App.tsx",
       "start": 398,

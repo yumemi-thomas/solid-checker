@@ -4,7 +4,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/realistic-topology/App.tsx",
       "start": 858,
