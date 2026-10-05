@@ -16,8 +16,17 @@ open.
 - **Uncertifiable:** more imports now carry a contract that leaves claims
   open. `probus-hk` trades one "no contract" notice for per-export notices,
   and `compass-ui` (solid-query rc.0) gains them.
+- **`@solidjs/router` (same day):** probe-checked `returns` claims for
+  `useLocation`, `useParams`, `useSearchParams`, `useIsRouting`, `useMatch`,
+  `useHref` and `useResolvedPath`, in next.16, next.17, next.18 and next.26.
+  - next.19 to next.24 fail to load on rc.13 and get no claims.
+  - Corpus violations become 267 (+1 over the TanStack step). The new one is a
+    runtime-confirmed seeding read in `donegeon-client`; no other violation
+    moved.
+  - The admitted apps otherwise read these hooks inside functions, memos and
+    effects.
 - **Still open:**
-  - **Direct route component bodies.** A route component's body read is not
+  - **Direct route component bodies (TanStack).** A route component's body read is not
     probed. The router renders that body without a strict-read window, so
     rc.13 emits no runtime warning there, and the probe pairs read in a
     component rendered through JSX instead.

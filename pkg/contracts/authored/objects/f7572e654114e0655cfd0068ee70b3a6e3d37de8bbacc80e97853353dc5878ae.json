@@ -1,0 +1,294 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "d8ccd210a124825def22f663d056b49d72e316ea7268f2f5965bbee54c1ea872",
+            "path": "./dist/index.js",
+            "sha256": "049c51d5d4f366d753e7628165264d48c74dae2854d7e7033d4484c325fc1783"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "687dad4f3f4e4374125f244e3286d4c5167d83fb78a8b786ce63deba8610d383"
+          },
+          "exports": {
+            "RouterContext": "open-callable",
+            "_mergeSearchString": "open-callable",
+            "action": "open-callable",
+            "browserHistory": "open-callable",
+            "createBeforeLeave": "open-callable",
+            "createRouter": "open-callable",
+            "defineRoute": "open-callable",
+            "defineRoutes": "open-callable",
+            "hashHistory": "open-callable",
+            "int": "open-callable",
+            "liveQuery": "open-callable",
+            "memoryHistory": "open-callable",
+            "query": "open-callable",
+            "revalidate": "open-callable",
+            "useAction": "open-callable",
+            "useBeforeLeave": "open-callable",
+            "useHref": "authored-useHref",
+            "useIsRouting": "authored-useIsRouting",
+            "useLinkState": "open-callable",
+            "useLocation": "authored-useLocation",
+            "useMatch": "authored-useMatch",
+            "useNavigate": "open-callable",
+            "useParams": "authored-useParams",
+            "usePreloadRoute": "open-callable",
+            "useResolvedPath": "authored-useResolvedPath",
+            "useRouteMatches": "open-callable",
+            "useSearchParams": "authored-useSearchParams",
+            "useSubmissions": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./default"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-DQ58djANKYi4HZfE9J7vN9kAtAH/eKYkUj61cezfDrBae3A/cgthgdjQS9C8pNGtNeST6aA8GNhcFYKlUWn+zA==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "f51b8560517b5fcd01106c59e03aa341015d769f3bfd7e5fa2b0e9f25a1c1aee"
+    },
+    "name": "@solidjs/router",
+    "version": "2.0.0-next.18"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-useHref": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-useIsRouting": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-useLocation": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "store"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-useMatch": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-useParams": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "store"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-useResolvedPath": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-useSearchParams": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "tuple",
+              "items": [
+                {
+                  "kind": "store"
+                },
+                {
+                  "kind": "unknown"
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

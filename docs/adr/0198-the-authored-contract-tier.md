@@ -87,6 +87,12 @@ document cannot state honestly.
      other case field is refused rather than carried unprobed. Summary ids are
      readable (`authored-<export>`, `open-<shape>`), since decoding does not
      require content-addressed ids for a one-case document.
+   - Only browser cases are authored (export conditions that include
+     `browser`). The probes run in Chrome, so a claim is evidence for the
+     browser host and nothing else.
+   - Specs of several versions may share one directory of pairs (`"pairs"` in
+     `spec.json`; a `specs/_…` directory is not a spec). Each version is still
+     probed in its own install.
    - `check` (in `make verify` and `make contract-conformance`) fails when the
      written tier is not what `build` writes.
 8. **The development collector reads rc.13.** `feedback run` instruments the
@@ -128,3 +134,23 @@ document cannot state honestly.
   - Measured on the rc.13 corpus, after its lockfiles were made to name the
     rc.13 runtime they hold: violations 256 -> 266 (+10, -0). These are
     exactly the 10 ADR 0186 sites.
+- **`@solidjs/router`:** `returns` claims for seven hooks.
+  - Claims: `useLocation` and `useParams` return a store (getters and proxies
+    over memos); `useSearchParams` returns a tuple whose first item is a store
+    (the setter is not claimed); `useIsRouting`, `useMatch`, `useHref` and
+    `useResolvedPath` return accessors.
+  - Probed in every installed version that runs on rc.13:
+    - next.16, next.17, next.18 and next.26 pass all seven pairs;
+    - next.19 to next.24 cannot load on rc.13 (they import
+      `parseServerFunctionUrl`, which rc.13's `@solidjs/web` no longer
+      exports), so they get no claims.
+  - The checker flags each misuse twin and leaves each correct twin clean.
+  - Measured (corpus hidden npm lockfiles relocked as well): violations
+    256 -> 267 (+11, -0), the ten TanStack sites plus one router site, in
+    `donegeon-client` (`createSignal(…(location.search))` in a route
+    component body). A runtime twin of that shape on the app's install raises
+    `STRICT_READ_UNTRACKED` at the read: unlike TanStack's, this router
+    renders route components with a strict-read window.
+  - Not admitted where the installed integrity is not a stated fact:
+    `beacon-web` (binary `bun.lockb`, and a `package-lock.json` without
+    integrities) and `error-menu-web` (two Solid versions in one lockfile).

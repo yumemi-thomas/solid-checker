@@ -11,7 +11,7 @@
 //
 // A spec is a directory `pkg/contracts/authored/specs/<package>@<version>/`
 // holding `spec.json` and, per claimed export, `<export>.misuse.tsx` and
-// `<export>.correct.tsx`. `spec.json` names the package version, the Solid
+// `<export>.correct.tsx` (or naming a shared directory of them in `pairs`). `spec.json` names the package version, the Solid
 // runtime its claims are probed on, and per export the authored `call` and the
 // misuse rule its pair exercises.
 //
@@ -45,19 +45,26 @@ const read = path => JSON.parse(readFileSync(path, "utf8"));
 const [command, ...rest] = process.argv.slice(2);
 const option = name => { const index = rest.indexOf(name); return index >= 0 ? rest[index + 1] : undefined; };
 
-const specs = readdirSync(join(TIER, "specs")).sort().map(name => {
+// A directory whose name starts with `_` holds probe pairs that several specs
+// share (`"pairs"` in spec.json, relative to the spec); it is not a spec.
+const specs = readdirSync(join(TIER, "specs")).filter(name => !name.startsWith("_")).sort().map(name => {
   const directory = join(TIER, "specs", name);
   const spec = read(join(directory, "spec.json"));
   assert.equal(name, `${spec.package.replace("/", "+")}@${spec.version}`, `${name}: directory names another version`);
-  return { ...spec, name, directory };
+  return { ...spec, name, directory, pairs: join(directory, spec.pairs ?? ".") };
 });
 const accepted = read(join(ACCEPTED, "index.json"));
 
-/** The certified cases of one version: one per (entrypoint, conditions, target). */
+/**
+ * The certified cases of one version: one per (entrypoint, conditions, target).
+ * Only browser cases: the probes run in Chrome, so a claim is evidence for the
+ * browser host and nothing else.
+ */
 function certifiedCases(spec) {
   const cases = new Map();
   for (const bundle of accepted.bundles) {
     if (bundle.packageName !== spec.package || bundle.packageVersion !== spec.version) continue;
+    if (!bundle.exportConditions.includes("browser")) continue;
     const key = JSON.stringify([bundle.specifier, bundle.requestedEntrypoint, bundle.exportConditions, bundle.runtimeTarget]);
     if (!cases.has(key)) cases.set(key, bundle);
   }
@@ -107,8 +114,8 @@ function probe(browser) {
     const identity = probeInstall(spec, realpathSync(install));
     const cases = Object.entries(spec.exports).map(([name, claim]) => ({
       id: `${spec.name}#${name}`, package: spec.package, version: spec.version, export: name, rule: claim.rule,
-      misuse: readFileSync(join(spec.directory, `${name}.misuse.tsx`), "utf8"),
-      correct: readFileSync(join(spec.directory, `${name}.correct.tsx`), "utf8")
+      misuse: readFileSync(join(spec.pairs, `${name}.misuse.tsx`), "utf8"),
+      correct: readFileSync(join(spec.pairs, `${name}.correct.tsx`), "utf8")
     }));
     const scratch = mkdtempSync(join(tmpdir(), "solid-checker-authored-"));
     writeFileSync(join(scratch, "cases.json"), json({ cases }));
