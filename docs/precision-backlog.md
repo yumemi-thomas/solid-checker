@@ -27707,6 +27707,31 @@ do with conditions or resolution.
 None of the four is a defect. Each is a reviewed decision with a measured price,
 and the two cheapest by sites are the two that are not premise work at all.
 
+## An application is the whole program (2026-10-05, ADR 0193)
+
+The program boundary defaults by the project's nearest `package.json`: a
+private or unpublished package is closed-world, a published library and a
+project with no readable manifest stay open. Owner decision of 2026-10-05.
+
+- **38-app browser sweep** (against ADR 0192's `a2-browser.json`):
+  - **+1 true positive:** `viviana-ui-web` `glasselated.ts:48`, an `onCleanup`
+    inside `onSettled` in a hook its one caller runs in a component body. It
+    was `missing-owner`; it is now `leaf-owner-forbidden-call`. The published
+    `@solidjs/signals` rc.9 dev build throws `CLEANUP_IN_FORBIDDEN_SCOPE` for
+    `onCleanup` under an owner flagged `CONFIG_CHILDREN_FORBIDDEN`.
+  - **−8 false positives:** `components-return-once` on an early return over
+    a prop (`if (props.bare) return inner;`). Every enumerated call site
+    passes a static value (a boolean attribute, a literal, or nothing), so
+    the branch never changes.
+  - **Uncertifiable:** 8,250 → 7,277 (860 distinct sites removed, none added).
+- **Not changed:** a component nothing references still escapes (an empty
+  reference list is a missing fact), and a value-passed, aliased or spread
+  component still escapes.
+- **Remaining approximation:** a non-component export that only a framework
+  calls (no project call site) gets no owner context, so a defect inside it
+  that the framework's call would expose is not reported. It is a false
+  negative, never a finding.
+
 ## Execution-role false positives: the lexical default is inverted (2026-10-03, development-feedback sweep)
 
 Source: the 48-project defect sweep triage (`triage-strict.md`, `triage-other.md`).

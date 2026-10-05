@@ -220,6 +220,9 @@ impl DiagnosticSession {
             .validate()
             .map_err(BackendError::Contract)?;
         rule_options.runtime = enablement.runtime;
+        if rule_options.runtime.program_boundary.is_none() {
+            rule_options.runtime.program_boundary = Some(default_program_boundary(project));
+        }
         rule_options.development_feedback = enablement.feedback_facts;
         // Scoped to this generation's facts: a gap about named exports is due
         // only where the project reaches one (`release_scope`), so the answer
@@ -3753,6 +3756,53 @@ fn discover_package_install(
     Ok(None)
 }
 
+/// The program boundary a check uses when the user selected none (ADR 0193).
+///
+/// An application is the whole program: every caller of its exported
+/// components and hooks is one of its own call sites. A published library is
+/// not. The nearest `package.json` at or above the project decides:
+///
+/// - `"private": true` is an application;
+/// - otherwise, a manifest that publishes an entry (`exports`, `main`,
+///   `module`, `types`, `typings` or `bin`) is a library;
+/// - a manifest that publishes nothing is an application.
+///
+/// No manifest, or one that cannot be read, keeps the open boundary: a build
+/// that cannot tell stays fail-closed.
+pub(crate) fn default_program_boundary(project: &Path) -> solid_reactive_ir::ProgramBoundary {
+    use solid_reactive_ir::ProgramBoundary;
+    let start = if project.is_dir() {
+        project
+    } else {
+        project.parent().unwrap_or(project)
+    };
+    let Some(manifest) = start
+        .ancestors()
+        .map(|directory| directory.join("package.json"))
+        .find(|candidate| candidate.is_file())
+    else {
+        return ProgramBoundary::Open;
+    };
+    let Ok(text) = std::fs::read_to_string(&manifest) else {
+        return ProgramBoundary::Open;
+    };
+    let Ok(serde_json::Value::Object(fields)) = serde_json::from_str::<serde_json::Value>(&text)
+    else {
+        return ProgramBoundary::Open;
+    };
+    if fields.get("private") == Some(&serde_json::Value::Bool(true)) {
+        return ProgramBoundary::Closed;
+    }
+    let publishes = ["exports", "main", "module", "types", "typings", "bin"]
+        .iter()
+        .any(|field| fields.contains_key(*field));
+    if publishes {
+        ProgramBoundary::Open
+    } else {
+        ProgramBoundary::Closed
+    }
+}
+
 /// Loads the project's per-rule options from the nearest
 /// `.solid-checker/rule-options.json`, walking ancestors exactly as local
 /// contract discovery does. A project without one gets upstream's defaults;
@@ -4762,6 +4812,44 @@ mod tests {
         assert!(super::discover_rule_options(&directory).is_err());
 
         std::fs::remove_dir_all(&directory).ok();
+    }
+
+    /// ADR 0193: an application is closed-world, a published library is not,
+    /// and a project with no readable manifest keeps the open boundary.
+    #[test]
+    fn the_default_program_boundary_follows_the_nearest_manifest() {
+        use solid_reactive_ir::ProgramBoundary::{Closed, Open};
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-program-boundary-{}",
+            std::process::id()
+        ));
+        let boundary = |manifest: Option<&str>| {
+            let _ = std::fs::remove_dir_all(&root);
+            let project = root.join("app/src");
+            std::fs::create_dir_all(&project).unwrap();
+            if let Some(manifest) = manifest {
+                std::fs::write(root.join("app/package.json"), manifest).unwrap();
+            }
+            super::default_program_boundary(&project.join("tsconfig.json"))
+        };
+        assert_eq!(
+            boundary(Some(r#"{"private": true, "exports": "./x.js"}"#)),
+            Closed
+        );
+        assert_eq!(
+            boundary(Some(r#"{"name": "app"}"#)),
+            Closed,
+            "publishes nothing"
+        );
+        assert_eq!(
+            boundary(Some(r#"{"name": "lib", "exports": "./x.js"}"#)),
+            Open
+        );
+        assert_eq!(boundary(Some(r#"{"name": "lib", "main": "x.js"}"#)), Open);
+        assert_eq!(boundary(Some(r#"{"name": "lib", "bin": "x.js"}"#)), Open);
+        assert_eq!(boundary(Some("not json")), Open, "an unreadable manifest");
+        assert_eq!(boundary(None), Open, "no manifest above the project");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// A discovered catalog that needs trust nobody supplied is withheld and

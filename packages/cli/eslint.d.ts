@@ -11,7 +11,9 @@ export interface SolidCheckerRuntimeSettings {
    * Whether code outside this project may import from it. `"closed"` asserts
    * the analyzed files are the whole program, which lets an exported symbol's
    * caller set be enumerated. It never licenses guessing one: every reference
-   * must still resolve to a use the analyzer understands.
+   * must still resolve to a use the analyzer understands. When unset, the
+   * project's nearest `package.json` decides: a private or unpublished
+   * package is closed, a published library is open (ADR 0193).
    */
   programBoundary?: "open" | "closed" | (string & {});
   /** Exact package/framework conditions selected for this analysis. */
