@@ -20,6 +20,16 @@
       "start": 7,
       "end": 77,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/closed-export-declaration-sibling/node_modules/linked/helpers.ts",
+      "start": 7,
+      "end": 77,
+      "fixes": 0
     }
   ]
 }

@@ -83,7 +83,8 @@ compiler knows that.
      bundler maps it to (`index.ts`). Those that are project files are
      followed; any other is a runtime file outside the program;
    - a file whose real path lies under `node_modules` is an installed
-     package and exposes no project module;
+     package and exposes no project module, unless the package's directory
+     holds a program file (an analyzed workspace source);
    - any other target, such as a declaration whose runtime module a package
      `main`, a link or a `paths` alias selects, may expose anything.
 
@@ -114,8 +115,6 @@ compiler knows that.
 
      A specifier with a backslash, an empty segment, a query or fragment, or
      `..` above the root is not taken as exact;
-   - a file whose real path lies under `node_modules` is not an analyzed
-     source;
    - neither `paths` nor a bundler remaps a Node built-in name onto a project
      file, except where the compiler attests such a mapping for that name;
    - under `preserveSymlinks`, a workspace package reached through its link

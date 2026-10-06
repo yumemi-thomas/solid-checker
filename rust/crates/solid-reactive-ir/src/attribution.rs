@@ -677,7 +677,8 @@ impl<'a> CallGraph<'a, '_> {
     ///   (`../dist/index.js`) loads exactly that file, or its TypeScript
     ///   source (`index.ts`): those that are project files are followed, and
     ///   any other is a runtime file outside the program (ADR 0193);
-    /// - a file installed under `node_modules` exposes no project module;
+    /// - a file installed under `node_modules` exposes no project module,
+    ///   unless the package's directory holds a program file;
     /// - any other target, such as a declaration whose runtime module a
     ///   package `main` or a link selects, may expose anything.
     ///
@@ -721,8 +722,25 @@ impl<'a> CallGraph<'a, '_> {
                     .filter(|candidate| self.file(candidate).is_some())
                     .any(|candidate| self.module_exposes(candidate, path, visiting));
             }
-            return !(row.resolution == solid_facts::ImportResolution::NodeModules
-                && resolved.contains("/node_modules/"));
+            if row.resolution != solid_facts::ImportResolution::NodeModules
+                || !resolved.contains("/node_modules/")
+            {
+                return true;
+            }
+            // An installed package exposes no project module, unless its
+            // directory holds a program file: an analyzed workspace source
+            // installed there. An unknown package directory may hold one.
+            return row
+                .package_manifest
+                .as_deref()
+                .and_then(|manifest| manifest.rsplit_once('/'))
+                .is_none_or(|(directory, _)| {
+                    let directory = format!("{directory}/");
+                    self.lookup
+                        .files()
+                        .iter()
+                        .any(|file| file.path.as_str().starts_with(&directory))
+                });
         }
         if !specifier.starts_with('.') {
             if !crate::runtime_semantics::is_node_builtin_module(specifier) {

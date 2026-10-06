@@ -25,11 +25,10 @@ specifier loads.
     sources;
   - a relative specifier with an explicit extension loads that file or its
     `.ts` source (no relative aliases, `.js`-named directories, or symlinked
-    relative directories);
-  - nothing under `node_modules` is an analyzed source.
-
-  Removing the last two needs runtime-resolution facts, such as the
-  bundler's resolver.
+    relative directories).
+  Removing the last needs a runtime-resolution fact, such as the bundler's
+  resolver. A package under `node_modules` whose directory holds a program
+  file is followed rather than assumed outside the program.
 - **Still open:** components entered through JSX, class members, functions
   registered with a package (Hono, Convex), local value escapes, tests and
   stories.

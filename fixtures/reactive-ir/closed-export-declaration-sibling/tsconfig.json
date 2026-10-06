@@ -10,6 +10,8 @@
   "include": [
     "*.ts",
     "*.js",
-    "bridge2/*.ts"
+    "bridge2/*.ts",
+    "node_modules/linked/helpers.ts",
+    "node_modules/linked/bridge.js"
   ]
 }

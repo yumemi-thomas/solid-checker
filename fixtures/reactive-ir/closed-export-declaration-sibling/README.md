@@ -16,3 +16,9 @@ TypeScript source) at run time: `bridge.js` is a program file, it re-exports
 (`surface.d.ts`), while its `main` selects `runtime.ts` at run time, which
 re-exports `helper2`. Nothing ties the declaration to that runtime module, so
 any project file may be it: `helper2` stays (`SC9012`).
+
+`linked` is installed under `node_modules`, and the compiler resolves it to
+its declaration (`types`). Its source, `helpers.ts`, is part of this program,
+so the package is not outside it, and its runtime `main` may re-export
+`helper3`. A package directory that holds a program file is followed like any
+other unknown target: `helper3` stays (`SC9012`).
