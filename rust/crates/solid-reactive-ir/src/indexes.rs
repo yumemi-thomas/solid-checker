@@ -322,6 +322,9 @@ pub(super) struct SemanticLookup<'a> {
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
     resolved_contracts: &'a crate::contracts::ResolvedContracts,
     functions_by_symbol: OnceLock<HashMap<&'a str, SymbolFunction>>,
+    /// ADR 0209: the property names some assignment in the project writes
+    /// (`x.name = …`), and whether any writes through a `prototype`.
+    assigned_member_names: OnceLock<(HashSet<&'a str>, bool)>,
     entities_by_location: OnceLock<HashMap<(&'a str, u64, u64), &'a EntityFact>>,
     contained_entities_by_path: OnceLock<HashMap<&'a str, Vec<&'a EntityFact>>>,
     descriptors_by_symbol: OnceLock<HashMap<&'a str, &'a TypeDescriptor>>,
@@ -449,6 +452,7 @@ impl<'a> SemanticLookup<'a> {
             symbol_names,
             resolved_contracts,
             functions_by_symbol: OnceLock::new(),
+            assigned_member_names: OnceLock::new(),
             entities_by_location: OnceLock::new(),
             contained_entities_by_path: OnceLock::new(),
             descriptors_by_symbol: OnceLock::new(),
@@ -1122,6 +1126,80 @@ impl<'a> SemanticLookup<'a> {
     /// they are called. Building this reverse index once keeps that proof
     /// linear in project facts instead of rescanning every binding for every
     /// call site.
+    /// ADR 0209: the project class `symbol` declares: its one declaration is a
+    /// class declaration, written at the name of a class in an analyzed file.
+    /// A symbol with several declarations (a class merged with an interface or
+    /// a namespace) names no exact class.
+    pub(super) fn class_for_symbol(
+        &self,
+        symbol: &str,
+    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::ClassFact)> {
+        let [declaration] = self.symbols_by_id().get(symbol)?.declarations() else {
+            return None;
+        };
+        if &*declaration.kind != "class" {
+            return None;
+        }
+        let file = self
+            .facts
+            .files
+            .iter()
+            .find(|file| *declaration.location.path == *file.path.as_str())?;
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(declaration.location.start_byte),
+            u32::try_from(declaration.location.end_byte),
+        ) else {
+            return None;
+        };
+        let at = Span::new(start, end);
+        let class = file.ast.classes.iter().find(|class| {
+            class
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == at || class.span == at)
+        })?;
+        Some((file, class))
+    }
+
+    /// ADR 0209: whether some assignment in the project writes a property
+    /// named `name` on any object, or writes through any `prototype`.
+    pub(super) fn member_name_may_be_reassigned(&self, name: &str) -> bool {
+        let (names, prototype) = self.assigned_member_names.get_or_init(|| {
+            let facts: &'a ProjectFacts = self.facts;
+            let mut names = HashSet::new();
+            let mut prototype = false;
+            for file in &facts.files {
+                for assignment in &file.ast.assignments {
+                    let target = file.ast.peel_ts_sugar_span(assignment.target);
+                    let text = file.source_text(target).unwrap_or_default();
+                    if text.contains("prototype") {
+                        prototype = true;
+                    }
+                    if let Some(member) =
+                        file.ast.members.iter().find(|member| member.span == target)
+                        && let Some(property) = file.source_text(member.property)
+                    {
+                        names.insert(property);
+                    } else if let Some(literal) = file
+                        .ast
+                        .literal_computed_members
+                        .iter()
+                        .find(|member| member.span == target)
+                    {
+                        names.insert(literal.key.as_str());
+                    }
+                    // A dynamic key (`x[key] = …`) is left out: writing one onto
+                    // a class instance is a type error under the published
+                    // declarations unless the class has an index signature or
+                    // the write casts, the same trust every resolved member
+                    // call here rests on.
+                }
+            }
+            (names, prototype)
+        });
+        *prototype || names.contains(name)
+    }
+
     pub(super) fn binding_at_reference(
         &self,
         path: &str,

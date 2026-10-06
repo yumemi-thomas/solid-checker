@@ -1,5 +1,16 @@
 # Precision backlog
 
+## A method of an exact instance is followed in a leaf scope (2026-10-06)
+
+ADR 0209. A method call in a leaf owner's callback is followed into its body
+when the receiver is a `const` bound to `new C(…)` and the method is
+declared in `C`, and so is `this.m()` inside it.
+
+- **Gained:** rc.13 corpus uncertifiable 3,382 to 3,380.
+- **Still open:** methods reached through properties
+  (`this.projectionMatrix.fromPerspective`), instances from callers or `let`,
+  inherited methods through a binding, and package classes.
+
 ## An authored contract for one patched install (2026-10-06)
 
 ADR 0208. An authored entry may state that its snapshot root is of a patched

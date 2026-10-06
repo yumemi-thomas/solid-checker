@@ -157,6 +157,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     &mut kinds,
                     &mut visited,
                     8,
+                    None,
                 );
                 let via = file
                     .source_text(callback_span)
@@ -274,6 +275,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     &mut kinds,
                     &mut visited,
                     8,
+                    None,
                 );
                 if kinds.is_empty() && complete {
                     continue;
@@ -517,6 +519,80 @@ struct LeafScopeResolution<'a, 'lookup> {
     safe_call_symbols: &'a HashSet<SymbolId>,
 }
 
+/// ADR 0209: the class a call's `this` is exactly an instance of, when the
+/// function the call is written in is a method declared in that class and was
+/// entered through such an instance. Inside an inherited method `this` may be
+/// a subclass instance that overrides what `this.m` names, so no class is
+/// carried there.
+type ExactThis = Option<(String, Span)>;
+
+/// ADR 0209: the method a member call runs, when its receiver is exactly an
+/// instance of one project class.
+///
+/// The receiver is either `this` under [`ExactThis`], or a `const` bound
+/// directly to `new C(…)` whose callee resolves to a project class. Then the
+/// object's class is exactly `C`. The method TypeScript resolves runs when it
+/// is declared in `C` itself, or, through `this` in `C`'s own method, when `C`
+/// inherits it. Not when
+/// some assignment writes a member of that name, or anything writes through a
+/// `prototype` (`member_name_may_be_reassigned`). The method itself is
+/// returned with the class its `this` is exact for, when it is declared in
+/// that class.
+fn exact_instance_method<'a>(
+    lookup: &SemanticLookup<'a>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    exact_this: &ExactThis,
+) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact, ExactThis)> {
+    if call.construct {
+        return None;
+    }
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    let member = file
+        .ast
+        .members
+        .iter()
+        .find(|member| member.span == callee)?;
+    let name = file.source_text(member.property)?;
+    if lookup.member_name_may_be_reassigned(name) {
+        return None;
+    }
+    let receiver = file.ast.peel_ts_sugar_span(member.object);
+    let through_this = file.source_text(receiver) == Some("this");
+    let class = if through_this {
+        exact_this
+            .clone()
+            .filter(|(path, _)| path == file.path.as_str())?
+    } else {
+        let (binding_file, binding, _) =
+            lookup.binding_at_reference(file.path.as_str(), receiver)?;
+        if !binding.immutable || binding.shape != solid_facts::ast::BindingShape::Identifier {
+            return None;
+        }
+        let construction = binding_file
+            .ast
+            .call_at(binding_file.ast.peel_ts_sugar_span(binding.initializer?))
+            .filter(|construction| construction.construct)?;
+        let class_symbol = lookup.callee_symbol(binding_file, construction.callee)?;
+        let (class_file, class) = lookup.class_for_symbol(class_symbol)?;
+        (class_file.path.to_string(), class.span)
+    };
+    let symbol = lookup.callee_symbol(file, call.callee)?;
+    let (method_file, method) = lookup.function_for_symbol(symbol)?;
+    method.method_name.as_ref()?;
+    let own = method_file.path.as_str() == class.0 && class.1.contains(method.span);
+    // Through a binding, TypeScript resolves the member on the binding's type,
+    // which an annotation can widen to a superclass (`const d: Base = new
+    // Derived()` names `Base.run` while `Derived.run` runs). Only a method
+    // declared in the constructed class itself is the one that runs. Inside
+    // that class's own method, `this` is typed by that class, so an inherited
+    // resolution is exact too.
+    if !own && !through_this {
+        return None;
+    }
+    Some((method_file, method, own.then_some(class)))
+}
+
 fn helper_forbidden_operations(
     resolution: LeafScopeResolution<'_, '_>,
     call_file: &FileFacts,
@@ -524,6 +600,7 @@ fn helper_forbidden_operations(
     kinds: &mut Vec<crate::LeafOwnerOperationKind>,
     visited: &mut Vec<(String, Span)>,
     depth: usize,
+    exact_this: ExactThis,
 ) -> bool {
     let LeafScopeResolution {
         lookup,
@@ -532,6 +609,19 @@ fn helper_forbidden_operations(
     } = resolution;
     if depth == 0 {
         return false;
+    }
+    if let Some((method_file, method, method_this)) =
+        exact_instance_method(lookup, call_file, call, &exact_this)
+    {
+        return function_forbidden_operations(
+            resolution,
+            method_file,
+            method,
+            kinds,
+            visited,
+            depth,
+            method_this,
+        );
     }
     let Some(symbol) = lookup.entities().at(call_file.path.as_str(), call.callee) else {
         return false;
@@ -545,7 +635,7 @@ fn helper_forbidden_operations(
             .and_then(|resolved| resolved.declaration.as_ref())
             .is_some_and(|declaration| declaration.standard_library);
     };
-    function_forbidden_operations(resolution, helper_file, helper, kinds, visited, depth)
+    function_forbidden_operations(resolution, helper_file, helper, kinds, visited, depth, None)
 }
 
 fn function_forbidden_operations(
@@ -555,6 +645,7 @@ fn function_forbidden_operations(
     kinds: &mut Vec<crate::LeafOwnerOperationKind>,
     visited: &mut Vec<(String, Span)>,
     depth: usize,
+    exact_this: ExactThis,
 ) -> bool {
     let LeafScopeResolution {
         lookup,
@@ -573,11 +664,10 @@ fn function_forbidden_operations(
     let entities = lookup.entities();
     let mut complete = true;
     for inner in helper_file.ast.calls_within(helper.body) {
-        // A call inside a nested function is not executed by calling the
-        // helper; it belongs to whatever later invokes that function.
-        let nested = containing_ast_function(&helper_file.ast, inner.span)
-            .is_some_and(|function| function.span != helper.span);
-        if nested {
+        // A call inside a nested function -- its body or its parameter list
+        // (ADR 0204) -- is not executed by calling the helper; it belongs to
+        // whatever later invokes that function.
+        if !crate::owners::written_directly_in(&helper_file.ast, helper, inner.span) {
             continue;
         }
         // After an `await` that every run of the helper reaches first, the
@@ -606,6 +696,7 @@ fn function_forbidden_operations(
                 kinds,
                 visited,
                 depth - 1,
+                exact_this.clone(),
             );
             continue;
         };
