@@ -50,6 +50,33 @@ fn constant_string_key(file: &FileFacts, key: Span) -> Option<String> {
 /// destructuring pattern), or as a loop head (`for (x of …)`). A write of a
 /// member of it (`x.y = …`) does not rebind it.
 pub(super) fn binding_written(file: &FileFacts, declaration: Span) -> bool {
+    // A redeclaration (`var xs = …` over a parameter, a second `function f`)
+    // writes the same binding without any reference. Any other declaration
+    // of the same name in the scope counts, a shadowing one included.
+    let name = file.source_text(declaration);
+    let scope = file
+        .ast
+        .functions
+        .iter()
+        .filter(|function| function.span.contains(declaration))
+        .min_by_key(|function| function.span.end - function.span.start)
+        .map_or(Span::new(0, u32::MAX), |function| function.span);
+    let redeclared = file.ast.bindings.iter().any(|binding| {
+        scope.contains(binding.declaration)
+            && binding
+                .names
+                .iter()
+                .any(|other| other.span != declaration && file.source_text(other.span) == name)
+    }) || file.ast.functions.iter().any(|function| {
+        scope.contains(function.span)
+            && function.kind == solid_facts::ast::FunctionKind::Declaration
+            && function.name.as_ref().is_some_and(|other| {
+                other.span != declaration && file.source_text(other.span) == name
+            })
+    });
+    if redeclared {
+        return true;
+    }
     let targets = file
         .ast
         .assignments
@@ -1291,60 +1318,83 @@ impl<'a> SemanticLookup<'a> {
             let mut names = HashSet::new();
             let mut prototype = false;
             for file in &facts.files {
-                for assignment in &file.ast.assignments {
-                    let target = file.ast.peel_ts_sugar_span(assignment.target);
+                let targets = file
+                    .ast
+                    .assignments
+                    .iter()
+                    .map(|assignment| assignment.target)
+                    .chain(file.ast.iteration_targets.iter().copied());
+                for target in targets {
+                    let target = file.ast.peel_ts_sugar_span(target);
                     let text = file.source_text(target).unwrap_or_default();
-                    // A named write through a prototype (`C.prototype.m = f`)
-                    // replaces the member it names, which the name records.
-                    // Only a write that replaces a prototype itself
-                    // (`C.prototype = …`) or writes one at a key no fact names
-                    // (`C.prototype[key] = …`) may replace any member.
-                    let computed = file.ast.computed_members.binary_search(&target).is_ok();
-                    if computed {
-                        // A computed write names its key only when the key is a
-                        // literal, or a `const` bound to a string literal.
-                        // Any other key, on a prototype, may be any member.
-                        let member = file.ast.members.iter().find(|member| member.span == target);
-                        if let Some(literal) = file
-                            .ast
-                            .literal_computed_members
-                            .iter()
-                            .find(|member| member.span == target)
-                        {
-                            names.insert(literal.key.to_string());
-                            if literal.key.as_str() == "prototype" {
-                                prototype = true;
-                            }
-                        } else if let Some(key) =
-                            member.and_then(|member| constant_string_key(file, member.property))
-                        {
-                            if key == "prototype" {
-                                prototype = true;
-                            }
-                            names.insert(key);
-                        } else if member.is_none_or(|member| {
-                            file.source_text(member.object)
-                                .unwrap_or_default()
-                                .contains("prototype")
-                        }) {
-                            prototype = true;
-                        }
-                    } else if let Some(member) =
-                        file.ast.members.iter().find(|member| member.span == target)
-                        && let Some(property) = file.source_text(member.property)
-                    {
-                        names.insert(property.to_string());
-                        if property == "prototype" {
-                            prototype = true;
-                        }
-                    } else if text.contains("prototype") {
+                    // Every member written by the target: the target itself,
+                    // or a leaf of a destructuring pattern (`[c.run] = …`) or
+                    // loop head (`for (c.run of …)`).
+                    // A member that is another written member's object
+                    // (`C.prototype` in `C.prototype.m = f`) is read, not
+                    // written.
+                    let inside = file
+                        .ast
+                        .members
+                        .iter()
+                        .filter(|member| target.contains(member.span))
+                        .collect::<Vec<_>>();
+                    let mut written = inside
+                        .iter()
+                        .copied()
+                        .filter(|member| {
+                            !inside.iter().any(|outer| {
+                                file.ast.peel_ts_sugar_span(outer.object) == member.span
+                            })
+                        })
+                        .peekable();
+                    if written.peek().is_none() && text.contains("prototype") {
                         prototype = true;
                     }
-                    // A dynamic key (`x[key] = …`) is left out: writing one onto
-                    // a class instance is a type error under the published
-                    // declarations unless the class has an index signature or
-                    // the write casts, the same trust every resolved member
-                    // call here rests on.
+                    for member in written {
+                        if file
+                            .ast
+                            .computed_members
+                            .binary_search(&member.span)
+                            .is_ok()
+                        {
+                            // A computed write names its key only when the key is
+                            // a literal, or a `const` bound to a string literal.
+                            // Any other key, on a prototype, may be any member.
+                            if let Some(literal) = file
+                                .ast
+                                .literal_computed_members
+                                .iter()
+                                .find(|literal| literal.span == member.span)
+                            {
+                                names.insert(literal.key.to_string());
+                                if literal.key.as_str() == "prototype" {
+                                    prototype = true;
+                                }
+                            } else if let Some(key) = constant_string_key(file, member.property) {
+                                if key == "prototype" {
+                                    prototype = true;
+                                }
+                                names.insert(key);
+                            } else if file
+                                .source_text(member.object)
+                                .unwrap_or_default()
+                                .contains("prototype")
+                            {
+                                prototype = true;
+                            }
+                        } else if let Some(property) = file.source_text(member.property) {
+                            names.insert(property.to_string());
+                            if property == "prototype" {
+                                prototype = true;
+                            }
+                        }
+                    }
+                    // A dynamic key not spelled through a prototype (`c[key] = f`
+                    // with `key: keyof C`, or through a prototype alias) is not
+                    // modeled. Like `Object.defineProperty`, it is a reflective
+                    // write this trust boundary leaves out (ADR 0215): vetoing
+                    // every dynamic write would refuse every `xs[i] = v`.
                 }
             }
             (names, prototype)
@@ -1695,8 +1745,11 @@ impl<'a> SemanticLookup<'a> {
                     let previous = updater
                         .parameters
                         .first()
+                        // A default replaces `undefined` with a value nothing
+                        // proves, so a defaulted previous value is not assumed.
                         .filter(|parameter| {
                             parameter.shape == solid_facts::ast::BindingShape::Identifier
+                                && parameter.initializer.is_none()
                         })
                         .and_then(|parameter| parameter.names.first())
                         .map(|name| name.span)
@@ -1804,7 +1857,18 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         function: &solid_facts::ast::FunctionFact,
     ) -> bool {
-        if function.method_name.is_some() {
+        // A class element's or an object literal method's own function. A
+        // function nested inside a method inherits its `method_name`, so that
+        // field alone says nothing.
+        let element_function = file.ast.classes.iter().any(|class| {
+            class
+                .elements
+                .iter()
+                .any(|element| element.value == Some(function.span))
+        }) || file.ast.object_properties.iter().any(|property| {
+            !property.data && file.ast.peel_ts_sugar_span(property.value) == function.span
+        });
+        if element_function {
             return true;
         }
         if function.kind == solid_facts::ast::FunctionKind::Declaration {

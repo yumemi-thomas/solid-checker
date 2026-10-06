@@ -793,8 +793,26 @@ fn standard_library_argument_operations(
     }
     let mut complete = true;
     for (index, argument) in call.arguments.iter().enumerate() {
+        // An object literal's accessors run when the host reads them, whether
+        // it is written here or bound to a `const` and named here.
+        if argument.value == solid_facts::ast::ArgumentValueKind::Identifier
+            && resolution
+                .lookup
+                .binding_at_reference(
+                    file.path.as_str(),
+                    file.ast.peel_ts_sugar_span(argument.span),
+                )
+                .is_some_and(|(binding_file, binding, _)| {
+                    binding.initializer_value_kind == solid_facts::ast::RuntimeValueKind::Object
+                        && binding.initializer.is_some_and(|initializer| {
+                            object_literal_has_accessor(binding_file, initializer)
+                        })
+                })
+        {
+            complete = false;
+            continue;
+        }
         if crate::runtime_semantics::literal_argument_is_not_callable(argument.runtime_value_kind) {
-            // An object literal's accessors run when the host reads them.
             if argument.runtime_value_kind == solid_facts::ast::RuntimeValueKind::Object
                 && object_literal_has_accessor(file, argument.span)
             {
@@ -873,8 +891,26 @@ fn setter_updater_operations(
 ) -> bool {
     let mut complete = true;
     for argument in &call.arguments {
+        // An object literal's accessors run when the host reads them, whether
+        // it is written here or bound to a `const` and named here.
+        if argument.value == solid_facts::ast::ArgumentValueKind::Identifier
+            && resolution
+                .lookup
+                .binding_at_reference(
+                    file.path.as_str(),
+                    file.ast.peel_ts_sugar_span(argument.span),
+                )
+                .is_some_and(|(binding_file, binding, _)| {
+                    binding.initializer_value_kind == solid_facts::ast::RuntimeValueKind::Object
+                        && binding.initializer.is_some_and(|initializer| {
+                            object_literal_has_accessor(binding_file, initializer)
+                        })
+                })
+        {
+            complete = false;
+            continue;
+        }
         if crate::runtime_semantics::literal_argument_is_not_callable(argument.runtime_value_kind) {
-            // An object literal's accessors run when the host reads them.
             if argument.runtime_value_kind == solid_facts::ast::RuntimeValueKind::Object
                 && object_literal_has_accessor(file, argument.span)
             {
@@ -964,45 +1000,49 @@ fn function_forbidden_operations(
     visited.push(key);
     let dialect = lookup.dialect;
     let entities = lookup.entities();
-    // Calling a generator runs none of its body, only its parameter list.
-    if helper.generator {
-        return helper
-            .parameters
-            .iter()
-            .all(|parameter| parameter.initializer.is_none());
-    }
-    let mut complete = true;
-    // The invoked function's own defaults run when the call omits their
-    // argument. Whether one runs is not decided here, so an operation there,
-    // or a call there the walk cannot follow, leaves the obligation open.
-    for default in helper
+    // The parameter list runs on entry: its defaults, top-level or nested in
+    // a destructuring pattern, and its computed keys. Whether a default runs
+    // depends on the argument, which is not decided here, so an operation
+    // there, or a call there the walk cannot follow, leaves the obligation
+    // open.
+    let parameter_spans = helper
         .parameters
         .iter()
-        .filter_map(|parameter| parameter.initializer)
-    {
-        for inner in helper_file.ast.calls_within(default) {
-            if helper_file
-                .ast
-                .functions_within(default)
-                .any(|nested| nested.span.contains(inner.span))
-            {
-                continue;
-            }
-            let mut possible = Vec::new();
-            let mut scratch = visited.clone();
-            complete &= call_primitive_name(helper_file, inner, entities, symbol_names, dialect)
-                .is_none()
-                && helper_forbidden_operations(
-                    resolution,
-                    helper_file,
-                    inner,
-                    &mut possible,
-                    &mut scratch,
-                    depth - 1,
-                    exact_this.clone(),
-                )
-                && possible.is_empty();
-        }
+        .flat_map(|parameter| std::iter::once(parameter.pattern).chain(parameter.initializer))
+        .collect::<Vec<_>>();
+    let mut parameter_calls = helper_file
+        .ast
+        .calls
+        .iter()
+        .filter(|inner| {
+            parameter_spans.iter().any(|span| span.contains(inner.span))
+                && !helper_file.ast.functions.iter().any(|nested| {
+                    nested.span != helper.span
+                        && helper.span.contains(nested.span)
+                        && nested.span.contains(inner.span)
+                })
+        })
+        .peekable();
+    // Calling a generator runs none of its body, only its parameter list.
+    if helper.generator {
+        return parameter_calls.peek().is_none();
+    }
+    let mut complete = true;
+    for inner in parameter_calls {
+        let mut possible = Vec::new();
+        let mut scratch = visited.clone();
+        complete &= call_primitive_name(helper_file, inner, entities, symbol_names, dialect)
+            .is_none()
+            && helper_forbidden_operations(
+                resolution,
+                helper_file,
+                inner,
+                &mut possible,
+                &mut scratch,
+                depth - 1,
+                exact_this.clone(),
+            )
+            && possible.is_empty();
     }
     for inner in helper_file.ast.calls_within(helper.body) {
         // A call inside a nested function -- its body or its parameter list

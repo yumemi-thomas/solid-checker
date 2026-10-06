@@ -583,6 +583,11 @@ impl<'a> CallGraph<'a, '_> {
             return false;
         }
         let argument = file.ast.peel_ts_sugar_span(argument);
+        // A computed read (`props["items"]`, `props[key]`) names its key by
+        // value, not by spelling: not followed.
+        if file.ast.computed_members.binary_search(&argument).is_ok() {
+            return false;
+        }
         let Some(access) = file
             .ast
             .members
@@ -629,9 +634,16 @@ impl<'a> CallGraph<'a, '_> {
             .iter()
             .filter(|(_, declared)| *declared == declaration)
             .all(|(reference, _)| {
+                // A call through it (`props.replace()`) hands `props` to user
+                // code as `this`, which may write any prop.
                 file.ast.members.iter().any(|read| {
                     read.object == *reference
                         && !targets.iter().any(|target| target.contains(read.span))
+                        && !file
+                            .ast
+                            .calls
+                            .iter()
+                            .any(|call| file.ast.peel_ts_sugar_span(call.callee) == read.span)
                 })
             });
         if !only_read {

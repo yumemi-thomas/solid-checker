@@ -17,6 +17,12 @@ now carry heritage and element kinds.
   modeled.
 - **Open:** a per-class veto for computed prototype writes whose receiver is
   one class.
+- **Round 2 (same day):** nine more variants; eight fixed (nested-method
+  functions, destructuring/loop-head member writes, computed prop reads,
+  `var` redeclarations, destructured parameter defaults, defaulted updaters,
+  calls through `props`, bound getter objects). A dynamic-key write through a
+  prototype alias stays a documented trust boundary. Corpus uncertifiable
+  3,368 to 3,370.
 
 ## A prop holds what every tag passes (2026-10-06)
 

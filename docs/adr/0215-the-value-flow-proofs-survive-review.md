@@ -109,3 +109,40 @@ Two findings of the review are kept, as documented limitations:
     app-game sites whose earlier removal rested on the prototype hole; the
     rest are call-initialized helpers and narrower member and parameter
     proofs.
+
+## Round 2
+
+A second review of this ADR's own fix (`rust/target/research/review-0215.md`)
+found nine variants, eight of them fixed here:
+
+1. **Methods.** A function nested in a method inherited its `method_name`.
+   The method exemption of `function_value_is_current` now covers only a
+   class element's or object literal method's own function.
+2. **Destructuring and loop-head member writes** (`[c.run] = …`,
+   `for (c.run of …)`). The name census reads every leaf member inside an
+   assignment target or loop head. The object of another written member
+   (`C.prototype` in `C.prototype.m = f`, also under a cast) is read, not
+   written.
+3. **Computed prop reads** (`props["items"]`) are not followed.
+4. **Redeclarations.** `var xs = …` over a parameter, and a second
+   `function f`, write the binding. Any same-named declaration in the scope
+   now counts.
+5. **Destructured parameter defaults** run on entry, for generators too.
+   The parameter-list walk covers every call in the parameter patterns.
+6. **A defaulted updater parameter** is not assumed to hold the previous
+   value.
+7. **Calls through `props`** (`props.replace()`) hand `props` to user code
+   as `this`, so they refuse the prop proof.
+8. **A getter object bound to a `const`** and named as an argument is
+   checked like a literal.
+
+Kept as a trust boundary: a dynamic-key write that is not spelled through a
+prototype, such as `p[key] = f` with `key: keyof C` through a prototype
+alias. It is the reflective-write class `Object.defineProperty` belongs to.
+Vetoing every dynamic write would refuse every `xs[i] = v`.
+
+- **Fixture:** `value-flow-review/Leaf2.tsx` and `App2.tsx`, ten cases, all
+  `SC9012`. The previous binary certified each of them clean.
+- **rc.13 corpus**, against `rc13-w-browser.json`: violations unchanged at
+  285; uncertifiable 3,368 to 3,370 (kui's `BarChart` and `LineChart` call a
+  function through `props`).
