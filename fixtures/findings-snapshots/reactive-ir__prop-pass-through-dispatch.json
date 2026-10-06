@@ -1,16 +1,6 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/prop-pass-through-dispatch/App.tsx",
-      "start": 215,
-      "end": 226,
-      "fixes": 0
-    },
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
@@ -34,7 +24,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/prop-pass-through-dispatch/App.tsx",
       "start": 725,

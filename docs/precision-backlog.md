@@ -1,5 +1,22 @@
 # Precision backlog
 
+## A forwarded prop is as reactive as its source (2026-10-06)
+
+ADR 0216. The caller-witness proof treated any prop forwarded from the
+caller's own props (`<Inner value={props.value} />`) as reactive, so a plain
+value forwarded once became a proven strict read or frozen handler. Solid
+2.0.0-rc.13 raises nothing there (checked in Chrome). Forwards now resolve
+to the parent prop's own classification in a least fixpoint.
+
+- **Removed:** rc.13 corpus violations 285 to 195 (86 distinct sites). Of
+  the first 82, traced by hand: 65 false positives, 14 real strict reads now
+  uncertifiable (router memos, query state, a context-held memo, a `For`
+  index accessor, a store behind a returned object), 1 unclear.
+- **Still open:** witnesses for those upstream accessors, to re-prove the 14;
+  forwarded reads on a branch that never runs, and a parent instance that
+  never renders the child (retained false positives); a forwarded accessor
+  called in the child.
+
 ## The value-flow proofs survive review (2026-10-06)
 
 ADR 0215. An adversarial review of ADRs 0209 to 0214 found 15 reachable

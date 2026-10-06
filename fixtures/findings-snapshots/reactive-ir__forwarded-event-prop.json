@@ -94,7 +94,7 @@
     {
       "rule": "reactive-handler-frozen",
       "code": "SC1007",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
       "start": 421,

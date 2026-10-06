@@ -15,7 +15,7 @@ use crate::{
     location,
 };
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use crate::contracts::ResolvedContracts;
 use crate::identity::{SymbolId, symbol_id};
@@ -2445,30 +2445,11 @@ impl PropsReactivityIndex {
         if !self.caller_proof {
             return PropUse::Reactive;
         }
-        match self.by_declaration.get(declaration) {
-            None => PropUse::Unknown,
-            // Witnessed reactive survives the escape; nothing else does.
-            Some(PropsReactivity::Escaping { reactive, .. }) => {
-                if reactive.contains(name) {
-                    PropUse::Reactive
-                } else {
-                    PropUse::Unknown
-                }
-            }
-            Some(PropsReactivity::Enumerated {
-                reactive,
-                unresolved,
-                ..
-            }) => {
-                if reactive.contains(name) {
-                    PropUse::Reactive
-                } else if unresolved.contains(name) {
-                    PropUse::Unknown
-                } else {
-                    PropUse::Static
-                }
-            }
-        }
+        self.by_declaration
+            .get(declaration)
+            .map_or(PropUse::Unknown, |classification| {
+                classification_use(classification, name)
+            })
     }
 
     /// The classification of a whole-object use (aliasing, spreading, or
@@ -2580,6 +2561,7 @@ fn classify_component_props(
         }
     }
     let mut by_declaration = HashMap::new();
+    let mut pending = Vec::new();
     for file in &facts.files {
         for function in &file.ast.functions {
             let Some(parameter) = function.parameters.first() else {
@@ -2588,7 +2570,7 @@ fn classify_component_props(
             if function.parameters.len() > 1 || !lookup.function_may_be_component(file, function) {
                 continue;
             }
-            let classification = classify_one_component(
+            let (classification, forwarded) = classify_one_component(
                 runtime,
                 facts,
                 lookup,
@@ -2600,6 +2582,13 @@ fn classify_component_props(
                 file,
                 function,
             );
+            pending.push((
+                location(file.path.shared(), parameter.pattern),
+                forwarded.clone(),
+            ));
+            if let Some(name) = parameter.names.first() {
+                pending.push((location(file.path.shared(), name.span), forwarded));
+            }
             by_declaration.insert(
                 location(file.path.shared(), parameter.pattern),
                 classification.clone(),
@@ -2609,9 +2598,98 @@ fn classify_component_props(
             }
         }
     }
+    resolve_forwarded_props(&mut by_declaration, &pending);
     PropsReactivityIndex {
         caller_proof: true,
         by_declaration,
+    }
+}
+
+/// What one component's classification says about the prop `name`.
+fn classification_use(classification: &PropsReactivity, name: &str) -> PropUse {
+    match classification {
+        // Witnessed reactive survives the escape; nothing else does.
+        PropsReactivity::Escaping { reactive, .. } => {
+            if reactive.contains(name) {
+                PropUse::Reactive
+            } else {
+                PropUse::Unknown
+            }
+        }
+        PropsReactivity::Enumerated {
+            reactive,
+            unresolved,
+            ..
+        } => {
+            if reactive.contains(name) {
+                PropUse::Reactive
+            } else if unresolved.contains(name) {
+                PropUse::Unknown
+            } else {
+                PropUse::Static
+            }
+        }
+    }
+}
+
+/// Settles forwarded props (`<Inner value={props.value} />`): the receiving
+/// prop is reactive when the forwarded parent prop is, unresolved when that is
+/// unresolved or unknown, and otherwise contributes nothing. This is the least
+/// fixpoint from "contributes nothing", so a prop is proven static only when
+/// no chain of forwards reaches a reactive or unresolved value. A forward into
+/// a component whose own classification has no entry is unknown.
+fn resolve_forwarded_props(
+    by_declaration: &mut HashMap<Location, PropsReactivity>,
+    pending: &[(Location, ForwardedProps)],
+) {
+    loop {
+        let mut changed = false;
+        for (declaration, forwarded) in pending {
+            for (name, sources) in forwarded {
+                let mut verdict = PropUse::Static;
+                for (source, prop, exact) in sources {
+                    let source_use = match by_declaration
+                        .get(source)
+                        .map_or(PropUse::Unknown, |classification| {
+                            classification_use(classification, prop)
+                        }) {
+                        // A static head says nothing about the rest of a
+                        // longer chain (`props.a.b` with `a` a store or an
+                        // object with getters).
+                        PropUse::Static if !exact => PropUse::Unknown,
+                        other => other,
+                    };
+                    verdict = match (verdict, source_use) {
+                        (PropUse::Reactive, _) | (_, PropUse::Reactive) => PropUse::Reactive,
+                        (PropUse::Unknown, _) | (_, PropUse::Unknown) => PropUse::Unknown,
+                        _ => PropUse::Static,
+                    };
+                }
+                let Some(classification) = by_declaration.get_mut(declaration) else {
+                    continue;
+                };
+                changed |= match (classification, verdict) {
+                    (_, PropUse::Static) => false,
+                    (
+                        PropsReactivity::Enumerated { reactive, .. }
+                        | PropsReactivity::Escaping { reactive, .. },
+                        PropUse::Reactive,
+                    ) => reactive.insert(name.clone()),
+                    (
+                        PropsReactivity::Enumerated {
+                            unresolved,
+                            reactive,
+                            ..
+                        },
+                        PropUse::Unknown,
+                    ) => !reactive.contains(name) && unresolved.insert(name.clone()),
+                    (PropsReactivity::Escaping { .. }, PropUse::Unknown) => false,
+                };
+            }
+        }
+        if !changed {
+            break;
+        }
     }
 }
 
@@ -2627,18 +2705,22 @@ fn classify_one_component(
     uses: &HashMap<(&str, solid_facts::core::Span), Vec<(usize, usize)>>,
     file: &FileFacts,
     function: &solid_facts::ast::FunctionFact,
-) -> PropsReactivity {
+) -> (PropsReactivity, ForwardedProps) {
     use solid_facts::core::Span;
+    let mut forwarded = ForwardedProps::new();
     let name = crate::owners::component_binding_name(file, function).or(function.name.as_ref());
     let Some(symbol) = name.and_then(|name| entities.get(&location(file.path.shared(), name.span)))
     else {
         // An anonymous component value (a HOC argument, say) has no symbol to
         // enumerate references through, so there are no call sites to witness
         // either way.
-        return PropsReactivity::Escaping {
-            reactive: BTreeSet::new(),
-            accessor_values: BTreeSet::new(),
-        };
+        return (
+            PropsReactivity::Escaping {
+                reactive: BTreeSet::new(),
+                accessor_values: BTreeSet::new(),
+            },
+            forwarded,
+        );
     };
     // Escape hatches below only forfeit the *static* half of the proof. Each
     // one sets this flag and keeps scanning, because the JSX call sites that
@@ -2744,6 +2826,7 @@ fn classify_one_component(
                                 prop_sources,
                                 use_file,
                                 expression,
+                                forwarded.entry(attribute_name.to_owned()).or_default(),
                             ),
                             None => PropUse::Unknown,
                         }
@@ -2768,8 +2851,22 @@ fn classify_one_component(
                 }
             }
         }
+        // Several children compile to an array whose dynamic entries are memo
+        // accessors: reading `props.children` reads none of them. Only a
+        // single child is the getter's own expression.
+        let several = element
+            .children
+            .iter()
+            .filter(|child| {
+                use_file
+                    .source_text(**child)
+                    .is_some_and(|text| !text.trim().is_empty())
+            })
+            .count()
+            > 1;
         for child in &element.children {
-            match classify_passed_expression(
+            let mut child_forwards = Vec::new();
+            let child_use = classify_passed_expression(
                 lookup,
                 entities,
                 accessors,
@@ -2777,7 +2874,19 @@ fn classify_one_component(
                 prop_sources,
                 use_file,
                 *child,
-            ) {
+                &mut child_forwards,
+            );
+            if several {
+                if child_use != PropUse::Static || !child_forwards.is_empty() {
+                    unresolved.insert("children".to_owned());
+                }
+                continue;
+            }
+            forwarded
+                .entry("children".to_owned())
+                .or_default()
+                .extend(child_forwards);
+            match child_use {
                 PropUse::Static => {}
                 PropUse::Reactive => {
                     reactive.insert("children".to_owned());
@@ -2793,17 +2902,33 @@ fn classify_one_component(
         // every prop that is not a proven reactive witness is unresolved
         // anyway, so recording the distinction would only invite a reader to
         // treat the complement as static.
-        return PropsReactivity::Escaping {
+        return (
+            PropsReactivity::Escaping {
+                reactive,
+                accessor_values,
+            },
+            forwarded,
+        );
+    }
+    (
+        PropsReactivity::Enumerated {
             reactive,
+            unresolved,
             accessor_values,
-        };
-    }
-    PropsReactivity::Enumerated {
-        reactive,
-        unresolved,
-        accessor_values,
-    }
+        },
+        forwarded,
+    )
 }
+
+/// Per prop name, the parent props a call site forwards into it
+/// (`<Inner value={props.value} />` inside `Outer`): the parent's props
+/// declaration and the prop name read there.
+type ForwardedProps = BTreeMap<String, Vec<Forward>>;
+
+/// One forwarded parent prop: the parent's props declaration, the prop name
+/// at the head of the forwarded chain, and whether the chain is exactly that
+/// one member (`props.a`, not `props.a.b`).
+type Forward = (Location, String, bool);
 
 fn passed_expression_is_accessor(
     lookup: &SemanticLookup<'_>,
@@ -2882,6 +3007,7 @@ fn component_symbol_is_exported(
 /// whose bodies run later, not in the getter). Anything unresolvable, any
 /// call the engine cannot classify, and JSX evaluated inside the getter stay
 /// unknown.
+#[allow(clippy::too_many_arguments)]
 fn classify_passed_expression(
     lookup: &SemanticLookup<'_>,
     entities: &EntitySymbols,
@@ -2890,9 +3016,12 @@ fn classify_passed_expression(
     prop_sources: &HashMap<SymbolId, (SymbolId, Location)>,
     file: &FileFacts,
     expression: solid_facts::core::Span,
+    forwards: &mut Vec<Forward>,
 ) -> PropUse {
     use solid_facts::core::Span;
     let expression = file.ast.peel_ts_sugar_span(expression);
+    // Identifiers that are a member chain's root; the chain decides them.
+    let mut chain_roots = Vec::new();
     let nested_functions: Vec<Span> = file
         .ast
         .functions_within(expression)
@@ -2920,14 +3049,18 @@ fn classify_passed_expression(
             continue;
         }
         let mut root = member.object;
+        let mut head = member;
         while let Some(inner) = file
             .ast
             .members
             .iter()
-            .find(|candidate| candidate.span == root)
+            .find(|candidate| candidate.span == file.ast.peel_ts_sugar_span(root))
         {
+            head = inner;
             root = inner.object;
         }
+        let root = file.ast.peel_ts_sugar_span(root);
+        chain_roots.push(root);
         let symbol = entities
             .get(&location(file.path.shared(), root))
             .cloned()
@@ -2938,11 +3071,34 @@ fn classify_passed_expression(
                     .map(|(_, _, symbol)| symbol)
             });
         match symbol {
-            Some(symbol)
-                if source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store)
-                    || prop_sources.contains_key(&symbol) =>
-            {
+            Some(symbol) if source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store) => {
                 return PropUse::Reactive;
+            }
+            // A parent's prop forwarded is exactly as reactive as that prop is
+            // in the parent: decided once every component is classified.
+            Some(symbol) if prop_sources.contains_key(&symbol) => {
+                let (_, declaration) = &prop_sources[&symbol];
+                // Only the props parameter itself: a `merge` result or a
+                // destructured binding attached to it is a view whose keys
+                // this does not map back to the parent's props.
+                if entities.get(declaration) != Some(&symbol) {
+                    result = PropUse::Unknown;
+                    continue;
+                }
+                let exact = head.span == member.span;
+                let name = if file.ast.computed_members.binary_search(&head.span).is_ok() {
+                    file.ast
+                        .literal_computed_members
+                        .iter()
+                        .find(|literal| literal.span == head.span)
+                        .map(|literal| literal.key.to_string())
+                } else {
+                    file.source_text(head.property).map(str::to_owned)
+                };
+                match name {
+                    Some(name) => forwards.push((declaration.clone(), name, exact)),
+                    None => result = PropUse::Unknown,
+                }
             }
             Some(_) => {}
             None => result = PropUse::Unknown,
@@ -2975,6 +3131,7 @@ fn classify_passed_expression(
     for identifier in file.ast.identifiers_within(expression) {
         if identifier.role != solid_facts::ast::IdentifierRole::Reference
             || inside_nested(identifier.span)
+            || chain_roots.contains(&identifier.span)
         {
             continue;
         }
@@ -2987,14 +3144,15 @@ fn classify_passed_expression(
                     .map(|(_, _, symbol)| symbol)
             });
         match symbol {
-            Some(symbol)
-                if source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store)
-                    || prop_sources.contains_key(&symbol) =>
-            {
-                // A store or props object passed whole stays a live proxy in
-                // the receiver.
-                return PropUse::Reactive;
+            // A store passed whole is a reference: reading the prop hands over
+            // the proxy and reads no key. The receiver's own key reads are
+            // what is reactive, and this classification does not follow them.
+            Some(symbol) if source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store) => {
+                result = PropUse::Unknown;
             }
+            // A props object passed whole forwards every prop; which ones the
+            // receiver reads, and whether they are live, is not followed.
+            Some(symbol) if prop_sources.contains_key(&symbol) => result = PropUse::Unknown,
             Some(_) => {}
             None => result = PropUse::Unknown,
         }
