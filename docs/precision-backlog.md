@@ -1,5 +1,17 @@
 # Precision backlog
 
+## Leaf scopes reach helpers, namespaces and more host callbacks (2026-10-06)
+
+ADR 0217. Argumentless calls in local helpers a leaf callback reaches are
+resolved; exact namespace-import member calls follow their export; five host
+timing rows (`Promise` executor and `NodeList.forEach` inline; global
+`addEventListener`, `MediaQueryList.addListener` deferred;
+`MediaSession.setActionHandler` fresh-stack).
+
+- **Gained:** rc.13 corpus uncertifiable 3,422 to 3,397; violations unchanged.
+- **Still open:** imported helpers' argumentless calls, wrapped callbacks to
+  inline host calls, executor `resolve`/`reject`.
+
 ## A forwarded prop is as reactive as its source (2026-10-06)
 
 ADR 0216. The caller-witness proof treated any prop forwarded from the

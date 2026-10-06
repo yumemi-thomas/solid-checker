@@ -2711,9 +2711,8 @@ mod tests {
 
     /// ADRs 0190 and 0192: only an argumentless method call's resolved
     /// declaration says whether the member is a standard-library built-in.
-    /// It is demanded through a parameter and directly in a leaf-owner
-    /// callback, and nowhere else: a resolved declaration also enters the
-    /// symbol index.
+    /// Unrelated bodies stay outside the leaf demand closure: a resolved
+    /// declaration also enters the symbol index.
     #[test]
     fn an_argumentless_method_call_is_demanded_its_resolved_call() {
         let file = test_file_facts(
@@ -2763,6 +2762,46 @@ mod tests {
             !resolved("local"),
             "an argumentless plain call stays as it was"
         );
+    }
+
+    #[test]
+    fn leaf_demands_follow_local_helpers_without_demanding_unrelated_bodies() {
+        let file = test_file_facts(
+            "src/helpers.ts",
+            r#"import { onSettled } from "solid-js";
+const captured = "value";
+function second() { captured.trim(); }
+const first = () => { second(); };
+function unused() { captured.toUpperCase(); }
+function shadowed() { captured.toLowerCase(); }
+function entry(shadowed: () => void) {
+    shadowed();
+    first();
+}
+onSettled(() => { entry(() => {}); });
+"#,
+        );
+        let demands = semantic_demands(
+            dialect::default_dialect(),
+            std::slice::from_ref(&file),
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
+        let resolved = |spelling: &str| {
+            let call = file
+                .ast
+                .calls
+                .iter()
+                .find(|call| file.source_text(call.callee) == Some(spelling))
+                .expect(spelling);
+            let location = typefacts_location(file.path.as_str(), call.callee);
+            demands
+                .iter()
+                .any(|demand| demand.location == location && demand.resolved_call)
+        };
+        assert!(resolved("captured.trim"), "transitive local helper");
+        assert!(!resolved("captured.toUpperCase"), "unrelated function");
+        assert!(!resolved("captured.toLowerCase"), "shadowed function");
     }
 
     #[test]

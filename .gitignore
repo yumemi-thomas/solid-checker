@@ -269,5 +269,11 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/prop-pass-through-dispatch/node_modules/**
 !fixtures/reactive-ir/value-flow-review/node_modules/
 !fixtures/reactive-ir/value-flow-review/node_modules/**
+!fixtures/reactive-ir/leaf-scope-helper-demand/node_modules/
+!fixtures/reactive-ir/leaf-scope-helper-demand/node_modules/**
+!fixtures/reactive-ir/leaf-scope-host-timing/node_modules/
+!fixtures/reactive-ir/leaf-scope-host-timing/node_modules/**
+!fixtures/reactive-ir/leaf-scope-namespace-export/node_modules/
+!fixtures/reactive-ir/leaf-scope-namespace-export/node_modules/**
 !fixtures/reactive-ir/render-time-reads/node_modules/
 !fixtures/reactive-ir/render-time-reads/node_modules/**

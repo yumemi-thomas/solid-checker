@@ -11,7 +11,7 @@
 | `FreshStack` | none | `setTimeout` runs its callback from a host queue |
 | `Listener` | none | a listener runs after the call returns; synchronous dispatch is not modeled |
 | `Thenable` | `SC9012` uncertifiable | a `PromiseLike`'s `then` is not the host's and may call back before it returns |
-| `UnauditedCallback` | `SC9012` uncertifiable | no audited timing for the `Promise` executor |
+| `UnauditedCallback` | `leaf-owner-forbidden-call` violation | the `Promise` executor runs inline (ECMA-262 `Promise(executor)` step 10, ADR 0217) and calls `register` |
 | `SetterUpdater` | `leaf-owner-forbidden-call` violation | the updater registers a cleanup |
 | `SetterUpdaterClean` | none | the updater only computes |
 | `BindDoesNotRun` | none | `bind` runs nothing; the walk used to read `register.bind` as a call of `register` |

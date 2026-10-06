@@ -2159,6 +2159,44 @@ impl<'a> SemanticLookup<'a> {
             .copied()
     }
 
+    /// A static member of an actual namespace import names its exported
+    /// value, not a structurally compatible method. Resolve the property
+    /// symbol itself; a selected call signature need not name that value.
+    pub(super) fn namespace_member_function(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
+        let callee = file.ast.peel_ts_sugar_span(callee);
+        if file.ast.computed_members.binary_search(&callee).is_ok() {
+            return None;
+        }
+        let member = file
+            .ast
+            .members
+            .iter()
+            .find(|member| member.span == callee)?;
+        let receiver = file.ast.peel_ts_sugar_span(member.object);
+        let declaration = file.ast.reference_declaration(receiver)?;
+        let namespace = file.ast.imports.iter().any(|import| {
+            !import.type_only
+                && import.bindings.iter().any(|binding| {
+                    !binding.type_only
+                        && binding.kind == solid_facts::ast::ImportKind::Namespace
+                        && binding.local.span == declaration
+                })
+        });
+        if !namespace {
+            return None;
+        }
+        let symbol = self.entities.at(file.path.as_str(), member.property)?;
+        self.function_for_symbol(symbol)
+            .filter(|(target_file, function)| {
+                function.method_name.is_none()
+                    && self.function_value_is_current(target_file, function)
+            })
+    }
+
     pub(super) fn function_for_symbol(
         &self,
         symbol: &str,

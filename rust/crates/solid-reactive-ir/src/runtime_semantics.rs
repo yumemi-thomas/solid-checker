@@ -56,10 +56,12 @@ pub(super) enum RuntimeArgumentBehavior {
 ///   `WindowOrWorkerGlobalScope`, `AnimationFrameProvider` and `Window`
 ///   members the global functions are bound to;
 /// - `Scheduler.postTask` -- queues a scheduler task;
+/// - `MediaSession.setActionHandler` -- Media Session's action handling
+///   queues a user-interaction task before invoking the handler;
 /// - the `IntersectionObserver`, `ResizeObserver`, `MutationObserver`,
 ///   `PerformanceObserver` and `ReportingObserver` constructors -- their
-///   callbacks are delivered by a queued task or microtask; `takeRecords()`
-///   returns records without invoking the callback.
+///   callbacks are delivered by a queued task, microtask or rendering update;
+///   `takeRecords()` returns records without invoking the callback.
 ///
 /// This is the list [`RuntimeArgumentBehavior::FreshStackCallback`] answers
 /// for, and the only host evidence that lets a package contract say a
@@ -81,6 +83,7 @@ pub(super) const FRESH_STACK_SCHEDULERS: &[&str] = &[
     "Promise.catch",
     "Promise.finally",
     "Scheduler.postTask",
+    "MediaSession.setActionHandler",
     "IntersectionObserver.construct",
     "ResizeObserver.construct",
     "MutationObserver.construct",
@@ -213,10 +216,29 @@ fn timing_behavior(
             {
                 Some(RuntimeArgumentBehavior::DeferredCallback)
             }
-            "Window.addEventListener" | "EventTarget.addEventListener"
+            // DOM addEventListener steps 1-2 only register the listener.
+            "addEventListener" | "Window.addEventListener" | "EventTarget.addEventListener"
                 if call.kind == CallKind::Call && argument == 1 && argument_callable =>
             {
                 Some(RuntimeArgumentBehavior::DeferredCallback)
+            }
+            // CSSOM View addListener delegates to DOM listener registration.
+            "MediaQueryList.addListener"
+                if call.kind == CallKind::Call && argument == 0 && argument_callable =>
+            {
+                Some(RuntimeArgumentBehavior::DeferredCallback)
+            }
+            // Media Session: handle media session action, queued task, step 7.
+            "MediaSession.setActionHandler"
+                if call.kind == CallKind::Call && argument == 1 && argument_callable =>
+            {
+                Some(RuntimeArgumentBehavior::DeferredCallback)
+            }
+            // ECMA-262 Promise(executor), step 10 calls the executor inline.
+            "PromiseConstructor.construct"
+                if call.kind == CallKind::Construct && argument == 0 && argument_callable =>
+            {
+                Some(RuntimeArgumentBehavior::InlineCallback)
             }
             "Promise.then" | "PromiseLike.then"
                 if call.kind == CallKind::Call && argument <= 1 && argument_callable =>
@@ -228,7 +250,11 @@ fn timing_behavior(
             {
                 Some(RuntimeArgumentBehavior::DeferredCallback)
             }
-            "Array.forEach"
+            // Web IDL iterable methods install Array.prototype.forEach
+            // on NodeList (steps 1.2.4); the callback runs inline.
+            "NodeList.forEach"
+            | "NodeListOf.forEach"
+            | "Array.forEach"
             | "ReadonlyArray.forEach"
             | "Set.forEach"
             | "Map.forEach"
@@ -589,6 +615,73 @@ mod tests {
 
     fn callability(value: Callability) -> Option<Callability> {
         Some(value)
+    }
+
+    #[test]
+    fn additional_host_callbacks_keep_their_audited_stack() {
+        for (name, owner, index, expected) in [
+            (
+                "construct",
+                Some("PromiseConstructor"),
+                0,
+                RuntimeArgumentBehavior::InlineCallback,
+            ),
+            (
+                "forEach",
+                Some("NodeList"),
+                0,
+                RuntimeArgumentBehavior::InlineCallback,
+            ),
+            (
+                "forEach",
+                Some("NodeListOf"),
+                0,
+                RuntimeArgumentBehavior::InlineCallback,
+            ),
+            (
+                "addListener",
+                Some("MediaQueryList"),
+                0,
+                RuntimeArgumentBehavior::DeferredCallback,
+            ),
+            (
+                "addEventListener",
+                None,
+                1,
+                RuntimeArgumentBehavior::DeferredCallback,
+            ),
+            (
+                "setActionHandler",
+                Some("MediaSession"),
+                1,
+                RuntimeArgumentBehavior::FreshStackCallback,
+            ),
+        ] {
+            let mut call = resolved_call(name, owner, true, Callability::Callable);
+            call.arguments = Arc::from([argument_mapping(index, Callability::Callable)]);
+            assert_eq!(
+                argument_behavior(&call, Some(Callability::Callable), index as usize),
+                Some(expected),
+                "{owner:?}.{name}"
+            );
+            call.kind = if call.kind == CallKind::Call {
+                CallKind::Construct
+            } else {
+                CallKind::Call
+            };
+            assert_eq!(
+                argument_behavior(&call, Some(Callability::Callable), index as usize),
+                None,
+                "wrong invocation kind: {owner:?}.{name}"
+            );
+            let mut custom = resolved_call(name, owner, false, Callability::Callable);
+            custom.arguments = Arc::from([argument_mapping(index, Callability::Callable)]);
+            assert_eq!(
+                argument_behavior(&custom, Some(Callability::Callable), index as usize),
+                None,
+                "same spelling outside the default library"
+            );
+        }
     }
 
     #[test]

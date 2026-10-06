@@ -77,7 +77,7 @@ export function Thenable() {
   return <div />;
 }
 
-// Uncertifiable: no audited timing says when `Promise` runs its executor.
+// Violation: `Promise` runs its executor before the constructor returns.
 export function UnauditedCallback() {
   onSettled(() => {
     new Promise<void>((resolve) => {

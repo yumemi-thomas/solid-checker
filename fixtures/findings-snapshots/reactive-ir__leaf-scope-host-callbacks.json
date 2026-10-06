@@ -52,13 +52,23 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/App.tsx",
+      "start": 1946,
+      "end": 1953,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/App.tsx",
-      "start": 1947,
-      "end": 1954,
+      "start": 1946,
+      "end": 1953,
       "fixes": 0
     },
     {
@@ -67,8 +77,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/App.tsx",
-      "start": 2208,
-      "end": 2216,
+      "start": 2207,
+      "end": 2215,
       "fixes": 0
     },
     {
@@ -77,8 +87,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/App.tsx",
-      "start": 2893,
-      "end": 2906,
+      "start": 2892,
+      "end": 2905,
       "fixes": 0
     }
   ]

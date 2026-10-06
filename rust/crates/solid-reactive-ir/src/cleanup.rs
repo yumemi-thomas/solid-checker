@@ -694,8 +694,8 @@ fn helper_forbidden_operations(
 /// receiver's root binding, not the member: `items().forEach` answers `items`
 /// and `register.bind` answers `register`. Read as the callee, that made an
 /// accessor's array method a safe accessor call and `register.bind(null)` a
-/// call of `register`. Only the resolved call names the member, and only a
-/// standard-library member is followed: its arguments by
+/// call of `register`. An exact namespace export is followed by its property
+/// symbol. Otherwise a standard-library member's arguments are followed by
 /// [`standard_library_argument_operations`], and the receiver itself when the
 /// member is `call` or `apply`, which run it before they return.
 fn member_call_operations(
@@ -707,6 +707,20 @@ fn member_call_operations(
     visited: &mut Vec<(String, Span)>,
     depth: usize,
 ) -> bool {
+    if !call.construct
+        && let Some((helper_file, helper)) =
+            resolution.lookup.namespace_member_function(file, callee)
+    {
+        return function_forbidden_operations(
+            resolution,
+            helper_file,
+            helper,
+            kinds,
+            visited,
+            depth,
+            None,
+        );
+    }
     let Some((resolved, declaration)) = resolution
         .lookup
         .resolved_callee_call(file, call.callee)

@@ -635,6 +635,24 @@ fn plan_file(
     // loses that provenance.
     for member in &file.ast.members {
         add_symbol(member.object, false);
+        // A wrapped namespace callee still needs its exact property symbol.
+        let receiver = file.ast.peel_ts_sugar_span(member.object);
+        let namespace_member =
+            file.ast
+                .reference_declaration(receiver)
+                .is_some_and(|declaration| {
+                    file.ast.imports.iter().any(|import| {
+                        !import.type_only
+                            && import.bindings.iter().any(|binding| {
+                                !binding.type_only
+                                    && binding.kind == solid_facts::ast::ImportKind::Namespace
+                                    && binding.local.span == declaration
+                            })
+                    })
+                });
+        if namespace_member {
+            add_symbol(member.property, false);
+        }
         if file.ast.calls.iter().any(|call| call.span == member.object) {
             add_symbol(member.property, false);
         }
@@ -707,7 +725,7 @@ fn plan_file(
     // The callbacks a leaf owner (`onSettled`, `createTrackedEffect`) runs,
     // as the dialect answers per argument. Matched by spelling, so an import
     // that only shares the name over-demands, which decides nothing.
-    let leaf_callbacks = file
+    let mut leaf_callbacks = file
         .ast
         .calls
         .iter()
@@ -731,6 +749,7 @@ fn plan_file(
                 .map(|(_, argument)| argument.span)
         })
         .collect::<Vec<_>>();
+    extend_leaf_demand_regions(file, &mut leaf_callbacks);
     for call in &file.ast.calls {
         let callee = typefacts_location(&path, call.callee);
         let property = callee_property_location(&file.source, &callee);
@@ -754,13 +773,9 @@ fn plan_file(
             && call
                 .static_callee(&file.source)
                 .is_some_and(|callee| primitive_imports.primitive(callee).is_some());
-        // And two argumentless method calls need their declaration, because
-        // only the resolved call says whether the member is a standard-library
-        // built-in: a helper's parameter-member invocation (`message.trim()`,
-        // ADR 0190), and a call written directly in a leaf-owner callback
-        // (`onSettled(() => dialog?.focus())`, ADR 0192). Not every method
-        // call: a resolved declaration also enters the symbol index, which
-        // moves structural member resolution elsewhere.
+        // Parameter members and leaf-reachable local helpers need exact
+        // declarations too. Keep unrelated functions out: extra resolved
+        // declarations can move structural member resolution (ADR 0192).
         let argumentless_method = call.arguments.is_empty()
             && property != callee
             && (parameter_rooted_member_call(file, call)
@@ -794,6 +809,54 @@ fn plan_file(
         }
     }
     Ok(())
+}
+
+/// Extend leaf demand regions through exact local function references. This
+/// plans facts, not execution: callbacks and nested literals may over-demand.
+/// Imports and member dispatch need semantic facts and are left to a later pass.
+fn extend_leaf_demand_regions(file: &FileFacts, regions: &mut Vec<solid_facts::core::Span>) {
+    use solid_facts::ast::{BindingShape, FunctionKind};
+
+    let mut functions = HashMap::new();
+    for function in &file.ast.functions {
+        if function.kind == FunctionKind::Declaration
+            && let Some(name) = &function.name
+        {
+            functions.insert(name.span, function.span);
+        }
+    }
+    for binding in &file.ast.bindings {
+        if !binding.immutable || binding.shape != BindingShape::Identifier {
+            continue;
+        }
+        let Some(initializer) = binding.initializer else {
+            continue;
+        };
+        let initializer = file.ast.peel_ts_sugar_span(initializer);
+        if file
+            .ast
+            .functions
+            .iter()
+            .any(|function| function.span == initializer)
+            && let Some(name) = binding.names.first()
+        {
+            functions.insert(name.span, initializer);
+        }
+    }
+    let mut seen = regions.iter().copied().collect::<HashSet<_>>();
+    let mut next = 0;
+    while next < regions.len() {
+        let region = regions[next];
+        next += 1;
+        for (reference, declaration) in &file.ast.reference_declarations {
+            if region.contains(*reference)
+                && let Some(function) = functions.get(declaration)
+                && seen.insert(*function)
+            {
+                regions.push(*function);
+            }
+        }
+    }
 }
 
 /// An argumentless method call through one of an enclosing function's
