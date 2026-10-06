@@ -1,5 +1,25 @@
 # Precision backlog
 
+## Host callbacks and member calls in a leaf scope (2026-10-06)
+
+ADR 0210. In a leaf owner's callback, a standard-library call's function
+arguments are classified by the audited timing table: inline callbacks are
+walked, deferred and fresh-stack ones are not, and a `PromiseLike.then`
+callback or an unaudited callable argument leaves the obligation open. A
+setter's updater is walked. A member call is read from its resolved
+declaration, never from the entity at the callee's span, which names the
+receiver's root.
+
+- **Fixed wrong clean results:** `items.forEach(register)`,
+  `forEach(() => onCleanup(…))`, a setter's updater, `register.call(null)`
+  and `items().forEach(…)`. Before, each certified clean.
+- **Fixed false positive:** `register.bind(null)` reported `register`'s body.
+- **Corpus:** rc.13 uncertifiable 3,380 to 3,414; violations unchanged.
+- **Still open:** synchronous dispatch is not modeled (`el.focus()` in a
+  leaf scope runs listeners there); unaudited host APIs
+  (`MediaSession.setActionHandler`, `MediaQueryList.addListener`, the
+  global `addEventListener`); namespace-import member calls.
+
 ## A method of an exact instance is followed in a leaf scope (2026-10-06)
 
 ADR 0209. A method call in a leaf owner's callback is followed into its body

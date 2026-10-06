@@ -88,4 +88,4 @@ symbol, so every method call stopped it.
   `Camera.perspective` calls `this.projectionMatrix.fromPerspective(…)`.
   Such an object is not provably exact, so the walk stops there. That code
   imports nothing from Solid at all. Proving that of a module's import graph
-  covers these calls whatever their receiver (ADR 0210).
+  would cover these calls whatever their receiver; that is not decided.

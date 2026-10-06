@@ -51,6 +51,10 @@ pub(super) enum RuntimeArgumentBehavior {
 ///   queue a global task;
 /// - `requestAnimationFrame`, `requestIdleCallback` -- run from the event
 ///   loop's "update the rendering" and idle-period steps;
+/// - the same four and `queueMicrotask` read as members
+///   (`window.setTimeout`), whose compiler-selected declarations are the
+///   `WindowOrWorkerGlobalScope`, `AnimationFrameProvider` and `Window`
+///   members the global functions are bound to;
 /// - `Scheduler.postTask` -- queues a scheduler task;
 /// - the `IntersectionObserver`, `ResizeObserver`, `MutationObserver`,
 ///   `PerformanceObserver` and `ReportingObserver` constructors -- their
@@ -68,6 +72,11 @@ pub(super) const FRESH_STACK_SCHEDULERS: &[&str] = &[
     "setInterval",
     "requestAnimationFrame",
     "requestIdleCallback",
+    "WindowOrWorkerGlobalScope.queueMicrotask",
+    "WindowOrWorkerGlobalScope.setTimeout",
+    "WindowOrWorkerGlobalScope.setInterval",
+    "AnimationFrameProvider.requestAnimationFrame",
+    "Window.requestIdleCallback",
     "Promise.then",
     "Promise.catch",
     "Promise.finally",
@@ -187,10 +196,19 @@ fn timing_behavior(
     let argument_callable = potentially_callable(actual_callability);
     if declaration.standard_library {
         let known_callback = match declaration.qualified_name.as_ref() {
-            "queueMicrotask" if argument == 0 && argument_callable => {
+            "queueMicrotask" | "WindowOrWorkerGlobalScope.queueMicrotask"
+                if argument == 0 && argument_callable =>
+            {
                 Some(RuntimeArgumentBehavior::DeferredCallback)
             }
-            "setTimeout" | "setInterval" | "requestAnimationFrame" | "requestIdleCallback"
+            "setTimeout"
+            | "setInterval"
+            | "requestAnimationFrame"
+            | "requestIdleCallback"
+            | "WindowOrWorkerGlobalScope.setTimeout"
+            | "WindowOrWorkerGlobalScope.setInterval"
+            | "AnimationFrameProvider.requestAnimationFrame"
+            | "Window.requestIdleCallback"
                 if argument == 0 && argument_callable =>
             {
                 Some(RuntimeArgumentBehavior::DeferredCallback)
