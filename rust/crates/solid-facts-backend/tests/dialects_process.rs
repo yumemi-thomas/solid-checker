@@ -101,8 +101,8 @@ fn preferences_are_default_on_with_explicit_disables_winning() {
             .iter()
             .filter(|finding| finding["id"] == "SC8014")
             .count(),
-        5,
-        "array Type Facts plus direct, prop-accessor, interprocedural, and v2 async facts select five lists: {defaults:#?}"
+        6,
+        "array Type Facts plus direct, prop-head, prop-accessor, interprocedural, and v2 async facts select six lists: {defaults:#?}"
     );
     assert_eq!(
         defaults
@@ -135,6 +135,8 @@ fn preferences_are_default_on_with_explicit_disables_winning() {
             .expect("accessor prop marker");
     assert!(starts.contains(&u64::try_from(accessor_map).expect("offset fits u64")));
     assert!(starts.contains(&marker("derivedItems().map")));
+    // ADR 0221: the head Get `props.items` of a reactive caller's prop.
+    assert!(starts.contains(&marker("props.items.map")));
     assert!(!starts.contains(&marker("props.staticReady &&")));
     assert!(!starts.contains(&marker("customCollection().map")));
     let async_map = marker("items().map(async");

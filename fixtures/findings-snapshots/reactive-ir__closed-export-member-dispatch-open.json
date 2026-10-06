@@ -58,6 +58,16 @@
       "severity": "warning",
       "path": "fixtures/reactive-ir/closed-export-member-dispatch-open/helpers.tsx",
       "start": 570,
+      "end": 582,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/closed-export-member-dispatch-open/helpers.tsx",
+      "start": 570,
       "end": 588,
       "fixes": 0
     }

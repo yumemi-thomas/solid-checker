@@ -894,12 +894,22 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
                     && containing_ast_function(&file.ast, **test)
                         .is_some_and(|owner| owner.span == function.span)
             }) {
-                let reactive = draft.reads.iter().any(|read| {
+                // A proven read makes the condition reactive. A read that is
+                // only an uncertifiable obligation makes it possibly reactive,
+                // which is an obligation here too, never a violation.
+                let (mut proven, mut possible) = (false, false);
+                for read in draft.reads.iter().filter(|read| {
                     read.location.path == file.path.as_str().into()
                         && u64::from(test.start) <= read.location.start_byte
                         && read.location.end_byte <= u64::from(test.end)
-                });
-                if reactive {
+                }) {
+                    if read.is_uncertifiable() {
+                        possible = true;
+                    } else {
+                        proven = true;
+                    }
+                }
+                if proven || possible {
                     let location = location(file.path.shared(), *test);
                     draft.push_defect(StaticDefect {
                         kind: StaticDefectKind::ComponentReturnsConditionally,
@@ -909,7 +919,8 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
                             .unwrap_or_default()
                             .to_owned(),
                         fixes: vec![],
-                        uncertain: component_status == crate::indexes::ComponentStatus::Uncertain,
+                        uncertain: !proven
+                            || component_status == crate::indexes::ComponentStatus::Uncertain,
                     });
                 }
             }

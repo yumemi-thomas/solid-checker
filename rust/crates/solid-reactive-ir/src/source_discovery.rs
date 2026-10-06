@@ -1783,6 +1783,10 @@ pub(crate) fn discover_sources(
         }
     }
     clock.finish(build_timings, ReactiveIrStage::SourceDiscovery);
+    // Source construction/accepted-return facts collected above, before the
+    // type-only fallback. A published Accessor/Store annotation alone cannot
+    // witness a runtime reactive Get in an incoming prop expression.
+    let mut runtime_sources = accessors.keys().cloned().collect::<HashSet<_>>();
     for entity in facts.typescript.entities() {
         let Some(descriptor) = &entity.type_descriptor else {
             continue;
@@ -1957,6 +1961,7 @@ pub(crate) fn discover_sources(
                     };
                     let declaration = location(file.path.shared(), parameter.span);
                     if let Some(symbol) = entities.get(&declaration) {
+                        runtime_sources.insert(symbol.clone());
                         accessors.entry(symbol.clone()).or_insert((
                             symbol_id(file.source_text(parameter.span).unwrap_or_default()),
                             declaration,
@@ -2009,6 +2014,7 @@ pub(crate) fn discover_sources(
                         };
                         let declaration = location(file.path.shared(), parameter.span);
                         if let Some(parameter_symbol) = entities.get(&declaration) {
+                            runtime_sources.insert(parameter_symbol.clone());
                             accessors.entry(parameter_symbol.clone()).or_insert((
                                 symbol_id(file.source_text(parameter.span).unwrap_or_default()),
                                 declaration,
@@ -2049,6 +2055,7 @@ pub(crate) fn discover_sources(
                     };
                     let declaration = location(file.path.shared(), parameter.span);
                     if let Some(symbol) = entities.get(&declaration) {
+                        runtime_sources.insert(symbol.clone());
                         accessors.entry(symbol.clone()).or_insert((
                             symbol_id(file.source_text(parameter.span).unwrap_or_default()),
                             declaration,
@@ -2316,6 +2323,17 @@ pub(crate) fn discover_sources(
             break;
         }
     }
+    runtime_sources.retain(|symbol| {
+        !facts.files.iter().any(|file| {
+            crate::value_identity::binding_has_write(file, entities, symbol)
+                || file.ast.iteration_targets.iter().any(|target| {
+                    file.ast.identifiers.iter().any(|identifier| {
+                        target.contains(identifier.span)
+                            && entities.at(file.path.as_str(), identifier.span) == Some(symbol)
+                    })
+                })
+        })
+    });
     let props_reactivity = classify_component_props(
         runtime,
         facts,
@@ -2324,6 +2342,7 @@ pub(crate) fn discover_sources(
         &accessors,
         &source_kinds,
         &prop_sources,
+        &runtime_sources,
     );
     clock.finish(
         build_timings,
@@ -2535,6 +2554,7 @@ impl PropsReactivityIndex {
 /// Builds [`PropsReactivityIndex`] from the proven components' JSX call
 /// sites. Empty (answering [`PropUse::Reactive`] everywhere) when the dialect
 /// keeps the upstream over-approximation.
+#[allow(clippy::too_many_arguments)]
 fn classify_component_props(
     runtime: &crate::RuntimeEnvironment,
     facts: &ProjectFacts,
@@ -2543,6 +2563,7 @@ fn classify_component_props(
     accessors: &HashMap<SymbolId, (SymbolId, Location)>,
     source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
     prop_sources: &HashMap<SymbolId, (SymbolId, Location)>,
+    runtime_sources: &HashSet<SymbolId>,
 ) -> PropsReactivityIndex {
     if !lookup.dialect.props_require_caller_proof() {
         return PropsReactivityIndex::default();
@@ -2578,6 +2599,7 @@ fn classify_component_props(
                 accessors,
                 source_kinds,
                 prop_sources,
+                runtime_sources,
                 &uses,
                 file,
                 function,
@@ -2702,6 +2724,7 @@ fn classify_one_component(
     accessors: &HashMap<SymbolId, (SymbolId, Location)>,
     source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
     prop_sources: &HashMap<SymbolId, (SymbolId, Location)>,
+    runtime_sources: &HashSet<SymbolId>,
     uses: &HashMap<(&str, solid_facts::core::Span), Vec<(usize, usize)>>,
     file: &FileFacts,
     function: &solid_facts::ast::FunctionFact,
@@ -2824,6 +2847,7 @@ fn classify_one_component(
                                 accessors,
                                 source_kinds,
                                 prop_sources,
+                                runtime_sources,
                                 use_file,
                                 expression,
                                 forwarded.entry(attribute_name.to_owned()).or_default(),
@@ -2872,6 +2896,7 @@ fn classify_one_component(
                 accessors,
                 source_kinds,
                 prop_sources,
+                runtime_sources,
                 use_file,
                 *child,
                 &mut child_forwards,
@@ -3014,6 +3039,7 @@ fn classify_passed_expression(
     accessors: &HashMap<SymbolId, (SymbolId, Location)>,
     source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
     prop_sources: &HashMap<SymbolId, (SymbolId, Location)>,
+    runtime_sources: &HashSet<SymbolId>,
     file: &FileFacts,
     expression: solid_facts::core::Span,
     forwards: &mut Vec<Forward>,
@@ -3072,7 +3098,21 @@ fn classify_passed_expression(
             });
         match symbol {
             Some(symbol) if source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store) => {
-                return PropUse::Reactive;
+                let key = if file.ast.computed_members.binary_search(&head.span).is_ok() {
+                    file.ast
+                        .literal_computed_members
+                        .iter()
+                        .find(|literal| literal.span == head.span)
+                        .map(|literal| literal.key.as_ref())
+                } else {
+                    file.source_text(head.property)
+                };
+                if runtime_sources.contains(&symbol)
+                    && key.is_some_and(|key| lookup.dialect.store_key_warns_strict_read(key))
+                {
+                    return PropUse::Reactive;
+                }
+                result = PropUse::Unknown;
             }
             // A parent's prop forwarded is exactly as reactive as that prop is
             // in the parent: decided once every component is classified.
@@ -3081,7 +3121,17 @@ fn classify_passed_expression(
                 // Only the props parameter itself: a `merge` result or a
                 // destructured binding attached to it is a view whose keys
                 // this does not map back to the parent's props.
-                if entities.get(declaration) != Some(&symbol) {
+                if entities.get(declaration) != Some(&symbol)
+                    || !crate::local_access::props_root_is_current(
+                        file,
+                        declaration,
+                        &symbol,
+                        entities,
+                    )
+                    || prop_sources
+                        .iter()
+                        .any(|(other, (_, attached))| other != &symbol && attached == declaration)
+                {
                     result = PropUse::Unknown;
                     continue;
                 }
@@ -3109,7 +3159,9 @@ fn classify_passed_expression(
             continue;
         }
         let callee = entities.get(&location(file.path.shared(), call.callee));
-        if callee.is_some_and(|symbol| accessors.contains_key(symbol)) {
+        if callee.is_some_and(|symbol| {
+            accessors.contains_key(symbol) && runtime_sources.contains(symbol)
+        }) {
             return PropUse::Reactive;
         }
         // Any other call may read reactive state each time the compiled

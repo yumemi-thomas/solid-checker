@@ -12,7 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use solid_dialect::{Primitive, TrackedCallbackTiming};
+use solid_dialect::{Dialect, Primitive, TrackedCallbackTiming};
 use solid_facts::ProjectFacts;
 use solid_facts::core::Span;
 use typefacts::{CallKind, Callability, Location, ResolvedCallValidity};
@@ -6135,59 +6135,138 @@ fn interprocedural_result_reads_for_file(
             }
         }
         // ADR 0201: which of these reads are proven to run while this call
-        // does. The callee is one synchronous project function, and the call
+        // does. The callee is one non-generator project function, and the call
         // is a statement-level call outside any JSX (a prop getter runs when
         // the consumer reads it). A read it discovered in its own body, as a
         // call written directly there (not in a nested function, not in a
         // default parameter), runs during the call; so does the accessor
         // argument the callee's own body calls (`invokes_parameter_during_call`
         // proved that row). Every other row, a read propagated from a deeper
-        // callee among them, stays attributed.
+        // callee among them, stays attributed unless the entered-call proof
+        // below covers it. An async body's reads additionally need a prefix
+        // proof: ordinary async calls enter immediately, but resume detached.
         let direct_callee = (ambiguous_candidates.is_none()
             && !file.ast.any_jsx_containing(call.span))
         .then(|| lookup.function_for_symbol(symbol))
         .flatten()
-        .filter(|(_, callee)| !callee.r#async && !callee.generator);
-        // ADR 0204: a default-parameter initializer of a top-level callee runs
+        .filter(|(callee_file, callee)| {
+            !call.construct
+                && !callee.generator
+                && (!callee.r#async || call.direct_callee)
+                && lookup.function_value_is_current(callee_file, callee)
+        });
+        // ADR 0204: a default-parameter initializer of an ordinary callee runs
         // during this call exactly when the call omits that argument. An
         // accessor called directly in it (not in a function it creates) is
-        // read then, as one the body calls is. A helper nested in a rendering
-        // function is decided where its default is written
-        // (`callee_callback_timing`), which sees every call site.
+        // read then, as one the body calls is. This includes nested async
+        // helpers and exact store Gets. Keep activation separate from summary
+        // ownership: a default is not a read in the enclosing function's body.
+        // The authored default remains the origin, not the invocation span.
+        let mut activated_defaults = Vec::new();
         if let Some((callee_file, callee)) = direct_callee
-            && crate::owners::containing_ast_function(&callee_file.ast, callee.span).is_none()
+            && call.direct_callee
             && !call.arguments.iter().any(|argument| argument.spread)
         {
             for parameter in callee.parameters.iter().skip(call.arguments.len()) {
                 let Some(default) = parameter.initializer else {
                     continue;
                 };
-                for read_call in callee_file.ast.calls.iter().filter(|candidate| {
-                    default.contains(candidate.span)
+                let evaluated_here = |span: Span| {
+                    default.contains(span)
+                        && !callee_file.ast.any_jsx_containing(span)
                         && !callee_file
                             .ast
                             .functions_within(default)
-                            .any(|nested| nested.span.contains(candidate.span))
-                }) {
+                            .any(|nested| nested.span.contains(span))
+                        && !callee_file
+                            .ast
+                            .classes
+                            .iter()
+                            .any(|class| class.span.contains(span))
+                };
+                for read_call in callee_file
+                    .ast
+                    .calls
+                    .iter()
+                    .filter(|candidate| evaluated_here(candidate.span))
+                {
                     let Some(accessor) =
                         entities.get(&location(callee_file.path.shared(), read_call.callee))
                     else {
                         continue;
                     };
-                    if source_kinds.get(accessor.as_str()) != Some(&ReactiveSourceKind::Accessor) {
+                    if source_kinds.get(accessor.as_str()) != Some(&ReactiveSourceKind::Accessor)
+                        || !source_has_runtime_witness(
+                            accessor,
+                            accessors,
+                            entities,
+                            symbol_names,
+                            lookup,
+                        )
+                    {
                         continue;
                     }
                     let Some((display, declaration)) = accessors.get(accessor.as_str()) else {
                         continue;
                     };
+                    dependencies.insert(InterproceduralResultDependency::Symbol(accessor.clone()));
                     push_unique_summary_read(
-                        &mut effective,
+                        &mut activated_defaults,
                         SummaryRead {
                             symbol: accessor.clone(),
                             display: display.clone(),
                             kind: Some("accessor".into()),
                             declaration: declaration.clone(),
-                            origin: location(file.path.shared(), call.span),
+                            origin: location(callee_file.path.shared(), read_call.span),
+                            origin_context: label.clone(),
+                            owner: None,
+                        },
+                    );
+                }
+                // The immediate receiver must be an exact store source. A
+                // prefix Get is enough (`state.range`), even when a longer
+                // suffix cannot be resolved. No parameter is globally tainted
+                // from the value this one invocation's default provides.
+                for member in callee_file.ast.members.iter().filter(|member| {
+                    evaluated_here(member.span) && member_is_get(&callee_file.ast, member.span)
+                }) {
+                    let object = callee_file.ast.peel_ts_sugar_span(member.object);
+                    let Some(store) = entities.get(&location(callee_file.path.shared(), object))
+                    else {
+                        continue;
+                    };
+                    if source_kinds.get(store.as_str()) != Some(&ReactiveSourceKind::Store)
+                        || !source_has_runtime_witness(
+                            store,
+                            accessors,
+                            entities,
+                            symbol_names,
+                            lookup,
+                        )
+                        || !store_get_has_strict_witness(
+                            callee_file,
+                            member.span,
+                            store,
+                            entities,
+                            lookup.dialect,
+                        )
+                    {
+                        continue;
+                    }
+                    let Some((_, declaration)) = accessors.get(store.as_str()) else {
+                        continue;
+                    };
+                    dependencies.insert(InterproceduralResultDependency::Symbol(store.clone()));
+                    push_unique_summary_read(
+                        &mut activated_defaults,
+                        SummaryRead {
+                            symbol: store.clone(),
+                            display: SymbolId::from(
+                                callee_file.source_text(member.span).unwrap_or("store"),
+                            ),
+                            kind: Some("store-path".into()),
+                            declaration: declaration.clone(),
+                            origin: location(callee_file.path.shared(), member.span),
                             origin_context: label.clone(),
                             owner: None,
                         },
@@ -6197,8 +6276,9 @@ fn interprocedural_result_reads_for_file(
         }
         // ADR 0204: the functions this call enters synchronously, through
         // calls written directly in each one's own body, outside JSX, each
-        // resolving to one synchronous project function. A read written
-        // directly in any of their bodies runs during this call.
+        // resolving to one ordinary project function. Every async hop must
+        // itself be in its caller's synchronous prefix; the leaf read must
+        // pass the same test. Entry alone never proves the whole async body.
         let entered = std::cell::OnceCell::new();
         let read_is_direct = |read: &SummaryRead| -> bool {
             let Some((callee_file, callee)) = direct_callee else {
@@ -6241,7 +6321,37 @@ fn interprocedural_result_reads_for_file(
                 return false;
             };
             let origin = Span::new(start, end);
-            crate::owners::written_directly_in(&owner_file.ast, owner, origin)
+            // Only the new async proof needs this narrower source premise.
+            // A published Accessor/Store type alone does not prove runtime
+            // reactivity. Existing all-sync directness is left unchanged.
+            let through_async = callee.r#async
+                || owner.r#async
+                || entered.get().is_some_and(|functions| {
+                    functions.iter().any(|(path, span)| {
+                        lookup.file_by_path(path).is_some_and(|file| {
+                            file.ast
+                                .functions
+                                .iter()
+                                .any(|function| function.span == *span && function.r#async)
+                        })
+                    })
+                });
+            (!through_async
+                || (source_has_runtime_witness(
+                    &read.symbol,
+                    accessors,
+                    entities,
+                    symbol_names,
+                    lookup,
+                ) && (source_kinds.get(&read.symbol) != Some(&ReactiveSourceKind::Store)
+                    || store_get_has_strict_witness(
+                        owner_file,
+                        origin,
+                        &read.symbol,
+                        entities,
+                        lookup.dialect,
+                    ))))
+                && body_site_runs_during_call(owner_file, owner, origin)
         };
         // One finding per symbol at this call (`seen` below). A symbol read
         // both directly and only through a nested default or closure keeps
@@ -6250,6 +6360,7 @@ fn interprocedural_result_reads_for_file(
         let mut effective = effective
             .into_iter()
             .map(|read| (read_is_direct(&read), read))
+            .chain(activated_defaults.into_iter().map(|read| (true, read)))
             .collect::<Vec<_>>();
         effective.sort_by_key(|(direct, _)| !*direct);
         for (direct, read) in effective {
@@ -6297,10 +6408,227 @@ fn interprocedural_result_reads_for_file(
     (result, dispatch_obligations, dependencies)
 }
 
-/// ADR 0204: every project function a synchronous call of `function` enters
+/// Narrow source premise for newly promoted defaults/async origins.
+/// Require an exact, unwritten binding created by the selected dialect's
+/// source primitive. Type-only Accessor/Store roots and external/returned
+/// sources need a separate provenance proof; declaration spelling is not one.
+fn source_has_runtime_witness(
+    symbol: &SymbolId,
+    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some((_, declaration)) = accessors.get(symbol) else {
+        return false;
+    };
+    let Some(file) = lookup.file_by_path(declaration.path.as_ref()) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (
+        u32::try_from(declaration.start_byte),
+        u32::try_from(declaration.end_byte),
+    ) else {
+        return false;
+    };
+    if entities.get(declaration) != Some(symbol)
+        || crate::value_identity::binding_has_write(file, entities, symbol)
+        || crate::indexes::binding_written(file, Span::new(start, end))
+    {
+        return false;
+    }
+    file.ast.bindings.iter().any(|binding| {
+        binding
+            .names
+            .iter()
+            .any(|name| location(file.path.shared(), name.span) == *declaration)
+            && binding.call_initializer.is_some_and(|initializer| {
+                file.ast.call_at(initializer).is_some_and(|call| {
+                    call_primitive_name(file, call, entities, symbol_names, lookup.dialect)
+                        .as_ref()
+                        .and_then(crate::PrimitiveName::primitive)
+                        .is_some_and(|primitive| lookup.dialect.creates_reactive_source(primitive))
+                })
+            })
+    })
+}
+
+/// A new strict store-read proof needs an exact identifier root and a
+/// known string head key. Symbol/dynamic/protocol keys are not witnesses.
+fn store_get_has_strict_witness(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    symbol: &SymbolId,
+    entities: &EntitySymbols,
+    dialect: &dyn Dialect,
+) -> bool {
+    let Some(mut head) = file.ast.members.iter().find(|member| member.span == span) else {
+        return false;
+    };
+    while let Some(inner) = file
+        .ast
+        .members
+        .iter()
+        .find(|member| member.span == file.ast.peel_ts_sugar_span(head.object))
+    {
+        head = inner;
+    }
+    let root = file.ast.peel_ts_sugar_span(head.object);
+    if !file.ast.identifiers.iter().any(|identifier| {
+        identifier.span == root && identifier.role == solid_facts::ast::IdentifierRole::Reference
+    }) || entities.at(file.path.as_str(), root) != Some(symbol)
+        || !member_is_get(&file.ast, head.span)
+    {
+        return false;
+    }
+    let key = if file.ast.computed_members.binary_search(&head.span).is_ok() {
+        file.ast
+            .literal_computed_members
+            .iter()
+            .find(|literal| literal.span == head.span)
+            .map(|literal| literal.key.as_ref())
+    } else {
+        file.source_text(head.property)
+    };
+    key.is_some_and(|key| dialect.store_key_warns_strict_read(key))
+}
+
+/// Whether a member occurrence performs Get, rather than only writing or
+/// deleting that exact member. Receivers and keys inside a target still run.
+fn member_is_get(ast: &solid_facts::ast::AstFacts, span: Span) -> bool {
+    !ast.is_plain_assignment_target(span)
+        && !ast
+            .deleted_targets
+            .iter()
+            .any(|target| ast.peel_ts_sugar_span(*target) == span)
+        && !ast
+            .iteration_targets
+            .iter()
+            .any(|target| target.contains(span))
+        // A destructuring target has no per-leaf Get/write census here.
+        && !ast.assignments.iter().any(|assignment| {
+            !assignment.reads_target
+                && assignment.target.contains(span)
+                && !ast
+                    .members
+                    .iter()
+                    .any(|member| member.span == assignment.target)
+        })
+}
+
+/// A direct body site that can execute only before this call first suspends.
+/// This is a may-run proof, as in ADR 0204: a branch need not be taken, but
+/// whenever the site is evaluated it must still be on the caller's stack.
+///
+/// All own awaits matter, not just `unconditional_awaits`. Source ordering is
+/// deliberately conservative: even an await operand is refused. Loops need
+/// a second check because a lexically earlier site can run again after an
+/// await on a back edge (including a for-loop's test or update). Implicit
+/// suspensions include for-await and await-using; the latter is recorded at
+/// its declaration, earlier than disposal, so it can only withhold proof.
+fn body_site_runs_during_call(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    site: Span,
+) -> bool {
+    if function.generator || !crate::owners::written_directly_in(&file.ast, function, site) {
+        return false;
+    }
+    // JSX may lower to a getter; class fields may wait for construction.
+    // Neither lexical containment nor source order proves evaluation then.
+    // A method's own body lies inside its class; only a class written in
+    // this function defers the site.
+    if file.ast.any_jsx_containing(site)
+        || file
+            .ast
+            .classes
+            .iter()
+            .any(|class| class.span.contains(site) && function.body.contains(class.span))
+        // Binding-pattern defaults/keys run after the initializer, even
+        // though written before it. Assignment patterns have the same
+        // reversal. Withhold these sites rather than infer evaluation order.
+        || file.ast.bindings.iter().any(|binding| binding.pattern.contains(site))
+        || file.ast.assignments.iter().any(|assignment| assignment.target.contains(site))
+        || (file.ast.members.iter().any(|member| member.span == site)
+            && !member_is_get(&file.ast, site))
+    {
+        return false;
+    }
+    if !function.r#async {
+        return true;
+    }
+    let suspensions = file
+        .ast
+        .awaits
+        .iter()
+        .chain(&file.ast.implicit_suspensions)
+        .copied()
+        .filter(|span| crate::owners::written_directly_in(&file.ast, function, *span))
+        .collect::<Vec<_>>();
+    // `default: read(); case await value:` evaluates the later case test
+    // before the default body. The conditional-test census contains if,
+    // ternary and switch tests; only the first two have an ordering model
+    // here. Refuse a suspending function with any other own conditional
+    // test, including future kinds, rather than invent a switch CFG.
+    if !suspensions.is_empty()
+        && file.ast.conditional_tests.iter().any(|test| {
+            crate::owners::written_directly_in(&file.ast, function, *test)
+                && !file
+                    .ast
+                    .if_regions
+                    .iter()
+                    .any(|region| region.test == *test)
+                && !file
+                    .ast
+                    .conditional_expressions
+                    .iter()
+                    .any(|expression| expression.test == *test)
+        })
+    {
+        return false;
+    }
+    !suspensions.iter().any(|span| span.start < site.end)
+        && !file.ast.loop_statements.iter().any(|looped| {
+            looped.contains(site)
+                && function.body.contains(*looped)
+                && suspensions.iter().any(|span| looped.contains(*span))
+        })
+}
+
+/// Whether `file` holds syntax that a caller's call-role proof reads beyond
+/// the summaries the result cache compares: an async function's suspensions,
+/// a parameter default, or a written binding that may hold a function
+/// (`function_value_is_current`, ADR 0221). A file without any of these moves
+/// no such proof.
+fn call_role_syntax(file: &solid_facts::FileFacts) -> bool {
+    file.ast.functions.iter().any(|function| {
+        function.r#async
+            || function
+                .parameters
+                .iter()
+                .any(|parameter| parameter.initializer.is_some())
+            || (function.kind == solid_facts::ast::FunctionKind::Declaration
+                && function
+                    .name
+                    .as_ref()
+                    .is_some_and(|name| crate::indexes::binding_written(file, name.span)))
+    }) || file.ast.bindings.iter().any(|binding| {
+        !binding.immutable
+            && binding.initializer.is_some_and(|initializer| {
+                let initializer = file.ast.peel_ts_sugar_span(initializer);
+                file.ast
+                    .functions
+                    .iter()
+                    .any(|function| function.span == initializer)
+            })
+    })
+}
+
+/// ADR 0204: every project function a call of `function` enters
 /// directly, `function` excluded: through a plain call written in its own body
 /// (not in a nested function, not in a default parameter, not in JSX) whose
-/// callee resolves to one synchronous project function, and so on from each.
+/// callee resolves to one ordinary project function, and so on from each.
+/// For async functions only calls in their synchronous prefix are followed.
 ///
 /// A cycle makes the answer empty: whether a recursive call reaches a read
 /// depends on the values it is called with (`readA(2)` may never get to the
@@ -6333,7 +6661,7 @@ fn enter_directly_called(
         // A plain call: a method call dispatches on its receiver, which a
         // subclass can override.
         if !call.direct_callee
-            || !crate::owners::written_directly_in(&file.ast, function, call.span)
+            || !body_site_runs_during_call(file, function, call.span)
             || file.ast.any_jsx_containing(call.span)
         {
             continue;
@@ -6352,7 +6680,10 @@ fn enter_directly_called(
         let Some((callee_file, callee)) = lookup.function_for_symbol(symbol) else {
             continue;
         };
-        if callee.r#async || callee.generator {
+        if call.construct
+            || callee.generator
+            || !lookup.function_value_is_current(callee_file, callee)
+        {
             continue;
         }
         let key = (callee_file.path.to_string(), callee.span);
@@ -7354,6 +7685,29 @@ fn interprocedural_reads(
         lookup: context.lookup,
     };
     if let Some(cache) = interprocedural_result_cache.as_deref_mut() {
+        // Call-role proofs inspect callee syntax beyond its read summary:
+        // moving an await/default/edge can preserve that summary byte for
+        // byte. Until syntax dependencies are retained per hop, a changed,
+        // added or removed file holding such syntax, before or after the
+        // edit, invalidates result-file reuse, including callers.
+        let all_result_sources_retained = facts
+            .files
+            .iter()
+            .filter(|file| !retained_source_paths.contains(file.path.as_str()))
+            .all(|file| {
+                !call_role_syntax(file)
+                    && cache
+                        .files
+                        .get(file.path.as_str())
+                        .is_none_or(|cached| !cached.call_role_syntax)
+            })
+            && cache.files.iter().all(|(path, cached)| {
+                !cached.call_role_syntax
+                    || facts
+                        .files
+                        .iter()
+                        .any(|file| file.path.as_str() == path.as_str())
+            });
         if cache.files.is_empty()
             && cache.dependency_states.is_empty()
             && cache.dependency_users.is_empty()
@@ -7375,6 +7729,7 @@ fn interprocedural_reads(
                         reads,
                         dispatch_obligations: obligations,
                         compiler: file.compiler.clone(),
+                        call_role_syntax: call_role_syntax(file),
                     },
                 );
             }
@@ -7411,7 +7766,8 @@ fn interprocedural_reads(
                 .map(|(dependency, _)| dependency.clone())
                 .collect::<HashSet<_>>();
             for file in &facts.files {
-                if retained_source_paths.contains(file.path.as_str())
+                if all_result_sources_retained
+                    && retained_source_paths.contains(file.path.as_str())
                     && let Some(cached) = cache.files.get(file.path.as_str())
                     && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                         || same_compiler_semantics(&cached.compiler, &file.compiler))
@@ -7456,6 +7812,7 @@ fn interprocedural_reads(
                         reads,
                         dispatch_obligations: obligations,
                         compiler: file.compiler.clone(),
+                        call_role_syntax: call_role_syntax(file),
                     },
                 );
             }

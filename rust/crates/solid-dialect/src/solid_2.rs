@@ -28,12 +28,15 @@ mod releases;
 /// value from the resolved `solid-js`, `@solidjs/signals` and `@solidjs/web`).
 /// `Solid2` the value is the conservative vocabulary
 /// ([`Solid2::CONSERVATIVE`]); [`Solid2::RC3`] and [`Solid2::RC9`] are those
-/// triples', and the audited one is rc.9's. The audited vocabulary, the
+/// triples', and [`Solid2::RC13`] carries the new audited store-key premise. The audited vocabulary, the
 /// conservative one variant ids are spelled against ([`Solid2::CONSERVATIVE`])
 /// and the one a project with no `solid-js` is analyzed under
 /// ([`Solid2::DEFAULTED`]) are three names, not one (`releases.rs`).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Solid2 {
+    /// Strict store-key witnesses read on exact @solidjs/signals rc.13.
+    /// Other owners/releases remain unaudited for this new premise.
+    store_strict_keys_audited: bool,
     /// B1, from `@solidjs/signals`.
     store_root: releases::StoreRootTyping,
     /// B3: whether this release's `omit` has the predicate form, a lone function
@@ -7442,6 +7445,13 @@ impl Dialect for Solid2 {
     /// dropped too).
     fn store_setter_callback_enables_proxy_writes(&self) -> bool {
         true
+    }
+
+    /// Audited rc.13 @solidjs/signals store Get: the strict-read warning
+    /// tests typeof key == "string" and excludes "then" before reading a
+    /// tracked node. Symbol/protocol keys are not strict-read witnesses.
+    fn store_key_warns_strict_read(&self, key: &str) -> bool {
+        self.store_strict_keys_audited && key != "then"
     }
 
     /// Source: rc.0 `devComponent` (`solid-js` dev entry `dev.js:35-50`)

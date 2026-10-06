@@ -184,7 +184,7 @@
     {
       "rule": "components-return-once",
       "code": "SC1004",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/component-reactive-conditional-return.tsx",
       "start": 53,
@@ -194,7 +194,7 @@
     {
       "rule": "components-return-once",
       "code": "SC1004",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/component-reactive-early-return.tsx",
       "start": 50,

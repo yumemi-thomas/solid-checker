@@ -214,7 +214,7 @@
     {
       "rule": "components-return-once",
       "code": "SC1004",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/component-return-invalid.tsx",
       "start": 126,
@@ -224,7 +224,7 @@
     {
       "rule": "components-return-once",
       "code": "SC1004",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/component-return-invalid.tsx",
       "start": 249,

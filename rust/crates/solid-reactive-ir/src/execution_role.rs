@@ -12,7 +12,7 @@ use solid_facts::core::Span;
 
 use super::{
     EntitySymbols, ExecutionRole, PrimitiveName, SemanticLookup, SymbolId, call_primitive_name,
-    jsx_primitive_name, known_primitive, location,
+    exact_jsx_primitive_name, jsx_primitive_name, known_primitive, location,
 };
 #[path = "project_consumer.rs"]
 mod project_consumer;
@@ -3189,6 +3189,59 @@ pub(super) fn control_flow_execution_role(
     } else {
         Some(ExecutionRole::UntrackedRendering)
     }
+}
+
+/// A role for a site directly in an exact control-flow children literal.
+/// Containment alone is insufficient: `{wrap(() => ... )}` passes the result
+/// of `wrap`, not that literal. Unknown wrappers, competing children props and
+/// spreads do not acquire a render-body proof through this admission gate.
+pub(super) fn direct_control_flow_body_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> Option<ExecutionRole> {
+    let owner = containing_ast_function(&file.ast, span)?;
+    if owner.r#async
+        || owner.generator
+        || !crate::owners::written_directly_in(&file.ast, owner, span)
+    {
+        return None;
+    }
+    let exact = file.ast.jsx_containing(owner.span).any(|element| {
+        element.spreads.is_empty()
+            && element
+                .children
+                .iter()
+                .filter(|child| {
+                    file.source_text(**child)
+                        .is_none_or(|text| !text.trim().is_empty())
+                })
+                .count()
+                == 1
+            && !element
+                .attributes
+                .iter()
+                .any(|attribute| file.source_text(attribute.name) == Some("children"))
+            && element
+                .children
+                .iter()
+                .any(|child| jsx_child_expression(file, *child) == Some(owner.span))
+            && exact_jsx_primitive_name(file, element, entities, symbol_names, dialect)
+                .as_ref()
+                .and_then(PrimitiveName::primitive)
+                .is_some_and(|primitive| dialect.renders_children_through_callback(primitive))
+    });
+    if !exact {
+        return None;
+    }
+    control_flow_execution_role(file, span, entities, symbol_names, dialect).filter(|role| {
+        matches!(
+            role,
+            ExecutionRole::UntrackedRendering | ExecutionRole::TrackedJsx
+        )
+    })
 }
 
 /// The expression an expression-container child (`{expression}`) holds, with

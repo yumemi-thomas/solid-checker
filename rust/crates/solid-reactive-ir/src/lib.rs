@@ -2745,6 +2745,40 @@ fn jsx_primitive_name(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     dialect: &dyn Dialect,
 ) -> Option<PrimitiveName> {
+    exact_jsx_primitive_name(file, element, entities, symbol_names, dialect).or_else(|| {
+        // The spelling of an imported binding, for a tag the entity table does
+        // not resolve. A tag that resolves to another symbol, a local `For`
+        // shadowing the import, is that symbol and names no primitive.
+        let tag = entities.at(file.path.as_str(), element.name.span);
+        file.ast
+            .imports
+            .iter()
+            .filter(|import| dialect.owns_module(&import.module))
+            .flat_map(|import| &import.bindings)
+            .find_map(|binding| {
+                (binding.kind != solid_facts::ast::ImportKind::Namespace
+                    && file.source_text(binding.local.span) == file.source_text(element.name.span)
+                    && tag.is_none_or(|tag| {
+                        entities.at(file.path.as_str(), binding.local.span) == Some(tag)
+                    }))
+                .then_some(binding.imported.as_deref())
+                .flatten()
+            })
+            .map(|name| PrimitiveName::new(name, dialect))
+    })
+}
+
+/// The dialect primitive a JSX tag names by symbol identity: its own resolved
+/// entity, or a member of a dialect namespace import. Unlike
+/// [`jsx_primitive_name`], a local binding that shadows an imported spelling
+/// names nothing here.
+fn exact_jsx_primitive_name(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> Option<PrimitiveName> {
     primitive_name(
         file.path.as_str(),
         element.name.span,
@@ -2774,20 +2808,6 @@ fn jsx_primitive_name(
                 .get(format!("{object_symbol}::{property_name}").as_str())
                 .map(|name| PrimitiveName::new(name, dialect))
         })?
-    })
-    .or_else(|| {
-        file.ast
-            .imports
-            .iter()
-            .filter(|import| dialect.owns_module(&import.module))
-            .flat_map(|import| &import.bindings)
-            .find_map(|binding| {
-                (binding.kind != solid_facts::ast::ImportKind::Namespace
-                    && file.source_text(binding.local.span) == file.source_text(element.name.span))
-                .then_some(binding.imported.as_deref())
-                .flatten()
-            })
-            .map(|name| PrimitiveName::new(name, dialect))
     })
 }
 

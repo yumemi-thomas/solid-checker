@@ -164,6 +164,16 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-exec-stored-literals/App.tsx",
+      "start": 4267,
+      "end": 4276,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fp-exec-stored-literals/App.tsx",

@@ -22,6 +22,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc9-heldout-execution-shapes/App.tsx",
+      "start": 2192,
+      "end": 2198,
+      "fixes": 0
+    },
+    {
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",

@@ -293,6 +293,9 @@ pub(crate) struct CachedInterproceduralResultFile {
     pub(crate) reads: Vec<ReactiveRead>,
     pub(crate) dispatch_obligations: Vec<StaticDefect>,
     pub(crate) compiler: Arc<solid_facts::compiler::ExecutionMap>,
+    /// Whether this file, as analyzed, held syntax a caller's call-role proof
+    /// reads beyond its summaries (`interproc::call_role_syntax`).
+    pub(crate) call_role_syntax: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -1,5 +1,32 @@
 # Precision backlog
 
+## A prop head and an async prefix run at the call (2026-10-07)
+
+ADR 0221.
+- **G1:** the head Get of a props member chain (`props.snapshot` in
+  `props.snapshot?.messages[i]`) is a read, backed through the ADR 0216
+  fixpoint.
+- **G2:** an ordinary async call runs its body up to the first possible
+  suspension, and an omitted argument runs its default, at that invocation.
+
+- **Gained:** corpus twins went from 4 proven, 11 uncertifiable and 3 silent
+  to 10 proven and 8 uncertifiable.
+- **Fixed false positives:**
+  - a local component spelled `For` that shadows the import was treated as
+    the primitive (`shadowed-control-flow-tag`);
+  - `components-return-once` reported a violation from an uncertifiable read.
+    Six fixture cases and two corpus sites (`inferay` `FileActionIcon`,
+    `viviana-ui-web` `ecosystem`) are now uncertifiable.
+- **Conservative:**
+  - every head with an unknown backing is a new obligation;
+  - views, aliases, and written or escaping roots are unknown;
+  - `then`, symbol and dynamic store keys are unknown;
+  - a site after any possible suspension, inside a suspending loop, or in a
+    suspending function with a `switch` stays attributed.
+- **Not yet:** `Cooked` (an escaped key behind `as`) and `WrappedExactCall`;
+  await operands, pattern sub-defaults, explicit `undefined`, transitive and
+  prop-backed defaults; async member, JSX and class entry.
+
 ## The project's bundler answers where a load goes (2026-10-06)
 
 ADR 0220, experimental and off by default. `--runtime-resolution required`

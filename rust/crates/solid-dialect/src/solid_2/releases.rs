@@ -256,6 +256,7 @@ impl Solid2 {
     /// The vocabulary for the `2.0.0-rc.3` triple (and rc.1, rc.2): every
     /// answer as rc.0-rc.3 give it, with the owned-scope guard rc.1 added.
     pub const RC3: Self = Self {
+        store_strict_keys_audited: false,
         store_root: StoreRootTyping::Readonly,
         omit_predicate_form: false,
         until: false,
@@ -267,7 +268,7 @@ impl Solid2 {
 
     /// The vocabulary of the audited triple, [`AUDITED_INSTALLATION`]: what
     /// the review answers for exactly that installation, with no gap.
-    pub const AUDITED: Self = Self::RC9;
+    pub const AUDITED: Self = Self::RC13;
 
     /// The vocabulary a project is analyzed under when no `solid-js`
     /// resolves at all, so no owner was reviewed (the backend's `Defaulted`
@@ -281,6 +282,7 @@ impl Solid2 {
     /// (B4), a store-setter guard that no longer exempts roots (N3), and the
     /// `FLUSH_IN_ACTION` throw (N4).
     pub const RC9: Self = Self {
+        store_strict_keys_audited: false,
         store_root: StoreRootTyping::Mutable,
         omit_predicate_form: true,
         until: true,
@@ -290,10 +292,17 @@ impl Solid2 {
         optimistic_store_setter: OptimisticStoreSetterGuard::Guarded,
     };
 
+    /// rc.13 adds one audited strict store-key premise; older reviews
+    /// grant none, even though their other answers coincide with rc.13.
+    pub const RC13: Self = Self {
+        store_strict_keys_audited: true,
+        ..Self::RC9
+    };
+
     /// How many distinct vocabularies the answers above combine into: every
     /// combination is reachable, because the three owners install
     /// independently.
-    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2;
+    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2;
 
     /// The vocabulary at one mixed-radix index, [`Solid2::CONSERVATIVE`] at
     /// `0`: digit `0` of every answer is its conservative one. A new
@@ -301,6 +310,7 @@ impl Solid2 {
     /// [`Solid2::index`], and one token in [`variant_key`].
     const fn from_index(index: usize) -> Self {
         Self {
+            store_strict_keys_audited: (index / 192) % 2 == 1,
             store_root: if index % 2 == 1 {
                 StoreRootTyping::Mutable
             } else {
@@ -355,6 +365,7 @@ impl Solid2 {
             + 24 * store_setter
             + 48 * flush
             + 96 * optimistic
+            + 192 * (if self.store_strict_keys_audited { 1 } else { 0 })
     }
 
     /// The one `'static` value per vocabulary, which is what an analysis holds.
@@ -395,6 +406,9 @@ static VARIANTS: [Solid2; Solid2::VARIANT_COUNT] = {
 /// audited triple (and a defaulted project) lands on moves.
 fn variant_key(vocabulary: Solid2) -> Option<String> {
     let mut tokens = Vec::new();
+    if vocabulary.store_strict_keys_audited {
+        tokens.push("store-strict-keys-audited");
+    }
     if vocabulary.store_root == StoreRootTyping::Mutable {
         tokens.push("store-root-mutable");
     }
@@ -603,6 +617,8 @@ fn is_pre_beta_experiment(version: &str) -> bool {
 /// The vocabulary for one resolved triple: each answer from its owner.
 fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>) -> Solid2 {
     Solid2 {
+        // The new premise was read only on exact rc.13 signals bytes.
+        store_strict_keys_audited: matches!(signals, Release::Read(13)),
         // B1. An unread or unresolved signals keeps `Readonly` (module docs).
         store_root: match signals {
             Release::Read(number) if number >= 7 => StoreRootTyping::Mutable,
@@ -1031,10 +1047,7 @@ mod tests {
             assert_eq!(gaps.len(), gap_count, "{release}: {gaps:?}");
         }
         assert_eq!(analyzed(&same("2.0.0-rc.3")).0.index(), Solid2::RC3.index());
-        assert_eq!(
-            analyzed(&same("2.0.0-rc.9")).0.index(),
-            Solid2::AUDITED.index()
-        );
+        assert_eq!(analyzed(&same("2.0.0-rc.9")).0.index(), Solid2::RC9.index());
         assert_eq!(
             analyzed(&same("2.0.0-rc.13")).0.index(),
             Solid2::AUDITED.index()
@@ -1079,6 +1092,30 @@ mod tests {
         ] {
             assert!(names.contains(export), "{export}: {names}");
         }
+    }
+
+    /// New strict-key witnesses follow signals, including mixed triples.
+    #[test]
+    fn strict_store_key_witness_follows_exact_signals_release() {
+        for release in ["2.0.0-rc.3", "2.0.0-rc.9", "2.0.0-rc.14"] {
+            assert!(
+                !analyzed(&same(release))
+                    .0
+                    .store_key_warns_strict_read("value")
+            );
+        }
+        let (audited, _) = analyzed(&same("2.0.0-rc.13"));
+        assert!(audited.store_key_warns_strict_read("value"));
+        assert!(!audited.store_key_warns_strict_read("then"));
+        assert!(!Solid2::CONSERVATIVE.store_key_warns_strict_read("value"));
+        assert!(
+            vocabulary_for(Release::Read(9), Release::Read(13), Release::Read(9))
+                .store_key_warns_strict_read("value")
+        );
+        assert!(
+            !vocabulary_for(Release::Read(13), Release::Read(9), Release::Read(13))
+                .store_key_warns_strict_read("value")
+        );
     }
 
     /// Defect 1 of the rc.1-rc.8 review § 5: a fresh install of the audited

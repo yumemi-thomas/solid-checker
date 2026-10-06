@@ -679,6 +679,119 @@ declare namespace JSX {
     }));
 }
 
+/// ADR 0221: moving an `await` across a read in an async callee changes
+/// whether that read runs during the call, while the callee's read summary
+/// can stay the same. A warm session must answer what a cold build does.
+#[test]
+fn incremental_result_cache_follows_a_moved_await() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("moved-await-cache");
+    let project = directory.join("tsconfig.json");
+    let app = directory.join("App.tsx");
+    let helper = directory.join("helper.ts");
+    let declarations = directory.join("solid-js.d.ts");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"jsx":"preserve","module":"ESNext","moduleResolution":"Bundler","strict":true,"target":"ES2022"},"files":["App.tsx","helper.ts","solid-js.d.ts"]}"#,
+    )
+    .unwrap();
+    fs::write(
+        &app,
+        r#"import { load } from "./helper";
+export function App() {
+  void load();
+  return <div />;
+}
+"#,
+    )
+    .unwrap();
+    let before = r#"import { createSignal } from "solid-js";
+const [count] = createSignal(0);
+export async function load() {
+  const value = count();
+  await Promise.resolve();
+  return value;
+}
+"#;
+    let after = r#"import { createSignal } from "solid-js";
+const [count] = createSignal(0);
+export async function load() {
+  await Promise.resolve();
+  const value = count();
+  return value;
+}
+"#;
+    fs::write(&helper, before).unwrap();
+    fs::write(
+        &declarations,
+        r#"declare module "solid-js" {
+  export function createSignal<T>(value: T): [() => T, (value: T) => void];
+}
+declare namespace JSX {
+  interface IntrinsicElements { div: Record<string, unknown>; }
+  interface Element {}
+}
+"#,
+    )
+    .unwrap();
+
+    let project_id = project.to_string_lossy().into_owned();
+    let sources = [&app, &helper]
+        .iter()
+        .map(|path| SourceFile {
+            path: path.to_string_lossy().into_owned(),
+            source: fs::read_to_string(path).unwrap().into(),
+            compiler_options: CompilerOptions::default(),
+        })
+        .collect();
+    let selected = dialect::by_id("solid-v2").unwrap();
+    let typescript = open_type_facts_session(&typefacts, &project_id);
+    let mut session =
+        NativeIncrementalSession::open(selected, project_id, sources, typescript).unwrap();
+    let first = session.analyze().unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let (initial, _) = incremental.build(&first, selected.vocabulary).unwrap();
+    let violations = |program: &_| {
+        selected
+            .solve(program)
+            .iter()
+            .filter(|finding| {
+                finding.rule == "strict-read-untracked" && finding.kind == "violation"
+            })
+            .count()
+    };
+    assert_eq!(
+        violations(&initial),
+        1,
+        "the read before the await runs during the call"
+    );
+
+    for (version, source) in [(1, after), (2, before), (3, after)] {
+        let edited = session
+            .edit(
+                vec![SourceChange {
+                    path: helper.to_string_lossy().into_owned(),
+                    version,
+                    source: Some(source.into()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        let fresh = solid_reactive_ir::build(&edited, selected.vocabulary).unwrap();
+        let (retained, _) = incremental.build(&edited, selected.vocabulary).unwrap();
+        assert_eq!(retained, fresh, "version {version}");
+        assert_eq!(
+            violations(&retained),
+            usize::from(source == before),
+            "version {version}"
+        );
+    }
+}
+
 #[test]
 fn compiler_option_only_edit_invalidates_cached_ownership() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {

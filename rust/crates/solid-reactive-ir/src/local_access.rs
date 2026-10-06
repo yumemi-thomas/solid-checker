@@ -25,14 +25,73 @@ use std::{
 
 use crate::execution_role::{
     RootBodyGuard, allowed_callback_spans, async_execution_role, callee_callback_timing,
-    control_flow_execution_role, host_callback_timing, missing_jsx_census,
-    named_callback_execution_role, nested_literal_runs_during_body, pending_accessor_probe,
-    read_analysis_context, semantic_execution_role, semantic_write_execution_role,
+    control_flow_execution_role, direct_control_flow_body_role, host_callback_timing,
+    missing_jsx_census, named_callback_execution_role, nested_literal_runs_during_body,
+    pending_accessor_probe, read_analysis_context, semantic_execution_role,
+    semantic_write_execution_role,
 };
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
 use solid_facts::ProjectFacts;
 use typefacts::{Declaration, Location};
+
+/// Do not apply an incoming-prop witness to a replaced or escaping root.
+/// Unknown writes through aliases/views need their own value-flow proof.
+pub(super) fn props_root_is_current(
+    file: &solid_facts::FileFacts,
+    declaration: &Location,
+    symbol: &SymbolId,
+    entities: &EntitySymbols,
+) -> bool {
+    use solid_facts::core::Span;
+    if declaration.path.as_ref() != file.path.as_str() {
+        return false;
+    }
+    let (Ok(start), Ok(end)) = (
+        u32::try_from(declaration.start_byte),
+        u32::try_from(declaration.end_byte),
+    ) else {
+        return false;
+    };
+    if crate::indexes::binding_written(file, Span::new(start, end)) {
+        return false;
+    }
+    let names_root = |span| {
+        let span = file.ast.peel_ts_sugar_span(span);
+        file.ast.identifiers.iter().any(|identifier| {
+            identifier.span == span
+                && identifier.role == solid_facts::ast::IdentifierRole::Reference
+        }) && entities.at(file.path.as_str(), span) == Some(symbol)
+    };
+    let member_written = file
+        .ast
+        .assignments
+        .iter()
+        .map(|assignment| assignment.target)
+        .chain(file.ast.deleted_targets.iter().copied())
+        .chain(file.ast.iteration_targets.iter().copied())
+        .any(|target| {
+            file.ast
+                .members
+                .iter()
+                .any(|member| target.contains(member.span) && names_root(member.object))
+        });
+    // Every unaccounted use of the object can alias or escape it, including
+    // shorthand properties, returns and nested parameter defaults. Erased
+    // parts of transparent TS wrappers do not evaluate the object.
+    let escapes = file.ast.identifiers.iter().any(|identifier| {
+        names_root(identifier.span)
+            && !file.ast.transparent_wrappers.iter().any(|wrapper| {
+                wrapper.span.contains(identifier.span) && !wrapper.inner.contains(identifier.span)
+            })
+            && !file
+                .ast
+                .members
+                .iter()
+                .any(|member| file.ast.peel_ts_sugar_span(member.object) == identifier.span)
+    });
+    !member_written && !escapes
+}
 
 pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) facts: &'a ProjectFacts,
@@ -925,11 +984,33 @@ impl LocalAccessContext<'_, '_> {
             }
         }
         for member in &file.ast.members {
-            if file
-                .ast
-                .members
-                .iter()
-                .any(|candidate| candidate.object == member.span)
+            // A member that is another member's object is read as part of the
+            // longer path, which is reported instead -- except a prop read at
+            // the head of a chain (`props.snapshot` in
+            // `props.snapshot?.messages[i]`): the getter that runs is that
+            // prop's, and the longer path's object resolves to no source.
+            let receiver = file.ast.peel_ts_sugar_span(member.object);
+            let receiver_is_identifier = file.ast.identifiers.iter().any(|identifier| {
+                identifier.span == receiver
+                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
+            });
+            let prop_head = receiver_is_identifier
+                && self
+                    .entities
+                    .get(&location(
+                        file.path.shared(),
+                        file.ast.peel_ts_sugar_span(member.object),
+                    ))
+                    .is_some_and(|symbol| {
+                        self.prop_sources.contains_key(symbol)
+                            && self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
+                    });
+            if !prop_head
+                && file
+                    .ast
+                    .members
+                    .iter()
+                    .any(|candidate| file.ast.peel_ts_sugar_span(candidate.object) == member.span)
             {
                 continue;
             }
@@ -937,10 +1018,28 @@ impl LocalAccessContext<'_, '_> {
             // old value. Compound assignments, updates, and members nested
             // inside a target (a computed key, a destructuring default) are
             // retained as reads.
-            if file.ast.is_plain_assignment_target(member.span) {
+            if file.ast.is_plain_assignment_target(member.span)
+                || file
+                    .ast
+                    .deleted_targets
+                    .iter()
+                    .any(|target| file.ast.peel_ts_sugar_span(*target) == member.span)
+                || file
+                    .ast
+                    .iteration_targets
+                    .iter()
+                    .any(|target| file.ast.peel_ts_sugar_span(*target) == member.span)
+            {
                 continue;
             }
-            let object = location(file.path.shared(), member.object);
+            let object = location(
+                file.path.shared(),
+                if receiver_is_identifier {
+                    receiver
+                } else {
+                    member.object
+                },
+            );
             let Some(symbol) = self.entities.get(&object) else {
                 continue;
             };
@@ -955,6 +1054,15 @@ impl LocalAccessContext<'_, '_> {
             if (inside_non_component_function(file, member.span, self.lookup)
                 || inside_unclassified_callback(file, member.span))
                 && named_callback_execution_role(file, member.span, self.lookup).is_none()
+                // This literal is the exact dialect-owned children callback,
+                // and this site is in its own body (nested defaults excluded).
+                && direct_control_flow_body_role(
+                    file,
+                    member.span,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup.dialect,
+                ).is_none()
                 && !matches!(
                     execution,
                     ExecutionRole::EffectApply | ExecutionRole::UntrackedCallback
@@ -970,14 +1078,29 @@ impl LocalAccessContext<'_, '_> {
             let Some((name, declaration)) = source else {
                 continue;
             };
+            // A dynamic first key is not the prop bearing that key's source
+            // spelling. Literal keys use the parser's cooked property name.
+            let property = if file.ast.computed_members.contains(&member.span) {
+                file.ast
+                    .literal_computed_members
+                    .iter()
+                    .find(|key| key.span == member.span)
+                    .map(|key| key.key.as_str())
+            } else {
+                file.source_text(member.property)
+            };
             // A component's `ref` prop is an imperative output channel: the
             // child calls it once to publish its handle. This is not a
             // reactive read, but only when the complete member expression is
             // the direct callee. Reading or aliasing `props.ref` still flows
             // through strict-read analysis like every other prop.
             if self.prop_sources.contains_key(symbol)
-                && file.source_text(member.property) == Some("ref")
-                && file.ast.calls.iter().any(|call| call.callee == member.span)
+                && property == Some("ref")
+                && file
+                    .ast
+                    .calls
+                    .iter()
+                    .any(|call| file.ast.peel_ts_sugar_span(call.callee) == member.span)
             {
                 continue;
             }
@@ -989,8 +1112,22 @@ impl LocalAccessContext<'_, '_> {
             if self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
                 && let Some((_, prop_declaration)) = self.prop_sources.get(symbol)
             {
-                let property = file.source_text(member.property).unwrap_or_default();
-                match self.props_reactivity.prop_use(prop_declaration, property) {
+                // A view/alias can have different keys from the original
+                // parameter. ADR 0216's classification is for that parameter,
+                // not permission to certify a merge view's local head Get.
+                let exact_root = self.entities.get(prop_declaration) == Some(symbol)
+                    && props_root_is_current(file, prop_declaration, symbol, self.entities)
+                    && !self.prop_sources.iter().any(|(other, (_, declaration))| {
+                        other != symbol && declaration == prop_declaration
+                    });
+                let backing = if exact_root {
+                    property.map_or(PropUse::Unknown, |property| {
+                        self.props_reactivity.prop_use(prop_declaration, property)
+                    })
+                } else {
+                    PropUse::Unknown
+                };
+                match backing {
                     PropUse::Static => continue,
                     PropUse::Reactive => {}
                     PropUse::Unknown => uncertain = true,
@@ -1000,20 +1137,28 @@ impl LocalAccessContext<'_, '_> {
             if !seen.insert(key) {
                 continue;
             }
-            let accessor = usize::try_from(member.span.start)
-                .ok()
-                .zip(usize::try_from(member.span.end).ok())
-                .and_then(|(start, end)| file.source.get(start..end))
-                .and_then(|path| {
-                    path.find('.')
-                        .map(|index| format!("{name}{}", &path[index..]))
-                })
-                .unwrap_or_else(|| {
-                    format!(
-                        "{name}.{}",
-                        file.source_text(member.property).unwrap_or_default()
-                    )
-                });
+            let accessor = if prop_head {
+                // Name the Get we proved, including brackets/optional syntax,
+                // rather than a suffix's property or an invented dotted key.
+                file.source_text(member.span)
+                    .unwrap_or(name.as_str())
+                    .to_owned()
+            } else {
+                usize::try_from(member.span.start)
+                    .ok()
+                    .zip(usize::try_from(member.span.end).ok())
+                    .and_then(|(start, end)| file.source.get(start..end))
+                    .and_then(|path| {
+                        path.find('.')
+                            .map(|index| format!("{name}{}", &path[index..]))
+                    })
+                    .unwrap_or_else(|| {
+                        format!(
+                            "{name}.{}",
+                            file.source_text(member.property).unwrap_or_default()
+                        )
+                    })
+            };
             result.reads.push(Arc::new(ReactiveRead {
                 package_internal: false,
                 summary_attributed: false,

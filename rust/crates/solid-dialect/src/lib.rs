@@ -2695,6 +2695,15 @@ pub trait Dialect: Sync {
     /// this answer alone cannot distinguish a store from its setter.
     fn returns_store(&self, primitive: Primitive) -> bool;
 
+    /// Whether an evaluated Get of this known string key on a runtime store
+    /// can warn in this dialect's strict untracked read scope. This is not a
+    /// claim about dependency tracking: protocol and symbol keys can differ.
+    /// Dynamic/non-string keys must not be submitted as spelling guesses.
+    /// An unaudited dialect fails closed.
+    fn store_key_warns_strict_read(&self, _key: &str) -> bool {
+        false
+    }
+
     /// The reactive role this dialect assigns to one slot of what `primitive`
     /// returns, or `None` where this dialect's audited vocabulary does not
     /// state it.
