@@ -18,8 +18,8 @@ a slot that tracks its callback's reads:
 | --- | --- | --- |
 | `UsesTracked` | none | `tracked` invokes `read` only in `createMemo(() => read())` |
 | `UsesTrackedAndEager` | `SC1001` violation | the wrapper also calls `read()` in its body, during the call |
-| `UsesUntracked` | `SC1001` uncertifiable | the call sits in an `untrack` callback, which does not track |
+| `UsesUntracked` | none | the call sits in an unlabelled `untrack` callback, which raises no strict-read warning (ADR 0218) |
 | `UsesTrackedLater` | `SC1001` uncertifiable | an async wrapper |
-| `UsesForwarded` | `SC1001` uncertifiable | the parameter is handed on uncalled (`createMemo(read)`), not invoked in a literal |
+| `UsesForwarded` | none | the parameter is handed on uncalled as the memo's compute (`createMemo(read)`, ADR 0218) |
 
 The stubs are copied from `forwarded-event-prop`.

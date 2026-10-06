@@ -3084,6 +3084,21 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the callback at `argument` may run in a strict-read window of
+    /// its own, opened from an option the call may pass: a reactive read in it
+    /// may then warn although the slot tracks its reads otherwise. A proof that
+    /// a callback runs silently must refuse such a slot; this is not evidence
+    /// that it warns.
+    fn callback_may_open_strict_window(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> bool {
+        let _ = (primitive, argument, argument_count);
+        false
+    }
+
     /// The member a context must be accessed through to act as a provider,
     /// if this dialect has one. Solid 1.x exposes `.Provider`, whose value
     /// getter runs untracked; Solid 2.0 makes the context itself the

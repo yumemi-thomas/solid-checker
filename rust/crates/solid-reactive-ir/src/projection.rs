@@ -617,6 +617,7 @@ pub fn project_findings(
             .iter()
             .filter(|read| {
                 read.execution.reports_untracked_read()
+                    && !read.project_consumer_non_strict
                     && (capabilities.module_scope_strict_reads
                         || read.execution != crate::ExecutionRole::ModuleInitialization)
             })

@@ -369,6 +369,12 @@ pub struct ReactiveRead {
     /// and worded separately for that reason.
     #[serde(default, skip_serializing_if = "is_false")]
     pub callee_callback_timing: bool,
+    /// Generation-local closed project-consumer proof, used only by strict-read
+    /// projection. It establishes no execution role, write legality, async-read
+    /// behavior, ownership, or escape permission. Deserialization cannot supply
+    /// this proof; the post-merge analysis recomputes it from current facts.
+    #[serde(skip)]
+    pub project_consumer_non_strict: bool,
     /// An accepted inline invocation may read an accessor passed by reference,
     /// but its call-scoped cardinality does not prove an invocation occurs.
     #[serde(default, skip_serializing_if = "is_false")]

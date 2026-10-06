@@ -29,7 +29,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 47;
+pub const AST_FACTS_SCHEMA: u32 = 48;
 
 mod binding_references;
 mod class_obligation;
@@ -133,6 +133,11 @@ pub struct AstFacts {
     /// imports counts these too.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub type_imports: Vec<TypeImportFact>,
+    /// The tag expression of each tagged template (facts schema 48). The
+    /// template calls its tag, with the member's object as `this` when the
+    /// tag is a member expression; no call fact records that invocation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tagged_template_tags: Vec<Span>,
     /// Syntax whose module/runtime reachability cannot be made finite from a
     /// local specifier graph. These rows are scope-resolved by Oxc's binder.
     #[serde(default)]
@@ -1391,6 +1396,7 @@ impl AstFacts {
             module_loads: Vec::new(),
             import_equals: Vec::new(),
             type_imports: Vec::new(),
+            tagged_template_tags: Vec::new(),
             module_hazards: Vec::new(),
             module_blocks: Vec::new(),
             identifiers: Vec::new(),
@@ -1532,6 +1538,7 @@ struct Collector<'s, 'semantic> {
     module_loads: Vec<ModuleLoadFact>,
     import_equals: Vec<ImportEqualsFact>,
     type_imports: Vec<TypeImportFact>,
+    tagged_template_tags: Vec<Span>,
     /// The declaration spans of `export import S = require("m")`, recorded by
     /// the export visitor before the walk reaches the declaration itself.
     exported_import_equals: Vec<Span>,
@@ -1684,6 +1691,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             module_loads: Vec::new(),
             import_equals: Vec::new(),
             type_imports: Vec::new(),
+            tagged_template_tags: Vec::new(),
             exported_import_equals: Vec::new(),
             module_hazards: Vec::new(),
             module_blocks: Vec::new(),
@@ -1744,6 +1752,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.import_equals.sort_by_key(|fact| fact.span);
         self.type_imports.sort_by_key(|fact| fact.span);
         self.module_hazards.sort_by_key(|fact| fact.span);
+        self.tagged_template_tags.sort_unstable();
         self.module_blocks.sort_unstable();
         self.identifiers.sort_by_key(|identifier| identifier.span);
         self.reference_declarations.sort_unstable();
@@ -1793,6 +1802,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             module_loads: self.module_loads,
             import_equals: self.import_equals,
             type_imports: self.type_imports,
+            tagged_template_tags: self.tagged_template_tags,
             module_hazards: self.module_hazards,
             module_blocks: self.module_blocks,
             identifiers: self.identifiers,
@@ -3402,6 +3412,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         // contract. The tag and the interpolated expressions are visited
         // directly so their own nested nodes — including genuinely untagged
         // templates inside an interpolation — are still collected.
+        self.tagged_template_tags.push(span(expression.tag.span()));
         self.visit_expression(&expression.tag);
         for interpolated in &expression.quasi.expressions {
             self.visit_expression(interpolated);
@@ -4145,6 +4156,16 @@ export const short = async () => 2;
         // The trailing string literal sits after a statement and is not a
         // module directive.
         assert_eq!(facts.module_directives.len(), 2);
+    }
+
+    #[test]
+    fn tagged_template_tags_are_recorded() {
+        let source = "const o = { t() { return 1; } }; o.t`x${1}`; `plain${2}`;";
+        let facts = extract("/project/tags.ts", source).unwrap();
+        let [tag] = facts.tagged_template_tags.as_slice() else {
+            panic!("one tag: {:?}", facts.tagged_template_tags);
+        };
+        assert_eq!(&source[tag.start as usize..tag.end as usize], "o.t");
     }
 
     #[test]

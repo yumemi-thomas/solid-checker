@@ -14,6 +14,10 @@ use super::{
     EntitySymbols, ExecutionRole, PrimitiveName, SemanticLookup, SymbolId, call_primitive_name,
     jsx_primitive_name, known_primitive, location,
 };
+#[path = "project_consumer.rs"]
+mod project_consumer;
+pub(crate) use project_consumer::ReadConsumerSummaries;
+
 use crate::indexes::ComponentStatus;
 use crate::owners::{
     callback_execution_at_call, callback_owner_at_call, containing_ast_function,

@@ -10,7 +10,7 @@
 | `withDefault(2)`, `lazyDefault()`, `deferred()` | none | the default does not run, only builds a function, or the read is in a closure nobody calls |
 | `useBoth()` | `SC1001` violation | the same signal is read in a nested default and directly in the hook's body; the finding keeps the body read |
 | `useFinisher()` | none | the read is in the default of a function the hook builds and never calls; it lies in the hook's body but in no code that runs there |
-| `<RenderLive label={…} />` | `SC1001` uncertifiable | `RenderLive` calls the prop only in JSX |
+| `<RenderLive label={…} />` | none | `RenderLive` calls the prop only in JSX, which tracks (ADR 0218) |
 | `<Render label={…} {...rest} />` | `SC1001` uncertifiable | a spread could replace the prop |
 
 The `SC1001` on `props.label` in `Render` belongs to the props rules and is not part of this claim. The stubs are copied from `feedback-tiers`.

@@ -270,6 +270,35 @@ pub(crate) fn collect_project<'facts>(
     timings.absorb_interprocedural(&interprocedural.timings);
     draft.strict_read_obligations += interprocedural.reads.len();
     draft.reads.extend(interprocedural.reads.iter().cloned());
+    // Recompute after both cache merges. A consumer in another file can change
+    // while the literal's local read row is reused; a cached true is never proof.
+    let mut consumers = crate::execution_role::ReadConsumerSummaries::new(ctx.semantic_lookup);
+    for read in &mut draft.reads {
+        read.project_consumer_non_strict = false;
+        if !read.callee_callback_timing
+            || !read.execution.reports_untracked_read()
+            || read.summary_attributed
+            || read.package_internal
+            || read.missing_jsx_census
+            || read.host_callback_timing
+            || read.callback_invocation_unproven
+        {
+            continue;
+        }
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(read.location.start_byte),
+            u32::try_from(read.location.end_byte),
+        ) else {
+            continue;
+        };
+        if let Some(file) = ctx
+            .semantic_lookup
+            .file_by_path(read.location.path.as_ref())
+        {
+            read.project_consumer_non_strict =
+                consumers.proves_non_strict(file, solid_facts::core::Span::new(start, end));
+        }
+    }
     for obligation in interprocedural.dispatch_obligations.iter() {
         draft.push_defect(obligation.clone());
     }

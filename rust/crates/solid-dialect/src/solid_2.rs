@@ -8164,6 +8164,21 @@ impl Dialect for Solid2 {
             || (primitive == Primitive::RunWithOwner && argument == 1)
     }
 
+    /// `mapArray(list, map, { name })` and `repeat(count, map, { name })` wrap
+    /// the map function in `setStrictRead(options.name)` (rc.13
+    /// `@solidjs/signals` `mapArray`, `repeat`), so any options argument may
+    /// open a labelled window around it.
+    fn callback_may_open_strict_window(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> bool {
+        argument == 1
+            && argument_count > 2
+            && matches!(primitive, Primitive::MapArray | Primitive::RepeatMap)
+    }
+
     /// The callbacks nothing runs until the returned value is used:
     /// `createReaction`'s invalidation callback arms only once the returned
     /// tracker is called, `lazy`'s loader waits for the wrapper component to

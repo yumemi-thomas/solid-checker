@@ -459,6 +459,7 @@ impl LocalAccessContext<'_, '_> {
                             execution,
                             self.lookup,
                         ),
+                        project_consumer_non_strict: false,
                         callback_invocation_unproven: false,
                         callee_callback_timing: callee_callback_timing(
                             file,
@@ -559,6 +560,7 @@ impl LocalAccessContext<'_, '_> {
                         execution,
                         self.lookup,
                     ),
+                    project_consumer_non_strict: false,
                     callback_invocation_unproven: false,
                     callee_callback_timing: callee_callback_timing(
                         file,
@@ -676,6 +678,7 @@ impl LocalAccessContext<'_, '_> {
                         execution,
                         self.lookup,
                     ),
+                    project_consumer_non_strict: false,
                     callback_invocation_unproven: false,
                     callee_callback_timing: callee_callback_timing(
                         file,
@@ -721,6 +724,7 @@ impl LocalAccessContext<'_, '_> {
                                 execution,
                                 self.lookup,
                             ),
+                            project_consumer_non_strict: false,
                             callback_invocation_unproven: false,
                             callee_callback_timing: callee_callback_timing(
                                 file,
@@ -788,6 +792,7 @@ impl LocalAccessContext<'_, '_> {
                                 execution,
                                 self.lookup,
                             ),
+                            project_consumer_non_strict: false,
                             callback_invocation_unproven: false,
                             callee_callback_timing: callee_callback_timing(
                                 file,
@@ -1033,6 +1038,7 @@ impl LocalAccessContext<'_, '_> {
                     execution,
                     self.lookup,
                 ),
+                project_consumer_non_strict: false,
                 callback_invocation_unproven: false,
                 callee_callback_timing: callee_callback_timing(
                     file,
@@ -1183,6 +1189,7 @@ impl LocalAccessContext<'_, '_> {
                     execution,
                     self.lookup,
                 ),
+                project_consumer_non_strict: false,
                 callback_invocation_unproven: false,
                 callee_callback_timing: callee_callback_timing(
                     file,

@@ -1,5 +1,56 @@
 # Precision backlog
 
+## A callback every use of which is closed is not a strict read (2026-10-06)
+
+ADR 0218. A reactive read in an arrow that a component body hands to a
+project function or component is not a strict read when every use of the
+parameter is closed: a tracked compute, unlabelled `untrack`, tracked JSX, a
+fresh-stack scheduler, or an exact forward to another closed use. Sibling
+fields the consumer touches must be inert at every site.
+
+- **Gained:** rc.13 corpus uncertifiable 3,397 to 3,384 (13 strict reads);
+  violations unchanged.
+- **Still open:**
+  - callbacks stored in fields, handed to package helpers (query keys), or
+    registered as DOM listeners;
+  - async or defaulted consumers;
+  - `function` callbacks;
+  - absent or named sibling fields;
+  - `mapArray`/`repeat` with options;
+  - `Promise.catch`/`finally`.
+- **Open, predates ADR 0218:**
+  - **A labelled `untrack` written directly in a body**
+    (`untrack(() => count(), "label")`). It warns at runtime (`strictRead`
+    is set to the label) and the checker reports nothing: a missed
+    detection. See fixture case `project-callback-uses`
+    `DirectLabelledUntrack`.
+  - **ADR 0210's leaf-scope host timing treats `Promise.catch`/`finally` as
+    fresh-stack.** Both call their receiver's `then`, which a subclass may
+    override to run the handler synchronously.
+
+## Parked: type queries and namespace calls as accounted entries (2026-10-06)
+
+A research lever, not landed. It would let a closed program's exported
+caller-supplied-member obligation (ADR 0203) treat `typeof helper` in a type
+position as erased, and `ns.helper(...)` as a call of the declaration its
+property resolves to. On the rc.13 corpus that removes 30 obligations.
+
+Five review rounds showed that the admission is sound only while the module
+is not reachable as an escaping namespace object: `Object.values(ns)`,
+`ns["helper"]`, a barrel's namespace, `import = require`, or a dynamic
+import. Telling which module a non-relative specifier names needs Type
+Facts' module graph (`ModuleImportFact.resolved_path`), which the analysis
+does not receive. The conservative rule, "a non-relative specifier may name
+any module", removes all 30 gains.
+
+The parked diff, fixtures and draft ADR are in
+`rust/target/research/volume/entries/parked/`.
+
+- **Open, predates this work:** a census ADR 0203 closes with direct calls
+  alone does not consult namespace escapes. A module called directly and
+  also enumerated through its namespace still clears. Guarding every census
+  refused 237 closures, so this too needs the module graph.
+
 ## Leaf scopes reach helpers, namespaces and more host callbacks (2026-10-06)
 
 ADR 0217. Argumentless calls in local helpers a leaf callback reaches are

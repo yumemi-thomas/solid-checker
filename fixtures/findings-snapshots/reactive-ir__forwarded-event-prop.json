@@ -67,16 +67,6 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-event-prop/App.tsx",
-      "start": 3001,
-      "end": 3008,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/forwarded-event-prop/App.tsx",
       "start": 3135,
       "end": 3142,
       "fixes": 0

@@ -91,6 +91,22 @@ pub(super) const FRESH_STACK_SCHEDULERS: &[&str] = &[
     "ReportingObserver.construct",
 ];
 
+/// Fresh-stack rows whose method calls its receiver's `then`
+/// (`Promise.prototype.catch` and `finally`, ECMAScript 27.2.5.1, 27.2.5.3).
+/// A subclass that overrides `then` can run the handler synchronously, and
+/// the inherited method still resolves to the standard declaration, so a proof
+/// that the handler never runs on its invoker's stack must refuse these.
+const RECEIVER_THEN_DISPATCH: &[&str] = &["Promise.catch", "Promise.finally"];
+
+/// Whether `call` is a fresh-stack scheduler whose stack depends on its
+/// receiver's `then` ([`RECEIVER_THEN_DISPATCH`]).
+pub(super) fn dispatches_through_receiver_then(call: &ResolvedCall) -> bool {
+    call.declaration.as_ref().is_some_and(|declaration| {
+        declaration.standard_library
+            && RECEIVER_THEN_DISPATCH.contains(&declaration.qualified_name.as_ref())
+    })
+}
+
 impl RuntimeArgumentBehavior {
     /// Whether the callback, when it runs, is proven to run with no caller's
     /// listener current -- the one fact a `deferred` contract row needs before

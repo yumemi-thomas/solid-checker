@@ -6123,6 +6123,7 @@ fn interprocedural_result_reads_for_file(
                                 callback_execution,
                                 lookup,
                             ),
+                            project_consumer_non_strict: false,
                             callback_invocation_unproven: accessor_read.is_some()
                                 && lookup.contract_inline_accessor_invocation(
                                     symbol,
@@ -6282,6 +6283,7 @@ fn interprocedural_result_reads_for_file(
                     uncertain: false,
                     missing_jsx_census: missing_jsx_census(file, call.span, execution),
                     host_callback_timing: host_callback_timing(file, call.span, execution, lookup),
+                    project_consumer_non_strict: false,
                     callback_invocation_unproven: false,
                     callee_callback_timing: callee_callback_timing(
                         file, call.span, execution, lookup,

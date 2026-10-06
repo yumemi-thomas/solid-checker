@@ -43,7 +43,7 @@ listener (`Spreads`, and `OmitSpread` through an `omit` view): rc.13's
 | `NestedOutsideHandler` | `SC1001` uncertifiable | an async helper's callback written in the body |
 | `UsesMergeEscapes` | `SC1001` uncertifiable | a `merge` view is handed to a helper |
 | `UsesSpreadsRender` | `SC1001` uncertifiable | a spread prop whose name is not an `on…` name |
-| `UsesKeeps` | `SC1001` uncertifiable | the prop is invoked from a timer |
+| `UsesKeeps` | none | the prop is invoked only from a timer, on a fresh stack (ADR 0218) |
 | `UsesMixed` | `SC1001` uncertifiable | one use is an event, another runs while rendering |
 | `UsesLoop` | `SC1001` uncertifiable | a forwarding cycle proves nothing |
 

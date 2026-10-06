@@ -1090,6 +1090,7 @@ mod tests {
                 uncertain: false,
                 missing_jsx_census: false,
                 host_callback_timing: false,
+                project_consumer_non_strict: false,
                 callback_invocation_unproven: false,
                 callee_callback_timing: false,
             }],

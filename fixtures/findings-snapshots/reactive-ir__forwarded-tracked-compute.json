@@ -17,28 +17,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-tracked-compute/App.tsx",
-      "start": 647,
-      "end": 654,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/forwarded-tracked-compute/App.tsx",
       "start": 792,
       "end": 799,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/forwarded-tracked-compute/App.tsx",
-      "start": 936,
-      "end": 943,
       "fixes": 0
     }
   ]
