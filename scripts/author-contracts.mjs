@@ -8,6 +8,9 @@
 //       write pkg/contracts/authored/{index.json,objects/**} and embedded.rs
 //   bun scripts/author-contracts.mjs check
 //       fail if the written tier is not what `build` would write
+//   bun scripts/author-contracts.mjs identity --spec <spec> --install <dir> --proposal <file>
+//       write the spec's identity.json from a `contract generate --host browser`
+//       proposal for a version the certified tier does not carry (ADR 0207)
 //
 // A spec is a directory `pkg/contracts/authored/specs/<package>@<version>/`
 // holding `spec.json` and, per claimed export, `<export>.misuse.tsx` and
@@ -16,7 +19,8 @@
 // misuse rule its pair exercises.
 //
 // Each artifact case of that version starts from the certified document the
-// compiled-in tier already carries for it: its identity, case structure and
+// compiled-in tier already carries for it, or, for a version it does not carry,
+// from the spec's `identity.json` (ADR 0207): its identity, case structure and
 // file digests are the version's own. Every export's `call` is then replaced,
 // with the authored claim where the spec states one and its pair passed, and
 // fully open (`{}`) everywhere else. Nothing a certification inferred ships
@@ -61,6 +65,11 @@ const accepted = read(join(ACCEPTED, "index.json"));
  * browser host and nothing else.
  */
 function certifiedCases(spec) {
+  if (spec.identity) {
+    const identity = read(join(spec.directory, spec.identity));
+    assert.equal(identity.format, 1, `${spec.name}: identity format`);
+    return identity.cases.map(entry => ({ ...entry, packageName: spec.package, packageVersion: spec.version }));
+  }
   const cases = new Map();
   for (const bundle of accepted.bundles) {
     if (bundle.packageName !== spec.package || bundle.packageVersion !== spec.version) continue;
@@ -89,8 +98,13 @@ function probeInstall(spec, install) {
   const packageDirectory = installed(spec.package, install);
   const manifest = read(join(packageDirectory, "package.json"));
   assert.equal(manifest.version, spec.version, `${spec.name}: the probe install holds ${manifest.version}`);
+  if (spec.identity) {
+    const root = snapshotRoot(packageDirectory, spec.package, spec.version);
+    for (const bundle of certifiedCases(spec))
+      assert.equal(root, bundle.snapshotRoot, `${spec.name}: the probe install's files are not the identity's snapshot`);
+  }
   const artifacts = certifiedCases(spec).map(bundle => {
-    const document = read(join(ACCEPTED, bundle.document));
+    const document = caseDocument(bundle);
     const [artifactCase] = Object.values(document.entrypoints).flatMap(entrypoint => entrypoint.cases ?? [entrypoint]);
     const path = artifactCase.artifact.path.replace(/^\.\//, "");
     const bytes = readFileSync(join(packageDirectory, path));
@@ -114,6 +128,7 @@ function probe(browser) {
     const identity = probeInstall(spec, realpathSync(install));
     const cases = Object.entries(spec.exports).map(([name, claim]) => ({
       id: `${spec.name}#${name}`, package: spec.package, version: spec.version, export: name, rule: claim.rule,
+      ...(claim.scenario ? { scenario: claim.scenario } : {}),
       misuse: readFileSync(join(spec.pairs, `${name}.misuse.tsx`), "utf8"),
       correct: readFileSync(join(spec.pairs, `${name}.correct.tsx`), "utf8")
     }));
@@ -145,8 +160,89 @@ function passed(spec, name) {
 }
 
 /** One authored document from one certified case document. */
+/** The identity document of one case: certified, or from the spec's identity. */
+function caseDocument(bundle) {
+  return bundle.identityDocument ? structuredClone(bundle.identityDocument) : read(join(ACCEPTED, bundle.document));
+}
+
+/**
+ * The snapshot root of a package as installed at `directory`, exactly as
+ * `installed_package_snapshot_root` computes it: every regular file outside the
+ * package's own top-level node_modules, with every directory those paths imply.
+ */
+function snapshotRoot(directory, name, version) {
+  const files = [];
+  const walk = (at, prefix) => {
+    for (const entry of readdirSync(at, { withFileTypes: true })) {
+      const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) { if (path !== "node_modules") walk(join(at, entry.name), path); }
+      else if (entry.isFile()) files.push(path);
+      else throw new Error(`${path} is not a regular file`);
+    }
+  };
+  walk(directory, "");
+  const order = (a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b));
+  files.sort(order);
+  const directories = new Set();
+  for (const path of files) {
+    const parts = path.split("/");
+    for (let index = 1; index < parts.length; index += 1) directories.add(parts.slice(0, index).join("/"));
+  }
+  const hash = createHash("sha256");
+  const field = bytes => { const length = Buffer.alloc(8); length.writeBigUInt64BE(BigInt(bytes.length)); hash.update(length); hash.update(bytes); };
+  hash.update(Buffer.from("solid-checker:artifact-snapshot:v1\0", "latin1"));
+  field(Buffer.from(name)); field(Buffer.from(version));
+  for (const path of [...directories].sort(order)) { field(Buffer.from("directory")); field(Buffer.from(path)); }
+  for (const path of files) { field(Buffer.from("file")); field(Buffer.from(path)); field(readFileSync(join(directory, path))); }
+  return `sha256:${hash.digest("hex")}`;
+}
+
+/**
+ * ADR 0207: a spec's identity.json from a `contract generate --host browser`
+ * proposal. Each artifact case becomes one single-case document holding only
+ * the identity fields; the proposal's claims are dropped, its summaries kept
+ * only for their shape. The condition set and targets are the case's own, as
+ * the proposal's certification inputs resolved them.
+ */
+function identity() {
+  const only = option("--spec"), install = option("--install"), proposalPath = option("--proposal");
+  assert(only && install && proposalPath, "usage: author-contracts.mjs identity --spec <spec> --install <dir> --proposal <file>");
+  const spec = specs.find(candidate => candidate.name === only);
+  assert(spec, `no spec ${only}`);
+  const proposal = read(proposalPath);
+  const inputs = read(`${proposalPath}.certification-inputs.json`);
+  assert.equal(proposal.package.name, spec.package); assert.equal(proposal.package.version, spec.version);
+  const packageDirectory = installed(spec.package, realpathSync(install));
+  const root = snapshotRoot(packageDirectory, spec.package, spec.version);
+  const cases = [];
+  for (const [entrypoint, value] of Object.entries(proposal.entrypoints))
+    for (const artifactCase of value.cases ?? [value]) {
+      const runtimeTarget = artifactCase.artifact.path.replace(/^\.\//, "");
+      const input = inputs.certificationInputs.find(row => row.entrypoint === entrypoint && row.resolution.runtime.path === join(packageDirectory, runtimeTarget));
+      assert(input, `${spec.name}: no certification input resolves ${runtimeTarget}`);
+      const summaries = {};
+      for (const reference of Object.values(artifactCase.exports)) {
+        const id = typeof reference === "string" ? reference : reference.summary;
+        summaries[id] = { call: {}, shape: proposal.summaries[id].shape };
+      }
+      cases.push({
+        specifier: input.resolution.specifier,
+        requestedEntrypoint: entrypoint,
+        // An ESM importer's resolution, as the corpus apps' certified bundles state it.
+        exportConditions: [...new Set([...input.conditions, "import"])].sort(),
+        runtimeTarget,
+        declarationTarget: artifactCase.declarations.path.replace(/^\.\//, ""),
+        packageIntegrity: proposal.package.integrity,
+        snapshotRoot: root,
+        identityDocument: { ...proposal, entrypoints: { [entrypoint]: { cases: [artifactCase] } }, summaries }
+      });
+    }
+  writeFileSync(join(spec.directory, spec.identity ?? "identity.json"), json({ format: 1, cases }));
+  console.log(`${spec.name}: wrote ${cases.length} identity cases`);
+}
+
 function author(spec, bundle) {
-  const document = read(join(ACCEPTED, bundle.document));
+  const document = caseDocument(bundle);
   const summaries = {};
   const shipped = [];
   for (const entrypoint of Object.values(document.entrypoints))
@@ -178,9 +274,8 @@ function build() {
     const integrity = Object.fromEntries(spec.solidRuntime.map(entry => [entry.name, entry]));
     assert.deepEqual(Object.keys(integrity).sort(), ["@solidjs/signals", "@solidjs/web", "solid-js"], `${spec.name}: solidRuntime`);
     for (const bundle of certifiedCases(spec)) {
-      const receipt = read(join(ACCEPTED, bundle.receipt));
-      const snapshotRoot = receipt.payload?.snapshotRoot;
-      assert(snapshotRoot, `${bundle.receipt}: no snapshotRoot`);
+      const snapshotRoot = bundle.snapshotRoot ?? read(join(ACCEPTED, bundle.receipt)).payload?.snapshotRoot;
+      assert(snapshotRoot, `${spec.name}: no snapshotRoot for ${bundle.runtimeTarget}`);
       const { document, shipped } = author(spec, bundle);
       if (shipped.length === 0) continue;
       const bytes = Buffer.from(json(document));
@@ -223,7 +318,8 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[${[...objects.keys()].sort().map(
   return { index: json({ format: 1, entries }), embedded, objects, report };
 }
 
-if (command === "probe") probe(rest.find((arg, index) => !arg.startsWith("--") && !rest[index - 1]?.startsWith("--")));
+if (command === "identity") identity();
+else if (command === "probe") probe(rest.find((arg, index) => !arg.startsWith("--") && !rest[index - 1]?.startsWith("--")));
 else if (command === "build" || command === "check") {
   const { index, embedded, objects, report } = build();
   if (command === "check") {
@@ -244,6 +340,6 @@ else if (command === "build" || command === "check") {
     for (const line of report) console.log(`  ${line}`);
   }
 } else {
-  console.error("usage: author-contracts.mjs probe <chromium> --only <spec> --install <dir> | build | check");
+  console.error("usage: author-contracts.mjs probe <chromium> --only <spec> --install <dir> | identity --spec <spec> --install <dir> --proposal <file> | build | check");
   process.exit(2);
 }

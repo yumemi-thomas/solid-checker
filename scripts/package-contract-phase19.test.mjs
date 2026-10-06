@@ -325,7 +325,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // 182 adds owned-computation-callbacks' main document and
       // package-owned-computation-consumer's hand-stated document, ADR 0183's
       // generator and consumer pins.
-      stableMainDocuments: 182,
+      //
+      // 183 adds package-event-props-consumer's hand-stated document, ADR
+      // 0207's pin of an `event-handler-props` callback item.
+      stableMainDocuments: 183,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

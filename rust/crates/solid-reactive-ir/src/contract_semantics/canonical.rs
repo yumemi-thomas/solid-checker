@@ -710,6 +710,14 @@ impl CanonicalWriter {
                 self.resource_id(resource);
                 self.sequence(path, |writer, value| writer.text(value));
             }
+            // ADR 0207: a tag of its own, so no document that states a member
+            // class hashes like one that does not.
+            ValueSource::ParameterMembers { index, path, class } => {
+                self.u8(3);
+                self.u16(*index);
+                self.sequence(path, |writer, value| writer.text(value));
+                self.text(class.wire());
+            }
         }
     }
 

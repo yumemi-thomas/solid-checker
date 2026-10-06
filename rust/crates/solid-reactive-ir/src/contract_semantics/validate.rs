@@ -1337,6 +1337,20 @@ fn validate_call_claims(
         )?;
         match &callback.from {
             ValueSource::Parameter { .. } => {}
+            // ADR 0207: a member class is invoked as a call; any other protocol
+            // of an unbounded set of members has no meaning here.
+            ValueSource::ParameterMembers { .. } => {
+                if operations.iter().any(|operation| {
+                    operation.id == callback.operation
+                        && operation.invoke_protocol()
+                            != crate::contract_semantics::InvokeProtocol::Call
+                }) {
+                    return Err(ModelError::InvalidKnowledge {
+                        path: format!("{path}.callbacks.source"),
+                        reason: "a member class is invoked only as a call".into(),
+                    });
+                }
+            }
             ValueSource::OperationOutput { operation, .. } => {
                 if !operation_kinds.contains_key(operation) {
                     return Err(ModelError::MissingOperation {

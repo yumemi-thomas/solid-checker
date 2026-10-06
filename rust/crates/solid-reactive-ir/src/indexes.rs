@@ -498,6 +498,18 @@ impl<'a> SemanticLookup<'a> {
             })
     }
 
+    /// ADR 0207: the `event-handler-props` items of the accepted contract
+    /// bound to `symbol`.
+    pub(super) fn contract_event_handler_props(
+        &self,
+        symbol: &str,
+    ) -> Option<&[super::EventHandlerPropsClaim]> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .map(|binding| binding.summary.event_handler_props.as_slice())
+    }
+
     pub(super) fn contract_inline_accessor_invocation(
         &self,
         symbol: &str,

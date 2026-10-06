@@ -17,7 +17,7 @@ use solid_reactive_ir::contract_semantics::{
     ArrayLength, ArtifactCase, ArtifactIdentity, CallbackInvocation, CapabilityClaim,
     CapabilityKnowledge, Cardinality, CardinalityScope, ClaimDomain, ContractProposal, Digest,
     EdgeKind, Event, ExportIdentity, ExportSemantics, ExportTargetIdentity, Guard, GuardAtom,
-    GuardPartition, GuardedCase, InvokeProtocol, KnowledgeSet, Lifetime, Literal,
+    GuardPartition, GuardedCase, InvokeProtocol, KnowledgeSet, Lifetime, Literal, MemberClass,
     ModuleInitializationClaim, NormalizedContract, ObjectProperty, ObservableCapability, Operation,
     OperationEdge, OperationId, OperationKind, OwnerCapabilities, OwnerProduction, OwnerRelation,
     OwnerRequirements, OwnerSource, PackageIdentity, ReactiveRole, Requirement, ResolutionStep,
@@ -611,6 +611,9 @@ fn compact_value_source(
 ) -> Result<JsonValue, ContractFailure> {
     Ok(match source {
         ValueSource::Parameter { index, path } => json!({"arg": index, "path": path}),
+        ValueSource::ParameterMembers { index, path, class } => {
+            json!({"arg": index, "path": path, "members": class.wire()})
+        }
         ValueSource::OperationOutput { operation, path } => {
             json!({"operation": ids.operation(operation)?, "path": path})
         }
@@ -1655,6 +1658,15 @@ struct WireValueSource {
     resource: Option<String>,
     #[serde(default)]
     path: Vec<String>,
+    /// ADR 0207: a class of the value's own members, beside `arg` only.
+    #[serde(default)]
+    members: Option<WireMemberClass>,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+enum WireMemberClass {
+    #[serde(rename = "event-handler-props")]
+    EventHandlerProps,
 }
 
 #[derive(Clone, Deserialize)]
@@ -3031,6 +3043,18 @@ fn expand_value_source(
     source: WireValueSource,
     ids: &IdScope,
 ) -> Result<ValueSource, ContractFailure> {
+    if let Some(class) = source.members {
+        let (Some(index), None, None) = (source.arg, &source.operation, &source.resource) else {
+            return invalid_document("a callback source's members class requires arg");
+        };
+        return Ok(ValueSource::ParameterMembers {
+            index,
+            path: source.path,
+            class: match class {
+                WireMemberClass::EventHandlerProps => MemberClass::EventHandlerProps,
+            },
+        });
+    }
     match (source.arg, source.operation, source.resource) {
         (Some(index), None, None) => Ok(ValueSource::Parameter {
             index,

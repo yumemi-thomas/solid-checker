@@ -1652,6 +1652,14 @@ pub enum ValueSource {
         index: u16,
         path: Vec<String>,
     },
+    /// ADR 0207: every member of the value at `index`/`path` in `class`. The
+    /// item is exhaustive for that class: every invocation of such a member
+    /// is its operation, whatever the domain's closure says.
+    ParameterMembers {
+        index: u16,
+        path: Vec<String>,
+        class: MemberClass,
+    },
     OperationOutput {
         operation: OperationId,
         path: Vec<String>,
@@ -1660,6 +1668,32 @@ pub enum ValueSource {
         resource: ResourceId,
         path: Vec<String>,
     },
+}
+
+/// ADR 0207: a class of an object's own properties a callback item names.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum MemberClass {
+    /// Every key that starts with `on` and contains no `:`: the properties
+    /// the Solid runtime's spread attaches as event listeners.
+    EventHandlerProps,
+}
+
+impl MemberClass {
+    /// Whether `key` is a member of the class.
+    #[must_use]
+    pub fn contains(self, key: &str) -> bool {
+        match self {
+            Self::EventHandlerProps => key.starts_with("on") && !key.contains(':'),
+        }
+    }
+
+    /// The class's wire spelling.
+    #[must_use]
+    pub const fn wire(self) -> &'static str {
+        match self {
+            Self::EventHandlerProps => "event-handler-props",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]

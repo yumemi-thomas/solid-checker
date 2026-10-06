@@ -788,17 +788,15 @@ fn forwarded_event_prop_role(
         .functions_body_containing(span)
         .any(|literal| {
             component_prop_literal(file, literal.span).is_some_and(|(element, prop)| {
-                lookup
-                    .function_called_at(file.path.as_str(), element.name.span)
-                    .is_some_and(|(component_file, component)| {
-                        prop_reaches_only_events(
-                            component_file,
-                            component,
-                            prop,
-                            lookup,
-                            &mut HashSet::new(),
-                        )
-                    })
+                component_prop_reaches_only_events(
+                    file,
+                    element,
+                    None,
+                    prop,
+                    lookup,
+                    &mut HashSet::new(),
+                    &[],
+                )
             })
         })
         .then_some(ExecutionRole::EventCallback)
@@ -984,6 +982,7 @@ fn prop_reaches_only_events(
     prop: &str,
     lookup: &SemanticLookup<'_>,
     visiting: &mut HashSet<(String, Span, String)>,
+    chain: &[RenderHop],
 ) -> bool {
     if function.r#async || function.generator || function.rest_parameter {
         return false;
@@ -1035,12 +1034,19 @@ fn prop_reaches_only_events(
                 .find(|member| member.object == reference)
             {
                 file.source_text(member.property) != Some(prop)
-                    || member_reaches_only_events(file, member.span, lookup, visiting)
+                    || member_reaches_only_events(
+                        file,
+                        function,
+                        member.span,
+                        lookup,
+                        visiting,
+                        chain,
+                    )
             } else if let Some(view) = props_view_call(file, reference, lookup) {
                 match spread_onto(file, view) {
-                    Some(element) => {
-                        spread_reaches_only_events(file, element, prop, lookup, visiting)
-                    }
+                    Some(element) => spread_reaches_only_events(
+                        file, function, element, prop, lookup, visiting, chain,
+                    ),
                     None => match const_binding_of(file, view, lookup) {
                         Some(binding) => {
                             aliases.push(binding);
@@ -1050,7 +1056,7 @@ fn prop_reaches_only_events(
                     },
                 }
             } else if let Some(element) = spread_onto(file, reference) {
-                spread_reaches_only_events(file, element, prop, lookup, visiting)
+                spread_reaches_only_events(file, function, element, prop, lookup, visiting, chain)
             } else if let Some(binding) = const_binding_of(file, reference, lookup) {
                 // `const rest = props`, `const root = view as Props`: the same
                 // object under another name.
@@ -1071,9 +1077,11 @@ fn prop_reaches_only_events(
 /// [`prop_reaches_only_events`].
 fn member_reaches_only_events(
     file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
     member: Span,
     lookup: &SemanticLookup<'_>,
     visiting: &mut HashSet<(String, Span, String)>,
+    chain: &[RenderHop],
 ) -> bool {
     use solid_facts::compiler::CallbackRoleKind;
     let event_handlers = || {
@@ -1099,12 +1107,17 @@ fn member_reaches_only_events(
         Some((element, _)) if intrinsic_element(file, element) => {
             event_handlers().any(|callback| callback.span.contains(member))
         }
-        Some((element, attribute)) => file
-            .source_text(attribute.name)
-            .zip(lookup.function_called_at(file.path.as_str(), element.name.span))
-            .is_some_and(|(next, (next_file, next_function))| {
-                prop_reaches_only_events(next_file, next_function, next, lookup, visiting)
-            }),
+        Some((element, attribute)) => file.source_text(attribute.name).is_some_and(|next| {
+            component_prop_reaches_only_events(
+                file,
+                element,
+                Some(function),
+                next,
+                lookup,
+                visiting,
+                chain,
+            )
+        }),
         None => {
             if event_handlers().any(|callback| {
                 intrinsic_attribute_value(file, callback.span)
@@ -1127,10 +1140,15 @@ fn member_reaches_only_events(
                 let Some((element, prop)) = component_prop_literal(file, literal) else {
                     continue;
                 };
-                if let Some((next_file, next_function)) =
-                    lookup.function_called_at(file.path.as_str(), element.name.span)
-                    && prop_reaches_only_events(next_file, next_function, prop, lookup, visiting)
-                {
+                if component_prop_reaches_only_events(
+                    file,
+                    element,
+                    Some(function),
+                    prop,
+                    lookup,
+                    visiting,
+                    chain,
+                ) {
                     return true;
                 }
             }
@@ -1157,19 +1175,253 @@ fn spread_onto(
 /// only event dispatch; see [`prop_reaches_only_events`].
 fn spread_reaches_only_events(
     file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
     element: &solid_facts::ast::JsxElementFact,
     prop: &str,
     lookup: &SemanticLookup<'_>,
     visiting: &mut HashSet<(String, Span, String)>,
+    chain: &[RenderHop],
 ) -> bool {
     if intrinsic_element(file, element) {
         return prop.starts_with("on") && !prop.contains(':');
     }
+    component_prop_reaches_only_events(file, element, Some(function), prop, lookup, visiting, chain)
+}
+
+/// Whether the component `element` renders runs its prop `prop` only after
+/// the render: a project component whose every use of it is proven
+/// ([`prop_reaches_only_events`]), or a package component whose accepted
+/// contract says so ([`package_prop_runs_only_deferred`]).
+///
+/// `enclosing` is the component whose body writes `element` (`None` for the
+/// element that wrote the literal), and `chain` the elements that rendered
+/// each enclosing component, outermost first.
+fn component_prop_reaches_only_events(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    enclosing: Option<&solid_facts::ast::FunctionFact>,
+    prop: &str,
+    lookup: &SemanticLookup<'_>,
+    visiting: &mut HashSet<(String, Span, String)>,
+    chain: &[RenderHop],
+) -> bool {
+    if let Some((next_file, next_function)) =
+        lookup.function_called_at(file.path.as_str(), element.name.span)
+    {
+        let mut next_chain = chain.to_vec();
+        next_chain.push(render_hop(file, element, enclosing, lookup));
+        return prop_reaches_only_events(
+            next_file,
+            next_function,
+            prop,
+            lookup,
+            visiting,
+            &next_chain,
+        );
+    }
+    package_prop_runs_only_deferred(file, element, enclosing, prop, lookup, chain)
+}
+
+/// What one element in a render chain can put in the props object it hands
+/// the component it renders: its attributes by name, and its spreads.
+#[derive(Clone, Debug)]
+struct RenderHop {
+    attributes: Vec<String>,
+    spreads: HopSpreads,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HopSpreads {
+    /// The element spreads nothing.
+    None,
+    /// Every spread is the enclosing component's props object, an alias of
+    /// it, or an `omit` view of it: a spread that adds no key the props did
+    /// not hold.
+    PropsViews,
+    /// Anything else may add any key.
+    Unknown,
+}
+
+fn render_hop(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    enclosing: Option<&solid_facts::ast::FunctionFact>,
+    lookup: &SemanticLookup<'_>,
+) -> RenderHop {
+    let attributes = element
+        .attributes
+        .iter()
+        .filter_map(|attribute| file.source_text(attribute.name).map(str::to_owned))
+        .collect();
+    let spreads = if element.spreads.is_empty() {
+        HopSpreads::None
+    } else if enclosing.is_some_and(|function| {
+        let views = props_key_preserving_views(file, function, lookup);
+        !views.is_empty()
+            && element.spreads.iter().all(|spread| {
+                symbol_at_reference(file, file.ast.peel_ts_sugar_span(spread.argument), lookup)
+                    .is_some_and(|symbol| views.contains(&symbol))
+            })
+    }) {
+        HopSpreads::PropsViews
+    } else {
+        HopSpreads::Unknown
+    };
+    RenderHop {
+        attributes,
+        spreads,
+    }
+}
+
+/// Whether the props object `at`'s element hands its component can hold no
+/// `key`: no element on the chain back to the one that wrote the literal
+/// writes it, and every spread on the way is a view of the props it received.
+fn key_absent(key: &str, at: &RenderHop, chain: &[RenderHop]) -> bool {
+    if at.attributes.iter().any(|attribute| attribute == key) {
+        return false;
+    }
+    match at.spreads {
+        HopSpreads::None => true,
+        HopSpreads::Unknown => false,
+        HopSpreads::PropsViews => chain
+            .split_last()
+            .is_some_and(|(parent, rest)| key_absent(key, parent, rest)),
+    }
+}
+
+/// The symbol a reference names: its entity row, or the binding it resolves
+/// to.
+fn symbol_at_reference(
+    file: &solid_facts::FileFacts,
+    reference: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<SymbolId> {
     lookup
-        .function_called_at(file.path.as_str(), element.name.span)
-        .is_some_and(|(next_file, next_function)| {
-            prop_reaches_only_events(next_file, next_function, prop, lookup, visiting)
+        .entities()
+        .at(file.path.as_str(), reference)
+        .cloned()
+        .or_else(|| {
+            lookup
+                .binding_at_reference(file.path.as_str(), reference)
+                .map(|(_, _, symbol)| symbol)
         })
+}
+
+/// The props parameter of `function` and every `const` in its body bound to
+/// it, to an alias of such a binding (`view as Props`), or to an `omit` the
+/// dialect names over one: the values whose keys are a subset of the props
+/// object's. A merge can add keys and is not one of them. Empty when the props
+/// parameter is not one identifier.
+fn props_key_preserving_views(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<SymbolId> {
+    let Some(parameter) = function.parameters.first() else {
+        return Vec::new();
+    };
+    if parameter.shape != solid_facts::ast::BindingShape::Identifier
+        || parameter.initializer.is_some()
+    {
+        return Vec::new();
+    }
+    let Some(symbol) = parameter
+        .names
+        .first()
+        .and_then(|name| lookup.entities().at(file.path.as_str(), name.span))
+    else {
+        return Vec::new();
+    };
+    let mut views = vec![symbol.clone()];
+    loop {
+        let before = views.len();
+        for binding in file.ast.bindings.iter().filter(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && function.body.contains(binding.declaration)
+        }) {
+            let Some(name) = binding.names.first() else {
+                continue;
+            };
+            let Some(bound) = lookup.entities().at(file.path.as_str(), name.span) else {
+                continue;
+            };
+            if views.contains(bound) {
+                continue;
+            }
+            let Some(initializer) = binding.initializer else {
+                continue;
+            };
+            let initializer = file.ast.peel_ts_sugar_span(initializer);
+            let source = if let Some(call) = file.ast.call_at(initializer) {
+                let omits = lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| lookup.dialect.splits_props(primitive));
+                let first = call.arguments.first().filter(|argument| !argument.spread);
+                match (omits, first) {
+                    (true, Some(argument)) => file.ast.peel_ts_sugar_span(argument.span),
+                    _ => continue,
+                }
+            } else {
+                initializer
+            };
+            if symbol_at_reference(file, source, lookup).is_some_and(|value| views.contains(&value))
+            {
+                views.push(bound.clone());
+            }
+        }
+        if views.len() == before {
+            return views;
+        }
+    }
+}
+
+/// ADR 0207: whether the package component `element` renders runs its prop
+/// `prop` only after the render, by its accepted contract.
+///
+/// The contract states an `event-handler-props` item on argument 0 itself,
+/// executed `deferred` (an external event or a queue, never the render's
+/// stack); the item is exhaustive for every un-namespaced `on…` member, so
+/// `prop` must be one. Every atom of the item's guard must be proven at this
+/// element: the one atom read is a `plain` kind at a top-level key, proven
+/// when no element on the render chain can put that key in the props object
+/// ([`key_absent`]). Any other atom proves nothing.
+fn package_prop_runs_only_deferred(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    enclosing: Option<&solid_facts::ast::FunctionFact>,
+    prop: &str,
+    lookup: &SemanticLookup<'_>,
+    chain: &[RenderHop],
+) -> bool {
+    use crate::contract_semantics::{GuardAtom, MemberClass, ValueKind};
+    if !MemberClass::EventHandlerProps.contains(prop) {
+        return false;
+    }
+    let Some(symbol) = lookup.callee_symbol(file, element.name.span) else {
+        return false;
+    };
+    let Some(claims) = lookup.contract_event_handler_props(symbol) else {
+        return false;
+    };
+    let hop = render_hop(file, element, enclosing, lookup);
+    claims.iter().any(|claim| {
+        claim.parameter == 0
+            && claim.path.is_empty()
+            && claim.execution == "deferred"
+            && claim.guard.iter().all(|atom| match atom {
+                GuardAtom::ValueKind {
+                    argument: 0,
+                    path,
+                    kind: ValueKind::Plain,
+                } => match path.as_slice() {
+                    [key] => key_absent(key, &hop, chain),
+                    _ => false,
+                },
+                _ => false,
+            })
+    })
 }
 
 /// The span of the call `reference` is the props argument of, when that call

@@ -160,8 +160,36 @@ pub fn project_export_semantics(
     let returns_closed_empty = returns_claim.is_closed() && returns_claim.items().is_empty();
     let returns_restated = restatable_returns(export);
 
+    let event_handler_props = export
+        .callbacks()
+        .items()
+        .iter()
+        .filter_map(|callback| {
+            let ValueSource::ParameterMembers {
+                index,
+                path,
+                class: crate::contract_semantics::MemberClass::EventHandlerProps,
+            } = &callback.from
+            else {
+                return None;
+            };
+            let operation = export.operation(&callback.operation.0)?;
+            Some(crate::EventHandlerPropsClaim {
+                parameter: usize::from(*index),
+                path: path.clone(),
+                execution: projected_execution(operation)?.into(),
+                guard: operation
+                    .guard
+                    .as_ref()
+                    .map(|guard| guard.0.clone())
+                    .unwrap_or_default(),
+            })
+        })
+        .collect();
+
     ContractExport {
         kind: kind.into(),
+        event_handler_props,
         reactive_reads,
         returns,
         callbacks,
@@ -3523,6 +3551,7 @@ fn contract_export_function(
         open_owner_requirements: Vec::new(),
         open_return: None,
         leaf_forbidden_operations: Vec::new(),
+        event_handler_props: Vec::new(),
         inline_accessor_invocations: BTreeMap::new(),
         returns: returns.into(),
         async_behavior: if node.r#async {

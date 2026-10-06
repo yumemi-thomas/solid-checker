@@ -76,7 +76,8 @@ async function runTwin(entry, twin) {
   writeFileSync(join(dir, "case.tsx"), retained ? readFileSync(join(dir, `${twin}.tsx`)) : entry[twin]);
   writeFileSync(join(dir, "main.tsx"), main);
   writeFileSync(join(dir, "index.html"), html);
-  writeFileSync(join(dir, "scenario.json"), JSON.stringify(scenario));
+  // A case may drive the page (ADR 0207: an event claim clicks its target).
+  writeFileSync(join(dir, "scenario.json"), JSON.stringify(entry.scenario ? { schemaVersion: 1, steps: [...scenario.steps, ...entry.scenario] } : scenario));
   writeFileSync(join(dir, "tsconfig.runtime.json"), JSON.stringify({ ...tsconfig, files: ["main.tsx", "case.tsx"] }, null, 2));
   const started = Date.now();
   const result = await run(process.execPath, [join(repo, "packages/cli/bin/solid-checker.mjs"), "feedback", "run",

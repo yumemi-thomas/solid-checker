@@ -1202,6 +1202,18 @@ impl<T> ContractClaim<T> {
     }
 }
 
+/// ADR 0207: when an export invokes the `on…` members of one of its argument
+/// values: the projected execution word of the item's operation, and that
+/// operation's guard, kept whole so a consumer proves every atom or reads
+/// nothing.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EventHandlerPropsClaim {
+    pub parameter: usize,
+    pub path: Vec<String>,
+    pub execution: String,
+    pub guard: Vec<contract_semantics::GuardAtom>,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ContractExport {
     pub kind: String,
@@ -1237,6 +1249,12 @@ pub struct ContractExport {
     /// a forbidden operation the runtime throws on. Projected from an accepted
     /// document only; empty for a local summary.
     pub leaf_forbidden_operations: Vec<OwnerRequirementOperation>,
+    /// ADR 0207: the accepted contract's `event-handler-props` items, each
+    /// exhaustive for the `on…` members of one argument value. They stay out
+    /// of [`Self::callbacks`], whose claim opens instead, so no consumer that
+    /// reads rows by path mistakes one for a call of the argument itself.
+    /// Projected from an accepted document only.
+    pub event_handler_props: Vec<EventHandlerPropsClaim>,
     pub async_behavior: ContractClaim<String>,
     /// Wire-independent open domains retained when normalized partial
     /// knowledge is projected into the existing analysis indexes. This field

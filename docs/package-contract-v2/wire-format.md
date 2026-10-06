@@ -170,6 +170,51 @@ Rules:
 - closure never transfers through a summary reference;
 - normalizer expansion occurs before closure is interpreted.
 
+### A class of members (`members`, ADR 0207)
+
+A callback item's source may name a class of an argument value's own
+members instead of one path:
+
+```json
+{
+  "call": {
+    "callbacks": [
+      {
+        "from": { "arg": 0, "path": [], "members": "event-handler-props" },
+        "operation": "event-handlers"
+      }
+    ],
+    "operations": [
+      {
+        "id": "event-handlers",
+        "kind": "invoke",
+        "guard": { "all": [{ "arg": 0, "path": ["as"], "kind": "plain" }] },
+        "trigger": { "event": "external-event" },
+        "at": { "event": "external-event", "schedule": "external" },
+        "count": { "min": 0, "max": "many", "scope": "call" },
+        "tracking": "ambient-at-execution"
+      }
+    ]
+  }
+}
+```
+
+`event-handler-props` is every key that starts with `on` and contains no `:`,
+the properties the Solid runtime's spread attaches as event listeners. The item
+is **exhaustive for its class**: every invocation of such a member is its
+operation, whatever the domain's closure says. Above, `callbacks` stays open,
+so the document says nothing about any other member.
+
+Rules:
+
+- `members` stands beside `arg` only;
+- the operation is an `invoke` of the call protocol;
+- a consumer that does not model the class reads the `callbacks` domain as
+  open;
+- certification never proves a member class, so only an authored, probed
+  contract states one;
+- a decoder that predates the field refuses the document.
+
 ### `proposedClosures`
 
 A `call` may additionally carry `proposedClosures`, naming the closures in its

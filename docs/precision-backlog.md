@@ -1,5 +1,25 @@
 # Precision backlog
 
+## A package component states when its event props run (2026-10-06)
+
+ADR 0207. A contract callback item can name every un-namespaced `on…` member
+of an argument (`members: "event-handler-props"`), exhaustively and under a
+guard. ADR 0199's proof reads it at a package component, and through project
+components' `omit` spreads. The authored tier takes identity from a
+`contract generate` proposal when no certified bundle exists. Kobalte
+`@kobalte/core@2.0.0-alpha.0` `./button` `Root` and `Button` ship the first
+such claim, probed in Chrome on published bytes.
+
+- **Gained:** nothing on the rc.13 corpus yet (285 violations, 3,421
+  uncertifiable).
+- **Still open:**
+  - `openbot` patches `@kobalte/core`, so its ~31 `Button` sites stay
+    uncertifiable. Admitting an authored claim for one project's patch needs
+    the patch in the identity, which is a policy decision;
+  - the other Kobalte parts (`DropdownMenu.Item`, `Switch`, `Dialog`) are not
+    authored yet;
+  - render props and other non-event callback props of package components.
+
 ## A component's owner carried to runWithOwner is not null (2026-10-06)
 
 ADR 0206. `runWithOwner(owner, fn)` runs `fn` under an owner when `owner` is

@@ -2,6 +2,80 @@
   "format": 1,
   "results": [
     {
+      "spec": "@kobalte+core@2.0.0-alpha.0",
+      "package": "@kobalte/core",
+      "version": "2.0.0-alpha.0",
+      "export": "Button",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/button/index.jsx",
+        "dist/button/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 9,
+            "column": 19
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@kobalte+core@2.0.0-alpha.0",
+      "package": "@kobalte/core",
+      "version": "2.0.0-alpha.0",
+      "export": "Root",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/button/index.jsx",
+        "dist/button/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 9,
+            "column": 19
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
       "spec": "@solidjs+router@2.0.0-next.16",
       "package": "@solidjs/router",
       "version": "2.0.0-next.16",

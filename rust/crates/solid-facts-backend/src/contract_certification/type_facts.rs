@@ -13098,6 +13098,14 @@ fn described_callbacks(
                      parameter"
                 ));
             }
+            // ADR 0207: certification has no census of a member class; only
+            // an authored, probed contract states one.
+            ValueSource::ParameterMembers { .. } => {
+                return Err(format!(
+                    "describes `{operation_id}` as invoking a class of members, which \
+                     certification does not prove"
+                ));
+            }
         };
         let Some(operation) = export.operation(operation_id) else {
             return Err(format!(

@@ -3016,3 +3016,25 @@ fn weakening_a_created_owner_keeps_the_invoke_and_drops_an_unnamed_resource() {
     );
     assert!(!plain.weaken_created_owner(&OperationId("invoke".into())));
 }
+
+/// ADR 0207: `event-handler-props` is exactly the keys the Solid runtime's
+/// spread attaches as event listeners.
+#[test]
+fn the_event_handler_member_class_is_every_unnamespaced_on_key() {
+    let class = MemberClass::EventHandlerProps;
+    assert_eq!(class.wire(), "event-handler-props");
+    for key in ["onClick", "onkeydown", "on", "onPointerDown"] {
+        assert!(class.contains(key), "{key}");
+    }
+    for key in [
+        "on:click",
+        "oncapture:click",
+        "ref",
+        "as",
+        "children",
+        "render",
+        "Onclick",
+    ] {
+        assert!(!class.contains(key), "{key}");
+    }
+}
