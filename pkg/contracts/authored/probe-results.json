@@ -1394,6 +1394,53 @@
       "correct": []
     },
     {
+      "spec": "@tanstack+solid-query@6.0.0-rc.0",
+      "package": "@tanstack/solid-query",
+      "version": "6.0.0-rc.0",
+      "export": "useQuery",
+      "label": "returns",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "src/index.ts",
+        "build/dev.js",
+        "build/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 24
+          }
+        },
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 24
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
       "spec": "@tanstack+solid-query@6.0.0-rc.3",
       "package": "@tanstack/solid-query",
       "version": "6.0.0-rc.3",
@@ -1443,6 +1490,52 @@
       "spec": "@tanstack+solid-query@6.0.0-rc.3",
       "package": "@tanstack/solid-query",
       "version": "6.0.0-rc.3",
+      "export": "useMutation",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "src/index.ts",
+        "build/dev.js",
+        "build/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 27
+          }
+        },
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 27
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@tanstack+solid-query@6.0.0-rc.3",
+      "package": "@tanstack/solid-query",
+      "version": "6.0.0-rc.3",
       "export": "useQuery",
       "solidRuntime": [
         {
@@ -1480,6 +1573,53 @@
             "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/probus-hk/.solid-checker-authored-probes/_tanstack_solid-query_6.0.0-rc.3_useQuery/main.tsx",
             "line": 8,
             "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@tanstack+solid-query@6.0.0-rc.3",
+      "package": "@tanstack/solid-query",
+      "version": "6.0.0-rc.3",
+      "export": "useQuery",
+      "label": "returns",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "src/index.ts",
+        "build/dev.js",
+        "build/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 24
+          }
+        },
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 24
           }
         }
       ],

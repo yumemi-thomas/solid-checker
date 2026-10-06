@@ -21,7 +21,10 @@
 // holding `spec.json` and, per claimed export, `<export>.misuse.tsx` and
 // `<export>.correct.tsx` (or naming a shared directory of them in `pairs`). `spec.json` names the package version, the Solid
 // runtime its claims are probed on, and per export the authored `call` and the
-// misuse rule its pair exercises.
+// misuse rule its pair exercises. A `call` that states more than one claim
+// (callbacks and returns) names each further pair in `probes`, as `{ label,
+// rule, why, scenario? }` exercised by `<export>.<label>.misuse.tsx` and
+// `<export>.<label>.correct.tsx`; the call ships only when every pair passed.
 //
 // Each artifact case of that version starts from the certified document the
 // compiled-in tier already carries for it, or, for a version it does not carry,
@@ -170,12 +173,13 @@ function probe(browser) {
   for (const spec of specs) {
     if (spec.name !== only) continue;
     const identity = probeInstall(spec, realpathSync(install));
-    const cases = Object.entries(spec.exports).map(([name, claim]) => ({
-      id: `${spec.name}#${name}`, package: spec.package, version: spec.version, export: name, rule: claim.rule,
-      ...(claim.scenario ? { scenario: claim.scenario } : {}),
-      misuse: readFileSync(join(spec.pairs, `${name}.misuse.tsx`), "utf8"),
-      correct: readFileSync(join(spec.pairs, `${name}.correct.tsx`), "utf8")
-    }));
+    const cases = Object.entries(spec.exports).flatMap(([name, claim]) => pairsOf(name, claim).map(pair => ({
+      id: `${spec.name}#${name}${pair.label ? `/${pair.label}` : ""}`, package: spec.package, version: spec.version,
+      export: name, rule: pair.rule, ...(pair.label ? { label: pair.label } : {}),
+      ...(pair.scenario ? { scenario: pair.scenario } : {}),
+      misuse: readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
+      correct: readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8")
+    })));
     const scratch = mkdtempSync(join(tmpdir(), "solid-checker-authored-"));
     writeFileSync(join(scratch, "cases.json"), json({ cases }));
     // The ledger writes each case beside the install, whose node_modules (an
@@ -183,24 +187,38 @@ function probe(browser) {
     const run = spawnSync(process.execPath, [LEDGER, join(scratch, "out.json"), browser, "--cases", join(scratch, "cases.json"), "--concurrency", "2"],
       { env: { ...process.env, MISUSE_CASES_ROOT: join(identity.install, ".solid-checker-authored-probes") }, stdio: ["ignore", "inherit", "inherit"] });
     assert.equal(run.status, 0, `${spec.name}: the probe ledger failed`);
+    const labels = new Map(cases.map(entry => [entry.id, entry.label]));
     for (const row of read(join(scratch, "out.json")).results) {
+      const label = labels.get(row.id);
       results.push({ spec: spec.name, package: spec.package, version: spec.version, export: row.export,
+        ...(label ? { label } : {}),
         solidRuntime: identity.runtime, artifacts: identity.artifacts, rule: row.rule,
         verdict: row.runtime === "detected" ? "passed" : row.runtime,
         misuse: (row.misuse.diagnostics ?? []).map(({ code, site }) => ({ code, site })),
         correct: (row.correct.diagnostics ?? []).map(({ code, site }) => ({ code, site })) });
     }
   }
-  results.sort((a, b) => `${a.spec}#${a.export}`.localeCompare(`${b.spec}#${b.export}`));
+  const key = row => `${row.spec}#${row.export}${row.label ? `/${row.label}` : ""}`;
+  results.sort((a, b) => key(a).localeCompare(key(b)));
   writeFileSync(RESULTS, json({ format: 1, results }));
-  for (const row of results) console.log(`${row.spec}#${row.export}: ${row.verdict}`);
+  for (const row of results) console.log(`${key(row)}: ${row.verdict}`);
 }
 
-/** Whether the claim for `name` has a passing pair on the spec's runtime. */
+/** The probe pairs of one export's claim: its own, then each in `probes`. */
+function pairsOf(name, claim) {
+  return [{ label: undefined, rule: claim.rule, scenario: claim.scenario, file: name },
+    ...(claim.probes ?? []).map(probe => {
+      assert(probe.label && probe.rule && probe.why, `${name}: a probe needs a label, a rule and a why`);
+      return { label: probe.label, rule: probe.rule, scenario: probe.scenario, file: `${name}.${probe.label}` };
+    })];
+}
+
+/** Whether every pair of the claim for `name` passed on the spec's runtime. */
 function passed(spec, name) {
   const results = existsSync(RESULTS) ? read(RESULTS).results : [];
-  return results.some(row => row.spec === spec.name && row.export === name && row.verdict === "passed"
-    && JSON.stringify(row.solidRuntime) === JSON.stringify(spec.solidRuntime.map(({ name, version }) => ({ name, version }))));
+  const runtime = JSON.stringify(spec.solidRuntime.map(({ name, version }) => ({ name, version })));
+  return pairsOf(name, spec.exports[name]).every(pair => results.some(row => row.spec === spec.name && row.export === name
+    && (row.label ?? undefined) === pair.label && row.verdict === "passed" && JSON.stringify(row.solidRuntime) === runtime));
 }
 
 /** One authored document from one certified case document. */

@@ -1,5 +1,17 @@
 # Precision backlog
 
+## TanStack Query results are stores (2026-10-06)
+
+ADR 0198 amendment. Probe-checked `returns` claims: `useQuery` on
+`@tanstack/solid-query` 6.0.0-rc.0 and rc.3, and `useMutation` on rc.3,
+return a store, so a property read untracked in a component body is a strict
+read. An authored export may now carry several probe pairs.
+
+- **Gained:** the misuse twins are proven `SC1001` violations. The rc.13
+  corpus does not move; no app reads these results in a body.
+- **Still open:** `reactiveReads` and `ownerRequirements` of these hooks, so
+  their import notices remain; `useInfiniteQuery`'s result.
+
 ## Host callbacks and member calls in a leaf scope (2026-10-06)
 
 ADR 0210. In a leaf owner's callback, a standard-library call's function

@@ -4,8 +4,8 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "1dcb8b279b3088fdbf4c7f3192fa74468ded12dd1c19d06c88f8bb72a8ff64c4",
-            "path": "./build/dev.js",
+            "closureSha256": "cf9c6f282cedb0313ea8164c6e3cc5362205270da5bc3694928cb4ef56fb12a8",
+            "path": "./build/index.js",
             "sha256": "ba9a827cb9308b6c1cf9bf5f0c69ee5cf894a70df7b848ba03eb021a13eb9505"
           },
           "declarations": {
@@ -60,15 +60,15 @@
             "useIsFetching": "open-callable",
             "useIsMutating": "open-callable",
             "useIsRestoring": "open-callable",
-            "useMutation": "open-callable",
+            "useMutation": "authored-useMutation",
             "useMutationState": "open-callable",
             "useQueries": "open-callable",
             "useQuery": "authored-useQuery",
             "useQueryClient": "open-callable"
           },
           "resolution": {
-            "runtimeBranch": "/exports/./development/import/default",
-            "typesBranch": "/exports/./development/import/types"
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
           }
         }
       ]
@@ -164,6 +164,36 @@
       },
       "shape": "callable"
     },
+    "authored-useMutation": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "store"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
     "authored-useQuery": {
       "call": {
         "callbacks": [
@@ -213,6 +243,26 @@
             "trigger": {
               "event": "call"
             }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "store"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
           }
         ],
         "resources": [
@@ -228,6 +278,9 @@
               "disposed"
             ]
           }
+        ],
+        "returns": [
+          "return"
         ]
       },
       "shape": "callable"

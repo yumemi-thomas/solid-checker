@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "d71c6b68d4af63d0576c11d378b92a2971c4cd6f905f98912088b1efd13ce60d",
-            "path": "./src/index.ts",
-            "sha256": "d95872975cfaabdc64e2fbcf9fadf26ee1446093e803af4fc4af08706d230d58"
+            "closureSha256": "fff575a0a9c05678c754c43195cd4d3441ae394a554ca5b8741fadaa80f391fc",
+            "path": "./build/index.js",
+            "sha256": "968cef629cf8b542d1c124a855dabeec60b99cd3a418302411477a2d31e43cd2"
           },
           "declarations": {
-            "path": "./src/index.ts",
-            "sha256": "d95872975cfaabdc64e2fbcf9fadf26ee1446093e803af4fc4af08706d230d58"
+            "path": "./build/index.d.ts",
+            "sha256": "554a92b6567fb328c3120eb055f29231141abd4804b60bed1b571fa2883dc548"
           },
           "exports": {
             "CancelledError": "open-callable",
@@ -72,8 +72,8 @@
             "useQueryClient": "open-callable"
           },
           "resolution": {
-            "runtimeBranch": "/exports/./@tanstack~1custom-condition",
-            "typesBranch": "/exports/./@tanstack~1custom-condition"
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
           }
         }
       ]
@@ -248,6 +248,26 @@
             "trigger": {
               "event": "call"
             }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "store"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
           }
         ],
         "resources": [
@@ -263,6 +283,9 @@
               "disposed"
             ]
           }
+        ],
+        "returns": [
+          "return"
         ]
       },
       "shape": "callable"

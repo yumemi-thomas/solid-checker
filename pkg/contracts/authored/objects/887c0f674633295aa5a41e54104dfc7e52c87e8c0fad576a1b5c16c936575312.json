@@ -4,17 +4,16 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "d5125c6fe633f22e65853f48df89b3c32b3b92c28c033c4434f773d4ce77e02e",
+            "closureSha256": "d71c6b68d4af63d0576c11d378b92a2971c4cd6f905f98912088b1efd13ce60d",
             "path": "./src/index.ts",
-            "sha256": "b51a47649ee94b27d8bd81f9d42c1b03f6236e4f4496044dbe8165b902020636"
+            "sha256": "d95872975cfaabdc64e2fbcf9fadf26ee1446093e803af4fc4af08706d230d58"
           },
           "declarations": {
             "path": "./src/index.ts",
-            "sha256": "b51a47649ee94b27d8bd81f9d42c1b03f6236e4f4496044dbe8165b902020636"
+            "sha256": "d95872975cfaabdc64e2fbcf9fadf26ee1446093e803af4fc4af08706d230d58"
           },
           "exports": {
             "CancelledError": "open-callable",
-            "FLIGHT_DATA_SOURCE": "open-plain",
             "InfiniteQueryObserver": "open-callable",
             "IsRestoringContext": "open-callable",
             "Mutation": "open-callable",
@@ -27,13 +26,19 @@
             "QueryClientContext": "open-callable",
             "QueryClientProvider": "open-callable",
             "QueryObserver": "open-callable",
+            "createInfiniteQuery": "open-callable",
+            "createIsFetching": "open-callable",
+            "createIsMutating": "open-callable",
+            "createMutation": "open-callable",
+            "createMutationState": "open-callable",
+            "createQueries": "open-callable",
+            "createQuery": "open-callable",
             "dataTagErrorSymbol": "open-plain",
             "dataTagSymbol": "open-plain",
             "defaultScheduler": "open-callable",
             "defaultShouldDehydrateMutation": "open-callable",
             "defaultShouldDehydrateQuery": "open-callable",
             "dehydrate": "open-callable",
-            "dehydrateSettled": "open-callable",
             "environmentManager": "open-plain",
             "experimental_streamedQuery": "open-callable",
             "focusManager": "open-plain",
@@ -60,7 +65,7 @@
             "useIsFetching": "open-callable",
             "useIsMutating": "open-callable",
             "useIsRestoring": "open-callable",
-            "useMutation": "open-callable",
+            "useMutation": "authored-useMutation",
             "useMutationState": "open-callable",
             "useQueries": "open-callable",
             "useQuery": "authored-useQuery",
@@ -76,13 +81,13 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "sha512-Wj23dMyRnVmKiYvvyMImZqb3+2Ftxc7FngUfloCAmQE2dpQO/QeqaSHNlpjbG6eoKqazVPe4k1xhxofUU+w/dA==",
+    "integrity": "sha512-v6U7OWYAI9DAPrmDjizCJ90/RrJU+F2Uvu9s/xfwsnOVHQeEC15T2Jsmn1dqCHm4XpuUv21t1SNgLqB+zzzsJQ==",
     "manifest": {
       "path": "./package.json",
-      "sha256": "8af2b3a0c5480f589b767ec3904a2dfd7657e61d50ec02eab189f885b328f999"
+      "sha256": "1273ce53618efac340cf02ab1e587afce21a820656a8f7a2efa6305c2f2e177a"
     },
     "name": "@tanstack/solid-query",
-    "version": "6.0.0-rc.3"
+    "version": "6.0.0-rc.0"
   },
   "schemaVersion": 1,
   "semanticModelVersion": 1,
@@ -164,6 +169,36 @@
       },
       "shape": "callable"
     },
+    "authored-useMutation": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "store"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
     "authored-useQuery": {
       "call": {
         "callbacks": [
@@ -213,6 +248,26 @@
             "trigger": {
               "event": "call"
             }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "store"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
           }
         ],
         "resources": [
@@ -228,6 +283,9 @@
               "disposed"
             ]
           }
+        ],
+        "returns": [
+          "return"
         ]
       },
       "shape": "callable"

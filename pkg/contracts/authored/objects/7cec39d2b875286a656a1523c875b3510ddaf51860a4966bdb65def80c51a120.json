@@ -4,9 +4,9 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "fff575a0a9c05678c754c43195cd4d3441ae394a554ca5b8741fadaa80f391fc",
-            "path": "./build/index.js",
-            "sha256": "968cef629cf8b542d1c124a855dabeec60b99cd3a418302411477a2d31e43cd2"
+            "closureSha256": "a7ea226c8f2a53ede831b6459996b2823a42081a939958877505718aa9673e28",
+            "path": "./build/dev.js",
+            "sha256": "39ead57d8ef661b515d1bb9429d8964fe0ae619957bbd3378cfdba0a4d46cbb3"
           },
           "declarations": {
             "path": "./build/index.d.ts",
@@ -72,8 +72,8 @@
             "useQueryClient": "open-callable"
           },
           "resolution": {
-            "runtimeBranch": "/exports/./import/default",
-            "typesBranch": "/exports/./import/types"
+            "runtimeBranch": "/exports/./development/import/default",
+            "typesBranch": "/exports/./development/import/types"
           }
         }
       ]
@@ -248,6 +248,26 @@
             "trigger": {
               "event": "call"
             }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "store"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
           }
         ],
         "resources": [
@@ -263,6 +283,9 @@
               "disposed"
             ]
           }
+        ],
+        "returns": [
+          "return"
         ]
       },
       "shape": "callable"

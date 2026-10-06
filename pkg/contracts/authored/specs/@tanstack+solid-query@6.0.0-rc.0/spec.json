@@ -102,6 +102,26 @@
             "trigger": {
               "event": "call"
             }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "store"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
           }
         ],
         "resources": [
@@ -117,8 +137,18 @@
               "disposed"
             ]
           }
+        ],
+        "returns": [
+          "return"
         ]
-      }
+      },
+      "probes": [
+        {
+          "label": "returns",
+          "rule": "strict-read-untracked",
+          "why": "Returns an object of getters over the query's projections and memos; reading a property untracked is a strict read."
+        }
+      ]
     },
     "useInfiniteQuery": {
       "why": "Invokes the options function on every call, on the same stack, as the tracked compute of a createMemo it creates.",

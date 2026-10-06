@@ -172,3 +172,24 @@ document cannot state honestly.
   - Not cleared: `ai-memory-ui`'s own `useQuery` wrapper (46 sites) invokes
     the options inside the literal it hands to the real hook. Carrying the
     tracked role through a project helper is A3's helper step.
+- **`@tanstack/solid-query` returns (2026-10-06):** `useQuery` on 6.0.0-rc.0
+  and rc.3, and `useMutation` on rc.3.
+  - Claim: the hook returns a store. rc.3's `useQuery` result is an object of
+    getters over the query's projections and memos (`data`, `status`,
+    `isPending`, …), and its `useMutation` result reads signals the same way.
+  - One export may now state more than one claim. A spec names each further
+    probe pair in the export's `probes` (`{ label, rule, why }`, exercised by
+    `<export>.<label>.misuse.tsx` and `.correct.tsx`), and the export's
+    `call` ships only when every pair passed. `useQuery` keeps its callbacks
+    pair and adds `useQuery.returns`.
+  - Each misuse twin reads `query.status` (or `mutation.status`) in the
+    component body and raises `STRICT_READ_UNTRACKED`. Each correct twin reads
+    it in JSX and raises nothing. All pairs pass on both versions.
+  - The checker flags the misuse twin (`SC1001`) and leaves the correct twin
+    clean.
+  - The import notice still lists `returns` as open. A `store` return gives a
+    property read its meaning; it does not close the domain (the value's
+    shape and async behaviour).
+  - Measured on the rc.13 corpus: nothing moved (violations 285,
+    uncertifiable 3,414). No admitted app reads a query or mutation result
+    untracked in a component body.

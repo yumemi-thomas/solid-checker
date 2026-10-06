@@ -4,16 +4,17 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "a7ea226c8f2a53ede831b6459996b2823a42081a939958877505718aa9673e28",
+            "closureSha256": "1dcb8b279b3088fdbf4c7f3192fa74468ded12dd1c19d06c88f8bb72a8ff64c4",
             "path": "./build/dev.js",
-            "sha256": "39ead57d8ef661b515d1bb9429d8964fe0ae619957bbd3378cfdba0a4d46cbb3"
+            "sha256": "ba9a827cb9308b6c1cf9bf5f0c69ee5cf894a70df7b848ba03eb021a13eb9505"
           },
           "declarations": {
             "path": "./build/index.d.ts",
-            "sha256": "554a92b6567fb328c3120eb055f29231141abd4804b60bed1b571fa2883dc548"
+            "sha256": "5032aabb7fec1efde5f09307425a1da18ed39259fa4f06e6e0a0c5558bb2d4df"
           },
           "exports": {
             "CancelledError": "open-callable",
+            "FLIGHT_DATA_SOURCE": "open-plain",
             "InfiniteQueryObserver": "open-callable",
             "IsRestoringContext": "open-callable",
             "Mutation": "open-callable",
@@ -26,19 +27,13 @@
             "QueryClientContext": "open-callable",
             "QueryClientProvider": "open-callable",
             "QueryObserver": "open-callable",
-            "createInfiniteQuery": "open-callable",
-            "createIsFetching": "open-callable",
-            "createIsMutating": "open-callable",
-            "createMutation": "open-callable",
-            "createMutationState": "open-callable",
-            "createQueries": "open-callable",
-            "createQuery": "open-callable",
             "dataTagErrorSymbol": "open-plain",
             "dataTagSymbol": "open-plain",
             "defaultScheduler": "open-callable",
             "defaultShouldDehydrateMutation": "open-callable",
             "defaultShouldDehydrateQuery": "open-callable",
             "dehydrate": "open-callable",
+            "dehydrateSettled": "open-callable",
             "environmentManager": "open-plain",
             "experimental_streamedQuery": "open-callable",
             "focusManager": "open-plain",
@@ -81,13 +76,13 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "sha512-v6U7OWYAI9DAPrmDjizCJ90/RrJU+F2Uvu9s/xfwsnOVHQeEC15T2Jsmn1dqCHm4XpuUv21t1SNgLqB+zzzsJQ==",
+    "integrity": "sha512-Wj23dMyRnVmKiYvvyMImZqb3+2Ftxc7FngUfloCAmQE2dpQO/QeqaSHNlpjbG6eoKqazVPe4k1xhxofUU+w/dA==",
     "manifest": {
       "path": "./package.json",
-      "sha256": "1273ce53618efac340cf02ab1e587afce21a820656a8f7a2efa6305c2f2e177a"
+      "sha256": "8af2b3a0c5480f589b767ec3904a2dfd7657e61d50ec02eab189f885b328f999"
     },
     "name": "@tanstack/solid-query",
-    "version": "6.0.0-rc.0"
+    "version": "6.0.0-rc.3"
   },
   "schemaVersion": 1,
   "semanticModelVersion": 1,
@@ -248,6 +243,26 @@
             "trigger": {
               "event": "call"
             }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "store"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
           }
         ],
         "resources": [
@@ -263,6 +278,9 @@
               "disposed"
             ]
           }
+        ],
+        "returns": [
+          "return"
         ]
       },
       "shape": "callable"
