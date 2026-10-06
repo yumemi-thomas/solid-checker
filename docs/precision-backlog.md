@@ -1,5 +1,16 @@
 # Precision backlog
 
+## A prop holds what every tag passes (2026-10-06)
+
+ADR 0214. In a closed program, a parameter-member obligation whose argument is
+`props.name` is discharged when the component is rendered only through JSX tags
+that spread nothing and pass the prop as a proven built-in value, including a
+parent's prop or parameter that holds one.
+
+- **Gained:** rc.13 corpus uncertifiable 3,318 to 3,299; violations unchanged.
+- **Still open:** destructured or merged props, spread tags, props through
+  package components, components rendered by routers or `Dynamic`.
+
 ## A parameter holds what every caller passes (2026-10-06)
 
 ADR 0213. In a closed program, a parameter-member obligation whose argument is

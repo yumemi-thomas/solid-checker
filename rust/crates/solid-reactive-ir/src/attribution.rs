@@ -177,7 +177,7 @@ pub(crate) fn discharge_closed_program_export_dispatch(
                 ..
             } = &defect.kind
         {
-            return !graph.parameter_holds_builtin(file, span, member, PASS_THROUGH_DEPTH);
+            return !graph.value_holds_builtin(file, span, member, PASS_THROUGH_DEPTH);
         }
         true
     });
@@ -529,6 +529,167 @@ impl<'a> CallGraph<'a, '_> {
         })
     }
 
+    /// Whether the value at `span` is a built-in value whose `member` is its
+    /// prototype's: by its origin (ADR 0211, 0212), or as a parameter
+    /// (ADR 0213) or a component prop (ADR 0214) that holds one on every
+    /// entry.
+    fn value_holds_builtin(
+        &self,
+        file: &'a FileFacts,
+        span: Span,
+        member: &str,
+        depth: usize,
+    ) -> bool {
+        depth > 0
+            && (matches!(
+                self.lookup.value_origin(
+                    file,
+                    span,
+                    solid_facts::ast::RuntimeValueKind::Unknown,
+                    6
+                ),
+                Some(crate::indexes::ValueOrigin::Builtin)
+            ) || self.parameter_holds_builtin(file, span, member, depth)
+                || self.prop_holds_builtin(file, span, member, depth))
+    }
+
+    /// ADR 0214: whether `props.name` at `argument` holds a built-in value on
+    /// every render of its component.
+    ///
+    /// `props` is the only parameter of a function around the argument, a
+    /// plain identifier with no default, and nothing in its file writes it or
+    /// a member of it. The component is rendered only through JSX tags the
+    /// graph resolves to it: a value escape, a call, or a rendering prop
+    /// (`component={Panel}`) supplies props no tag shows. Every tag spreads
+    /// nothing and passes `name` -- if at all -- as a string, a boolean, or an
+    /// expression that holds a built-in value. A missing attribute is
+    /// `undefined`. `children` is the element's content, not an attribute,
+    /// and is not followed.
+    fn prop_holds_builtin(
+        &self,
+        file: &'a FileFacts,
+        argument: Span,
+        member: &str,
+        depth: usize,
+    ) -> bool {
+        use solid_facts::ast::JsxAttributeValueKind;
+        if depth == 0
+            || self.lookup.member_name_may_be_reassigned(member)
+            || self.lookup.member_name_may_be_reassigned("__proto__")
+        {
+            return false;
+        }
+        let argument = file.ast.peel_ts_sugar_span(argument);
+        let Some(access) = file
+            .ast
+            .members
+            .iter()
+            .find(|access| access.span == argument)
+        else {
+            return false;
+        };
+        let Some(name) = file.source_text(access.property) else {
+            return false;
+        };
+        if name == "children" {
+            return false;
+        }
+        let Some(declaration) = file
+            .ast
+            .reference_declaration(file.ast.peel_ts_sugar_span(access.object))
+        else {
+            return false;
+        };
+        let Some(component) = file.ast.functions.iter().find(|function| {
+            function.body.contains(argument)
+                && matches!(function.parameters.as_slice(), [parameter]
+                    if parameter.shape == solid_facts::ast::BindingShape::Identifier
+                        && parameter.initializer.is_none()
+                        && parameter.names.first().is_some_and(|name| name.span == declaration))
+        }) else {
+            return false;
+        };
+        let written = file.ast.assignments.iter().any(|assignment| {
+            let target = file.ast.peel_ts_sugar_span(assignment.target);
+            file.ast.reference_declaration(target) == Some(declaration)
+                || file.ast.members.iter().any(|written| {
+                    written.span == target
+                        && file
+                            .ast
+                            .reference_declaration(file.ast.peel_ts_sugar_span(written.object))
+                            == Some(declaration)
+                })
+        });
+        if written {
+            return false;
+        }
+        let Some(renders) = self.rendered_only_through_jsx(file.path.as_str(), component.span)
+        else {
+            return false;
+        };
+        !renders.is_empty()
+            && renders.into_iter().all(|(caller, element)| {
+                element.spreads.is_empty()
+                    && element
+                        .attributes
+                        .iter()
+                        .filter(|attribute| {
+                            attribute.namespace.is_none()
+                                && caller.source_text(attribute.local_name) == Some(name)
+                        })
+                        .all(|attribute| match attribute.value_kind {
+                            JsxAttributeValueKind::Boolean | JsxAttributeValueKind::String => true,
+                            JsxAttributeValueKind::Expression => {
+                                attribute.expression.is_some_and(|expression| {
+                                    self.value_holds_builtin(caller, expression, member, depth - 1)
+                                })
+                            }
+                            JsxAttributeValueKind::Element | JsxAttributeValueKind::Fragment => {
+                                false
+                            }
+                        })
+            })
+    }
+
+    /// The JSX elements that render the function at `(path, function)`, when
+    /// those are every way of entering it: each enumerated site is a tag, and
+    /// every reference to the function is one of them, its declaration, or
+    /// its module surface. A call, a dialect renderer or a rendering prop
+    /// makes this `None`.
+    fn rendered_only_through_jsx(
+        &self,
+        path: &str,
+        function: Span,
+    ) -> Option<Vec<(&'a FileFacts, &'a solid_facts::ast::JsxElementFact)>> {
+        let aliased = self.function_symbols(path, function)?;
+        let mut renders = Vec::new();
+        for (caller, callee) in self.lookup.function_call_sites(path, function) {
+            renders.push((
+                caller,
+                caller
+                    .ast
+                    .jsx_elements
+                    .iter()
+                    .find(|element| element.name.span == callee)?,
+            ));
+        }
+        let known = self
+            .lookup
+            .function_call_site_references(path, function)
+            .into_iter()
+            .map(|(caller, span)| (caller.path.to_string(), span.start, span.end))
+            .collect::<HashSet<_>>();
+        aliased
+            .iter()
+            .all(|candidate| {
+                self.lookup
+                    .symbol_references(candidate.as_str())
+                    .iter()
+                    .all(|reference| self.reference_is_accounted_for(reference, &known, false))
+            })
+            .then_some(renders)
+    }
+
     /// ADR 0213: whether the argument at `argument`, the obligation's site,
     /// is a parameter that holds a built-in value (ADR 0211) on every entry
     /// of its function, so its `member` is the built-in prototype's.
@@ -591,7 +752,7 @@ impl<'a> CallGraph<'a, '_> {
             matches!(
                 self.lookup.value_origin(file, span, kind, 6),
                 Some(crate::indexes::ValueOrigin::Builtin)
-            ) || self.parameter_holds_builtin(file, span, member, depth - 1)
+            ) || self.value_holds_builtin(file, span, member, depth - 1)
         };
         if let Some(default) = function.parameters[index].initializer
             && !builtin(file, default, solid_facts::ast::RuntimeValueKind::Unknown)
