@@ -5897,7 +5897,30 @@ fn interprocedural_result_reads_for_file(
                     }
                     continue;
                 };
-                let implementations = lookup.member_value_symbols_at(file, argument.span, property);
+                let mut implementations =
+                    lookup.member_value_symbols_at(file, argument.span, property);
+                // ADR 0211: an argument whose origin fixes its class fixes the
+                // member that runs -- a fresh built-in value's is its
+                // prototype's, which reads nothing reactive, and an exact
+                // project class's is the method that class declares. Unless
+                // the program rewrites that member or a prototype.
+                if implementations.is_empty()
+                    && !argument.spread
+                    && !lookup.member_name_may_be_reassigned(property)
+                    && !lookup.member_name_may_be_reassigned("__proto__")
+                {
+                    match lookup.value_origin(file, argument.span, argument.runtime_value_kind, 6) {
+                        Some(crate::indexes::ValueOrigin::Builtin) => continue,
+                        Some(crate::indexes::ValueOrigin::ProjectClass(class_file, class)) => {
+                            implementations.extend(
+                                lookup
+                                    .class_method_symbol(class_file, class, property)
+                                    .cloned(),
+                            );
+                        }
+                        None => {}
+                    }
+                }
                 let mut member_summaries = Vec::with_capacity(implementations.len());
                 for implementation in &implementations {
                     dependencies.insert(InterproceduralResultDependency::Symbol(

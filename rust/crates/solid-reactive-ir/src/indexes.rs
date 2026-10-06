@@ -18,6 +18,78 @@ use typefacts::{
 use super::{SymbolId, SymbolName};
 use crate::owners::function_binding_name;
 
+/// ADR 0211: what a value's origin proves about the object it evaluates to.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum ValueOrigin<'a> {
+    /// A fresh object of a reviewed standard-library value class: an array
+    /// literal, `new Date(…)`, `Array.from(…)`. Its members are its built-in
+    /// prototype's, none of which reads reactive state.
+    Builtin,
+    /// An instance of exactly this project class.
+    ProjectClass(&'a FileFacts, &'a solid_facts::ast::ClassFact),
+}
+
+/// The standard-library constructors whose instances are plain values: their
+/// built-in methods read and write the instance and call only the callbacks
+/// they are handed. `Proxy`, `Function`, `Promise` and every event target are
+/// left out: their members run user code that was registered elsewhere.
+const BUILTIN_VALUE_CONSTRUCTORS: &[&str] = &[
+    "ArrayConstructor.construct",
+    "DateConstructor.construct",
+    "MapConstructor.construct",
+    "SetConstructor.construct",
+    "WeakMapConstructor.construct",
+    "WeakSetConstructor.construct",
+    "RegExpConstructor.construct",
+    "ArrayBufferConstructor.construct",
+    "DataViewConstructor.construct",
+    "Int8ArrayConstructor.construct",
+    "Uint8ArrayConstructor.construct",
+    "Uint8ClampedArrayConstructor.construct",
+    "Int16ArrayConstructor.construct",
+    "Uint16ArrayConstructor.construct",
+    "Int32ArrayConstructor.construct",
+    "Uint32ArrayConstructor.construct",
+    "Float32ArrayConstructor.construct",
+    "Float64ArrayConstructor.construct",
+    "BigInt64ArrayConstructor.construct",
+    "BigUint64ArrayConstructor.construct",
+];
+
+/// Static standard-library functions that return a fresh array, when called on
+/// the global they are declared for.
+const FRESH_ARRAY_STATICS: &[&str] = &[
+    "ArrayConstructor.from",
+    "ArrayConstructor.of",
+    "ObjectConstructor.keys",
+    "ObjectConstructor.values",
+    "ObjectConstructor.entries",
+];
+
+/// Array methods that return a new array built by the receiver's species.
+const FRESH_ARRAY_METHODS: &[&str] = &[
+    "Array.map",
+    "Array.filter",
+    "Array.slice",
+    "Array.concat",
+    "Array.flat",
+    "Array.flatMap",
+    "Array.toSorted",
+    "Array.toReversed",
+    "Array.toSpliced",
+    "Array.with",
+    "ReadonlyArray.map",
+    "ReadonlyArray.filter",
+    "ReadonlyArray.slice",
+    "ReadonlyArray.concat",
+    "ReadonlyArray.flat",
+    "ReadonlyArray.flatMap",
+    "ReadonlyArray.toSorted",
+    "ReadonlyArray.toReversed",
+    "ReadonlyArray.toSpliced",
+    "ReadonlyArray.with",
+];
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum ComponentStatus {
     No,
@@ -1198,6 +1270,164 @@ impl<'a> SemanticLookup<'a> {
             (names, prototype)
         });
         *prototype || names.contains(name)
+    }
+
+    /// ADR 0211: what the origin of the value at `value` proves about the
+    /// object it evaluates to, followed through `const` bindings.
+    ///
+    /// `kind` is the value's syntactic runtime kind where the fact supplies
+    /// one (an argument's, a binding initializer's), `Unknown` elsewhere.
+    pub(super) fn value_origin(
+        &self,
+        file: &FileFacts,
+        value: Span,
+        kind: solid_facts::ast::RuntimeValueKind,
+        depth: usize,
+    ) -> Option<ValueOrigin<'a>> {
+        if depth == 0 {
+            return None;
+        }
+        // A fresh array: its members are `Array.prototype`'s.
+        if kind == solid_facts::ast::RuntimeValueKind::Array {
+            return Some(ValueOrigin::Builtin);
+        }
+        let value = file.ast.peel_ts_sugar_span(value);
+        if let Some(call) = file.ast.call_at(value) {
+            return self.call_origin(file, call, depth);
+        }
+        let (binding_file, binding, _) = self.binding_at_reference(file.path.as_str(), value)?;
+        if !binding.immutable || binding.shape != solid_facts::ast::BindingShape::Identifier {
+            return None;
+        }
+        self.value_origin(
+            binding_file,
+            binding.initializer?,
+            binding.initializer_value_kind,
+            depth - 1,
+        )
+    }
+
+    fn call_origin(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+        depth: usize,
+    ) -> Option<ValueOrigin<'a>> {
+        if call.construct {
+            if let Some((class_file, class)) = self
+                .callee_symbol(file, call.callee)
+                .and_then(|symbol| self.class_for_symbol(symbol))
+            {
+                return Some(ValueOrigin::ProjectClass(class_file, class));
+            }
+            let declaration =
+                self.standard_library_declaration(file, call, typefacts::CallKind::Construct)?;
+            return BUILTIN_VALUE_CONSTRUCTORS
+                .contains(&declaration.qualified_name.as_ref())
+                .then_some(ValueOrigin::Builtin);
+        }
+        let declaration =
+            self.standard_library_declaration(file, call, typefacts::CallKind::Call)?;
+        let name = declaration.qualified_name.as_ref();
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let receiver = file
+            .ast
+            .members
+            .iter()
+            .find(|member| member.span == callee)
+            .map(|member| file.ast.peel_ts_sugar_span(member.object));
+        if FRESH_ARRAY_STATICS.contains(&name) {
+            // `Array.from` called through a subclass (`List.from`) builds that
+            // subclass, under the same declaration.
+            let owner = name.split('.').next().unwrap_or_default();
+            let global = owner.strip_suffix("Constructor").unwrap_or(owner);
+            return receiver
+                .is_some_and(|receiver| file.source_text(receiver) == Some(global))
+                .then_some(ValueOrigin::Builtin);
+        }
+        if name == "String.split" {
+            return Some(ValueOrigin::Builtin);
+        }
+        if FRESH_ARRAY_METHODS.contains(&name) {
+            // The result is built by the receiver's species: an array whose
+            // origin is proven, and whose `constructor` nothing rewrites.
+            return (!self.member_name_may_be_reassigned("constructor")
+                && matches!(
+                    self.value_origin(
+                        file,
+                        receiver?,
+                        solid_facts::ast::RuntimeValueKind::Unknown,
+                        depth - 1,
+                    ),
+                    Some(ValueOrigin::Builtin)
+                ))
+            .then_some(ValueOrigin::Builtin);
+        }
+        None
+    }
+
+    fn standard_library_declaration(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+        kind: typefacts::CallKind,
+    ) -> Option<&'a typefacts::ResolvedDeclaration> {
+        self.resolved_callee_call(file, call.callee)
+            .filter(|resolved| {
+                resolved.validity == ResolvedCallValidity::Valid
+                    && resolved.kind == kind
+                    && resolved.targets.is_none()
+            })
+            .and_then(|resolved| resolved.declaration.as_ref())
+            .filter(|declaration| declaration.standard_library)
+    }
+
+    /// ADR 0211: the instance method `property` of exactly `class`, declared
+    /// in its own body: one plain method, not static, not an accessor.
+    pub(super) fn class_method_symbol(
+        &self,
+        class_file: &'a FileFacts,
+        class: &solid_facts::ast::ClassFact,
+        property: &str,
+    ) -> Option<&'a SymbolId> {
+        let ast = &class_file.ast;
+        let mut methods = ast.functions.iter().filter(|function| {
+            class.span.contains(function.span)
+                && function
+                    .method_name
+                    .as_ref()
+                    .is_some_and(|name| class_file.source_text(name.span) == Some(property))
+                // Written in this class's own body: no nested class or
+                // function between them.
+                && !ast.classes.iter().any(|inner| {
+                    inner.span != class.span
+                        && class.span.contains(inner.span)
+                        && inner.span.contains(function.span)
+                })
+                && !ast.functions.iter().any(|outer| {
+                    outer.span != function.span && outer.span.contains(function.span)
+                })
+        });
+        let method = methods.next()?;
+        if methods.next().is_some() {
+            return None;
+        }
+        let name = method.method_name.as_ref()?;
+        // The modifiers between the previous member and the name.
+        let before = class_file
+            .source
+            .get(usize::try_from(class.span.start).ok()?..usize::try_from(name.span.start).ok()?)?;
+        let modifiers = before
+            .rsplit(['{', '}', ';', '\n'])
+            .next()
+            .unwrap_or_default();
+        if modifiers
+            .split(|character: char| !character.is_alphanumeric())
+            .any(|word| matches!(word, "static" | "get" | "set"))
+        {
+            return None;
+        }
+        self.entities.at(class_file.path.as_str(), name.span)
     }
 
     pub(super) fn binding_at_reference(

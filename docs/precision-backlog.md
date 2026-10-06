@@ -1,5 +1,19 @@
 # Precision backlog
 
+## A value whose origin fixes its class fixes its members (2026-10-06)
+
+ADR 0211. At a parameter-member call site, an argument whose origin is a
+fresh built-in value (an array literal, `new Date()`, `Array.from`, …) runs
+its prototype's members, and an exact project class instance runs the method
+its class declares. Origins are followed through `const` bindings, and never
+where the program assigns that member or a prototype.
+
+- **Gained:** rc.13 corpus uncertifiable 3,414 to 3,386; violations
+  unchanged.
+- **Still open:** accessor-call, property, parameter and `let` arguments
+  (phase 2, signal and memo values); inherited methods; multi-segment
+  paths.
+
 ## TanStack Query results are stores (2026-10-06)
 
 ADR 0198 amendment. Probe-checked `returns` claims: `useQuery` on

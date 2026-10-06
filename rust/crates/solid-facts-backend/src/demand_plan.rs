@@ -767,11 +767,17 @@ fn plan_file(
                 || leaf_callbacks
                     .iter()
                     .any(|region| region.contains(call.span)));
+        // And an argumentless construction (`new Date()`), because only its
+        // resolved call says which constructor builds the value: a value
+        // whose origin is a reviewed built-in class selects that class's
+        // members at a parameter-member call site (ADR 0211).
+        let argumentless_construction = call.arguments.is_empty() && call.construct;
         planned.resolved_call = !call.arguments.is_empty()
             || returned_callees.contains(&call.callee)
             || computed_dispatch
             || argumentless_primitive
-            || argumentless_method;
+            || argumentless_method
+            || argumentless_construction;
         planned.query_location = Some(property.clone());
         planned.type_descriptor = call.arguments.is_empty();
         // Typed source discovery must distinguish the exact callable value

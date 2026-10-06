@@ -558,6 +558,11 @@ pub struct BindingFact {
     pub initializer_function: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub initializer_identifier: Option<NamedSpan>,
+    /// The normalized runtime shape of the initializer underneath transparent
+    /// TypeScript wrappers, as [`ArgumentFact::runtime_value_kind`] gives it
+    /// for an argument: `const items = [a, b]` is `Array`.
+    #[serde(default)]
+    pub initializer_value_kind: RuntimeValueKind,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1608,6 +1613,7 @@ struct BindingMetadata {
     call_initializer: Option<OxcSpan>,
     initializer_function: bool,
     initializer_identifier: Option<NamedSpan>,
+    initializer_value_kind: RuntimeValueKind,
     immutable: bool,
 }
 
@@ -1858,6 +1864,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             call_initializer: metadata.call_initializer.map(span),
             initializer_function: metadata.initializer_function,
             initializer_identifier: metadata.initializer_identifier,
+            initializer_value_kind: metadata.initializer_value_kind,
         }
     }
 
@@ -2543,17 +2550,24 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 _ => None,
             }
         });
-        self.bindings.push(self.binding_fact(
-            declaration.span,
-            &declaration.id,
-            BindingMetadata {
-                initializer,
-                call_initializer,
-                initializer_function,
-                initializer_identifier,
-                immutable: declaration.kind == oxc_ast::ast::VariableDeclarationKind::Const,
-            },
-        ));
+        self.bindings.push(
+            self.binding_fact(
+                declaration.span,
+                &declaration.id,
+                BindingMetadata {
+                    initializer,
+                    call_initializer,
+                    initializer_function,
+                    initializer_identifier,
+                    initializer_value_kind: declaration
+                        .init
+                        .as_ref()
+                        .map(|expression| self.runtime_value_kind(expression))
+                        .unwrap_or_default(),
+                    immutable: declaration.kind == oxc_ast::ast::VariableDeclarationKind::Const,
+                },
+            ),
+        );
         walk::walk_variable_declarator(self, declaration);
     }
 
