@@ -267,5 +267,7 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/parameter-pass-through-dispatch/node_modules/**
 !fixtures/reactive-ir/prop-pass-through-dispatch/node_modules/
 !fixtures/reactive-ir/prop-pass-through-dispatch/node_modules/**
+!fixtures/reactive-ir/value-flow-review/node_modules/
+!fixtures/reactive-ir/value-flow-review/node_modules/**
 !fixtures/reactive-ir/render-time-reads/node_modules/
 !fixtures/reactive-ir/render-time-reads/node_modules/**

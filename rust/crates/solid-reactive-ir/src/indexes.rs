@@ -18,6 +18,59 @@ use typefacts::{
 use super::{SymbolId, SymbolName};
 use crate::owners::function_binding_name;
 
+/// The string a computed key names when it is a `const` bound to a string
+/// literal in the same file (`const key = "run"; c[key] = f`).
+fn constant_string_key(file: &FileFacts, key: Span) -> Option<String> {
+    let key = file.ast.peel_ts_sugar_span(key);
+    let declaration = file.ast.reference_declaration(key)?;
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding
+                .names
+                .first()
+                .is_some_and(|name| name.span == declaration)
+    })?;
+    if binding.initializer_value_kind != solid_facts::ast::RuntimeValueKind::Primitive {
+        return None;
+    }
+    let text = file.source_text(file.ast.peel_ts_sugar_span(binding.initializer?))?;
+    let unquoted = text
+        .strip_prefix('"')
+        .and_then(|text| text.strip_suffix('"'))
+        .or_else(|| {
+            text.strip_prefix('\'')
+                .and_then(|text| text.strip_suffix('\''))
+        })?;
+    (!unquoted.contains('\\')).then(|| unquoted.to_string())
+}
+
+/// Whether the binding declared at `declaration` is written anywhere in its
+/// file after its declaration: as an assignment target or inside one (a
+/// destructuring pattern), or as a loop head (`for (x of …)`). A write of a
+/// member of it (`x.y = …`) does not rebind it.
+pub(super) fn binding_written(file: &FileFacts, declaration: Span) -> bool {
+    let targets = file
+        .ast
+        .assignments
+        .iter()
+        .map(|assignment| assignment.target)
+        .chain(file.ast.iteration_targets.iter().copied())
+        .collect::<Vec<_>>();
+    file.ast
+        .reference_declarations
+        .iter()
+        .filter(|(_, declared)| *declared == declaration)
+        .any(|(reference, _)| {
+            targets.iter().any(|target| target.contains(*reference))
+                && !file
+                    .ast
+                    .members
+                    .iter()
+                    .any(|member| member.object == *reference)
+        })
+}
+
 /// ADR 0211: what a value's origin proves about the object it evaluates to.
 #[derive(Clone, Copy, Debug)]
 pub(super) enum ValueOrigin<'a> {
@@ -393,7 +446,7 @@ pub(super) struct SemanticLookup<'a> {
     functions_by_symbol: OnceLock<HashMap<&'a str, SymbolFunction>>,
     /// ADR 0209: the property names some assignment in the project writes
     /// (`x.name = …`), and whether any writes through a `prototype`.
-    assigned_member_names: OnceLock<(HashSet<&'a str>, bool)>,
+    assigned_member_names: OnceLock<(HashSet<String>, bool)>,
     entities_by_location: OnceLock<HashMap<(&'a str, u64, u64), &'a EntityFact>>,
     contained_entities_by_path: OnceLock<HashMap<&'a str, Vec<&'a EntityFact>>>,
     descriptors_by_symbol: OnceLock<HashMap<&'a str, &'a TypeDescriptor>>,
@@ -1246,22 +1299,42 @@ impl<'a> SemanticLookup<'a> {
                     // Only a write that replaces a prototype itself
                     // (`C.prototype = …`) or writes one at a key no fact names
                     // (`C.prototype[key] = …`) may replace any member.
-                    if let Some(member) =
+                    let computed = file.ast.computed_members.binary_search(&target).is_ok();
+                    if computed {
+                        // A computed write names its key only when the key is a
+                        // literal, or a `const` bound to a string literal.
+                        // Any other key, on a prototype, may be any member.
+                        let member = file.ast.members.iter().find(|member| member.span == target);
+                        if let Some(literal) = file
+                            .ast
+                            .literal_computed_members
+                            .iter()
+                            .find(|member| member.span == target)
+                        {
+                            names.insert(literal.key.to_string());
+                            if literal.key.as_str() == "prototype" {
+                                prototype = true;
+                            }
+                        } else if let Some(key) =
+                            member.and_then(|member| constant_string_key(file, member.property))
+                        {
+                            if key == "prototype" {
+                                prototype = true;
+                            }
+                            names.insert(key);
+                        } else if member.is_none_or(|member| {
+                            file.source_text(member.object)
+                                .unwrap_or_default()
+                                .contains("prototype")
+                        }) {
+                            prototype = true;
+                        }
+                    } else if let Some(member) =
                         file.ast.members.iter().find(|member| member.span == target)
                         && let Some(property) = file.source_text(member.property)
                     {
-                        names.insert(property);
+                        names.insert(property.to_string());
                         if property == "prototype" {
-                            prototype = true;
-                        }
-                    } else if let Some(literal) = file
-                        .ast
-                        .literal_computed_members
-                        .iter()
-                        .find(|member| member.span == target)
-                    {
-                        names.insert(literal.key.as_str());
-                        if literal.key.as_str() == "prototype" {
                             prototype = true;
                         }
                     } else if text.contains("prototype") {
@@ -1418,6 +1491,9 @@ impl<'a> SemanticLookup<'a> {
             && let Some((function_file, function)) = self
                 .callee_symbol(file, call.callee)
                 .and_then(|symbol| self.function_for_symbol(symbol))
+                .filter(|(function_file, function)| {
+                    self.function_value_is_current(function_file, function)
+                })
         {
             return self
                 .returns_builtin(function_file, function, None, depth)
@@ -1441,9 +1517,16 @@ impl<'a> SemanticLookup<'a> {
         // A member of a proven built-in receiver is that receiver's own: its
         // class's prototype selects it, so no declaration is needed. An
         // unproven receiver falls through to the declaration below.
+        // `split` defers to its separator's `Symbol.split`, user code unless
+        // the separator is a primitive (or a RegExp literal).
+        let separator_is_primitive = call.arguments.first().is_none_or(|separator| {
+            !separator.spread
+                && separator.runtime_value_kind == solid_facts::ast::RuntimeValueKind::Primitive
+        });
         if let Some(member) = member
             && let Some(method) = file.source_text(member.property)
             && (RECEIVER_RETURNING_METHODS.contains(&method) || FRESH_VALUE_METHODS.contains(&method))
+            && (method != "split" || separator_is_primitive)
             && !self.member_name_may_be_reassigned(method)
             // A species-built result follows the receiver's `constructor`.
             && (RECEIVER_RETURNING_METHODS.contains(&method)
@@ -1469,14 +1552,17 @@ impl<'a> SemanticLookup<'a> {
             // subclass, under the same declaration.
             let owner = name.split('.').next().unwrap_or_default();
             let global = owner.strip_suffix("Constructor").unwrap_or(owner);
+            // The receiver must be that global, not a local of its name.
             return member
                 .is_some_and(|member| {
-                    file.source_text(file.ast.peel_ts_sugar_span(member.object)) == Some(global)
+                    let receiver = file.ast.peel_ts_sugar_span(member.object);
+                    file.source_text(receiver) == Some(global)
+                        && file.ast.reference_declaration(receiver).is_none()
                 })
                 .then_some(ValueOrigin::Builtin);
         }
         if name == "String.split" {
-            return Some(ValueOrigin::Builtin);
+            return separator_is_primitive.then_some(ValueOrigin::Builtin);
         }
         None
     }
@@ -1560,7 +1646,11 @@ impl<'a> SemanticLookup<'a> {
                 Some(ValueOrigin::Builtin)
             }
             (solid_facts::ast::BindingShape::Identifier, Primitive::CreateMemo) => {
-                let compute = initializer.arguments.first()?;
+                // Options can supply a value no compute returns
+                // (`loadingValue`), so only the bare form is followed.
+                let [compute] = initializer.arguments.as_slice() else {
+                    return None;
+                };
                 let function =
                     crate::cleanup::callback_argument_literal(binding_file, compute.span)?;
                 self.returns_builtin(binding_file, function, None, depth)
@@ -1609,7 +1699,8 @@ impl<'a> SemanticLookup<'a> {
                             parameter.shape == solid_facts::ast::BindingShape::Identifier
                         })
                         .and_then(|parameter| parameter.names.first())
-                        .map(|name| name.span);
+                        .map(|name| name.span)
+                        .filter(|name| !binding_written(file, *name));
                     return self.returns_builtin(
                         file,
                         updater,
@@ -1677,47 +1768,142 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn class_method_symbol(
         &self,
         class_file: &'a FileFacts,
-        class: &solid_facts::ast::ClassFact,
+        class: &'a solid_facts::ast::ClassFact,
         property: &str,
     ) -> Option<&'a SymbolId> {
-        let ast = &class_file.ast;
-        let mut methods = ast.functions.iter().filter(|function| {
-            class.span.contains(function.span)
-                && function
-                    .method_name
-                    .as_ref()
-                    .is_some_and(|name| class_file.source_text(name.span) == Some(property))
-                // Written in this class's own body: no nested class or
-                // function between them.
-                && !ast.classes.iter().any(|inner| {
-                    inner.span != class.span
-                        && class.span.contains(inner.span)
-                        && inner.span.contains(function.span)
-                })
-                && !ast.functions.iter().any(|outer| {
-                    outer.span != function.span && outer.span.contains(function.span)
-                })
+        use solid_facts::ast::ClassElementKind;
+        if !self.class_instance_is_exact(class_file, class, property, 4) {
+            return None;
+        }
+        let mut methods = class.elements.iter().filter(|element| {
+            !element.r#static
+                && element.key.and_then(|key| class_file.source_text(key)) == Some(property)
         });
         let method = methods.next()?;
-        if methods.next().is_some() {
+        if methods.next().is_some() || method.kind != ClassElementKind::Method {
             return None;
         }
-        let name = method.method_name.as_ref()?;
-        // The modifiers between the previous member and the name.
-        let before = class_file
-            .source
-            .get(usize::try_from(class.span.start).ok()?..usize::try_from(name.span.start).ok()?)?;
-        let modifiers = before
-            .rsplit(['{', '}', ';', '\n'])
-            .next()
-            .unwrap_or_default();
-        if modifiers
-            .split(|character: char| !character.is_alphanumeric())
-            .any(|word| matches!(word, "static" | "get" | "set"))
-        {
-            return None;
+        let function = class_file
+            .ast
+            .functions
+            .iter()
+            .find(|function| Some(function.span) == method.value)?;
+        self.entities.at(
+            class_file.path.as_str(),
+            function.method_name.as_ref()?.span,
+        )
+    }
+
+    /// Whether the value a project function's symbol names now is that
+    /// function: a declaration whose name nothing writes, a method, or the
+    /// direct initializer of a `const`. A `let` that is reassigned, or a
+    /// binding initialized by a call that merely contains the function
+    /// (`const f = wrap(() => …)`), proves nothing.
+    pub(super) fn function_value_is_current(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        if function.method_name.is_some() {
+            return true;
         }
-        self.entities.at(class_file.path.as_str(), name.span)
+        if function.kind == solid_facts::ast::FunctionKind::Declaration {
+            return function
+                .name
+                .as_ref()
+                .is_some_and(|name| !binding_written(file, name.span));
+        }
+        file.ast.bindings.iter().any(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.initializer.is_some_and(|initializer| {
+                    file.ast.peel_ts_sugar_span(initializer) == function.span
+                })
+        })
+    }
+
+    /// Whether `new C(…)` of this class evaluates to an instance whose
+    /// `property` is found on its prototype chain (ADR 0209, 0211 as
+    /// amended): no constructor in the chain returns another object, and no
+    /// class in the chain defines `property` as an own field, a parameter
+    /// property, or under a computed key. Every ancestor must be a project
+    /// class this resolves; an unresolved `extends` proves nothing.
+    pub(super) fn class_instance_is_exact(
+        &self,
+        file: &'a FileFacts,
+        class: &'a solid_facts::ast::ClassFact,
+        property: &str,
+        depth: usize,
+    ) -> bool {
+        use solid_facts::ast::ClassElementKind;
+        if depth == 0 {
+            return false;
+        }
+        for element in &class.elements {
+            if element.r#static {
+                continue;
+            }
+            match element.kind {
+                ClassElementKind::Constructor => {
+                    let Some(constructor) = file
+                        .ast
+                        .functions
+                        .iter()
+                        .find(|function| Some(function.span) == element.value)
+                    else {
+                        return false;
+                    };
+                    let returns_value = crate::returns_walk::own_returns(&file.ast, constructor)
+                        .any(|returned| returned.argument.is_some());
+                    let parameter_property = file.ast.parameter_properties.iter().any(|name| {
+                        constructor.span.contains(*name)
+                            && file.source_text(*name) == Some(property)
+                    });
+                    if returns_value || parameter_property {
+                        return false;
+                    }
+                }
+                ClassElementKind::Field
+                    if element.computed
+                        || element.key.and_then(|key| file.source_text(key)) == Some(property) =>
+                {
+                    return false;
+                }
+                ClassElementKind::Method | ClassElementKind::Getter | ClassElementKind::Setter
+                    if element.computed =>
+                {
+                    return false;
+                }
+                _ => {}
+            }
+        }
+        let Some(heritage) = class.heritage else {
+            return true;
+        };
+        let heritage = file.ast.peel_ts_sugar_span(heritage);
+        let base = file
+            .ast
+            .reference_declaration(heritage)
+            .and_then(|declaration| {
+                file.ast
+                    .classes
+                    .iter()
+                    .find(|candidate| {
+                        candidate
+                            .name
+                            .as_ref()
+                            .is_some_and(|name| name.span == declaration)
+                    })
+                    .map(|base| (file, base))
+            })
+            .or_else(|| {
+                self.entities
+                    .at(file.path.as_str(), heritage)
+                    .and_then(|symbol| self.class_for_symbol(symbol))
+            });
+        base.is_some_and(|(base_file, base)| {
+            self.class_instance_is_exact(base_file, base, property, depth - 1)
+        })
     }
 
     pub(super) fn binding_at_reference(

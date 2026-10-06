@@ -566,9 +566,19 @@ fn exact_instance_method<'a>(
     let receiver = file.ast.peel_ts_sugar_span(member.object);
     let through_this = file.source_text(receiver) == Some("this");
     let class = if through_this {
-        exact_this
+        let (path, span) = exact_this
             .clone()
-            .filter(|(path, _)| path == file.path.as_str())?
+            .filter(|(path, _)| path == file.path.as_str())?;
+        let class_file = lookup.file_by_path(path.as_str())?;
+        let class = class_file
+            .ast
+            .classes
+            .iter()
+            .find(|class| class.span == span)?;
+        if !lookup.class_instance_is_exact(class_file, class, name, 4) {
+            return None;
+        }
+        (path, span)
     } else {
         let (binding_file, binding, _) =
             lookup.binding_at_reference(file.path.as_str(), receiver)?;
@@ -581,6 +591,11 @@ fn exact_instance_method<'a>(
             .filter(|construction| construction.construct)?;
         let class_symbol = lookup.callee_symbol(binding_file, construction.callee)?;
         let (class_file, class) = lookup.class_for_symbol(class_symbol)?;
+        // The constructor chain must hand back this instance, and no own
+        // field may shadow the method (ADR 0209 as amended).
+        if !lookup.class_instance_is_exact(class_file, class, name, 4) {
+            return None;
+        }
         (class_file.path.to_string(), class.span)
     };
     let symbol = lookup.callee_symbol(file, call.callee)?;
@@ -650,7 +665,10 @@ fn helper_forbidden_operations(
     if safe_call_symbols.contains(symbol) {
         return true;
     }
-    let Some((helper_file, helper)) = lookup.function_for_symbol(symbol) else {
+    let Some((helper_file, helper)) = lookup
+        .function_for_symbol(symbol)
+        .filter(|(helper_file, helper)| lookup.function_value_is_current(helper_file, helper))
+    else {
         let Some(resolved) =
             lookup
                 .resolved_callee_call(call_file, call.callee)
@@ -740,10 +758,9 @@ fn member_call_operations(
 ///   dispatch is not modeled: the same `focus()` runs listeners registered
 ///   anywhere, and the walk has always read it as a host call that runs only
 ///   what it is handed;
-/// - a `PromiseLike.then` callback may run before the call returns, because
-///   the thenable is any object with a `then`. A forbidden operation there,
-///   or a body the walk cannot follow, leaves the obligation open rather than
-///   proving a violation;
+/// - a `PromiseLike.then` call leaves the obligation open: the thenable is
+///   any object with a `then`, and that `then` is user code, whatever it is
+///   handed;
 /// - a value the host only reads or keeps is not run;
 /// - any other argument the host may call -- a callable parameter with no
 ///   audited timing (`new Promise(executor)`) -- leaves the obligation open.
@@ -770,9 +787,19 @@ fn standard_library_argument_operations(
         .declaration
         .as_ref()
         .is_some_and(|declaration| declaration.qualified_name.as_ref() == "PromiseLike.then");
+    // The thenable's own `then` is user code, whatever it is handed.
+    if thenable {
+        return false;
+    }
     let mut complete = true;
     for (index, argument) in call.arguments.iter().enumerate() {
         if crate::runtime_semantics::literal_argument_is_not_callable(argument.runtime_value_kind) {
+            // An object literal's accessors run when the host reads them.
+            if argument.runtime_value_kind == solid_facts::ast::RuntimeValueKind::Object
+                && object_literal_has_accessor(file, argument.span)
+            {
+                complete = false;
+            }
             continue;
         }
         let callability = lookup
@@ -791,18 +818,6 @@ fn standard_library_argument_operations(
         let listener_slot =
             crate::runtime_semantics::runs_on_invoker_stack(resolved, callability, index);
         match crate::runtime_semantics::argument_behavior(resolved, callability, index) {
-            Some(RuntimeArgumentBehavior::DeferredCallback) if thenable => {
-                let mut possible = Vec::new();
-                let mut scratch = visited.clone();
-                complete &= argument_body_operations(
-                    resolution,
-                    file,
-                    argument.span,
-                    &mut possible,
-                    &mut scratch,
-                    depth,
-                ) && possible.is_empty();
-            }
             Some(RuntimeArgumentBehavior::InlineCallback) => {
                 complete &= argument_body_operations(
                     resolution,
@@ -837,6 +852,15 @@ fn standard_library_argument_operations(
     complete
 }
 
+/// Whether the object literal at `span`, or one nested in it, defines a
+/// property that is not plain data: a getter, a setter or a method.
+fn object_literal_has_accessor(file: &FileFacts, span: Span) -> bool {
+    file.ast
+        .object_properties
+        .iter()
+        .any(|property| span.contains(property.span) && !property.data)
+}
+
 /// A setter's function argument is its updater, which the setter runs before
 /// it returns (ADR 0210). Any other argument is the new value.
 fn setter_updater_operations(
@@ -850,6 +874,12 @@ fn setter_updater_operations(
     let mut complete = true;
     for argument in &call.arguments {
         if crate::runtime_semantics::literal_argument_is_not_callable(argument.runtime_value_kind) {
+            // An object literal's accessors run when the host reads them.
+            if argument.runtime_value_kind == solid_facts::ast::RuntimeValueKind::Object
+                && object_literal_has_accessor(file, argument.span)
+            {
+                complete = false;
+            }
             continue;
         }
         let callability = resolution
@@ -893,6 +923,9 @@ fn argument_body_operations(
         .entities()
         .at(file.path.as_str(), file.ast.peel_ts_sugar_span(argument))
         .and_then(|symbol| lookup.function_for_symbol(symbol))
+        .filter(|(function_file, function)| {
+            lookup.function_value_is_current(function_file, function)
+        })
     else {
         return false;
     };
@@ -931,7 +964,46 @@ fn function_forbidden_operations(
     visited.push(key);
     let dialect = lookup.dialect;
     let entities = lookup.entities();
+    // Calling a generator runs none of its body, only its parameter list.
+    if helper.generator {
+        return helper
+            .parameters
+            .iter()
+            .all(|parameter| parameter.initializer.is_none());
+    }
     let mut complete = true;
+    // The invoked function's own defaults run when the call omits their
+    // argument. Whether one runs is not decided here, so an operation there,
+    // or a call there the walk cannot follow, leaves the obligation open.
+    for default in helper
+        .parameters
+        .iter()
+        .filter_map(|parameter| parameter.initializer)
+    {
+        for inner in helper_file.ast.calls_within(default) {
+            if helper_file
+                .ast
+                .functions_within(default)
+                .any(|nested| nested.span.contains(inner.span))
+            {
+                continue;
+            }
+            let mut possible = Vec::new();
+            let mut scratch = visited.clone();
+            complete &= call_primitive_name(helper_file, inner, entities, symbol_names, dialect)
+                .is_none()
+                && helper_forbidden_operations(
+                    resolution,
+                    helper_file,
+                    inner,
+                    &mut possible,
+                    &mut scratch,
+                    depth - 1,
+                    exact_this.clone(),
+                )
+                && possible.is_empty();
+        }
+    }
     for inner in helper_file.ast.calls_within(helper.body) {
         // A call inside a nested function -- its body or its parameter list
         // (ADR 0204) -- is not executed by calling the helper; it belongs to

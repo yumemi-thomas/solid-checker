@@ -602,6 +602,45 @@ pub struct ClassFact {
     pub span: Span,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<NamedSpan>,
+    /// The `extends` expression, when the class has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub heritage: Option<Span>,
+    /// Every element of the class body, in source order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub elements: Vec<ClassElementFact>,
+}
+
+/// One element of a class body: what it defines, under which key, on the
+/// instance or the constructor.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClassElementFact {
+    pub span: Span,
+    pub kind: ClassElementKind,
+    /// The key's span; `None` for a computed key, a private name, a static
+    /// block or an index signature.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<Span>,
+    #[serde(default)]
+    pub computed: bool,
+    #[serde(default)]
+    pub r#static: bool,
+    /// The method's function, or the field's initializer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<Span>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ClassElementKind {
+    Constructor,
+    Method,
+    Getter,
+    Setter,
+    /// A field or auto-accessor: an own property of every instance.
+    Field,
+    StaticBlock,
+    IndexSignature,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -2658,11 +2697,73 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_class(&mut self, class: &oxc_ast::ast::Class<'a>) {
+        use oxc_ast::ast::{ClassElement, MethodDefinitionKind, PropertyKey};
+        let key = |key: &PropertyKey<'_>, computed: bool| {
+            (!computed && !matches!(key, PropertyKey::PrivateIdentifier(_)))
+                .then(|| span(key.span()))
+        };
+        let elements = class
+            .body
+            .body
+            .iter()
+            .map(|element| match element {
+                ClassElement::MethodDefinition(method) => ClassElementFact {
+                    span: span(method.span),
+                    kind: match method.kind {
+                        MethodDefinitionKind::Constructor => ClassElementKind::Constructor,
+                        MethodDefinitionKind::Method => ClassElementKind::Method,
+                        MethodDefinitionKind::Get => ClassElementKind::Getter,
+                        MethodDefinitionKind::Set => ClassElementKind::Setter,
+                    },
+                    key: key(&method.key, method.computed),
+                    computed: method.computed,
+                    r#static: method.r#static,
+                    value: Some(span(method.value.span)),
+                },
+                ClassElement::PropertyDefinition(property) => ClassElementFact {
+                    span: span(property.span),
+                    kind: ClassElementKind::Field,
+                    key: key(&property.key, property.computed),
+                    computed: property.computed,
+                    r#static: property.r#static,
+                    value: property.value.as_ref().map(|value| span(value.span())),
+                },
+                ClassElement::AccessorProperty(property) => ClassElementFact {
+                    span: span(property.span),
+                    kind: ClassElementKind::Field,
+                    key: key(&property.key, property.computed),
+                    computed: property.computed,
+                    r#static: property.r#static,
+                    value: property.value.as_ref().map(|value| span(value.span())),
+                },
+                ClassElement::StaticBlock(block) => ClassElementFact {
+                    span: span(block.span),
+                    kind: ClassElementKind::StaticBlock,
+                    key: None,
+                    computed: false,
+                    r#static: true,
+                    value: None,
+                },
+                ClassElement::TSIndexSignature(signature) => ClassElementFact {
+                    span: span(signature.span),
+                    kind: ClassElementKind::IndexSignature,
+                    key: None,
+                    computed: false,
+                    r#static: signature.r#static,
+                    value: None,
+                },
+            })
+            .collect();
         self.classes.push(ClassFact {
             span: span(class.span),
             name: class.id.as_ref().map(|id| NamedSpan {
                 span: span(id.span),
             }),
+            heritage: class
+                .super_class
+                .as_ref()
+                .map(|heritage| span(heritage.span())),
+            elements,
         });
         walk::walk_class(self, class);
     }

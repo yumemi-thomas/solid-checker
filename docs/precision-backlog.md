@@ -1,5 +1,23 @@
 # Precision backlog
 
+## The value-flow proofs survive review (2026-10-06)
+
+ADR 0215. An adversarial review of ADRs 0209 to 0214 found 15 reachable
+holes: three false positives (generator calls, a static method by layout,
+a returning constructor) and wrong clean results (computed and destructuring
+writes, current function values, thenables, defaults, shadowed globals,
+`split` protocols, memo options, props aliases). All are fixed; class facts
+now carry heritage and element kinds.
+
+- **Cost:** rc.13 corpus uncertifiable 3,299 to 3,368; violations unchanged.
+  Most of it is app-game, where a dynamic prototype write on a parameter
+  refuses every member name.
+- **Kept, documented:** a forbidden operation that may not run is still
+  reported; synchronous dispatch and `Object.defineProperty` are not
+  modeled.
+- **Open:** a per-class veto for computed prototype writes whose receiver is
+  one class.
+
 ## A prop holds what every tag passes (2026-10-06)
 
 ADR 0214. In a closed program, a parameter-member obligation whose argument is

@@ -541,6 +541,9 @@ impl<'a> CallGraph<'a, '_> {
         depth: usize,
     ) -> bool {
         depth > 0
+            // The member veto holds for every origin, the direct one included.
+            && !self.lookup.member_name_may_be_reassigned(member)
+            && !self.lookup.member_name_may_be_reassigned("__proto__")
             && (matches!(
                 self.lookup.value_origin(
                     file,
@@ -609,18 +612,29 @@ impl<'a> CallGraph<'a, '_> {
         }) else {
             return false;
         };
-        let written = file.ast.assignments.iter().any(|assignment| {
-            let target = file.ast.peel_ts_sugar_span(assignment.target);
-            file.ast.reference_declaration(target) == Some(declaration)
-                || file.ast.members.iter().any(|written| {
-                    written.span == target
-                        && file
-                            .ast
-                            .reference_declaration(file.ast.peel_ts_sugar_span(written.object))
-                            == Some(declaration)
+        // `props` is only ever the object of a member read: an alias, a
+        // spread, an argument or a write could change what `props.name`
+        // holds without any tag showing it.
+        let targets = file
+            .ast
+            .assignments
+            .iter()
+            .map(|assignment| assignment.target)
+            .chain(file.ast.iteration_targets.iter().copied())
+            .chain(file.ast.deleted_targets.iter().copied())
+            .collect::<Vec<_>>();
+        let only_read = file
+            .ast
+            .reference_declarations
+            .iter()
+            .filter(|(_, declared)| *declared == declaration)
+            .all(|(reference, _)| {
+                file.ast.members.iter().any(|read| {
+                    read.object == *reference
+                        && !targets.iter().any(|target| target.contains(read.span))
                 })
-        });
-        if written {
+            });
+        if !only_read {
             return false;
         }
         let Some(renders) = self.rendered_only_through_jsx(file.path.as_str(), component.span)
@@ -740,12 +754,7 @@ impl<'a> CallGraph<'a, '_> {
         if function.rest_parameter && index + 1 == function.parameters.len() {
             return false;
         }
-        let written = file.ast.assignments.iter().any(|assignment| {
-            file.ast
-                .reference_declaration(file.ast.peel_ts_sugar_span(assignment.target))
-                == Some(declaration)
-        });
-        if written {
+        if crate::indexes::binding_written(file, declaration) {
             return false;
         }
         let builtin = |file: &'a FileFacts, span: Span, kind| {
