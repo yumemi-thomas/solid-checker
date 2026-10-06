@@ -67,6 +67,10 @@ struct Request {
     feedback_facts: bool,
     #[serde(default)]
     check_contracts: bool,
+    /// Resolve every module load through the project's own bundler, which
+    /// runs its config (ADR 0220).
+    #[serde(default)]
+    runtime_resolution: bool,
     /// Whether the contracts compiled into this checker may be applied to this
     /// project. On by default: a project that installed the exact artifact one
     /// of them was proven about gets its claims without certifying anything
@@ -3858,6 +3862,23 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             import_identity = measurement;
         }
     }
+    if diagnostics && request.runtime_resolution {
+        let project = Path::new(&facts.project_id);
+        let directory = if project.is_dir() {
+            project
+        } else {
+            project.parent().unwrap_or_else(|| Path::new("."))
+        };
+        let (index, measurement) =
+            solid_facts_backend::runtime_resolution::resolve_runtime_imports(&facts, directory);
+        if std::env::var_os("SOLID_CHECKER_TIMINGS").is_some() {
+            eprintln!(
+                "runtime resolution: {} of {} loads answered ({})",
+                measurement.answered, measurement.loads, measurement.status
+            );
+        }
+        facts.runtime_resolutions = Some(index);
+    }
     let import_identity_ns = started
         .elapsed()
         .as_nanos()
@@ -4208,6 +4229,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut certify = false;
     let mut feedback_facts = false;
     let mut check_contracts = false;
+    let mut runtime_resolution = false;
     let mut bundled_contracts = true;
     let mut validate_contract_paths = Vec::new();
     let mut emit_contract = String::new();
@@ -4465,6 +4487,13 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             "--certify" => certify = true,
             "--feedback-facts" => feedback_facts = true,
             "--check-contracts" => check_contracts = true,
+            "--runtime-resolution" => {
+                runtime_resolution = match args.next().as_deref() {
+                    Some("required") => true,
+                    Some("off") => false,
+                    _ => return Err("--runtime-resolution needs required or off".into()),
+                }
+            }
             "--no-bundled-contracts" => bundled_contracts = false,
             "--serve" => serve = true,
             "--help" | "-h" => help = true,
@@ -4654,6 +4683,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         certify,
         feedback_facts,
         check_contracts,
+        runtime_resolution,
         bundled_contracts,
         validate_contract_paths,
         emit_contract,
@@ -4758,6 +4788,10 @@ fn print_help() {
            --check-contracts            Report imported Solid packages whose contract is\n\
                                         missing, unverified, or stale (audited against a\n\
                                         version this project no longer installs)\n\
+           --runtime-resolution <MODE>  required: resolve module loads through the\n\
+                                        project's own Vite, which runs its config\n\
+                                        (SOLID_CHECKER_RUNTIME_RESOLVER names the\n\
+                                        worker script); off (default)\n\
            --accepted-contracts <PATH>  Load a host-acquired catalog of stable-v1\n\
                                         documents, proof receipts, and exact resolved imports\n\
            --receipt-trust-configuration <PATH>\n\

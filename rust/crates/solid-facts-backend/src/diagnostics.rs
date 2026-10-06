@@ -4554,6 +4554,7 @@ mod tests {
             ),
             typescript_changes: None,
             resolved_imports: None,
+            runtime_resolutions: None,
             runtime_symbol_redirects: Default::default(),
         };
         let mut session = DiagnosticSession::default();
@@ -4600,6 +4601,7 @@ mod tests {
             ),
             typescript_changes: None,
             resolved_imports: None,
+            runtime_resolutions: None,
             runtime_symbol_redirects: Default::default(),
         };
         let mut session = DiagnosticSession::default();

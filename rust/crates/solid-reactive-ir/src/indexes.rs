@@ -1275,6 +1275,14 @@ impl<'a> SemanticLookup<'a> {
         self.facts.resolved_imports.as_ref()
     }
 
+    /// The project bundler's resolution of each module load, when the host
+    /// asked for it (ADR 0220).
+    pub(super) fn runtime_resolutions(
+        &self,
+    ) -> Option<&'a solid_facts::runtime_resolution::RuntimeResolutionIndex> {
+        self.facts.runtime_resolutions.as_ref()
+    }
+
     /// The files declaring the module a namespace binding at `span` names:
     /// its symbol's alias target's declarations. `None` when Type Facts does
     /// not resolve it.
@@ -3829,6 +3837,7 @@ mod tests {
             ),
             typescript_changes: None,
             resolved_imports: None,
+            runtime_resolutions: None,
             runtime_symbol_redirects: HashMap::new(),
         }
     }

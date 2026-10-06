@@ -3057,6 +3057,7 @@ mod tests {
             ),
             typescript_changes: None,
             resolved_imports: None,
+            runtime_resolutions: None,
             runtime_symbol_redirects: HashMap::new(),
         }
     }

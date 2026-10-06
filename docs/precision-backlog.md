@@ -1,5 +1,18 @@
 # Precision backlog
 
+## The project's bundler answers where a load goes (2026-10-06)
+
+ADR 0220, experimental and off by default. `--runtime-resolution required`
+resolves every module load through the project's own Vite, which runs its
+config, and replaces ADR 0219's resolution premises with those answers.
+
+- **Measured:** 70–74% of loads answered per app. Stricter than the
+  default: the 16 `app-game` obligations ADR 0219 clears return, blocked by
+  a `require("fs")` the worker cannot attest. Adds about 22 s across the
+  corpus.
+- **Still open:** production/SSR/worker resolution, other bundlers, worker
+  isolation and pinning, and fixtures that install Vite.
+
 ## A type query and a namespace call are accounted entries (2026-10-06)
 
 ADR 0219. A closed program's exported caller-supplied-member obligation (ADR

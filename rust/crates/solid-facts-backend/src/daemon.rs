@@ -120,6 +120,9 @@ pub fn eligible(request: &Request) -> bool {
         && request.emit_contract.is_empty()
         && request.declaration_probe_plan.is_empty()
         && !request.check_contracts
+        // Runtime resolution runs project code per check and is not part of
+        // the retained identity (ADR 0220).
+        && !request.runtime_resolution
         && retained_format(&request.format)
 }
 

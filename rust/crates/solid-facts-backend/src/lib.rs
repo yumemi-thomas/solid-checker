@@ -114,6 +114,7 @@ mod proposal_generation;
 mod release_scope;
 mod runtime_probe_wire;
 mod runtime_probes;
+pub mod runtime_resolution;
 mod wire;
 
 pub use cache::{CacheStats, FactsCache};

@@ -694,6 +694,26 @@ impl<'a> CallGraph<'a, '_> {
         path: &str,
         visiting: &mut Vec<String>,
     ) -> bool {
+        // The runtime's own answer, when the host obtained it (ADR 0220),
+        // replaces every inference below. A file outside the program, an
+        // external or a built-in module imports no project module (ADR 0193).
+        if let Some(runtime) = self.lookup.runtime_resolutions() {
+            let Some(at) = at else {
+                return true;
+            };
+            return match runtime.outcome(from.path.as_str(), at, specifier) {
+                solid_facts::runtime_resolution::RuntimeOutcome::File {
+                    path: runtime_path,
+                    physical_path,
+                } => [runtime_path.as_ref(), physical_path.as_ref()]
+                    .into_iter()
+                    .find(|target| self.file(target).is_some())
+                    .is_some_and(|target| self.module_exposes(target, path, visiting)),
+                solid_facts::runtime_resolution::RuntimeOutcome::External
+                | solid_facts::runtime_resolution::RuntimeOutcome::Builtin => false,
+                solid_facts::runtime_resolution::RuntimeOutcome::Unknown => true,
+            };
+        }
         let attested = at.and_then(|at| {
             match self
                 .lookup
