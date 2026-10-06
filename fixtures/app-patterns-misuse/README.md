@@ -30,3 +30,21 @@ Measured 2026-10-06 on rc.13 with ADR 0204 (`docs/precision-backlog.md`):
 - No correct twin gets a violation.
 - The 2 runtime-silent cases (`on-settled-read`, `signal-in-tracked-effect`)
   are statically silent too.
+
+## Corpus twins
+
+`corpus-twins.json` holds 18 more misuse/correct pairs, each modelled on an
+rc.13 corpus site found by the 2026-10-06 censuses: package option getters
+(`@tanstack/virtual-core` 3.17.8, `@tanstack/table-core` 9.2.4), async
+helpers whose synchronous prefix or default reads state in an effect, props
+read in `For`/`Show` bodies and effect apply callbacks, and a native `find`
+predicate during render. Each case names the corpus `install` whose
+`node_modules` it imports from; `run-corpus-twins.sh` runs one ledger pass per
+install.
+
+Measured 2026-10-06 in Chrome on rc.13: all 18 misuse twins raise
+`STRICT_READ_UNTRACKED` at the case file, and no correct twin raises anything.
+The checker (ADR 0215) proves 4 of them, leaves 11 uncertifiable and is silent
+on 3 (`ai-for-captured-forwarded-workspaces`,
+`openbot-for-captured-conversation-snapshot`,
+`openbot-show-request-prop-in-effect-apply`): the recall targets.
