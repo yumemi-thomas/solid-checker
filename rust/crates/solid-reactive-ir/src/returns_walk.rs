@@ -659,7 +659,7 @@ pub fn literal_structural_returns(
 }
 
 /// The return facts `function`'s *own* body writes, in source order.
-fn own_returns<'a>(
+pub(crate) fn own_returns<'a>(
     ast: &'a AstFacts,
     function: &'a FunctionFact,
 ) -> impl Iterator<Item = &'a ReturnFact> + 'a {

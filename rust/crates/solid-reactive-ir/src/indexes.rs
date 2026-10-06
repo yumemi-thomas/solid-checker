@@ -66,28 +66,25 @@ const FRESH_ARRAY_STATICS: &[&str] = &[
     "ObjectConstructor.entries",
 ];
 
-/// Array methods that return a new array built by the receiver's species.
-const FRESH_ARRAY_METHODS: &[&str] = &[
-    "Array.map",
-    "Array.filter",
-    "Array.slice",
-    "Array.concat",
-    "Array.flat",
-    "Array.flatMap",
-    "Array.toSorted",
-    "Array.toReversed",
-    "Array.toSpliced",
-    "Array.with",
-    "ReadonlyArray.map",
-    "ReadonlyArray.filter",
-    "ReadonlyArray.slice",
-    "ReadonlyArray.concat",
-    "ReadonlyArray.flat",
-    "ReadonlyArray.flatMap",
-    "ReadonlyArray.toSorted",
-    "ReadonlyArray.toReversed",
-    "ReadonlyArray.toSpliced",
-    "ReadonlyArray.with",
+/// Members of a proven built-in receiver that return the receiver itself.
+const RECEIVER_RETURNING_METHODS: &[&str] = &["sort", "reverse", "fill", "copyWithin"];
+
+/// Members of a proven built-in receiver that return a fresh built-in value:
+/// on an array, one built by its species; on a typed array, buffer or string,
+/// one of its own class. No reviewed value class has a member of these names
+/// that returns anything else.
+const FRESH_VALUE_METHODS: &[&str] = &[
+    "map",
+    "filter",
+    "slice",
+    "concat",
+    "flat",
+    "flatMap",
+    "toSorted",
+    "toReversed",
+    "toSpliced",
+    "with",
+    "split",
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1284,26 +1281,108 @@ impl<'a> SemanticLookup<'a> {
         kind: solid_facts::ast::RuntimeValueKind,
         depth: usize,
     ) -> Option<ValueOrigin<'a>> {
+        self.value_origin_assuming(file, value, kind, depth, None)
+    }
+
+    /// [`Self::value_origin`], with one parameter -- a setter updater's
+    /// previous value -- assumed to hold a built-in value already. The
+    /// assumption is the induction step: a signal every write of which keeps a
+    /// built-in value built-in, from a built-in initial value, only ever holds
+    /// one.
+    fn value_origin_assuming(
+        &self,
+        file: &FileFacts,
+        value: Span,
+        kind: solid_facts::ast::RuntimeValueKind,
+        depth: usize,
+        assumed: Option<(&str, Span)>,
+    ) -> Option<ValueOrigin<'a>> {
+        use solid_facts::ast::RuntimeValueKind;
         if depth == 0 {
             return None;
         }
-        // A fresh array: its members are `Array.prototype`'s.
-        if kind == solid_facts::ast::RuntimeValueKind::Array {
+        // A fresh array: its members are `Array.prototype`'s. A primitive's
+        // are its wrapper prototype's, and a nullish value has none to run.
+        if matches!(
+            kind,
+            RuntimeValueKind::Array | RuntimeValueKind::Primitive | RuntimeValueKind::Nullish
+        ) {
             return Some(ValueOrigin::Builtin);
         }
         let value = file.ast.peel_ts_sugar_span(value);
+        if file.ast.array_literals.binary_search(&value).is_ok() {
+            return Some(ValueOrigin::Builtin);
+        }
+        // `null`, and an `undefined` no local declaration shadows: nothing.
+        match file.source_text(value) {
+            Some("null") => return Some(ValueOrigin::Builtin),
+            Some("undefined") if file.ast.reference_declaration(value).is_none() => {
+                return Some(ValueOrigin::Builtin);
+            }
+            _ => {}
+        }
         if let Some(call) = file.ast.call_at(value) {
-            return self.call_origin(file, call, depth);
+            return self.call_origin(file, call, depth, assumed);
+        }
+        if let Some(conditional) = file
+            .ast
+            .conditional_expressions
+            .iter()
+            .find(|conditional| conditional.span == value)
+        {
+            let arm = |span| {
+                matches!(
+                    self.value_origin_assuming(
+                        file,
+                        span,
+                        RuntimeValueKind::Unknown,
+                        depth - 1,
+                        assumed
+                    ),
+                    Some(ValueOrigin::Builtin)
+                )
+            };
+            return (arm(conditional.consequent) && arm(conditional.alternate))
+                .then_some(ValueOrigin::Builtin);
+        }
+        // `a ?? b`, `a || b`, `a && b`: the value is one operand or the other.
+        if let Some(logical) = file
+            .ast
+            .logical_expressions
+            .iter()
+            .find(|logical| logical.span == value)
+        {
+            let operand = |span| {
+                matches!(
+                    self.value_origin_assuming(
+                        file,
+                        span,
+                        RuntimeValueKind::Unknown,
+                        depth - 1,
+                        assumed
+                    ),
+                    Some(ValueOrigin::Builtin)
+                )
+            };
+            return (operand(logical.left) && operand(logical.right))
+                .then_some(ValueOrigin::Builtin);
+        }
+        if let Some((path, parameter)) = assumed
+            && path == file.path.as_str()
+            && file.ast.reference_declaration(value) == Some(parameter)
+        {
+            return Some(ValueOrigin::Builtin);
         }
         let (binding_file, binding, _) = self.binding_at_reference(file.path.as_str(), value)?;
         if !binding.immutable || binding.shape != solid_facts::ast::BindingShape::Identifier {
             return None;
         }
-        self.value_origin(
+        self.value_origin_assuming(
             binding_file,
             binding.initializer?,
             binding.initializer_value_kind,
             depth - 1,
+            assumed,
         )
     }
 
@@ -1312,7 +1391,28 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         call: &solid_facts::ast::CallFact,
         depth: usize,
+        assumed: Option<(&str, Span)>,
     ) -> Option<ValueOrigin<'a>> {
+        if !call.construct
+            && call.arguments.is_empty()
+            && let Some(origin) = self.accessor_origin(file, call, depth)
+        {
+            return Some(origin);
+        }
+        // A plain call of an exact project function returns what its body
+        // returns. A method call is not followed: its receiver selects it.
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        if !call.construct
+            && !self.is_member_span(file, callee)
+            && file.ast.computed_members.binary_search(&callee).is_err()
+            && let Some((function_file, function)) = self
+                .callee_symbol(file, call.callee)
+                .and_then(|symbol| self.function_for_symbol(symbol))
+        {
+            return self
+                .returns_builtin(function_file, function, None, depth)
+                .then_some(ValueOrigin::Builtin);
+        }
         if call.construct {
             if let Some((class_file, class)) = self
                 .callee_symbol(file, call.callee)
@@ -1326,44 +1426,224 @@ impl<'a> SemanticLookup<'a> {
                 .contains(&declaration.qualified_name.as_ref())
                 .then_some(ValueOrigin::Builtin);
         }
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let member = file.ast.members.iter().find(|member| member.span == callee);
+        // A member of a proven built-in receiver is that receiver's own: its
+        // class's prototype selects it, so no declaration is needed. An
+        // unproven receiver falls through to the declaration below.
+        if let Some(member) = member
+            && let Some(method) = file.source_text(member.property)
+            && (RECEIVER_RETURNING_METHODS.contains(&method) || FRESH_VALUE_METHODS.contains(&method))
+            && !self.member_name_may_be_reassigned(method)
+            // A species-built result follows the receiver's `constructor`.
+            && (RECEIVER_RETURNING_METHODS.contains(&method)
+                || !self.member_name_may_be_reassigned("constructor"))
+            && matches!(
+                self.value_origin_assuming(
+                    file,
+                    member.object,
+                    solid_facts::ast::RuntimeValueKind::Unknown,
+                    depth - 1,
+                    assumed,
+                ),
+                Some(ValueOrigin::Builtin)
+            )
+        {
+            return Some(ValueOrigin::Builtin);
+        }
         let declaration =
             self.standard_library_declaration(file, call, typefacts::CallKind::Call)?;
         let name = declaration.qualified_name.as_ref();
-        let callee = file.ast.peel_ts_sugar_span(call.callee);
-        let receiver = file
-            .ast
-            .members
-            .iter()
-            .find(|member| member.span == callee)
-            .map(|member| file.ast.peel_ts_sugar_span(member.object));
         if FRESH_ARRAY_STATICS.contains(&name) {
             // `Array.from` called through a subclass (`List.from`) builds that
             // subclass, under the same declaration.
             let owner = name.split('.').next().unwrap_or_default();
             let global = owner.strip_suffix("Constructor").unwrap_or(owner);
-            return receiver
-                .is_some_and(|receiver| file.source_text(receiver) == Some(global))
+            return member
+                .is_some_and(|member| {
+                    file.source_text(file.ast.peel_ts_sugar_span(member.object)) == Some(global)
+                })
                 .then_some(ValueOrigin::Builtin);
         }
         if name == "String.split" {
             return Some(ValueOrigin::Builtin);
         }
-        if FRESH_ARRAY_METHODS.contains(&name) {
-            // The result is built by the receiver's species: an array whose
-            // origin is proven, and whose `constructor` nothing rewrites.
-            return (!self.member_name_may_be_reassigned("constructor")
+        None
+    }
+
+    /// ADR 0211, phase 2: the value an accessor call `items()` returns, when
+    /// every value the accessor can hold is proven.
+    ///
+    /// - `const [items, setItems] = createSignal(initial)` declared in a
+    ///   function: the initial value, and every value written through the
+    ///   setter, whose every reference in its file is the callee of a call --
+    ///   a setter handed anywhere else may write anything. An updater's
+    ///   returns are proven with its previous value assumed.
+    /// - `const sorted = createMemo(() => …)`: every value its compute, a
+    ///   synchronous function literal, returns.
+    fn accessor_origin(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+        depth: usize,
+    ) -> Option<ValueOrigin<'a>> {
+        use solid_dialect::Primitive;
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let (binding_file, binding, _) = self.binding_at_reference(file.path.as_str(), callee)?;
+        if !binding.immutable {
+            return None;
+        }
+        let initializer_span = binding_file
+            .ast
+            .peel_ts_sugar_span(binding.call_initializer?);
+        let index = binding_file
+            .ast
+            .calls
+            .iter()
+            .position(|candidate| candidate.span == initializer_span)?;
+        let initializer = &binding_file.ast.calls[index];
+        let primitive = self.primitives(binding_file).calls[index]
+            .as_ref()
+            .and_then(super::PrimitiveName::primitive)?;
+        let builtin = |file: &FileFacts, argument: &solid_facts::ast::ArgumentFact, assumed| {
+            !argument.spread
                 && matches!(
-                    self.value_origin(
+                    self.value_origin_assuming(
                         file,
-                        receiver?,
-                        solid_facts::ast::RuntimeValueKind::Unknown,
+                        argument.span,
+                        argument.runtime_value_kind,
                         depth - 1,
+                        assumed,
                     ),
                     Some(ValueOrigin::Builtin)
-                ))
-            .then_some(ValueOrigin::Builtin);
+                )
+        };
+        match (binding.shape, primitive) {
+            (solid_facts::ast::BindingShape::Array, Primitive::CreateSignal) => {
+                // The accessor is the tuple's first slot, read in its own file.
+                let accessor = binding.array_slots.first()?.as_ref()?;
+                if binding_file.path != file.path
+                    || file.ast.reference_declaration(callee) != Some(accessor.span)
+                    || !binding_file
+                        .ast
+                        .functions
+                        .iter()
+                        .any(|function| function.body.contains(binding.declaration))
+                {
+                    return None;
+                }
+                // `createSignal(fn)` is a writable memo; its value is `fn`'s.
+                if let Some(initial) = initializer.arguments.first()
+                    && (matches!(
+                        initial.value,
+                        solid_facts::ast::ArgumentValueKind::Function
+                            | solid_facts::ast::ArgumentValueKind::AsyncFunction
+                    ) || !builtin(binding_file, initial, None))
+                {
+                    return None;
+                }
+                if let Some(Some(setter)) = binding.array_slots.get(1)
+                    && !self.setter_writes_builtin(binding_file, setter.span, depth)
+                {
+                    return None;
+                }
+                Some(ValueOrigin::Builtin)
+            }
+            (solid_facts::ast::BindingShape::Identifier, Primitive::CreateMemo) => {
+                let compute = initializer.arguments.first()?;
+                let function =
+                    crate::cleanup::callback_argument_literal(binding_file, compute.span)?;
+                self.returns_builtin(binding_file, function, None, depth)
+                    .then_some(ValueOrigin::Builtin)
+            }
+            _ => None,
         }
-        None
+    }
+
+    /// Whether every write through the setter declared at `setter` is proven
+    /// a built-in value: each reference to it in its file is a call's callee,
+    /// and each call writes nothing, a built-in value, or an updater whose
+    /// returns are built-in given a built-in previous value.
+    fn setter_writes_builtin(&self, file: &FileFacts, setter: Span, depth: usize) -> bool {
+        file.ast
+            .reference_declarations
+            .iter()
+            .filter(|(_, declaration)| *declaration == setter)
+            .all(|(reference, _)| {
+                let Some(call) = self
+                    .call_by_callee(file, *reference)
+                    .filter(|call| file.ast.peel_ts_sugar_span(call.callee) == *reference)
+                else {
+                    return false;
+                };
+                let Some(written) = call.arguments.first() else {
+                    return true;
+                };
+                if written.spread {
+                    return false;
+                }
+                if matches!(
+                    written.value,
+                    solid_facts::ast::ArgumentValueKind::Function
+                        | solid_facts::ast::ArgumentValueKind::AsyncFunction
+                ) {
+                    let Some(updater) =
+                        crate::cleanup::callback_argument_literal(file, written.span)
+                    else {
+                        return false;
+                    };
+                    let previous = updater
+                        .parameters
+                        .first()
+                        .filter(|parameter| {
+                            parameter.shape == solid_facts::ast::BindingShape::Identifier
+                        })
+                        .and_then(|parameter| parameter.names.first())
+                        .map(|name| name.span);
+                    return self.returns_builtin(
+                        file,
+                        updater,
+                        previous.map(|name| (file.path.as_str(), name)),
+                        depth,
+                    );
+                }
+                matches!(
+                    self.value_origin(file, written.span, written.runtime_value_kind, depth - 1),
+                    Some(ValueOrigin::Builtin)
+                )
+            })
+    }
+
+    /// Whether every value the synchronous `function` returns is proven a
+    /// built-in value, with `assumed` (a parameter's name) taken as one.
+    fn returns_builtin(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+        assumed: Option<(&str, Span)>,
+        depth: usize,
+    ) -> bool {
+        if function.r#async || function.generator {
+            return false;
+        }
+        let proven = |returned: &solid_facts::ast::ReturnFact| {
+            returned.argument.is_none_or(|argument| {
+                matches!(
+                    self.value_origin_assuming(
+                        file,
+                        argument,
+                        returned.runtime_value_kind,
+                        depth - 1,
+                        assumed,
+                    ),
+                    Some(ValueOrigin::Builtin)
+                )
+            })
+        };
+        if function.expression_body {
+            return function.expression_return.as_ref().is_some_and(proven);
+        }
+        crate::returns_walk::own_returns(&file.ast, function).all(proven)
     }
 
     fn standard_library_declaration(

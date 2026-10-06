@@ -1,5 +1,20 @@
 # Precision backlog
 
+## An accessor's value is proven from every write (2026-10-06)
+
+ADR 0212. A parameter-member call site also proves a built-in argument when it
+is a signal accessor whose setter never escapes its file and whose every write
+is proven, a memo whose compute returns proven values, a call of a project
+function whose returns are proven, or a logical or conditional over proven
+operands.
+
+- **Gained:** rc.13 corpus uncertifiable 3,386 to 3,375; violations
+  unchanged.
+- **Still open:** props and parameters (values crossing a component or call
+  boundary), store members, module-level accessors, and method calls on
+  project objects. These are most of the remaining 1,186 caller-supplied
+  obligations.
+
 ## A value whose origin fixes its class fixes its members (2026-10-06)
 
 ADR 0211. At a parameter-member call site, an argument whose origin is a

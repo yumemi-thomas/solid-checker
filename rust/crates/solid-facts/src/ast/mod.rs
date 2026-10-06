@@ -203,6 +203,10 @@ pub struct AstFacts {
     pub members: Vec<MemberFact>,
     #[serde(default)]
     pub computed_members: Vec<Span>,
+    /// Every array literal (`[a, ...b]`), sorted by span. An array literal
+    /// evaluates to a fresh `Array`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub array_literals: Vec<Span>,
     /// The subset of [`AstFacts::computed_members`] whose key is a literal
     /// naming exactly one property, sorted by member span: a string literal
     /// (its cooked value, lone surrogates refused) or a numeric literal whose
@@ -845,6 +849,11 @@ pub struct ReturnFact {
     pub callee: Option<Span>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub structure: Option<Box<ReturnStructureFact>>,
+    /// The returned value's normalized runtime shape, as
+    /// [`ArgumentFact::runtime_value_kind`] gives it for an argument. A bare
+    /// `return;` is `Nullish`.
+    #[serde(default)]
+    pub runtime_value_kind: RuntimeValueKind,
 }
 
 impl ReturnFact {
@@ -1356,6 +1365,7 @@ impl AstFacts {
             transparent_wrappers: Vec::new(),
             members: Vec::new(),
             computed_members: Vec::new(),
+            array_literals: Vec::new(),
             literal_computed_members: Vec::new(),
             optional_members: Vec::new(),
             parameter_properties: Vec::new(),
@@ -1500,6 +1510,7 @@ struct Collector<'s, 'semantic> {
     transparent_wrappers: Vec<TransparentWrapperFact>,
     members: Vec<MemberFact>,
     computed_members: Vec<Span>,
+    array_literals: Vec<Span>,
     literal_computed_members: Vec<LiteralMemberKeyFact>,
     optional_members: Vec<Span>,
     parameter_properties: Vec<Span>,
@@ -1649,6 +1660,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             transparent_wrappers: Vec::new(),
             members: Vec::new(),
             computed_members: Vec::new(),
+            array_literals: Vec::new(),
             literal_computed_members: Vec::new(),
             optional_members: Vec::new(),
             parameter_properties: Vec::new(),
@@ -1705,6 +1717,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.transparent_wrappers.sort_by_key(|fact| fact.span);
         self.members.sort_by_key(|fact| fact.span);
         self.computed_members.sort_unstable();
+        self.array_literals.sort_unstable();
         self.literal_computed_members.sort_by_key(|fact| fact.span);
         self.optional_members.sort_unstable();
         self.parameter_properties.sort_unstable();
@@ -1754,6 +1767,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             transparent_wrappers: self.transparent_wrappers,
             members: self.members,
             computed_members: self.computed_members,
+            array_literals: self.array_literals,
             literal_computed_members: self.literal_computed_members,
             optional_members: self.optional_members,
             parameter_properties: self.parameter_properties,
@@ -1878,6 +1892,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                 conditional: false,
                 callee: None,
                 structure: None,
+                runtime_value_kind: RuntimeValueKind::Nullish,
             };
         };
         let argument_span = span(expression.span());
@@ -1976,6 +1991,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             _ => (ReturnValueKind::Other, None),
         };
         ReturnFact {
+            runtime_value_kind: self.runtime_value_kind(expression),
             span: span(expression.span()),
             argument: Some(argument_span),
             control_tests: self.conditional_control_stack.clone().into_boxed_slice(),
@@ -3534,6 +3550,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             });
         }
         walk::walk_computed_member_expression(self, member);
+    }
+
+    fn visit_array_expression(&mut self, array: &oxc_ast::ast::ArrayExpression<'a>) {
+        self.array_literals.push(span(array.span));
+        walk::walk_array_expression(self, array);
     }
 
     fn visit_array_expression_element(&mut self, element: &ArrayExpressionElement<'a>) {
