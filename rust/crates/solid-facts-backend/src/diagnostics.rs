@@ -1458,8 +1458,8 @@ pub fn admission_refusal_details(
     let patches = crate::installed_patches::InstalledPatches::read(project_directory);
     let snapshots = InstalledSnapshots::default();
     let installed = |specifier: &str| installed_artifact_identity(project_directory, specifier);
-    let bytes = |specifier: &str| {
-        installed_artifact_bytes(project_directory, specifier, &patches, &snapshots)
+    let bytes = |specifier: &str, patched: bool| {
+        installed_artifact_bytes(project_directory, specifier, patched, &patches, &snapshots)
     };
     let difference = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
         installed_environment_difference(project_directory, specifier, environment, &patches)
@@ -1908,8 +1908,9 @@ fn admitted_by_install(
     // its files and re-read every lockfile above it again.
     let snapshots = InstalledSnapshots::default();
     let patches = crate::installed_patches::InstalledPatches::read(directory);
-    let bytes =
-        |specifier: &str| installed_artifact_bytes(directory, specifier, &patches, &snapshots);
+    let bytes = |specifier: &str, patched: bool| {
+        installed_artifact_bytes(directory, specifier, patched, &patches, &snapshots)
+    };
     let resolved_target =
         |specifier: &str| resolved_target_identity(directory, facts, specifier, &counted);
     let environment = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
@@ -1927,8 +1928,9 @@ fn admitted_by_install(
                 .flatten()
         };
         let patches = crate::installed_patches::InstalledPatches::read(base);
-        let bytes =
-            |specifier: &str| installed_artifact_bytes(base, specifier, &patches, &snapshots);
+        let bytes = |specifier: &str, patched: bool| {
+            installed_artifact_bytes(base, specifier, patched, &patches, &snapshots)
+        };
         let resolved_target = |specifier: &str| {
             let importers = specifiers.get(specifier)?;
             resolved_target_identity(base, facts, specifier, &|importer| {
@@ -2812,8 +2814,9 @@ pub fn certified_catalog_self_admission(
     let patches = crate::installed_patches::InstalledPatches::read(project);
     let snapshots = InstalledSnapshots::default();
     let installed = |specifier: &str| installed_artifact_identity(project, specifier);
-    let bytes =
-        |specifier: &str| installed_artifact_bytes(project, specifier, &patches, &snapshots);
+    let bytes = |specifier: &str, patched: bool| {
+        installed_artifact_bytes(project, specifier, patched, &patches, &snapshots)
+    };
     let difference = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
         installed_environment_difference(project, specifier, environment, &patches)
     };
@@ -2887,8 +2890,9 @@ pub(crate) fn compiled_in_citation(
     let patches = crate::installed_patches::InstalledPatches::read(&project);
     let snapshots = InstalledSnapshots::default();
     let installed = |specifier: &str| installed_artifact_identity(&project, specifier);
-    let bytes =
-        |specifier: &str| installed_artifact_bytes(&project, specifier, &patches, &snapshots);
+    let bytes = |specifier: &str, patched: bool| {
+        installed_artifact_bytes(&project, specifier, patched, &patches, &snapshots)
+    };
     let difference = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
         installed_environment_difference(&project, specifier, environment, &patches)
     };
@@ -3217,6 +3221,7 @@ struct InstalledSnapshots(std::cell::RefCell<HashMap<PathBuf, Result<String, Str
 fn installed_artifact_bytes(
     project_directory: &Path,
     specifier: &str,
+    patched_install: bool,
     patches: &crate::installed_patches::InstalledPatches,
     snapshots: &InstalledSnapshots,
 ) -> Result<String, String> {
@@ -3227,7 +3232,13 @@ fn installed_artifact_bytes(
         .flatten()
         .ok_or_else(unlocatable)?;
     let directory = fs::canonicalize(&directory).map_err(|_| unlocatable())?;
-    if let Some(evidence) = patches.of(&directory, &module, &manifest.version) {
+    // ADR 0208: an authored entry probed on a patched install compares that
+    // install's own snapshot root; every other acceptance is about the
+    // published archive, which a patched tree does not hold.
+    if let Some(evidence) = patches
+        .of(&directory, &module, &manifest.version)
+        .filter(|_| !patched_install)
+    {
         return Err(format!(
             "{module}@{} is patched ({evidence})",
             manifest.version
@@ -3252,6 +3263,7 @@ pub(crate) fn installed_artifact_snapshot(
     installed_artifact_bytes(
         project_directory,
         specifier,
+        false,
         &crate::installed_patches::InstalledPatches::read(project_directory),
         &InstalledSnapshots::default(),
     )

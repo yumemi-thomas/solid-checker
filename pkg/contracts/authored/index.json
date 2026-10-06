@@ -43,6 +43,41 @@
       "requestedEntrypoint": "./button",
       "exportConditions": [
         "browser",
+        "import",
+        "solid"
+      ],
+      "runtimeTarget": "dist/button/index.jsx",
+      "declarationTarget": "dist/button/index.d.ts",
+      "snapshotRoot": "sha256:31b2c300d58b756197723d73ff43bdf1eed3ee2f4a8c0273d5f28fae09ec57be",
+      "patchedInstall": true,
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/54e2b13ab8e5ff84eb9064013331b3477516cc0b3be4f9008a077557b70b7877.json",
+      "documentDigest": "sha256:54e2b13ab8e5ff84eb9064013331b3477516cc0b3be4f9008a077557b70b7877"
+    },
+    {
+      "packageName": "@kobalte/core",
+      "specifier": "@kobalte/core/button",
+      "packageVersion": "2.0.0-alpha.0",
+      "packageIntegrity": "sha512-6l5wJRkk/CRXWzbzwYeNfv38XHWKoL3Bj9ykJQexGcmyM2TQV4IpR1E/wDbhygT9TsI3LYP5qgdLj/l2xx+qiw==",
+      "requestedEntrypoint": "./button",
+      "exportConditions": [
+        "browser",
         "import"
       ],
       "runtimeTarget": "dist/button/index.js",
@@ -67,6 +102,40 @@
       ],
       "document": "objects/7824b131f2022977a848a44780e5a1c680722c643412d7746733823aa96f38f4.json",
       "documentDigest": "sha256:7824b131f2022977a848a44780e5a1c680722c643412d7746733823aa96f38f4"
+    },
+    {
+      "packageName": "@kobalte/core",
+      "specifier": "@kobalte/core/button",
+      "packageVersion": "2.0.0-alpha.0",
+      "packageIntegrity": "sha512-6l5wJRkk/CRXWzbzwYeNfv38XHWKoL3Bj9ykJQexGcmyM2TQV4IpR1E/wDbhygT9TsI3LYP5qgdLj/l2xx+qiw==",
+      "requestedEntrypoint": "./button",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/button/index.js",
+      "declarationTarget": "dist/button/index.d.ts",
+      "snapshotRoot": "sha256:31b2c300d58b756197723d73ff43bdf1eed3ee2f4a8c0273d5f28fae09ec57be",
+      "patchedInstall": true,
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/9643edd8d1ca07ac9eddfc1294a8bfddb7de564f829c1a0460cefc60ed505c1d.json",
+      "documentDigest": "sha256:9643edd8d1ca07ac9eddfc1294a8bfddb7de564f829c1a0460cefc60ed505c1d"
     },
     {
       "packageName": "@solidjs/router",

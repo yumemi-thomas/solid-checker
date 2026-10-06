@@ -1511,7 +1511,7 @@ fn a_project_catalog_is_admitted_by_artifact_only_in_its_certified_environment()
             &root,
             &declared,
             &installed,
-            &|_: &str| Ok(bindings.snapshot_root.clone()),
+            &|_: &str, _: bool| Ok(bindings.snapshot_root.clone()),
             &target,
             &environment,
         )

@@ -774,6 +774,7 @@ fn cite_from<'a>(
         claimed.iter().map(|(bundle, _, _)| {
             (
                 ArtifactAcceptance {
+                    patched_install: false,
                     specifier: &bundle.specifier,
                     requested_entrypoint: &bundle.requested_entrypoint,
                     export_conditions: &bundle.export_conditions,
@@ -869,7 +870,9 @@ pub type InstalledEnvironment<'a> = dyn Fn(&str, &[DependencyEnvironmentEntry]) 
 /// themselves are asked too (ADR 0131). The native answer walks the installed
 /// directory; a host with no filesystem has no answer and admits nothing that
 /// needs one.
-pub type InstalledArtifactBytes<'a> = dyn Fn(&str) -> Result<String, String> + 'a;
+/// The second argument admits a patched install (ADR 0208): only an authored
+/// entry that states its snapshot root is of one asks it.
+pub type InstalledArtifactBytes<'a> = dyn Fn(&str, bool) -> Result<String, String> + 'a;
 
 /// Whether an installed tree reproduces `environment`, starting from `root`,
 /// the imported package's installed location.
@@ -1258,6 +1261,7 @@ fn admitted_from(
 ) -> Vec<(String, String)> {
     admit_by_artifact(
         loaded.iter().map(|bundle| ArtifactAcceptance {
+            patched_install: false,
             specifier: &bundle.specifier,
             requested_entrypoint: &bundle.requested_entrypoint,
             export_conditions: &bundle.export_conditions,
@@ -1420,6 +1424,7 @@ pub fn bundle_admission_refusals(
         bundles()?.iter().map(|bundle| {
             (
                 ArtifactAcceptance {
+                    patched_install: false,
                     specifier: &bundle.specifier,
                     requested_entrypoint: &bundle.requested_entrypoint,
                     export_conditions: &bundle.export_conditions,
@@ -1450,7 +1455,7 @@ fn bytes_difference(
     if acceptance.snapshot_root.is_empty() {
         return Some("its receipt signs no snapshot root to compare them with".into());
     }
-    match installed_bytes(acceptance.specifier) {
+    match installed_bytes(acceptance.specifier, acceptance.patched_install) {
         Ok(root) if root == acceptance.snapshot_root => None,
         Ok(_) => Some(
             "they do not reproduce the signed snapshot root, so something changed them after \
@@ -1477,6 +1482,10 @@ pub(crate) struct ArtifactAcceptance<'a> {
     pub(crate) acceptance_root: &'a str,
     /// The signed `snapshotRoot`, which the installed files must reproduce.
     pub(crate) snapshot_root: &'a str,
+    /// ADR 0208: the snapshot root is of a patched install, so a patch the
+    /// tree records does not refuse the comparison. Only an authored entry
+    /// states it; every certified acceptance is about the published archive.
+    pub(crate) patched_install: bool,
     /// The entries behind the signed `dependencyEnvironmentRoot`, already
     /// reproduced against it. `None` when the receipt states no environment
     /// or its entries were not published: such an acceptance is never admitted.

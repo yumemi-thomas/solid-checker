@@ -176,7 +176,7 @@ fn any_environment(_: &str, _: &[DependencyEnvironmentEntry]) -> bool {
 /// (`snapshotRoot` is `stand_in(3)`). For the tests about everything but the
 /// bytes, which the bytes half must not change.
 #[allow(clippy::unnecessary_wraps)]
-fn signed_bytes(_: &str) -> Result<String, String> {
+fn signed_bytes(_: &str, _: bool) -> Result<String, String> {
     Ok(stand_in(3))
 }
 
@@ -896,6 +896,7 @@ fn the_tier_needs_only_the_solid_runtime_of_its_environment() {
             |_: &str, environment: &[DependencyEnvironmentEntry]| tree.installs(environment);
         admit_by_artifact(
             bundles.iter().map(|bundle| ArtifactAcceptance {
+                patched_install: false,
                 specifier: &bundle.specifier,
                 requested_entrypoint: &bundle.requested_entrypoint,
                 export_conditions: &bundle.export_conditions,
@@ -1101,6 +1102,7 @@ fn admission_refusals_name_the_step_that_failed() {
     let certified = [entry("@solidjs/signals", "2.0.0-rc.6", "sha512-rc6")];
     let bundle = loaded_in(&certified);
     let stated = || ArtifactAcceptance {
+        patched_install: false,
         specifier: &bundle.specifier,
         requested_entrypoint: &bundle.requested_entrypoint,
         export_conditions: &bundle.export_conditions,
@@ -1486,8 +1488,9 @@ impl PatchTree {
         let directory = &self.directory;
         let installed =
             |specifier: &str| crate::diagnostics::installed_artifact_identity(directory, specifier);
-        let bytes =
-            |specifier: &str| crate::diagnostics::installed_artifact_snapshot(directory, specifier);
+        let bytes = |specifier: &str, _: bool| {
+            crate::diagnostics::installed_artifact_snapshot(directory, specifier)
+        };
         let environment = |specifier: &str, environment: &[DependencyEnvironmentEntry]| {
             crate::diagnostics::installed_environment_matches(directory, specifier, environment)
         };
@@ -1510,6 +1513,7 @@ impl PatchTree {
         let refusal = admission_refusals(
             [(
                 ArtifactAcceptance {
+                    patched_install: false,
                     specifier: &bundle.specifier,
                     requested_entrypoint: &bundle.requested_entrypoint,
                     export_conditions: &bundle.export_conditions,
@@ -2098,7 +2102,7 @@ fn a_patched_dependency_is_never_cited() {
         artifact_case: Some(&case),
         accepted_contract_digest: Some(&digest),
     };
-    let patched = |_: &str| -> Result<String, String> {
+    let patched = |_: &str, _: bool| -> Result<String, String> {
         Err("plain-package@1.0.0 is patched (pnpm-lock.yaml patchedDependencies)".to_owned())
     };
     let refusal = cite_in_tier(&query, &installed_plain, &patched, &reproduced)
@@ -2217,6 +2221,7 @@ fn an_acceptance_citing_a_receipt_the_tier_no_longer_carries_is_withdrawn() {
     let refusals = admission_refusals(
         [(
             ArtifactAcceptance {
+                patched_install: false,
                 specifier: &bundle.specifier,
                 requested_entrypoint: &bundle.requested_entrypoint,
                 export_conditions: &bundle.export_conditions,
@@ -2243,6 +2248,7 @@ fn an_acceptance_citing_a_receipt_the_tier_no_longer_carries_is_withdrawn() {
     );
     let admitted = admit_by_artifact(
         [ArtifactAcceptance {
+            patched_install: false,
             specifier: &bundle.specifier,
             requested_entrypoint: &bundle.requested_entrypoint,
             export_conditions: &bundle.export_conditions,

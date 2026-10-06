@@ -1,5 +1,20 @@
 # Precision backlog
 
+## An authored contract for one patched install (2026-10-06)
+
+ADR 0208. An authored entry may state that its snapshot root is of a patched
+install (`patchedInstall`); admission then compares that root despite the
+recorded patch, so exactly those files are admitted. Specs name the patch,
+and probes refuse the wrong install.
+
+- **Gained:** rc.13 corpus uncertifiable 3,421 to 3,382 (openbot's Kobalte
+  `Button` reads); violations unchanged.
+- **Corpus repair:** openbot's relocked `bun.lock` claimed the rc.13 Solid
+  runtime was patched with rc.0 patches that were never applied. The records
+  were removed (backup `bun.lock.before-patch-fix`).
+- **Still open:** the other Kobalte parts openbot wraps (`DropdownMenu.Item`,
+  `Switch`, `Dialog.Content`, `Combobox`).
+
 ## A package component states when its event props run (2026-10-06)
 
 ADR 0207. A contract callback item can name every un-namespaced `on…` member

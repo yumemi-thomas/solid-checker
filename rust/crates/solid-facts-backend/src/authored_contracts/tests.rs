@@ -49,6 +49,7 @@ fn entry(bundle: &serde_json::Value, document: &[u8]) -> AuthoredEntry {
         runtime_target: bundle["runtimeTarget"].as_str().unwrap().to_owned(),
         declaration_target: bundle["declarationTarget"].as_str().unwrap().to_owned(),
         snapshot_root: SNAPSHOT.to_owned(),
+        patched_install: false,
         solid_runtime: runtime("2.0.0-rc.13", "sha512-rc13"),
         document: "objects/router.json".to_owned(),
         document_digest: crate::contract_interface::sha256_digest(document),
@@ -111,7 +112,7 @@ fn an_authored_contract_is_admitted_on_package_bytes_and_its_solid_runtime() {
             bundle["packageIntegrity"].as_str().unwrap().to_owned(),
         ))
     };
-    let published = |_: &str| -> Result<String, String> { Ok(SNAPSHOT.to_owned()) };
+    let published = |_: &str, _: bool| -> Result<String, String> { Ok(SNAPSHOT.to_owned()) };
     let admit = |runtime: Vec<SolidRuntimeEntry>,
                  bytes: &InstalledArtifactBytes,
                  installed: &InstalledArtifactIdentity| {
@@ -150,7 +151,7 @@ fn an_authored_contract_is_admitted_on_package_bytes_and_its_solid_runtime() {
         admit(runtime("2.0.0-rc.9", "sha512-rc9"), &published, &installed).is_empty(),
         "another Solid runtime"
     );
-    let patched = |_: &str| -> Result<String, String> { Err("patched".to_owned()) };
+    let patched = |_: &str, _: bool| -> Result<String, String> { Err("patched".to_owned()) };
     assert!(
         admit(runtime("2.0.0-rc.13", "sha512-rc13"), &patched, &installed).is_empty(),
         "other installed bytes"
@@ -170,6 +171,69 @@ fn an_authored_contract_is_admitted_on_package_bytes_and_its_solid_runtime() {
         )
         .is_empty(),
         "another integrity"
+    );
+}
+
+/// ADR 0208: an entry probed on a patched install admits that install by its
+/// snapshot root, and only an entry that states so asks past the patch.
+#[test]
+fn a_patched_install_is_admitted_only_by_an_entry_probed_on_it() {
+    let (bundle, document) = router_document();
+    let conditions = BTreeSet::from(["browser".to_owned(), "import".to_owned()]);
+    let resolved = |_: &str| Some("dist/esm/index.d.ts".to_owned());
+    let installed = |_: &str| {
+        Some((
+            "@tanstack/solid-router".to_owned(),
+            "2.0.0-rc.4".to_owned(),
+            bundle["packageIntegrity"].as_str().unwrap().to_owned(),
+        ))
+    };
+    let expected = runtime("2.0.0-rc.13", "sha512-rc13")
+        .into_iter()
+        .map(|entry| {
+            DependencyEnvironmentEntry::package(entry.name, entry.version, entry.integrity)
+        })
+        .collect::<Vec<_>>();
+    let environment = move |_: &str, environment: &[DependencyEnvironmentEntry]| {
+        environment == expected.as_slice()
+    };
+    // The tree records a patch: its files answer only a caller that admits one.
+    let patched_tree = |_: &str, admits_patch: bool| -> Result<String, String> {
+        if admits_patch {
+            Ok(SNAPSHOT.to_owned())
+        } else {
+            Err("patched".to_owned())
+        }
+    };
+    let admit = |entry: AuthoredEntry, bytes: &InstalledArtifactBytes| {
+        let loaded = [load_authored(&entry, &document).unwrap()];
+        admitted_from(
+            &loaded,
+            &conditions,
+            &installed,
+            bytes,
+            &resolved,
+            &environment,
+        )
+    };
+
+    assert!(
+        admit(entry(&bundle, &document), &patched_tree).is_empty(),
+        "an entry about the published bytes"
+    );
+    let mut probed_on_patch = entry(&bundle, &document);
+    probed_on_patch.patched_install = true;
+    assert_eq!(
+        admit(probed_on_patch.clone(), &patched_tree).len(),
+        1,
+        "the patched install it was probed on"
+    );
+    // Another patch: the root no longer matches.
+    let other_patch =
+        |_: &str, _: bool| -> Result<String, String> { Ok("sha256:other".to_owned()) };
+    assert!(
+        admit(probed_on_patch, &other_patch).is_empty(),
+        "another patch"
     );
 }
 

@@ -269,7 +269,10 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
                     )
                 })
         };
-        let installed_bytes = |specifier: &str| {
+        // The host states each package's installed snapshot root; whether a
+        // patch produced it is the host's to know, and the root still has to
+        // match the acceptance byte for byte (ADR 0208).
+        let installed_bytes = |specifier: &str, _patched_install: bool| {
             request
                 .installed_packages
                 .iter()

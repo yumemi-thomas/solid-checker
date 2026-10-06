@@ -1168,6 +1168,7 @@ impl ProjectCandidate {
             declaration_target: &self.declaration_target,
             acceptance_root: &self.acceptance_root,
             snapshot_root: &self.snapshot_root,
+            patched_install: false,
             environment: Some(&self.environment),
             identity: &self.identity,
             citations: &self.citations,

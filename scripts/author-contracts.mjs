@@ -12,6 +12,11 @@
 //       write the spec's identity.json from a `contract generate --host browser`
 //       proposal for a version the certified tier does not carry (ADR 0207)
 //
+// A spec named `<package>@<version>+<label>` with `patchedInstall` in its
+// spec.json is about one patched install (ADR 0208): its identity is that
+// install's files, its probes run only where that exact patch is applied, and
+// its entries are admitted only where the installed files reproduce them.
+//
 // A spec is a directory `pkg/contracts/authored/specs/<package>@<version>/`
 // holding `spec.json` and, per claimed export, `<export>.misuse.tsx` and
 // `<export>.correct.tsx` (or naming a shared directory of them in `pairs`). `spec.json` names the package version, the Solid
@@ -54,7 +59,9 @@ const option = name => { const index = rest.indexOf(name); return index >= 0 ? r
 const specs = readdirSync(join(TIER, "specs")).filter(name => !name.startsWith("_")).sort().map(name => {
   const directory = join(TIER, "specs", name);
   const spec = read(join(directory, "spec.json"));
-  assert.equal(name, `${spec.package.replace("/", "+")}@${spec.version}`, `${name}: directory names another version`);
+  // ADR 0208: a spec about one patched install is named for its patch.
+  const base = `${spec.package.replace("/", "+")}@${spec.version}`;
+  assert.equal(name, spec.patchedInstall ? `${base}+${spec.patchedInstall.label}` : base, `${name}: directory names another version`);
   return { ...spec, name, directory, pairs: join(directory, spec.pairs ?? ".") };
 });
 const accepted = read(join(ACCEPTED, "index.json"));
@@ -94,10 +101,47 @@ function installed(name, from) {
  * The identity a probe ran on: the package's own files reproduce one certified
  * case's artifact, and the Solid runtime it resolves is the spec's, by version.
  */
+/**
+ * The patch files the tree above `install` records for `name@version`: Bun's
+ * and pnpm's `patchedDependencies` (lockfile or package.json) and
+ * `patch-package` files. A probe guard, not admission: admission reads every
+ * mechanism itself (installed_patches.rs).
+ */
+function recordedPatches(install, name, version) {
+  const key = `${name}@${version}`;
+  const found = [];
+  for (let directory = install; ; directory = dirname(directory)) {
+    for (const file of ["bun.lock", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]) {
+      const path = join(directory, file);
+      if (!existsSync(path)) continue;
+      const text = readFileSync(path, "utf8");
+      const match = text.match(new RegExp(`"?${key.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}"?\\s*:\\s*"([^"]+\\.patch)"`));
+      if (match) found.push(join(directory, match[1]));
+      else if (text.includes("patchedDependencies") && text.includes(key)) found.push(path);
+    }
+    const patches = join(directory, "patches");
+    if (existsSync(patches))
+      for (const file of readdirSync(patches))
+        if (file.startsWith(name.replace("/", "+")) || file.startsWith(encodeURIComponent(name)) || file.startsWith(name.replace("/", "%2F")))
+          if (file.includes(version)) found.push(join(patches, file));
+    if (directory === dirname(directory)) break;
+  }
+  return [...new Set(found)];
+}
+
 function probeInstall(spec, install) {
   const packageDirectory = installed(spec.package, install);
   const manifest = read(join(packageDirectory, "package.json"));
   assert.equal(manifest.version, spec.version, `${spec.name}: the probe install holds ${manifest.version}`);
+  // ADR 0208: a spec about the published bytes is never probed on a patched
+  // copy, and a spec about one patch only on an install holding that patch.
+  const patches = recordedPatches(install, spec.package, spec.version);
+  if (spec.patchedInstall) {
+    assert(patches.some(path => existsSync(path) && `sha256:${sha256(readFileSync(path))}` === spec.patchedInstall.sha256),
+      `${spec.name}: the probe install does not apply the stated patch`);
+  } else {
+    assert.deepEqual(patches, [], `${spec.name}: the probe install patches ${spec.package}@${spec.version}`);
+  }
   if (spec.identity) {
     const root = snapshotRoot(packageDirectory, spec.package, spec.version);
     for (const bundle of certifiedCases(spec))
@@ -291,6 +335,7 @@ function build() {
         runtimeTarget: bundle.runtimeTarget,
         declarationTarget: bundle.declarationTarget,
         snapshotRoot,
+        ...(spec.patchedInstall ? { patchedInstall: true } : {}),
         solidRuntime: spec.solidRuntime,
         document: member,
         documentDigest: `sha256:${sha256(bytes)}`

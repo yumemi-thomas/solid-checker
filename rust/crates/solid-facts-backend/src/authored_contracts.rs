@@ -58,6 +58,11 @@ pub(crate) struct AuthoredEntry {
     /// The snapshot root of the published files, which the installed files
     /// must reproduce.
     pub(crate) snapshot_root: String,
+    /// ADR 0208: the snapshot root is of a patched install, the one the claims
+    /// were probed on. A patch the consumer's tree records then does not
+    /// refuse the comparison; the root still has to match byte for byte.
+    #[serde(default)]
+    pub(crate) patched_install: bool,
     /// The Solid runtime the claims were probed on, which the consumer's tree
     /// must install as stated (resolved from the package's own location).
     pub(crate) solid_runtime: Vec<SolidRuntimeEntry>,
@@ -85,11 +90,19 @@ pub(crate) struct LoadedAuthored {
 
 /// The index entry identity an authored contract is keyed and admitted by.
 /// Prefixed so it can never collide with a certified acceptance's.
-fn authored_identity(acceptance_root: &str, environment: &[DependencyEnvironmentEntry]) -> String {
-    format!(
-        "authored:{}",
-        crate::accepted_bundles::environment_acceptance_identity(acceptance_root, environment)
-    )
+fn authored_identity(
+    acceptance_root: &str,
+    environment: &[DependencyEnvironmentEntry],
+    patched_snapshot: Option<&str>,
+) -> String {
+    let identity =
+        crate::accepted_bundles::environment_acceptance_identity(acceptance_root, environment);
+    // ADR 0208: an entry about one patched install is another artifact than
+    // the published one of the same version, and is keyed by its bytes.
+    match patched_snapshot {
+        Some(snapshot) => format!("authored-patched:{snapshot}:{identity}"),
+        None => format!("authored:{identity}"),
+    }
 }
 
 pub(crate) fn load_authored(
@@ -168,7 +181,13 @@ pub(crate) fn load_authored(
         })
         .collect::<Vec<_>>();
     Ok(LoadedAuthored {
-        identity: authored_identity(&acceptance_root, &environment),
+        identity: authored_identity(
+            &acceptance_root,
+            &environment,
+            entry
+                .patched_install
+                .then_some(entry.snapshot_root.as_str()),
+        ),
         entry: entry.clone(),
         acceptance_root,
         environment,
@@ -267,6 +286,7 @@ pub(crate) fn admitted_from(
             declaration_target: &authored.entry.declaration_target,
             acceptance_root: &authored.acceptance_root,
             snapshot_root: &authored.entry.snapshot_root,
+            patched_install: authored.entry.patched_install,
             environment: Some(&authored.environment),
             identity: &authored.identity,
             citations: &[],
