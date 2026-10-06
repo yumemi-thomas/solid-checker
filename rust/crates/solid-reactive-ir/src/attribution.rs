@@ -139,7 +139,13 @@ pub(crate) fn discharge_closed_program_export_dispatch(
     let exported_dispatch = |defect: &StaticDefect| {
         defect.analysis_context == crate::EXPORTED_PARAMETER_MEMBER_DISPATCH
     };
-    if !lookup.program_closed || !defects.iter().any(exported_dispatch) {
+    let passed_parameter =
+        |defect: &StaticDefect| defect.analysis_context == "parameter-member-target-unresolved";
+    if !lookup.program_closed
+        || !defects
+            .iter()
+            .any(|defect| exported_dispatch(defect) || passed_parameter(defect))
+    {
         return;
     }
     let graph = CallGraph {
@@ -155,19 +161,30 @@ pub(crate) fn discharge_closed_program_export_dispatch(
         entered_only_through_calls: RefCell::new(HashMap::new()),
     };
     defects.retain(|defect| {
-        if !exported_dispatch(defect) {
-            return true;
-        }
         let Some(file) = graph.file(defect.location.path.as_ref()) else {
             return true;
         };
-        let function = Span::new(
+        let span = Span::new(
             u32::try_from(defect.location.start_byte).unwrap_or(u32::MAX),
             u32::try_from(defect.location.end_byte).unwrap_or(u32::MAX),
         );
-        !graph.entered_only_through_call_expressions(file.path.as_str(), function)
+        if exported_dispatch(defect) {
+            return !graph.entered_only_through_call_expressions(file.path.as_str(), span);
+        }
+        if passed_parameter(defect)
+            && let crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                member: Some(member),
+                ..
+            } = &defect.kind
+        {
+            return !graph.parameter_holds_builtin(file, span, member, PASS_THROUGH_DEPTH);
+        }
+        true
     });
 }
+
+/// How many functions a parameter's value is followed back through (ADR 0213).
+const PASS_THROUGH_DEPTH: usize = 4;
 
 /// The functions a reach walk starts from, and whether they are all of them.
 struct ImportBindingUses<'a> {
@@ -510,6 +527,100 @@ impl<'a> CallGraph<'a, '_> {
                     self.reference_is_accounted_for(reference, &known_call_sites, false)
                 })
         })
+    }
+
+    /// ADR 0213: whether the argument at `argument`, the obligation's site,
+    /// is a parameter that holds a built-in value (ADR 0211) on every entry
+    /// of its function, so its `member` is the built-in prototype's.
+    ///
+    /// The parameter is a plain identifier of the innermost function around
+    /// the argument, written nowhere in its file. The function is entered only
+    /// through call expressions, so its call sites are every entry. Each one
+    /// passes, at the parameter's position, a value `value_origin` proves, or
+    /// a parameter of its own function that holds one. A default proves
+    /// nothing unless it holds one too.
+    fn parameter_holds_builtin(
+        &self,
+        file: &'a FileFacts,
+        argument: Span,
+        member: &str,
+        depth: usize,
+    ) -> bool {
+        if depth == 0
+            || self.lookup.member_name_may_be_reassigned(member)
+            || self.lookup.member_name_may_be_reassigned("__proto__")
+        {
+            return false;
+        }
+        let argument = file.ast.peel_ts_sugar_span(argument);
+        let Some(declaration) = file.ast.reference_declaration(argument) else {
+            return false;
+        };
+        let Some((function, index)) = file
+            .ast
+            .functions_body_containing(argument)
+            .min_by_key(|function| function.body.end - function.body.start)
+            .and_then(|function| {
+                function
+                    .parameters
+                    .iter()
+                    .position(|parameter| {
+                        parameter.shape == solid_facts::ast::BindingShape::Identifier
+                            && parameter
+                                .names
+                                .first()
+                                .is_some_and(|name| name.span == declaration)
+                    })
+                    .map(|index| (function, index))
+            })
+        else {
+            return false;
+        };
+        if function.rest_parameter && index + 1 == function.parameters.len() {
+            return false;
+        }
+        let written = file.ast.assignments.iter().any(|assignment| {
+            file.ast
+                .reference_declaration(file.ast.peel_ts_sugar_span(assignment.target))
+                == Some(declaration)
+        });
+        if written {
+            return false;
+        }
+        let builtin = |file: &'a FileFacts, span: Span, kind| {
+            matches!(
+                self.lookup.value_origin(file, span, kind, 6),
+                Some(crate::indexes::ValueOrigin::Builtin)
+            ) || self.parameter_holds_builtin(file, span, member, depth - 1)
+        };
+        if let Some(default) = function.parameters[index].initializer
+            && !builtin(file, default, solid_facts::ast::RuntimeValueKind::Unknown)
+        {
+            return false;
+        }
+        if !self.entered_only_through_call_expressions(file.path.as_str(), function.span) {
+            return false;
+        }
+        let sites = self
+            .lookup
+            .function_call_sites(file.path.as_str(), function.span);
+        !sites.is_empty()
+            && sites.into_iter().all(|(caller, callee)| {
+                let Some(call) = self.lookup.call_by_callee(caller, callee) else {
+                    return false;
+                };
+                if call
+                    .arguments
+                    .iter()
+                    .take(index + 1)
+                    .any(|argument| argument.spread)
+                {
+                    return false;
+                }
+                call.arguments
+                    .get(index)
+                    .is_none_or(|passed| builtin(caller, passed.span, passed.runtime_value_kind))
+            })
     }
 
     fn reference_is_accounted_for(

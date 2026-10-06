@@ -63,9 +63,10 @@ The value's origin can settle it.
 3. **The origin is followed through `const` bindings only.** A binding
    initializer now carries its runtime kind (`initializer_value_kind`), as an
    argument does. A `let`, a parameter or a property proves nothing.
-4. **Nothing applies where the program may replace the member.** This is the
-   case when an assignment writes a member of that name, `__proto__`, or
-   anything through a `prototype` (ADR 0209's check).
+4. **Nothing applies where the program may replace the member.** This is
+   the case when an assignment writes a member of that name or `__proto__`,
+   or replaces a prototype or writes one at a dynamic key (ADR 0209's check,
+   narrowed by ADR 0213: a named prototype write refuses only its name).
 5. **An argumentless construction's resolved call is demanded** (`new
    Date()`). Only the resolved call names the constructor.
 

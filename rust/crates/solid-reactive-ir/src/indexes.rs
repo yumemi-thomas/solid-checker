@@ -1241,14 +1241,19 @@ impl<'a> SemanticLookup<'a> {
                 for assignment in &file.ast.assignments {
                     let target = file.ast.peel_ts_sugar_span(assignment.target);
                     let text = file.source_text(target).unwrap_or_default();
-                    if text.contains("prototype") {
-                        prototype = true;
-                    }
+                    // A named write through a prototype (`C.prototype.m = f`)
+                    // replaces the member it names, which the name records.
+                    // Only a write that replaces a prototype itself
+                    // (`C.prototype = …`) or writes one at a key no fact names
+                    // (`C.prototype[key] = …`) may replace any member.
                     if let Some(member) =
                         file.ast.members.iter().find(|member| member.span == target)
                         && let Some(property) = file.source_text(member.property)
                     {
                         names.insert(property);
+                        if property == "prototype" {
+                            prototype = true;
+                        }
                     } else if let Some(literal) = file
                         .ast
                         .literal_computed_members
@@ -1256,6 +1261,11 @@ impl<'a> SemanticLookup<'a> {
                         .find(|member| member.span == target)
                     {
                         names.insert(literal.key.as_str());
+                        if literal.key.as_str() == "prototype" {
+                            prototype = true;
+                        }
+                    } else if text.contains("prototype") {
+                        prototype = true;
                     }
                     // A dynamic key (`x[key] = …`) is left out: writing one onto
                     // a class instance is a type error under the published

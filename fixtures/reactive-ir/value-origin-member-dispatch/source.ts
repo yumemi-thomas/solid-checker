@@ -50,3 +50,6 @@ export function run(patched: Patched): number {
 
 const patched = new Patched();
 patched.run = () => count();
+
+// A named write through a prototype replaces only the member it names.
+(Live.prototype as unknown as { extra?: () => number }).extra = () => 0;

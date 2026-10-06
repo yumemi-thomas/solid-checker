@@ -1,5 +1,18 @@
 # Precision backlog
 
+## A parameter holds what every caller passes (2026-10-06)
+
+ADR 0213. In a closed program, a parameter-member obligation whose argument is
+a parameter is discharged when the function is entered only through calls and
+every call passes a proven built-in value (or a parameter that holds one).
+A named prototype write now refuses only the member it names.
+
+- **Gained:** rc.13 corpus uncertifiable 3,375 to 3,318; violations
+  unchanged. Nearly all of it is the prototype refinement, which had switched
+  ADR 0209/0211/0212 off across app-game and openbot.
+- **Still open:** props (component parameters rendered through JSX),
+  destructured parameters, functions handed out as values, open programs.
+
 ## An accessor's value is proven from every write (2026-10-06)
 
 ADR 0212. A parameter-member call site also proves a built-in argument when it

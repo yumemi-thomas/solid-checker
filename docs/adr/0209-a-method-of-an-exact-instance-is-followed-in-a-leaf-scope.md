@@ -48,6 +48,9 @@ symbol, so every method call stopped it.
 3. **Nothing reassigns it.** No assignment in the project writes a member
    of that name (`x.name = …`, or a literal key `x["name"] = …`), and none
    writes through a `prototype`.
+   - Amended by ADR 0213: a named write through a prototype
+     (`C.prototype.name = …`) refuses only that name. A write that replaces
+     a prototype, or writes one at a dynamic key, still refuses every name.
    - A dynamic-key write onto a class instance is left out. Under the
      published declarations it is a type error unless the class has an index
      signature or the write casts. Every resolved member call here rests on

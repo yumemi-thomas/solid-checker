@@ -1,0 +1,55 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-pass-through-dispatch/App.tsx",
+      "start": 624,
+      "end": 628,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-pass-through-dispatch/App.tsx",
+      "start": 768,
+      "end": 772,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-pass-through-dispatch/App.tsx",
+      "start": 920,
+      "end": 924,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-pass-through-dispatch/App.tsx",
+      "start": 929,
+      "end": 939,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-pass-through-dispatch/App.tsx",
+      "start": 1114,
+      "end": 1125,
+      "fixes": 0
+    }
+  ]
+}

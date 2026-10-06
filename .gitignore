@@ -263,5 +263,7 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/closed-export-member-dispatch/node_modules/**
 !fixtures/reactive-ir/closed-export-member-dispatch-open/node_modules/
 !fixtures/reactive-ir/closed-export-member-dispatch-open/node_modules/**
+!fixtures/reactive-ir/parameter-pass-through-dispatch/node_modules/
+!fixtures/reactive-ir/parameter-pass-through-dispatch/node_modules/**
 !fixtures/reactive-ir/render-time-reads/node_modules/
 !fixtures/reactive-ir/render-time-reads/node_modules/**

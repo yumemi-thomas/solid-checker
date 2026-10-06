@@ -5,7 +5,7 @@
 - a fresh built-in value (an array literal, an array built by `Array.from`, `Object.keys`/`values`/`entries`, `split` or an array method of a proven array, or `new` of a reviewed value class such as `Date`, `Set` or `Map`) runs its prototype's member, which reads nothing reactive;
 - an instance of exactly a project class (`new C(…)`) runs the method `C` declares, whose summary is used.
 
-The origin is followed through `const` bindings only, and nothing applies where the program assigns a member of that name or writes a prototype.
+The origin is followed through `const` bindings only, and nothing applies where the program assigns a member of that name, or replaces a prototype or writes one at a dynamic key. `source.ts` writes `Live.prototype.extra`, which names `extra` and leaves every other case standing.
 
 | Case | Finding | Why |
 | --- | --- | --- |
