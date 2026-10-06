@@ -790,50 +790,36 @@ pub struct NativeIncrementalSession {
     semantic_demand_options: SemanticDemandOptions,
 }
 
-/// The importing files whose module specifiers must be attested before a
-/// package contract may be bound to any of them.
+/// The importing files whose module specifiers are attested: every file of
+/// the program.
 ///
-/// A contract is applied by installed identity, which needs the compiler's own
-/// resolution for the specifier
-/// ([`solid_reactive_ir::PackageContract::for_import`]). Asking for that
-/// resolution is an explicit operation on the Type Facts session, and its
-/// import half is proportional to the files asked about — so it is asked only
-/// of the files that could carry a contract-bound specifier at all: the ones
-/// with at least one bare specifier. A relative or `node:` specifier can never
-/// name a package.
+/// Two consumers read the answer:
+/// - A package contract is applied by installed identity, which needs the
+///   compiler's own resolution of the specifier
+///   ([`solid_reactive_ir::PackageContract::for_import`]).
+/// - The IR asks which module each specifier loads before it trusts that no
+///   namespace object, barrel or dynamic import reaches a module (ADR 0219).
+///   That includes relative specifiers, since only the compiler maps
+///   `./x.js` to `x.ts`.
 ///
-/// The scope deliberately does **not** consult contract discovery, though that
-/// would narrow it further. The attestation is computed once per program
-/// generation and a retained session reuses it across checks, while contracts
-/// are re-discovered on every check; a scope keyed on today's contracts would
-/// answer for a contract that appeared afterwards by *silently omitting* its
-/// files, which is name-only binding restored by accident. `export … from`
-/// specifiers count for the same reason contract resolution binds them.
+/// Both questions hold for any file, so the scope is not narrowed to files
+/// with a bare specifier. It is one request per program generation, and its
+/// import half is proportional to the files asked about.
 ///
-/// An empty answer means no specifier in this program could name a package, and
-/// the caller then asks for nothing.
+/// The scope deliberately does **not** consult contract discovery. The
+/// attestation is computed once per program generation and a retained session
+/// reuses it across checks, while contracts are re-discovered on every check.
+/// A scope keyed on today's contracts would answer for a contract that
+/// appeared afterwards by *silently omitting* its files, which is name-only
+/// binding restored by accident.
+///
+/// An empty answer means the program has no files, and the caller then asks
+/// for nothing.
 #[must_use]
 pub fn contract_identity_scope(facts: &ProjectFacts) -> Vec<String> {
     facts
         .files
         .iter()
-        .filter(|file| {
-            file.ast
-                .imports
-                .iter()
-                .map(|import| import.module.as_str())
-                .chain(
-                    file.ast
-                        .exports
-                        .iter()
-                        .filter_map(|export| export.module.as_deref()),
-                )
-                .any(|specifier| {
-                    !specifier.starts_with('.')
-                        && !specifier.starts_with('/')
-                        && !specifier.starts_with("node:")
-                })
-        })
         .map(|file| file.path.as_str().to_owned())
         .collect()
 }

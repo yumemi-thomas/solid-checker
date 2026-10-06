@@ -1262,6 +1262,35 @@ impl<'a> SemanticLookup<'a> {
             .map(|index| &self.facts.files[*index])
     }
 
+    /// A missing symbol is missing reference evidence, not an empty census.
+    pub(super) fn symbol_references_if_present(&self, symbol: &str) -> Option<Vec<Location>> {
+        self.symbols_by_id()
+            .get(symbol)
+            .map(|candidate| candidate.references().cloned().collect())
+    }
+
+    /// The compiler's attested resolution of the project's import specifiers,
+    /// when the analysis carries it.
+    pub(super) fn resolved_imports(&self) -> Option<&'a solid_facts::AttestedImportIndex> {
+        self.facts.resolved_imports.as_ref()
+    }
+
+    /// The files declaring the module a namespace binding at `span` names:
+    /// its symbol's alias target's declarations. `None` when Type Facts does
+    /// not resolve it.
+    pub(super) fn namespace_module_paths(&self, path: &str, span: Span) -> Option<Vec<&'a str>> {
+        let symbol = self.entities.at(path, span)?;
+        let symbols = self.symbols_by_id();
+        let target = symbols.get(symbol.as_str())?.alias_target();
+        let paths = symbols
+            .get(target)?
+            .declarations()
+            .iter()
+            .map(|declaration| declaration.location.path.as_ref())
+            .collect::<Vec<&'a str>>();
+        (!paths.is_empty()).then_some(paths)
+    }
+
     pub(super) fn symbol_references(&self, symbol: &str) -> Vec<Location> {
         self.symbols_by_id()
             .get(symbol)

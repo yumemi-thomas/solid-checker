@@ -91,6 +91,74 @@ pub(super) const FRESH_STACK_SCHEDULERS: &[&str] = &[
     "ReportingObserver.construct",
 ];
 
+/// The modules the Node runtime provides under a bare name (Node 24
+/// `module.builtinModules`, without the `_`-prefixed internals). A specifier
+/// naming one, or any `node:` specifier, loads the runtime's module rather
+/// than a project file. This assumes no bundler aliases one of these names
+/// onto a project file (ADR 0219).
+const NODE_BUILTIN_MODULES: &[&str] = &[
+    "assert",
+    "assert/strict",
+    "async_hooks",
+    "buffer",
+    "child_process",
+    "cluster",
+    "console",
+    "constants",
+    "crypto",
+    "dgram",
+    "diagnostics_channel",
+    "dns",
+    "dns/promises",
+    "domain",
+    "events",
+    "fs",
+    "fs/promises",
+    "http",
+    "http2",
+    "https",
+    "inspector",
+    "inspector/promises",
+    "module",
+    "net",
+    "os",
+    "path",
+    "path/posix",
+    "path/win32",
+    "perf_hooks",
+    "process",
+    "punycode",
+    "querystring",
+    "readline",
+    "readline/promises",
+    "repl",
+    "stream",
+    "stream/consumers",
+    "stream/promises",
+    "stream/web",
+    "string_decoder",
+    "sys",
+    "timers",
+    "timers/promises",
+    "tls",
+    "trace_events",
+    "tty",
+    "url",
+    "util",
+    "util/types",
+    "v8",
+    "vm",
+    "wasi",
+    "worker_threads",
+    "zlib",
+];
+
+/// Whether `specifier` names a module the Node runtime provides
+/// ([`NODE_BUILTIN_MODULES`], or any `node:` specifier).
+pub(super) fn is_node_builtin_module(specifier: &str) -> bool {
+    specifier.starts_with("node:") || NODE_BUILTIN_MODULES.contains(&specifier)
+}
+
 /// Fresh-stack rows whose method calls its receiver's `then`
 /// (`Promise.prototype.catch` and `finally`, ECMAScript 27.2.5.1, 27.2.5.3).
 /// A subclass that overrides `then` can run the handler synchronously, and

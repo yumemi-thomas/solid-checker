@@ -1,5 +1,44 @@
 # Precision backlog
 
+## A type query and a namespace call are accounted entries (2026-10-06)
+
+ADR 0219. A closed program's exported caller-supplied-member obligation (ADR
+0203) treats `typeof helper` in a type position as erased, and
+`ns.helper(...)` as a call of the declaration its property resolves to. Both
+hold only while no namespace object reaches the module. The compiler's module
+resolution, now attested for every project file, says which module each
+specifier loads.
+
+- **Gained:** rc.13 corpus uncertifiable 3,384 to 3,368 (16 obligations);
+  violations unchanged.
+- **Conservative:**
+  - a qualified type reference (`ns.Item`) counts as a runtime use of the
+    namespace;
+  - an unresolved non-relative `import()` or `require` may name any module;
+  - a declaration whose runtime module a package `main`, a link or an alias
+    selects may expose anything.
+- **Premises:**
+  - the analyzed program is the whole runtime program;
+  - neither `paths` nor a bundler remaps a Node built-in name onto a
+    project file unless the compiler attests it;
+  - `preserveSymlinks` workspace links are not identified with their
+    sources;
+  - a relative specifier with an explicit extension loads that file or its
+    `.ts` source (no relative aliases, `.js`-named directories, or symlinked
+    relative directories);
+  - nothing under `node_modules` is an analyzed source.
+
+  Removing the last two needs runtime-resolution facts, such as the
+  bundler's resolver.
+- **Still open:** components entered through JSX, class members, functions
+  registered with a package (Hono, Convex), local value escapes, tests and
+  stories.
+- **Open, predates ADR 0219:** a census ADR 0203 closes with direct calls
+  alone does not consult namespace escapes. A module called directly and
+  also enumerated through its namespace still clears. Guarding every census
+  refused 237 closures, many likely correct; with attested resolution this
+  could now be measured again.
+
 ## A callback every use of which is closed is not a strict read (2026-10-06)
 
 ADR 0218. A reactive read in an arrow that a component body hands to a
@@ -27,29 +66,6 @@ fields the consumer touches must be inert at every site.
   - **ADR 0210's leaf-scope host timing treats `Promise.catch`/`finally` as
     fresh-stack.** Both call their receiver's `then`, which a subclass may
     override to run the handler synchronously.
-
-## Parked: type queries and namespace calls as accounted entries (2026-10-06)
-
-A research lever, not landed. It would let a closed program's exported
-caller-supplied-member obligation (ADR 0203) treat `typeof helper` in a type
-position as erased, and `ns.helper(...)` as a call of the declaration its
-property resolves to. On the rc.13 corpus that removes 30 obligations.
-
-Five review rounds showed that the admission is sound only while the module
-is not reachable as an escaping namespace object: `Object.values(ns)`,
-`ns["helper"]`, a barrel's namespace, `import = require`, or a dynamic
-import. Telling which module a non-relative specifier names needs Type
-Facts' module graph (`ModuleImportFact.resolved_path`), which the analysis
-does not receive. The conservative rule, "a non-relative specifier may name
-any module", removes all 30 gains.
-
-The parked diff, fixtures and draft ADR are in
-`rust/target/research/volume/entries/parked/`.
-
-- **Open, predates this work:** a census ADR 0203 closes with direct calls
-  alone does not consult namespace escapes. A module called directly and
-  also enumerated through its namespace still clears. Guarding every census
-  refused 237 closures, so this too needs the module graph.
 
 ## Leaf scopes reach helpers, namespaces and more host callbacks (2026-10-06)
 

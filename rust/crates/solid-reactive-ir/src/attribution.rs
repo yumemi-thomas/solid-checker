@@ -110,6 +110,8 @@ pub(crate) fn obligation_reach(
         aliases,
         symbols_by_root,
         entered_only_through_calls: RefCell::new(HashMap::new()),
+        namespace_escapes: RefCell::new(HashMap::new()),
+        attested_project_texts: RefCell::new(None),
     };
     locations
         .into_iter()
@@ -159,6 +161,8 @@ pub(crate) fn discharge_closed_program_export_dispatch(
         aliases,
         symbols_by_root,
         entered_only_through_calls: RefCell::new(HashMap::new()),
+        namespace_escapes: RefCell::new(HashMap::new()),
+        attested_project_texts: RefCell::new(None),
     };
     defects.retain(|defect| {
         let Some(file) = graph.file(defect.location.path.as_ref()) else {
@@ -202,6 +206,11 @@ struct CallGraph<'a, 'b> {
     /// functions, and the verdict walks every reference of a symbol; without
     /// this the same walk runs once per obligation that reaches the function.
     entered_only_through_calls: RefCell<HashMap<(&'a str, Span), bool>>,
+    /// One namespace-escape verdict per module; the scan reads every file.
+    namespace_escapes: RefCell<HashMap<String, bool>>,
+    /// Specifier texts the compiler resolves to a project file somewhere,
+    /// built on first use.
+    attested_project_texts: RefCell<Option<HashMap<String, Vec<String>>>>,
 }
 
 impl<'a> CallGraph<'a, '_> {
@@ -441,6 +450,16 @@ impl<'a> CallGraph<'a, '_> {
         if !aliased.iter().any(|candidate| candidate == symbol) {
             aliased.push(symbol.clone());
         }
+        // A symbol Type Facts does not know has no reference census, so it
+        // bounds nothing; a few graph edges cannot stand in for one. A known
+        // symbol with no references has no entries.
+        if aliased.iter().any(|candidate| {
+            self.lookup
+                .symbol_references_if_present(candidate.as_str())
+                .is_none()
+        }) {
+            return None;
+        }
         Some(aliased)
     }
 
@@ -492,14 +511,22 @@ impl<'a> CallGraph<'a, '_> {
             .chain(self.lookup.function_render_call_sites(path, function))
             .map(|(caller, callee)| (caller.path.to_string(), callee.start, callee.end))
             .collect::<HashSet<_>>();
-        aliased.iter().all(|candidate| {
-            self.lookup
-                .symbol_references(candidate.as_str())
-                .iter()
-                .all(|reference| {
-                    self.reference_is_accounted_for(reference, &known_call_sites, true)
-                })
-        })
+        // A type query is erased (ADR 0219), but accounts for a reference
+        // only while no namespace object reaches the module.
+        let mut widened = false;
+        for candidate in &aliased {
+            for reference in self.lookup.symbol_references(candidate.as_str()) {
+                if self.reference_is_accounted_for(&reference, &known_call_sites, true) {
+                    continue;
+                }
+                if self.reference_in_type_query(&reference) {
+                    widened = true;
+                    continue;
+                }
+                return false;
+            }
+        }
+        !widened || !self.module_namespace_escapes(path)
     }
 
     /// Whether every way of entering this function is a call expression, each
@@ -512,21 +539,350 @@ impl<'a> CallGraph<'a, '_> {
         let Some(aliased) = self.function_symbols(path, function) else {
             return false;
         };
-        let known_call_sites = self
-            .lookup
-            .function_call_sites(path, function)
-            .into_iter()
-            .filter(|(caller, callee)| self.lookup.call_by_callee(caller, *callee).is_some())
-            .map(|(caller, callee)| (caller.path.to_string(), callee.start, callee.end))
-            .collect::<HashSet<_>>();
-        aliased.iter().all(|candidate| {
-            self.lookup
-                .symbol_references(candidate.as_str())
+        let (calls, namespace_calls) = self.call_expression_references(path, function);
+        // A type query or a namespace call's property also accounts for a
+        // reference (ADR 0218), but only while the module is not reachable as
+        // a namespace object that enters exports without naming them.
+        let mut widened = false;
+        for candidate in &aliased {
+            for reference in self.lookup.symbol_references(candidate.as_str()) {
+                if self.reference_is_accounted_for(&reference, &calls, false) {
+                    continue;
+                }
+                if self.reference_in_type_query(&reference)
+                    || namespace_calls.contains(&location_key(&reference))
+                {
+                    widened = true;
+                    continue;
+                }
+                return false;
+            }
+        }
+        !widened || !self.module_namespace_escapes(path)
+    }
+
+    /// Whether `reference` lies inside a TypeScript type query, which is
+    /// erased: it names the function without entering it.
+    fn reference_in_type_query(&self, reference: &Location) -> bool {
+        let Some(file) = self.file(reference.path.as_ref()) else {
+            return false;
+        };
+        let (start, end) = location_key(reference).1;
+        file.ast
+            .type_queries
+            .iter()
+            .any(|query| query.contains(Span::new(start, end)))
+    }
+
+    /// Whether the module at `path` is reachable as a namespace object that
+    /// code may use other than by naming a static member. `Object.values(ns)`,
+    /// `ns["helper"]`, an alias, `export * as` or a dynamic import can each
+    /// enter an export with no reference naming it. A namespace whose module
+    /// Type Facts does not resolve may be this one. A non-relative dynamic
+    /// specifier may be an alias, so it matches when its last segment names
+    /// this module.
+    fn module_namespace_escapes(&self, path: &str) -> bool {
+        if let Some(escapes) = self.namespace_escapes.borrow().get(path) {
+            return *escapes;
+        }
+        let escapes = self.scan_namespace_escapes(path);
+        self.namespace_escapes
+            .borrow_mut()
+            .insert(path.to_string(), escapes);
+        escapes
+    }
+
+    fn scan_namespace_escapes(&self, path: &str) -> bool {
+        // The module the binding's specifier loads, as the compiler resolved
+        // it; without a specifier, the module Type Facts resolves the binding
+        // to. A barrel may expose this module's functions under its own
+        // namespace. A target outside the project's files may be anything.
+        let names_this = |file: &solid_facts::FileFacts,
+                          span: Span,
+                          specifier: Option<(Span, &str)>| match specifier
+        {
+            Some((declaration, specifier)) => {
+                self.specifier_reaches(file, Some(declaration), specifier, path, &mut Vec::new())
+            }
+            None => self
+                .lookup
+                .namespace_module_paths(file.path.as_str(), span)
+                .is_none_or(|paths| {
+                    paths
+                        .iter()
+                        .any(|target| self.module_exposes(target, path, &mut Vec::new()))
+                }),
+        };
+        self.lookup.files().iter().any(|file| {
+            let namespace_escapes = file
+                .ast
+                .imports
                 .iter()
-                .all(|reference| {
-                    self.reference_is_accounted_for(reference, &known_call_sites, false)
+                .filter(|import| !import.type_only)
+                .flat_map(|import| import.bindings.iter().map(move |binding| (import, binding)))
+                .filter(|(_, binding)| {
+                    !binding.type_only && binding.kind == solid_facts::ast::ImportKind::Namespace
                 })
+                .any(|(import, binding)| {
+                    names_this(
+                        file,
+                        binding.local.span,
+                        Some((import.span, import.module.as_str())),
+                    ) && !namespace_used_by_static_members(file, binding.local.span)
+                });
+            let reexported = file.ast.exports.iter().any(|export| {
+                !export.type_only
+                    && export.namespace_binding.as_ref().is_some_and(|binding| {
+                        names_this(
+                            file,
+                            binding.span,
+                            export.module.as_deref().map(|module| (export.span, module)),
+                        )
+                    })
+            });
+            let required = file.ast.import_equals.iter().any(|import| {
+                !import.type_only
+                    && names_this(
+                        file,
+                        import.local.span,
+                        Some((import.span, import.module.as_str())),
+                    )
+                    && (import.exported
+                        || !namespace_used_by_static_members(file, import.local.span))
+            });
+            let loaded = file.ast.module_loads.iter().any(|load| {
+                load.specifier.as_deref().is_none_or(|specifier| {
+                    self.specifier_reaches(
+                        file,
+                        load.specifier_span,
+                        specifier,
+                        path,
+                        &mut Vec::new(),
+                    )
+                })
+            });
+            namespace_escapes || reexported || required || loaded
         })
+    }
+
+    /// Whether the specifier at `at` in `from` loads the module at `path`, or
+    /// a module that exposes it. `at` is the declaration holding the
+    /// specifier, or a load's own argument literal.
+    ///
+    /// The compiler's attested resolution decides when it has a row for this
+    /// occurrence:
+    /// - an unresolved specifier may name anything;
+    /// - a project file is followed;
+    /// - a relative specifier with an explicit runtime extension
+    ///   (`../dist/index.js`) loads exactly that file, or its TypeScript
+    ///   source (`index.ts`): those that are project files are followed, and
+    ///   any other is a runtime file outside the program (ADR 0193);
+    /// - a file installed under `node_modules` exposes no project module;
+    /// - any other target, such as a declaration whose runtime module a
+    ///   package `main` or a link selects, may expose anything.
+    ///
+    /// Without a row, a relative specifier is resolved against the project's
+    /// files, failing closed when that does not resolve. A Node built-in name
+    /// loads the runtime's module, plus any project file the compiler maps
+    /// that name to elsewhere. Any other bare specifier may name anything.
+    fn specifier_reaches(
+        &self,
+        from: &solid_facts::FileFacts,
+        at: Option<Span>,
+        specifier: &str,
+        path: &str,
+        visiting: &mut Vec<String>,
+    ) -> bool {
+        let attested = at.and_then(|at| {
+            match self
+                .lookup
+                .resolved_imports()?
+                .specifier(from.path.as_str(), at, specifier)
+            {
+                solid_facts::SpecifierAttestation::Attested(row) => Some(row),
+                solid_facts::SpecifierAttestation::Unattested => None,
+            }
+        });
+        if let Some(row) = attested {
+            if row.resolution == solid_facts::ImportResolution::Unresolved {
+                return true;
+            }
+            let resolved = if row.included_path.is_empty() {
+                row.resolved_path.as_ref()
+            } else {
+                row.included_path.as_ref()
+            };
+            if self.file(resolved).is_some() {
+                return self.module_exposes(resolved, path, visiting);
+            }
+            if let Some(candidates) = explicit_runtime_files(from.path.as_str(), specifier) {
+                return candidates
+                    .iter()
+                    .filter(|candidate| self.file(candidate).is_some())
+                    .any(|candidate| self.module_exposes(candidate, path, visiting));
+            }
+            return !(row.resolution == solid_facts::ImportResolution::NodeModules
+                && resolved.contains("/node_modules/"));
+        }
+        if !specifier.starts_with('.') {
+            if !crate::runtime_semantics::is_node_builtin_module(specifier) {
+                return true;
+            }
+            // A mapping the compiler resolves this name through elsewhere adds
+            // the project file it names; it never removes a candidate.
+            return self
+                .attested_project_targets(specifier)
+                .iter()
+                .any(|target| self.module_exposes(target, path, visiting));
+        }
+        let files = self.lookup.files();
+        solid_facts::resolve_relative_module_path(
+            from.path.as_str(),
+            specifier,
+            files.iter().map(|file| file.path.as_str()),
+        )
+        .is_none_or(|resolved| self.module_exposes(resolved, path, visiting))
+    }
+
+    /// The project files the compiler resolves `specifier` to, in any
+    /// importing file: a `paths` mapping or alias that a Node built-in name
+    /// must not shadow.
+    fn attested_project_targets(&self, specifier: &str) -> Vec<String> {
+        let mut cache = self.attested_project_texts.borrow_mut();
+        let targets = cache.get_or_insert_with(|| {
+            let mut targets: HashMap<String, Vec<String>> = HashMap::new();
+            for (_, row) in self
+                .lookup
+                .resolved_imports()
+                .into_iter()
+                .flat_map(|index| index.iter())
+            {
+                let resolved = if row.included_path.is_empty() {
+                    row.resolved_path.as_ref()
+                } else {
+                    row.included_path.as_ref()
+                };
+                if row.resolution != solid_facts::ImportResolution::Unresolved
+                    && self.file(resolved).is_some()
+                {
+                    let entry = targets.entry(row.text.to_string()).or_default();
+                    if !entry.iter().any(|target| target == resolved) {
+                        entry.push(resolved.to_string());
+                    }
+                }
+            }
+            targets
+        });
+        targets.get(specifier).cloned().unwrap_or_default()
+    }
+
+    /// Whether the module at `target` exposes the module at `path`: it is
+    /// that module, or it re-exports from one that does, by `export … from`
+    /// or by exporting a binding it imported. A module the project does not
+    /// analyze may.
+    fn module_exposes(&self, target: &str, path: &str, visiting: &mut Vec<String>) -> bool {
+        if target == path {
+            return true;
+        }
+        // A declaration's exports are not its runtime module's.
+        if [".d.ts", ".d.mts", ".d.cts"]
+            .iter()
+            .any(|extension| target.ends_with(extension))
+        {
+            return true;
+        }
+        if visiting.iter().any(|seen| seen == target) {
+            return false;
+        }
+        visiting.push(target.to_string());
+        let Some(file) = self.file(target) else {
+            return true;
+        };
+        let imported_from = |local: Span| -> Option<(Span, &str)> {
+            file.ast
+                .imports
+                .iter()
+                .find(|import| {
+                    import
+                        .bindings
+                        .iter()
+                        .any(|binding| binding.local.span == local)
+                })
+                .map(|import| (import.span, import.module.as_str()))
+                .or_else(|| {
+                    file.ast
+                        .import_equals
+                        .iter()
+                        .find(|import| import.local.span == local)
+                        .map(|import| (import.span, import.module.as_str()))
+                })
+        };
+        for export in &file.ast.exports {
+            if let Some(module) = export.module.as_deref() {
+                if self.specifier_reaches(file, Some(export.span), module, path, visiting) {
+                    return true;
+                }
+                continue;
+            }
+            // `export { helper }` lists a specifier; `export default helper`
+            // records its expression among the declarations.
+            for specifier in export.specifiers.iter().chain(&export.declarations) {
+                if let Some((declaration, module)) = file
+                    .ast
+                    .reference_declaration(specifier.local.span)
+                    .and_then(imported_from)
+                    && self.specifier_reaches(file, Some(declaration), module, path, visiting)
+                {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Exact reference spans of resolved ordinary call edges. A namespace
+    /// call's graph edge names `ns.helper`, whereas the helper's own symbol
+    /// reference can name only `helper`. Admit that property only when its
+    /// exact semantic entity resolves to this same declaration.
+    fn call_expression_references(
+        &self,
+        path: &str,
+        function: Span,
+    ) -> (HashSet<CallSiteKey>, HashSet<ReferenceKey>) {
+        let mut known = HashSet::new();
+        let mut properties = HashSet::new();
+        for (caller, callee) in self.lookup.function_call_sites(path, function) {
+            if self.lookup.call_by_callee(caller, callee).is_none() {
+                continue;
+            }
+            known.insert((caller.path.to_string(), callee.start, callee.end));
+            let peeled = caller.ast.peel_ts_sugar_span(callee);
+            if caller.ast.computed_members.binary_search(&peeled).is_ok() {
+                continue;
+            }
+            let Some(member) = caller
+                .ast
+                .members
+                .iter()
+                .find(|member| member.span == peeled)
+            else {
+                continue;
+            };
+            let same_target = self
+                .lookup
+                .entity_symbol(caller, member.property)
+                .and_then(|symbol| self.lookup.function_for_symbol(symbol))
+                .is_some_and(|(target_file, target)| {
+                    target_file.path.as_str() == path && target.span == function
+                });
+            if same_target {
+                properties.insert((
+                    caller.path.to_string(),
+                    (member.property.start, member.property.end),
+                ));
+            }
+        }
+        (known, properties)
     }
 
     /// Whether the value at `span` is a built-in value whose `member` is its
@@ -817,9 +1173,10 @@ impl<'a> CallGraph<'a, '_> {
             return true;
         }
         let Some(file) = self.file(reference.path.as_ref()) else {
-            // A reference in a file outside the analyzed project — a bundled
-            // declaration, say — is not a runtime entry this project owns.
-            return true;
+            // A reference in a file the project does not analyze may be a
+            // runtime entry nobody has seen. Its path or extension is no
+            // evidence that it is erased.
+            return false;
         };
         let span = Span::new(start, end);
         // A reference whose value reaches only rendering props is accounted
@@ -906,4 +1263,94 @@ fn outermost_function(file: &FileFacts, span: Span) -> Option<&solid_facts::ast:
     file.ast
         .functions_body_containing(span)
         .max_by_key(|function| function.body.end - function.body.start)
+}
+
+/// Every runtime reference to the namespace binding declared at
+/// `declaration` names a static member (`ns.helper`). A reference inside a
+/// type query is erased.
+fn namespace_used_by_static_members(file: &solid_facts::FileFacts, declaration: Span) -> bool {
+    file.ast
+        .reference_declarations
+        .iter()
+        .filter(|(_, declared)| *declared == declaration)
+        .all(|(reference, _)| {
+            file.ast
+                .type_queries
+                .iter()
+                .any(|query| query.contains(*reference))
+                || file.ast.members.iter().any(|member| {
+                    file.ast.peel_ts_sugar_span(member.object) == *reference
+                        && file
+                            .ast
+                            .computed_members
+                            .binary_search(&member.span)
+                            .is_err()
+                })
+        })
+}
+
+/// A call's callee, by file and byte range.
+type CallSiteKey = (String, u32, u32);
+/// A reference, by file and byte range.
+type ReferenceKey = (String, (u32, u32));
+
+fn location_key(location: &Location) -> ReferenceKey {
+    (
+        location.path.to_string(),
+        (
+            u32::try_from(location.start_byte).unwrap_or(u32::MAX),
+            u32::try_from(location.end_byte).unwrap_or(u32::MAX),
+        ),
+    )
+}
+
+/// The files a relative specifier with an explicit runtime extension loads at
+/// run time: the written path, and the TypeScript source a bundler maps it to
+/// (`./x.js` to `x.ts` or `x.tsx`). `None` for any other specifier, whose
+/// runtime module a directory index or package `main` may select.
+fn explicit_runtime_files(from: &str, specifier: &str) -> Option<Vec<String>> {
+    // Only a plain spelling: a backslash, an empty segment, or a query or
+    // fragment suffix may name the file differently.
+    if (!specifier.starts_with("./") && !specifier.starts_with("../"))
+        || specifier.contains('\\')
+        || specifier.contains("//")
+        || specifier.contains(['?', '#'])
+    {
+        return None;
+    }
+    let (stem, sources): (&str, &[&str]) = [
+        (".js", &[".ts", ".tsx"][..]),
+        (".jsx", &[".tsx"][..]),
+        (".mjs", &[".mts"][..]),
+        (".cjs", &[".cts"][..]),
+        (".ts", &[][..]),
+        (".tsx", &[][..]),
+        (".mts", &[][..]),
+        (".cts", &[][..]),
+    ]
+    .iter()
+    .find_map(|(extension, sources)| {
+        specifier
+            .strip_suffix(extension)
+            .map(|stem| (stem, *sources))
+    })?;
+    let mut segments: Vec<&str> = from.split('/').collect();
+    segments.pop();
+    for segment in stem.split('/') {
+        match segment {
+            "." => {}
+            // Never above the importer's root: `/` splits to an empty first
+            // segment, which stays.
+            ".." if segments.len() > 1 => {
+                segments.pop();
+            }
+            ".." => return None,
+            segment => segments.push(segment),
+        }
+    }
+    let base = segments.join("/");
+    let written = format!("{base}{}", &specifier[stem.len()..]);
+    let mut files = vec![written];
+    files.extend(sources.iter().map(|source| format!("{base}{source}")));
+    Some(files)
 }

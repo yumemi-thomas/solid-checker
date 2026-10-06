@@ -1219,7 +1219,7 @@ fn edit_recovers_when_the_service_dies_between_update_and_analyze() {
 /// generation's counts in place would make `SOLID_CHECKER_TIMINGS` attribute
 /// them to a generation that never issued the operation.
 #[test]
-fn an_empty_identity_scope_clears_the_previous_generations_measurement() {
+fn an_identity_measurement_describes_the_current_generation() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,
         Err(_) => return,
@@ -1279,10 +1279,13 @@ fn an_empty_identity_scope_clears_the_previous_generations_measurement() {
             None,
         )
         .unwrap();
+    // Every program file is attested (ADR 0219), so the edited file is still
+    // asked about; the specifier it no longer has is not carried over from
+    // the previous generation.
     let measurement = session.last_import_identity();
-    assert_eq!(measurement.requested, 0);
-    assert_eq!(measurement.attested, 0);
+    assert_eq!(measurement.requested, 1);
+    assert_eq!(measurement.attested, 1);
+    assert_eq!(measurement.unknown, 0);
     assert_eq!(measurement.specifiers, 0);
-    assert_eq!(measurement.modules, 0);
     fs::remove_dir_all(directory).unwrap();
 }

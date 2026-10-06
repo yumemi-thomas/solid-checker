@@ -18,7 +18,7 @@ use oxc_ast::ast::{
     LogicalOperator, ModuleExportName, NewExpression, ObjectProperty, ObjectPropertyKind,
     PropertyKey, PropertyKind, ReturnStatement, SpreadElement, StaticMemberExpression,
     TSGlobalDeclaration, TSImportEqualsDeclaration, TSImportType, TSImportTypeQualifier,
-    TSModuleBlock, TSModuleDeclaration, TSModuleDeclarationName, TSModuleReference,
+    TSModuleBlock, TSModuleDeclaration, TSModuleDeclarationName, TSModuleReference, TSTypeQuery,
     UnaryExpression, UpdateExpression, VariableDeclarator,
 };
 use oxc_ast_visit::{Visit, walk};
@@ -29,7 +29,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 48;
+pub const AST_FACTS_SCHEMA: u32 = 50;
 
 mod binding_references;
 mod class_obligation;
@@ -133,6 +133,10 @@ pub struct AstFacts {
     /// imports counts these too.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub type_imports: Vec<TypeImportFact>,
+    /// TypeScript type queries, erased at runtime (facts schema 49).
+    /// Runtime `typeof value` expressions are deliberately not recorded.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub type_queries: Vec<Span>,
     /// The tag expression of each tagged template (facts schema 48). The
     /// template calls its tag, with the member's object as `this` when the
     /// tag is a member expression; no call fact records that invocation.
@@ -765,6 +769,12 @@ pub struct ModuleLoadFact {
     pub kind: ModuleLoadKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub specifier: Option<CompactString>,
+    /// The runtime argument literal's own span when `specifier` is known
+    /// (facts schema 50). A type argument such as
+    /// `require<typeof import("x")>("x")` may hold another literal with the
+    /// same text, so a resolution is joined to this span, not to `span`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub specifier_span: Option<Span>,
 }
 
 /// `import S = require("m")`, `import type S = require("m")`, or either
@@ -1396,6 +1406,7 @@ impl AstFacts {
             module_loads: Vec::new(),
             import_equals: Vec::new(),
             type_imports: Vec::new(),
+            type_queries: Vec::new(),
             tagged_template_tags: Vec::new(),
             module_hazards: Vec::new(),
             module_blocks: Vec::new(),
@@ -1538,6 +1549,7 @@ struct Collector<'s, 'semantic> {
     module_loads: Vec<ModuleLoadFact>,
     import_equals: Vec<ImportEqualsFact>,
     type_imports: Vec<TypeImportFact>,
+    type_queries: Vec<Span>,
     tagged_template_tags: Vec<Span>,
     /// The declaration spans of `export import S = require("m")`, recorded by
     /// the export visitor before the walk reaches the declaration itself.
@@ -1691,6 +1703,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             module_loads: Vec::new(),
             import_equals: Vec::new(),
             type_imports: Vec::new(),
+            type_queries: Vec::new(),
             tagged_template_tags: Vec::new(),
             exported_import_equals: Vec::new(),
             module_hazards: Vec::new(),
@@ -1752,6 +1765,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.import_equals.sort_by_key(|fact| fact.span);
         self.type_imports.sort_by_key(|fact| fact.span);
         self.module_hazards.sort_by_key(|fact| fact.span);
+        self.type_queries.sort_unstable();
+        self.type_queries.dedup();
         self.tagged_template_tags.sort_unstable();
         self.module_blocks.sort_unstable();
         self.identifiers.sort_by_key(|identifier| identifier.span);
@@ -1802,6 +1817,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             module_loads: self.module_loads,
             import_equals: self.import_equals,
             type_imports: self.type_imports,
+            type_queries: self.type_queries,
             tagged_template_tags: self.tagged_template_tags,
             module_hazards: self.module_hazards,
             module_blocks: self.module_blocks,
@@ -2435,21 +2451,25 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     fn visit_import_expression(&mut self, expression: &ImportExpression<'a>) {
         let specifier = if expression.options.is_none() {
             match &expression.source {
-                Expression::StringLiteral(source) => Some(source.value.as_str().into()),
+                Expression::StringLiteral(source) => {
+                    Some((source.value.as_str().into(), span(source.span)))
+                }
                 Expression::TemplateLiteral(source) if source.expressions.is_empty() => source
                     .quasis
                     .first()
                     .and_then(|quasi| quasi.value.cooked.as_ref())
-                    .map(|value| value.as_str().into()),
+                    .map(|value| (value.as_str().into(), span(source.span))),
                 _ => None,
             }
         } else {
             None
         };
+        let (specifier, specifier_span) = specifier.unzip();
         self.module_loads.push(ModuleLoadFact {
             span: span(expression.span),
             kind: ModuleLoadKind::DynamicImport,
             specifier: specifier.clone(),
+            specifier_span,
         });
         if specifier.is_none() {
             self.module_hazards.push(ModuleHazardFact {
@@ -2489,18 +2509,22 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         if let Expression::Identifier(callee) = &call.callee {
             if self.is_unresolved_named(callee, "require") {
                 let specifier = match call.arguments.as_slice() {
-                    [Argument::StringLiteral(source)] => Some(source.value.as_str().into()),
+                    [Argument::StringLiteral(source)] => {
+                        Some((source.value.as_str().into(), span(source.span)))
+                    }
                     [Argument::TemplateLiteral(source)] if source.expressions.is_empty() => source
                         .quasis
                         .first()
                         .and_then(|quasi| quasi.value.cooked.as_ref())
-                        .map(|value| value.as_str().into()),
+                        .map(|value| (value.as_str().into(), span(source.span))),
                     _ => None,
                 };
+                let (specifier, specifier_span) = specifier.unzip();
                 self.module_loads.push(ModuleLoadFact {
                     span: span(call.span),
                     kind: ModuleLoadKind::Require,
                     specifier: specifier.clone(),
+                    specifier_span,
                 });
                 if specifier.is_none() {
                     self.module_hazards.push(ModuleHazardFact {
@@ -2916,6 +2940,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             });
         }
         walk::walk_ts_import_equals_declaration(self, declaration);
+    }
+
+    fn visit_ts_type_query(&mut self, query: &TSTypeQuery<'a>) {
+        self.type_queries.push(span(query.span));
+        walk::walk_ts_type_query(self, query);
     }
 
     fn visit_ts_import_type(&mut self, import: &TSImportType<'a>) {
@@ -4156,6 +4185,41 @@ export const short = async () => 2;
         // The trailing string literal sits after a statement and is not a
         // module directive.
         assert_eq!(facts.module_directives.len(), 2);
+    }
+
+    #[test]
+    fn type_queries_are_erased_but_runtime_typeof_is_not() {
+        let source = "function f() {} type T = ReturnType<typeof f>; const value = typeof f;";
+        let facts = extract("/project/types.ts", source).unwrap();
+        assert_eq!(facts.type_queries.len(), 1);
+        let query = facts.type_queries[0];
+        assert_eq!(
+            &source[query.start as usize..query.end as usize],
+            "typeof f"
+        );
+        let runtime = source.rfind("typeof f").unwrap();
+        let runtime = Span::new(runtime as u32, (runtime + "typeof f".len()) as u32);
+        assert!(!query.contains(runtime));
+    }
+
+    #[test]
+    fn a_load_records_its_runtime_literal_not_a_type_argument() {
+        let source = r#"const ns = require<typeof import("x")>("x"); const m = import("./m");"#;
+        let facts = extract("/project/loads.ts", source).unwrap();
+        let [required, imported] = facts.module_loads.as_slice() else {
+            panic!("two loads: {:?}", facts.module_loads);
+        };
+        let literal = required.specifier_span.expect("require literal");
+        assert_eq!(literal.start as usize, source.rfind(r#""x""#).unwrap());
+        assert_eq!(
+            &source[literal.start as usize..literal.end as usize],
+            r#""x""#
+        );
+        let literal = imported.specifier_span.expect("import literal");
+        assert_eq!(
+            &source[literal.start as usize..literal.end as usize],
+            r#""./m""#
+        );
     }
 
     #[test]

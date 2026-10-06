@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "target": "ES2022",
+    "allowJs": true,
+    "noEmit": true
+  },
+  "include": [
+    "*.ts",
+    "*.js",
+    "bridge2/*.ts"
+  ]
+}

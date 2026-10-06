@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "target": "ES2022",
+    "baseUrl": ".",
+    "paths": {
+      "@entry": [
+        "helpers.ts"
+      ],
+      "@other": [
+        "other.ts"
+      ],
+      "fs": [
+        "shimmed.ts"
+      ]
+    }
+  },
+  "include": [
+    "*.ts"
+  ]
+}
