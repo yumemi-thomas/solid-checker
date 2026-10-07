@@ -46,25 +46,12 @@ import remains uncertifiable. Hosts should use the same artifact-acquisition
 adapter as the Node CLI and must not manufacture closure digests from contract
 bytes.
 
-`acceptedContracts` is no longer the *only* way package behavior enters. This
-build also carries the accepted contracts compiled into the checker
-(`pkg/contracts/accepted/`), and `installedPackages` is how a host lets one
-apply: it states, per specifier, the installed package's name, version,
-registry integrity and resolved file. Admission recomputes each bundled
-contract's signed artifact root from those five facts and applies it only on
-equality, so a wrong or invented entry yields no contract rather than the wrong
-one. `exportConditions` must name what the host resolved under; an empty set
-admits nothing, because conditions select the artifact. Each entry must also
-state `snapshotRoot`, the snapshot root of the package's installed files: a
-patched package keeps its published integrity, so a bundle applies only where
-the files reproduce the archive its receipt signs (ADR 0131). Stating no
-`installedPackages` at all keeps the previous behavior exactly.
-
-The asymmetry is deliberate and is the price of having no filesystem: on the
-native side the analyzer reads the project's lockfile itself, and here the host
-asserts it, as it already asserts `typeFacts`. What that does not move is the
-acceptance — the contract and its receipt are compiled in and are not the
-host's to state.
+`acceptedContracts` is the only way package behavior enters. The compiled-in
+certified tier this build once carried is retired (ADR 0228), and the authored
+tier is not served here: it admits on the Solid runtime installed beside the
+package, which a host with no filesystem cannot show. `installedPackages`,
+`exportConditions` and `bundledContracts` are still accepted, so an older host's
+request decodes, and have no effect.
 
 Rule configuration is not yet transported through the WASM `CheckRequest`.
 The adapter cannot read `.solid-checker/rule-options.json` and exposes no rule

@@ -1,6 +1,6 @@
 # ADR 0123: A compiled-in contract is admitted only in the environment it was certified in
 
-- Status: accepted and implemented (2026-09-25); written with the implementation
+- Status: superseded in part by [ADR 0228](0228-the-certified-contract-tier-is-retired.md) (2026-10-08): the compiled-in tier is retired. Artifact and environment admission for project catalogs and the authored tier remains in force. Originally: accepted and implemented (2026-09-25); written with the implementation
 - Date: 2026-09-25
 - Owners: the policy-2 receipt (`policy2_receipt.rs`), certification finalization
   (`finalization.rs`, `dependencies.rs`, `type_facts.rs`), the catalog and bundle

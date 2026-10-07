@@ -1,6 +1,6 @@
 # ADR 0126: A dependency environment records who resolved what
 
-- Status: accepted and implemented (2026-09-26); written with the implementation
+- Status: superseded in part by [ADR 0228](0228-the-certified-contract-tier-is-retired.md) (2026-10-08): compiled-in tier delivery and regeneration are retired. Dependency-environment edges and their replay remain in force. Originally: accepted and implemented (2026-09-26); written with the implementation
 - Date: 2026-09-26
 - Owners: the certifier's source collector (`certify-contract.mjs`), environment
   assembly (`contract_certification/environment_edges.rs`, `finalization.rs`,

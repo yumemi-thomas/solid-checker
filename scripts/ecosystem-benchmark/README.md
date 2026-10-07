@@ -218,9 +218,10 @@ rows, cloned in memory with one `kind: "environment"` probe each, in that tree;
 the committed manifest is not changed. It refuses a package that disagrees with
 its row, a runtime that is not an audited archive, and a runtime above
 `AUDITED_SOLID_2`. The scope records the environment, the coverage census
-refuses the run, and `make accepted-bundles` bundles it beside the census run
-(`make consumer-environment-runs` writes
-`rust/target/consumer-environments/<id>/run.json`). Its yield is measured by
+refuses the run (`make consumer-environment-runs` writes
+`rust/target/consumer-environments/<id>/run.json`). These runs fed the
+compiled-in certified tier, retired by ADR 0228; they are now certification
+evidence only. Its yield is measured by
 re-sweeping the consumer, never by the census pin. Derive a new entry with
 `derive-consumer-environment.mjs` and review it before adding it. Derivation
 records, rather than lists, a package the consumer patches (pnpm

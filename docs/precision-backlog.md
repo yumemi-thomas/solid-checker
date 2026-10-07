@@ -1,5 +1,27 @@
 # Precision backlog
 
+## The certified contract tier is retired (2026-10-08)
+
+ADR 0228 deletes `pkg/contracts/accepted/` (1,876 bundles, 126 packages), its
+loader, its bundler and compiled-in citations. Precedence is now project
+catalogs, then the authored tier.
+
+**Precision status: no violation moves on the measured corpus.** An A/B run
+with the same release binary, tier on and off: the rc.13 corpus sweep has 235
+violations in both arms (0 added, 0 removed); the base app-patterns ledger (29
+proven, 31 detected), the corpus twins (25 proven, 13 uncertifiable) and the
+primitives ledger are identical. Six `vite.config.ts` notices move from column
+8 to column 1; they came from the nine runtime-free bundles
+(`@solidjs/vite-plugin` 3.0.0-next.34 to next.36, `vite-plugin-solid-svg`,
+`@solid-primitives/input-mask` 1.0.0-next.2).
+
+**Fail-closed where it changes behavior.** A receipt citing a compiled-in
+acceptance is refused (`CitationWithdrawn`). A plain-lane certification whose
+closure names a dependency edge refuses with `DependencyAuthorityMissing`;
+graph transactions still compose their own receipts. Projects on rc.0 through
+rc.9 lose their only shipped supply. The A/B result does not cover a project
+that matched an old certified bundle.
+
 ## An authored contract may close a domain it cites (2026-10-07)
 
 ADR 0226.
@@ -26441,6 +26463,8 @@ write, and nothing about the 86 of 114 packages whose contracts carry no
 actionable row at all.
 
 ## A user now gets a contract without certifying one (2026-09-16)
+
+> Historical record. The tier described here was retired by ADR 0228 (2026-10-08).
 
 The checker compiles in a small set of accepted contracts and applies them to
 any project whose *installed artifact* is the one they were certified about:

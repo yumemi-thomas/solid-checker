@@ -1,6 +1,6 @@
 # ADR 0151: A certified claim may cite a dependency's compiled-in acceptance
 
-- Status: accepted and implemented (2026-09-28); written with the implementation.
+- Status: superseded by [ADR 0228](0228-the-certified-contract-tier-is-retired.md) (2026-10-08). Originally: accepted and implemented (2026-09-28); written with the implementation.
   The owner decided on 2026-09-28 that a dependent package's certification may
   cite a dependency's accepted, environment-matched claim as proof.
 - Date: 2026-09-28

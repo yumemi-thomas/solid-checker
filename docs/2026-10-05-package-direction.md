@@ -128,6 +128,11 @@ runtime confirmation of new violations.
 
 ### Track C: retire certification (after B4 passes)
 
+The certified tier is retired (ADR 0228, 2026-10-08), with its bundler and
+compiled-in citations. Signing, receipts, trust configuration, environment
+admission and project catalogs are kept: project catalogs and the authored
+tier use them. The rest of this list is unchanged and not started.
+
 Remove, in green slices:
 
 - in-place certify;

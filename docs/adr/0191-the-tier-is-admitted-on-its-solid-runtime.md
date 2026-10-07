@@ -1,6 +1,6 @@
 # ADR 0191: The tier is admitted on its Solid runtime
 
-- Status: accepted and implemented (2026-10-05). The first slice of
+- Status: superseded by [ADR 0228](0228-the-certified-contract-tier-is-retired.md) (2026-10-08). Originally: accepted and implemented (2026-10-05). The first slice of
   [ADR 0189](0189-package-contracts-are-authored-and-probe-checked.md),
   decision 3, applied to the contracts the checker already ships.
 - Owners: step 3 of `admit_by_artifact` (`accepted_bundles.rs`) and its

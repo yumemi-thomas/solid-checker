@@ -1,6 +1,6 @@
 # ADR 0186: The tier carries what the app corpus installs
 
-- Status: accepted and implemented (2026-10-05). Tenth lever of the owner's
+- Status: superseded by [ADR 0228](0228-the-certified-contract-tier-is-retired.md) (2026-10-08). Originally: accepted and implemented (2026-10-05). Tenth lever of the owner's
   package-misuse goal of 2026-10-04. Owner decision of 2026-10-05: make the
   compiled-in tier match what users actually install.
 - Owners: the compiled-in accepted-contract tier (`pkg/contracts/accepted/`

@@ -249,7 +249,7 @@ starts.
 
 Without trust, a *discovered* policy-2 catalog is withheld rather than fatal:
 the analysis proceeds as if it were absent, so its imports fall back to the
-compiled-in tier or report `SC9005`. The checker's note saying so (a
+authored tier or report `SC9005`. The checker's note saying so (a
 `solid-checker: note:` line on stderr) is reported in ESLint as a
 `[solid-checker note]` message at line 1 of every linted file, by its own rule,
 `solid-checker/contract-note`, and by no other. Every shipped config enables it

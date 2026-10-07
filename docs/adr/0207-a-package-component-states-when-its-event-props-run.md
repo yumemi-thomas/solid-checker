@@ -71,7 +71,8 @@ identity to start a document from.
      literal must also write no `p` attribute and no spread, and no hop may
      write `p`. Every other atom proves nothing.
 4. **The authored tier takes identity from a generated proposal when no
-   certified bundle exists.**
+   certified bundle exists.** (Since ADR 0228 retired the certified tier,
+   every spec names its own identity file.)
    - A spec may name an `identity` file: the artifact cases of a
      `solid-checker contract generate --host browser` proposal for one
      entrypoint, with each case's condition set and runtime and declaration

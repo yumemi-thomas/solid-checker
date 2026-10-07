@@ -2,17 +2,22 @@
 
 - Status: accepted (2026-10-05); implemented in slices, see *Implementation
   status*. Track B of `docs/2026-10-05-package-direction.md`, implementing
-  ADR 0189.
+  ADR 0189. Superseded in part by [ADR 0228](0228-the-certified-contract-tier-is-retired.md) (2026-10-08): the certified-tier
+  precedence and bootstrap (decisions 4 and 6). The authored tier stays in
+  force.
 - Owners:
   - `accept_authored` in `solid-reactive-ir/src/contract_semantics/proof.rs`;
   - `solid-facts-backend/src/authored_contracts.rs` (the tier, its admission
     and its index);
   - `pkg/contracts/authored/` (documents and index);
   - the per-claim probe gate (slice 3).
-- Relation: the first implementation of ADR 0189. The certified tier (ADR 0186)
-  and project catalogs are unchanged and keep their own rules.
+- Relation: the first implementation of ADR 0189. Project catalogs keep their
+  own rules. The certified tier (ADR 0186) was retired by ADR 0228.
 
 ## Context
+
+Historical context for the pilot: the certified tier described here was
+retired by ADR 0228.
 
 On the rc.13 corpus the certified tier reaches no app. Its bundles were proven
 on the apps' older Solid runtimes, so the 10 package findings it delivered are
@@ -53,18 +58,20 @@ document cannot state honestly.
    - the resolved file reaches the case, and case selection is unchanged.
 
    The rest of the dependency tree is not compared.
-4. **Precedence:** project catalogs, then the authored tier, then the
-   certified tier. An authored entry is keyed `authored:…`, so it never
-   collides with a certified acceptance.
+4. **Precedence:** project catalogs, then the authored tier. There is no
+   certified fallback since ADR 0228. An authored entry is keyed
+   `authored:…`, so it never collides with a project catalog's acceptance.
 5. **Every claim has a probe case** (slice 3): a misuse/correct pair run in
    headless Chrome on the published package at the listed version and the
    stated Solid runtime, in the misuse ledger's harness. The misuse case must
    raise the dev diagnostic the claim implies (`STRICT_READ_UNTRACKED` for an
    untracked read of a returned accessor or store), and the correct case must
    not. A claim without a passing pair is not shipped.
-6. **Documents start from the version's own identity.** For the pilot, the
-   identity and case structure of each document come from the certified
-   bundle the tier already carries for that exact version. Every export's
+6. **Documents start from the version's own identity.** Every spec names an
+   `identity.json` (ADR 0207) holding the version's artifact cases: identity,
+   case structure, resolution, declaration targets and file digests. (The
+   pilot took them from the certified bundle for that version; ADR 0228
+   moved every spec to its own file.) A spec with none is an error. Every export's
    `call` is then replaced: the authored claims for the exports the pair
    probes, and fully open (`call: {}`) for every other export. Nothing a
    certification inferred is carried without its own probe.
@@ -78,7 +85,7 @@ document cannot state honestly.
    - `probe <chromium> --only <spec> --install <dir>` runs the pairs through
      the misuse ledger's harness (`solid-checker feedback run`) in an install
      that holds the package. It first refuses an install whose files do not
-     reproduce every certified case's artifact digest, or whose Solid runtime,
+     reproduce the identity's snapshot root and artifact digests, or whose Solid runtime,
      resolved from the package's own directory, is another release. Results go
      to `pkg/contracts/authored/probe-results.json`.
    - `build` writes the documents, the index and `embedded.rs`. A claim ships

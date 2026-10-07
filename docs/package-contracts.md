@@ -169,7 +169,7 @@ per artifact, and a row whose artifact the name does not identify from the
 project directory lists its `importers` (project-relative files); a
 single-package project's rows never carry the field.
 
-Admission of an accepted contract by artifact -- a compiled-in contract or a
+Admission of an accepted contract by artifact -- an authored contract or a
 project catalog entry certified from another file -- is decided per importer
 the same way. The installed identity (name, version, lockfile integrity) and
 the dependency-environment replay start from the copy the importing file's
