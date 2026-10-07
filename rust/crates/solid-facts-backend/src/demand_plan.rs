@@ -754,10 +754,11 @@ fn plan_file(
         let callee = typefacts_location(&path, call.callee);
         let property = callee_property_location(&file.source, &callee);
         let mut planned = demand(callee.clone()).symbol(false);
-        // Signature-to-argument mapping is consumed only when a call has an
+        // Signature-to-argument mapping is consumed when a call has an
         // argument to classify, when cleanup analysis must prove the
-        // callability of a returned call, or when a computed call needs a
-        // validity gate before unresolved runtime dispatch is exposed.
+        // callability of a returned call, or when dispatch needs a validity
+        // gate. Captured-prop projection also needs validity at a plain call
+        // of an exact nested function, even when it passes no arguments.
         let computed_dispatch = file
             .ast
             .computed_members
@@ -787,12 +788,16 @@ fn plan_file(
         // whose origin is a reviewed built-in class selects that class's
         // members at a parameter-member call site (ADR 0211).
         let argumentless_construction = call.arguments.is_empty() && call.construct;
+        let argumentless_local_helper = call.arguments.is_empty()
+            && call.direct_callee
+            && local_nested_function_callee(file, call.callee);
         planned.resolved_call = !call.arguments.is_empty()
             || returned_callees.contains(&call.callee)
             || computed_dispatch
             || argumentless_primitive
             || argumentless_method
-            || argumentless_construction;
+            || argumentless_construction
+            || argumentless_local_helper;
         planned.query_location = Some(property.clone());
         planned.type_descriptor = call.arguments.is_empty();
         // Typed source discovery must distinguish the exact callable value
@@ -857,6 +862,38 @@ fn extend_leaf_demand_regions(file: &FileFacts, regions: &mut Vec<solid_facts::c
             }
         }
     }
+}
+
+/// Only an exact lexical declaration of a nested function value. This is
+/// demand selection, not component identity or an execution proof. Parameters,
+/// aliases, imports, methods, and call-initialized bindings do not enter it.
+fn local_nested_function_callee(file: &FileFacts, callee: solid_facts::core::Span) -> bool {
+    use solid_facts::ast::{BindingShape, FunctionKind};
+    let Some(declaration) = file.ast.reference_declaration(callee) else {
+        return false;
+    };
+    file.ast.functions.iter().any(|function| {
+        let names_value = (function.kind == FunctionKind::Declaration
+            && function
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == declaration))
+            || file.ast.bindings.iter().any(|binding| {
+                binding.immutable
+                    && binding.shape == BindingShape::Identifier
+                    && binding.names.len() == 1
+                    && binding.names[0].span == declaration
+                    && binding.initializer.is_some_and(|initializer| {
+                        file.ast.peel_ts_sugar_span(initializer) == function.span
+                    })
+            });
+        names_value
+            && file
+                .ast
+                .functions
+                .iter()
+                .any(|outer| outer.span != function.span && outer.body.contains(function.span))
+    })
 }
 
 /// An argumentless method call through one of an enclosing function's

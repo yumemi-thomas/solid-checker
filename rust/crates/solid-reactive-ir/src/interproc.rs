@@ -6526,7 +6526,7 @@ fn member_is_get(ast: &solid_facts::ast::AstFacts, span: Span) -> bool {
 /// await on a back edge (including a for-loop's test or update). Implicit
 /// suspensions include for-await and await-using; the latter is recorded at
 /// its declaration, earlier than disposal, so it can only withhold proof.
-fn body_site_runs_during_call(
+pub(super) fn body_site_runs_during_call(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     site: Span,
@@ -6598,30 +6598,33 @@ fn body_site_runs_during_call(
 /// Whether `file` holds syntax that a caller's call-role proof reads beyond
 /// the summaries the result cache compares: an async function's suspensions,
 /// a parameter default, or a written binding that may hold a function
-/// (`function_value_is_current`, ADR 0221). A file without any of these moves
+/// (`function_value_is_current`, ADR 0221), or a bare identifier return whose
+/// source identity discovery follows (ADR 0222). A file without any of these moves
 /// no such proof.
 fn call_role_syntax(file: &solid_facts::FileFacts) -> bool {
-    file.ast.functions.iter().any(|function| {
-        function.r#async
-            || function
-                .parameters
-                .iter()
-                .any(|parameter| parameter.initializer.is_some())
-            || (function.kind == solid_facts::ast::FunctionKind::Declaration
-                && function
-                    .name
-                    .as_ref()
-                    .is_some_and(|name| crate::indexes::binding_written(file, name.span)))
-    }) || file.ast.bindings.iter().any(|binding| {
-        !binding.immutable
-            && binding.initializer.is_some_and(|initializer| {
-                let initializer = file.ast.peel_ts_sugar_span(initializer);
-                file.ast
-                    .functions
+    crate::indexes::returns_bare_identifier(file)
+        || file.ast.functions.iter().any(|function| {
+            function.r#async
+                || function
+                    .parameters
                     .iter()
-                    .any(|function| function.span == initializer)
-            })
-    })
+                    .any(|parameter| parameter.initializer.is_some())
+                || (function.kind == solid_facts::ast::FunctionKind::Declaration
+                    && function
+                        .name
+                        .as_ref()
+                        .is_some_and(|name| crate::indexes::binding_written(file, name.span)))
+        })
+        || file.ast.bindings.iter().any(|binding| {
+            !binding.immutable
+                && binding.initializer.is_some_and(|initializer| {
+                    let initializer = file.ast.peel_ts_sugar_span(initializer);
+                    file.ast
+                        .functions
+                        .iter()
+                        .any(|function| function.span == initializer)
+                })
+        })
 }
 
 /// ADR 0204: every project function a call of `function` enters

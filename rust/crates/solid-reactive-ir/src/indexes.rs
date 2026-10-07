@@ -49,6 +49,29 @@ fn constant_string_key(file: &FileFacts, key: Span) -> Option<String> {
 /// file after its declaration: as an assignment target or inside one (a
 /// destructuring pattern), or as a loop head (`for (x of …)`). A write of a
 /// member of it (`x.y = …`) does not rebind it.
+/// Whether some function in `file` returns a bare identifier: the only shape
+/// whose callee syntax a returned-source proof (ADR 0222) reads beyond the
+/// summaries and Type Facts the caches compare.
+pub(crate) fn returns_bare_identifier(file: &FileFacts) -> bool {
+    file.ast
+        .returns
+        .iter()
+        .chain(
+            file.ast
+                .functions
+                .iter()
+                .filter_map(|function| function.expression_return.as_ref()),
+        )
+        .filter_map(|returned| returned.argument)
+        .any(|argument| {
+            let argument = file.ast.peel_ts_sugar_span(argument);
+            file.ast.identifiers.iter().any(|identifier| {
+                identifier.span == argument
+                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
+            })
+        })
+}
+
 pub(super) fn binding_written(file: &FileFacts, declaration: Span) -> bool {
     // A redeclaration (`var xs = …` over a parameter, a second `function f`)
     // writes the same binding without any reference. Any other declaration
@@ -1001,6 +1024,24 @@ impl<'a> SemanticLookup<'a> {
             component_keys.sort_unstable();
             let mut hasher = Sha256::new();
             hasher.update(b"components\0");
+            // Returned-source proofs inspect callee syntax and binding facts,
+            // even when its public type and read summary do not change. Bind
+            // the byte identity of every file that can hold such a proof (a
+            // bare identifier return, ADR 0222); a file gaining or losing one
+            // enters or leaves the digest, so the set itself is bound too.
+            let mut source_inputs = self
+                .files()
+                .iter()
+                .filter(|file| returns_bare_identifier(file))
+                .collect::<Vec<_>>();
+            source_inputs.sort_unstable_by(|left, right| left.path.cmp(&right.path));
+            hasher.update(b"returned-source-inputs\0");
+            for file in source_inputs {
+                let path = file.path.as_str();
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(file.source_hash.as_str().as_bytes());
+            }
             for (path, span) in component_keys {
                 hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
                 hasher.update(path.as_bytes());
@@ -2178,6 +2219,10 @@ impl<'a> SemanticLookup<'a> {
                 self.entity_at(file.path.as_str(), call_span)
                     .and_then(|entity| entity.resolved_call.as_deref())
             })
+    }
+
+    pub(super) fn ast_file_index(&self, path: &str) -> Option<&'a CachedAstFileIndex> {
+        self.ast_indexes.get(path)
     }
 
     pub(super) fn function_called_at(

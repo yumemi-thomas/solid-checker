@@ -231,6 +231,153 @@ fn effective_call_return(
     effective_value_return(argument.span, context, depth - 1)
 }
 
+/// A fresh source returned by one exact project function. This is deliberately
+/// separate from structured-return summaries: finding one reactive leaf, or
+/// merging equal kinds, cannot prove that every completion returns one value.
+fn project_returned_source<'a>(
+    lookup: &SemanticLookup<'a>,
+    caller: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    resolved_contracts: &ResolvedContracts,
+) -> Option<(&'a FileFacts, &'a solid_facts::ast::CallFact, Primitive)> {
+    // This first slice only admits straight-line calls, which also excludes
+    // optional invocation and optional receivers. No selected signature is
+    // substituted for a value identity.
+    if call.construct || !caller.ast.straight_line_calls.contains(&call.span) {
+        return None;
+    }
+    let callee = caller.ast.peel_ts_sugar_span(call.callee);
+    let target = if caller.ast.identifiers.iter().any(|id| id.span == callee) {
+        lookup.function_called_at(caller.path.as_str(), callee)
+    } else {
+        lookup.namespace_member_function(caller, callee)
+    };
+    let (file, function) = target?;
+    if function.r#async
+        || function.generator
+        || function.expression_body
+        || function.method_name.is_some()
+        || !lookup.function_value_is_current(file, function)
+    {
+        return None;
+    }
+    let returns = file
+        .ast
+        .returns
+        .iter()
+        .filter(|returned| {
+            containing_ast_function(&file.ast, returned.span)
+                .is_some_and(|owner| owner.span == function.span)
+        })
+        .collect::<Vec<_>>();
+    let mut source = None;
+    let mut sites = Vec::new();
+    for returned in &returns {
+        let value = file.ast.peel_ts_sugar_span(returned.argument?);
+        if !file.ast.identifiers.iter().any(|id| id.span == value) {
+            return None;
+        }
+        let symbol = entities.at(file.path.as_str(), value)?;
+        if source.is_some_and(|prior| prior != symbol) {
+            return None;
+        }
+        source = Some(symbol);
+        sites.push(value);
+    }
+    let source = source?;
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding
+            .names
+            .iter()
+            .any(|name| entities.at(file.path.as_str(), name.span) == Some(source))
+    })?;
+    let name = binding
+        .names
+        .iter()
+        .find(|name| entities.at(file.path.as_str(), name.span) == Some(source))?;
+    if !binding.immutable
+        || crate::indexes::binding_written(file, name.span)
+        || crate::value_identity::binding_has_write(file, entities, source)
+        || !containing_ast_function(&file.ast, binding.declaration)
+            .is_some_and(|owner| owner.span == function.span)
+    {
+        return None;
+    }
+    let initializer = file.ast.peel_ts_sugar_span(binding.initializer?);
+    let created = file.ast.call_at(initializer)?;
+    if created.construct
+        || !file.ast.straight_line_calls.contains(&created.span)
+        || returns
+            .iter()
+            .any(|returned| created.span.end > returned.span.start)
+    {
+        return None;
+    }
+    let primitive = known_primitive(&call_primitive_name(
+        file,
+        created,
+        entities,
+        symbol_names,
+        lookup.dialect,
+    ))?;
+    if !lookup.dialect.creates_reactive_source(primitive) {
+        return None;
+    }
+    let context = EffectiveReturnContext {
+        file,
+        ast_index: lookup.ast_file_index(file.path.as_str())?,
+        entities,
+        symbol_names,
+        resolved_contracts,
+        dialect: lookup.dialect,
+    };
+    let returned = effective_value_return(returns.first()?.argument?, &context, 16)?;
+    if !matches!(returned.kind.as_str(), "accessor" | "store-path") {
+        return None;
+    }
+    // No alias or escape of the root: another call could receive it through
+    // an alias not represented by this proof. Only exact returns, member
+    // receivers, and direct accessor invocations use the root here.
+    for reference in file.ast.identifiers.iter().filter(|id| {
+        id.role == solid_facts::ast::IdentifierRole::Reference
+            && (file.ast.reference_declaration(id.span) == Some(name.span)
+                || entities.at(file.path.as_str(), id.span) == Some(source))
+    }) {
+        let at = reference.span;
+        if file.ast.calls.iter().any(|call| {
+            call.arguments
+                .iter()
+                .any(|argument| argument.span.contains(at))
+        }) || !(returns.iter().any(|returned| {
+            returned
+                .argument
+                .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == at)
+        }) || file
+            .ast
+            .members
+            .iter()
+            .any(|member| file.ast.peel_ts_sugar_span(member.object) == at)
+            || (returned.kind == "accessor"
+                && file
+                    .ast
+                    .calls
+                    .iter()
+                    .any(|call| file.ast.peel_ts_sugar_span(call.callee) == at)))
+        {
+            return None;
+        }
+    }
+    (solid_facts::ast::completion_return_cover(
+        std::path::Path::new(file.path.as_str()),
+        &file.source,
+        function.body,
+        &sites,
+    ) == Some(true))
+    .then_some((file, created, primitive))
+}
+
 /// Follow an exact immutable identity into a proved source-producing call.
 /// Nested/default/rest binding slots carry no direct-value identity fact.
 fn effective_value_return(
@@ -903,6 +1050,72 @@ pub(crate) fn discover_file_sources(
         }
         let primitive = call_primitive_name(file, call, entities, symbol_names, lookup.dialect);
         let resolved = known_primitive(&primitive);
+        if resolved.is_none()
+            && binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding
+                .initializer
+                .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == call.span)
+            && let Some(name) = binding.names.first()
+            && !crate::indexes::binding_written(file, name.span)
+            && let Some(symbol) = entities.at(file.path.as_str(), name.span)
+            && let Some((origin_file, created, primitive)) = project_returned_source(
+                lookup,
+                file,
+                call,
+                entities,
+                symbol_names,
+                resolved_contracts,
+            )
+        {
+            // The caller binding is this call's source, never the callee's
+            // declaration symbol. Separate calls keep separate identities.
+            let declaration = location(file.path.shared(), name.span);
+            result.accessors.push((
+                symbol.clone(),
+                (
+                    symbol_id(file.source_text(name.span).unwrap_or_default()),
+                    declaration,
+                ),
+            ));
+            result.source_kinds.push((
+                symbol.clone(),
+                if lookup.dialect.returns_store(primitive) {
+                    ReactiveSourceKind::Store
+                } else {
+                    ReactiveSourceKind::Accessor
+                },
+            ));
+            result.source_phases.push((symbol.clone(), 1));
+            if let Some(spelling) = lookup.dialect.name_of(primitive) {
+                result
+                    .source_primitives
+                    .push((symbol.clone(), spelling.into()));
+            }
+            result
+                .source_owned_write
+                .push((symbol.clone(), created.owned_write_option));
+            if store_is_value_form(created, Some(primitive)) {
+                result.value_form_stores.push(symbol.clone());
+            }
+            let options =
+                async_source_options(origin_file, created, Some(primitive), lookup.dialect);
+            if options != AsyncSourceOptions::default() {
+                result.source_async_options.push((symbol.clone(), options));
+            }
+            if created.arguments.first().is_some_and(|argument| {
+                computation_is_async_with_contracts(
+                    lookup,
+                    origin_file,
+                    argument.span,
+                    &resolved_contracts.by_symbol,
+                )
+            }) {
+                result.async_sources.push(symbol.clone());
+            }
+            continue;
+        }
         if resolved == Some(Primitive::Action) {
             if let Some(name) = binding.names.first() {
                 let location = location(file.path.shared(), name.span);
@@ -1692,6 +1905,9 @@ pub(crate) fn discover_sources(
                     cache
                         .get(file.path.as_str())
                         .is_some_and(|cached| {
+                            // A returned-source proof's callee syntax is bound
+                            // by `cross_file_proof_digest` (ADR 0222); its
+                            // symbol resolution by the per-file delta.
                             source_discovery_identity_matches(
                                 &cached.identity,
                                 file.path.as_str(),

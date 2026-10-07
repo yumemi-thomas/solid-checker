@@ -6,10 +6,11 @@ use crate::cache::{
     LocalAccessSymbolState, SourceDiscoveryTypeScriptDelta, same_compiler_semantics,
 };
 use crate::owners::{
-    LoadingCover, analysis_context, async_read_role, containing_leaf_owner,
-    counts_as_strict_read_root, enclosing_render_function, inside_known_value_function_argument,
-    inside_non_component_function, inside_unclassified_callback, read_loading_cover,
-    solid_accessor_declaration, typed_accessor_descriptor_at,
+    LoadingCover, analysis_context, async_read_role, containing_ast_function,
+    containing_leaf_owner, counts_as_strict_read_root, enclosing_render_function,
+    function_binding_name, inside_known_value_function_argument, inside_non_component_function,
+    inside_unclassified_callback, read_loading_cover, solid_accessor_declaration,
+    typed_accessor_descriptor_at,
 };
 use crate::pipeline::parallel_file_chunk_results;
 use crate::source_discovery::{AsyncSourceOptions, PropUse, PropsReactivityIndex};
@@ -343,6 +344,12 @@ impl LocalAccessContext<'_, '_> {
             .iter()
             .map(|call| call.callee)
             .chain(file.ast.members.iter().map(|member| member.object))
+            .chain(
+                file.ast
+                    .members
+                    .iter()
+                    .map(|member| file.ast.peel_ts_sugar_span(member.object)),
+            )
             .chain(file.ast.spreads.iter().map(|spread| spread.argument))
             .chain(
                 file.ast
@@ -452,6 +459,346 @@ impl LocalAccessContext<'_, '_> {
                 .call_multiplicities
                 .iter()
                 .all(|(callee, previous)| self.reachable_calls.get(callee).copied() == *previous)
+    }
+
+    /// Own body only: nested parameter defaults retain ADR 0204's existing
+    /// authored-site proof. Select the innermost function before admitting a
+    /// named helper, so an anonymous nested closure is not its parent's read.
+    fn component_prop_helper<'file>(
+        &self,
+        file: &'file solid_facts::FileFacts,
+        site: solid_facts::core::Span,
+    ) -> Option<&'file solid_facts::ast::FunctionFact> {
+        let helper = file
+            .ast
+            .functions
+            .iter()
+            .filter(|function| function.span.contains(site))
+            .min_by_key(|function| function.span.end - function.span.start)?;
+        (helper.body.contains(site)
+            && function_binding_name(file, helper).is_some()
+            && !self.lookup.function_may_be_component(file, helper)
+            && file.ast.functions.iter().any(|component| {
+                component.body.contains(helper.span)
+                    && self.lookup.function_is_component(file, component)
+            }))
+        .then_some(helper)
+    }
+
+    /// An exact callback slot's execution role, independent of any other use
+    /// of the binding. Arbitrary callback props and returned invokers remain
+    /// escapes. An effect apply slot is strict, despite being deferred.
+    fn helper_value_execution(
+        &self,
+        file: &solid_facts::FileFacts,
+        reference: solid_facts::core::Span,
+    ) -> Option<ExecutionRole> {
+        if file.compiler.callback_roles.iter().any(|callback| {
+            callback.span == reference
+                && callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+        }) {
+            return Some(ExecutionRole::EventCallback);
+        }
+        file.ast
+            .arguments_containing(reference)
+            .find_map(|(call, index)| {
+                let argument = &call.arguments[index];
+                if argument.spread
+                    || file.ast.peel_ts_sugar_span(argument.span) != reference
+                    || !self
+                        .lookup
+                        .resolved_callee_call(file, call.callee)
+                        .is_some_and(|resolved| {
+                            resolved.validity == typefacts::ResolvedCallValidity::Valid
+                        })
+                {
+                    return None;
+                }
+                let primitive = self.lookup.primitive_at_call(file, call.span)?;
+                let dialect = self.lookup.dialect;
+                let semantics =
+                    dialect.callback_semantics_at(primitive, index, call.arguments.len());
+                let execution = semantics.execution?;
+                if semantics.requires_return_invocation
+                    || semantics.stores_as_value
+                    || dialect.callback_runs_on_result_access(
+                        primitive,
+                        index,
+                        call.arguments.len(),
+                    )
+                {
+                    return None;
+                }
+                if dialect.reports_untracked_reads_at(primitive, index, call.arguments.len()) {
+                    return Some(
+                        if dialect.apply_callback_argument(primitive) == Some(index) {
+                            ExecutionRole::EffectApply
+                        } else {
+                            ExecutionRole::UntrackedCallback
+                        },
+                    );
+                }
+                if semantics.tracks_reads {
+                    return Some(ExecutionRole::TrackedJsx);
+                }
+                if execution == solid_dialect::Execution::Deferred
+                    || dialect.runs_callback_deferred(primitive)
+                {
+                    return Some(ExecutionRole::DeferredCallback);
+                }
+                None
+            })
+    }
+
+    /// A named event caller's role is not exclusive when the same binding is
+    /// also invoked directly (MixedNamedCaller). Refuse that deeper chain;
+    /// do not let its named callback role erase a possible render-time call.
+    fn exclusive_event_caller(
+        &self,
+        file: &solid_facts::FileFacts,
+        caller: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        if file.compiler.callback_roles.iter().any(|callback| {
+            callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                && callback.span.contains(caller.span)
+                && file
+                    .ast
+                    .functions_within(callback.span)
+                    .max_by_key(|function| function.span.end - function.span.start)
+                    .is_some_and(|function| function.span == caller.span)
+        }) {
+            return true;
+        }
+        let Some(name) = function_binding_name(file, caller) else {
+            return false;
+        };
+        let mut observed = false;
+        for identifier in &file.ast.identifiers {
+            if identifier.role != solid_facts::ast::IdentifierRole::Reference
+                || file.ast.reference_declaration(identifier.span) != Some(name.span)
+            {
+                continue;
+            }
+            observed = true;
+            if !file.compiler.callback_roles.iter().any(|callback| {
+                callback.span == identifier.span
+                    && callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+            }) {
+                return false;
+            }
+        }
+        observed
+    }
+
+    /// Each exact local call has its own execution proof. An escape opens a
+    /// separate definition-site obligation; it cannot erase another call's
+    /// valid immutable target, own-body prefix, or incoming-prop witness.
+    #[allow(clippy::too_many_arguments)]
+    fn project_helper_prop_read(
+        &self,
+        file: &solid_facts::FileFacts,
+        helper: &solid_facts::ast::FunctionFact,
+        site: solid_facts::core::Span,
+        allowed: &[solid_facts::core::Span],
+        read: ReactiveRead,
+        definition_admitted: bool,
+        result: &mut LocalAccessResult,
+    ) {
+        if read.execution == ExecutionRole::DiscardedRendering {
+            return;
+        }
+        let Some(name) = function_binding_name(file, helper) else {
+            return;
+        };
+        // Dynamic lexical observation may replace a declaration or the
+        // captured props root without an ordinary reference/write fact.
+        let dynamic_lexical_observation = file.ast.identifiers.iter().any(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && matches!(
+                    file.source_text(identifier.span),
+                    Some("eval" | "arguments")
+                )
+                && file.ast.functions.iter().any(|component| {
+                    self.lookup.function_is_component(file, component)
+                        && component.body.contains(helper.span)
+                        && component.span.contains(identifier.span)
+                })
+        });
+        let symbol = self.entities.at(file.path.as_str(), name.span);
+        let current = !dynamic_lexical_observation
+            && symbol.is_some_and(|symbol| {
+                self.lookup.function_value_is_current(file, helper)
+                    && !crate::value_identity::binding_has_write(file, self.entities, symbol)
+                    && self
+                        .lookup
+                        .function_for_symbol(symbol.as_str())
+                        .is_some_and(|(target_file, target)| {
+                            target_file.path == file.path && target.span == helper.span
+                        })
+            });
+        let body_runs = crate::interproc::body_site_runs_during_call(file, helper, site);
+        // The lexical census includes undemanded references. Missing call
+        // facts open the proof rather than hiding an observed call or escape.
+        let mut unproven_use = dynamic_lexical_observation;
+        for reference in file.ast.identifiers.iter().filter(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && file.ast.reference_declaration(identifier.span) == Some(name.span)
+        }) {
+            if crate::execution_role::discarded_region_contains(file, reference.span)
+                || file.ast.transparent_wrappers.iter().any(|wrapper| {
+                    wrapper.span.contains(reference.span) && !wrapper.inner.contains(reference.span)
+                })
+            {
+                continue;
+            }
+            let Some(call) = file.ast.calls.iter().find(|call| {
+                call.direct_callee
+                    && !call.construct
+                    && file.ast.peel_ts_sugar_span(call.callee) == reference.span
+            }) else {
+                if current
+                    && body_runs
+                    && let Some(execution) = self.helper_value_execution(file, reference.span)
+                {
+                    if execution.reports_untracked_read() {
+                        let mut attributed = read.clone();
+                        attributed.location = location(file.path.shared(), reference.span);
+                        attributed.execution = execution;
+                        attributed.context =
+                            read_analysis_context(file, site, execution, self.lookup).into();
+                        attributed.via =
+                            file.source_text(name.span).unwrap_or("local helper").into();
+                        attributed.origin = Some(read.location.clone());
+                        attributed.origin_context = attributed.via.clone();
+                        attributed.summary_attributed = false;
+                        attributed.missing_jsx_census =
+                            missing_jsx_census(file, reference.span, execution);
+                        attributed.host_callback_timing = false;
+                        attributed.callee_callback_timing = false;
+                        result.reads.push(Arc::new(attributed));
+                        result.strict_read_obligations += 1;
+                    }
+                } else {
+                    unproven_use = true;
+                }
+                continue;
+            };
+            let execution = semantic_execution_role(
+                file,
+                call.span,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+            );
+            if execution == ExecutionRole::DiscardedRendering {
+                continue;
+            }
+            let candidates = self.lookup.callee_symbols(file, call.callee);
+            let exact = current
+                && candidates.len() == 1
+                && symbol.is_some_and(|symbol| candidates.first() == Some(symbol))
+                && self
+                    .lookup
+                    .resolved_callee_call(file, call.callee)
+                    .is_some_and(|resolved| {
+                        resolved.validity == typefacts::ResolvedCallValidity::Valid
+                    });
+            let caller = containing_ast_function(&file.ast, call.span);
+            let control = direct_control_flow_body_role(
+                file,
+                call.span,
+                self.entities,
+                self.symbol_names,
+                self.lookup.dialect,
+            );
+            let component =
+                caller.is_some_and(|caller| self.lookup.function_is_component(file, caller));
+            let primitive_callback = caller.is_some_and(|caller| {
+                file.ast
+                    .arguments_containing(caller.span)
+                    .any(|(outer, index)| {
+                        !outer.arguments[index].spread
+                            && file.ast.peel_ts_sugar_span(outer.arguments[index].span)
+                                == caller.span
+                            && self.lookup.primitive_at_call(file, outer.span).is_some_and(
+                                |primitive| {
+                                    self.lookup
+                                        .dialect
+                                        .callback_semantics_at(
+                                            primitive,
+                                            index,
+                                            outer.arguments.len(),
+                                        )
+                                        .execution
+                                        .is_some()
+                                },
+                            )
+                    })
+            });
+            let event = caller.is_some_and(|caller| self.exclusive_event_caller(file, caller));
+            let non_strict_role = matches!(
+                execution,
+                ExecutionRole::TrackedJsx
+                    | ExecutionRole::DeferredCallback
+                    | ExecutionRole::EventCallback
+            );
+            // JSX-contained tracked expressions, control-flow bodies and
+            // events execute in the compiler/dialect-proven scope, not while
+            // constructing the outer JSX. Do not use ADR 0201's no-JSX entry
+            // gate to decide that these known scopes are unproven.
+            let prefix = caller.is_some_and(|caller| {
+                crate::interproc::body_site_runs_during_call(file, caller, call.span)
+                    || (!caller.r#async
+                        && !caller.generator
+                        && crate::owners::written_directly_in(&file.ast, caller, call.span)
+                        && (control.is_some() || (non_strict_role && (component || event))))
+            });
+            let admitted =
+                component || primitive_callback || control.is_some() || (non_strict_role && event);
+            let host_timing = host_callback_timing(file, call.span, execution, self.lookup);
+            let callee_timing = callee_callback_timing(file, call.span, execution, self.lookup);
+            let timing_proven =
+                exact && body_runs && prefix && admitted && !host_timing && !callee_timing;
+            if timing_proven && non_strict_role {
+                continue;
+            }
+            let direct = timing_proven && execution.reports_untracked_read();
+            if !direct {
+                unproven_use = true;
+                continue;
+            }
+            let mut attributed = read.clone();
+            attributed.location = location(file.path.shared(), call.span);
+            attributed.execution = execution;
+            attributed.context =
+                read_analysis_context(file, call.span, execution, self.lookup).into();
+            attributed.via = file
+                .source_text(call.callee)
+                .unwrap_or("local helper")
+                .into();
+            attributed.origin = Some(read.location.clone());
+            attributed.origin_context =
+                file.source_text(name.span).unwrap_or("local helper").into();
+            attributed.summary_attributed = false;
+            attributed.missing_jsx_census = missing_jsx_census(file, call.span, execution);
+            attributed.host_callback_timing = host_timing;
+            attributed.callee_callback_timing = callee_timing;
+            result.reads.push(Arc::new(attributed));
+            result.strict_read_obligations += 1;
+        }
+        // An unproven use (an escape, an unproven call) adds no new
+        // obligation: the read keeps what the definition site answered before
+        // this path existed, and nothing where that gate refused it. A new
+        // definition-site obligation for every such helper buried the corpus
+        // in derived getters and handler helpers (ADR 0222).
+        if unproven_use && definition_admitted {
+            let counts = counts_as_strict_read_root(file, site, read.execution, self.lookup);
+            result.reads.push(Arc::new(read));
+            if counts {
+                result.strict_read_obligations += 1;
+            }
+        }
     }
 
     pub(crate) fn discover(&self, file: &solid_facts::FileFacts) -> LocalAccessResult {
@@ -1051,7 +1398,12 @@ impl LocalAccessContext<'_, '_> {
                 self.symbol_names,
                 self.lookup,
             );
-            if (inside_non_component_function(file, member.span, self.lookup)
+            let helper = self
+                .prop_sources
+                .get(symbol)
+                .filter(|_| self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store))
+                .and_then(|_| self.component_prop_helper(file, member.span));
+            let gate_refuses = (inside_non_component_function(file, member.span, self.lookup)
                 || inside_unclassified_callback(file, member.span))
                 && named_callback_execution_role(file, member.span, self.lookup).is_none()
                 // This literal is the exact dialect-owned children callback,
@@ -1066,8 +1418,8 @@ impl LocalAccessContext<'_, '_> {
                 && !matches!(
                     execution,
                     ExecutionRole::EffectApply | ExecutionRole::UntrackedCallback
-                )
-            {
+                );
+            if helper.is_none() && gate_refuses {
                 continue;
             }
             let source = if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
@@ -1159,7 +1511,7 @@ impl LocalAccessContext<'_, '_> {
                         )
                     })
             };
-            result.reads.push(Arc::new(ReactiveRead {
+            let read = ReactiveRead {
                 package_internal: false,
                 summary_attributed: false,
                 kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
@@ -1191,7 +1543,20 @@ impl LocalAccessContext<'_, '_> {
                     execution,
                     self.lookup,
                 ),
-            }));
+            };
+            if let Some(helper) = helper {
+                self.project_helper_prop_read(
+                    file,
+                    helper,
+                    member.span,
+                    &allowed,
+                    read,
+                    !gate_refuses,
+                    &mut result,
+                );
+                continue;
+            }
+            result.reads.push(Arc::new(read));
             if counts_as_strict_read_root(file, member.span, execution, self.lookup) {
                 result.strict_read_obligations += 1;
             }

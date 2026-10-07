@@ -7,7 +7,7 @@ use oxc_allocator::Allocator;
 use oxc_ast::{AstKind, ast::Statement};
 use oxc_parser::Parser;
 use oxc_semantic::SemanticBuilder;
-use oxc_span::SourceType;
+use oxc_span::{GetSpan, SourceType};
 
 use crate::core::Span;
 
@@ -25,6 +25,32 @@ pub fn completion_call_cover(
     body: Span,
     candidates: &[Span],
     unreachable_returns: &[Span],
+) -> Option<bool> {
+    completion_cover(path, source, body, candidates, unreachable_returns, false)
+}
+
+/// Whether every normal completion of this synchronous block body exits at
+/// a return of one of these exact peeled value spans. Candidate identity belongs to
+/// the caller. Fallthrough, bare returns, and unmodeled control flow refuse.
+/// Unlike a call cover, running a candidate initializer never closes this
+/// proof: a later finally/catch or fallthrough can still change the return.
+#[must_use]
+pub fn completion_return_cover(
+    path: &Path,
+    source: &str,
+    body: Span,
+    candidates: &[Span],
+) -> Option<bool> {
+    completion_cover(path, source, body, candidates, &[], true)
+}
+
+fn completion_cover(
+    path: &Path,
+    source: &str,
+    body: Span,
+    candidates: &[Span],
+    unreachable_returns: &[Span],
+    return_sites: bool,
 ) -> Option<bool> {
     if source.len() > 4 * 1024 * 1024 || candidates.is_empty() {
         return None;
@@ -64,9 +90,10 @@ pub fn completion_call_cover(
             .collect(),
         returns: 0,
         budget: 4096,
+        return_sites,
     };
     let fallthrough = walk.statements(&bound.statements, 1, 0)?;
-    // Bit 1: a path without a call. Bit 2: a path with a call.
+    // Bit 1: an uncovered completion. Bit 2: a covered completion.
     Some((fallthrough | walk.returns) == 2)
 }
 
@@ -79,6 +106,7 @@ struct Cover {
     dead_returns: HashSet<(u32, u32)>,
     returns: u8,
     budget: usize,
+    return_sites: bool,
 }
 
 impl Cover {
@@ -87,7 +115,8 @@ impl Cover {
     /// identifiers; namespace/member witnesses remain open rather than
     /// guessing optional-chain semantics.
     fn candidate(&self, expression: &oxc_ast::ast::Expression<'_>) -> bool {
-        matches!(super::peel_ts_sugar(expression), oxc_ast::ast::Expression::CallExpression(call)
+        !self.return_sites
+            && matches!(super::peel_ts_sugar(expression), oxc_ast::ast::Expression::CallExpression(call)
             if !call.optional
             && matches!(super::peel_ts_sugar(&call.callee), oxc_ast::ast::Expression::Identifier(_))
             && self.candidates.contains(&(call.span.start, call.span.end)))
@@ -135,10 +164,17 @@ impl Cover {
                     return Some(paths);
                 }
                 // `return a()` runs the call before it completes (ADR 0183).
-                let hit = returned
-                    .argument
-                    .as_ref()
-                    .is_some_and(|argument| self.candidate(argument));
+                let hit = if self.return_sites {
+                    returned.argument.as_ref().is_some_and(|argument| {
+                        let span = super::peel_ts_sugar(argument).span();
+                        self.candidates.contains(&(span.start, span.end))
+                    })
+                } else {
+                    returned
+                        .argument
+                        .as_ref()
+                        .is_some_and(|argument| self.candidate(argument))
+                };
                 self.returns |= if hit { 2 } else { paths };
                 Some(0)
             }
@@ -172,6 +208,41 @@ impl Cover {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn return_cover_requires_a_candidate_on_every_normal_completion() {
+        for (body, expected) in [
+            ("return state;", Some(true)),
+            ("if(flag) return state; else return state;", Some(true)),
+            ("if(flag) return state; return state;", Some(true)),
+            ("if(flag) throw 0; return state;", Some(true)),
+            ("if(flag) return state;", Some(false)),
+            ("if(flag) return; return state;", Some(false)),
+            ("if(flag) return other; return state;", Some(false)),
+            ("try { return state; } finally { return other; }", None),
+            ("try { throw 0; } catch { return state; }", None),
+            ("while(flag) { return state; }", None),
+            ("switch(flag) { default: return state; }", None),
+        ] {
+            let source = format!("function test(flag) {{ {body} }}");
+            let candidates = source
+                .match_indices("return state;")
+                .map(|(at, text)| {
+                    Span::new((at + "return ".len()) as u32, (at + text.len() - 1) as u32)
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                completion_return_cover(
+                    Path::new("test.js"),
+                    &source,
+                    Span::new(source.find('{').unwrap() as u32, source.len() as u32),
+                    &candidates,
+                ),
+                expected,
+                "{body}"
+            );
+        }
+    }
 
     fn cover(body: &str, targets: &[&str], dead: &[&str]) -> Option<bool> {
         let source = format!("function test(flag) {{ {body} }}");

@@ -183,6 +183,8 @@ pub(crate) struct SourceDiscoveryContribution {
 
 pub(crate) struct CachedSourceDiscovery {
     pub(crate) identity: SourceDiscoveryIdentity,
+    /// Includes project source hashes for exact returned-source proofs;
+    /// unchanged caller types alone cannot retain a callee's return identity.
     pub(crate) cross_file_proofs: Option<CrossFileProofDigest>,
     pub(crate) contribution: SourceDiscoveryContribution,
 }

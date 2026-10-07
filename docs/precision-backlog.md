@@ -1,5 +1,27 @@
 # Precision backlog
 
+## A returned source and a helper's prop read reach the caller (2026-10-07)
+
+ADR 0222. Two misuses with no finding at all are closed:
+- a store or accessor returned from a project hook is that source at the
+  caller's binding;
+- a prop read in a component-local helper counts at each call proven to run
+  the helper's body.
+
+- **Gained:** twins went from 21 proven, 15 uncertifiable and 2 silent to
+  22 proven, 16 uncertifiable and 0 silent, out of 38. rc.13 corpus violations went from 222 to 231, every
+  added site reviewed.
+- **Removed noise:** 7 corpus obligations for reads in tracked `createMemo`
+  computes of hook-returned accessors.
+- **Deliberately not reported:** a helper's unproven uses (escapes,
+  handlers, JSX props). A definition-site obligation for each added 1,351
+  corpus obligations, nearly all derived getters.
+- **Not yet:**
+  - returned member paths and conditional different-source returns;
+  - transitive helper-in-helper prop reads;
+  - `error-menu` stays uncertifiable, because its caller's helper call has
+    unknown backing.
+
 ## A prop head and an async prefix run at the call (2026-10-07)
 
 ADR 0221.

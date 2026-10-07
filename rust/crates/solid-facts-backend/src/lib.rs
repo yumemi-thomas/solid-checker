@@ -2696,6 +2696,46 @@ mod tests {
         );
     }
 
+    #[test]
+    fn argumentless_nested_function_calls_demand_validity_by_exact_binding() {
+        let file = test_file_facts(
+            "src/captured.tsx",
+            r#"declare function top(): void;
+function Card(props: { value: string }, parameter: () => string) {
+  const browse = () => props.value;
+  function label() { return props.value; }
+  const alias = browse;
+  const object = { browse };
+  browse(); label(); parameter(); alias(); object.browse(); top();
+  { const browse = parameter; browse(); }
+  return <p />;
+}"#,
+        );
+        let demands = semantic_demands(
+            dialect::default_dialect(),
+            std::slice::from_ref(&file),
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
+        for call in &file.ast.calls {
+            let location = typefacts_location(file.path.as_str(), call.callee);
+            let planned = demands
+                .iter()
+                .find(|demand| demand.location == location)
+                .unwrap();
+            let declaration = file.ast.reference_declaration(call.callee);
+            let expected = file.source_text(call.callee) == Some("label")
+                || (file.source_text(call.callee) == Some("browse")
+                    && declaration.is_some_and(|span| {
+                        file.ast.bindings.iter().any(|binding| {
+                            binding.names.iter().any(|name| name.span == span)
+                                && binding.initializer_function
+                        })
+                    }));
+            assert_eq!(planned.resolved_call, expected, "{:?}", call.span);
+        }
+    }
+
     /// ADRs 0190 and 0192: only an argumentless method call's resolved
     /// declaration says whether the member is a standard-library built-in.
     /// Unrelated bodies stay outside the leaf demand closure: a resolved
