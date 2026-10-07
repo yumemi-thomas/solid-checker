@@ -1,0 +1,554 @@
+{
+  "package": "@solid-primitives/keyboard",
+  "version": "2.0.0-next.5",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "pairs": "../_pairs/@solid-primitives+keyboard",
+  "exports": {
+    "createKeyHold": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:91-151,203-212; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          },
+          {
+            "id": "singleton-subscription-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "singleton-root-production",
+            "kind": "create",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "captured",
+              "resource": "detached-owner",
+              "requires": "unconstrained",
+              "productions": [
+                {
+                  "resource": "singleton-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "pressed-keys-production",
+            "kind": "create",
+            "resources": [
+              "pressed-keys"
+            ],
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            }
+          },
+          {
+            "id": "held-key-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required"
+            }
+          },
+          {
+            "id": "prevent-default-listener-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "options-get",
+            "kind": "invoke",
+            "protocol": "get",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            }
+          },
+          {
+            "id": "keydown-pressed-keys-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ]
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "options-get"
+          }
+        ],
+        "resources": [
+          {
+            "id": "singleton-root",
+            "kind": "owner"
+          },
+          {
+            "id": "pressed-keys",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "detached-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "singleton-subscription-cleanup",
+          "prevent-default-listener-cleanup"
+        ],
+        "creates": [
+          "singleton-root-production",
+          "pressed-keys-production"
+        ],
+        "computations": [
+          "held-key-memo"
+        ],
+        "closed": [
+          "returns",
+          "callbacks"
+        ],
+        "reads": [
+          "keydown-pressed-keys-read"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:91-151,203-212; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 Every normal browser completion returns the final held-key memo accessor.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:91-151,203-212; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 No caller callable is accepted; the only caller property protocol is the options preventDefault Get. options-get enumerates it; primitive key uppercase conversion does not add reactive reads."
+      },
+      "probes": [
+        {
+          "label": "subscription-owner",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Singleton subscription cleanup and memo child restriction in a leaf."
+        }
+      ]
+    },
+    "createShortcut": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:8-32,243-319; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "leaf-owner-forbidden-call",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          },
+          {
+            "id": "shortcut-listener-cleanups",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 4,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "shortcut-callback",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "shortcut-callback"
+          }
+        ],
+        "resources": [],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "shortcut-listener-cleanups"
+        ],
+        "closed": [
+          "returns",
+          "creates",
+          "reads",
+          "callbacks"
+        ],
+        "creates": [],
+        "reads": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:8-32,243-319; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 All normal completions are undefined, including empty-key exit.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:8-32,243-319; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 Empty keys creates none; otherwise exactly four tryOnCleanup listener registrations. Owner is unconstrained with cleanup required on a present owner; 0..4 remains conditional, not guaranteed. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints).",
+        "reads": "P1: P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:8-32,243-319; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 P2: key-array length/map/index and option destructuring are plain data. P1: editable target and event fields/methods have no reactive getters. No package signal is read.",
+        "callbacks": "P1: P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:8-32,243-319; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 P1: The only caller callback executes from matching keydown branches on the host's later stack; shortcut-callback is external/ambient/0..many. P2: keys/options traversal is data, not another callable origin."
+      },
+      "probes": [
+        {
+          "label": "host-dispatch",
+          "rule": "missing-owner",
+          "why": "A real keydown host dispatch reaches the case-file shortcut callback without owner restoration. The correct twin re-enters the captured owner for cleanup registration.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    },
+    "useKeyDownList": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:91-119; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          },
+          {
+            "id": "singleton-subscription-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "singleton-root-production",
+            "kind": "create",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "captured",
+              "resource": "detached-owner",
+              "requires": "unconstrained",
+              "productions": [
+                {
+                  "resource": "singleton-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "pressed-keys-production",
+            "kind": "create",
+            "resources": [
+              "pressed-keys"
+            ],
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            }
+          },
+          {
+            "id": "keydown-pressed-keys-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ]
+          },
+          {
+            "id": "returned-pressed-keys-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ]
+          }
+        ],
+        "callbacks": [],
+        "resources": [
+          {
+            "id": "singleton-root",
+            "kind": "owner"
+          },
+          {
+            "id": "pressed-keys",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "detached-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "singleton-subscription-cleanup"
+        ],
+        "creates": [
+          "singleton-root-production",
+          "pressed-keys-production"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "callbacks"
+        ],
+        "reads": [
+          "keydown-pressed-keys-read",
+          "returned-pressed-keys-read"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:91-119; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 On every normal browser completion returns the pressedKeys signal accessor, whether first use or reuse.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:91-119; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 No own reactive read during the singleton constructor factory. pressedKeys() is read only in a later native keydown handler; the returned source getter is also later.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:91-119; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 The public call takes no arguments/caller handler. Its four listener callbacks are package-defined; no caller callback is invoked."
+      },
+      "probes": [
+        {
+          "label": "subscription-owner",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Singleton use registers subscriber onCleanup on caller owner even on reuse."
+        }
+      ]
+    }
+  }
+}

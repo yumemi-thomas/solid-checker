@@ -1522,15 +1522,19 @@ fn validate_call_claims(
             );
         }
         // A `compute` is the registration of a computation on an owner the
-        // operation does not create, which is the whole of what it states: it
-        // requires that owner, and requires it to admit a child (ADR 0114).
+        // operation does not create (ADR 0114): it requires that owner to admit
+        // a child. It may require the owner itself, or tolerate its absence:
+        // rc.13's computed nodes run unowned yet throw under a leaf owner
+        // (ADR 0226), and the leaf rule reads the child requirement. An owner
+        // it forbids, or creates, is not a registration on the caller's.
         if operation.kind == OperationKind::Compute
-            && !(operation.imposes_owner_requirement()
+            && !(!matches!(operation.owner.source, OwnerSource::Created(_))
+                && operation.owner.requirements.owner != Requirement::Forbidden
                 && operation.owner.requirements.child_owners == Requirement::Required)
         {
             return contradiction(
                 format!("{path}.operation.{}", operation.id.0),
-                "a compute operation requires an owner it does not create, and child owners of it",
+                "a compute operation requires child owners of an owner it does not create, which it may not forbid",
             );
         }
         // NOT YET: "a `create` operation naming no resource is a

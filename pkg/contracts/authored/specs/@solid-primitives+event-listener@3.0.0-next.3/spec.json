@@ -18,21 +18,135 @@
       "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
     }
   ],
+  "pairs": "../_pairs/@solid-primitives+event-listener",
   "exports": {
+    "WindowEventListener": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/components.js:7-23; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:145,149 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "leaf-owner-forbidden-call",
+      "call": {
+        "operations": [
+          {
+            "id": "prop-listener-cleanups",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          }
+        ],
+        "cleanups": [
+          "prop-listener-cleanups"
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "creates",
+          "reads"
+        ],
+        "creates": [],
+        "reads": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/components.js:7-23; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:145,149 \u2014 All normal browser completions return undefined.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/components.js:7-23; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:145,149 \u2014 For each qualifying on* prop, one optional-owner tryOnCleanup registration; prop-listener-cleanups is counted 0..many. No other package-defined reactive creation. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints).",
+        "reads": "P1: P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/components.js:7-23; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:145,149 \u2014 P1: window/listener methods have no reactive getters. P2: Object.keys(props) and props[attr] are data traversal; the analyzer owns reactive props/store sources."
+      }
+    },
     "createEventListener": {
-      "why": "Every browser call creates createEffect (function target) or createRenderEffect (plain target) synchronously on the caller owner; both need a children-capable owner. dist/eventListener.js:10\u201325 is byte-identical in these two installed versions. Only that positive requirement is claimed; handlers and target callback roles remain open.",
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88-100 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
       "rule": "leaf-owner-forbidden-call",
       "probes": [
         {
           "label": "accessor",
           "rule": "leaf-owner-forbidden-call",
           "why": "An accessor target selects the createEffect branch at eventListener.js:24; plain-target primary selects createRenderEffect at :25. Both need their own runtime confirmation."
+        },
+        {
+          "label": "target-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Target accessor is computed by the listener effect. Both callbacks read a signal in the case file. Only the misuse attempts an owned-scope write; the correct twin writes in the driven event handler.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "type-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The plain-target branch computes event names synchronously in a render effect; catch the intended misuse write so readiness can settle. Both callbacks read a signal in the case file. Only the misuse attempts an owned-scope write; the correct twin writes in the driven event handler.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "host-dispatch",
+          "rule": "missing-owner",
+          "why": "The native EventTarget dispatch invokes the installed handler without restoring registration ownership; onCleanup in the case-file handler warns, while re-entering the captured component owner is clean.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
         }
       ],
       "call": {
-        "computations": [
-          "listener-effect"
-        ],
         "operations": [
           {
             "id": "listener-effect",
@@ -53,10 +167,932 @@
             "owner": {
               "source": "ambient-at-call",
               "requires": "required",
-              "requiresChildren": "required"
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "listener-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "targets-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "listener-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "listener-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 0,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "type-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "listener-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "listener-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 1,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
             }
           }
-        ]
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "targets-compute"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "type-compute"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "handler"
+          }
+        ],
+        "computations": [
+          "listener-effect"
+        ],
+        "resources": [
+          {
+            "id": "listener-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "creates",
+          "reads",
+          "callbacks"
+        ],
+        "creates": [],
+        "reads": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88-100 \u2014 Every normal browser completion is undefined.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88-100 \u2014 Exactly one createEffect or createRenderEffect owns compute/apply and its returned cleanup. No additional package-defined constructor registration. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints).",
+        "reads": "P1: P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88-100 \u2014 P1: DOM listener member access has no reactive getters. P2: target/type array traversal is plain data; only the explicitly guarded target/type accessors are caller computations, each already stated under the effect owner. createEventSignal only supplies its package setter as the event handler.",
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88-100 \u2014 P1: The handler row is external-event/external, ambient-at-execution tracking and owner, count 0..many. Target/type accessors are exactly stated tracked invocations; P2 excludes plain-array traversal from an additional callback protocol."
+      }
+    },
+    "createEventListenerMap": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListenerMap.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:141 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "leaf-owner-forbidden-call",
+      "call": {
+        "operations": [
+          {
+            "id": "map-effects",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "map-effects-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          },
+          {
+            "id": "map-target-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "map-effects-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "map-effects-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 0,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "map-target-compute"
+          }
+        ],
+        "computations": [
+          "map-effects"
+        ],
+        "resources": [
+          {
+            "id": "map-effects-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "creates",
+          "reads"
+        ],
+        "creates": [],
+        "reads": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListenerMap.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:141 \u2014 All normal completions are undefined.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListenerMap.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:141 \u2014 Zero to many listener effects, one per truthy enumerable entry, each owning its apply cleanup; map-effects is the complete package construction census. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints).",
+        "reads": "P1: P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListenerMap.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:141 \u2014 P1: target listener APIs have no reactive getters. P2: Object.entries(handlersMap) and target-array traversal are plain data. The guarded target accessor runs tracked under each map effect."
+      },
+      "probes": [
+        {
+          "label": "target-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "A nonempty handlers map creates a listener effect that computes its target accessor. Both callbacks read a signal in the case file. Only the misuse attempts an owned-scope write; the correct twin writes in the driven event handler.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    },
+    "createEventSignal": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:27-32; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "leaf-owner-forbidden-call",
+      "call": {
+        "operations": [
+          {
+            "id": "signal-listener",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "signal-listener-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "create-event-state",
+            "kind": "create",
+            "resources": [
+              "last-event"
+            ],
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          },
+          {
+            "id": "target-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "signal-listener-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "signal-listener-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 0,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "type-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "signal-listener-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "signal-listener-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 1,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "target-compute"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "type-compute"
+          }
+        ],
+        "computations": [
+          "signal-listener"
+        ],
+        "resources": [
+          {
+            "id": "signal-listener-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "last-event",
+            "kind": "reactive-source"
+          }
+        ],
+        "creates": [
+          "create-event-state"
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "creates",
+          "reads",
+          "callbacks"
+        ],
+        "reads": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:27-32; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26 \u2014 Every normal browser completion returns the lastEvent signal accessor.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:27-32; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26 \u2014 One last-event signal plus one listener effect owning apply cleanup; create-event-state and signal-listener enumerate the complete construction. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints).",
+        "reads": "P1: P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:27-32; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26 \u2014 P1: DOM listener member access has no reactive getters. P2: target/type array traversal is plain data; only the explicitly guarded target/type accessors are caller computations, each already stated under the effect owner. createEventSignal only supplies its package setter as the event handler.",
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:27-32; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26 \u2014 P1: Every public callable is a guarded target/type accessor already enumerated; the only event handler is the internal setter, externally dispatched by the host. P2 removes data traversal as an additional caller protocol."
+      },
+      "probes": [
+        {
+          "label": "returns",
+          "rule": "strict-read-untracked",
+          "why": "Returned signal getter read untracked versus JSX."
+        }
+      ]
+    },
+    "makeEventListener": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:149 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "leaf-owner-forbidden-call",
+      "call": {
+        "operations": [
+          {
+            "id": "listener-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "handler"
+          }
+        ],
+        "cleanups": [
+          "listener-cleanup"
+        ],
+        "closed": [
+          "creates",
+          "reads",
+          "callbacks"
+        ],
+        "creates": [],
+        "reads": []
+      },
+      "closures": {
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:149 \u2014 The sole own registration is tryOnCleanup: owner unconstrained, present owner must support cleanup. The operation is entered once; it imposes no missing-owner obligation and is forbidden in a leaf. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints).",
+        "reads": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:149 \u2014 P1: Even a caller-supplied EventTarget has platform add/remove behavior with no reactive getters.",
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:149 \u2014 P1: The only caller handler is exactly the external/ambient/0..many handler row. Bound removal never invokes it."
+      },
+      "probes": [
+        {
+          "label": "host-dispatch",
+          "rule": "missing-owner",
+          "why": "The native EventTarget dispatch invokes the installed handler without restoring registration ownership; onCleanup in the case-file handler warns, while re-entering the captured component owner is clean.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    },
+    "makeEventListenerStack": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListenerStack.js:7-15; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:163-174 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "leaf-owner-forbidden-call",
+      "call": {
+        "operations": [
+          {
+            "id": "stack-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "callable"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "later-listener-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          }
+        ],
+        "callbacks": [],
+        "cleanups": [
+          "stack-cleanup",
+          "later-listener-cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListenerStack.js:7-15; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:163-174 \u2014 Construction performs no reactive read; later add/remove dispatch remains in the open returned-method protocol.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListenerStack.js:7-15; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:163-174 \u2014 Exactly one direct onCleanup(execute) registration at construction, plus later-listener-cleanup for optional-owner tryOnCleanup registration when the returned adder is invoked. No later registration is attributed to construction. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints).",
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListenerStack.js:7-15; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:163-174 \u2014 P1: No callable is passed at construction (only host target/options). The callback stack captures only package-created bound host removals. The future adder's handler argument has no constructor origin and is deliberately covered by the open returns domain, not an invented constructor callback."
+      }
+    },
+    "preventDefault": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:18-21 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "reactive-write-in-owned-scope",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          },
+          {
+            "id": "wrapped-handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "result-access"
+            },
+            "at": {
+              "event": "result-access",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "wrapped-handler"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "creates",
+          "reads",
+          "writes",
+          "invalidates",
+          "cleanups",
+          "disposals",
+          "callbacks"
+        ],
+        "creates": [],
+        "reads": [],
+        "writes": [],
+        "invalidates": [],
+        "cleanups": [],
+        "disposals": []
+      },
+      "closures": {
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:18-21 \u2014 Wrapper construction has no owner/source/cleanup registration.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:18-21 \u2014 Wrapper construction has no reactive read.",
+        "writes": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:18-21 \u2014 Wrapper construction only allocates a closure; it does not execute the callback or event method, read reactive state, register an owner, mutate reactive state, or dispose anything. Later wrapper execution is explicitly not declared inert.",
+        "invalidates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:18-21 \u2014 Wrapper construction only allocates a closure; it does not execute the callback or event method, read reactive state, register an owner, mutate reactive state, or dispose anything. Later wrapper execution is explicitly not declared inert.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:18-21 \u2014 Wrapper construction only allocates a closure; it does not execute the callback or event method, read reactive state, register an owner, mutate reactive state, or dispose anything. Later wrapper execution is explicitly not declared inert.",
+        "disposals": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:18-21 \u2014 Wrapper construction only allocates a closure; it does not execute the callback or event method, read reactive state, register an owner, mutate reactive state, or dispose anything. Later wrapper execution is explicitly not declared inert.",
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:18-21 \u2014 P1: The Event method has platform behavior; the only captured caller callback is the exact wrapped-handler result-access invocation, preserving invoking tracking and owner. This closes captured-callback enumeration, not the returned wrapper protocol."
+      }
+    },
+    "stopPropagation": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:37-40 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "reactive-write-in-owned-scope",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          },
+          {
+            "id": "wrapped-handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "result-access"
+            },
+            "at": {
+              "event": "result-access",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "wrapped-handler"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "creates",
+          "reads",
+          "writes",
+          "invalidates",
+          "cleanups",
+          "disposals",
+          "callbacks"
+        ],
+        "creates": [],
+        "reads": [],
+        "writes": [],
+        "invalidates": [],
+        "cleanups": [],
+        "disposals": []
+      },
+      "closures": {
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:37-40 \u2014 Wrapper construction has no owner/source/cleanup registration.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:37-40 \u2014 Wrapper construction has no reactive read.",
+        "writes": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:37-40 \u2014 Wrapper construction only allocates a closure; it does not execute the callback or event method, read reactive state, register an owner, mutate reactive state, or dispose anything. Later wrapper execution is explicitly not declared inert.",
+        "invalidates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:37-40 \u2014 Wrapper construction only allocates a closure; it does not execute the callback or event method, read reactive state, register an owner, mutate reactive state, or dispose anything. Later wrapper execution is explicitly not declared inert.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:37-40 \u2014 Wrapper construction only allocates a closure; it does not execute the callback or event method, read reactive state, register an owner, mutate reactive state, or dispose anything. Later wrapper execution is explicitly not declared inert.",
+        "disposals": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:37-40 \u2014 Wrapper construction only allocates a closure; it does not execute the callback or event method, read reactive state, register an owner, mutate reactive state, or dispose anything. Later wrapper execution is explicitly not declared inert.",
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:37-40 \u2014 P1: The Event method has platform behavior; the only captured caller callback is the exact wrapped-handler result-access invocation, preserving invoking tracking and owner. This closes captured-callback enumeration, not the returned wrapper protocol."
       }
     }
   }

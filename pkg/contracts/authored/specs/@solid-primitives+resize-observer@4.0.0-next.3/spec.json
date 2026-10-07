@@ -18,47 +18,12 @@
       "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
     }
   ],
+  "pairs": "../_pairs/@solid-primitives+resize-observer",
   "exports": {
-    "makeResizeObserver": {
-      "why": "Browser construction creates ResizeObserver and immediately registers observer.disconnect with onCleanup on the caller owner, dist/index.js:16\u201326. Positive cleanup requirement only.",
-      "rule": "leaf-owner-forbidden-call",
-      "call": {
-        "cleanups": [
-          "observer-cleanup"
-        ],
-        "operations": [
-          {
-            "id": "observer-cleanup",
-            "kind": "cleanup",
-            "trigger": {
-              "event": "call"
-            },
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "tracking": "untracked",
-            "count": {
-              "min": 1,
-              "max": 1,
-              "scope": "call"
-            },
-            "owner": {
-              "source": "ambient-at-call",
-              "requires": "required",
-              "requiresCleanup": "required"
-            }
-          }
-        ]
-      }
-    },
     "createElementSize": {
-      "why": "Every successful browser call constructs an observer and registers disconnect with onCleanup, dist/index.js:119\u2013124. No unconditional reactive-store return is claimed: createStaticStore lazily installs signal getters only after tracking.",
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../static-store/dist/index.js:27-54 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
       "rule": "leaf-owner-forbidden-call",
       "call": {
-        "cleanups": [
-          "element-observer-cleanup"
-        ],
         "operations": [
           {
             "id": "element-observer-cleanup",
@@ -81,27 +46,243 @@
               "requires": "required",
               "requiresCleanup": "required"
             }
+          },
+          {
+            "id": "plain-target-unobserve",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "plain"
+                }
+              ]
+            }
+          },
+          {
+            "id": "element-target-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "element-target-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "target-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "element-target-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "element-target-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "lazy-size-cache-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ]
           }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "target-compute"
+          }
+        ],
+        "cleanups": [
+          "element-observer-cleanup",
+          "plain-target-unobserve"
+        ],
+        "computations": [
+          "element-target-effect"
+        ],
+        "resources": [
+          {
+            "id": "element-target-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "reads",
+          "callbacks"
+        ],
+        "reads": [
+          "lazy-size-cache-read"
         ]
-      }
+      },
+      "closures": {
+        "reads": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../static-store/dist/index.js:27-54 \u2014 P1: getBoundingClientRect/clientWidth/clientHeight and observer entry targets have no reactive getters. The only caller callable is the stated tracked target. static-store/index.js:27-41 performs signal reads only through later returned getters, already listed as lazy-size-cache-read; no signal read occurs at construction.",
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../static-store/dist/index.js:27-54 \u2014 P1: Geometry/observer methods are host behavior. The sole constructor callable is target, exactly invoked under the target effect; the observer handler and lazy getter are package code. Lazy returned-getter behavior stays open in returns/creates."
+      },
+      "probes": [
+        {
+          "label": "target-effect",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Callable target selects the effect branch; cleanup primary already shipped."
+        },
+        {
+          "label": "target-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The callable-target branch computes the target in the package effect. Both callbacks read a signal in the case file. Only the misuse attempts an owned-scope write; the correct twin writes in the driven event handler.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
     },
     "createResizeObserver": {
-      "why": "Every browser call uses makeResizeObserver (which registers cleanup) and creates an effect on the caller owner. dist/index.js:43\u201361 and :16\u201326. The positive cleanup and child-owner requirements are separate.",
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:43-62; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:16-27; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88-100,231-250 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
       "rule": "leaf-owner-forbidden-call",
       "probes": [
         {
           "label": "owner",
           "rule": "missing-owner",
           "why": "Module-scope setup exercises both onCleanup in makeResizeObserver and createEffect in createResizeObserver; expect NO_OWNER_CLEANUP and NO_OWNER_EFFECT, and neither under a live root."
+        },
+        {
+          "label": "target-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The target accessor is computed in the observer effect. Both callbacks read a signal in the case file. Only the misuse attempts an owned-scope write; the correct twin writes in the driven event handler.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "host-dispatch",
+          "rule": "missing-owner",
+          "why": "Resize an attached element after arming the handler; ignore initial native delivery. The installed observer path restores no owner, so only the misuse registers an unowned case-file cleanup.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
         }
       ],
       "call": {
-        "cleanups": [
-          "resize-cleanup"
-        ],
-        "computations": [
-          "resize-effect"
-        ],
         "operations": [
           {
             "id": "resize-cleanup",
@@ -144,11 +325,358 @@
             "owner": {
               "source": "ambient-at-call",
               "requires": "required",
-              "requiresChildren": "required"
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "resize-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "target-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "resize-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "resize-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 0,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "on-resize",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
             }
           }
-        ]
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "target-compute"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "on-resize"
+          }
+        ],
+        "cleanups": [
+          "resize-cleanup"
+        ],
+        "computations": [
+          "resize-effect"
+        ],
+        "resources": [
+          {
+            "id": "resize-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "creates",
+          "reads",
+          "callbacks"
+        ],
+        "creates": [],
+        "reads": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:43-62; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:16-27; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88-100,231-250 \u2014 Normal completion is undefined.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:43-62; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:16-27; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88-100,231-250 \u2014 Exactly one ResizeObserver, direct onCleanup(disconnect), and one createEffect with apply cleanup/diff; resize-cleanup and resize-effect enumerate package owner registrations. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints).",
+        "reads": "P1: P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:43-62; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:16-27; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88-100,231-250 \u2014 P2: target arrays/filter/diff are plain data; target accessor is explicitly tracked. P1: observer and contentRect/target geometry have no reactive getters.",
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:43-62; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:16-27; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88-100,231-250 \u2014 P1: The tracked target accessor is already enumerated. onResize only runs in the externally dispatched observer wrapper, after its previous-size guard; on-resize is external/ambient/0..many. P2 removes array traversal as another callback protocol."
       }
+    },
+    "createWindowSize": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:70-90; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../static-store/dist/index.js:27-76; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:149 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "leaf-owner-forbidden-call",
+      "call": {
+        "operations": [
+          {
+            "id": "window-listener-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "lazy-size-cache-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ]
+          }
+        ],
+        "callbacks": [],
+        "cleanups": [
+          "window-listener-cleanup"
+        ],
+        "resources": [
+          {
+            "id": "hydration-settle-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": [
+          "lazy-size-cache-read"
+        ]
+      },
+      "closures": {
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:70-90; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../static-store/dist/index.js:27-76; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:149 \u2014 No caller argument/handler is accepted; resize/update callbacks and size getter bodies are package-defined.",
+        "reads": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:70-90; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../static-store/dist/index.js:27-76; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:149 \u2014 P1: window.innerWidth/innerHeight and resize dispatch have no reactive getters. static-store/index.js:27-41 reads cached signals only on later result access, represented by lazy-size-cache-read; hydration changes initialization timing and creates, not the complete read census."
+      }
+    },
+    "makeResizeObserver": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:16-27 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "leaf-owner-forbidden-call",
+      "call": {
+        "operations": [
+          {
+            "id": "observer-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "resize-callback",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "observe",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "unobserve",
+                  "value": {
+                    "kind": "callable"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "resize-callback"
+          }
+        ],
+        "cleanups": [
+          "observer-cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:16-27 \u2014 Constructor allocates native observer and binds methods; no package reactive source read.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:16-27 \u2014 Exactly one native observer and one direct onCleanup(disconnect) registration, observer-cleanup; methods defer observe/unobserve work. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints).",
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:16-27 \u2014 P1: The only caller callback is passed to ResizeObserver; resize-callback is external/ambient/0..many. observe/unobserve remain an open returned-method protocol."
+      },
+      "probes": [
+        {
+          "label": "host-dispatch",
+          "rule": "missing-owner",
+          "why": "Resize an attached element after arming the handler; ignore initial native delivery. The installed observer path restores no owner, so only the misuse registers an unowned case-file cleanup.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
     }
   }
 }

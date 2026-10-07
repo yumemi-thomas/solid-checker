@@ -18,20 +18,12 @@
       "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
     }
   ],
+  "pairs": "../_pairs/@solid-primitives+utils",
   "exports": {
     "access": {
-      "why": "Possible invocation of argument 0 at the call, on the same stack, with ambient tracking and owner. It runs only for typeof function && length === 0, utils/dist/index.js:88; min stays 0 because a callable type does not establish exact runtime function.length. The grammar can name that literal leaf, but its value requires a fact. No closure or guaranteed invocation is asserted.",
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:80-88 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
       "rule": "strict-read-untracked",
       "call": {
-        "callbacks": [
-          {
-            "from": {
-              "arg": 0,
-              "path": []
-            },
-            "operation": "access-argument"
-          }
-        ],
         "operations": [
           {
             "id": "access-argument",
@@ -51,9 +43,636 @@
             },
             "owner": {
               "source": "ambient-at-call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 0,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "parameter",
+              "index": 0
+            }
+          },
+          {
+            "id": "return-invocation",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "invocation-result",
+              "parameter": 0
             }
           }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "access-argument"
+          }
+        ],
+        "returns": [
+          "return",
+          "return-invocation"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:80-88 \u2014 The only own property Get is built-in function length, excluded by the premise. Conditional v() is enumerated in callbacks, not claimed inert.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:80-88 \u2014 The complete caller-code use is v() under the callable and length=0 guard; length is a plain property under the premise. Unknown guard truth remains unknown, not a guaranteed invocation.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:80-88 \u2014 No package-defined owner/source/cleanup/computation is created; any v() body is caller code governed by access-argument."
+      },
+      "probes": [
+        {
+          "label": "callback-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The zero-arity case-file callback inherits the caller memo's tracked owned scope. Both callbacks read a signal in the case file. Only the misuse attempts an owned-scope write; the correct twin writes in the driven event handler.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    },
+    "asArray": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "parameter",
+              "index": 0
+            }
+          },
+          {
+            "id": "return-singleton",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "argument-array",
+              "items": [
+                0
+              ]
+            }
+          },
+          {
+            "id": "return-empty",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "argument-array",
+              "items": []
+            }
+          }
+        ],
+        "callbacks": [],
+        "returns": [
+          "return",
+          "return-singleton",
+          "return-empty"
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "cleanups",
+          "disposals"
+        ],
+        "reads": [],
+        "writes": [],
+        "creates": [],
+        "invalidates": [],
+        "cleanups": [],
+        "disposals": []
+      },
+      "closures": {
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness invoke no caller callback.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness make no reactive read.",
+        "writes": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness only; returns the original array, a new singleton containing argument 0, or an empty array; no traversal, invocation, reactive primitive, or owner registration.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 No reactive primitive or owner registration; ordinary arrays are the three result shapes.",
+        "invalidates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness only; returns the original array, a new singleton containing argument 0, or an empty array; no traversal, invocation, reactive primitive, or owner registration.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness only; returns the original array, a new singleton containing argument 0, or an empty array; no traversal, invocation, reactive primitive, or owner registration.",
+        "disposals": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness only; returns the original array, a new singleton containing argument 0, or an empty array; no traversal, invocation, reactive primitive, or owner registration."
+      }
+    },
+    "clamp": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:72-73 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          },
+          {
+            "id": "coerce-0",
+            "kind": "invoke",
+            "protocol": "coerce",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            }
+          },
+          {
+            "id": "coerce-1",
+            "kind": "invoke",
+            "protocol": "coerce",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            }
+          },
+          {
+            "id": "coerce-2",
+            "kind": "invoke",
+            "protocol": "coerce",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "coerce-0"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "coerce-1"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "coerce-2"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:72-73 \u2014 All normal completions return Math.min(Math.max(n,min),max), a number including NaN; no asynchronous completion.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:72-73 \u2014 Numeric primitive coercion is not a reactive read by premise; nonprimitive numeric conversion is fully enumerated by the three coerce protocol rows, without declaring their bodies inert. No separate own reactive read.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:72-73 \u2014 Exactly the numeric conversion of arguments 0, 1 and 2 can enter caller code; coerce-0/1/2 enumerate it. Primitive arguments enter none, and nonprimitive any values are not declared inert.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:72-73 \u2014 No package-defined owner/source/cleanup/computation; user conversion methods belong to the coerce rows."
+      }
+    },
+    "defer": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:118-137 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          },
+          {
+            "id": "dependency",
+            "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            }
+          },
+          {
+            "id": "body",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            }
+          },
+          {
+            "id": "delayed-wrapper-reads",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "parameter",
+                "index": 0
+              }
+            ]
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "dependency"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "body"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "creates",
+          "reads"
+        ],
+        "creates": [],
+        "reads": [
+          "delayed-wrapper-reads"
         ]
+      },
+      "closures": {
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:118-137 \u2014 Construction allocates plain lexical state and a wrapper, with no reactive primitive or owner registration.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:118-137 \u2014 No call-time reactive read. Later wrapper array length/index Gets are delayed-wrapper-reads, and dependency/body callback execution remains separately open."
+      }
+    },
+    "keys": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:142-145 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "array",
+              "element": {
+                "kind": "plain"
+              }
+            }
+          }
+        ],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:142-145 \u2014 Object.keys returns a fresh array of string keys on every normal completion.",
+        "reads": "P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:142-145 \u2014 P2: Object.keys input enumeration is plain-data traversal, not an additional reactive getter or caller callback protocol under the accepted data premise. The body contains no explicit caller-function invocation, Solid creation, owner or cleanup registration. Reactive store/props sources remain owned by the analyzer; this is not authority for adversarial Proxy behavior outside P2.",
+        "creates": "P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:142-145 \u2014 P2: Object.keys input enumeration is plain-data traversal, not an additional reactive getter or caller callback protocol under the accepted data premise. The body contains no explicit caller-function invocation, Solid creation, owner or cleanup registration. Reactive store/props sources remain owned by the analyzer; this is not authority for adversarial Proxy behavior outside P2.",
+        "callbacks": "P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:142-145 \u2014 P2: Object.keys input enumeration is plain-data traversal, not an additional reactive getter or caller callback protocol under the accepted data premise. The body contains no explicit caller-function invocation, Solid creation, owner or cleanup registration. Reactive store/props sources remain owned by the analyzer; this is not authority for adversarial Proxy behavior outside P2."
+      }
+    },
+    "noop": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          }
+        ],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "reads": [],
+        "writes": [],
+        "creates": [],
+        "invalidates": [],
+        "throws": [],
+        "cleanups": [],
+        "disposals": []
+      },
+      "closures": {
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The complete implementation is ()=>void 0; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The complete implementation is ()=>void 0; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+        "writes": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The complete implementation is ()=>void 0; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+        "invalidates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+        "throws": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The complete implementation is ()=>void 0; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+        "disposals": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs."
+      }
+    },
+    "trueFn": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "reads": [],
+        "writes": [],
+        "creates": [],
+        "invalidates": [],
+        "throws": [],
+        "cleanups": [],
+        "disposals": []
+      },
+      "closures": {
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The complete implementation is ()=>true; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The complete implementation is ()=>true; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+        "writes": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The complete implementation is ()=>true; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+        "invalidates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+        "throws": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The complete implementation is ()=>true; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+        "disposals": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs."
       }
     }
   }

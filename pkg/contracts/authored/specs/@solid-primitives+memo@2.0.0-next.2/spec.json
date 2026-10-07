@@ -18,12 +18,69 @@
       "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
     }
   ],
+  "pairs": "../_pairs/@solid-primitives+memo",
   "exports": {
     "createLazyMemo": {
-      "why": "Browser branch returns createMemo's accessor with lazy:true, dist/index.js:95\u2013117. Positive accessor return only. Does not assert that calc runs at construction; callback timing/owner creation remain open.",
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/solid-dnd/node_modules/@solid-primitives/memo/dist/index.js:95-117 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
       "rule": "strict-read-untracked",
       "call": {
         "operations": [
+          {
+            "id": "lazy-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "lazy-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "calc",
+            "kind": "invoke",
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "lazy-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "lazy-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "trigger": {
+              "event": "external-event",
+              "resource": "lazy-memo-owner"
+            }
+          },
           {
             "id": "return",
             "kind": "return",
@@ -44,11 +101,186 @@
               "kind": "reactive",
               "role": "accessor"
             }
+          },
+          {
+            "id": "options-get",
+            "kind": "invoke",
+            "protocol": "get",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            }
+          },
+          {
+            "id": "option-name-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-call"
+            },
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "inputs": [
+              {
+                "kind": "parameter",
+                "index": 2,
+                "path": [
+                  "name"
+                ]
+              }
+            ]
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "calc"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "options-get"
+          }
+        ],
+        "computations": [
+          "lazy-memo"
+        ],
+        "resources": [
+          {
+            "id": "lazy-memo-owner",
+            "kind": "owner"
           }
         ],
         "returns": [
           "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [
+          "option-name-read"
+        ],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/solid-dnd/node_modules/@solid-primitives/memo/dist/index.js:95-117 \u2014 Browser branch returns exactly the lazy memo accessor.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/solid-dnd/node_modules/@solid-primitives/memo/dist/index.js:95-117 \u2014 Construction reads only options?.name in DEV; option-name-read names argument 2.name. calc executes only on demand and is enumerated as a callback. No built-in function property read is reactive by premise.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/solid-dnd/node_modules/@solid-primitives/memo/dist/index.js:95-117 \u2014 Exactly calc in the lazy tracked memo and an optional options.name property Get in DEV. The get protocol row retains caller getter behavior rather than declaring it inert.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/solid-dnd/node_modules/@solid-primitives/memo/dist/index.js:95-117 \u2014 Exactly one createMemo with optional ambient owner, requiring children if present; lazy-memo is the complete census and never requires an owner to exist. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints)."
+      },
+      "probes": [
+        {
+          "label": "calc-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Demand the lazy memo so its tracked calc actually runs. Both callbacks read a signal in the case file. Only the misuse attempts an owned-scope write; the correct twin writes in the driven event handler.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    },
+    "createMemoCache": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/solid-dnd/node_modules/@solid-primitives/memo/dist/index.js:119-135 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "reactive-write-in-owned-scope",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          },
+          {
+            "id": "delayed-cache-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ]
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads"
+        ],
+        "reads": [
+          "delayed-cache-read"
         ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/solid-dnd/node_modules/@solid-primitives/memo/dist/index.js:119-135 \u2014 No call-time reactive read: construction allocates Map, captures getOwner and uses typeof on overload args. Later memo reads are delayed-cache-read."
       }
     }
   }

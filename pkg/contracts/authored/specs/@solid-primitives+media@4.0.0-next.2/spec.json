@@ -18,9 +18,10 @@
       "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
     }
   ],
+  "pairs": "../_pairs/@solid-primitives+media",
   "exports": {
     "createMediaQuery": {
-      "why": "Returns the createHydratableSignal accessor in browser mode, dist/index.js:38\u201344; utils/dist/index.js:209\u2013218 supplies it. Positive reactive-accessor return only; no owner requirement or callback closure is asserted.",
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/visual-effects/node_modules/@solid-primitives/media/dist/index.js:38-45; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:209-219,149; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
       "rule": "strict-read-untracked",
       "call": {
         "operations": [
@@ -44,12 +45,81 @@
               "kind": "reactive",
               "role": "accessor"
             }
+          },
+          {
+            "id": "create-media-state",
+            "kind": "create",
+            "resources": [
+              "media-state"
+            ],
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            }
+          },
+          {
+            "id": "media-listener-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
           }
         ],
+        "callbacks": [],
         "returns": [
           "return"
-        ]
-      }
+        ],
+        "resources": [
+          {
+            "id": "media-state",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "hydration-settle-owner",
+            "kind": "owner"
+          }
+        ],
+        "creates": [
+          "create-media-state"
+        ],
+        "cleanups": [
+          "media-listener-cleanup"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "callbacks"
+        ],
+        "reads": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/visual-effects/node_modules/@solid-primitives/media/dist/index.js:38-45; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:209-219,149; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9 \u2014 Browser media primitive returns the hydratable signal accessor on every normal completion.",
+        "reads": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/visual-effects/node_modules/@solid-primitives/media/dist/index.js:38-45; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:209-219,149; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9 \u2014 P1: matchMedia and matches are host operations without reactive getters. utils/index.js:209-218 initializes from the fallback or mql.matches; neither branch reads a package signal. Browser window exists under P1; sharedConfig.hydrating still controls creates.",
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/visual-effects/node_modules/@solid-primitives/media/dist/index.js:38-45; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:209-219,149; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9 \u2014 P1: No caller callback argument exists. The package-created update handler and hydration update thunk are internal; matchMedia conversion of a string is primitive coercion. No additional caller-code protocol."
+      },
+      "probes": [
+        {
+          "label": "owner",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Listener cleanup in ordinary non-hydrating browser branch."
+        }
+      ]
     }
   }
 }

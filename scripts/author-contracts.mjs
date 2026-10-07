@@ -65,6 +65,9 @@ const option = name => { const index = rest.indexOf(name); return index >= 0 ? r
  * lines; a citation without a closed domain is refused too, so the two cannot
  * drift apart. `closures` is spec metadata and never enters the document.
  */
+/** The claim domains a call may list operations in (schema `$defs/call`). */
+const CLAIM_DOMAINS = ["callbacks", "reads", "writes", "creates", "invalidates", "throws", "returns", "cleanups", "disposals", "computations"];
+
 function validateClosures(where, claim) {
   const closed = claim.call?.closed ?? [];
   const closures = claim.closures ?? {};
@@ -75,6 +78,14 @@ function validateClosures(where, claim) {
   }
   for (const domain of Object.keys(closures))
     assert(closed.includes(domain), `${where}: closures cites ${domain}, which the call does not close`);
+  // The decoder refuses an empty list for a domain left open
+  // (contract_document.rs), and one undecodable authored document fails
+  // every project. Refuse it here, before it ships.
+  for (const domain of CLAIM_DOMAINS) {
+    const items = claim.call?.[domain];
+    if (Array.isArray(items) && items.length === 0)
+      assert(closed.includes(domain), `${where}: open domain ${domain} has an empty list; omit it or close it`);
+  }
 }
 
 // A directory whose name starts with `_` holds probe pairs that several specs
@@ -262,7 +273,32 @@ function probe(browser) {
 }
 
 /** The probe pairs of one export's claim: its own, then each in `probes`. */
+/** A value shape with no reactive part: what a pure function can return. */
+function plainOutput(shape) {
+  if (!shape) return false;
+  if (["undefined", "null", "plain"].includes(shape.kind)) return true;
+  if (shape.kind === "array") return plainOutput(shape.element);
+  return false;
+}
+
 function pairsOf(name, claim) {
+  // ADR 0226: a pure function (`noop`, `clamp`, `keys`) has nothing a probe
+  // can show; it is closures only, each cited. It names no rule and needs no
+  // pair. Its operations may only be a bare return of a non-reactive value,
+  // or a possible (min 0) ambient coercion of the caller's value, which can
+  // yield an obligation and never a violation. Any other operation needs its
+  // pair.
+  if (claim.rule === undefined) {
+    const unprobeable = operation => (operation.kind === "return" && plainOutput(operation.output)
+        && operation.tracking === "untracked" && !operation.owner && !operation.guard)
+      || (operation.kind === "invoke" && operation.protocol === "coerce" && (operation.count?.min ?? 0) === 0
+        && operation.tracking === "ambient-at-execution" && operation.owner?.source === "ambient-at-execution");
+    for (const operation of claim.call?.operations ?? [])
+      assert(unprobeable(operation), `${name}: operation ${operation.id} needs a probe pair and its rule`);
+    assert((claim.call?.closed ?? []).length > 0, `${name}: a claim with no rule must close a domain`);
+    assert(!(claim.probes ?? []).length, `${name}: a closure-only claim has no probes`);
+    return [];
+  }
   return [{ label: undefined, rule: claim.rule, scenario: claim.scenario, file: name },
     ...(claim.probes ?? []).map(probe => {
       assert(probe.label && probe.rule && probe.why, `${name}: a probe needs a label, a rule and a why`);

@@ -18,17 +18,12 @@
       "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
     }
   ],
+  "pairs": "../_pairs/@solid-primitives+timer",
   "exports": {
     "createTimer": {
-      "why": "Browser-only positive owner requirements, split by delay kind: numeric delay synchronously registers onCleanup; accessor delay synchronously creates an effect. Installed readingroom/frontend/node_modules/@solid-primitives/timer/dist/index.js:35\u201350. No handler scheduling or domain closure is claimed.",
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:35-84; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
       "rule": "missing-owner",
       "call": {
-        "cleanups": [
-          "numeric-cleanup"
-        ],
-        "computations": [
-          "accessor-effect"
-        ],
         "operations": [
           {
             "id": "numeric-cleanup",
@@ -80,7 +75,247 @@
             "owner": {
               "source": "ambient-at-call",
               "requires": "required",
-              "requiresChildren": "required"
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "accessor-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "delay-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "accessor-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "accessor-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "timer-provider",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "plain"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          },
+          {
+            "id": "accessor-timer-provider",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            },
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "accessor-handler",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            },
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            }
+          },
+          {
+            "id": "numeric-handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "plain"
+                }
+              ]
+            }
+          },
+          {
+            "id": "accessor-reconcile-handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "reconcile-timer-provider",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
             },
             "guard": {
               "all": [
@@ -92,7 +327,81 @@
               ]
             }
           }
-        ]
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "delay-compute"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "timer-provider"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "accessor-timer-provider"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "accessor-handler"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "numeric-handler"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "accessor-reconcile-handler"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "reconcile-timer-provider"
+          }
+        ],
+        "cleanups": [
+          "numeric-cleanup"
+        ],
+        "computations": [
+          "accessor-effect"
+        ],
+        "resources": [
+          {
+            "id": "accessor-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
       },
       "scenario": [
         {
@@ -115,6 +424,197 @@
           "label": "callable",
           "rule": "missing-owner",
           "why": "Accessor delay enters createEffect, index.js:50; outside an owner it emits NO_OWNER_EFFECT."
+        },
+        {
+          "label": "delay-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The accessor-delay branch computes delay under tracking; use a long host interval to isolate compute. Both callbacks read a signal in the case file. Only the misuse attempts an owned-scope write; the correct twin writes in the driven event handler.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "numeric-handler",
+          "rule": "missing-owner",
+          "why": "numeric-handler: wait for native timeout dispatch. Only the misuse calls onCleanup without the captured component owner.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "accessor-handler",
+          "rule": "missing-owner",
+          "why": "accessor-handler: wait for native timeout dispatch. The package's untrack(fn) preserves the execution-time owner, which is absent at host entry. Only the misuse calls onCleanup without the captured component owner.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "reconcile-handler",
+          "rule": "missing-owner",
+          "why": "Force fractionDone >= 1 while suppressing host ticks. In the installed rc.13 runtime, effect apply executes without an owner; callHandler's untrack(fn) preserves that absent owner. Only the misuse registers an unowned cleanup; the correct twin restores the captured component owner. This witnesses queued reconciliation, not a native host tick.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "provider-phases",
+          "rule": "missing-owner",
+          "why": "Drive 0 < fractionDone < 1 with a long suppressed interval. Only the second provider registration, called by the native reconciliation timeout, attempts onCleanup; the correct twin restores the captured component owner. This diagnostic witnesses the external provider entry, not the first effect-apply entry.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:35-84; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 Every normal completion returns undefined.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:35-84; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 Package has no own reactive source read. delay is invoked in tracked compute, provider/callHandler bodies are separate explicit caller-code uses; no untracked caller-read attribution is asserted.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:35-84; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 Numeric branch registers onCleanup; accessor branch creates exactly one effect owning apply cleanup. Preserve ADR 0223 plain/callable guards and required owner capabilities; provider effects are caller code. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints).",
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:35-84; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 P1: Numeric fn is the external/ambient numeric-handler; non-native timers count as hosts. Accessor delay executes in the stated tracked compute. Timer registration has numeric same-stack, accessor apply/flush, and later reconcile-provider roles. index.js:46-49 explicitly untracks fn inside callHandler: accessor-handler is external/untracked, while accessor-reconcile-handler executes in queued effect apply (flush), never as a universal host-deferred constructor invocation. dev.js:1723-1740,1876-1892 establishes the user-effect apply boundary; untrack preserves ambient owner (dev-shared.js:5863-5891). These are the complete branch-specific caller uses. /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:1723-1740,1876-1892; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5863-5891."
+      }
+    },
+    "makeTimer": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "timer-provider",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          },
+          {
+            "id": "host-handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "timer-provider"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "host-handler"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 No own reactive read; timer-provider invokes parameter 2 inline, retaining all caller effects. No primitive delay coercion read.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 No package-defined reactive owner/source/cleanup; the timer provider is an explicit caller-code invocation, not an inertness claim.",
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 P1: timer, including non-native structurally compatible providers, has host scheduling behavior. timer-provider records the synchronous registration call; host-handler records caller fn later, external/ambient/0..many. The returned clear stays open by the owner's explicit restriction."
+      },
+      "probes": [
+        {
+          "label": "host-handler",
+          "rule": "missing-owner",
+          "why": "host-handler: wait for native timeout dispatch. Only the misuse calls onCleanup without the captured component owner.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
         }
       ]
     }

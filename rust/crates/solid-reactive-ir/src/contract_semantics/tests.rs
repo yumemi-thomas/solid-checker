@@ -316,12 +316,22 @@ fn computations_are_stated_by_item_only_and_by_compute_operations() {
         call(vec![childless], vec![]),
         "a compute that does not require child owners states no registration",
     );
+    // ADR 0227: rc.13's computed nodes run unowned, so a compute may tolerate
+    // a missing owner while still requiring a present one to accept children.
     let mut ownerless = compute("compute-0");
     ownerless.owner.source = OwnerSource::Unknown;
     ownerless.owner.requirements.owner = Requirement::Unconstrained;
+    assert!(
+        proposal_with(ValueShape::Callable, call(vec![ownerless], vec![]))
+            .normalize()
+            .is_ok(),
+        "a compute that tolerates no owner still registers on a present one"
+    );
+    let mut forbidding = compute("compute-0");
+    forbidding.owner.requirements.owner = Requirement::Forbidden;
     refused(
-        call(vec![ownerless], vec![]),
-        "a compute that does not require an owner states no registration",
+        call(vec![forbidding], vec![]),
+        "a compute that forbids an owner states no registration",
     );
 }
 

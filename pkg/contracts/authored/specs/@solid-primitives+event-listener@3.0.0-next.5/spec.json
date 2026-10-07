@@ -18,21 +18,67 @@
       "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
     }
   ],
+  "pairs": "../_pairs/@solid-primitives+event-listener",
   "exports": {
     "createEventListener": {
-      "why": "Every browser call creates createEffect (function target) or createRenderEffect (plain target) synchronously on the caller owner; both need a children-capable owner. dist/eventListener.js:10\u201325 is byte-identical in these two installed versions. Only that positive requirement is claimed; handlers and target callback roles remain open.",
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/kobalte-docs/packages/core/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88-100 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
       "rule": "leaf-owner-forbidden-call",
       "probes": [
         {
           "label": "accessor",
           "rule": "leaf-owner-forbidden-call",
           "why": "An accessor target selects the createEffect branch at eventListener.js:24; plain-target primary selects createRenderEffect at :25. Both need their own runtime confirmation."
+        },
+        {
+          "label": "target-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Target accessor is computed by the listener effect. Both callbacks read a signal in the case file. Only the misuse attempts an owned-scope write; the correct twin writes in the driven event handler.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "type-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The plain-target branch computes event names synchronously in a render effect; catch the intended misuse write so readiness can settle. Both callbacks read a signal in the case file. Only the misuse attempts an owned-scope write; the correct twin writes in the driven event handler.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "host-dispatch",
+          "rule": "missing-owner",
+          "why": "The native EventTarget dispatch invokes the installed handler without restoring registration ownership; onCleanup in the case-file handler warns, while re-entering the captured component owner is clean.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
         }
       ],
       "call": {
-        "computations": [
-          "listener-effect"
-        ],
         "operations": [
           {
             "id": "listener-effect",
@@ -53,10 +99,198 @@
             "owner": {
               "source": "ambient-at-call",
               "requires": "required",
-              "requiresChildren": "required"
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "listener-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "targets-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "listener-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "listener-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 0,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "type-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "listener-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "listener-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 1,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
             }
           }
-        ]
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "targets-compute"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "type-compute"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "handler"
+          }
+        ],
+        "computations": [
+          "listener-effect"
+        ],
+        "resources": [
+          {
+            "id": "listener-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "creates",
+          "reads",
+          "callbacks"
+        ],
+        "creates": [],
+        "reads": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/kobalte-docs/packages/core/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88-100 \u2014 Every normal browser completion is undefined.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/kobalte-docs/packages/core/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88-100 \u2014 Exactly one createEffect or createRenderEffect owns compute/apply and its returned cleanup. No additional package-defined constructor registration. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints).",
+        "reads": "P1: P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/kobalte-docs/packages/core/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88-100 \u2014 P1: DOM listener member access has no reactive getters. P2: target/type array traversal is plain data; only the explicitly guarded target/type accessors are caller computations, each already stated under the effect owner. createEventSignal only supplies its package setter as the event handler.",
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/kobalte-docs/packages/core/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88-100 \u2014 P1: The handler row is external-event/external, ambient-at-execution tracking and owner, count 0..many. Target/type accessors are exactly stated tracked invocations; P2 excludes plain-array traversal from an additional callback protocol."
       }
     }
   }

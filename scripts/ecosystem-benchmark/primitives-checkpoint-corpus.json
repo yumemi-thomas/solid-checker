@@ -23,8 +23,8 @@
       "probe": "@solid-primitives/a11y@1.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.0",
@@ -47,8 +47,8 @@
       "probe": "@solid-primitives/active-element@3.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.2",
@@ -71,8 +71,8 @@
       "probe": "@solid-primitives/analytics@2.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "2.0.0-next.2",
@@ -95,7 +95,7 @@
       "probe": "@solid-primitives/animation@1.0.0-next.1|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.1",
@@ -118,7 +118,7 @@
       "probe": "@solid-primitives/async@0.0.101-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "0.0.101-next.0",
@@ -141,8 +141,8 @@
       "probe": "@solid-primitives/audio@3.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.2",
@@ -165,8 +165,8 @@
       "probe": "@solid-primitives/bounds@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -189,8 +189,8 @@
       "probe": "@solid-primitives/broadcast-channel@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -213,8 +213,8 @@
       "probe": "@solid-primitives/clipboard@2.0.0-next.17|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "2.0.0-next.17",
@@ -237,8 +237,8 @@
       "probe": "@solid-primitives/connectivity@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -261,8 +261,8 @@
       "probe": "@solid-primitives/context@2.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "2.0.0-next.2",
@@ -285,8 +285,8 @@
       "probe": "@solid-primitives/controlled-props@1.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.3",
@@ -309,7 +309,7 @@
       "probe": "@solid-primitives/controlled-signal@1.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.0",
@@ -332,8 +332,8 @@
       "probe": "@solid-primitives/cookies@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -356,8 +356,8 @@
       "probe": "@solid-primitives/cursor@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -380,8 +380,8 @@
       "probe": "@solid-primitives/date@3.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.3",
@@ -404,8 +404,8 @@
       "probe": "@solid-primitives/deep@1.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.3",
@@ -428,7 +428,7 @@
       "probe": "@solid-primitives/destructure@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -451,7 +451,7 @@
       "probe": "@solid-primitives/devices@3.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.2",
@@ -474,8 +474,8 @@
       "probe": "@solid-primitives/drag-drop@0.1.0-next.0|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "0.1.0-next.0",
@@ -498,7 +498,7 @@
       "probe": "@solid-primitives/event-bus@3.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.3",
@@ -521,8 +521,8 @@
       "probe": "@solid-primitives/event-dispatcher@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -545,8 +545,8 @@
       "probe": "@solid-primitives/event-listener@3.0.0-next.5|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.5",
@@ -569,7 +569,7 @@
       "probe": "@solid-primitives/event-props@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -592,8 +592,8 @@
       "probe": "@solid-primitives/favicon@1.0.0-next.1|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.0",
@@ -616,8 +616,8 @@
       "probe": "@solid-primitives/filesystem@3.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.3",
@@ -640,7 +640,7 @@
       "probe": "@solid-primitives/flux-store@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -663,8 +663,8 @@
       "probe": "@solid-primitives/focus@1.0.0-next.4|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.0",
@@ -687,8 +687,8 @@
       "probe": "@solid-primitives/form@1.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.0",
@@ -711,8 +711,8 @@
       "probe": "@solid-primitives/fullscreen@2.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "2.0.0-next.3",
@@ -735,8 +735,8 @@
       "probe": "@solid-primitives/geolocation@3.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.2",
@@ -759,7 +759,7 @@
       "probe": "@solid-primitives/gestures@3.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.3",
@@ -782,8 +782,8 @@
       "probe": "@solid-primitives/history@1.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.3",
@@ -806,8 +806,8 @@
       "probe": "@solid-primitives/i18n@3.0.0-next.4|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.4",
@@ -830,8 +830,8 @@
       "probe": "@solid-primitives/idle@1.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.3",
@@ -854,7 +854,7 @@
       "probe": "@solid-primitives/input-mask@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -877,8 +877,8 @@
       "probe": "@solid-primitives/interaction@1.0.0-next.4|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.0",
@@ -901,8 +901,8 @@
       "probe": "@solid-primitives/intersection-observer@3.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.3",
@@ -925,8 +925,8 @@
       "probe": "@solid-primitives/jsx-tokenizer@3.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.2",
@@ -949,8 +949,8 @@
       "probe": "@solid-primitives/keyboard@2.0.0-next.5|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "2.0.0-next.5",
@@ -973,8 +973,8 @@
       "probe": "@solid-primitives/keyed@3.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.2",
@@ -997,8 +997,8 @@
       "probe": "@solid-primitives/lifecycle@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -1021,8 +1021,8 @@
       "probe": "@solid-primitives/list@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -1045,8 +1045,8 @@
       "probe": "@solid-primitives/list-state@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.0",
@@ -1069,8 +1069,8 @@
       "probe": "@solid-primitives/map@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -1093,7 +1093,7 @@
       "probe": "@solid-primitives/marker@2.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "2.0.0-next.2",
@@ -1116,7 +1116,7 @@
       "probe": "@solid-primitives/masonry@2.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "2.0.0-next.2",
@@ -1139,8 +1139,8 @@
       "probe": "@solid-primitives/match@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -1163,8 +1163,8 @@
       "probe": "@solid-primitives/media@4.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "4.0.0-next.2",
@@ -1187,8 +1187,8 @@
       "probe": "@solid-primitives/mediastream@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.0",
@@ -1211,8 +1211,8 @@
       "probe": "@solid-primitives/memo@2.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "2.0.0-next.2",
@@ -1235,8 +1235,8 @@
       "probe": "@solid-primitives/mouse@4.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "4.0.0-next.3",
@@ -1259,8 +1259,8 @@
       "probe": "@solid-primitives/mutable@3.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.2",
@@ -1283,8 +1283,8 @@
       "probe": "@solid-primitives/mutation-observer@3.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.2",
@@ -1307,8 +1307,8 @@
       "probe": "@solid-primitives/notification@1.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.0",
@@ -1331,8 +1331,8 @@
       "probe": "@solid-primitives/orientation@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.0",
@@ -1355,8 +1355,8 @@
       "probe": "@solid-primitives/page-utilities@3.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.0",
@@ -1379,8 +1379,8 @@
       "probe": "@solid-primitives/pagination@1.0.0-next.8|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.8",
@@ -1403,8 +1403,8 @@
       "probe": "@solid-primitives/permission@2.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "2.0.0-next.2",
@@ -1427,8 +1427,8 @@
       "probe": "@solid-primitives/platform@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -1451,8 +1451,8 @@
       "probe": "@solid-primitives/pointer@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -1475,7 +1475,7 @@
       "probe": "@solid-primitives/presence@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -1498,7 +1498,7 @@
       "probe": "@solid-primitives/promise@2.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "2.0.0-next.2",
@@ -1521,8 +1521,8 @@
       "probe": "@solid-primitives/props@4.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "4.0.0-next.3",
@@ -1545,7 +1545,7 @@
       "probe": "@solid-primitives/queue@1.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.0",
@@ -1568,8 +1568,8 @@
       "probe": "@solid-primitives/raf@4.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "4.0.0-next.2",
@@ -1592,8 +1592,8 @@
       "probe": "@solid-primitives/range@1.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.3",
@@ -1616,8 +1616,8 @@
       "probe": "@solid-primitives/refs@3.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.2",
@@ -1640,8 +1640,8 @@
       "probe": "@solid-primitives/resize-observer@4.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "4.0.0-next.3",
@@ -1664,8 +1664,8 @@
       "probe": "@solid-primitives/rootless@2.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "2.0.0-next.2",
@@ -1688,8 +1688,8 @@
       "probe": "@solid-primitives/scheduled@2.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "2.0.0-next.2",
@@ -1712,8 +1712,8 @@
       "probe": "@solid-primitives/script-loader@3.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.2",
@@ -1736,8 +1736,8 @@
       "probe": "@solid-primitives/scroll@3.0.0-next.4|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.4",
@@ -1760,8 +1760,8 @@
       "probe": "@solid-primitives/selection@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -1784,7 +1784,7 @@
       "probe": "@solid-primitives/sensors@1.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.0",
@@ -1807,8 +1807,8 @@
       "probe": "@solid-primitives/set@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -1831,8 +1831,8 @@
       "probe": "@solid-primitives/share@4.0.0-next.4|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "4.0.0-next.4",
@@ -1855,7 +1855,7 @@
       "probe": "@solid-primitives/signal-builders@1.0.0-next.4|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.4",
@@ -1878,8 +1878,8 @@
       "probe": "@solid-primitives/sortable@1.0.0-next.0|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.0",
@@ -1902,8 +1902,8 @@
       "probe": "@solid-primitives/spring@1.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.3",
@@ -1926,8 +1926,8 @@
       "probe": "@solid-primitives/sse@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -1950,7 +1950,7 @@
       "probe": "@solid-primitives/state-machine@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -1973,8 +1973,8 @@
       "probe": "@solid-primitives/static-store@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -1997,8 +1997,8 @@
       "probe": "@solid-primitives/storage@5.0.0-next.4|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "5.0.0-next.4",
@@ -2021,8 +2021,8 @@
       "probe": "@solid-primitives/styles@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.2",
@@ -2045,8 +2045,8 @@
       "probe": "@solid-primitives/timer@1.4.5-next.1|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.4.5-next.1",
@@ -2069,7 +2069,7 @@
       "probe": "@solid-primitives/transition-group@2.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "2.0.0-next.2",
@@ -2092,8 +2092,8 @@
       "probe": "@solid-primitives/trigger@3.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "3.0.0-next.2",
@@ -2116,8 +2116,8 @@
       "probe": "@solid-primitives/tween@2.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "2.0.0-next.2",
@@ -2140,8 +2140,8 @@
       "probe": "@solid-primitives/upload@1.0.0-next.4|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.4",
@@ -2164,8 +2164,8 @@
       "probe": "@solid-primitives/url@0.2.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "0.2.0-next.0",
@@ -2188,8 +2188,8 @@
       "probe": "@solid-primitives/utils@7.0.0-next.4|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "7.0.0-next.4",
@@ -2212,8 +2212,8 @@
       "probe": "@solid-primitives/vibrate@1.0.0-next.2|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.0",
@@ -2236,8 +2236,8 @@
       "probe": "@solid-primitives/video@1.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.0",
@@ -2260,8 +2260,8 @@
       "probe": "@solid-primitives/virtual@1.0.0-next.4|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "1.0.0-next.4",
@@ -2284,7 +2284,7 @@
       "probe": "@solid-primitives/websocket@2.0.0-next.3|solid2|head",
       "probeKind": "head",
       "solid": {
-        "solid-js": "2.0.0-rc.9"
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "2.0.0-next.3",
@@ -2307,8 +2307,8 @@
       "probe": "@solid-primitives/workers@2.0.1-next.1|solid2|head",
       "probeKind": "head",
       "solid": {
-        "@solidjs/web": "2.0.0-rc.9",
-        "solid-js": "2.0.0-rc.9"
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
       },
       "solidPeer": "^2.0.0-rc.0",
       "nextDistTag": "2.0.1-next.1",

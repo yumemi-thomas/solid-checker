@@ -1,0 +1,138 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "d56c66987ec9a464f99a3b1144091210235cc6d60f1ab97fea7aa59062539e6b",
+            "path": "./dist/index.js",
+            "sha256": "877037b6484457c32d552c0d1f42bb3f451e3ec8b087204642c40edc27318cd1"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "0dcaaea6ebbe6eb1c54830ed2505081f5d9b043c7040f5081e7fae7d7fc4cb4d"
+          },
+          "exports": {
+            "createBreakpoints": "open-callable",
+            "createMediaQuery": "authored-createMediaQuery",
+            "createPrefersDark": "open-callable",
+            "makeMediaQueryListener": "open-callable",
+            "sortBreakpoints": "open-callable",
+            "usePrefersDark": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-jTua+YRSAe2u3z1kZRPIunANI+JSQl0U2pOsDVqCzKgp/nzZC1WsodyFluiSARD9SICgFnzHqlD+EmXzKgp/Mg==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "3b69d209a215ba6fca0cff335ee04c0790b70f3b7981f08619d070e7ea492457"
+    },
+    "name": "@solid-primitives/media",
+    "version": "4.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-createMediaQuery": {
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          },
+          {
+            "id": "create-media-state",
+            "kind": "create",
+            "resources": [
+              "media-state"
+            ],
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            }
+          },
+          {
+            "id": "media-listener-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          }
+        ],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "resources": [
+          {
+            "id": "media-state",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "hydration-settle-owner",
+            "kind": "owner"
+          }
+        ],
+        "creates": [
+          "create-media-state"
+        ],
+        "cleanups": [
+          "media-listener-cleanup"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "callbacks"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    }
+  }
+}

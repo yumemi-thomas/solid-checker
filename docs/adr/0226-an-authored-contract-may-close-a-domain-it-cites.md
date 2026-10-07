@@ -39,9 +39,19 @@ systematic:
    `closures` is spec metadata and is not written into the document.
    - Admission pins the cited bytes by identity, so the citation stays true
      for every install that is admitted.
-2. **Premise:** built-in function properties (`length`, `name`) and the
+2. **Premises.** Built-in function properties (`length`, `name`) and the
    coercion of a primitive value are not reactive reads. A contract may close
    `reads` without listing them.
+   - **P1, added the same day: host objects behave as the platform
+     specifies.** `window`, DOM targets, `MediaQueryList`,
+     `requestAnimationFrame`, timers and their methods have no reactive
+     getters. They run a handler they are given later, on their own stack: an
+     `external`-schedule invoke, which the consumer projects as deferred.
+   - **P2, added the same day: plain data is plain.** Arrays and objects passed
+     as data (targets, key lists, option and handler maps) read reactive state
+     only through values the analysis already knows are reactive, such as
+     stores and props, which it tracks as their own sources. A contract may
+     close `reads` without listing their traversal.
 3. **Only reads at the call are attributed to it.** A read that a contract
    states runs later is not a read during the call: queued or external, at
    an event other than the call, or triggered by a resource. Examples are a
@@ -60,7 +70,8 @@ systematic:
 - No fixture snapshot moved. The bundled and authored contracts state no
   operation that decisions 3 or 4 change.
 - Not yet:
-  - callbacks a host API dispatches (`addEventListener`, timers) stay an open
-    domain until host dispatch is modelled;
+  - stateful returned functions (`defer`, `targetFPS`, a returned clear or
+    `observe` function) keep `returns` open, because the format describes no
+    stateful callable;
   - lazy getters that create a signal only on first observed read
     (`createElementSize`, `createWindowSize`) keep `returns` open.
